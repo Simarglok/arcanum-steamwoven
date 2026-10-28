@@ -434,7 +434,7 @@ public partial class TerrainViewerApp
                 GD.Print("ARC-COMBAT-019 native-smoke boomerang NONE (a critical miss took the boomerang before its first flight)");
                 return "NONE (a critical miss took the boomerang first)";
             }
-            Require(reattacks > 0 || _combatHost!.Target(session, runtime, pick.Target.Row.Key) is { Dead: true },
+            Require(reattacks > 0 || !_gameSettings.AutoAttack || _combatHost!.Target(session, runtime, pick.Target.Row.Key) is { Dead: true },
                 $"the auto attack started again after a return ({reattacks} of {flights.Count})");
             GD.Print($"ARC-COMBAT-019 native-smoke boomerang PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} reattacks={reattacks}"
                 + $" flights={string.Join(",", flights)}");

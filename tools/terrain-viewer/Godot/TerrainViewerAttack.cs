@@ -444,7 +444,7 @@ public partial class TerrainViewerApp
         var target = goal.Combat is null ? null : _combatHost!.Target(owner, CurrentAreaMap, goal.Row.Key);
         var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
-        var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, RealTimeCombatRules.AutoAttackDefault,
+        var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
             owner.QueryCombatRound() is not null, goal.Combat is not null && target is null, dead, false, false, false, owner.QueryBoomerangInFlight()));
         if (repeats) goal.RepeatAtMs = now + RealTimeCombatRules.RepeatDelayMs;
         else _attack = null;

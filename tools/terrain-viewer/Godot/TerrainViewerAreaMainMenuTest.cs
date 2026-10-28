@@ -94,8 +94,8 @@ public partial class TerrainViewerApp
             // Opened by the publication: modal, the root window with the offered buttons and the hidden ones named.
             var placeholder = _areaSession;
             Require(MainMenuOpen && WorldModal && !_worldGate.IsOpen && _mainMenu!.Window == AreaMenuWindow.Main, "the menu opened modal over the scene");
-            Require(Buttons().SequenceEqual(["Single Player  (S)", "Exit Game  (E)"]), "root buttons: " + string.Join("|", Buttons()));
-            Require(_mainMenuPanel!.NoteForSelfTest.Contains("MultiPlayer: ", StringComparison.Ordinal) && _mainMenuPanel.NoteForSelfTest.Contains("Options: ", StringComparison.Ordinal)
+            Require(Buttons().SequenceEqual(["Single Player  (S)", "Options  (O)", "Exit Game  (E)"]), "root buttons: " + string.Join("|", Buttons()));
+            Require(_mainMenuPanel!.NoteForSelfTest.Contains("MultiPlayer: ", StringComparison.Ordinal) && !_mainMenuPanel.NoteForSelfTest.Contains("Options: ", StringComparison.Ordinal)
                 && _mainMenuPanel.NoteForSelfTest.Contains("Credits: ", StringComparison.Ordinal), "the hidden buttons are named: " + _mainMenuPanel.NoteForSelfTest);
             Require(GetSelfTestSnapshot().Hud.Contains(" | main menu open", StringComparison.Ordinal), "HUD open status");
             // The root ignores Escape; a letter of a hidden button (M) or of no button (Q) does nothing; the menu owns F7 and L.
@@ -152,11 +152,11 @@ public partial class TerrainViewerApp
             Letter('l'); InventoryKey(Key.Enter);
             Require(!SaveListOpen && !MainMenuOpen && _mainMenu is null && !ReferenceEquals(beforeLoad, _areaSession) && !WorldModal, "a load from the window ended the menu");
 
-            // A controller: down to Exit Game and confirm. "Exit Game" exits (here only counted).
+            // A controller: up to Exit Game (wrapping) and confirm. "Exit Game" exits (here only counted).
             OpenMainMenu(AreaMainMenuTexts.Project("self-test"));
             static IntentFrame Pad(bool confirm, int direction) => new(default, default, confirm, false, false, false, false, false, false,
                 direction, 0, InputMethod.Gamepad, true, "self-test") { MenuPressedDirection = direction };
-            HandleMainMenuPulse(Pad(false, 1));
+            HandleMainMenuPulse(Pad(false, -1));
             HandleMainMenuPulse(Pad(true, 0));
             Require(_mainMenuExitsForSelfTest == 1, "Exit Game exited");
             return "opened modal by --main-menu with the offered buttons, letters and Escape (not at the root), Last Save without a save stays, " +

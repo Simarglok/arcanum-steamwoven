@@ -438,7 +438,7 @@ hand, `QueryBoomerangInFlight`), BR2 (`GameSessionFailure.WeaponInFlight` before
 turns the session's shot, `ReturnShot` turns it at the range end or a target-less destination, `EndShot` is the second end, also for
 a flight given up), BR4 (`ProjectileRules.TurnBack`: a new line from the tile being left to the hero's tile now), BR5
 (`ProjectileRules.Cross` with `ProjectileShot.Returning`), BR6 in the viewer (combat mode on, in real time with the auto-attack
-default a new attack goal on the NPC or object the shot was fired at when none runs) and BR7 (`BoomerangHero`: the thrown range from the
+setting a new attack goal on the NPC or object the shot was fired at when none runs) and BR7 (`BoomerangHero`: the thrown range from the
 session's weight row with the hero as holder). Steamwoven differences: the session keeps no projectile and no mark in a snapshot, so a
 session restored while a boomerang flies has it in the hand and may attack at once (the original's map keeps both); a turn on the
 hero's own tile ends the flight at once (the original's line of no step was not read). Not modelled: the return's hit script and

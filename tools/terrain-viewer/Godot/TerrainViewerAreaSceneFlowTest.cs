@@ -84,8 +84,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.Escape);
             Require(MainMenuOpen && WorldModal && !_worldGate.IsOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && ReferenceEquals(running, _areaSession),
                 "Escape opened the in-play menu modal");
-            Require(Buttons().SequenceEqual(["Save Game  (S)", "Load Game  (L)", "Quit  (Q)", "Continue  (C)"]), "in-play buttons: " + string.Join("|", Buttons()));
-            Require(_mainMenuPanel!.NoteForSelfTest.Contains("Options: " + AreaMainMenu.NoOptions, StringComparison.Ordinal), "Options is named: " + _mainMenuPanel.NoteForSelfTest);
+            Require(Buttons().SequenceEqual(["Save Game  (S)", "Load Game  (L)", "Options  (O)", "Quit  (Q)", "Continue  (C)"]), "in-play buttons: " + string.Join("|", Buttons()));
             InventoryKey(Key.Escape);
             Require(!MainMenuOpen && _mainMenu is null && !WorldModal, "Escape continued play");
             InventoryKey(Key.Escape); Letter('c');
@@ -118,7 +117,7 @@ public partial class TerrainViewerApp
             Require(_sceneLoadsForSelfTest == loads + 1 && !ReferenceEquals(running, _areaSession) && _areaSession!.QueryHero() is null
                 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && _mainMenu.Reopened && library.List().Entries.Count == 1,
                 "Quit loaded the start scene with a fresh session and reopened the main menu, the save kept");
-            Require(Buttons().SequenceEqual(["Single Player  (S)", "Exit Game  (E)"]), "the main menu's buttons: " + string.Join("|", Buttons()));
+            Require(Buttons().SequenceEqual(["Single Player  (S)", "Options  (O)", "Exit Game  (E)"]), "the main menu's buttons: " + string.Join("|", Buttons()));
 
             // A new game on a scene that is not the start scene (here a --sector start) loads the start scene and starts there.
             _arguments = _arguments! with { AreaMapSector = new AreaSectorCoordinate(1, 1) };

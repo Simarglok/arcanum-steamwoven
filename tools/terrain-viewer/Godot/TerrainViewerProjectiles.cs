@@ -230,7 +230,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-COMBAT-019 (the second end of 0x4B2690 → 0x4A9AD0 with the hero and the goal's target object): back in the hand, the hero
-    /// takes up combat mode when it left it (0x4B3F50) and, in real time with auto attack (0x4B8230: the option, off in a turn-based
+    /// takes up combat mode when it left it (0x4B3F50) and, in real time with the auto-attack setting (0x4B8230: the option, off in a turn-based
     /// round), attacks again what the shot was fired at (the goal's target slot: the clicked target, or the line of fire's blocker,
     /// not a critter a stray strike hit on the way) when no attack goal runs (0x434AE0 → 0x434B00, not aimed). A wall or a companion
     /// is not attacked again; the original's goal-slot tests (0x423300, 0x423470) and the turn-based round's join (0x4B6E70) are not
@@ -241,7 +241,7 @@ public partial class TerrainViewerApp
         var owner = projectile.Owner;
         if (!ReferenceEquals(owner, _areaSession) || projectile.Map != CurrentAreaMap || owner.QueryHeroLife() is not { Status.IsActive: true }) return;
         if (!HeroInCombatMode) ToggleCombatMode();
-        if (!HeroInCombatMode || owner.QueryCombatRound() is not null || !RealTimeCombatRules.AutoAttackDefault || _attack is not null
+        if (!HeroInCombatMode || owner.QueryCombatRound() is not null || !_gameSettings.AutoAttack || _attack is not null
             || IsAreaCompanion(projectile.Target.Key)) return;
         AttackGoal? goal = _combatHost!.Target(owner, CurrentAreaMap, projectile.Target.Key) is { Dead: false, Build.Combat: { } combat } npc
             ? new(npc, combat, null)
