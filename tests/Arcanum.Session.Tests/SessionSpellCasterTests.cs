@@ -506,9 +506,9 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg43_a_dropped_queued_cast_keeps_its_run_in_the_original_and_is_freed_unpaid_in_Steamwoven()
+    public void Mg43_a_dropped_queued_cast_is_freed_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
         {
             var record = SelfBolt();
             var (owner, caster) = Session(mode, record);

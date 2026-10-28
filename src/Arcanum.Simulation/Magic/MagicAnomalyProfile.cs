@@ -129,14 +129,6 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ReleaseRefusalKeepsRun { get; init; }
 
-    /// <summary>
-    /// MG43 (ARC-MAGIC-019, pending owner decision; recommended and built: fix): a queued cast (SU13) whose goal never plays — its
-    /// caster's goal stack ends through the end step (a playing cast without caster eye candy, a target failing at the overlay's
-    /// start, a queued goal refused at its start) or is interrupted (0x44E2C0) — gets only its goal's end node, the casting goal
-    /// 26's animation reset (0x42B090), which frees nothing: the run keeps its slot, unbegun and unpaid, until the game ends.
-    /// Steamwoven frees it, unpaid.
-    /// </summary>
-    public bool DroppedQueueKeepsRuns { get; init; }
 
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
@@ -148,7 +140,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true, DroppedQueueKeepsRuns = true,
+        ReleaseRefusalKeepsRun = true,
     };
 
     /// <summary>Both settings, default first.</summary>
