@@ -118,7 +118,7 @@ public static class FollowerRules
     /// is drawn by <c>random(0, n − 1)</c> (<see cref="AiRollPurpose.TauntFollower"/>, no draw for one) and must be active
     /// (0x45D790). FO17 (fixed in both settings): a null entry, which the original passes to the activity test unchecked, is skipped.
     /// </summary>
-    [OriginalFunction(0x4AE9E0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4AE9E0, OriginalFunctionScope.Partial)]
     public static FollowerComment? Taunt(TauntKind kind, IReadOnlyList<HostilityCritter?> followers, IAiRollSource rolls)
     {
         ArgumentNullException.ThrowIfNull(followers);
@@ -134,7 +134,7 @@ public static class FollowerRules
     /// whose hit-point percent (0x4AB400) was at least 20 before and is below 20 after, makes it float 5500–5599 toward its PC
     /// leader. FO16 (fixed in both settings): a critter the hit killed floats nothing, where the original floats an empty line.
     /// </summary>
-    [OriginalFunction(0x4AEAB0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4AEAB0, OriginalFunctionScope.Partial)]
     public static FollowerComment? NearDeath(string critter, bool hasPcLeader, int damage, int percentBefore, int percentAfter, bool deadAfter)
     {
         ArgumentNullException.ThrowIfNull(critter);

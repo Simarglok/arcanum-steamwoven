@@ -112,8 +112,6 @@ public sealed class CompanionCombatOrderTests
         Assert.IsTrue(party.All(o => o.Effect == CompanionOrderEffect.PartyTarget));
         Assert.AreEqual(revision, owner.Version.Revision, "the stop stands");
         Assert.IsTrue(owner.QueryDanger(Virgil).Flags.HasFlag(DangerFlags.NoAttack));
-        var noWorld = owner.IssueCompanionOrder(owner.Version, new(CompanionOrderType.Attack, CompanionOrderAddressing.All, [F(Virgil)]) { Target = WolfHandle });
-        Assert.AreEqual((CompanionOrderEffect.Failed, GameSessionFailure.InvalidDangerFacts), (noWorld.Outcomes.Single().Effect, noWorld.Outcomes.Single().Failure));
     }
 
     [TestMethod]
@@ -149,6 +147,10 @@ public sealed class CompanionCombatOrderTests
         // A complaint without reaction facts is refused for that follower only.
         var bare = Order(owner, CompanionOrderType.Attack, SoggHandle, followers: F(Virgil) with { Combat = null }).Outcomes.Single();
         Assert.AreEqual((CompanionOrderEffect.Failed, GameSessionFailure.InvalidDangerFacts), (bare.Effect, bare.Failure));
+        Assert.AreEqual(GameSessionFailure.InvalidDangerTarget, owner.ApplyFollowerRule(owner.Version, new()
+        {
+            Outcome = new(Virgil, FollowerRuleStep.Complain), Leader = Hero, Target = SoggHandle, Complaint = new(Npc60, Pc),
+        }).Failure, "a complaint names its reason");
     }
 
     [TestMethod]
@@ -213,6 +215,49 @@ public sealed class CompanionCombatOrderTests
             Assert.IsTrue(result.Outcomes.All(o => o.Pass is { Failure: GameSessionFailure.None, Pass: not null }), $"{type}");
         }
         Assert.IsTrue(Order(owner, CompanionOrderType.StayClose).Outcomes.All(o => o.Pass is null), "no host: the host runs it");
+    }
+
+    [TestMethod]
+    public void Each_pass_runs_before_the_next_followers_order()
+    {
+        using var owner = Owner();
+        var ai = new AiSchedulerTests.World().With(Virgil).With(Sogg);
+        Order(owner, CompanionOrderType.SpreadOut);
+        foreach (var entity in new[] { Virgil, Sogg }) owner.RunAiPass(owner.Version, entity, ai);
+        var start = owner.Version.Revision;
+        var result = Order(owner, CompanionOrderType.StayClose, ai: ai);
+        Assert.AreEqual((start + 1, start + 2), (result.Outcomes[0].Pass!.Version.Revision, result.Outcomes[1].Pass!.Version.Revision),
+            "Virgil's pass sees only his own order; Sogg's comes after it (FO1)");
+    }
+
+    [TestMethod]
+    public void Through_the_order_an_origin_complaint_a_target_in_combat_and_a_door_follow_the_rule()
+    {
+        using var owner = Owner();
+        var world = new World();
+        world.Add("oid:kin", HostilityKind.Npc, c => c with { Origin = 3 });
+        world.Add("oid:door", HostilityKind.Object);
+        var kin = SessionCombatant.Critter("oid:kin");
+        var complaint = Order(owner, CompanionOrderType.Attack, kin, world, followers: F(Virgil)).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.Complained, UpsetReason.Origin, -5), (complaint.Effect, complaint.Rule!.Value.Upset, complaint.Reaction!.Value.Delta));
+        world.Critters["oid:kin"] = world.Critters["oid:kin"] with { InCombatMode = true };
+        var silent = Order(owner, CompanionOrderType.Attack, kin, world, followers: F(Virgil)).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.AttackIgnored, FollowerRuleStep.UpsetIgnored, (ReactionAdjustment?)null),
+            (silent.Effect, silent.Rule!.Value.Step, silent.Reaction));
+        var door = Order(owner, CompanionOrderType.Attack, SessionCombatant.Critter("oid:door"), world, followers: F(Sogg)).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.AttackLocked, true), (door.Effect, door.Locked));
+        Assert.AreEqual(SessionCombatant.Critter("oid:door"), owner.QueryDanger(Sogg).Focus);
+    }
+
+    [TestMethod]
+    public void A_failed_attack_step_still_lifts_the_stop()
+    {
+        using var owner = Owner();
+        StopAll(owner);
+        var noWorld = owner.IssueCompanionOrder(owner.Version, new(CompanionOrderType.Attack, CompanionOrderAddressing.All, [F(Virgil)]) { Target = WolfHandle })
+            .Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.Failed, GameSessionFailure.InvalidDangerFacts), (noWorld.Effect, noWorld.Failure));
+        Assert.IsFalse(owner.QueryDanger(Virgil).Flags.HasFlag(DangerFlags.NoAttack), "FO9");
     }
 
     [TestMethod]

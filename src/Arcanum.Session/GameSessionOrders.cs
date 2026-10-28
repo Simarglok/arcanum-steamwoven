@@ -201,11 +201,16 @@ public sealed partial class GameSessionOwner
         }
 
         var start = _revision;
-        // FO1: one AI pass per reached follower right after its order, before the next follower's order.
-        var outcomes = receivers.Select(r => Order(r.Entity, r.Type, facts[r.Entity], request, profile))
-            .Select(o => request.Ai is { } ai ? o with { Pass = RunAiPass(Version, o.Entity, ai) } : o).ToArray();
+        var outcomes = new List<CompanionOrderOutcome>(receivers.Count);
+        foreach (var (entity, type) in receivers)
+        {
+            var outcome = Order(entity, type, facts[entity], request, profile);
+            // FO1: one AI pass per reached follower right after its own order, before the next follower's order.
+            if (request.Ai is { } ai) outcome = outcome with { Pass = RunAiPass(Version, entity, ai) };
+            outcomes.Add(outcome);
+        }
         return new(_revision == start ? GameSessionDisposition.NoChange : GameSessionDisposition.Changed, GameSessionFailure.None,
-            Array.AsReadOnly(outcomes), Version);
+            outcomes.AsReadOnly(), Version);
     }
 
     // One follower's order (OL4–OL11): its line, then its state change through the party entries.
@@ -296,7 +301,7 @@ public sealed partial class GameSessionOwner
         if (target is null) return new(entity, type, CompanionOrderEffect.NoTarget, null);
         if (FollowerRules.AttackOrderRefused(_hero is not null && _combat.HeroCombatMode, !target.IsHero && LedByPc(target.Entity!)))
             return new(entity, type, CompanionOrderEffect.PartyTarget, null);
-        if (world is null) return new(entity, type, CompanionOrderEffect.Failed, null, Failure: GameSessionFailure.InvalidDangerFacts);
+        if (world is null) return AllowedButFailed(entity, GameSessionFailure.InvalidDangerFacts);
         var combat = facts.Combat ?? new();
         var plan = new DangerPlan(this);
         plan.AllowAttacking(SessionCombatant.Critter(entity));
@@ -310,7 +315,7 @@ public sealed partial class GameSessionOwner
             rule = FollowerRules.Rule(world, entity, leader, victim, FollowerSide.Attacker, false, true, _rules.Combat);
             var failure = PlanFollowerRule(plan, rule.Value, leader == AiSchedulerRules.Pc, target, combat.Setter, combat.Reaction, null,
                 out danger, out reaction);
-            if (failure != GameSessionFailure.None) return new(entity, type, CompanionOrderEffect.Failed, null, Failure: failure);
+            if (failure != GameSessionFailure.None) return AllowedButFailed(entity, failure);
         }
         var committed = plan.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, Version));
         if (committed.Disposition == GameSessionDisposition.Rejected)
@@ -326,6 +331,17 @@ public sealed partial class GameSessionOwner
             AttackStop = rule is null ? attack.Stop : null, Rule = rule, Locked = danger?.Locked == true,
             Danger = danger is null ? null : danger with { Disposition = committed.Disposition, Version = committed.Version }, Reaction = reaction,
         };
+    }
+
+    // FO9: past the party filter the stop is lifted before the event, so a step the session cannot make (no world, missing facts)
+    // still clears NO_ATTACK; the outcome reports the failure.
+    private CompanionOrderOutcome AllowedButFailed(string entity, GameSessionFailure failure)
+    {
+        var plan = new DangerPlan(this);
+        plan.AllowAttacking(SessionCombatant.Critter(entity));
+        var committed = plan.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, Version));
+        return new(entity, CompanionOrderType.Attack, CompanionOrderEffect.Failed, null,
+            Failure: committed.Disposition == GameSessionDisposition.Rejected ? committed.Failure : failure);
     }
 
     private SessionCompanionOrderResult RejectOrder(GameSessionFailure failure) =>

@@ -325,8 +325,8 @@ address,name,domain,status,reason,level,evidence,method
 0x4AE120,kill on sight,ai,full,,F2,docs/research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057,Arcanum.Simulation.Ai.HostilityRules.KillOnSight
 0x4AE3A0,protect,ai,full,,F2,docs/research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057,Arcanum.Simulation.Ai.HostilityRules.Protect
 0x4AE720,ai cast eligibility,ai,full,,F2,docs/research/ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059,Arcanum.Simulation.Ai.AiSupportRules.Eligibility
-0x4AE9E0,combat taunt,ai,full,,F2,docs/research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067,Arcanum.Simulation.Ai.FollowerRules.Taunt
-0x4AEAB0,near death line,ai,full,,F2,docs/research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067,Arcanum.Simulation.Ai.FollowerRules.NearDeath
+0x4AE9E0,combat taunt,ai,partial,"the speaker's can-speak test, the line callback and the line text are the host's",F2,docs/research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067,Arcanum.Simulation.Ai.FollowerRules.Taunt
+0x4AEAB0,near death line,ai,partial,"the speaker's can-speak test, the line callback and the line text are the host's",F2,docs/research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067,Arcanum.Simulation.Ai.FollowerRules.NearDeath
 0x4AEB70,portal open attempt,locks,partial,"the caller passes the busted state, the leaving test, the unlock script's result and the party's keys",F2,docs/research/ledger/world.md#doors-containers-and-locks-arc-res-065,Arcanum.Simulation.Locks.LockRules.Attempt
 0x4AED80,container open attempt,locks,partial,"the caller passes the junk-pile and busted tests, the unlock script's result and the party's keys",F2,docs/research/ledger/world.md#doors-containers-and-locks-arc-res-065,Arcanum.Simulation.Locks.LockRules.Attempt
 0x4AF170,stop fleeing,ai,partial,"the decision only: the session's StopFleeing applies the setter's NONE, the flee-goal interrupt (0x44E4D0) is the host's",F2,docs/research/ledger/npc-ai.md#npc-ai-morale-arc-res-058,Arcanum.Simulation.Ai.MoraleRules.StopFleeing

@@ -37,7 +37,8 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(request);
         var follower = request.Outcome.Follower;
         if (!SessionValidation.Entity(follower) || request.Leader is null || request.Target is null || !ValidDangerHandle(request.Leader) ||
-            !ValidDangerHandle(request.Target) || !Enum.IsDefined(request.Outcome.Step) || !Enum.IsDefined(request.Outcome.Upset))
+            !ValidDangerHandle(request.Target) || !Enum.IsDefined(request.Outcome.Step) || !Enum.IsDefined(request.Outcome.Upset) ||
+            request.Outcome.Step == FollowerRuleStep.Complain && request.Outcome.Upset == UpsetReason.None)
             return RejectDanger(GameSessionFailure.InvalidDangerTarget);
         if (request.Reaction is { } reaction && (!ReactionRules.IsValid(reaction.Npc) || !ReactionRules.IsValid(reaction.Pc) ||
                 !ReactionLimits.InRange(reaction.HostileReaction)) || request.Complaint is { } complaint && !ValidReaction(complaint))
