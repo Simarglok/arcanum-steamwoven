@@ -53,7 +53,7 @@ Left for the next inventory slices (each its own task):
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
 - **Other modes**: loot (234 `Loot`, 349 `Loot_PD`), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at
   (703, 236)), steal; the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
-  341 `PD_Cover4Inven` at (361, 0) and moves the doll 348 to the right, F0).
+  341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
 - The two numbers at (80, 358) and (261, 358) (0x464630, 0x464700, F0) and the selected-item fill

@@ -1116,6 +1116,7 @@ public partial class TerrainViewerApp : Node
         _prototypeItems?.Dispose(); _prototypeItems = null;
         // ARC-UI-032: the hotkey bar's item icons.
         _hotkeyItemIcons?.Dispose(); _hotkeyItemIcons = null;
+        _inventoryItemIcons?.Dispose(); _inventoryItemIcons = null;
         _cache.Dispose();
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();

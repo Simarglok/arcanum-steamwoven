@@ -77,7 +77,7 @@ public sealed class AreaItemIcons : IDisposable
     }
 
     /// <summary>ARC-UI-051: the frame of an item's inventory art (field 0x5D) at any size, as the inventory window draws it on the grid and
-    /// the doll (IW25); null with the reason when the fields or the art do not read.</summary>
+    /// the doll (IW22); null with the reason when the fields or the art do not read.</summary>
     public (AreaInterfaceFrame? Frame, string Detail) InventoryFrame(SessionItemKind kind, CombatFields? rowFields)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

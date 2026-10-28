@@ -171,7 +171,7 @@ public partial class AreaInventoryPanel : CanvasLayer
             button.Pressed += () => Callable.From(action).CallDeferred();
             _quantity.AddChild(button); _quantityButtons.Add(button);
         }
-        _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.None, Alignment = HorizontalAlignment.Left, Visible = false };
+        _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>
         {
             _diagnosticChosen = !_diagnosticChosen;
@@ -349,12 +349,9 @@ public partial class AreaInventoryPanel : CanvasLayer
         // ARC-UI-029: a re-render while the quantity window is up keeps the rest of the window inert.
         if (_bar is not null) SetOthersDisabled(true);
         _message.Visible = !ArtMode || _message.Text.Length > 0;
-        // ARC-UI-051: the original look has no focusable buttons (the original window takes no keys but I and Escape).
-        if (!ArtMode || _bar is not null)
-        {
-            var enabled = Focusable();
-            enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
-        }
+        // ARC-UI-051: in the original look only the switch takes focus, so a pad or the keyboard can reach the diagnostic buttons.
+        var enabled = Focusable();
+        enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
     }
 
@@ -374,6 +371,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     {
         // ARC-UI-029: while the quantity window asks only its buttons take focus.
         if (_bar is not null) return _quantityButtons.ToList();
+        // ARC-UI-051: the original look's diagnostic buttons are hidden; the switch to them is the one focusable control.
+        if (ArtMode) return [_lookToggle];
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
@@ -396,6 +395,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         SetOthersDisabled(true);
         ShowQuantity();
         _message.Text = message ?? string.Empty;
+        _message.Visible = !ArtMode || _message.Text.Length > 0;
         _quantityButtons[0].GrabFocus();
         ResizePanel();
     }
@@ -457,7 +457,6 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     public void Navigate(int direction)
     {
-        if (ArtMode && _bar is null) return;
         var enabled = Focusable();
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
@@ -465,7 +464,6 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     public void Confirm()
     {
-        if (ArtMode && _bar is null) return;
         var focused = Focusable().FirstOrDefault(button => button.HasFocus());
         if (focused is not null) focused.EmitSignal(BaseButton.SignalName.Pressed);
     }
@@ -477,12 +475,17 @@ public partial class AreaInventoryPanel : CanvasLayer
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         if (ArtMode)
         {
-            // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part; one line below it for the switch
-            // and a message (PROJECT: the original prints no message in the window).
-            var reserve = 2 * 24f;
-            var scale = Math.Max(.25f, Math.Min(size.X / AreaInventoryDrag.FrameWidth, (size.Y - reserve) / AreaInventoryDrag.FrameHeight));
-            _area.FitScale(scale);
-            var frameWidth = AreaInventoryDrag.FrameWidth * scale;
+            // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
+            // shows besides the frame (the switch, a message, the quantity row; PROJECT: the original prints no message in the window).
+            var frameWidth = 0f;
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var others = Math.Max(0, _panel.GetCombinedMinimumSize().Y - _area.CustomMinimumSize.Y);
+                var scale = Math.Max(.25f, Math.Min(size.X / AreaInventoryDrag.FrameWidth, (size.Y - others) / AreaInventoryDrag.FrameHeight));
+                _area.FitScale(scale);
+                frameWidth = AreaInventoryDrag.FrameWidth * scale;
+                _panel.Size = new(frameWidth, 0);
+            }
             _panel.Size = new(frameWidth, 0);
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, size.Y));
             _panel.Position = new((size.X - frameWidth) / 2, top);

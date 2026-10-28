@@ -39,7 +39,7 @@ public partial class TerrainViewerApp
         return _inventoryArtLook;
     }
 
-    /// <summary>An item's inventory art (field 0x5D, IW25), read once per item and session; null when its fields or art do not read.</summary>
+    /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.</summary>
     private Texture2D? InventoryItemArt(string item)
     {
         if (_areaSession is not { } session || _inventoryItemIcons is not { } icons) return null;

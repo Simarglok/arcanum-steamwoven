@@ -240,9 +240,17 @@ public partial class AreaInventoryGridArea : Control
         {
             if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
-        void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, Vector2? origin = null)
+        void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, Vector2? origin = null, string? name = null)
         {
-            if (texture is null) return;
+            if (texture is null)
+            {
+                // An item whose art does not read keeps the diagnostic look: a framed box with its name.
+                var box = (origin is { } start ? new Rect2(start, new Vector2(rect.Width, rect.Height) * _scale) : Scaled(rect.X, rect.Y, rect.Width, rect.Height)).Grow(-2 * _scale);
+                DrawRect(box, new Color(.2f, .3f, .38f, .85f));
+                DrawRect(box, new Color(.5f, .65f, .75f), false);
+                if (name is not null) DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                return;
+            }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
             DrawTextureRect(texture, placed, false);
@@ -273,14 +281,15 @@ public partial class AreaInventoryGridArea : Control
             // The held item stays in its place but is not drawn there (the original's item flag 0x10, IW2).
             if (item.Entity == Held?.Entity) continue;
             Item(look.ItemArt(item.Entity), (AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
-                AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels));
+                AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels),
+                name: item.Name);
         }
         foreach (var (slot, rect) in AreaInventoryDrag.SlotRects)
         {
             // A held worn item leaves its slot to the cover, as an empty one (0x5772B4 skips it, 0x577851 covers every unmarked slot).
-            var worn = _view.Doll.FirstOrDefault(entry => entry.Slot == slot)?.Entity;
-            if (worn is not null && worn != Held?.Entity && look.ItemArt(worn) is { } texture) Item(texture, rect);
-            else if (worn is null || worn == Held?.Entity) Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
+            var entry = _view.Doll.FirstOrDefault(entry => entry.Slot == slot);
+            if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, name: entry.Name ?? "?");
+            else Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
         }
         if (Held is { } held)
         {
@@ -288,7 +297,8 @@ public partial class AreaInventoryGridArea : Control
             var (w, h) = placed is null ? (1, 1) : (placed.Width, placed.Height);
             var cell = AreaInventoryDrag.CellPixels * _scale;
             var origin = _pointer - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
-            Item(look.ItemArt(held.Entity), (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin);
+            var name = placed?.Name ?? _view.Doll.FirstOrDefault(slot => slot.Entity == held.Entity)?.Name ?? "?";
+            Item(look.ItemArt(held.Entity), (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin, name);
         }
     }
 }
