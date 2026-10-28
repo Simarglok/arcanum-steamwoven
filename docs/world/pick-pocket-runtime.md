@@ -32,7 +32,7 @@ Requirements: [FR-ITEM-015](../requirements/items-economy.md#fr-item-015) (steal
 | Attempt (PP2) | Each drag is one attempt: 4 action points in the thief's subturn of a turn-based round, then the shared check. Steal-mode drags never ask how many (PP10). | `GameSessionOwner.PickPocket(..., world)` |
 | Amount (PP3) | On a success: gold min(quantity, 100) (the rest of the pile stays), ammunition min(quantity, 20), any other item whole; a steal from the victim to the thief, a plant the other way. No item flag or worn slot refuses (a worn slot raises the difficulty, SC11). A move the insertion refuses is a failure that is never noticed; a critical success adds nothing. | `PickPocketRules.Amount` |
 | Detection (PP4) | Only a failure: a critical failure always (a master is caught on one), any other only when the thief is untrained and the victim's `random(1, 20)` is at most its effective perception; a master planting never; a fated attempt is a critical success and never noticed. | `PickPocketRules.Detection`, `NoticedByRoll` |
-| Alignment (PP5) | After a theft that moved something (never a plant, never from a victim the thief summoned): with `a` the victim's alignment and `b` the thief's, `a ≥ 0` lowers the thief's base by `trunc(trunc(a / 20) / 2)` to no less than `−100 − a`; `a < 0` with `b ≤ a` by `trunc(trunc(a / 20) / 2)` to no less than `a − 100`; else nothing. A base already at the bound stays. | `PickPocketRules.AlignmentAfterTheft` |
+| Alignment (PP5) | After a theft that moved something (never a plant, never from a victim the thief summoned): with `a` the victim's alignment and `b` the thief's, `a ≥ 0` lowers the thief's base by `trunc(trunc(a / 20) / 2)` to no less than `−100 − a`; `a < 0` with `b ≤ a` by `trunc(trunc(a / 20) / 2)` to no less than `a − 100`; else nothing. A base already at or below the bound stays. | `PickPocketRules.AlignmentAfterTheft` |
 | Caught thief (PP7) | After a noticed failure: the thief's script at point 33 (answer ignored), then the victim's at point 11 (catching thief), whose answer other than run default stops the rest; then a victim led by the thief stops it; else the attack event of the thief on the victim (loudness 1). Nothing else changes reaction, alignment or marks. | `PickPocketRules.Caught` |
 | No experience, no stolen flag (PP6, PP10) | No branch grants experience; a theft sets no item flag 0x8000 (only the sale check reads it, BT3). | — |
 
@@ -43,11 +43,14 @@ for ammunition, the kind of a new stack. Refused before anything is charged or r
 victim facts out of bounds or a victim that is no living NPC of the actor's map seed (`InvalidPickPocketVictim`), the version, no seed
 (`InventoryUnavailable`), an item the side does not hold (`ItemNotAvailable`; the hero's coins too, a count and not a pile), a gold pile
 with an insert-item script (`ItemScriptUnsupported`), an item the victim wears (`WornItemUnsupported`: the original steals it, the
-session does not unequip an NPC), ammunition without a stack kind (`InvalidAmmo`). In the hero's subturn with a
-world it charges 4 action points first (its own revision). The draws come from the session generator: the check's two d100, then the
+session does not unequip an NPC), ammunition without a stack kind (`InvalidAmmo`), a key or key ring (`ItemTypeUnsupported`). With a world in a turn-based round, another's subturn or an inactive
+hero is `PickPocketOutOfTurn`; in the hero's subturn it charges 4 action points first (its own revision), and a charge the hero
+cannot pay ends its subturn and refuses the attempt (`PickPocketOutOfTurn` with the charge). The draws come from the session generator: the check's two d100, then the
 perception die when it is rolled. On a success the move runs through `TakeGoldFromNpc`, `TakeAmmoFromNpc`, `TakeItemFromNpc`,
 `GiveAmmoToNpc` or `GiveItemToNpc`; the check, the move, the alignment and the fate share the move's revision, and an attempt that moves
-nothing takes one revision of its own. A move refused for any reason but the insert check (a script the session does not run, a
+nothing takes one revision of its own. The check's draws are committed before the move (whose item scripts and pickup or removal
+triggers draw after them) and put back when the move is refused. The thief's alignment `b` is the hero's stored alignment (the
+session has no effects on alignment). A move refused for any reason but the insert check (a script the session does not run, a
 budget, the revision) refuses the attempt after the charge, with nothing rolled or moved. The answer carries the check, the amount
 moved, the move's own result, the die, whether the failure was noticed, the new alignment and whether the fate was used.
 

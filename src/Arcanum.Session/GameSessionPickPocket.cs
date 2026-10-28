@@ -38,8 +38,10 @@ public sealed partial class GameSessionOwner
     /// The hero steals an item from a living NPC on the actor's map, or plants one of its own on it (the steal-mode drags 0x575180 and
     /// 0x575100 → the use-skill goal → the shared check and the pick-pocket case of 0x4C7160, ledger PP2–PP8). In order:
     /// <list type="number">
-    /// <item>With a world and a turn-based round whose subturn is the hero's, 4 action points are charged (<see cref="ConsumeActionPoints"/>,
-    /// its own revision; the attempt goes on whatever the charge answers).</item>
+    /// <item>With a world and a turn-based round, another's subturn or an inactive hero is refused
+    /// (<see cref="GameSessionFailure.PickPocketOutOfTurn"/>); in the hero's subturn 4 action points are charged
+    /// (<see cref="ConsumeActionPoints"/>, its own revision), and a charge the hero cannot pay ends its subturn and refuses the attempt
+    /// (the same failure, with the charge).</item>
     /// <item>The check (<see cref="SkillCheckRules.Run"/>): the hero's pick-pocket level and training opposed by the victim's perception,
     /// the victim's awareness term, the item's worn slot and its size in inventory cells (SC11), the hero's injuries, the armed fate
     /// (which forces a critical success).</item>
@@ -61,7 +63,8 @@ public sealed partial class GameSessionOwner
     /// seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), an item the victim (steal) or the hero (plant) does
     /// not hold, or the hero's coins (<see cref="GameSessionFailure.ItemNotAvailable"/>), a gold pile with an insert-item script
     /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item the victim wears (the original steals it; unequipping an NPC
-    /// is not modelled: <see cref="GameSessionFailure.WornItemUnsupported"/>), an ammunition move without an ammunition kind for a new stack
+    /// is not modelled: <see cref="GameSessionFailure.WornItemUnsupported"/>), a key or key ring (<see cref="GameSessionFailure.ItemTypeUnsupported"/>),
+    /// an ammunition move without an ammunition kind for a new stack
     /// (<see cref="GameSessionFailure.InvalidAmmo"/>). A move refused for any reason but the insert check (a script the session does not
     /// run, a budget, the revision) refuses the attempt after the charge, with nothing rolled or moved.
     /// </summary>
@@ -98,6 +101,8 @@ public sealed partial class GameSessionOwner
             if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem)) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
             // The original steals a worn item too (PP3, its slot only raises the difficulty); the session does not unequip an NPC.
             if (facts.Worn) return RejectPickPocket(GameSessionFailure.WornItemUnsupported);
+            // Keys and key rings are not modelled in the session's lists (the transfer would refuse them after the rolls).
+            if (kind == PickPocketItemKind.Item && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectPickPocket(GameSessionFailure.ItemTypeUnsupported);
             quantity = kind == PickPocketItemKind.Ammunition ? QueryAmmo(item)?.Units ?? facts.Quantity ?? 0 : facts.Quantity ?? 1;
             location = facts.InventoryLocation;
             (width, height) = (facts.InventoryWidth, facts.InventoryHeight);
@@ -115,11 +120,16 @@ public sealed partial class GameSessionOwner
         if (kind == PickPocketItemKind.Ammunition && newStackKind.Type != SessionItemType.Ammo) return RejectPickPocket(GameSessionFailure.InvalidAmmo);
 
         SessionCombatResult? charge = null;
-        if (world is not null && _combat.Round is { } round && round.Actor == SessionCombatant.Hero)
+        if (world is not null && _combat.Round is not null)
         {
+            // The goal needs the hero's turn (PP2): another's subturn or an inactive hero is refused before any charge.
+            if (QueryCombatActionGate(SessionCombatant.Hero, TurnBasedRules.UseItemCost) is SessionCombatGate.NotTheirTurn or SessionCombatGate.Inactive)
+                return RejectPickPocket(GameSessionFailure.PickPocketOutOfTurn);
             if (_revision >= long.MaxValue - 1) return RejectPickPocket(GameSessionFailure.RevisionExhausted);
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectPickPocket(charge.Failure) with { Charge = charge };
+            // Too few action points end the subturn and the attempt does not run.
+            if (charge.Charge == SessionActionPointUse.Refused) return RejectPickPocket(GameSessionFailure.PickPocketOutOfTurn) with { Charge = charge };
         }
         return PickPocketStep(victim, direction, item, kind, quantity, location, width, height, newStackKind, insertCheck, scripts, triggers) with { Charge = charge };
     }
@@ -165,6 +175,9 @@ public sealed partial class GameSessionOwner
         catch (SkillRolls.ExhaustedException) { return RejectPickPocket(GameSessionFailure.RandomExhausted); }
 
         var amount = check.Success ? PickPocketRules.Amount(kind, quantity) : 0;
+        // The check's draws are spent before the move, whose item scripts and triggers draw after them; a refused move puts them back.
+        var before = _random;
+        _random = rolls.Trial;
         InventoryMutationResult? move = null;
         var moved = false;
         if (amount > 0)
@@ -183,13 +196,19 @@ public sealed partial class GameSessionOwner
             // A move the insertion refuses or a script declines is a failure that is never noticed (PP3); any other refusal is one the
             // session cannot answer as the original does, so the attempt is refused with nothing rolled.
             if (result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.InsertRefused)
+            {
+                _random = before;
                 return RejectPickPocket(result.Failure) with { Move = result };
+            }
             if (!moved) amount = 0;
         }
-        if (move is not { Disposition: GameSessionDisposition.Changed } && _revision == long.MaxValue) return RejectPickPocket(GameSessionFailure.RevisionExhausted);
+        if (move is not { Disposition: GameSessionDisposition.Changed } && _revision == long.MaxValue)
+        {
+            _random = before;
+            return RejectPickPocket(GameSessionFailure.RevisionExhausted);
+        }
 
-        // After the move (it may refuse) the rolls, the fate and the alignment join its revision.
-        _random = rolls.Trial;
+        // After the move (it may refuse) the fate and the alignment join its revision.
         if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.PickPocket)) is { } fate) hero.Apply(hero.State.WithFate(FateRules.Use(hero.State.Fate, fate).After));
         int? alignment = null;
         if (moved && direction == PickPocketDirection.Steal && !victim.SummonedByHero &&

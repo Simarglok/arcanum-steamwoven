@@ -129,6 +129,7 @@ public partial class TerrainViewerApp
     private bool TryAreaInventoryClick(Vector2 screen)
     {
         if (InventoryOpen || ActorCell() is not { } cell || InventoryTargetAt(screen) is not { } target) return false;
+        CancelPickPocket("an item click replaced it");
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
         var distance = Chebyshev(target.Row, cell);
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
@@ -283,6 +284,7 @@ public partial class TerrainViewerApp
         }
         EndInventory();
         CancelPendingWalkOrder("lockpicks armed");
+        _pickPocketArmed = false; _pickPocketAfterRoute = null;
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";
         GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");

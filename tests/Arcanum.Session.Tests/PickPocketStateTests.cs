@@ -177,6 +177,13 @@ public sealed class PickPocketStateTests
         var points = owner.QueryCombatRound()!.ActionPoints;
         var result = owner.PickPocket(owner.Version, Victim(), PickPocketDirection.Steal, "sword", NoStack, Accept, world);
         Assert.AreEqual((SessionActionPointUse.Paid, points - TurnBasedRules.UseItemCost, 1), (result.Charge!.Charge, owner.QueryCombatRound()!.ActionPoints, result.Moved));
+        // Another's subturn refuses the attempt before any charge or roll (the goal needs the hero's turn, PP2).
+        owner.EndCombatTurn(owner.Version, SessionCombatant.Hero, world);
+        Assert.AreNotEqual(SessionCombatant.Hero, owner.QueryCombatRound()!.Actor);
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        var outOfTurn = owner.PickPocket(owner.Version, Victim(), PickPocketDirection.Steal, "ring", NoStack, Accept, world);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.PickPocketOutOfTurn, revision, draws),
+            (outOfTurn.Disposition, outOfTurn.Failure, owner.Version.Revision, owner.QueryRandom().Draws));
     }
 
     [TestMethod]

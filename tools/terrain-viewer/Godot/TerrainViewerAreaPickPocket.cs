@@ -31,6 +31,7 @@ public partial class TerrainViewerApp
     {
         if (_areaSession?.QueryHero() is null || !InventoryActive) { _inventoryStatus = "pick pocket: no hero or no area inventory"; RefreshAreaStatus(); return; }
         if (AreaAiHostNow() is null) { _inventoryStatus = "pick pocket: not ready (the map's AI host is off)"; RefreshAreaStatus(); return; }
+        CancelArmedLockpicks("pick pocket armed");
         _pickPocketArmed = true;
         _inventoryStatus = "pick pocket: press an NPC";
         GD.Print("ARC-SKILLS-010 pick-pocket armed");
