@@ -7,10 +7,17 @@ namespace Arcanum.Session;
 /// <summary>
 /// One component of a translated record (ARC-MAGIC-014): its action and its index among that action's components (the run rules'
 /// component number), its type, its own area (the gate's test, MT8), its <c>Apply_AoE:</c> (the re-aim), its item triggers, and the
-/// typed data the components implemented so far read (<see cref="Damage"/> for Damage and Heal, MT12).
+/// typed data the components implemented so far read (<see cref="Damage"/> for Damage and Heal, MT12; <see cref="EyeCandy"/> for
+/// EyeCandy, ARC-MAGIC-017).
 /// </summary>
 public sealed record SessionSpellComponent(SpellRunAction Action, int Index, SpellComponentType Type, SpellTargetArea Area, ulong ApplyTargets,
-    int ItemTriggers, SpellDamageComponent? Damage);
+    int ItemTriggers, SpellDamageComponent? Damage)
+{
+    public SpellEyeCandyComponent? EyeCandy { get; init; }
+}
+
+/// <summary>ARC-MAGIC-017: an EyeCandy component's data: its number in the spell's eye-candy group, Add or Remove, the <c>Play:</c> flags.</summary>
+public sealed record SpellEyeCandyComponent(int Number, bool Add, uint Play);
 
 /// <summary>
 /// A spell record of the data (<see cref="SpellRecord"/>, ARC-MAGIC-001/002) in the rules' own types (ARC-MAGIC-014): the run rules'
@@ -51,7 +58,8 @@ public static class SessionSpellRecords
             var damage = component.Data is DamageData d && component.Type is SpellComponentType.Damage or SpellComponentType.Heal
                 ? new SpellDamageComponent(d.DamageType, d.Minimum, d.Maximum, unchecked((int)d.Flags)) : null;
             components.Add(new(action, counts[(int)action]++, component.Type, Area(component.Area), component.ApplyTargets,
-                unchecked((int)component.ItemTriggers), damage));
+                unchecked((int)component.ItemTriggers), damage)
+            { EyeCandy = component.Data is EyeCandyData e ? new(e.EyeCandy, e.Add, e.Play) : null });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));

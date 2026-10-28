@@ -1,6 +1,7 @@
 namespace Arcanum.Data.Area;
 
-/// <summary>The ART file and frame selection an art id of a scenery (class 4), item (class 6) or container (class 7) names.</summary>
+/// <summary>The ART file and frame selection an art id of a scenery (class 4), item (class 6), container (class 7) or eye candy
+/// (class 14, ARC-MAGIC-017) names.</summary>
 /// <param name="Path">The content path, under <c>art/scenery/</c>, <c>art/item/</c> or <c>art/container/</c>.</param>
 /// <param name="Lookup">The art id the selection is keyed by (an item's without its two palette-free bits).</param>
 public sealed record AreaObjectArtPath(string Path, uint Lookup, int Nominal, int Group, int Frame, int Palette);
@@ -23,6 +24,7 @@ public static class AreaObjectArt
         AreaMappingRole.Scenery => "art/scenery/scenery.mes",
         AreaMappingRole.Container => "art/container/container.mes",
         AreaMappingRole.ItemGround => "art/item/item_ground.mes",
+        AreaMappingRole.EyeCandy => Arcanum.Data.Magic.EyeCandyArt.NamesPath,
         _ => throw new ArgumentOutOfRangeException(nameof(role)),
     };
 
@@ -32,6 +34,7 @@ public static class AreaObjectArt
     {
         ArgumentNullException.ThrowIfNull(name);
         var cls = aid >> 28;
+        if (cls == Arcanum.Data.Magic.EyeCandyArt.Class) return EyeCandy(aid, name);
         if (cls is not (4 or 6 or 7)) return new(AreaObjectArtStatus.OtherClass, null, $"class {cls}");
         var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
         var palette = (int)((aid >> 4) & 3);
@@ -53,6 +56,20 @@ public static class AreaObjectArt
         if (name(role, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{role} {key}");
         if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{role} {key}");
         return new(AreaObjectArtStatus.Resolved, new(folder + entry, lookup, nominal, nominal, frame, palette), $"{role} {key}");
+    }
+
+    // ARC-MAGIC-017: an eye-candy art id (class 14, ledger EC rows) names art\eye_candy\<name>_<F|B|U>.art by its number in
+    // eye_candy.mes (0x41DF84); its frame, rotation and palette select the frame.
+    private static AreaObjectArtResolution EyeCandy(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        var number = Arcanum.Data.Magic.EyeCandyArt.Number(aid);
+        if (name(AreaMappingRole.EyeCandy, number) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.EyeCandy} {number}");
+        if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.EyeCandy} {number}");
+        var variant = Arcanum.Data.Magic.EyeCandyArt.Variant(aid);
+        if ((int)variant > 2) return new(AreaObjectArtStatus.Unsupported, null, "eye-candy variant 3");
+        var rotation = Arcanum.Data.Magic.EyeCandyArt.Rotation(aid);
+        return new(AreaObjectArtStatus.Resolved, new(Arcanum.Data.Magic.EyeCandyArt.FilePath(entry, variant), aid, rotation, rotation,
+            Arcanum.Data.Magic.EyeCandyArt.Frame(aid), Arcanum.Data.Magic.EyeCandyArt.Palette(aid)), $"{AreaMappingRole.EyeCandy} {number}");
     }
 
     /// <summary>A mapping file's name table in the original MES grammar, with the owner's limits; null when it does not parse to a
