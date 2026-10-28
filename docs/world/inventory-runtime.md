@@ -465,6 +465,25 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers; the barter window's substitute
   container, identified flag, payment order and restock (ARC-UI-050, NT4).
 
+## Made item complexity (ARC-WORLD-083)
+
+A made item keeps its magick/tech complexity (field 0x60), which the hero's insert check reads for the Technophobia refusal
+([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)): in the original the item is one object whose field no drop,
+placement, pickup or transfer writes ([ledger MC1](../research/ledger/items.md#made-item-complexity-arc-world-083)), so a product
+the check refused once is refused again when picked up. Tests [`MadeItemComplexityStateTests`](../../tests/Arcanum.Session.Tests/MadeItemComplexityStateTests.cs).
+
+- **Where it comes from.** An assembly product unit, the hero's or an NPC crafter's, takes the complexity of the host's facts for the
+  product prototype (0 without facts), in the list it enters or on the crafter's tile.
+- **Where it goes.** `SessionMadeItem.Complexity` in the hero's made items and in an NPC's list, `SessionPlacedItem.Complexity` on the
+  ground (0 for a kit or taken item: a taken item's seed answers). Placing, pickup, giving to an NPC and taking back carry it; a taken
+  item given to an NPC carries its seed's complexity in the NPC's list (the given record then returns it to the taken items, where the
+  seed answers again). The facts the session shows the host for such an item (`QueryMapInventory`, the insert check's item) carry it.
+- **None (0).** A kit item, a made item `AddItemToNpc` adds (the host passes only its kind) and a new ammunition stack split off
+  another (`NewHeroStack`, `NewNpcStack`): the session is given no complexity for them.
+- **Snapshot schema 41.** Each `made` row and each NPC list row gains `"complexity"` and each `placed` row ends with `"complexity"`,
+  any 32-bit value; a missing one is `MissingField`, a non-zero one on a placed kit or taken item `NotCanonical`. Schemas 1..40 are
+  refused, not migrated.
+
 ## Next steps
 
 The AREA viewer is wired (ARC-UI-004). Next: the insert check from the [session hero](starting-hero-runtime.md)'s carry
