@@ -137,6 +137,20 @@ class UniversalDevTests(unittest.TestCase):
                     cli["command_launch"](args)
                 start.assert_not_called()
 
+    def test_a_universal_build_takes_the_main_menu(self):
+        # ARC-UI-011: `--main-menu` reaches the viewer as `--main-menu true` after the map arguments.
+        cli, args = self.launch_cli(launch.UNIVERSAL_TASK, "--mode", "crash-site-area", "--area-map", "Arcanum1-024-fixed", "--main-menu",
+                                    installation={"pinnedVerified": []})
+        with patch.object(launch, "start", return_value={"started": False}) as start:
+            cli["command_launch"](args)
+            argv = start.call_args[0][1]
+        self.assertEqual(argv[-2:], ["--main-menu", "true"])
+        self.tearDown(); self.setUp()
+        cli, args = self.launch_cli(launch.UNIVERSAL_TASK, "--mode", "world-diagnostic", "--main-menu")
+        with patch.object(launch, "start") as start, self.assertRaisesRegex(ValueError, "main menu|map mode only"):
+            cli["command_launch"](args)
+        start.assert_not_called()
+
     def test_a_pinned_area_launch_refuses_an_installation_whose_pins_differ(self):
         cli, args = self.launch_cli("ARC-RENDER-008", "--mode", "crash-site-area", installation={"pinnedVerified": ["module"]})
         with patch.object(launch, "start") as start, self.assertRaisesRegex(ValueError, "pinned"):
