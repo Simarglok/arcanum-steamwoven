@@ -34,12 +34,12 @@ public partial class LauncherPanel : CanvasLayer
     public event Action? ResetRequested;
     public event Action? QuitRequested;
     public bool IsOpen => Visible;
-    /// <summary>The screen's lines, top to bottom: reason, file, folder, rules (the chosen one in brackets), show at start, debug mode, notice.</summary>
+    /// <summary>The screen's lines: reason, file, folder, rules (the chosen one in brackets), show at start, notice, then the debug mode.</summary>
     internal IReadOnlyList<string> LinesForSelfTest =>
     [
         _reason.Text, _file.Text, _folder.Text,
         "Rules: " + string.Join(" ", _rules.GetChildren().OfType<Button>().Select(button => button.ButtonPressed ? $"[{button.Text}]" : button.Text)),
-        "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), "Debug mode: " + (_debugMode.ButtonPressed ? "on" : "off"), _notice.Text,
+        "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), _notice.Text, "Debug mode: " + (_debugMode.ButtonPressed ? "on" : "off"),
     ];
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
     internal void ChooseForSelfTest(string path) => FolderChosen?.Invoke(path);

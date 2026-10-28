@@ -105,11 +105,12 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); "Show this screen at every start"; Play, Reset settings and Quit. The project's own look, not a
+  after alpha); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
 - **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
-  detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode and "show
-  at start", then starts map mode on the main map with the main menu from that folder, as a start without the screen
+  detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode, "show
+  at start" and the debug mode (`debugMode`, which turns the run's debug mode on, as `--debug-mode` does), then starts map mode on the main map with the main menu from that folder, as a start without the screen
   does. A save the file refuses (a newer build's or an unreadable file) does not stop the start: the choices apply to
   it and the file is kept.
 - **Reset settings** writes the defaults over the file (`LauncherSettingsFile.Reset`, the one write that replaces a

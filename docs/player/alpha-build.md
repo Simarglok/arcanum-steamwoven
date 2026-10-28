@@ -126,3 +126,27 @@ The build does not update itself. A newer build is made from the current `main` 
 Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
 the old build may stay). Settings and saves stay in the folder above. A newer build loads the saves of older builds (from the first packaged
 build on); an older build refuses a save made by a newer one.
+
+## 7. Debug mode
+
+The debug mode is a testing aid for the alpha, **not part of the game**. It is off unless you turn it on. While it is on,
+the world map (key **W**, also inside buildings and caves) lists every area of the world, known or not, and **Teleport**
+moves you to the selected area at once. Without it the world map has no area list and you travel only by clicking the map,
+as in the original game.
+
+**Turn it on:** hold **Shift** while the game starts to open the launcher, tick **Debug mode** and press **Play**. The
+choice is stored, so the next starts keep it until you untick it there (or press **Reset settings**). While it is on, the
+line in the bottom right corner of the main menu ends in `DEBUG MODE`.
+
+Advanced, for one start only: start the game with the argument `-- --debug-mode`. On macOS, in Terminal:
+`"/Applications/Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven" -- --debug-mode` (adjust the path to where the
+app is). On Windows, in a command prompt in the game folder: `"Arcanum Steamwoven.exe" -- --debug-mode`, or put
+` -- --debug-mode` after the target of a shortcut to the `.exe`.
+
+**Use it:** press **W** in play, select an area in the list on the right and press **Teleport**. The game loads the world
+around that area and puts you on the nearest walkable spot, together with the companions that follow you. A teleport takes
+no game time and does not mark the area as discovered; areas you have really discovered stay marked in yellow. Normal
+travel on the world map works as without the debug mode.
+
+**Saves:** the debug mode does not change the rules or what a save holds, but a save made while it is on has `[DEBUG]`
+before its location in the save's details (the line under the list in the save and load windows), so you can tell it apart. Such a save loads normally with the debug mode off.
