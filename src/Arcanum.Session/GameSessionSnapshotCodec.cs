@@ -69,7 +69,7 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    // ARC-SCRIPT-042 (schema 42): the kept item script slots, and a worn item's item event points.
+    // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
@@ -1992,10 +1992,11 @@ public static class GameSessionSnapshotCodec
         "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
-    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082).</summary>
+    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082; CheckWeapon
+    /// ARC-WORLD-084).</summary>
     private static readonly string[] DangerFlagNames =
         ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked",
-            "SpellFlee"];
+            "SpellFlee", "CheckWeapon"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>

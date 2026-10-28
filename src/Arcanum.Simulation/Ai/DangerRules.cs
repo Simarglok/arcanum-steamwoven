@@ -40,8 +40,11 @@ public enum DangerFlags
     TargetLocked = 1 << 8,
     /// <summary>Critter flag 0x10000 (SPELL_FLEE): the flight's flee spell or item was chosen (0x4AAF50, slice I5).</summary>
     SpellFlee = 1 << 9,
+    /// <summary>NPC flag 0x80 (CHECK_WEAPON): the gate's next pass wields the best weapon (slice I6; the full re-wield clears it
+    /// too, CL2).</summary>
+    CheckWeapon = 1 << 10,
     /// <summary>Every defined bit.</summary>
-    All = (1 << 10) - 1,
+    All = (1 << 11) - 1,
 }
 
 /// <summary>

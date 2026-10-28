@@ -187,7 +187,7 @@ Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#1
   re-insertions ran, and what those runs changed is applied (`Changed`, or `NoChange` when nothing), as in the original; `Verdict`
   is the insert check's answer and `Displaced` is null.
 
-**Snapshot schema 42.** A worn item's `scripts` (its item event points, ascending) and the inventory's `scriptSlots` (entity,
+**Snapshot schema 43.** A worn item's `scripts` (its item event points, ascending) and the inventory's `scriptSlots` (entity,
 point, script, local flags, counters; by entity in ordinal order, then by point, at most `SessionItemScripts.MaxStoredSlots`). Restore
 refuses a point outside 0..35 or the dialog-override slot, a script number outside 0..99,999, a deleted item's slot, worn points
 other than 21, 24, 25 and 28 and an unsorted list. A deleted item's kept slots go with it.
