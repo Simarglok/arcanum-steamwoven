@@ -191,6 +191,7 @@ public partial class TerrainViewerApp
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
+        ClearAreaProjectiles("quick load");
         if (_mapTransfers?.Clear() is { } dropped) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + dropped.To.Name);
         var grid = (AreaGridSession)_worldActor.Session!;
         var actor = loaded.QueryActor();
@@ -222,6 +223,8 @@ public partial class TerrainViewerApp
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
+        // ARC-COMBAT-016: the flights of the replaced session are given up.
+        ClearAreaProjectiles("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
         if (_mapTransfers?.Clear() is { } queued) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();

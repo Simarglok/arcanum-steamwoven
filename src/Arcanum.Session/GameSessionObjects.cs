@@ -270,7 +270,8 @@ public sealed partial class GameSessionOwner
         if ((attack.Target is null ? 0 : 1) + (attack.Item is null ? 0 : 1) + (attack.Wall ? 1 : 0) != 1) return RejectObject(GameSessionFailure.InvalidObject);
         var struckKey = ShotObjectKey(attack);
         PendingShot? pending = null;
-        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || !pending.Hit && pending.Object == struckKey))
+        // Walls share one key and take nothing: a missed shot may strike any wall past its destination.
+        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || !pending.Hit && pending.Object == struckKey && !attack.Wall))
             return RejectObject(GameSessionFailure.InvalidAttack);
         AttackTargetKind kind;
         Combatant defender;

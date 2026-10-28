@@ -194,7 +194,7 @@ object-attack, critical and line-of-fire stages that follow the cast stage in th
 native observation: the goal's reach test admits only a clear line, so the viewer meets a wall blocker only when the line changed
 after it; the session tests cover the wall's shot.
 
-Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour), boomerangs (RH3, RH4,
+Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour, and since ARC-COMBAT-016 its shot flies as a projectile while it stays in the hand), boomerangs (RH3, RH4,
 ARC-COMBAT-019), a bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
 bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
 
@@ -209,7 +209,7 @@ projectile art is field 127 (`CombatWeaponFields.MissileArt`, slot 74, [combat f
 | --- | --- |
 | Which shots fly (PF1, PF2) | A shot on the ranged path (`RangedPath`) whose weapon has a projectile art (not −1). Every installed bow, 5 of the 41 firearms, the throwing weapons and the throwing dagger have one, all scenery arts (combat census). Without one the hit runs on the action frame as before. |
 | Decided at the shot (PF1) | `SessionAttack.Flight` / `SessionObjectAttack.Flight`: the attack runs as without it up to the outcome (refusals, the hit location, the ammunition, the check, the dodge, the fate, the concealment) and a critical miss turns on the hero at once; a hit or critical hit carries no damage yet (`AttackRequest.DeferHit`). The result names the shot in flight (`SessionAttackResult.Shot`), a hit or a miss; at most `MaxShotsInFlight` (16) fly. |
-| Strike (PF5, PF6, PF8) | `LandShot` (an NPC) and `LandShotOnObject` (a portal, container, scenery, trap or wall): the shot's own target when it hit, with the carried location, aim and critical (`AttackResolver.LandHit` rolls only the damage, on the target as it is now; a target dead by then is refused); any other object as a forced hit without a check (`AttackResolver.ForcedHit`: torso, no critical). A miss never strikes its own target. Every step after the resolution follows as for an attack at once; the shot's fate, concealment and ammunition are not spent again. |
+| Strike (PF5, PF6, PF8) | `LandShot` (an NPC) and `LandShotOnObject` (a portal, container, scenery, trap or wall): the shot's own target when it hit, with the carried location, aim and critical (`AttackResolver.LandHit` rolls only the damage, on the target as it is now; a target dead by then is refused); any other object as a forced hit without a check (`AttackResolver.ForcedHit`: torso, no critical). A miss never strikes its own target (walls excepted: they share one identity and take nothing). Every step after the resolution follows as for an attack at once; the shot's fate, concealment and ammunition are not spent again. The damage uses the shot's weapon and skill (field 0x50); the attacker's values and the wear of the hero's items are those of the strike (a weapon wielded since then takes the wear). |
 | End (PF9) | `EndShot`: the shot flew beyond its range, off the map or its map left the screen; a carried hit is lost. |
 | Not saved | The session keeps its shots in memory only: a snapshot taken during a flight holds what the shot spent and no projectile, and a restored session has none (Steamwoven; the original's projectile is a map object). |
 | Flight (PF3, PF4) | `ProjectileRules.Launch` and `Step`: the pixel line from the hero's tile centre to the destination tile's (the goal target's tile at the shot, also after a line-of-fire redirect, PF2), in 10-pixel steps, replayed when they run out; four steps a 35 ms tick (`TickMs`, `StepsIn`; the weapon's eye-candy speed column is not read). A tile change is a `ProjectileCrossing` of the tile left; a point off the map ends the flight. |
@@ -222,11 +222,11 @@ its ticks owe (`ProcessAreaProjectiles`), the tiles it leaves are crossed over t
 hero, the companions on their live cells and the map's living NPCs in row order, the line-of-fire view's step for an obstruction),
 and a strike resolves through the session with the same sounds, status line, death pose and drawn bodies as a hit at once
 (`projectile-end strike=… struck=…`). The projectile is drawn from its faced art at its tile, moved by its pixel offset along the
-line, its frame advanced once per step; a map change, a reload or the smoke's end gives the flights up. A companion struck on the
+line, its frame advanced once per step; each projectile keeps the session that holds its shot, and a map change, a reload (F8 or the load window) or the smoke's end gives the flights up (a strike the session refuses ends its shot there too). A companion struck on the
 way ends the shot without a strike (RH6, not ready). Native smoke `ARC-COMBAT-016 native-smoke projectile PASS` (in the ranged stage,
 with the lent bow and scenery art 0 as its projectile art): from the first cell each shot flies, a hit deals nothing at the shot and
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
-afterwards, until one hit has landed (at most 12 shots).
+afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
 
 Not ready: the second projectile of a bow (ARC-COMBAT-018), thrown items and their scale arc (PF11, PF12, ARC-COMBAT-017),
 boomerangs (ARC-COMBAT-019), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event

@@ -167,7 +167,8 @@ public partial class TerrainViewerApp
 
         // ARC-COMBAT-016: with the lent bow's projectile art each shot flies from the hero's cell: the hit decided at the shot deals
         // nothing until the arrow leaves the target's tile, its art is drawn on the way, and a missed arrow flies on past the target
-        // (to its range's end, a stray critter or an obstruction). Shots from the first cell until one hit has landed (at most 12).
+        // (to its range's end, a stray critter or an obstruction). Shots from the first cell until a hit has landed and a miss has
+        // flown (at most 12; a miss is reported, not required).
         async Task<object> Projectiles()
         {
             _lentMissileArtForSelfTest = LentMissileArt;
@@ -179,7 +180,7 @@ public partial class TerrainViewerApp
             var life = pick.Target.Build.Combat!.Target;
             int Hp() => session.QueryLife(life).View!.Status.HitPoints;
             var hits = 0; var misses = new List<string>(); var drawn = 0; var maxSteps = 0L;
-            for (var shots = 0; shots < 12 && hits == 0; shots++)
+            for (var shots = 0; shots < 12 && (hits == 0 || misses.Count == 0); shots++)
             {
                 Heal();
                 _projectileEndsForSelfTest.Clear();
@@ -210,7 +211,7 @@ public partial class TerrainViewerApp
                 }
                 Require(session.QueryShotsInFlight().Count == 0, "the session holds no shot after the flight");
             }
-            Require(hits == 1, $"a hit landed within 12 shots (misses {string.Join(",", misses)})");
+            Require(hits >= 1, $"a hit landed within 12 shots (misses {string.Join(",", misses)})");
             Require(drawn > 0 && maxSteps >= ProjectileRules.DefaultStepsPerTick, $"the arrow was drawn while it flew ({drawn} frames, {maxSteps} steps)");
             GD.Print($"ARC-COMBAT-016 native-smoke projectile PASS map={_readyMapName} target={pick.Target.Entity} misses={misses.Count} drawn={drawn} steps={maxSteps}");
             return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };

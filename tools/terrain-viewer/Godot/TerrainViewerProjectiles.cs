@@ -16,6 +16,8 @@ public partial class TerrainViewerApp
     private sealed class AreaProjectile
     {
         public required SessionShot Shot { get; init; }
+        // The session that holds the shot: a projectile of another session (a reload, a carried session) is given up.
+        public required GameSessionOwner Owner { get; init; }
         public required int Map { get; init; }
         public required AreaObjectRecord Target { get; init; }
         public AttackGoal? Critter { get; init; }
@@ -47,17 +49,19 @@ public partial class TerrainViewerApp
         return kit[number - 1] is { } art && art != CombatWeaponFields.NoMissileArt ? art : null;
     }
 
-    /// <summary>ARC-COMBAT-016 (ledger PF1, RH3): a shot on the ranged path flies as a projectile when the weapon has a projectile art;
-    /// otherwise it hits at once on the action frame.</summary>
-    private bool ShotFlies(SessionHeroAttack? hero) => RangedPath(hero) && HeroMissileArt() is not null;
+    /// <summary>ARC-COMBAT-016 (ledger PF1, RH3): a shot on the ranged path flies as a projectile when the weapon has a projectile art:
+    /// that art and the weapon's range, read before the shot (a critical miss may drop or break the weapon); null when it hits at once
+    /// on the action frame.</summary>
+    private (int Art, int Range)? ShotFlight(SessionHeroAttack? hero) =>
+        RangedPath(hero) && HeroMissileArt() is { } art ? (art, HeroReach(hero)) : null;
 
     /// <summary>
     /// ARC-COMBAT-016: the session's shot leaves the hero's tile for the goal target's tile (the destination stays the target's tile
     /// after a line-of-fire redirect, ledger PF2) with the art faced in its screen direction (0x4B6A00, 0x4B6B10); a shot that cannot
     /// fly (no line between the tiles) ends at once.
     /// </summary>
-    private void LaunchProjectile(AttackGoal goal, SessionShot shot, AttackResolution resolution, AreaObjectRecord target, AttackGoal? critter,
-        AreaObjectAttackTarget? obj)
+    private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
+        AttackGoal? critter, AreaObjectAttackTarget? obj)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
@@ -71,12 +75,12 @@ public partial class TerrainViewerApp
             return;
         }
         var direction = ProjectileRules.Direction(start, destination);
-        var art = HeroMissileArt() is { } missile ? ProjectileRules.FacedArt(unchecked((uint)missile), direction) : null;
+        var art = ProjectileRules.FacedArt(unchecked((uint)weapon.Art), direction);
         var hit = resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
         _projectiles.Add(new AreaProjectile
         {
-            Shot = shot, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = art,
-            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, false, HeroReach(owner.QueryHeroAttack())),
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = art,
+            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, false, weapon.Range),
         });
         _attackNotice = $"the shot flies ({(hit ? "it will hit" : "it missed")})";
         GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
@@ -99,7 +103,7 @@ public partial class TerrainViewerApp
         var lineMap = owner is null || !AttackMapActive ? null : AreaLineOfFireNow();
         foreach (var projectile in _projectiles.ToArray())
         {
-            if (owner is null || lineMap is null || projectile.Map != CurrentAreaMap)
+            if (owner is null || lineMap is null || projectile.Map != CurrentAreaMap || !ReferenceEquals(projectile.Owner, owner))
             {
                 EndProjectile(projectile, ProjectileStrikeKind.None, null, "the map changed");
                 continue;
@@ -141,7 +145,7 @@ public partial class TerrainViewerApp
     /// without combat values is not ready (the shot ends without a strike).</summary>
     private void Strike(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck)
     {
-        var owner = _areaSession!;
+        var owner = projectile.Owner;
         _projectiles.Remove(projectile);
         PlaceHeroForDrop();
         var map = CurrentAreaMap;
@@ -151,7 +155,9 @@ public partial class TerrainViewerApp
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Life?.HitPointDamage}");
-            if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
+            // A refused strike leaves the shot in the session: it ends there too.
+            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
+            else FinishCritterHit(goal, result);
             return;
         }
         if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
@@ -162,7 +168,8 @@ public partial class TerrainViewerApp
                 target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow() });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
-            if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result);
+            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
+            else FinishObjectHit(null, target, result);
             return;
         }
         if (struck.Type == 0)
@@ -170,6 +177,7 @@ public partial class TerrainViewerApp
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
                 new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
+            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
             _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
             RefreshAreaStatus();
             return;
@@ -183,7 +191,7 @@ public partial class TerrainViewerApp
     private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why)
     {
         _projectiles.Remove(projectile);
-        _areaSession?.EndShot(projectile.Shot);
+        projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
     }

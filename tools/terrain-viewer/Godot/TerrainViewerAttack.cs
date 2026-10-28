@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
     }
 
-    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
+    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 
@@ -217,16 +217,16 @@ public partial class TerrainViewerApp
         if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
         PlaceHeroForDrop();
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
-        var flies = ShotFlies(owner.QueryHeroAttack());
+        var flight = ShotFlight(owner.QueryHeroAttack());
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
-            DropMap = AreaDropMapNow(), Flight = flies,
+            DropMap = AreaDropMapNow(), Flight = flight is not null,
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
         {
-            LaunchProjectile(goal, shot, result.Resolution!, target.Row, null, target);
+            LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, target.Row, null, target);
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
         FinishObjectHit(goal, target, result);
@@ -581,17 +581,18 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-COMBAT-015 line-of-fire strikes wall={blocker.Key.Kind}:{blocker.Key.SourceIndex} instead of {goal.Entity}");
             _lineOfFireStruck = $"wall:{blocker.Key.SourceIndex}";
             PlaceHeroForDrop();
+            var flight = ShotFlight(owner.QueryHeroAttack());
             var result = owner.AttackObject(owner.Version, new SessionObjectAttack
             {
                 Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
                 // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
-                Flight = ShotFlies(owner.QueryHeroAttack()),
+                Flight = flight is not null,
             });
             goal.Attacks++;
             goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
             if (result.Shot is { } shot)
             {
-                LaunchProjectile(goal, shot, result.Resolution!, blocker, null, null);
+                LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, blocker, null, null);
                 if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
             }
             _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
@@ -615,14 +616,14 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         PlaceHeroForDrop();
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
-        var flies = ShotFlies(owner.QueryHeroAttack());
-        var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with { Flight = flies });
+        var flight = ShotFlight(owner.QueryHeroAttack());
+        var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with { Flight = flight is not null });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
         {
-            LaunchProjectile(goal, shot, result.Resolution!, struck.Row, struck, null);
+            LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, struck.Row, struck, null);
             // A critical miss turned on the hero at the shot; anything else waits for the strike.
             if (result.Life is null) { _lastCritterAttackForSelfTest = result; SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
