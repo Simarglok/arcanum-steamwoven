@@ -5,9 +5,11 @@ namespace Arcanum.Data.Characters;
 
 public enum PortraitCatalogueStatus { Ready, FileMissing, ReadFailed, ParseFailed }
 
-/// <summary>The portrait catalogue, or why one of its files could not be loaded (<see cref="File"/> names it).</summary>
+/// <summary>The portrait catalogue, or why the game file could not be loaded (<see cref="File"/> names it). A user file that
+/// is present but could not be read or parsed leaves the catalogue without one, as in the original, and is reported in
+/// <see cref="UserRefusal"/>.</summary>
 public sealed record PortraitCatalogueLoad(PortraitCatalogueStatus Status, PortraitCatalogue? Catalogue, string? File = null,
-    ContentReadStatus? Read = null, MesParseResult? Parse = null);
+    ContentReadStatus? Read = null, MesParseResult? Parse = null, PortraitCatalogueLoad? UserRefusal = null);
 
 /// <summary>
 /// The character a portrait is filtered for: its race (0..10, the eleven entries of the original's code table), gender (0
@@ -85,6 +87,8 @@ public sealed class PortraitCatalogue
     // letters ("FM", 0x5B7C38).
     private static readonly string[] RaceCodes = ["HU", "DW", "EL", "HE", "GN", "HA", "HO", "HG", "EL", "HG", "HO"];
     private const string GenderLetters = "FM";
+    private static readonly byte[][] Codes = RaceCodes
+        .SelectMany(race => GenderLetters.Select(gender => System.Text.Encoding.ASCII.GetBytes(race + gender))).ToArray();
     private static readonly byte[] Any = "ANY"u8.ToArray(), Npc = "NPC"u8.ToArray();
 
     private readonly MesFile _game;
@@ -96,8 +100,9 @@ public sealed class PortraitCatalogue
     /// means no user file.</summary>
     public static PortraitCatalogue Create(MesFile game, MesFile? user = null) => new(game ?? throw new ArgumentNullException(nameof(game)), user);
 
-    /// <summary>Reads both files from <paramref name="stack"/>'s base sources, as the module's init does at game start. A
-    /// missing user file is no user file; one that is present but cannot be read or parsed is refused.</summary>
+    /// <summary>Reads both files from <paramref name="stack"/>'s base sources, as the module's init does at game start. The
+    /// game file is required; a user file that is missing, unreadable or refused by the MES reader is no user file (the
+    /// original only records whether it loaded), the latter two reported in <see cref="PortraitCatalogueLoad.UserRefusal"/>.</summary>
     [OriginalFunction(0x4CE350, OriginalFunctionScope.Full)]
     public static PortraitCatalogueLoad Load(ContentStack stack, MesReaderOptions? options = null)
     {
@@ -107,8 +112,8 @@ public sealed class PortraitCatalogue
         var game = Read(stack, GamePath, options, out var refusal);
         if (game is null) return refusal!;
         var user = Read(stack, UserPath, options, out refusal);
-        if (user is null && refusal!.Status != PortraitCatalogueStatus.FileMissing) return refusal;
-        return new(PortraitCatalogueStatus.Ready, new(game, user));
+        return new(PortraitCatalogueStatus.Ready, new(game, user),
+            UserRefusal: user is null && refusal!.Status != PortraitCatalogueStatus.FileMissing ? refusal : null);
     }
 
     public bool HasUserFile => _user is not null;
@@ -151,7 +156,7 @@ public sealed class PortraitCatalogue
     public static bool Matches(ReadOnlySpan<byte> stem, PortraitSubject subject)
     {
         ArgumentNullException.ThrowIfNull(subject);
-        var code = System.Text.Encoding.ASCII.GetBytes(RaceCodes[subject.Race] + GenderLetters[subject.Gender]);
+        var code = Codes[subject.Race * GenderLetters.Length + subject.Gender];
         return Prefix(stem, code) || Prefix(stem, Any) || (subject.Npc && Prefix(stem, Npc));
     }
 

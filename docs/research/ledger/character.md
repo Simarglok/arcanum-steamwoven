@@ -269,5 +269,6 @@ heroes).
 | PO10 | portrait get (0x4CEB80) | Field 0xE7; for an NPC whose non-zero portrait equals the player's (0x4CEB80 of 0x40DA50), the next portrait, else the previous one, else 0, by the NPC's own race, gender and NPC rule. | Original |
 
 Project admission policy (not a rule mode): a stem that is empty, holds a byte outside printable ASCII or a path separator is
-refused (`InvalidStem`) instead of formatted into a path; a present `userport.mes` that the MES reader refuses fails the load,
-as the game file does. No installed portrait is refused.
+refused (`InvalidStem`) instead of formatted into a path. A present `userport.mes` that cannot be read or that the MES reader
+refuses leaves the catalogue without a user file, as a failed load does in the original, and the load reports it. No installed
+portrait is refused.

@@ -99,6 +99,9 @@ public sealed class PortraitCatalogueTests
         Assert.AreEqual(3, catalogue.Last(1004, HumanMan), "none left in the game ids: the last user id");
         Assert.AreEqual(3, catalogue.Last(2, HumanMan), "a user start reads the user ids from 1");
         Assert.AreEqual(1004, catalogue.Next(1003, new(Human, Male, npc: true)));
+        Assert.AreEqual(1, catalogue.Previous(3, HumanWoman), "the backward search finds a user id on its way down");
+        Assert.AreEqual(1003, Catalogue(Game).Previous(5, HumanMan), "no user file: from a user id straight to the game ids");
+        Assert.AreEqual(3, Catalogue("{0}{HUM}", User).Last(0, HumanMan), "a match at id 0 counts as none, so the last search reads the user ids");
 
         // A gap ends the game ids, and the backward search starts at count + 999, not at the highest id.
         var gap = Catalogue("{1000}{HUM}\n{1002}{HUM}", User);
@@ -164,7 +167,9 @@ public sealed class PortraitCatalogueTests
         Assert.AreEqual((PortraitCatalogueStatus.Ready, "portrait/HUF_u1.bmp"), (both.Status, both.Catalogue!.Image(1, 32).Path));
         Write(data, PortraitCatalogue.UserPath, "{1}{HUF");
         var broken = Load(module, data);
-        Assert.AreEqual((PortraitCatalogueStatus.ParseFailed, PortraitCatalogue.UserPath), (broken.Status, broken.File), "a present user file that cannot be parsed is refused");
+        Assert.AreEqual((PortraitCatalogueStatus.Ready, false), (broken.Status, broken.Catalogue!.HasUserFile), "a user file that cannot be parsed is no user file");
+        Assert.AreEqual((PortraitCatalogueStatus.ParseFailed, PortraitCatalogue.UserPath), (broken.UserRefusal!.Status, broken.UserRefusal.File), "and is reported");
+        Assert.IsNull(both.UserRefusal);
         Write(data, PortraitCatalogue.UserPath, User);
         Assert.AreEqual(MesParseStatus.TooLarge, Load(module, data, new() { MaxBytes = 4 }).Parse!.Status);
     }
@@ -240,7 +245,7 @@ public sealed class PortraitCatalogueRealDataTests
             Assert.AreEqual(34, ids.Count(id => catalogue.Allows(id, new(race, gender, npc: true))), $"race {race} gender {gender} as an NPC");
             // The buttons cycle through the same four, both ways.
             var walked = new List<int> { catalogue.First(pc)!.Value };
-            while (catalogue.Press(PortraitButton.Next, walked[^1], pc) is var next && next != walked[0]) walked.Add(next);
+            while (walked.Count <= run && catalogue.Press(PortraitButton.Next, walked[^1], pc) is var next && next != walked[0]) walked.Add(next);
             CollectionAssert.AreEqual(allowed, walked);
             Assert.AreEqual(allowed[^1], catalogue.Press(PortraitButton.Previous, allowed[0], pc));
             offered.UnionWith(allowed);
