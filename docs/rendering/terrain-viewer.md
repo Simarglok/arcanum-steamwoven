@@ -1650,25 +1650,44 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   row shows the description's name and the text below it, the game's `mes\gameback.mes`; before any background press (or after
   a clear) the window shows the default text 1000 and the character keeps background 0 without its effect, as in the
   original. Race and gender names are the project's.
+- **Portrait** (ARC-UI-033, FR-CHAR-004, [NW9](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
+  a row with the original's arrows over the portraits the race and gender may take (`PortraitCatalogue.Press`, PO9: next
+  past the last takes the first, previous before the first takes the last); a race or gender change takes the first
+  portrait of the new pair, a refused press keeps it. The window starts with the generic prototype's portrait 1005 and
+  shows the portrait's image name and number (the image is not drawn yet). The catalogue is read with the generic start
+  (`AreaHeroLoad.Portraits`); without it the arrows say so and a race change keeps the portrait.
+- **Name** (ARC-UI-033, FR-CHAR-002, [NW6–NW8](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
+  the field starts with main-menu message 500 (in the game's encoding, the project's text without the game). A click on it
+  (or the controller's confirm on its row) clears it and starts the typing, marked by a caret: typed characters the game's
+  encoding (code page 1252) has go to its end up to 22 bytes, Backspace removes the last, Return ends the typing (an empty
+  field takes message 500), and a press on any other button ends it first (an empty field takes back its old text). The
+  cursor keys, Delete and Insert of the original's text edit are not offered. While it is typed into, letters go to the
+  field; Escape still leaves the window, as in the original.
 - **Accept** starts a new game as that character, as Start does for a pre-made hero (the same session recipe and scene
   flow): the session's hero is the generic prototype with the chosen race and gender, whose race effect (64 + race) and
   female effect (330) are its innate effects (NW3), then the chosen background is set with its effect (cause 1,
   [ARC-WORLD-097](../world/equipment-runtime.md#setting-and-clearing-the-background-arc-world-097)); no main-menu flag is
-  set. The new character's tables (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
+  set. ARC-UI-033: Accept first checks the name (NW6): a name equal to message 500 (an empty field takes it) is refused with
+  message 506 as the window's notice; otherwise the session's hero starts with the chosen portrait and the name is stored as
+  its player name (`SetHeroPlayerName`, snapshot schema 56), which the status lines then show. The new character's tables
+  (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
   transfer reads the generic start again; a load that makes a fresh session instead of carrying it (the palette's reload, an
   exterior scene load without a carried session) starts the generic human man with background 0, as it starts a pre-made hero
   afresh.
 - **Keys.** The window's buttons are art only in the original: no letters. Escape and Cancel go back. A controller moves
-  over the rows, Accept and Cancel, and its confirm presses a row's next arrow or the button.
+  over the rows (gender, race, background, portrait, name), Accept and Cancel, and its confirm presses a row's next arrow,
+  begins or ends the name's typing, or presses the button.
 
-Not built yet (later N10b slices): the name field and its check (NW6, FR-CHAR-002), the portrait arrows and the PC's
-portrait in the session (FR-CHAR-004), the character editor in creation mode that Accept opens in the original (point
+Not built yet (later N10b slices): the portrait's image in the window, the character editor in creation mode that Accept opens in the original (point
 buying, FR-CHAR-015, FR-CHAR-020), and the opening shop with the background's money and items and the clothes
 (FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no gold, no items and
 its 5 points unspent. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
-back and an Accept that starts a dwarf with a background and its effect); native smoke on the original data: the `menu` stage
+back, the default name refused, a name typed through the keys and an Accept that starts a dwarf with a background and its
+effect, the name and the portrait); native smoke on the original data: the `menu` stage
 (`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
-accepts and checks the session (`ARC-UI-030 native-smoke new character PASS`).
+steps her portraits, has Accept refuse the default name, types a name through the window's keys, accepts and checks the
+session (`ARC-UI-030 native-smoke new character PASS`, then `ARC-UI-033 native-smoke name and portrait PASS`). Checks:
+`AreaNewCharacterTests`, `CharacterNameRulesTests`, `HeroNameTests`.
 
 ### Interface bars (ARC-UI-018)
 

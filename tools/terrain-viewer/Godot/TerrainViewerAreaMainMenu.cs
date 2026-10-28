@@ -1,3 +1,4 @@
+using Arcanum.Data.Messages;
 using Arcanum.Data.Traversal;
 using Arcanum.Input;
 using Arcanum.Session;
@@ -95,6 +96,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.SoundRequested += id => PlayBarSound(id, "menu button");
             _mainMenuPanel.CreationPressed += button => MainMenuCommand(() => { _mainMenu!.PressCreation(button, CreationRules()); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
+            _mainMenuPanel.NameClicked += () => MainMenuCommand(() => { _mainMenu!.BeginName(); return AreaMenuCommand.Nothing; });
         }
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
@@ -216,8 +218,8 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-030: the character-creation rules of the rule setting the launcher and options window hold (NW4).</summary>
     private CharacterCreationRuleProfile CreationRules() => GameRules.For(_ruleMode).Creation;
 
-    /// <summary>ARC-UI-030: the new character's name in the status lines (no player name yet: its race and gender).</summary>
-    private static string CreationName(AreaNewCharacter creation) => $"a new {creation.Race} {creation.Gender} character";
+    /// <summary>ARC-UI-030: the new character's name in the status lines (ARC-UI-033: its name field, with its race and gender).</summary>
+    private static string CreationName(AreaNewCharacter creation) => $"{creation.NameText()}, a new {creation.Race} {creation.Gender} character";
 
     /// <summary>ARC-UI-030: the new character's start (the generic prototype), read once a run as the pre-made heroes are.</summary>
     private AreaHeroLoad MainMenuNewCharacter()
@@ -225,7 +227,7 @@ public partial class TerrainViewerApp
         if (_mainMenuNewCharacter is { } cached) return cached;
         var generic = AreaStartingHero.NewCharacter;
         var load = _heroLoaderForSelfTest?.Invoke(generic) ?? AreaStartingHero.Load(_arguments!.ModulePath, generic);
-        GD.Print($"ARC-UI-030 new character start status={load.Status} detail={load.Detail} backgrounds={load.Backgrounds?.Count.ToString() ?? load.BackgroundsDetail}");
+        GD.Print($"ARC-UI-030 new character start status={load.Status} detail={load.Detail} backgrounds={load.Backgrounds?.Count.ToString() ?? load.BackgroundsDetail} portraits={load.Portraits?.GameCount.ToString() ?? load.PortraitsDetail} portrait={load.Read?.Hero?.Portrait}");
         return _mainMenuNewCharacter = load;
     }
 
@@ -283,7 +285,9 @@ public partial class TerrainViewerApp
                 // ARC-UI-030: the original makes the PC when the window opens (0x5446F0); a start that does not read keeps window 11.
                 var generic = MainMenuNewCharacter();
                 if (generic.Status != AreaHeroStatus.Ready) { _mainMenu.Notice = $"the new character cannot be made ({generic.Status} {generic.Detail})"; break; }
-                _mainMenu.OpenNewCharacter(new AreaNewCharacter(generic));
+                // ARC-UI-033: the field's default name is main-menu message 500 in the game's encoding (the project's text without it).
+                var defaultName = _mainMenu.Texts.FromGame ? MesText.Encode(_mainMenu.Texts.Text(CharacterNameRules.DefaultNameMessage), AreaHoverIndex.TextProfile) : null;
+                _mainMenu.OpenNewCharacter(new AreaNewCharacter(generic, defaultName));
                 GD.Print("ARC-UI-030 new character window open");
                 break;
             case AreaMenuCommandKind.StartNewCharacter:
@@ -452,6 +456,12 @@ public partial class TerrainViewerApp
         if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape()); return; }
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
+        // ARC-UI-033: while the name field is typed into, Backspace removes its last character and Enter ends the typing.
+        if (routed is Key.Backspace or Key.Enter or Key.KpEnter && _mainMenu.Creation is { TypingName: true })
+        {
+            MainMenuCommand(() => { _mainMenu.NameKey(backspace: routed == Key.Backspace); return AreaMenuCommand.Nothing; });
+            return;
+        }
         if (_mainMenu.Window == AreaMenuWindow.Options && !_mainMenu.QuitPending)
         {
             // The original's key table reads the O key's scan code here, not the typed letter.
@@ -594,6 +604,28 @@ public partial class TerrainViewerApp
                 && creation.Chosen is null, "an elf woman, background cleared");
             Press(AreaNewCharacterButton.BackgroundNext);
             var chosen = creation.Chosen ?? throw new InvalidOperationException("ARC-UI-030 new character smoke: no background landed");
+            // ARC-UI-033: the elf woman's portraits from the real file (her first after the gender change, then next and previous), the
+            // default name refused by Accept (506), and a name typed through the window's keys.
+            var portraits = creation.Generic.Portraits ?? throw new InvalidOperationException("ARC-UI-033 new character smoke: portraits " + creation.Generic.PortraitsDetail);
+            var woman = new Arcanum.Data.Characters.PortraitSubject((int)creation.Race, Arcanum.Data.Characters.PortraitCatalogue.FemaleGender);
+            var firstPortrait = creation.Portrait;
+            Require(firstPortrait == portraits.First(woman) && creation.PortraitText() is not null, $"the elf woman's first portrait: {firstPortrait}");
+            Press(AreaNewCharacterButton.PortraitNext);
+            var secondPortrait = creation.Portrait;
+            Require(secondPortrait != firstPortrait && portraits.Allows(secondPortrait, woman), $"portrait next: {secondPortrait}");
+            Press(AreaNewCharacterButton.PortraitPrevious); Press(AreaNewCharacterButton.PortraitNext);
+            Require(creation.Portrait == secondPortrait, "portrait previous and next again");
+            _mainMenuPanel!.AcceptForSelfTest();
+            Require(MainMenuOpen && _mainMenu.Window == AreaMenuWindow.NewCharacter && _mainMenu.Notice == _mainMenu.Texts.Text(CharacterNameRules.RefusalMessage)
+                && creation.Name.SequenceEqual(creation.DefaultName), "Accept refused the default name: " + _mainMenu.Notice);
+            _mainMenuPanel.NameClickForSelfTest();
+            Require(creation.TypingName && creation.Name.IsEmpty, "a click on the name field cleared it");
+            foreach (var typed in "Velaa")
+                HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.A, Unicode = typed });
+            HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Backspace });
+            HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
+            Require(!creation.TypingName && creation.NameText() == "Vela" && _mainMenuPanel.CreationForSelfTest.Contains("Name: Vela"),
+                "the typed name: " + string.Join(" | ", _mainMenuPanel.CreationForSelfTest));
             var beforeAccept = _areaSession;
             _mainMenuPanel!.AcceptForSelfTest();
             var made = _areaSession!.QueryHero();
@@ -603,6 +635,7 @@ public partial class TerrainViewerApp
                 && _areaSession.QueryHeroBackground() == chosen.Background && _areaSession.QueryHeroBackgroundDescription() == chosen.Description
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
                 && _areaSession.QueryGold() == 0, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()}");
+            Require(made!.Portrait == secondPortrait && AreaStartingHero.Name(made) == "Vela", $"the session's portrait and name: {made.Portrait} {AreaStartingHero.Name(made)}");
             for (var i = 0; i < 3; i++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -611,6 +644,9 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-030 native-smoke new character PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Backgrounds = creation.Generic.Backgrounds!.Count, DwarfBackground = dwarfBackground!.Background, Rules = CreationRules().Name,
                 chosen.Background, chosen.Description, chosen.Effect, made!.Prototype, Revision = _areaSession.Version.Revision }));
+            GD.Print("ARC-UI-033 native-smoke name and portrait PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Portraits = portraits.GameCount, FirstPortrait = firstPortrait, made.Portrait, NameBytes = made.PlayerName.Length,
+                DefaultNameBytes = creation.DefaultName.Length, Refusal = CharacterNameRules.RefusalMessage }));
         }
         finally
         {

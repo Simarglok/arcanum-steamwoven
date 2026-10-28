@@ -8,13 +8,16 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-030 (N10b): the new-character window (ledger NW1–NW5, BD4, BD10) over a synthetic generic hero and background table.</summary>
+/// <summary>ARC-UI-030 (N10b): the new-character window (ledger NW1–NW5, BD4, BD10) over a synthetic generic hero and background table;
+/// ARC-UI-033: its portrait buttons (PO9) over a synthetic portrait file and its name field (NW6–NW8).</summary>
 [TestClass]
 public sealed class AreaNewCharacterTests
 {
     // Block 0 for everyone (effect 86), block 1 for a dwarf man (effect 87, no rule), block 2 for a human or elf woman (effect 86).
     private const string Blocks = "{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{87}{12}{DWM}{13}{0}{14}{}\n{20}{1002}{21}{86}{22}{HUF,ELF}{23}{0}{24}{}";
     private const string Texts = "{1000}{Default\nplain}{1001}{Stout\nstub}{1002}{Lady\nfine}";
+    // Human men 1000, 1003, 1005 (the generic start), elf women 1001, 1004, an NPC-only 1002, and 1006 for anyone.
+    private const string Portraits = "{1000}{HUM1}{1001}{ELF1}{1002}{NPC1}{1003}{HUM2}{1004}{ELF2}{1005}{HUM3}{1006}{ANY1}";
 
     private static MesFile Mes(string text)
     {
@@ -32,7 +35,7 @@ public sealed class AreaNewCharacterTests
         _ => null,
     };
 
-    private static AreaHeroLoad Generic(bool backgrounds = true)
+    private static AreaHeroLoad Generic(bool backgrounds = true, bool portraits = true)
     {
         var read = new PremadeHero(AreaStartingHero.GenericPrototype, AreaStartingHero.GenericPrototype + PremadeHeroReader.PrototypeOffset, 0, 1, 0, 20, 1005, 0, 0,
             Effect(64)!, null, 0, 0, []);
@@ -41,6 +44,8 @@ public sealed class AreaNewCharacterTests
         {
             Backgrounds = backgrounds ? BackgroundTable.Create(Mes(Blocks), Mes(Texts)) : null,
             BackgroundsDetail = backgrounds ? null : "FileMissing rules/backgrnd.mes",
+            Portraits = portraits ? PortraitCatalogue.Create(Mes(Portraits)) : null,
+            PortraitsDetail = portraits ? null : "FileMissing portrait/gameport.mes",
         };
     }
 
@@ -171,6 +176,91 @@ public sealed class AreaNewCharacterTests
         Assert.AreEqual(1, owner.QueryHeroEffects()!.Effects.Count(e => e.Number == 87 && e.Cause == EffectCause.Background));
     }
 
+    [TestMethod]
+    public void The_portrait_buttons_step_through_the_pair_s_portraits_and_wrap_as_the_original()
+    {
+        var creation = new AreaNewCharacter(Generic());
+        Assert.AreEqual(1005, creation.Portrait, "the generic prototype's portrait (NW1)");
+        Assert.AreEqual("HUM3", creation.PortraitText());
+        int Press(AreaNewCharacterButton button) { Assert.IsNull(creation.Press(button, Steamwoven)); return creation.Portrait; }
+        Assert.AreEqual(1006, Press(AreaNewCharacterButton.PortraitNext), "ANY suits everyone");
+        Assert.AreEqual(1000, Press(AreaNewCharacterButton.PortraitNext), "past the last: the first (PO9)");
+        Assert.AreEqual(1006, Press(AreaNewCharacterButton.PortraitPrevious), "before 1000: the last from it");
+        Assert.AreEqual(1005, Press(AreaNewCharacterButton.PortraitPrevious));
+        Assert.AreEqual(1003, Press(AreaNewCharacterButton.PortraitPrevious), "an elf woman's and the NPC's are skipped");
+    }
+
+    [TestMethod]
+    public void A_race_or_gender_change_takes_the_pair_s_first_portrait_and_a_refused_press_keeps_it()
+    {
+        var creation = new AreaNewCharacter(Generic());
+        creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        Assert.AreEqual((CharacterRace.Dwarf, 1006), (creation.Race, creation.Portrait), "a dwarf man's first: ANY");
+        creation.Press(AreaNewCharacterButton.PortraitPrevious, Steamwoven);
+        Assert.AreEqual(1006, creation.Portrait, "no earlier one for him: previous keeps it");
+        creation.Press(AreaNewCharacterButton.GenderNext, CharacterCreationRuleProfile.Original);
+        Assert.AreEqual((CharacterGender.Male, 1006), (creation.Gender, creation.Portrait), "a refused gender keeps the portrait in both settings");
+        creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        creation.Press(AreaNewCharacterButton.GenderNext, Steamwoven);
+        Assert.AreEqual((CharacterRace.Elf, CharacterGender.Female, 1001), (creation.Race, creation.Gender, creation.Portrait));
+        var hero = creation.Hero(out var detail) ?? throw new AssertFailedException(detail ?? "hero");
+        Assert.AreEqual(1001, hero.Definition!.Portrait, "the hero starts with the chosen portrait");
+        using var owner = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero).Owner!;
+        Assert.AreEqual(1001, owner.QueryHero()!.Portrait);
+
+        var bare = new AreaNewCharacter(Generic(portraits: false));
+        StringAssert.StartsWith(bare.Press(AreaNewCharacterButton.PortraitNext, Steamwoven), "the portraits did not read");
+        bare.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        Assert.AreEqual((1005, (string?)null), (bare.Portrait, bare.PortraitText()), "without the file a race change keeps the portrait");
+    }
+
+    [TestMethod]
+    public void The_name_field_types_at_its_end_and_ends_as_the_original()
+    {
+        var creation = new AreaNewCharacter(Generic(), "Your Name"u8.ToArray());
+        Assert.AreEqual(("Your Name", false), (creation.NameText(), creation.TypingName), "the field starts with message 500");
+        Assert.IsNotNull(creation.TypeName('a'), "no typing before a click on the field");
+        creation.BeginName();
+        Assert.AreEqual(("", true), (creation.NameText(), creation.TypingName), "a click clears the field");
+        foreach (var c in "Ren\u00e9") Assert.IsNull(creation.TypeName(c));
+        Assert.AreEqual("Ren\u00e9", creation.NameText());
+        Assert.IsNotNull(creation.TypeName('\u041a'), "a letter the game's encoding lacks");
+        Assert.IsNotNull(creation.TypeName('\t'), "a control character");
+        creation.BackspaceName();
+        Assert.AreEqual("Ren", creation.NameText());
+        creation.EndName(enter: true);
+        Assert.AreEqual(("Ren", false), (creation.NameText(), creation.TypingName));
+
+        creation.BeginName();
+        for (var i = 0; i < 25; i++) creation.TypeName('z');
+        Assert.AreEqual(CharacterNameRules.TypedLength, creation.Name.Length, "typing stops at 22");
+        Assert.AreEqual("the name field is full", creation.TypeName('z'));
+        foreach (var _ in Enumerable.Range(0, 30)) creation.BackspaceName();
+        creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        Assert.AreEqual(("Ren", false), (creation.NameText(), creation.TypingName), "a click elsewhere gives an empty field its old text back");
+        creation.BeginName();
+        creation.EndName(enter: true);
+        Assert.AreEqual("Your Name", creation.NameText(), "Enter gives an empty field the default name");
+        Assert.IsFalse(creation.AcceptName().Accepted, "which Accept refuses (506)");
+    }
+
+    [TestMethod]
+    public void Apply_stores_the_accepted_name_as_the_player_name()
+    {
+        var creation = new AreaNewCharacter(Generic(), "Your Name"u8.ToArray());
+        creation.BeginName();
+        foreach (var c in "Ren\u00e9") creation.TypeName(c);
+        creation.EndName(enter: true);
+        Assert.IsTrue(creation.AcceptName().Accepted);
+        using var owner = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, creation.Hero(out _)).Owner!;
+        Assert.IsNull(creation.Apply(owner, Effect));
+        CollectionAssert.AreEqual(new byte[] { 0x52, 0x65, 0x6E, 0xE9 }, owner.QueryHero()!.PlayerName.ToArray());
+        Assert.AreEqual("Ren\u00e9", AreaStartingHero.Name(owner.QueryHero()!), "the status lines show the player name");
+        Assert.AreEqual(1, owner.Version.Revision, "one revision: no background was chosen");
+    }
+
     // The installed original (opt-in): the generic prototype reads as the human man with the background table (79 blocks); the elf
     // woman gets effects 66 and 330, and every block the window offers her reads a description and effect number. No text is printed.
     [TestMethod, TestCategory("RealData")]
@@ -212,12 +302,31 @@ public sealed class AreaNewCharacterTests
         CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.NoEditor);
         menu.PressCreation(AreaNewCharacterButton.RaceNext, Steamwoven);
         Assert.AreEqual(CharacterRace.Dwarf, menu.Creation!.Race);
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Accept(), "ARC-UI-033: the default name is refused");
+        Assert.AreEqual("Your character needs a name.", menu.Notice, "message 506 (the project's text here)");
+        menu.BeginName();
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('n'), "a typed letter goes into the name field, not to a button");
+        Assert.IsTrue(menu.NameKey(backspace: false), "Enter ends the typing");
+        Assert.IsFalse(menu.NameKey(backspace: true), "no longer typing: the key is the window's");
+        Assert.AreEqual("n", menu.Creation.NameText());
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Accept());
-        // The controller: rows gender, race, background, Accept, Cancel.
+        Assert.IsNull(menu.Notice);
+        // The controller: rows gender, race, background, portrait, name, Accept, Cancel.
         menu.Move(1);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm());
         Assert.AreEqual(CharacterRace.Elf, menu.Creation.Race, "Confirm on the race row presses next");
         menu.Move(1); menu.Move(1);
+        menu.PressCreation(AreaNewCharacterButton.GenderNext, Steamwoven);
+        Assert.AreEqual(1001, menu.Creation.Portrait, "an elf woman's first portrait");
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm());
+        Assert.AreEqual(1004, menu.Creation.Portrait, "Confirm on the portrait row presses next");
+        menu.Move(1);
+        menu.Confirm();
+        Assert.IsTrue(menu.Creation.TypingName, "Confirm on the name row begins the typing");
+        menu.Type('x');
+        menu.Confirm();
+        Assert.AreEqual((false, "x"), (menu.Creation.TypingName, menu.Creation.NameText()), "and a second Confirm ends it as Enter");
+        menu.Move(1);
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Confirm(), "the Accept row");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Escape());
         Assert.AreEqual(AreaMenuWindow.NewGame, menu.Window, "Escape goes back");

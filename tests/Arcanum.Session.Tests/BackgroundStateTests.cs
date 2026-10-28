@@ -65,7 +65,7 @@ public sealed class BackgroundStateTests
         using var plain = Hero(SessionBackgrounds.None);
         Assert.AreEqual(GameSessionDisposition.Changed, plain.PickUpItem(plain.Version, "cog", Accept).Disposition);
         plain.PlaceHeroItem("cog", new CellCoord(120, 210));
-        var text = GameSessionSnapshotCodec.Encode(plain.Capture()).Replace(",\"background\":0,\"backgroundDescription\":0}", ",\"background\":72,\"backgroundDescription\":0}");
+        var text = GameSessionSnapshotCodec.Encode(plain.Capture()).Replace(",\"background\":0,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}", ",\"background\":72,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}");
         using var owner = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!, RestoreOptions()).Owner!;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);
         var refused = owner.PickUpItem(owner.Version, "cog", Accept);
@@ -147,11 +147,11 @@ public sealed class BackgroundStateTests
     {
         using var owner = Hero(SessionBackgrounds.Technophobia);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"background\":72,\"backgroundDescription\":0}");
+        StringAssert.Contains(text, ",\"background\":72,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}");
         using var restored = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!, RestoreOptions()).Owner!;
         Assert.AreEqual(72, restored.QueryHeroBackground());
         Assert.AreEqual(GameSessionFailure.InvalidHero, GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(
-            text.Replace(",\"background\":72,\"backgroundDescription\":0}", ",\"background\":-1,\"backgroundDescription\":0}")).Snapshot!, RestoreOptions()).Failure);
+            text.Replace(",\"background\":72,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}", ",\"background\":-1,\"backgroundDescription\":0,\"playerName\":\"\",\"portrait\":0}")).Snapshot!, RestoreOptions()).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidHero, GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Background = 1000 } }).Failure);
         using var heroless = Create();
         Assert.IsNull(heroless.QueryHeroBackground());
