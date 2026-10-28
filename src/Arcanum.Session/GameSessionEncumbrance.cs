@@ -131,7 +131,14 @@ public sealed partial class GameSessionOwner
                     .Concat(Enumerable.Repeat(new SessionEffect(CarryRules.EffectNumber, EffectCause.Item), entries)).ToList();
                 if (steps.Count > 0 && EffectDomain.Bounded(list, definitions) &&
                     PrepareEffects([.. steps], definitions, 0, out var prepared) == GameSessionFailure.None) ApplyEffects(prepared!);
-                else entries = _effects.Entries.Count(e => e.Number == CarryRules.EffectNumber);
+                else
+                {
+                    // Additions the list's bounds refuse are left out; the removals alone always pass (a removal is never refused).
+                    entries = 0;
+                    var removals = steps.Where(step => step.Add is null).ToArray();
+                    if (removals.Length > 0 && PrepareEffects(removals, definitions, 0, out var removed) == GameSessionFailure.None) ApplyEffects(removed!);
+                    entries = _effects.Entries.Count(e => e.Number == CarryRules.EffectNumber);
+                }
             }
             if (CarryRules.DrainIntervalMs(level) is { } delay) ScheduleEncumbranceDrain(delay);
             _encumbranceChange = new((_encumbranceChange?.Sequence ?? 0) + 1, level, entries);

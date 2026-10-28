@@ -312,7 +312,6 @@ public partial class TerrainViewerApp
         _areaKitThrowWeight = hero?.KitThrowWeight;
         _menuTablesHero = hero?.Hero;
         if (_arguments is not null) _arguments = _arguments with { Hero = hero?.Hero };
-        AttachAreaEncumbranceEffect();
     }
 
     /// <summary>The game-wide tables a hero save loaded from the menu takes (the experience and auto-level data are the same for

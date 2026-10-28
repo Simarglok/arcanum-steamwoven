@@ -1137,7 +1137,8 @@ to rank 0.
 ### Level-up messages (ARC-UI-046)
 
 Since ARC-WORLD-087 the same window also shows a change of the hero's encumbrance level: line `11 + level` of
-`mes\critter.mes` (loaded with the level texts), once per new change the session records
+`mes\critter.mes` (loaded with the level texts) for the latest change the session records (one entry when several came between
+two frames, where the original shows one per recalculation)
 ([encumbrance consequences](../world/inventory-runtime.md#encumbrance-consequences-arc-world-087)). The viewer attaches effect 158
 from the hero's effect tables to every new or loaded session. Native smoke (after the level message one):
 `ARC-WORLD-087 native-smoke encumbrance PASS` (the installed rule of effect 158 changes the speed, the seven message lines are

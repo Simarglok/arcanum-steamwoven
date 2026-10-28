@@ -74,7 +74,7 @@ public partial class TerrainViewerApp
         _areaKitArt = result.Hero?.KitArt;
         _areaKitMissileArt = result.Hero?.KitMissileArt;
         _areaKitThrowWeight = result.Hero?.KitThrowWeight;
-        if (carried is not null) { _areaSession = carried; SyncTurnBasedSetting(carried); }
+        if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is

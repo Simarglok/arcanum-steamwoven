@@ -668,6 +668,11 @@ every change of its state (each revision) is compared with the state before it, 
 objects changed, its base strength or the strength its effects give changed, and the level before differs from the level after.
 Any other change (poison, the aptitude, units spent from a stack) recalculates nothing, as in the original, so the level the
 effects show can lag the weight until the next recalculation (`QueryHeroCarry` always answers the level the weight gives).
+The comparison is once per revision, while the original recalculates at each insertion and removal: a change that moves several
+objects in one revision (an assembly's components and products, a wear swap, which the original runs as removals and insertions)
+recalculates once, from the level before it to the level after it. Where the original passes an intermediate level, it would post
+one more message, could set the fatigue timer at an intermediate level 4..6, and a level that differs only in between is never
+recalculated here; a wear move, which keeps the weight, recalculates nothing in either.
 
 | Setting | Units merged into a stack the hero holds (an insertion's merge, a unit move) |
 | --- | --- |
@@ -678,14 +683,15 @@ effects show can lag the weight until the next recalculation (`QueryHeroCarry` a
 
 | Step | Contract |
 | --- | --- |
-| Effect 158 | Every entry of effect 158 leaves the hero's list (whatever added it), then effect 158 with the item cause is added `CarryRules.EffectEntries(level)` times (one a level, eight at level 6), through the same trial as any effect. The rule comes from the host (`AttachEncumbranceEffect(definition)`, number 158, an admitted rule; never saved, attached again after a restore), else from the hero's saved entries of it; without either no entries are added. The session's list holds at most 64 entries, so a full list takes fewer; entries whose rule the list's bounds refuse are not added. |
-| Message | `QueryHeroEncumbranceChange()` answers `SessionEncumbranceChange(Sequence, Level, Entries)` of the last change (sequence from 1, per owner; a restore shows none); the host shows line `11 + level` of `mes\critter.mes`, as the original shows it to the local PC. The original holds the message back while the inventory window drags an item; the viewer has no drag. |
+| Effect 158 | Every entry of effect 158 leaves the hero's list (whatever added it), then effect 158 with the item cause is added `CarryRules.EffectEntries(level)` times (one a level, eight at level 6), through the same trial as any effect. The rule comes from the host (`AttachEncumbranceEffect(definition)`, number 158, an admitted rule; never saved, attached again after a restore), else from the hero's saved entries of it; without either no entries are added. The session's list holds at most 64 entries, so a full list takes fewer; when the list's bounds refuse the additions, only the removals apply (no entries of effect 158 are left). |
+| Message | `QueryHeroEncumbranceChange()` answers `SessionEncumbranceChange(Sequence, Level, Entries)` of the last change (sequence from 1, per owner; a restore shows none); the host shows line `11 + level` of `mes\critter.mes`, as the original shows it to the local PC (the original shows one per recalculation; the viewer shows the latest when several came between two frames). The original holds the message back while the inventory window drags an item; the viewer has no drag. |
 | Fatigue timer | A level with a drain interval (4: 600 s, 5: 60 s, 6: 5 s) sets the `life.hero.encumbrance` event unless one is pending (WEA2), see the [event queue](game-event-queue-runtime.md). |
 | Run | `SessionHeroCarry.CanRun`: only below level 4 (WE9); the fatigue test of a run stays the host's. |
 
 A new session's hero starts with an empty list at level 0 before its kit, so the first change of the session recalculates a kit
 above level 0 (the host attaches the rule before that change; every installed pre-made kit is at level 0). A restore recalculates
-nothing: the saved effect list and timer hold the consequences. No snapshot schema change: the entries are effect entries
+nothing: the saved effect list and timer hold the consequences. A save made before this task (or a new session saved before its
+first change) holds none, so its consequences appear at the next change of level. No snapshot schema change: the entries are effect entries
 (schema 13) and the timer a saved event.
 
 **Viewer.** The AREA viewer attaches effect 158 from the hero's effect tables to every new or loaded session, walks a hero at

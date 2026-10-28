@@ -12,7 +12,7 @@ namespace Arcanum.Session.Tests;
 
 // ARC-WORLD-087: the encumbrance level's consequences in the session (ledger WE5, WE7–WE9, WEA1, WEA2). The half-elf fixture hero has
 // strength 8 (carry weight 4 000: levels start at 600, 1 200, 1 800, 2 400, 3 000, 3 600) and maximum fatigue 30; its kit weighs 1 500
-// (level 2). Entities, prototypes, weights and the effect's rule are invented (the installed effect 158 is a speed change too).
+// (level 2). Entities, prototypes and weights are invented; the effect's rule is the installed one's shape (speed −2, ledger WE5).
 [TestClass]
 public sealed class EncumbranceStateTests
 {
@@ -35,6 +35,8 @@ public sealed class EncumbranceStateTests
             new("cells", Item(SessionItemType.Ammo, 7060, 8, 100), new CellCoord(102, 200)),
             new("more-cells", Item(SessionItemType.Ammo, 7060, 8, 100), new CellCoord(103, 200)),
             new("feather", Item(SessionItemType.Generic, 5002, 1), new CellCoord(104, 200)),
+            new("block", Item(SessionItemType.Generic, 5003, 1_000), new CellCoord(105, 200)),
+            new("brick", Item(SessionItemType.Generic, 5004, 1_200), new CellCoord(106, 200)),
         ]);
 
     private static GameSessionOwner Hero(RuleMode rules = RuleMode.Steamwoven, bool attach = true, int points = 0)
@@ -118,6 +120,18 @@ public sealed class EncumbranceStateTests
     }
 
     [TestMethod]
+    public void The_recalculation_removes_entries_of_effect_158_whatever_added_them()
+    {
+        using var owner = Hero();
+        Pick(owner, "feather");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroEffect(owner.Version, Slow, EffectCause.Spell).Disposition);
+        Assert.AreEqual(3, Entries(owner), "a spell's entry beside the two of level 2");
+        Pick(owner, "anvil");
+        Assert.AreEqual(8, Entries(owner));
+        Assert.IsTrue(owner.QueryHeroEffects()!.Effects.All(e => e.Cause == EffectCause.Item), "the spell's entry went too (0x4EA200)");
+    }
+
+    [TestMethod]
     public void A_stack_growing_in_place_recalculates_under_Steamwoven_and_lags_under_Original()
     {
         foreach (var (rules, expected) in new[] { (RuleMode.Steamwoven, 3), (RuleMode.Original, 2) })
@@ -168,6 +182,15 @@ public sealed class EncumbranceStateTests
     [TestMethod]
     public void A_pending_timer_keeps_its_older_delay()
     {
+        // A rise from level 4 to 6 keeps the level-4 timer's 600 s.
+        using var owner = Hero();
+        Pick(owner, "block");
+        Assert.AreEqual(4, owner.QueryHeroCarry()!.Level, "2 500: level 4");
+        var pending = Drains(owner).Single();
+        StringAssert.EndsWith(pending, "+600000");
+        Pick(owner, "brick");
+        Assert.AreEqual((6, 8), (owner.QueryHeroCarry()!.Level, Entries(owner)), "3 700: level 6");
+        CollectionAssert.AreEqual(new[] { pending }, Drains(owner), "WEA2: the older, longer delay stays");
         using var other = Hero();
         Pick(other, "anvil");
         var first = Drains(other).Single();
@@ -187,6 +210,12 @@ public sealed class EncumbranceStateTests
         CollectionAssert.AreEqual(Drains(owner), Drains(restored));
         Assert.IsNull(restored.QueryHeroEncumbranceChange(), "a restore shows no change");
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        // A saved encumbrance timer with another delay is refused.
+        var drain = owner.QueryEvents().Single(e => e.Kind == SessionEventKinds.HeroEncumbrance);
+        var deadline = $"\"deadlineMs\":{drain.DeadlineMs}";
+        StringAssert.Contains(text, deadline);
+        Assert.AreEqual(GameSessionFailure.InvalidEvents,
+            GameSessionOwner.Restore(Decode(text.Replace(deadline, $"\"deadlineMs\":{drain.DeadlineMs + 1}")), RestoreOptions()).Failure);
         // Without an attached rule the saved entries' rule serves (the host attaches its seed again: seeds are not saved).
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, Seed()).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, restored.GiveItemToNpc(restored.Version, "smith", "anvil", Accept).Disposition);
