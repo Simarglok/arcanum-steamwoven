@@ -62,8 +62,21 @@ public sealed class AreaAiMovers
 
     public void Clear() { _movers.Clear(); Version++; }
 
+    /// <summary>Ends the slides done by <paramref name="nowMs"/>: the cell a mover left is no longer held.</summary>
+    public void Settle(long nowMs)
+    {
+        foreach (var mover in _movers.Values.Where(m => m.From is not null && m.Progress(nowMs) >= 1).ToArray())
+        {
+            _movers[mover.Entity] = mover with { From = null, StepMs = 0 };
+            Version++;
+        }
+    }
+
+    /// <summary>Whether the NPC stands off its map data's cell, or is on its way (its T0 record is moved).</summary>
+    public bool IsMoved(string entity) => _movers.TryGetValue(entity, out var mover) && (mover.Cell != mover.Origin || mover.From is not null);
+
     /// <summary>The T0 records the movers left (their body is drawn where they stand now).</summary>
-    public IEnumerable<AreaObjectKey> Moved => _movers.Values.Where(m => m.Cell != m.Origin || m.From is not null).Select(m => m.Key);
+    public IEnumerable<AreaObjectKey> Moved => _movers.Values.Where(m => IsMoved(m.Entity)).Select(m => m.Key);
 
     /// <summary>The world cells the movers hold: the cell each stands on and, during a step, the cell it left.</summary>
     public IEnumerable<CellCoord> Held()

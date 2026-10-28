@@ -75,6 +75,11 @@ public sealed class NpcAttackStateTests
         var bow = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))])
             .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
         Assert.AreEqual((CombatSkill.Bow, 12, false), (bow.Skill, bow.Range, bow.Supported));
+
+        // A weapon the NPC no longer wears (a critical dropped or destroyed it) does not strike: the monster's table again.
+        var dropped = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Melee))])
+            .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven, []);
+        Assert.AreEqual((WeaponKind.Unarmed, new DamageRange(1, 3)), (dropped.Weapon.Kind, dropped.Weapon.Damage.Normal));
     }
 
     [TestMethod]

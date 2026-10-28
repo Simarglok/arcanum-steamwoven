@@ -51,6 +51,32 @@ public sealed class AreaAiHostTests
         Assert.AreEqual(origin, movers.CellOf("rat", origin), "a reset stands it on its map data's cell again");
     }
 
+    [TestMethod]
+    public void A_settled_step_holds_one_cell_and_the_event_world_without_a_host_ends_the_tick()
+    {
+        var movers = new AreaAiMovers();
+        var origin = new CellCoord(5, 5);
+        movers.Step("rat", Rat, origin, new(6, 5), nowMs: 0, stepMs: 100);
+        var version = movers.Version;
+        movers.Settle(50);
+        Assert.AreEqual(2, movers.Held().Count(), "a step under way holds both cells");
+        movers.Settle(100);
+        CollectionAssert.AreEqual(new[] { new CellCoord(6, 5) }, movers.Held().ToArray(), "a done slide holds the cell it reached");
+        Assert.IsTrue(movers.Version > version && movers.IsMoved("rat"));
+        movers.Face("rat", Rat, origin, new(6, 6));
+        movers.Step("rat", Rat, origin, origin, nowMs: 200, stepMs: 100);
+        movers.Settle(300);
+        Assert.IsFalse(movers.IsMoved("rat"), "back on its map data's cell it is not moved");
+        Assert.AreEqual(0, movers.Moved.Count());
+
+        // ARC-WORLD-092: without an AI host the viewer's event world answers a tick so that it ends: the NPC is gone, its sector not loaded.
+        var events = new AreaEventWorld(() => null, () => null);
+        Assert.IsNull(events.AiLifeTarget("rat"));
+        Assert.IsFalse(events.SectorLoaded("rat"));
+        Assert.AreEqual(-1, events.DistanceToPc("rat"));
+        Assert.IsTrue(events.RunScript(AiScriptPoint.Heartbeat, "rat", "rat"));
+    }
+
     private static (int X, int Y) Destination(AreaDrawCommand command) => (command.Destination.X, command.Destination.Y);
 
     [TestMethod, TestCategory("RealData")]

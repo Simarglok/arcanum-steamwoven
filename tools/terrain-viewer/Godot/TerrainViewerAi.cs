@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-WORLD-092 (NPC AI slice I10, first fight): the shown map's AI host in the AREA view. With a hero, every NPC of the shown map
 // that is not a companion gets its AI tick (0x4AD6E0) when the map's host is built; the event pump fires the ticks through the host
-// (the scheduler's pass: gate, danger update, perform), and each frame the host steps the goal runs on the session clock. An NPC the
+// (the scheduler's pass: gate, danger update, perform), and each frame the host steps the goal runs on the world clock. An NPC the
 // hero hits reacts (the attack event); a fighting NPC walks up tile by tile, swings and bites through the session's NPC hit step. NPC
 // bodies are their T0 frames moved with the walker (no walk or attack ART yet). Automated runs (self-test, native smokes) keep the AI
 // off unless their stage turns it on, so the other stages stay as they were. NOT READY: turn-based rounds (NPC subturns still end at
@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
-    private (GameSessionOwner Session, int Map, AreaLoadResult Area)? _aiHostStamp;
+    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party)? _aiHostStamp;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     private string? _aiNotice;
@@ -39,7 +39,8 @@ public partial class TerrainViewerApp
             if (_aiHost is not null) { _aiHost = null; _aiHostStamp = null; _aiPcOccupancy = null; }
             return null;
         }
-        var stamp = (session, CurrentAreaMap, area);
+        // A follower joining or leaving changes who the host runs.
+        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
         var npcs = new List<AreaAiNpc>();
@@ -127,6 +128,8 @@ public partial class TerrainViewerApp
             var target = struck == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : _combatHost?.Build(CurrentAreaMap, struck).Combat?.Target;
             if (target is not null) EndStun(owner, target, struck);
         }
+        // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).
+        if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
         SyncAreaCombatBodies();

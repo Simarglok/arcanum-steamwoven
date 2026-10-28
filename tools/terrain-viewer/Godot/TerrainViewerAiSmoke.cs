@@ -91,9 +91,36 @@ public partial class TerrainViewerApp
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
+
+            // The hero hits back where the NPC stands now (unless the NPC knocked itself out with a critical miss).
+            var struckBack = false;
+            if (session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true })
+            {
+                var moved = AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key);
+                Require(moved is not null, "the walked NPC's body is among the moved bodies");
+                var point = await HoverPointAsync(this, moved!) ?? throw new InvalidOperationException("ARC-WORLD-092 smoke: walked NPC not visible");
+                HoverAtForSelfTest(point);
+                var hover = HoverActionForSelfTest;
+                Require(hover == AreaHoverAction.Attack, "the hero attacks the walked NPC from where it stands: hover " + hover);
+                var before = _lastCritterAttackForSelfTest;
+                // The click at the frames' clock (AreaSmokeClick reads whole seconds): the attack starts at once, next to the NPC.
+                _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
+                Require(_attack is not null, "the click started the hero's attack: " + _attackNotice);
+                for (var f = 0; f < 400 && ReferenceEquals(_lastCritterAttackForSelfTest, before); f++)
+                {
+                    _areaSmokeTime++;
+                    TickAreaClock(hostMs += 50);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                struckBack = !ReferenceEquals(_lastCritterAttackForSelfTest, before);
+                Require(struckBack, "the hero's attack struck the walked NPC: " + _attackNotice);
+                CancelAreaAttack(null);
+                HoverReleaseForSelfTest();
+            }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

@@ -63,14 +63,12 @@ public sealed partial class GameSessionOwner
 
         var attackerStatus = LifeRules.Evaluate(attackerRecord.State, attackerFacts!);
         SessionNpcAttackValues values;
-        try { values = Levelled(attacker).AttackValues(attackerStatus, attackerRecord.State, _rules.Combat); }
+        // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes.
+        try { values = Levelled(attacker).AttackValues(attackerStatus, attackerRecord.State, _rules.Combat, attack.AttackerWorn?.Keys); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         if (attack.Distance < 0 || attack.Distance > values.Range || attack.AttackerCell is { } from && !DropCellFits(from) ||
             attack.TargetCell is { } to && !DropCellFits(to)) return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!values.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
-        if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
-        // The fate may take a revision before the damage.
-        if (_revision >= long.MaxValue - 1) return RejectAttack(GameSessionFailure.RevisionExhausted);
 
         var targetStatus = LifeRules.Evaluate(targetRecord.State, targetFacts!);
         Combatant defender;
@@ -82,12 +80,14 @@ public sealed partial class GameSessionOwner
             // An earlier critical may have dropped or destroyed some of its map data's items (ARC-COMBAT-009).
             if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
         }
+        if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
+        // The fate may take a revision before the damage.
+        if (_revision >= long.MaxValue - 1) return RejectAttack(GameSessionFailure.RevisionExhausted);
         var weapon = values.Weapon;
         // The weapon's art subtype is item data, passed with its baseline, as for the hero's.
         if (attack.AttackerWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && weapon.Kind == WeaponKind.Weapon)
             weapon = weapon with { ArtSubtype = wielded.ArtSubtype };
         var striker = values.Combatant;
-        if (attack.AttackerWorn is { } attackerWorn) striker = striker with { Worn = CombatantRules.WornItems(attackerWorn.Keys) };
         var request = new AttackRequest
         {
             Attacker = striker,

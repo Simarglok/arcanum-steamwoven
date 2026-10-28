@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
     private AreaEventWorld? _areaEventWorld;
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost,
-        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null, () => _aiHost,
+        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null);
 
     private void StartAreaAmbient(AreaLoadResult area)

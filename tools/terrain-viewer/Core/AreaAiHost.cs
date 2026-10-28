@@ -69,10 +69,11 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// ARC-WORLD-092 (NPC AI slice I10, first fight): the AREA viewer's AI host. It is the scheduler's host (<see cref="ISessionAiWorld"/>,
 /// forwarding the event pass's script and party questions to the viewer's event world), the executor's world (<see cref="IAiPerformWorld"/>)
 /// and the hostility and morale rules' world (<see cref="IMoraleWorld"/>) over the shown map. It holds one goal run per NPC
-/// (<see cref="AiGoalRun"/>, not saved) and steps it on the session clock after its delay (<see cref="Pump"/>); the pass's perform stage
+/// (<see cref="AiGoalRun"/>, not saved) and steps it after its delay (<see cref="Pump"/>); the pass's perform stage
 /// runs <see cref="AiExecutorRules.Perform"/>; the danger stage runs <see cref="HostilityRules.DangerUpdate"/> and applies its plan through
 /// the session's setter; the hit step is the session's <see cref="GameSessionOwner.AttackByNpc"/>, followed by the attack event; the
 /// hero's hits run the attack event here too (<see cref="HeroAttacked"/>). The walker moves NPCs tile by tile (<see cref="Movers"/>).
+/// The runs go by the viewer's world clock (<see cref="Pump"/>), the ticks by the session's game clock.
 /// NOT READY (later slices): the turn-based subturn hook and round costs, casting, item use, skills, throws and pickups, grenades, the
 /// back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
@@ -163,14 +164,15 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     /// <summary>
     /// Steps every run that is due at <paramref name="nowMs"/> (<paramref name="maxSteps"/> steps at most), each after its delay; a run
-    /// that ended is dropped (its end nodes are the executor's <see cref="AiExecutorRules.EndRun"/>). Returns the steps taken. The runs
-    /// go by the caller's animation clock in milliseconds (the viewer's world clock, which the hero's walk and attack play on; the
-    /// session's game clock runs 8 times faster), the AI ticks by the session's game clock.
+    /// that ended is dropped (a killed one, or one stopped by the node limit or an overflow, through <see cref="AiExecutorRules.EndRun"/>).
+    /// Returns the steps taken. The runs go by the caller's animation clock in milliseconds (the viewer's world clock, which the hero's
+    /// walk and attack play on; the session's game clock runs 8 times faster), the AI ticks by the session's game clock.
     /// </summary>
     public int Pump(long nowMs, int maxSteps = 64)
     {
         var steps = 0;
         _nowMs = Math.Max(_nowMs, nowMs);
+        Movers.Settle(_nowMs);
         while (steps < maxSteps && _runs.Where(r => r.Value.DueMs <= _nowMs).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
                    .Select(r => r.Key).FirstOrDefault() is { } npc)
         {
@@ -182,7 +184,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             if (step.Ended || step.Run is null)
             {
                 _runs.Remove(npc);
-                if (step.End == AiRunEnd.EndStep && step.Run is { } ended) AiExecutorRules.EndRun(ended, this);
+                // The end step ran the end nodes itself; a killed run, the node limit and an overflow drop the run without them.
+                if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) AiExecutorRules.EndRun(run, this);
                 continue;
             }
             // A delay of 0 is the next frame.
@@ -298,8 +301,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         SetDanger(npc, state, target);
     }
 
-    /// <summary>The perform stage: <see cref="AiExecutorRules.Perform"/> with the danger source as the pass's target; the run it returns
-    /// replaces the NPC's and steps at the next pump.</summary>
+    /// <summary>The perform stage: <see cref="AiExecutorRules.Perform"/> with the danger source as the pass's target; a started run
+    /// replaces the NPC's (the old one's end nodes run, <see cref="AiExecutorRules.EndRun"/>) and steps at the next pump.</summary>
     public void Perform(string npc)
     {
         var danger = _session.QueryDanger(npc);
@@ -308,12 +311,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var result = AiExecutorRules.Perform(this, npc, target, null, null, current);
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
         if (!result.Started || result.Run is not { } run) return;
-        if (current is not null && !ReferenceEquals(current, run) && current.Bottom.Goal != run.Bottom.Goal) AiExecutorRules.EndRun(current, this);
+        if (current is not null && !ReferenceEquals(current, run)) AiExecutorRules.EndRun(current, this);
         // Started inside the event pass: it steps at the next pump.
         _runs[npc] = (run, _nowMs);
     }
 
-    public SessionLifeTarget? AiLifeTarget(string entity) => Build(entity)?.Target;
+    // An NPC that joined the hero since the host was built is the companions' (it counts as gone here).
+    public SessionLifeTarget? AiLifeTarget(string entity) => _session.QueryCompanion(entity).LedByPc ? null : Build(entity)?.Target;
 
     private void DropRun(string npc)
     {
@@ -770,7 +774,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private SessionNpcAttackValues? Values(string id)
     {
         if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return null;
-        try { return build.AttackValues(status, state, _session.Rules.Combat); }
+        try { return build.AttackValues(status, state, _session.Rules.Combat, _scene.Combat.WornItems(_session, _scene.RuntimeMap, id)?.Keys); }
         catch (ArgumentException) { return null; }
     }
 

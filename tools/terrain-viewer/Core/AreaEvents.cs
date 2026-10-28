@@ -197,7 +197,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <param name="lootShowsContainer">ARC-WORLD-063: whether the viewer's loot window shows a container (a junk pile); an item's
     /// decay then waits a minute (ledger ID3, ID6). Null: never.</param>
     /// <param name="ai">ARC-WORLD-092: the shown map's AI host, which an AI tick of the pass runs through; null or a null answer: no AI
-    /// runs (every NPC counts as gone, so its tick only schedules the next).</param>
+    /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
     /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null,
         Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null)
@@ -264,7 +264,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public bool IsEncounterCreature(string npc) => Ai?.IsEncounterCreature(npc) ?? false;
     public void Destroy(string npc) => Ai?.Destroy(npc);
     public void InterruptAnimations(string npc) => Ai?.InterruptAnimations(npc);
-    public bool SectorLoaded(string npc) => Ai?.SectorLoaded(npc) ?? true;
+    // Without a host the tick is not rescheduled (its NPC counts as gone and its sector as not loaded), as another host consumes it.
+    public bool SectorLoaded(string npc) => Ai?.SectorLoaded(npc) ?? false;
     public Arcanum.Simulation.Ai.AiCatchUpFacts CatchUp(string npc) => Ai?.CatchUp(npc) ?? new();
     public void MoveToLeader(string npc) => Ai?.MoveToLeader(npc);
     public bool MapClearing => Ai?.MapClearing ?? false;

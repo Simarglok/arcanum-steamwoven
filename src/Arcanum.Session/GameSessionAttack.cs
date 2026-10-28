@@ -277,16 +277,18 @@ public sealed class SessionCritterCombat
     /// gauntlets for melee only, then the monster test 0x45F730 picks the table over them); the weapon's skill with the level and training
     /// of the NPC's stored basic skill (melee 20 and the tiers for a monstrous critter), or of the sheet it was levelled to; the weapon
     /// speed and attack cost; the reach (1 bare-handed). <see cref="SessionNpcAttackValues.Supported"/> is a melee attack: bows,
-    /// throws and firearms are the ranged slice's.
+    /// throws and firearms are the ranged slice's. <paramref name="wornNow"/> names the wear slots whose map-data item the NPC still
+    /// wears (a critical may have dropped or destroyed one); null: all of them.
     /// </summary>
-    public SessionNpcAttackValues AttackValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile)
+    public SessionNpcAttackValues AttackValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile, IEnumerable<EquipmentSlot>? wornNow = null)
     {
-        var combatant = Combatant(status, state, profile);
+        var worn = wornNow is null ? _worn : _worn.Where(pair => wornNow.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+        var combatant = Combatant(status, state, profile) with { Worn = CombatantRules.WornItems(worn.Keys) };
         var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
             state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
         var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
         var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
-        var wielded = _worn.TryGetValue(EquipmentSlot.Weapon, out var item) ? item : null;
+        var wielded = worn.TryGetValue(EquipmentSlot.Weapon, out var item) ? item : null;
         var skill = wielded?.Weapon?.Skill ?? CombatSkill.Melee;
         BasicCombatSkill? basic = skill switch
         {
@@ -304,7 +306,7 @@ public sealed class SessionCritterCombat
         }
         // The firearms skill is a tech skill, which the map data's basic skills do not hold.
         else (level, training) = (0, SkillTraining.None);
-        var equipment = EquipmentRules.Evaluate(_worn, aptitude, training);
+        var equipment = EquipmentRules.Evaluate(worn, aptitude, training);
         var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
         var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
         return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
@@ -758,7 +760,8 @@ public sealed partial class GameSessionOwner
         var recipient = whose == DamageRecipient.Target ? target : attacker;
         var failure = GameSessionFailure.None;
         // The attack's weapon, before a step of this attack breaks or drops it: the damage step's ammunition use reads it (CR15).
-        var attackWeapon = recipient.Life is { IsHero: true } && _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Item.Weapon : null;
+        // ARC-WORLD-092: only the attacker's own weapon (a hero hit by an NPC is no attacker).
+        var attackWeapon = whose == DamageRecipient.Attacker && recipient.Life is { IsHero: true } && _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Item.Weapon : null;
         if (life.Events.HasFlag(LifeEvents.ArmHitDropsItems))
             recipient = ArmHitDrops(whose, recipient, npc, recipientCell, dropMap, criticals, ref failure);
         if (failure != GameSessionFailure.None) return (null, failure);
