@@ -177,6 +177,8 @@ public partial class TerrainViewerApp
             if (flow is not null && ReferenceEquals(_sceneFlow, flow))
             {
                 _sceneFlow = null;
+                // ARC-UI-038: the opening shop's session the flow carried goes with it.
+                flow.Creation?.DropShop();
                 GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
             }
             // ARC-UI-026: a death's black screen gives way to whatever is shown now (the reopened menu fades in already; a failure, or
@@ -188,7 +190,14 @@ public partial class TerrainViewerApp
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
     private void ContinueSceneFlow(SceneFlowRequest flow)
     {
-        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); HeroDeathSceneReady(); return; }
+        if (!QuickKeysActive || _arguments is null)
+        {
+            GD.Print("ARC-UI-012 scene flow: the start scene has no game session");
+            // ARC-UI-038: the opening shop's session the flow carried goes with it.
+            flow.Creation?.DropShop();
+            HeroDeathSceneReady();
+            return;
+        }
         var texts = MainMenuTexts(_arguments);
         string? refused = null;
         if (flow.Kind == SceneFlowKind.NewGame)
@@ -201,6 +210,8 @@ public partial class TerrainViewerApp
                 RefreshReadyStatus();
                 return;
             }
+            // ARC-UI-038: a refused start drops the opening shop's session the flow carried.
+            flow.Creation?.DropShop();
         }
         // A quit, or a new game the start scene refused: the main menu, opened again (its root Escape exits the game, MM6).
         OpenMainMenu(texts, AreaMenuWindow.Main, reopened: true);
@@ -211,18 +222,23 @@ public partial class TerrainViewerApp
 
     private void RenderMainMenu()
     {
+        // ARC-UI-038: the opening shop's barter window goes with the shop's session (its Back, the start, the menu's end).
+        if (_barterInShop && !ShopBarterActive) EndBarter();
         if (_mainMenu is null || _mainMenuPanel is null) return;
         BindOptionsWindow();
         _mainMenu.Rules = CreationRules();
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
-            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit) : "");
+            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "");
         RenderCharacterEditor();
     }
 
     /// <summary>ARC-UI-036: the opening shop's kit as the window lists it: the gold, then each item's name (the game's text when the names
     /// loaded) with its prototype, the clothes the kit chose and the items it skipped.</summary>
-    private string ShopDescription(AreaOpeningKit kit)
+    private string ShopDescription(AreaOpeningKit kit, AreaShopSession? shop)
     {
+        // ARC-UI-038: with the merchant's barter open the hero's goods are the barter window's.
+        if (shop?.Owner is { } owner)
+            return $"trading with {shop.Barter.Merchant.Name} on {shop.Map.Name}: gold {owner.QueryGold()}; Accept starts the game, Back returns to the editor";
         var lines = new List<string> { $"gold {kit.Gold} (background {kit.Background})" };
         for (var i = 0; i < kit.Kit.Count; i++)
             lines.Add($"kit:{i + 1} {AreaInventoryHost.KindName(kit.Kit[i].Kind, _hoverNames?.Catalog)} (prototype {kit.Kit[i].Kind.Prototype})");
@@ -305,6 +321,8 @@ public partial class TerrainViewerApp
                 var defaultName = _mainMenu.Texts.FromGame ? MesText.Encode(_mainMenu.Texts.Text(CharacterNameRules.DefaultNameMessage), AreaHoverIndex.TextProfile) : null;
                 _mainMenu.OpenNewCharacter(new AreaNewCharacter(generic, defaultName));
                 GD.Print("ARC-UI-030 new character window open");
+                // ARC-UI-038: the shop map loads behind the menu from here on, so the opening shop usually finds it loaded.
+                BeginShopMapLoad();
                 break;
             case AreaMenuCommandKind.OpenCharacterEditor:
                 // ARC-UI-034: the original's Accept opens window 14, the character editor in creation mode (CM1).
@@ -328,6 +346,9 @@ public partial class TerrainViewerApp
                     _mainMenu.OpenShop(kit);
                     GD.Print($"ARC-UI-036 shop open background={kit.Background} gold={kit.Gold} items={string.Join(",", kit.Items)} kit={kit.Kit.Count} "
                         + $"clothes={kit.Clothes} jacket={kit.Jacket} skipped={kit.Skipped} presses={shopEditor.Creation.Presses.Count}");
+                    // ARC-UI-038: the merchant's barter opens at once when the shop map is loaded (else once it is, per frame).
+                    SyncShopBarter();
+                    if (_mainMenu is null) return;
                 }
                 else _mainMenu.Notice = "the opening shop cannot open: " + kitRefused;
                 break;
@@ -387,32 +408,55 @@ public partial class TerrainViewerApp
         if (_newGameRecipe is not { } recipe) return "new game refused: no recipe";
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) return "new game refused: " + Describe(busy);
-        var created = AreaTransitionCoordinator.CreateSession(recipe.Clock, Guid.NewGuid(), recipe.Module, recipe.Spawn, recipe.RuntimeMap, hero, recipe.Reputations);
-        if (created.Owner is not { } owner) return $"new game refused: the session was not created ({created.Failure})";
-        // ARC-UI-030: the background the window set, with its effect, as the original's background buttons set it on the PC.
-        if (creation?.Apply(owner, hero.Effects ?? (_ => null)) is { } backgroundRefused)
+        GameSessionOwner owner;
+        var fromShop = false;
+        // ARC-UI-038: a refused start on the shop's session drops it (its trades with it); the shop opens anew on the next frame.
+        string ShopRefused(string why)
         {
-            owner.Dispose();
-            return "new game refused: " + backgroundRefused;
+            creation!.DropShop();
+            if (_mainMenu is { Window: AreaMenuWindow.Shop } shopMenu) shopMenu.ShopNote = AreaMainMenu.ShopLoading;
+            return "new game refused: " + why;
         }
-        // ARC-UI-036: then the start's best weapon and body armour (0x5412E0, OS5).
-        if (creation is not null && AreaNewCharacter.WieldStart(owner, hero.KitWear ?? []) is { } wieldRefused)
+        // ARC-UI-038: the new character's game goes on with the opening shop's session (its trades kept): the start wields its best items
+        // and teleports the PC from the shop map to the start map's tile (0x5412E0, OS5).
+        if (creation?.Shop is { Owner: not null } shop)
         {
-            owner.Dispose();
-            return "new game refused: " + wieldRefused;
+            if (shop.Start(hero.KitWear ?? [], new(recipe.RuntimeMap), new(checked((int)recipe.Spawn.X), checked((int)recipe.Spawn.Y))) is { } shopRefused)
+                return ShopRefused(shopRefused);
+            owner = shop.Take();
+            fromShop = true;
+        }
+        else
+        {
+            var created = AreaTransitionCoordinator.CreateSession(recipe.Clock, Guid.NewGuid(), recipe.Module, recipe.Spawn, recipe.RuntimeMap, hero, recipe.Reputations);
+            if (created.Owner is not { } made) return $"new game refused: the session was not created ({created.Failure})";
+            owner = made;
+            // ARC-UI-030: the background the window set, with its effect, as the original's background buttons set it on the PC.
+            if (creation?.Apply(owner, hero.Effects ?? (_ => null)) is { } backgroundRefused)
+            {
+                owner.Dispose();
+                return "new game refused: " + backgroundRefused;
+            }
+            // ARC-UI-036: then the start's best weapon and body armour (0x5412E0, OS5).
+            if (creation is not null && AreaNewCharacter.WieldStart(owner, hero.KitWear ?? []) is { } wieldRefused)
+            {
+                owner.Dispose();
+                return "new game refused: " + wieldRefused;
+            }
         }
         // As a load: the maps' inventory seeds and the dialog host move to the new session before anything changes.
         if (_inventoryHost?.Attach(owner) is { } attached && attached != GameSessionFailure.None)
         {
             owner.Dispose();
-            return $"new game refused: the inventory seeds do not attach ({attached})";
+            var why = $"the inventory seeds do not attach ({attached})";
+            return fromShop ? ShopRefused(why) : "new game refused: " + why;
         }
         AreaConversationHost? talk = null;
         try { talk = _conversationHost?.Rebind(owner); }
         catch (ArgumentException)
         {
             owner.Dispose();
-            return "new game refused: the dialog state is not readable";
+            return fromShop ? ShopRefused("the dialog state is not readable") : "new game refused: the dialog state is not readable";
         }
         AdoptHeroTables(hero);
         AdoptLoadedSession(owner, AreaRuntimes(), talk, "new game");
@@ -479,6 +523,7 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is null) return;
         GD.Print("ARC-UI-011 main menu closed: the scene ended (another map loads)");
+        DropMainMenuShop();
         _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = "closed: another map loads";
     }
@@ -487,6 +532,7 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is null) return;
         GD.Print("ARC-UI-011 main menu closed: " + reason);
+        DropMainMenuShop();
         _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = reason;
         QuarantineWorld(); RefreshReadyStatus();
@@ -506,7 +552,17 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: a session that is gone (a reset, map mode left) ends the menu.</summary>
     private void SyncMainMenu()
     {
-        if (_mainMenu is not null && !QuickKeysActive) { _mainMenu.DropEditor(); CloseCharacterEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
+        if (_mainMenu is not null && !QuickKeysActive) { DropMainMenuShop(); _mainMenu.DropEditor(); CloseCharacterEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
+        SyncShopBarter();
+    }
+
+    /// <summary>ARC-UI-038: the menu ends: the opening shop's session goes with it, unless a new game takes it after the start scene loads
+    /// (the scene flow carries the character).</summary>
+    private void DropMainMenuShop()
+    {
+        if (_barterInShop) EndBarter();
+        if (_mainMenu?.Creation is { } creation && ReferenceEquals(_sceneFlow?.Creation, creation)) return;
+        _mainMenu?.DropShop();
     }
 
     /// <summary>While open the menu owns the keys: Escape goes back (or continues play, exits from a reopened main menu, answers
@@ -726,10 +782,38 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && _mainMenu.Window == AreaMenuWindow.Shop && !CharacterEditorShown && shopKit is { Background: var kitBackground, Clothes: not null }
                 && kitBackground == chosen.Background && shopKit.Gold == creation.Generic.Backgrounds!.Block(chosen.Background).Block!.Money
                 && shopKit.Items.Contains(shopKit.Clothes!.Value) && ReferenceEquals(beforeAccept, _areaSession)
-                && _mainMenuPanel!.ShopForSelfTest.StartsWith($"gold {shopKit.Gold}", StringComparison.Ordinal),
+                && (_mainMenuPanel!.ShopForSelfTest.StartsWith($"gold {shopKit.Gold}", StringComparison.Ordinal) || _mainMenuPanel.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal)),
                 $"Return opened the opening shop with her kit: {_mainMenu.Notice} '{_mainMenuPanel!.ShopForSelfTest}'");
+            // ARC-UI-038: the shop map's merchant (loaded behind the menu since the new-character window) opens its barter above the shop:
+            // the chest's regenerated coins are the merchant's; the cheapest ware she can pay is bought.
+            async Task<AreaShopSession> ShopBarterAsync()
+            {
+                for (var i = 0; i < 3600 && _mainMenu is { Window: AreaMenuWindow.Shop, ShopNote: AreaMainMenu.ShopLoading }; i++)
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var opened = _mainMenu?.Creation?.Shop ?? throw new InvalidOperationException("ARC-UI-038 shop barter smoke: no shop session (" + _mainMenu?.ShopNote + ")");
+                Require(BarterOpen && _barterInShop && ReferenceEquals(_barterSession, opened.Owner) && opened.Owner!.QueryActor().Map.RuntimeMap == opened.Map.RuntimeMap
+                    && _barter!.View() is { MerchantGold: > 0, Wares.Count: > 0 } && _mainMenuPanel!.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal),
+                    $"the shop's barter opened on the shop map: {_mainMenu?.ShopNote} '{_mainMenuPanel!.ShopForSelfTest}'");
+                return opened;
+            }
+            (string Entity, int Price) BuyCheapest()
+            {
+                var view = _barter!.View();
+                var ware = view.Wares.Where(line => line.Quote.Refusal == Arcanum.Simulation.Items.TradeRefusal.None && line.Count == 1 && line.Quote.Price <= view.HeroGold)
+                    .OrderBy(line => line.Quote.Price).FirstOrDefault() ?? throw new InvalidOperationException("ARC-UI-038 shop barter smoke: no ware she can pay");
+                // The window's Buy button runs this handler.
+                BuyFromMerchant(ware.Entity);
+                Require(_barter!.View().HeroGold == view.HeroGold - ware.Quote.Price && _barter.View().Hero.Any(line => line.Entity == ware.Entity),
+                    $"she bought {ware.Text} for {ware.Quote.Price}: {_barterMessage}");
+                return (ware.Entity, ware.Quote.Price);
+            }
+            var firstShop = await ShopBarterAsync();
+            var firstShopView = _barter!.View();
+            var firstBuy = BuyCheapest();
+            var firstOwner = firstShop.Owner!;
             _mainMenuPanel.ShopPressForSelfTest(accept: false);
             Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "the shop's Back returned to the editor");
+            Require(!BarterOpen && firstShop.Owner is null && _mainMenu.Creation.Shop is null, "the shop's Back closed the barter and dropped the shop's session");
             _editorPanel!.StatMinusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
             var refundedAfterShop = _editorPanel!.StatsForSelfTest is { UnspentPoints: 3 } && _editorPanel.StatsForSelfTest.Rows[7].Value == 8;
             _editorPanel!.StatPlusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
@@ -737,6 +821,11 @@ public partial class TerrainViewerApp
                 "the willpower bought before the shop was taken back and bought again: " + _editorPanel!.SkillMessageForSelfTest);
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
             Require(_mainMenu!.Window == AreaMenuWindow.Shop && _mainMenu.Creation!.Kit is { } again && again.Items.SequenceEqual(shopKit.Items), "Return opened the shop again");
+            var shop = await ShopBarterAsync();
+            Require(!ReferenceEquals(shop.Owner, firstOwner) && _barter!.View().HeroGold == shopKit.Gold, "the shop opened anew: the first trade went with its Back");
+            var bought = BuyCheapest();
+            var shopMap = shop.Map;
+            var shopOwner = shop.Owner;
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
             var made = _areaSession!.QueryHero();
             Require(!MainMenuOpen && !CharacterEditorShown && !ReferenceEquals(beforeAccept, _areaSession) && made is { Race: Arcanum.Simulation.Character.CharacterRace.Elf,
@@ -746,7 +835,11 @@ public partial class TerrainViewerApp
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == chosen.Background && _areaSession.QueryHeroBackgroundDescription() == chosen.Description
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
-                && _areaSession.QueryGold() == shopKit.Gold && _areaSession.QueryHeroKit().Count == shopKit.Kit.Count, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()}");
+                && _areaSession.QueryGold() == shopKit.Gold - bought.Price && _areaSession.QueryHeroKit().Count == shopKit.Kit.Count, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()} gold {_areaSession.QueryGold()}");
+            // ARC-UI-038: the game goes on with the shop's session: the bought ware is hers and the PC stands on the start map.
+            Require(ReferenceEquals(_areaSession, shopOwner) && shop.Owner is null && !BarterOpen && _areaSession.QueryActor().Map.RuntimeMap == CurrentAreaMap && CurrentAreaMap != shopMap.RuntimeMap
+                && (_areaSession.QueryMadeItems().Any(item => item.Entity == bought.Entity) || _areaSession.QueryPcInventory().Any(item => item.Entity == bought.Entity)),
+                $"the started game is the shop's session with the bought ware on the start map: map {_areaSession.QueryActor().Map.RuntimeMap} shown {CurrentAreaMap}");
             Require(made!.Portrait == secondPortrait && AreaStartingHero.Name(made) == "Vela", $"the session's portrait and name: {made.Portrait} {AreaStartingHero.Name(made)}");
             for (var i = 0; i < 3; i++)
             {
@@ -764,6 +857,10 @@ public partial class TerrainViewerApp
                 shopKit.Background, shopKit.Gold, Items = string.Join(",", shopKit.Items), Kit = shopKit.Kit.Count, shopKit.Clothes, shopKit.Jacket,
                 shopKit.Skipped, Armour = armour?.Entity, Worn = _areaSession.QueryEquipment().Worn.Count, RefundedAfterShop = refundedAfterShop,
                 Presses = editorPresses + 2 }));
+            GD.Print("ARC-UI-038 native-smoke shop merchant PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                shopMap.Name, shopMap.RuntimeMap, shopMap.Merchant, Container = shop.Barter.Merchant.Container, MerchantGold = firstShopView.MerchantGold,
+                Wares = firstShopView.Wares.Count, Created = shop.ContainerRegeneration?.Regeneration?.Created.Count, FirstBuy = firstBuy.Price, Bought = bought.Entity,
+                bought.Price, Gold = _areaSession.QueryGold(), Map = _areaSession.QueryActor().Map.RuntimeMap, Worn = _areaSession.QueryEquipment().Worn.Count }));
             GD.Print("ARC-UI-033 native-smoke name and portrait PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Portraits = portraits.GameCount, FirstPortrait = firstPortrait, made.Portrait, NameBytes = made.PlayerName.Length,
                 DefaultNameBytes = creation.DefaultName.Length, Refusal = CharacterNameRules.RefusalMessage }));

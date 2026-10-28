@@ -133,7 +133,7 @@ public sealed class AreaOpeningShopTests
         Assert.AreSame(kit, creation.Kit);
         Assert.AreSame(editor, menu.Editor, "the editor and its draft stay for the shop's Back");
         Assert.IsFalse(editor.Disposed);
-        CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShopBarter, "the shop map's merchant is a later slice (OS2)");
+        CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.ShopLoading, "ARC-UI-038: the shop map's merchant loads behind the menu (OS2)");
         Assert.AreSame(kit.Hero, creation.StartHero(out _));
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('a'), "no letters (art buttons)");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Accept(), "Accept (or Return, CM5) starts the game");

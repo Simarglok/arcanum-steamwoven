@@ -419,4 +419,39 @@ public sealed class RestockStateTests
             Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure);
         }
     }
+
+    /// <summary>ARC-UI-038: the opening shop's direct regeneration (0x463E20 from 0x545F1D, ledger OS7): no event tests run; a merchant
+    /// without a source of its own is only cleared (RK4: persistent items stay, nothing is generated, no wield, RK15), a container with a
+    /// source is generated, an NPC with one wields after it; the refusals change nothing.</summary>
+    [TestMethod]
+    public void A_direct_regeneration_clears_a_sourceless_merchant_and_generates_its_chest()
+    {
+        using var owner = Owner();
+        var world = new World();
+        world.Facts["smith"] = world.Facts["smith"] with { InventorySource = 0, Dead = true, PcLeader = true };
+        world.Facts["chest"] = world.Facts["chest"] with { OnScreen = true };
+        var revision = owner.Version.Revision;
+        var cleared = owner.RegenerateInventory(owner.Version, "smith", world);
+        Assert.AreEqual((GameSessionDisposition.Changed, SessionRestockOutcome.Cleared, 2, 0), (cleared.Disposition, cleared.Regeneration!.Outcome,
+            cleared.Regeneration.Removed, cleared.Regeneration.Created.Count), "death, a PC leader and the screen are the event's tests, not this one's");
+        Assert.IsNull(cleared.Regeneration.Wield, "a source of 0 ends after the clear");
+        CollectionAssert.AreEqual(new[] { "ring" }, List(owner, "smith"));
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        var chest = owner.RegenerateInventory(owner.Version, "chest", world);
+        Assert.AreEqual((SessionRestockOutcome.Regenerated, 3, 40), (chest.Regeneration!.Outcome, chest.Regeneration.Removed, chest.Regeneration.Coins));
+        Assert.AreEqual((2, 2), (List(owner, "chest").Length, chest.Regeneration.Skipped), "the pile and the sword; the key and the line without a prototype are skipped");
+        Assert.AreEqual(0, owner.QueryRestocks().Count, "a regeneration schedules nothing");
+        using var dressed = Owner();
+        Assert.IsNotNull(dressed.RegenerateInventory(dressed.Version, "smith", new World()).Regeneration!.Wield, "an NPC with a source wields after it (RK15)");
+        // Refused before any effect.
+        var before = owner.Version;
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.RegenerateInventory(owner.Version, "made:1", world).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RegenerateInventory(new(owner.Identity, 99), "chest", world).Failure);
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.RegenerateInventory(owner.Version, "nobody", world).Failure);
+        world.Facts["box"] = world.Facts["box"] with { Kind = RestockHolderKind.Npc };
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.RegenerateInventory(owner.Version, "box", world).Failure, "the host and the seed disagree on its kind");
+        world.Ready = false;
+        Assert.AreEqual(GameSessionFailure.InventoryUnavailable, owner.RegenerateInventory(owner.Version, "chest", world).Failure);
+        Assert.AreEqual(before, owner.Version);
+    }
 }
