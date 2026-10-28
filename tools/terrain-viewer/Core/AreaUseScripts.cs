@@ -45,6 +45,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
+    /// <summary>ARC-SKILLS-010: the catching-thief point (11) whose slot an NPC's run keeps as map changes too, under <c>scr11.*</c>.</summary>
+    public const int CatchingThiefPoint = 11;
+    private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
+
+    /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
+    /// <c>scr&lt;point&gt;.*</c> for the catching-thief point.</summary>
+    public static string SlotProperty(int point, string part) => point == ScrPoint.Use ? "use." + part : $"scr{point}.{part}";
     /// <summary>The spell flag the original reads as mind-controlled (field 20, bit 27; ledger SG3).</summary>
     public const uint MindControlledFlag = 0x0800_0000;
 
@@ -196,11 +203,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
-        if (point != ScrPoint.Use) return loaded;
+        if (point != ScrPoint.Use && point != CatchingThiefPoint) return loaded;
         long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
-        return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
-            Read(LocalFlagsProperty) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
-            Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
+        return new(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
+            Read(SlotProperty(point, LocalFlagsPart)) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
+            Read(SlotProperty(point, CountersPart)) is { } counters ? checked((uint)counters) : loaded.Counters);
     }
 
     /// <summary>
@@ -313,6 +320,28 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             var attachee = new ScrObjectRef(_shownMap, entity);
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
             return Finish(run, teleportRefusal, writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = null; }
+    }
+
+    /// <summary>
+    /// ARC-SKILLS-010: an NPC's catching-thief script (point 11, PP7) after a noticed pick-pocket failure, with the PC (the thief) as the
+    /// triggerer and no extra object; its slot is kept as map changes (<see cref="SlotProperty"/>). A teleport is not modelled from it and
+    /// leaves the run unapplied. The caller reads its outcome: anything but "run default" stops the theft's consequences.
+    /// </summary>
+    public AreaScriptedUse RunCatchingThief(AreaObjectRecord row, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var entity = EntityId(row);
+        if (row.Key.RuntimeMap != _shownMap) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the object is not on the shown map");
+        _clicked = (entity, row);
+        try
+        {
+            var attachee = new ScrObjectRef(_shownMap, entity);
+            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = null; }
     }
@@ -475,15 +504,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
     {
-        if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Use || writeback.Attachee != attachee
-            || Row(attachee) is not { } row || LoadedSlot(row, ScrPoint.Use) is not { } loaded) return false;
+        if (writeback.Source != ScrSource.Object || writeback.Point is not (ScrPoint.Use or CatchingThiefPoint) || writeback.Attachee != attachee
+            || Row(attachee) is not { } row || LoadedSlot(row, writeback.Point) is not { } loaded) return false;
         var map = new SessionMapId(attachee.Map);
         MapChangeEdit Edit(string property, long value, long baseline) => new(map, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
+        var point = writeback.Point;
         var result = _session.ApplyChanges(_session.Version, null,
         [
-            Edit(ScriptProperty, writeback.Slot.Script, loaded.Script),
-            Edit(LocalFlagsProperty, writeback.Slot.LocalFlags, loaded.LocalFlags),
-            Edit(CountersProperty, writeback.Slot.Counters, loaded.Counters),
+            Edit(SlotProperty(point, ScriptPart), writeback.Slot.Script, loaded.Script),
+            Edit(SlotProperty(point, LocalFlagsPart), writeback.Slot.LocalFlags, loaded.LocalFlags),
+            Edit(SlotProperty(point, CountersPart), writeback.Slot.Counters, loaded.Counters),
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
     }

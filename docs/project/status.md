@@ -122,6 +122,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Pick locks | [Skills](status/skills.md) | ARC-SKILLS-006, ARC-WORLD-050 |
 | Repair | [Skills](status/skills.md) | ARC-SKILLS-007, ARC-WORLD-053 |
 | Stealth | [Skills](status/skills.md) | ARC-SKILLS-008 |
+| Pick pocket | [Skills](status/skills.md) | ARC-SKILLS-010 |
 | NPC conversation | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-005, ARC-WORLD-043, ARC-WORLD-044 |
 | Walking and running | [World, maps and movement](status/world.md) | ARC-WORLD-020, ARC-WORLD-021 |
 | Window jump | [World, maps and movement](status/world.md) | ARC-WORLD-021, ARC-RES-049 |

@@ -202,10 +202,20 @@ public sealed class AreaGameBarTexts
     private static readonly IReadOnlyList<string> ProjectSkillButtonNames = ["Prowling", "Pick Pocket", "Disarm Traps", "Repair"];
     private readonly IReadOnlyDictionary<int, string> _game;
     private readonly IReadOnlyDictionary<int, string> _skillButtons;
+    // ARC-SKILLS-010: the skill bar's pick-pocket lines (skill_ui.mes 500 success, 501 failure, 525 a target that cannot be robbed).
+    private static readonly IReadOnlyDictionary<int, string> ProjectSkillLines = new Dictionary<int, string>
+    {
+        [Arcanum.Simulation.Skills.PickPocketRules.SuccessLine] = "Pick pocket: success",
+        [Arcanum.Simulation.Skills.PickPocketRules.FailureLine] = "Pick pocket: failure",
+        [Arcanum.Simulation.Skills.PickPocketRules.NotAllowedLine] = "That pocket cannot be picked",
+    };
+    private readonly IReadOnlyDictionary<int, string> _skillLines;
 
-    private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail, IReadOnlyDictionary<int, string>? skillButtons = null)
+    private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail, IReadOnlyDictionary<int, string>? skillButtons = null,
+        IReadOnlyDictionary<int, string>? skillLines = null)
     {
         _game = game; FromGame = fromGame; Detail = detail; _skillButtons = skillButtons ?? new Dictionary<int, string>();
+        _skillLines = skillLines ?? new Dictionary<int, string>();
     }
 
     /// <summary>True when the file read and gave at least one name; <see cref="GameCount"/> says how many.</summary>
@@ -228,15 +238,18 @@ public sealed class AreaGameBarTexts
             if (Decoded(table, number) is { } text) kept[number] = text;
         // skill_ui.mes is the skill bar's own file (read at its init, 0x579ED5): a failure keeps the project's names.
         var buttons = new Dictionary<int, string>();
+        var lines = new Dictionary<int, string>();
         var skillDetail = "";
         if (AreaStartingHero.Table(stack, SkillUiPath, ContentLoadPhase.GameStart, required: true, out var skillRead) is { } skillUi)
         {
             for (var button = 0; button < ProjectSkillButtonNames.Count; button++)
                 if (Decoded(skillUi, FirstSkillButtonName + button) is { } name) buttons[button] = name;
-            skillDetail = $"; {SkillUiPath}: {buttons.Count} of {ProjectSkillButtonNames.Count} names";
+            foreach (var number in ProjectSkillLines.Keys)
+                if (Decoded(skillUi, number) is { } line) lines[number] = line;
+            skillDetail = $"; {SkillUiPath}: {buttons.Count} of {ProjectSkillButtonNames.Count} names, {lines.Count} of {ProjectSkillLines.Count} lines";
         }
         else skillDetail = $"; {SkillUiPath} not read ({skillRead})";
-        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts{skillDetail}", buttons);
+        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts{skillDetail}", buttons, lines);
     }
 
     private static string? Decoded(MesFile table, int number) =>
@@ -248,6 +261,12 @@ public sealed class AreaGameBarTexts
     /// <summary>ARC-UI-035: a skill-bar button's name (<c>skill_ui.mes</c> 100 + button, 0x57A700), else the project's.</summary>
     public string SkillButtonName(int button) =>
         _skillButtons.GetValueOrDefault(button) ?? (button is >= 0 and < 4 ? ProjectSkillButtonNames[button] : $"[skill button {button}]");
+
+    /// <summary>ARC-SKILLS-010: a pick-pocket line of the skill bar (<c>skill_ui.mes</c> 500, 501, 525), else the project's.</summary>
+    public string SkillLine(int number) => _skillLines.GetValueOrDefault(number) ?? ProjectSkillLines.GetValueOrDefault(number, $"[{number}]");
+
+    /// <summary>How many of the pick-pocket lines the game's file gave.</summary>
+    public int GameSkillLineCount => _skillLines.Count;
 
     /// <summary>How many skill-bar button names the game's file gave.</summary>
     public int GameSkillButtonCount => _skillButtons.Count;
