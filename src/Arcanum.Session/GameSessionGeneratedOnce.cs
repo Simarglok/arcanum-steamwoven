@@ -27,10 +27,10 @@ public sealed partial class GameSessionOwner
     /// source 0 is only cleared and keeps its flag (none installed). Without flag 0x200 nothing changes; a container the session cannot
     /// regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list
     /// (<see cref="SessionRestockOutcome.Unsupported"/>, no change). Refused before any effect: an invalid entity
-    /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, no seed for the actor's map
-    /// (<see cref="GameSessionFailure.InventoryUnavailable"/>), a container the seed or the host does not list as one, or a spilled one
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, a host not ready yet (<see cref="ISessionRestockWorld.RestockReady"/>) or
+    /// no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a container the seed or the host does not list as one, or a spilled one
     /// (<see cref="GameSessionFailure.UnknownHolder"/>), a full record, list or generated budget (<see cref="GameSessionFailure.BudgetExceeded"/>)
-    /// and the revision. One revision.
+    /// and the revision. One revision. The host must not call back into the session from its callbacks during the generation.
     /// </summary>
     public SessionGenerateOnceResult GenerateContainerOnce(GameSessionVersion expected, string container, ISessionRestockWorld world)
     {
@@ -40,7 +40,8 @@ public sealed partial class GameSessionOwner
         if (!SessionEventKinds.RestockHolder(container)) return Refuse(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return Refuse(GameSessionFailure.StaleVersion);
         var map = _actor.Map;
-        if (!_inventory.Seeds.TryGetValue(map, out var seed)) return Refuse(GameSessionFailure.InventoryUnavailable);
+        // A host whose object data or inventory sources are not loaded could read a set as unreachable and empty the container for good.
+        if (!world.RestockReady || !_inventory.Seeds.TryGetValue(map, out var seed)) return Refuse(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(container, out var row) || row.Kind != SessionHolderKind.Container || SpillCell(map, seed, container) is not null ||
             world.RestockFacts(map, container) is not { Kind: RestockHolderKind.Container } found) return Refuse(GameSessionFailure.UnknownHolder);
         var facts = GeneratedFacts(map, container, found);

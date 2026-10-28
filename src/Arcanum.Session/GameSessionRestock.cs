@@ -217,7 +217,8 @@ public sealed partial class GameSessionOwner
         // without them it keeps its list.
         var source = RestockRules.InventorySource(facts);
         int? draws = null;
-        if (kind == SessionHolderKind.Container && (facts.ContainerFlags & RestockRules.GeneratedOnceFlag) != 0)
+        // A source of 0 draws nothing, so it needs no seed.
+        if (kind == SessionHolderKind.Container && (facts.ContainerFlags & RestockRules.GeneratedOnceFlag) != 0 && source != 0)
         {
             if (world.GeneratedOnceFacts(map, holder) is not { PlayerName: { } name } once) return Unsupported();
             draws = RestockRules.GeneratedOnceSeed(GeneratedOncePc([.. name]), once.LocationX);

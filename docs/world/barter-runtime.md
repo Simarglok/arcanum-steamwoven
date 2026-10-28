@@ -123,12 +123,12 @@ Decisions of this slice for sets (`SessionRestockSet`, the host's reading of `In
 - `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; 39 of the 123 installed sets are `Malformed`) are read
   partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
   the map's seed does not list as that kind, a spilled container, a holder with a transfer script (the session does not run it, so
-  every created item would be refused after the clear) and a container with flag 0x200 (generated once from its own seeded draws,
-  RK4: the first-open slice).
+  every created item would be refused after the clear) and a container with flag 0x200 with a source whose seed facts the host
+  cannot give (ARC-WORLD-100: with them it draws seeded and is recorded as generated, [below](#session-generation-arc-world-100)).
 
 The session postpones a firing a minute (`SessionRestockFiring.Postponed`) when the pass has no restock host, the holder's map seed
 is not attached, the deleted-item budget cannot hold the clear's records, or the session-wide added-item, pile or stack budgets could
-not hold every line and a pile after the clear; nothing is cleared then. A postponement or a reschedule whose new event is refused
+not hold every line and a pile after the clear, or (ARC-WORLD-100) the generated-container budget (4096) is full; nothing is cleared then. A postponement or a reschedule whose new event is refused
 (a full event budget) reports it in `SessionRestockFiring.ScheduleFailure`. With a host that checks objects (`ISessionScriptWorld`)
 a restock event of a missing holder is dropped by the queue, which is the same "nothing" as RK3.
 
@@ -194,12 +194,14 @@ event finds no source (`RestockRules.Fire` → nothing). The draws come from `Re
 
 | API | Original | Rule |
 | --- | --- | --- |
-| `GenerateContainerOnce(expected, container, world)` | partner setup 0x572640 (call site 0x572779) → 0x463E20, RK12 | The first open in loot mode, which the host calls before `ScheduleRestock` for a container of the actor's map. Without flag 0x200, or once generated, no change. Otherwise the clear (persistent items stay, RK5) and the seeded generation as at a restock event; with a source the container is then recorded as generated. Flag 0x200 with source 0 (none installed) is only cleared and keeps its flag. An unreachable set (RK7) clears, generates nothing and is recorded. A container the session cannot regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list: outcome `Unsupported`, no change. Refused before any effect: an invalid entity, the version, no seed for the map, a container the seed or the host does not list as one or a spilled one, a full record, list or generated budget (4096), the revision. One revision. |
+| `GenerateContainerOnce(expected, container, world)` | partner setup 0x572640 (call site 0x572779) → 0x463E20, RK12 | The first open in loot mode, which the host calls before `ScheduleRestock` for a container of the actor's map. Without flag 0x200, or once generated, no change. Otherwise the clear (persistent items stay, RK5) and the seeded generation as at a restock event; with a source the container is then recorded as generated. Flag 0x200 with source 0 (none installed) is only cleared and keeps its flag. An unreachable set (RK7) clears, generates nothing and is recorded. A container the session cannot regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list: outcome `Unsupported`, no change. Refused before any effect: an invalid entity, the version, a host not ready yet (`RestockReady` false) or no seed for the map
+(`InventoryUnavailable`), a container the seed or the host does not list as one or a spilled one, a full record, list or generated budget (4096), the revision. One revision. |
 | `FireRestock` (event `inventory.restock`) | 0x464180 → 0x463C60 → 0x463E20, RK3, RK10 | A container with flag 0x200 that the decision regenerates (on its own with flag 0x400, or through its merchant) draws seeded and is recorded; the merchant's own regeneration before it keeps the session's draws. Without the host's seed facts it keeps its list (`Unsupported`, as before). |
-| `ISessionRestockWorld.GeneratedOnceFacts(map, container)` | 0x463E20 (field 2), 0x441B60 (field 0x10E) | The host's part of the seed: the container's tile x and the PC's player name bytes (the host's PC, else its prototype's; empty when unset). The default answers null (no seed facts). |
+| `ISessionRestockWorld.GeneratedOnceFacts(map, container)` | 0x463E20 (field 2), 0x441B60 (field 0x10E) | The host's part of the seed: the container's tile x and the PC's player name bytes (the host's PC, else its prototype's; empty when unset). The default answers null (no seed facts). Asked only for a container with a source: flag 0x200 with source 0 is cleared without a seed. |
 | `QueryContainerGenerated(map, container)` | 0x4EFDD0 | Whether the session generated the container (its source and flag cleared). |
 
-The seed's PC is the session hero: its race as the source's index (stat 27) and its gender (stat 26: female 0, male 1), which no
+The host must not call back into the session from its callbacks during a generation (the insert check, the item and set reads):
+a nested `GenerateContainerOnce` on the same container would find it not yet recorded. The seed's PC is the session hero: its race as the source's index (stat 27) and its gender (stat 26: female 0, male 1), which no
 session effect changes, and its background (field 0x101); a session without a hero seeds from the tile x alone. Tests:
 [`GeneratedOnceStateTests`](../../tests/Arcanum.Session.Tests/GeneratedOnceStateTests.cs).
 

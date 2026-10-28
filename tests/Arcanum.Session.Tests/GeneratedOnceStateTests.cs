@@ -33,7 +33,10 @@ public sealed class GeneratedOnceStateTests
 
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
         public RestockHolder? RestockFacts(SessionMapId map, string entity) => Facts.TryGetValue(entity, out var facts) ? facts : null;
-        public string? RestockMerchant(SessionMapId map, string container) => null;
+        public string? Merchant { get; set; }
+        public bool Ready { get; set; } = true;
+        public string? RestockMerchant(SessionMapId map, string container) => Merchant;
+        public bool RestockReady => Ready;
         public bool Persistent(SessionMapId map, string item) => item == "ring";
         public SessionRestockSet RestockSet(int source) => Sets[source];
         public SessionRestockItem? RestockItem(int basicPrototype) => new(new(SessionItemType.Generic, 9100 + basicPrototype, 2300 + basicPrototype, 32300 + basicPrototype));
@@ -56,9 +59,9 @@ public sealed class GeneratedOnceStateTests
 
     private const int HeroBackground = 41;
 
-    private static GameSessionOwner Owner(bool hero = true)
+    private static GameSessionOwner Owner(bool hero = true, GameSessionLimits? limits = null)
     {
-        var descriptor = hero ? Descriptor() with { Hero = HeroStateTests.HalfElf() with { Background = HeroBackground } } : Descriptor();
+        var descriptor = hero ? Descriptor(limits) with { Hero = HeroStateTests.HalfElf() with { Background = HeroBackground } } : Descriptor(limits);
         var owner = GameSessionOwner.Create(descriptor).Owner!;
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
         return owner;
@@ -137,6 +140,22 @@ public sealed class GeneratedOnceStateTests
     }
 
     [TestMethod]
+    public void Through_its_merchant_the_merchant_draws_from_the_session_and_the_container_seeded()
+    {
+        using var owner = Owner();
+        var world = new World { Merchant = "smith" };
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, "crate", hasSource: true).Disposition);
+        var draws = owner.QueryRandom().Draws;
+        var fired = Fire(owner, world).Restocks.Single();
+        Assert.AreEqual(new RestockDecision(RestockStep.RegenerateMerchantAndContainer, true), fired.Decision);
+        CollectionAssert.AreEqual(new[] { "smith", "crate" }, fired.Regenerations.Select(r => r.Holder).ToArray(), "the merchant first");
+        Assert.AreEqual(draws + 1 + CrateSet.Lines.Count, owner.QueryRandom().Draws, "the merchant's coins and lines only");
+        AssertGenerated(owner, fired.Regenerations[1], HeroSeed());
+        Assert.IsTrue(owner.QueryContainerGenerated(Exterior, "crate"));
+        Assert.IsFalse(owner.QueryContainerGenerated(Exterior, "smith"));
+    }
+
+    [TestMethod]
     public void A_pending_event_of_a_generated_container_does_nothing()
     {
         using var owner = Owner();
@@ -180,9 +199,10 @@ public sealed class GeneratedOnceStateTests
         var opened = owner.GenerateContainerOnce(owner.Version, "crate", world).Regeneration!;
         Assert.AreEqual((SessionRestockOutcome.Cleared, 2, 0), (opened.Outcome, opened.Removed, opened.Created.Count));
         Assert.IsTrue(owner.QueryContainerGenerated(Exterior, "crate"), "the source and flag are cleared after the lines (RK7, RK10)");
-        // Flag 0x200 with source 0 (none installed): cleared at each open, and the flag stays.
+        // Flag 0x200 with source 0 (none installed): cleared at each open without a seed, and the flag stays.
         using var bare = Owner();
         world.Facts["crate"] = world.Facts["crate"] with { InventorySource = 0 };
+        world.Once = null;
         var first = bare.GenerateContainerOnce(bare.Version, "crate", world);
         Assert.AreEqual((GameSessionDisposition.Changed, SessionRestockOutcome.Cleared, 2), (first.Disposition, first.Regeneration!.Outcome, first.Regeneration.Removed));
         Assert.IsFalse(bare.QueryContainerGenerated(Exterior, "crate"));
@@ -204,10 +224,23 @@ public sealed class GeneratedOnceStateTests
             Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.GenerateContainerOnce(owner.Version, holder, world).Failure, holder);
         world.Facts["crate"] = world.Facts["crate"] with { Kind = RestockHolderKind.Npc };
         Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.GenerateContainerOnce(owner.Version, "crate", world).Failure, "the host's kind");
+        Assert.AreEqual(GameSessionFailure.InventoryUnavailable, owner.GenerateContainerOnce(owner.Version, "crate", new World { Ready = false }).Failure,
+            "a host not ready could read the set as unreachable");
         using var unseeded = GameSessionOwner.Create(Descriptor()).Owner!;
         Assert.AreEqual(GameSessionFailure.InventoryUnavailable, unseeded.GenerateContainerOnce(unseeded.Version, "crate", new World()).Failure);
         Assert.AreEqual(0L, owner.Version.Revision);
         Assert.ThrowsExactly<ArgumentNullException>(() => owner.GenerateContainerOnce(owner.Version, "crate", null!));
+    }
+
+    [TestMethod]
+    public void A_clear_the_budgets_cannot_hold_is_refused_before_any_effect()
+    {
+        using var owner = Owner(limits: new GameSessionLimits(maxDurabilityRecords: 1));
+        var opened = owner.GenerateContainerOnce(owner.Version, "crate", new World());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (opened.Disposition, opened.Failure));
+        Assert.AreEqual(0L, owner.Version.Revision);
+        CollectionAssert.AreEqual(new[] { "gold-a", "axe", "ring" }, Items(owner, "crate").Select(item => item.Entity).ToArray());
+        Assert.IsFalse(owner.QueryContainerGenerated(Exterior, "crate"));
     }
 
     [TestMethod]
