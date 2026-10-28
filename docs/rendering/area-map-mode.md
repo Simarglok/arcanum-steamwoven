@@ -328,13 +328,22 @@ the start map), one per tile.
   is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   6 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722), and since
-  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 678 tile scripts and 1 sector script run without one,
-  2,328 tile and 19 sector scripts are refused because they need actions or conditions outside the set (before
-  ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and 2,368).
-- **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); tile and
-  sector scripts of generated main-map sectors (only the map's own sector files are read; the one such script, the
-  plant generator 30285, is described in [template sector scripts](../research/template-sector-plants.md),
-  ARC-RES-073); the arrival tile of a
+  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 678 tile scripts and 16 sector scripts run without one,
+  2,198 tile and 4 sector scripts are refused because they need actions or conditions outside the set, and since ARC-WORLD-081
+  the 130 tiles of script 1629 on the start map run to a create object of a critter prototype (28464, eight next to the PC), which the
+  viewer does not create, so their effects are refused (before ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and
+  2,368; before ARC-WORLD-081: 678 and 1 run, 2,328 and 19 refused).
+- **Generated sectors** (ARC-WORLD-081, [template sector plants](../world/template-sector-plants-runtime.md)): a main-map window
+  also lists the sector scripts of its template sectors (the template's script section, ledger PG9), and they run on entry like an own
+  sector's. The only one, the plant generator 30285, creates herbs next to the template's marker when the marker stands within 10 tiles
+  of the player (set S15: random, loops over the vicinity's scenery, create object); they lie on the ground as created placed items,
+  drawn from their prototype's art and picked up like any placed item, at most 6 within 3 tiles of a marker under Steamwoven (no limit
+  under Original). The log line `ARC-WORLD-081 created` names each creation. Native smoke (the stage `plants`, run only when named:
+  `ARC_AREA_MAP_SMOKE_ONLY=plants` on the main map with `--area-map-sector 1384,239`): with the PC reported on a core marker, the
+  marker's sector script runs 40 times through map mode's own runner; on 2026-10-28 it listed 19 template scripts in the window and
+  laid 6 herbs (Passion Root and Witchbane, the elven forest variant 67108864 of sector (1385, 238)) next to the marker, all drawn and
+  picked as ground items: `ARC-WORLD-081 native-smoke plants PASS`.
+- **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); the arrival tile of a
   transfer; a fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
@@ -668,8 +677,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based,ranged,junk`
-  narrows a run to those stages; without it all but `walk` and `census` run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves; `ranged` alone runs the battery's last combat stages, object attack, critical, line of fire and ARC-COMBAT-015's [ranged shot](../world/hero-attack-runtime.md#ranged-hero-attack-arc-combat-015); `junk` alone runs ARC-WORLD-063's [junk pile](../world/inventory-runtime.md#junk-piles-arc-world-063) stage, the battery's last) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based,ranged,junk,plants`
+  narrows a run to those stages; without it all but `walk`, `census` and `plants` (ARC-WORLD-081) run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves; `ranged` alone runs the battery's last combat stages, object attack, critical, line of fire and ARC-COMBAT-015's [ranged shot](../world/hero-attack-runtime.md#ranged-hero-attack-arc-combat-015); `junk` alone runs ARC-WORLD-063's [junk pile](../world/inventory-runtime.md#junk-piles-arc-world-063) stage, the battery's last) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the

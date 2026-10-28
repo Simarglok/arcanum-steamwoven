@@ -1,7 +1,8 @@
 # Template sector scripts: the plant generator (ARC-RES-073)
 
-Status: **research, docs only**, work item ARC-RES-073, 2026-10-27. No `src/`, viewer, session or probe
-change. This document answers what the one sector script found in terrain templates does, when the original runs it, what
+Status: **research, docs only**, work item ARC-RES-073, 2026-10-27; **implemented by ARC-WORLD-081** (2026-10-28,
+[template sector plants runtime](../world/template-sector-plants-runtime.md), ledger PG11–PG13 added). No `src/`, viewer, session or probe
+change by this study. This document answers what the one sector script found in terrain templates does, when the original runs it, what
 it creates and where, and how many sectors carry it. It is the input for ARC-WORLD-081 (running the scripts of generated
 sectors and the create-object action).
 
@@ -118,6 +119,11 @@ object (52).
 
 ## What ARC-WORLD-081 needs
 
+ARC-WORLD-081 did all of this ([runtime](../world/template-sector-plants-runtime.md)): the window lists its template sectors' scripts, set
+S15 admits the commands, the session keeps the created items (snapshot schema 48), and the owner settled both questions (a fixed reach of
+10 tiles, the original's own play view, in both settings; a limit of 6 created items within 3 tiles under Steamwoven; Original keeps the
+first 100 objects of the list and no limit).
+
 - Read the sector script record of a generated sector from its template (the catalogue already keeps the section
   sector-local) and run it on entry like an own sector's, with its slot on the sector (the same session keys).
 - Admit what the script uses beyond today's sets (which already hold true, equal, less-or-equal, local flag, add,
@@ -134,6 +140,6 @@ object (52).
 
 - Static reading only (F2 where both readers agree); how often a marker is on screen at a crossing in play is not
   observed.
-- Not read: the window size the vicinity takes, the order of the vicinity list (which 100 objects are kept), the path
+- Not read: the order of the vicinity list (which 100 objects are kept; the window size was read by ARC-WORLD-081: the fixed 800 × 400 play view, PG13), the path
   search's own rules, and how created objects are saved and reloaded for a template sector beyond [SS2 and SS5](ledger/world.md#main-map-streaming-arc-data-030).
-- Nothing in the project runs template sector scripts or creates objects from scripts yet (ARC-WORLD-081).
+- Since ARC-WORLD-081 the viewer runs template sector scripts and creates their items; this study's own text above is unchanged.

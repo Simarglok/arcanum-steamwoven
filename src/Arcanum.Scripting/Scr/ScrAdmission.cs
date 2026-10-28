@@ -48,10 +48,13 @@ public sealed record ScrRefusal(int Line, ScrClauseSide Side, ScrRefusalCode Cod
 /// data: a later slice widens it by adding types, never by changing what admission checks.</summary>
 public sealed class ScrAdmissionSet
 {
-    public ScrAdmissionSet(string id, IEnumerable<int> conditions, IEnumerable<int> actions, IEnumerable<ScrValueKind> valueKinds, IEnumerable<ScrFocusKind> focusKinds)
+    /// <param name="counterIndexWraps">ARC-WORLD-081: whether a counter operand may name any index, read as the original's counter
+    /// reader takes it (PG6: index mod 4); otherwise an index outside 0..3 refuses the script.</param>
+    public ScrAdmissionSet(string id, IEnumerable<int> conditions, IEnumerable<int> actions, IEnumerable<ScrValueKind> valueKinds, IEnumerable<ScrFocusKind> focusKinds,
+        bool counterIndexWraps = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        Id = id;
+        Id = id; CounterIndexWraps = counterIndexWraps;
         Conditions = Freeze(conditions, ScrCatalogue.IsKnownCondition);
         Actions = Freeze(actions, ScrCatalogue.IsKnownAction);
         ValueKinds = Freeze(valueKinds, k => Enum.IsDefined(k));
@@ -71,6 +74,9 @@ public sealed class ScrAdmissionSet
     public IReadOnlySet<int> Actions { get; }
     public IReadOnlySet<ScrValueKind> ValueKinds { get; }
     public IReadOnlySet<ScrFocusKind> FocusKinds { get; }
+    /// <summary>ARC-WORLD-081: a counter operand with an index outside 0..3 is admitted and reads counter (index mod 4), as the original's
+    /// counter reader does (ledger PG6; the plant generator 30285 names counter 2,012,780,696, which reads counter 0).</summary>
+    public bool CounterIndexWraps { get; }
 
     /// <summary>The first admitted set (ARC-SCRIPT-007, from the ARC-RES-045 census): control flow
     /// and the two returns, goto, local flags and counters, local variables, arithmetic, global
@@ -179,6 +185,23 @@ public sealed class ScrAdmissionSet
         S13.Actions.Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
             ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]), S13.ValueKinds, S13.FocusKinds);
 
+    /// <summary>
+    /// The world-object set (ARC-WORLD-081, the plant generator of template sectors, docs/research/template-sector-plants.md):
+    /// <see cref="S14"/> plus random (37, PG5), loop for (18) and loop end (19, PG7), and create object (52, PG1), which hands one
+    /// <see cref="ScrCreateRequest"/> to the host; the focus kinds "current looped object" (10) and "every scenery in vicinity" (15, PG3),
+    /// which the host answers through <see cref="IScrWorldQueries"/>; and a counter operand with any index (<see cref="CounterIndexWraps"/>,
+    /// PG6).
+    /// </summary>
+    public static ScrAdmissionSet S15 { get; } = new("S15", S14.Conditions,
+        S14.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject]), S14.ValueKinds,
+        S14.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]), counterIndexWraps: true);
+
+    /// <summary>The actions of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
+    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor };
+
+    /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
+    public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EverySceneryInVicinity };
+
     /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
     public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
 
@@ -193,7 +216,8 @@ public sealed class ScrAdmissionSet
     public bool IsSubsetOf(ScrAdmissionSet other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        return Conditions.All(other.Conditions.Contains) && Actions.All(other.Actions.Contains) && ValueKinds.All(other.ValueKinds.Contains) && FocusKinds.All(other.FocusKinds.Contains);
+        return Conditions.All(other.Conditions.Contains) && Actions.All(other.Actions.Contains) && ValueKinds.All(other.ValueKinds.Contains) && FocusKinds.All(other.FocusKinds.Contains)
+            && (!CounterIndexWraps || other.CounterIndexWraps);
     }
 }
 
@@ -274,20 +298,48 @@ public static class ScrAdmission
                 ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, count));
             if (refusal is not null) { refusals.Add(refusal); continue; }
             foreach (var action in always ? new[] { line.OnTrue } : [line.OnTrue, line.OnFalse])
-                foreach (var next in Successors(action, at, count))
+                foreach (var next in Successors(program, action, at))
                     if (region.Add(next)) work.Push(next);
         }
         if (refusals.Count > 0) return ScrAdmissionResult.Of(refusals.OrderBy(r => r.Line).First());
         return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set, entryLine, Array.AsReadOnly(region.ToArray())));
     }
 
-    // Successor lines of an admitted action; a line at the count is the end of the run, not a line.
-    private static IEnumerable<int> Successors(ScrClause action, int line, int count) => action.Type switch
+    // Successor lines of an admitted action; a line at the count or past it is the end of the run, not a line.
+    private static IEnumerable<int> Successors(ScrProgram program, ScrClause action, int line)
     {
-        ScrCatalogue.Action.ReturnSkipDefault or ScrCatalogue.Action.ReturnRunDefault or ScrCatalogue.Action.Dialog => [],
-        ScrCatalogue.Action.Goto => action.Value(0) < count ? [action.Value(0)] : [],
-        _ => line + 1 < count ? [line + 1] : [],
-    };
+        var count = program.Count;
+        IEnumerable<int> lines = action.Type switch
+        {
+            ScrCatalogue.Action.ReturnSkipDefault or ScrCatalogue.Action.ReturnRunDefault or ScrCatalogue.Action.Dialog => [],
+            ScrCatalogue.Action.Goto => [action.Value(0)],
+            // PG7: a loop for goes on with the next line, or with an empty list after its loop end.
+            ScrCatalogue.Action.LoopFor => [line + 1, AfterLoopEnd(program, line)],
+            // A loop end goes on with the next line, or jumps back to the line after the loop for that filled the list: any loop for's.
+            ScrCatalogue.Action.LoopEnd => program.Lines.Where(l => IsLoopFor(l.OnTrue) || l.Condition.Type != ScrCatalogue.Condition.True && IsLoopFor(l.OnFalse))
+                .Select(l => l.Number + 1).Prepend(line + 1),
+            _ => [line + 1],
+        };
+        return lines.Where(next => next < count);
+
+        static bool IsLoopFor(ScrClause clause) => clause.Type == ScrCatalogue.Action.LoopFor;
+    }
+
+    /// <summary>
+    /// PG7 (0x44BC60): where a loop for with an empty list goes on: the line after the first line after it whose condition is "true" and
+    /// whose true action is loop end; without one, the line after the line count (the original's scan stops at the first line it cannot
+    /// read and returns the line after it), which ends the run as a line outside the script.
+    /// </summary>
+    [OriginalFunction(0x44BC60, OriginalFunctionScope.Full)]
+    internal static int AfterLoopEnd(ScrProgram program, int loopFor)
+    {
+        for (var at = loopFor + 1; at < program.Count; at++)
+        {
+            var row = program.Lines[at];
+            if (row.Condition.Type == ScrCatalogue.Condition.True && row.OnTrue.Type == ScrCatalogue.Action.LoopEnd) return at + 1;
+        }
+        return program.Count + 1;
+    }
 
     private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
     {
@@ -307,7 +359,8 @@ public static class ScrAdmission
                 case ScrOperandRole.Number:
                     if (!ScrCatalogue.IsKnownValueKind(kind)) return Refuse(ScrRefusalCode.UnknownValueKind);
                     if (!set.ValueKinds.Contains((ScrValueKind)kind)) return Refuse(ScrRefusalCode.ValueKindNotAdmitted);
-                    if (!InStore((ScrValueKind)kind, value)) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
+                    if (!(set.CounterIndexWraps && (ScrValueKind)kind == ScrValueKind.Counter) && !InStore((ScrValueKind)kind, value))
+                        return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
                 case ScrOperandRole.Object:
                     if (!ScrCatalogue.IsKnownFocusKind(kind)) return Refuse(ScrRefusalCode.UnknownFocusKind);
@@ -319,6 +372,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get object type stores into its number operand 1 (ARC-SCRIPT-018).
             if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Random stores into its number operand 2 (ARC-WORLD-081, PG5).
+            if (!condition && type == ScrCatalogue.Action.Random && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // The magick-tech adjustment stores into its number operand 3 (ARC-SCRIPT-042, WE2).
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
