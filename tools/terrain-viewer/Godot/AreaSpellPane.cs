@@ -55,6 +55,7 @@ public partial class AreaSpellPane : CanvasLayer
         header.AddChild(_weapon);
         _buttons = new HFlowContainer { MouseFilter = Control.MouseFilterEnum.Ignore, CustomMinimumSize = new(520, 0) }; column.AddChild(_buttons);
         GetViewport().SizeChanged += Place;
+        AreaGameBarPanel.InsetsChanged += Place;
     }
 
     /// <summary>Shows the pane with <paramref name="spells"/> or, while it is open, the weapon's spell pane
@@ -115,12 +116,15 @@ public partial class AreaSpellPane : CanvasLayer
 
     internal void PressItemForSelfTest(int slot) => ItemActivated?.Invoke(slot);
 
+    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
+    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
+
     private void Place()
     {
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _panel.ResetSize();
         var panel = _panel.GetCombinedMinimumSize();
-        _panel.Position = new(12, Math.Max(12, size.Y - panel.Y - 12));
+        _panel.Position = new(12, Math.Max(12, size.Y - panel.Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }

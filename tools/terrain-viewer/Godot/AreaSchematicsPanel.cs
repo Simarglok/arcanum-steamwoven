@@ -77,6 +77,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
         };
         foreach (var control in new Control[] { _header, tabs, disciplines, _body, _assemble, _message, hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
+        AreaGameBarPanel.InsetsChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
@@ -144,10 +145,14 @@ public partial class AreaSchematicsPanel : CanvasLayer
     /// <summary>Controller confirm or Tab: the assemble button.</summary>
     public void Confirm() => AssembleRequested?.Invoke();
 
+    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
+    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= ResizePanel;
+
     private void ResizePanel()
     {
-        var size = GetViewport().GetVisibleRect().Size;
-        _panel.Position = new Vector2(size.X * .1f, size.Y * .08f);
+        // ARC-UI-018: inside the part the interface bars leave free.
+        var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
+        _panel.Position = new Vector2(size.X * .1f, top + size.Y * .08f);
         _panel.Size = new Vector2(size.X * .8f, size.Y * .8f);
     }
 }
