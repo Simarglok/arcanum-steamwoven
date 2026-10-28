@@ -115,6 +115,15 @@ public sealed class ItemDurabilityRulesTests
         Assert.AreEqual((10, 5, 1, 0, 5), (RepairAdjustmentPercent(RepairTraining.None, false), RepairAdjustmentPercent(RepairTraining.Apprentice, false),
             RepairAdjustmentPercent(RepairTraining.Expert, false), RepairAdjustmentPercent(RepairTraining.Master, false),
             RepairAdjustmentPercent(RepairTraining.Master, true)));
+        // ARC-SKILLS-007 (ledger RP2): the 5 % of a broken item is a master's; anyone else keeps the training table.
+        Assert.AreEqual((10, 1), (RepairAdjustmentPercent(RepairTraining.None, true), RepairAdjustmentPercent(RepairTraining.Expert, true)));
+        // The skill's own run is not forced: effectiveness 0 restores nothing, anything above restores at least 1.
+        Assert.AreEqual((25, 50, 0, 1), (SkillRepairAmount(damaged, 50, false), SkillRepairAmount(damaged, 0, true), SkillRepairAmount(damaged, 0, false),
+            SkillRepairAmount(damaged, 1, false)));
+        Assert.AreEqual((0, 1), (SkillRepairAmount(new ItemCondition(-10, 0, 5, false), 0, true), SkillRepairAmount(new ItemCondition(-10, 0, 5, false), 30, true)),
+            "the floor follows the fated branch too");
+        Assert.AreEqual((1, 0, 0, 5), (SkillRepairAdjustmentPercent(RepairTraining.Master, false, 0, true), SkillRepairAdjustmentPercent(RepairTraining.Master, false, 0, false),
+            SkillRepairAdjustmentPercent(RepairTraining.Master, false, 3, true), SkillRepairAdjustmentPercent(RepairTraining.Master, true, 0, true)));
 
         var repaired = Repair(damaged, 25, 10, RepairTraining.None);
         Assert.AreEqual(ItemRepairStatus.Repaired, repaired.Status);
@@ -127,14 +136,17 @@ public sealed class ItemDurabilityRulesTests
         Assert.AreEqual(ItemRepairStatus.NothingToRepair, Repair(broken, 10, 5, RepairTraining.Expert).Status, "no damage, not a master");
         // A broken item that took damage again: any repairer lowers the damage; only a master clears the bit.
         var hurt = broken with { Damage = 20 };
-        var expert = Repair(hurt, 10, 5, RepairTraining.Expert);
-        Assert.AreEqual((ItemRepairStatus.Repaired, 10, 8, true), (expert.Status, expert.Condition.Damage, expert.Condition.Adjustment, expert.Condition.Broken));
+        var expert = Repair(hurt, 10, 1, RepairTraining.Expert);
+        Assert.AreEqual((ItemRepairStatus.Repaired, 10, 10, true), (expert.Status, expert.Condition.Damage, expert.Condition.Adjustment, expert.Condition.Broken),
+            "an expert's 1 % of 50 truncates to 0");
         Assert.IsFalse(Repair(hurt, 10, 5, RepairTraining.Master).Condition.Broken);
         var mended = Repair(broken, 10, 5, RepairTraining.Master);
         Assert.AreEqual(ItemRepairStatus.Repaired, mended.Status);
         Assert.AreEqual((false, true, 0, 8), (mended.Condition.Broken, mended.Condition.InventoryArtBroken, mended.Condition.Damage, mended.Condition.Adjustment),
             "the current art's bit only; hp_adj 10 − 50 × 5 / 100");
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Repair(damaged, 0, 0, RepairTraining.None));
+        var nothing = Repair(damaged, 0, 10, RepairTraining.None);
+        Assert.AreEqual((ItemRepairStatus.Repaired, 30, 5), (nothing.Status, nothing.Condition.Damage, nothing.Condition.Adjustment), "no hit points, the share still taken");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Repair(damaged, -1, 0, RepairTraining.None));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Repair(damaged, 1, 101, RepairTraining.None));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Repair(damaged, 1, 0, (RepairTraining)9));
     }

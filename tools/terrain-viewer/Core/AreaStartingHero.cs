@@ -65,6 +65,10 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// <summary>ARC-COMBAT-008: the kit's durability values for the attack's wear, by kit index (null for a prototype that does not
     /// read or an item outside the durability bounds), from the same prototype fields (<see cref="SessionWearItem.FromCombatFields"/>).</summary>
     public IReadOnlyList<SessionWearItem?>? KitDurability { get; init; }
+
+    /// <summary>ARC-RENDER-033: each kit item's ground ART id (its prototype's current art, field 0), by kit index; null for a
+    /// prototype that does not read. The viewer draws a placed kit item with it.</summary>
+    public IReadOnlyList<uint?>? KitArt { get; init; }
 }
 
 /// <summary>
@@ -149,6 +153,7 @@ public static class AreaStartingHero
             KitHealing = KitHealing(prototypes.Read, definition),
             KitLockpicks = KitLockpicks(prototypes.Read, definition),
             KitDurability = KitDurability(prototypes.Read, definition),
+            KitArt = KitArt(prototypes.Read, definition),
         };
     }
 
@@ -211,6 +216,15 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
             ? SessionWearItem.FromCombatFields("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
+    }
+
+    /// <summary>ARC-RENDER-033: each kit item's ground ART id from its prototype's combat fields, null where it does not read.</summary>
+    public static IReadOnlyList<uint?> KitArt(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
+            ? (uint?)fields.Object.CurrentArt : null).ToArray();
     }
 
     /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>
@@ -345,7 +359,8 @@ public static class AreaStartingHero
             raceEffect, genderEffect, hero.Gold,
             [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))],
             Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0),
-            InnateSkills: skills);
+            // A scheme or background outside the session's range starts as 0 (none), as the pre-made data never has one (39..50 installed).
+            InnateSkills: skills, Background: hero.Background is >= SessionHeroLimits.MinBackground and <= SessionHeroLimits.MaxBackground ? hero.Background : 0);
     }
 
     /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>

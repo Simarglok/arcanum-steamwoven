@@ -49,6 +49,12 @@ its Close button. Contents:
 - **Always Run on/off** (ARC-WORLD-020): the original's Always Run option, saved; the line under
   it shows the option, the Num Lock state, what the next ground click does and the current gait
   ([walking and running](../world/gait-runtime.md)).
+- **Prowl (stealth) on/off** (ARC-SKILLS-008): the original's skill-bar prowling button; toggles the
+  session hero's concealment and its followers'. While concealed, a run is a walk unless the hero is
+  a master of prowling with fatigue left ([stealth](../world/stealth-runtime.md)).
+- **Save game (save list)** and **Load game (save list)** (ARC-UI-010): close the palette and open the save or
+  load window of the session's save list; without an AREA game session the line under the actions says so
+  ([save list](../rendering/terrain-viewer.md#save-list-arc-ui-010)).
 - **Sound test: next interface sound** (ARC-UI-040): plays the next of the original's fixed interface
   sounds by id from the area module's sound catalogue; the line under it shows the output device,
   the three channel settings, the catalogue and the last result ([viewer audio](../audio/viewer-audio.md)).
@@ -102,7 +108,8 @@ WORLD host (`TerrainViewerWorld.cs`).
    until the next key press (at window heights below about 550 px the header may then
    take the whole HUD panel). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
-   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
+   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011); F7 writes the
+   auto-save and F8 loads the newest save, [ARC-UI-010](../rendering/terrain-viewer.md#save-list-arc-ui-010)),
    and while its session inventory exists I toggles the inventory window on key down
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)); while it has a game
    session C toggles the character sheet, L the logbook and T the schematic window on key down
@@ -122,6 +129,10 @@ WORLD host (`TerrainViewerWorld.cs`).
    not wired); without a session
    (`world-diagnostic`, or a map or exterior drawn without a session clock) F1–F8, I, C, L, R and T are reserved
    too, and Num Lock in `world-diagnostic`. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   The original's character letters A, C, F, I, L, R, S, T and W act bare or with Shift only: with Ctrl, Alt or Command
+   held (alone or with Shift) they open, close or toggle nothing and are not reported as reserved, because the
+   original reads them from WM_CHAR, where Ctrl makes a control code and Alt no character
+   ([ARC-INPUT-004](../research/ledger/ui-audio.md#window-key-modifiers-arc-input-004), `OriginalWorldKeyboard.CharacterKeySilenced`).
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.
@@ -140,7 +151,14 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
 
 - Unit tests `tests/Arcanum.TerrainViewer.Tests/DiagnosticPaletteRoutingTests.cs`:
   chord ownership, exact modifiers, text/unfocused gating, lost release, reserved
-  table, palette keys, bounded trace, fixed-sign arrows vs stick inversion.
+  table, palette keys, bounded trace, fixed-sign arrows vs stick inversion; ARC-INPUT-004: each character letter
+  silenced by Ctrl, Alt, Command and Ctrl+Shift but not by Shift, and no other key silenced.
+- ARC-INPUT-004 in the `ARC-UI-008` AREA self-test (production key route, synthetic session): L, C, I, T, R and W
+  with Ctrl, Alt, Command or Ctrl+Shift change no window, status, notice or reserved report; Shift+C/T/R act as
+  bare; Shift+L opens and closes the logbook and Ctrl+L does not close it (the other windows' close gates share the code
+  but are not driven: without a hero the sheet and schematic window do not open, and the fixture has no inventory host). The palette chord matrix's held-modifier
+  check (held Ctrl+Shift + F1–F5, R, F, L, 1, 0, WASD) failed in its `ARC_AREA_GRID_PROBE` run in `crash-site-area`
+  from ARC-UI-008 until this fix (Ctrl+Shift+L opened the logbook).
 - Godot self-test (`--self-test`, headless and graphical): `ARC-INPUT-001 palette chord
   matrix PASS` (order, modifier-first release, echo, re-press, both sides, partial/extra
   modifiers, held modifiers + original keys, text entry, palette text, focus loss,
@@ -157,7 +175,7 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
   ARC-RENDER-007 gate (see [toolchain](../workflow/toolchain.md) and
   [local development](../workflow/local-development.md)); the synthetic gates require the
   ARC-INPUT-001 markers. Its ordinary mode is `crash-site-area`; `./arcanum area`
-  prefers the current ARC-INPUT-001 build over ARC-RENDER-007.
+  then preferred the current ARC-INPUT-001 build over ARC-RENDER-007 (since ARC-RENDER-028 it is map mode on the main world map).
 
 **Owner-verified (L3, ARC-INPUT-002, 2026-10-17):** native macOS delivery of
 Ctrl+Shift+F9, a physical Mac keyboard and a physical controller (see the result below).

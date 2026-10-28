@@ -14,7 +14,7 @@ Requirements: [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (r
 
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers: rows FA7–FA9 and AL5
-  (already at F2) and SR1–SR9 of the [verification ledger](../research/original-verification-ledger.md#skill-rules-arc-skills-001).
+  (already at F2) and SR1–SR9 of the [verification ledger](../research/ledger/skills.md#skill-rules-arc-skills-001).
   Both readers agree on every row; no anomaly, no rule-mode switch.
 - The function oracle ([ARC-DEV-007](../../tools/original-oracle/README.md)) runs the basic level (0x4C5EB0) and the basic
   training setter (0x4C6170) on 10,000 seeded inputs each: no difference, four planted mutants caught per function (F3,

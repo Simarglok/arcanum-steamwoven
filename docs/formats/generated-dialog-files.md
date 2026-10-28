@@ -9,7 +9,7 @@ no line is built yet). The consumer, the NPC greeting of the dialog, is ARC-WORL
 ## Evidence
 
 The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers that saw only the questions
-([ledger "Generated dialog files"](../research/original-verification-ledger.md#generated-dialog-files-arc-data-042), GD1–GD5,
+([ledger "Generated dialog files"](../research/ledger/data.md#generated-dialog-files-arc-data-042), GD1–GD5,
 anomaly GD-A1); they agree on every row. Local data: the opt-in census below (counts only).
 
 ## Files

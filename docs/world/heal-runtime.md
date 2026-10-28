@@ -14,12 +14,12 @@ Requirements: [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a
 
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers and checked against a
-  first reading: rows HL1–HL5 of the [verification ledger](../research/original-verification-ledger.md#heal-arc-skills-005).
+  first reading: rows HL1–HL5 of the [verification ledger](../research/ledger/skills.md#heal-arc-skills-005).
   They agree on every row; no anomaly, no rule-mode switch. HL4 re-reads the record heal applier (0x4B58C0) that
   `LifeRules.Heal` (ARC-COMBAT-002) modelled at F0: it agrees, now F2.
 - The skill check, its difficulty (a healing item lowers it by its bonus, none makes it impossible) and the heal fate are
-  [SC1–SC17](../research/original-verification-ledger.md#skill-check-arc-skills-003) and
-  [FT6](../research/original-verification-ledger.md#fate-points-arc-world-054).
+  [SC1–SC17](../research/ledger/skills.md#skill-check-arc-skills-003) and
+  [FT6](../research/ledger/skills.md#fate-points-arc-world-054).
 - Installed original (opt-in, [below](#real-data-census)).
 
 ## Rules
@@ -55,13 +55,13 @@ the destruction, and whether the heal fate was used.
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,
 ordinal order; a used-up item is in `destroyed`). The decoder refuses a count outside the range (`OutOfRange`), an out-of-order or
-repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 30 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-33)).
+repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 30 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-36)).
 
 ## Viewer
 
 The AREA inventory window lists a **Use on self** button for each healing item in the PC's list (the kit's from the hero load's
-prototype fields, a taken item's from its object row) and runs `HealWithItem` on the hero (no turn-based round in the viewer, so
-no action points). A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
+prototype fields, a taken item's from its object row) and runs `HealWithItem` on the hero; in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the use charges its 4
+action points on the hero's subturn and goes on whatever the charge answers. A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
 fields for it, although `HealWithItem` accepts one the hero holds. The window reports the amount, the cure, the uses left or the item used up.
 
 ## Boundaries

@@ -182,6 +182,9 @@ public sealed record SessionObjectAttackResult(GameSessionDisposition Dispositio
 
     /// <summary>The critical item steps of a critical self-hit on the hero (ARC-COMBAT-009); empty otherwise.</summary>
     public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
+
+    /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
+    public SessionAmmoUse? Ammunition { get; init; }
 }
 
 /// <summary>
@@ -293,6 +296,7 @@ public sealed partial class GameSessionOwner
             AimedLocation = attack.Aim,
             Distance = attack.Distance,
             Difficulty = _difficulty,
+            AmmunitionShort = ShotAmmunition() is { Short: true },
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
@@ -306,20 +310,27 @@ public sealed partial class GameSessionOwner
             _revision++;
         }
         var changed = resolution.Fate != FateUse.None;
+        // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss.
+        var ammunition = resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
+        if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None,
+                refusedSpend.Failure, Version) { Ammunition = refusedSpend };
+        changed |= ammunition is { Disposition: GameSessionDisposition.Changed };
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
-                null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version);
+                null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition };
 
         if (damage.Recipient == DamageRecipient.Attacker)
         {
             // A critical self-hit: the hero takes the damage and its own armour and weapon the wear (ARC-COMBAT-007).
             var applied = ApplyDamage(Version, SessionLifeTarget.Hero, LifeDamage.FromAttack(resolution)!);
             if (applied.Disposition == GameSessionDisposition.Rejected)
-                return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version);
+                return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version)
+                { Ammunition = ammunition };
             var criticals = new List<SessionCriticalStep>();
             var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, attack.DropMap, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
-                selfFailure, Version) { Criticals = criticals };
+                selfFailure, Version) { Criticals = criticals, Ammunition = ammunition };
         }
 
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
@@ -334,7 +345,8 @@ public sealed partial class GameSessionOwner
             hit = ObjectDamageRules.Hit(facts, state.Damage, amount);
             var write = ObjectWrite(struck, hit);
             if (write.Disposition == GameSessionDisposition.Rejected)
-                return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version);
+                return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version)
+                { Ammunition = ammunition };
             broken = hit.Broken;
             host = HostSteps(struck.Baseline, hit);
         }
@@ -344,7 +356,7 @@ public sealed partial class GameSessionOwner
             itemResult = DamageItem(Version, item.Entity, item.Baseline, amount);
             if (itemResult.Value.Disposition == GameSessionDisposition.Rejected)
                 return new(Disposition(changed), GameSessionFailure.None, resolution, null, itemResult, null, null, SessionObjectHostSteps.None,
-                    itemResult.Value.Failure, Version);
+                    itemResult.Value.Failure, Version) { Ammunition = ammunition };
             broken = itemResult.Value.Break != ItemBreakStep.None;
             host = broken ? SessionObjectHostSteps.WitnessesHearBreak : SessionObjectHostSteps.WitnessesHearAttack;
             if (broken && attack.ItemFacts!.Trapped) host |= SessionObjectHostSteps.TrapFires;
@@ -358,7 +370,8 @@ public sealed partial class GameSessionOwner
         var wear = resolution.Wear is { Any: true }
             ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = heroSide, Target = objectSide, TargetBroken = broken })
             : null;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, hit, itemResult, null, wear, host, WearFailure(wear), Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, hit, itemResult, null, wear, host, WearFailure(wear), Version)
+        { Ammunition = ammunition };
     }
 
     // The original's respawn event (kind 33; 0x43F5F0): the scenery is switched on again (its off state and respawn mark cleared).
@@ -411,6 +424,11 @@ public sealed partial class GameSessionOwner
             edits.AddRange(Edits(openable, openableBaseline.Kind, flags | LockRules.BustedBit, 0));
         }
         var applied = ApplyChanges(Version, null, edits);
+        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7).
+        if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
+            _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
+            foreach (var item in _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)))
+                ScheduleDecay(item.Entity, target.Map);
         if (applied.Disposition != GameSessionDisposition.Changed || hit.Break != ObjectBreak.SceneryRespawns) return applied;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var delay = ObjectDamageRules.RespawnDelayMs(target.Baseline.RespawnDelay);

@@ -32,6 +32,10 @@ public enum AreaHoverAction
     /// <summary>ARC-COMBAT-005: in combat mode a living NPC within the weapon's reach is attacked.</summary>
     Attack,
     WalkToAttack,
+    /// <summary>ARC-MAGIC-015: the spell's targeting cursor is open and the object or tile under it passes the spell's area.</summary>
+    Cast,
+    /// <summary>ARC-MAGIC-015: the targeting cursor is open and nothing under it passes (a press shows at most a message).</summary>
+    CastNoTarget,
 }
 
 public enum AreaNamesStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, CatalogFailed }
@@ -77,6 +81,14 @@ public sealed class AreaHoverIndex
     /// <summary>The pickable drawn bodies in draw order.</summary>
     public IReadOnlyList<AreaDrawCommand> Bodies { get; }
     public AreaObjectRecord Row(AreaObjectKey key) => _rows[key];
+
+    /// <summary>ARC-RENDER-033: a row the map's snapshot does not hold (a placed item without a row of this map), named and picked
+    /// only where a moving command draws it, like a visitor.</summary>
+    public void Admit(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        _rows[row.Key] = row; _names.Remove(row.Key);
+    }
     public bool Contains(AreaObjectKey key) => _rows.ContainsKey(key);
 
     public static bool ClickThrough(AreaObjectRecord row)
@@ -172,13 +184,16 @@ public static class AreaHover
 
     /// <summary>The ground action for a goal, from the planner's refusals that need no search
     /// (<see cref="RoutePlanner.Plan"/>): both cells inside the area and the goal enterable (<see cref="GoalEnterable"/>).
-    /// A goal beyond the planner's axis reach is a walk too: the follower walks it along a corridor (ARC-WORLD-042). The
-    /// actor's own cell is a walk (the route is already there).</summary>
-    public static AreaHoverAction Ground(IRouteStepSource source, CellCoord actor, CellCoord goal)
+    /// A goal beyond the planner's axis reach is a walk too: the follower walks it along a corridor (ARC-WORLD-042), unless
+    /// <paramref name="farClickDoesNotMove"/> (the Original rule mode, ARC-WORLD-072: the click is refused,
+    /// <c>ROUTE_TARGET_OUT_OF_RANGE</c>). The actor's own cell is a walk (the route is already there).</summary>
+    public static AreaHoverAction Ground(IRouteStepSource source, CellCoord actor, CellCoord goal, bool farClickDoesNotMove = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (!source.Contains(actor) || !source.Contains(goal)) return AreaHoverAction.NoRoute;
         if (goal == actor) return AreaHoverAction.Walk;
+        if (farClickDoesNotMove && Math.Max(Math.Abs((long)goal.X - actor.X), Math.Abs((long)goal.Y - actor.Y)) > RouteLimits.AxisDistanceMaximum)
+            return AreaHoverAction.NoRoute;
         return GoalEnterable(source, goal) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
     }
 
@@ -197,6 +212,8 @@ public static class AreaHover
         AreaHoverAction.WalkToLoot => "walk to loot",
         AreaHoverAction.Attack => "attack",
         AreaHoverAction.WalkToAttack => "walk to attack",
+        AreaHoverAction.Cast => "cast",
+        AreaHoverAction.CastNoTarget => "no target",
         _ => "none",
     };
 

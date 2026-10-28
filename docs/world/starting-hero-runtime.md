@@ -69,7 +69,8 @@ a pair of digit runs, at most 300 items. A buy line for the set with anything bu
 
 `GameSessionDescriptor` takes an optional `SessionHeroDefinition`: PC prototype number, race, gender, the ten stored stats
 (eight primary, magick points, tech points), level, unspent points, alignment, the race and gender effects as
-`StatEffectDefinition` (only stats the character owner models; `null` when none), gold and the kit as item kinds. The
+`StatEffectDefinition` (only stats the character owner models; `null` when none), gold, the kit as item kinds and, since
+ARC-WORLD-069, the background id (`Background`, 0 none; a pre-made hero's 39–50, [backgrounds](equipment-runtime.md#backgrounds-arc-world-069)). The
 host maps the reader's result (the mapping lives in the real-data test until the viewer is wired): effect changes on
 the 17 primary/derived stats and magick/tech points are kept; since ARC-SKILLS-002 the changes on basic and tech skills are
 kept too, as the hero's innate skill changes (`InnateSkills`, [hero skills](hero-skills-runtime.md)); changes on resistances, tech disciplines,
@@ -78,9 +79,9 @@ critical-hit chance, the bad-reaction adjustment and age, SH-09).
 
 `Create` refuses (`InvalidHero`, before any component is built) a prototype below 1, an undefined race or gender, a
 stats list that is not ten values, a stored value outside the race's range (strict, as `SetBase`), level outside
-0..51, unspent points outside 0..56, alignment outside −1000..1000 (the original's stat ranges),
+0..51, unspent points outside 0..56, alignment outside −1000..1000 (the original's stat ranges), a background outside 0..999,
 an effect the character owner refuses (no modifiers, more than seven, a magnitude above 1000, divisor 0, negative id),
-negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key, key ring) and a kit larger than
+negative gold, a kit item of a type the kit cannot hold (gold, ammunition: no unit count, key, key ring) and a kit larger than
 `MaxPcItems`. The definition is copied (its lists are checked on the copy). Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
 `kit:2`, … (`SessionKitItem`, no origin map), kept apart from the items the PC takes from the world (`QueryPcInventory`
 keeps its ARC-WORLD-014 meaning, which the viewer's inventory window reads) and counted with them toward `MaxPcItems`.
@@ -90,7 +91,7 @@ A seed that lists a kit entity is `InventoryMismatch`.
 | --- | --- |
 | `QueryHero()` | `SessionHeroState` (the saved fields) or `null` without a hero. |
 | `QueryHeroStats(context)` | The character owner's `CharacterStatsQueryResult` under the context (base/effective/derived values, applied innate effects), or `null`. |
-| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the original's race index 0..10. `IsDumb` is false: the original sets it for backgrounds 55, 74 and 75 only (the dumb test, 0x45FC00) and no background is modelled. |
+| `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the original's race index 0..10. `IsDumb` is false: the original sets it for backgrounds 55, 74 and 75 only (the dumb test, 0x45FC00), which is not applied yet (the hero's background id is held since ARC-WORLD-069; a pre-made hero's is 39..50). |
 | `QueryGold()` | The PC's gold (0 without a hero). |
 | `QueryHeroKit()` | The starting kit in kit order (empty without a hero); in the PC's inventory it precedes `QueryPcInventory`. |
 
@@ -157,7 +158,7 @@ of the game folder that holds the module archive (the description tables' rule),
 `AreaStartingHero.Definition` (the mapping above, moved out of the real-data test). Refusals are typed
 (`AreaHeroStatus`: module outside a game folder, mount or stack failure, a table absent or invalid, a reader refusal,
 an invalid flag message) and fail the viewer's load. Each table comes from the sources of the phase the original reads
-it in (ARC-DATA-027, exe-checked, [ledger](../research/original-verification-ledger.md#load-phases-arc-data-027)):
+it in (ARC-DATA-027, exe-checked, [ledger](../research/ledger/data.md#load-phases-arc-data-027)):
 `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes`, `mes\MainMenu.mes`, `rules\xp_level.mes` and
 `rules\xp_quest.mes` at game start, so from the first base source (a module copy is never read; a table only a module
 holds is absent, detail `<path> NotInPhase`); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
@@ -165,7 +166,7 @@ game-start tables, so the installed heroes read unchanged.
 
 **Pre-made hero flag** (S, and checked in the original executable): picking a hero, the main menu's pre-made hero step
 (0x545B60) reads `MainMenu.mes` messages 551 + i for each hero index i, turns each into a flag number with `atoi` and
-writes 1 for the chosen hero and 0 for the others ([ledger](../research/original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
+writes 1 for the chosen hero and 0 for the others ([ledger](../research/ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
 The viewer starts from the original new-game flags (all 0..3199 known false, so the 0 writes change nothing) with the
 chosen hero's flag true (`AreaStartingHero.NewGameFlags`); on the installed original that is flag 2350 + i (CC-07).
 Project admission: the chosen message must be one to five ASCII digits (space-padded allowed) naming a flag below 3,200;

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Arcanum.Data.Fixes;
 using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Magic;
@@ -107,7 +108,7 @@ public sealed partial class SpellRecordTable
 
     /// <summary>Reads all 223 records of a parsed <c>rules\spelllist.mes</c>; <paramref name="componentTypes"/> are the 25
     /// <c>Type:</c> names of <c>rules\magictech.mes</c> (<see cref="SpellData.ComponentTypeNames"/>).</summary>
-    public static SpellRecordRead Read(MesFile list, IReadOnlyList<string> componentTypes, SpellRecordMode mode)
+    public static SpellRecordRead Read(MesFile list, IReadOnlyList<string> componentTypes, SpellRecordMode mode, DataFixProfile? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(list);
         ArgumentNullException.ThrowIfNull(componentTypes);
@@ -115,7 +116,7 @@ public sealed partial class SpellRecordTable
             throw new ArgumentException("The 25 component type names are required.", nameof(componentTypes));
         if (mode is not (SpellRecordMode.Strict or SpellRecordMode.LikeOriginal)) throw new ArgumentOutOfRangeException(nameof(mode));
         var drafts = new Draft[SpellRecord.Count];
-        var refusal = ReadRecords(list, mode, drafts) ?? ReadComponentPass(list, componentTypes, mode, drafts);
+        var refusal = ReadRecords(list, mode, drafts) ?? ReadComponentPass(list, componentTypes, mode, drafts, fixes?.Applies("DF4") == true);
         if (refusal is not null) return new(refusal.Status, null, refusal);
         return new(SpellDataStatus.Read, new(drafts.Select(d => d.ToRecord()).ToArray(), drafts.SelectMany(d => d.Unread).ToArray()));
     }
@@ -136,10 +137,12 @@ public sealed partial class SpellRecordTable
 
     /// <summary>The second pass: the component lines of each record in number order, then the forced values again.</summary>
     [OriginalFunction(0x44FFA0, OriginalFunctionScope.Full)]
-    private static SpellDataRefusal? ReadComponentPass(MesFile list, IReadOnlyList<string> types, SpellRecordMode mode, Draft[] drafts)
+    private static SpellDataRefusal? ReadComponentPass(MesFile list, IReadOnlyList<string> types, SpellRecordMode mode, Draft[] drafts,
+        bool repeatedDamageFlags)
     {
         foreach (var draft in drafts)
         {
+            draft.RepeatedDamageFlags = repeatedDamageFlags;
             if (ComponentLines(list, draft, types, mode) is { } refusal) return refusal;
             Force(draft);
         }
@@ -482,6 +485,8 @@ public sealed partial class SpellRecordTable
         public SpellArea[] Areas = Enumerable.Repeat(new SpellArea(0, 0, 0, 0, -1), SpellRecord.Actions).ToArray();
         public List<SpellComponent> Components = [];
         public List<SpellDataRefusal> Unread = [];
+        // DF4 (the Steamwoven setting): a repeated Dmg_Flags: is read too.
+        public bool RepeatedDamageFlags;
         public bool HasDamage;
         public uint SpellFlagsSet;
 

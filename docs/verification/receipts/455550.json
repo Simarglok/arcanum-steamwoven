@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x455550",
+  "name": "spell-target-stage",
+  "method": "Arcanum.Simulation.Magic.SpellTargetStage.Decide",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG15",
+    "ledgerInputs": 938,
+    "differ": 938,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "7ec91721e489a8860f7d8bac6a2badd791f3619edfbe23db73a4c20077278a28",
+  "configuration": "Debug"
+}

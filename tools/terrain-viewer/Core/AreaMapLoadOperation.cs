@@ -5,6 +5,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
+using Arcanum.Simulation.Movement;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -31,8 +32,10 @@ internal static class AreaMapLoadOperation
         RequireSame(stack.Plan.SearchOrder.Where(s => s.Role == ContentSourceRole.ModuleArchive).Select(s => s.Path), arguments.ModulePath);
         var catalog = WorldCatalog.Open(stack);
         var centre = WindowCentre(stack, catalog, mapName, arguments);
-        var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)))
-            : AreaMapPlans.Create(stack, catalog, mapName);
+        // ARC-DATA-037: the map patch is applied under the session's data rules (Steamwoven by default).
+        var data = arguments.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven;
+        var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)), data: data)
+            : AreaMapPlans.Create(stack, catalog, mapName, data);
         if (created.Status != AreaMapPlanStatus.Ready) throw new InvalidOperationException("AREA_MAP_PLAN_" + created.Status.ToString().ToUpperInvariant());
         var mapPlan = created.Plan!;
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource2).Select(f => f.Path), arguments.ResourcePath);
@@ -115,6 +118,8 @@ internal static class AreaMapLoadOperation
                 command.Phase == 0 ? TerrainKind.Tile : TerrainKind.Facade, checked((int)(command.MapX - plan.Chart.OriginX)),
                 checked((int)(command.MapY - plan.Chart.OriginY)), command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
+        // ARC-RENDER-034: a window's terrain overview beyond its core, from the map's terrain grid and the types' editor colours.
+        var (overview, overviewFailure) = centre is { } middle ? Overview(stack, catalog, mapPlan.Map, middle, plan) : (null, null);
         var elapsed = Environment.TickCount64 - started;
         area = area with { ArtSources = mapPlan.Files.Where(f => f.Member is null && f.Key.Role is not (AreaSourceRole.Loose or AreaSourceRole.Module or AreaSourceRole.Prototype or AreaSourceRole.NormalGameMobile))
                 .GroupBy(f => f.Key).ToDictionary(g => g.Key, g => g.First().Path),
@@ -127,8 +132,24 @@ internal static class AreaMapLoadOperation
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
+            AreaOverview = overview, AreaOverviewFailure = overviewFailure,
             UnlitSessionStartup = unlitStartup?.Startup, UnlitSessionStartupFailure = unlitStartup?.Failure,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
+    }
+
+    /// <summary>ARC-RENDER-034: the overview around the window's centre, or why there is none (no terrain grid or no types).</summary>
+    private static (AreaTerrainOverview? Overview, string? Failure) Overview(ContentStack stack, WorldCatalog catalog, WorldMap map, AreaSectorCoordinate centre,
+        AreaScenePlan plan)
+    {
+        var started = Environment.TickCount64;
+        var terrain = catalog.ReadTerrain(map);
+        if (terrain.Grid is not { } grid) return (null, "TERRAIN_" + (terrain.Issue?.Code.ToString() ?? "NONE").ToUpperInvariant());
+        if (catalog.TerrainTypes.Table is not { } table) return (null, "TYPES_" + catalog.TerrainTypes.Status.ToString().ToUpperInvariant());
+        var colours = TerrainEditorColours.Open(stack, table);
+        var overview = AreaTerrainOverview.Create(grid, colours.Colours ?? [], centre, 1, plan.Chart, plan.WorldBounds);
+        Console.WriteLine($"ARC-RENDER-034 load stage=overview sectors={overview.Sectors.Count} fallback={overview.MissingColours} colours={colours.Failure ?? "read"} " +
+            $"bounds={overview.Bounds.Width}x{overview.Bounds.Height} ms={Environment.TickCount64 - started}");
+        return (overview, null);
     }
 
     /// <summary>ARC-RENDER-024: the centre of the window a map opens as, or null when it loads whole. A map with more sector
@@ -206,7 +227,7 @@ internal static class AreaMapLoadOperation
         throw new InvalidOperationException("AREA_MAP_NO_WALKABLE_TILE");
     }
 
-    private static bool CanStep(AreaStepSnapshot steps, AreaStepCell cell)
+    internal static bool CanStep(AreaStepSnapshot steps, AreaStepCell cell)
     {
         if (!steps.IsAdmitted(cell) || steps.Terrain(cell) is not { Disposition: CardinalTraversalDisposition.Open }) return false;
         for (var direction = 1; direction < 8; direction += 2)
@@ -241,7 +262,11 @@ public static class AreaMapWalk
 {
     /// <summary>The route (<see cref="AreaWindowRoute"/>) on the module content stack of the arguments' game folder; the native
     /// walk smoke steers by it.</summary>
-    public static AreaWindowRouteResult Plan(TerrainViewerArguments arguments, AreaStepCell from, AreaStepCell to, CancellationToken token)
+    /// <param name="overlay">The live overlay the walk steps by (ARC-WORLD-060: the objects the session destroyed or switched off
+    /// free their tiles as for the PC's steps, through the same <see cref="AreaOccupancyRules.Apply"/>); null for the T0 evidence.
+    /// Its occupied cells are chart cells of the shown window and are not read here.</param>
+    public static AreaWindowRouteResult Plan(TerrainViewerArguments arguments, AreaStepCell from, AreaStepCell to, CancellationToken token,
+        AreaOccupancy? overlay = null)
     {
         var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
@@ -249,6 +274,49 @@ public static class AreaMapWalk
         var opened = ContentStack.Open(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
-        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token);
+        return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token, stepOpen: StepOpen(overlay));
+    }
+
+    /// <summary>The window route's step verdict over an overlay's moved T0 records (<see cref="AreaOccupancyRules.Apply"/>, the
+    /// query the PC's steps use); null (the T0 disposition) when the overlay moves none. Live actors' cells are chart cells of the
+    /// shown window and are not applied.</summary>
+    internal static Func<AreaStepAssessment, AreaStepCell, CardinalTraversalDirection, bool>? StepOpen(AreaOccupancy? overlay)
+    {
+        if (overlay is not { Moved.Count: > 0 } live) return null;
+        var removed = AreaOccupancy.None.WithRemoved(live.Moved);
+        return (assessment, _, direction) => AreaOccupancyRules.Apply(assessment, default, Neighbor[direction], removed).Disposition == CardinalTraversalDisposition.Open;
+    }
+
+    // The movement direction of each traversal direction (the inverse of GridReplay.MapDirection).
+    internal static readonly IReadOnlyDictionary<CardinalTraversalDirection, NeighborDirection> Neighbor =
+        Enum.GetValues<NeighborDirection>().ToDictionary(GridReplay.MapDirection);
+}
+
+/// <summary>ARC-RENDER-027: the maps of a game folder's content stack the map census opens, in catalogue order: every
+/// catalogued map with its listing (<c>rules/maplist.mes</c>, the transfer destinations), its sector file count and its
+/// map-list start tile. Map mode opens a map with at least one sector file; a window (more than
+/// <see cref="AreaMapPlans.MaxSectorFiles"/>) also needs its map-list start.</summary>
+public static class AreaMapCensus
+{
+    public sealed record Entry(string Name, bool Listed, int SectorFiles, WorldLocation? Start)
+    {
+        public bool Window => SectorFiles > AreaMapPlans.MaxSectorFiles;
+        public bool Openable => SectorFiles > 0 && (!Window || Start is not null);
+    }
+
+    /// <summary>Whether the walker can stand on the cell: open terrain and a cardinal step out and back (the spawn rule).</summary>
+    public static bool Stands(AreaStepSnapshot steps, AreaStepCell cell) => AreaMapLoadOperation.CanStep(steps, cell);
+
+    public static IReadOnlyList<Entry> Maps(TerrainViewerArguments arguments)
+    {
+        var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
+        if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
+        var opened = ContentStack.Open(discovery.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
+        using var stack = opened.Stack!;
+        var catalog = WorldCatalog.Open(stack);
+        var list = MapList.Read(stack);
+        return catalog.Maps.Select(m => list.Status == MapListStatus.Read && list.Find(m.Name) is { } row
+            ? new Entry(m.Name, true, m.SectorFiles.Count, row.Start) : new Entry(m.Name, false, m.SectorFiles.Count, null)).ToArray();
     }
 }

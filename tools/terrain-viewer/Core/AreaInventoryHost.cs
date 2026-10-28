@@ -6,6 +6,7 @@ using Arcanum.Data.Scripts;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -81,7 +82,8 @@ public sealed class AreaInventoryMap
                 inventory.ListOf(holder.SourceIndex).Select(item => Id(item.Key)).ToArray())).ToArray(),
             inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
-                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray()),
+                    item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray())
+                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0 },
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
@@ -132,6 +134,8 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Written { get; init; }
     /// <summary>ARC-SKILLS-006: the PC can pick a lock with this item (lockpicks it holds).</summary>
     public bool Lockpick { get; init; }
+    /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
+    public bool Repairable { get; init; }
 }
 
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
@@ -243,19 +247,24 @@ public sealed class AreaInventoryHost
     /// <summary>The window's lines: the PC's list in order and, for <paramref name="holder"/> on <paramref name="runtimeMap"/>,
     /// that holder's current list.</summary>
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
-        IReadOnlyList<SessionHealingItem?>? kitHealing = null, IReadOnlyList<SessionLockpick?>? kitLockpicks = null)
+        IReadOnlyList<SessionHealingItem?>? kitHealing = null, IReadOnlyList<SessionLockpick?>? kitLockpicks = null,
+        IReadOnlyList<SessionWearItem?>? kitDurability = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
         // item the hero wears (ARC-WORLD-028 session equipment) is marked.
         var worn = session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         string Worn(string entity) => worn.Contains(entity) ? " (worn)" : string.Empty;
+        // ARC-WORLD-066: an ammunition stack shows its units.
+        string Units(string entity) => session.QueryAmmo(entity) is { } stack ? $" ×{stack.Units}" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
-            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written })
-            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))
-            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written }))
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
+              Repairable = Repairable(session, item.Entity, kitDurability) })
+            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Units(item.Entity) + Worn(item.Entity))
+            { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
+              Repairable = Repairable(session, item.Entity, kitDurability) }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
-            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + " (made)" + Worn(item.Entity))
+            .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
             .ToArray();
         var gold = session.QueryGold();
@@ -265,7 +274,7 @@ public sealed class AreaInventoryHost
         static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
                 ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
-            + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
+            + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
         return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
 
@@ -317,6 +326,25 @@ public sealed class AreaInventoryHost
         return null;
     }
 
+    /// <summary>ARC-SKILLS-007: the T0 condition of an item the PC holds: a kit item's from <paramref name="kitDurability"/> (the hero
+    /// load's, by kit entity), a taken item's from its object row (<see cref="SessionItemConditions.FromCombatFields"/>); null for an
+    /// item without one, an item the session no longer has, or a session without a hero.</summary>
+    public ItemCondition? RepairBaseline(GameSessionOwner session, string entity, IReadOnlyList<SessionWearItem?>? kitDurability)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitDurability?.FirstOrDefault(item => item?.Entity == entity)?.Baseline;
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionItemConditions.FromCombatFields(fields);
+        return null;
+    }
+
+    // An item whose current condition (the session's record over its baseline) is damaged or broken.
+    private bool Repairable(GameSessionOwner session, string entity, IReadOnlyList<SessionWearItem?>? kitDurability) =>
+        RepairBaseline(session, entity, kitDurability) is { } baseline && session.QueryItemCondition(entity, baseline) is { } condition
+        && (condition.Damage > 0 || condition.Broken);
+
     /// <summary>A kit item's shown name: the text of its prototype's description number (the identified name; the kit's
     /// identification state is not modelled). No catalog, an absent or undecodable text gives a bracketed label.</summary>
     public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog) => KindName(item.Kind, catalog);
@@ -347,12 +375,14 @@ public sealed class AreaInventoryHost
     public static string Printed(InventoryMutationResult result) =>
         result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
 
-    /// <summary>Plain text for a transfer refusal shown in the window and the status line.</summary>
-    public static string Refusal(GameSessionFailure failure) => failure switch
+    /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
+    /// (<c>mes\item.mes</c> 115 in the original).</summary>
+    public static string Refusal(GameSessionFailure failure, SessionInsertVerdict? verdict = null) => failure switch
     {
+        GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
-        GameSessionFailure.ItemTypeUnsupported => "gold, ammunition and keys are not modelled",
+        GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",
         GameSessionFailure.WornItemUnsupported => "worn items are not modelled",
         GameSessionFailure.ItemNotAvailable => "the item is no longer there",
         GameSessionFailure.HolderNotLootable => "only a dead NPC can be looted",

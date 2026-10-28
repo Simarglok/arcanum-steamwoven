@@ -319,8 +319,14 @@ public sealed class AreaCompanionGroup
         return group;
     }
 
-    /// <summary>The PC's overlay: every companion's T0 record is moved (here or away), and the companions hold their live cells.</summary>
-    public AreaOccupancy OccupancyForPc() => _companions.Length == 0 && _absent.Count == 0 ? AreaOccupancy.None : Cached(-1, true);
+    /// <summary>ARC-WORLD-065: the T0 records of the objects the session destroyed or switched off (read at every overlay; the same
+    /// set while nothing changed); every overlay moves them. Null is none.</summary>
+    public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; set; }
+
+    /// <summary>The PC's overlay: every companion's T0 record is moved (here or away), and the companions hold their live cells;
+    /// removed objects are moved too.</summary>
+    public AreaOccupancy OccupancyForPc() =>
+        _companions.Length == 0 && _absent.Count == 0 && Removed?.Invoke() is not { Count: > 0 } ? AreaOccupancy.None : Cached(-1, true);
 
     /// <summary>The PC's live cells, set by the host after each PC advance (committed cell and a started step's cell).</summary>
     public IReadOnlyList<CellCoord> Pc { get; private set; } = [];
@@ -332,19 +338,22 @@ public sealed class AreaCompanionGroup
     // A planner asks for the overlay at every step it assesses: one value per (mover, PC cells, companion states) is
     // reused while none of them changed (states are immutable and replaced by each advance).
     private readonly Dictionary<(int Index, bool Leader), (object[] Inputs, AreaOccupancy Value)> _cache = [];
+    private static readonly IReadOnlySet<AreaObjectKey> NoneRemoved = new HashSet<AreaObjectKey>();
 
     private AreaOccupancy Cached(int index, bool leader)
     {
-        var inputs = new object[_companions.Length + 1];
+        var removed = Removed?.Invoke() ?? NoneRemoved;
+        var inputs = new object[_companions.Length + 2];
         inputs[0] = Pc;
-        for (var i = 0; i < _companions.Length; i++) inputs[i + 1] = (object?)_companions[i].Grid?.State ?? this;
+        inputs[1] = removed;
+        for (var i = 0; i < _companions.Length; i++) inputs[i + 2] = (object?)_companions[i].Grid?.State ?? this;
         if (_cache.TryGetValue((index, leader), out var known) && known.Inputs.Length == inputs.Length
             && known.Inputs.Zip(inputs).All(pair => ReferenceEquals(pair.First, pair.Second))) return known.Value;
         var held = new List<CellCoord>();
         if (leader && index >= 0) held.AddRange(Pc);
         for (var i = 0; i < _companions.Length; i++)
             if (i != index && _companions[i].Grid is { } other) held.AddRange(Held(other.State));
-        var value = new AreaOccupancy(_companions.Select(c => c.Key).Concat(_absent), held);
+        var value = new AreaOccupancy(_companions.Select(c => c.Key).Concat(_absent).Concat(removed), held);
         _cache[(index, leader)] = (inputs, value);
         return value;
     }

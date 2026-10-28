@@ -14,7 +14,7 @@ drawing side of [FR-SCENE-008](../requirements/scene.md#fr-scene-008) (a destroy
 ready.
 
 Every rule was read in the executable by two independent readers
-([ledger "Object damage"](../research/original-verification-ledger.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
+([ledger "Object damage"](../research/ledger/combat.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
 
 Code: [`ObjectDamageRules`](../../src/Arcanum.Simulation/Combat/ObjectDamageRules.cs),
 [`GameSessionObjects`](../../src/Arcanum.Session/GameSessionObjects.cs); tests
@@ -123,7 +123,17 @@ The registry version stays 1, as when the Lock event was added.
   at each hit.
 
   It also names the objects the session destroyed or switched off. The view no longer draws or picks those, and a destroyed
-  door's passage is open.
+  door's passage is open. Since ARC-WORLD-065 they block no step either: the live overlay moves their T0 records for the PC
+  (its steps and click routes) and for each companion (`AreaCompanionGroup.Removed`), as the original's object lists skip
+  destroyed and switched-off objects in the step test (ledger FC1–FC3); a respawning scenery blocks again once it is back.
+  The same holds for destroyed doors, windows and traps: their T0 records leave no gap on a step either.
+  The tile's own blocking (sector mask, facade, tile name) does not depend on objects and stays. The object-attack smoke
+  reports the steps onto the struck object's tile that its T0 record alone blocked and how many are open afterwards
+  (`BlockedSteps`, `FreedSteps`; all of them when the object was removed, none while it stands). The next stage,
+  `ARC-WORLD-065 native-smoke freed-cell`, takes the map's first container or scenery that blocks steps by itself, marks it
+  destroyed in the session, checks those steps are open for the PC's overlay and its click routes, returns its condition to
+  what it was and checks they block again. The use reach of a trigger, the hover cursor's route and the main-map corridor still
+  read T0 steps (a removed crate on such a step is a detour or a refusal there).
 
   It works on every map the viewer shows. The exterior and the cave have no session portals, so there only containers and
   scenery are targets. A static container's entity is its inventory holder's `oid:` id, not the `sector:` id of
@@ -145,24 +155,33 @@ The registry version stays 1, as when the Lock event was added.
 - **Native smoke.** With `--hero`, as the last stage of map mode (the map keeps what the hits did), the hero Alt-clicks the
   drawn door, window, container or scenery with the fewest hit points it can damage. It attacks until the object breaks or
   40 attacks have run. Each hit goes through the session, and a destroyed or switched-off object is no longer drawn. The
-  stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object.
+  stage prints `ARC-COMBAT-008 native-smoke object-attack PASS`, or `NONE` without such an object. Since ARC-COMBAT-014 the
+  candidates are only the objects the player's click can pick: a click-through scenery (OF_CLICK_THROUGH) is never picked, as in
+  the original, and a roof-covered body is not drawn, so neither can be Alt-clicked. A candidate is skipped for the next (at
+  most eight tried, `Skipped` in the PASS line) when it has no cell within the hero's reach to stand on, when no start a few
+  cells away has a planner route to the cell the attack will walk to, or when the pointer finds no point of it; with every
+  candidate skipped the stage is `NONE` with the reasons. On the main map the earlier stage chose a click-through scenery
+  ("target not visible") and then a start with no route to the approach cell. Known limit: the attack walks to the standable
+  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there (since ARC-WORLD-073 the attack takes the original's approach instead, a cell a route reaches by construction, [click route](click-route-runtime.md#attack-approach-arc-world-073)); the
+  smoke starts where it does, so another reachable cell beside the object is not tried by the attack (the original's move-near
+  is not read).
 
 ## Differences from the original
 
 | Original 1.0.7.4 | Steamwoven |
 | --- | --- |
 | The respawn delay multiplies in 32 bits (it wraps beyond 268,435 seconds or 35,791 minutes). | Exact. |
-| Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container, prototype 3023), and each dropped item gets an item-decay event two days later; the container drops its last item first. | The items lie loose on the cell in the holder's order, without a pile or decay. |
+| Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container, prototype 3023), and each dropped item gets an item-decay event two days later; the container drops its last item first. | The items lie loose on the cell in the holder's order, without a pile; since ARC-WORLD-062 each decays two game days later ([item decay](inventory-runtime.md#item-decay-arc-world-062)). |
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
 | A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
 
 ## Not ready
 
-- **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded), a busted scenery or trap on
-  its T0 ART (not the destroyed ART), and no spilled items: they lie in the session and the inventory but have no draw command.
-  A destroyed scenery or container still blocks its cells: step evidence is T0 map data. The viewer passes the trap flag
-  (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
+- **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded). Since ARC-RENDER-033 a busted
+  scenery or trap is drawn from its destroyed ART (field 24) at its T0 anchor and spilled items at the container's cell
+  ([ground items](inventory-runtime.md#ground-items-in-the-viewer-arc-render-033)).
+  The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
-- **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay
-  of dropped items.
+- **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects (the decay
+  of dropped items is in since ARC-WORLD-062).

@@ -104,6 +104,7 @@ public sealed partial class GameSessionOwner
         ReactionQuery query = ReactionQuery.Standard)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         var failure = ResolveReaction(entity, npc, pc, out var record);
         if (failure == GameSessionFailure.None && !Enum.IsDefined(query)) failure = GameSessionFailure.InvalidReactionFacts;
         if (failure != GameSessionFailure.None) return new(failure, null);
@@ -123,6 +124,7 @@ public sealed partial class GameSessionOwner
         int delta)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         return ChangeReaction(expected, entity, npc, pc, _ => delta);
     }
 
@@ -135,6 +137,7 @@ public sealed partial class GameSessionOwner
         int target)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         return ChangeReaction(expected, entity, npc, pc,
             stored => ReactionRules.DeltaTo(target, ReactionRules.Effective(stored, npc, pc)), validAmount: ReactionLimits.InRange(target));
     }
@@ -149,6 +152,7 @@ public sealed partial class GameSessionOwner
         ReactionHitFacts ai, bool deliberate)
     {
         ThrowIfDisposed();
+        npc = Listed(entity, npc);
         var validAi = ReactionLimits.InRange(ai.FollowerHitAdjustment) && ReactionLimits.InRange(ai.HostileReaction);
         var profile = _rules.Reaction;
         var follow = false;
@@ -180,6 +184,16 @@ public sealed partial class GameSessionOwner
         // The raised start always changes the slot, so a used fate commits with it.
         if (used && result.Disposition == GameSessionDisposition.Changed)
             _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.ForceGoodReaction).After));
+        // ARC-SKILLS-008 (ST4): a dialog's start ends the concealment of the hero and of the NPC it talks to; after an unchanged slot
+        // that needs a revision of its own (refused at the limit, with nothing changed).
+        if (result.Disposition == GameSessionDisposition.Rejected || !(_combat.HeroConcealed || _combat.Concealed.Contains(entity))) return result;
+        if (result.Disposition == GameSessionDisposition.NoChange && _revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted);
+        EndConcealmentForDialog(entity);
+        if (result.Disposition == GameSessionDisposition.NoChange)
+        {
+            _revision++;
+            result = result with { Disposition = GameSessionDisposition.Changed, Version = Version };
+        }
         return result;
     }
 

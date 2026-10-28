@@ -65,7 +65,11 @@ public partial class TerrainViewerApp : Node
         _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
         // ARC-DEV-032: a self-test, a native smoke or the WORLD settings validation never reads or writes the player's settings and saves.
         if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
+        {
             ViewerAutomatedStorage.MarkAutomated();
+            // ARC-DEV-045: an automated run keeps drawing while its window cannot draw (minimized).
+            if (DisplayServer.GetName() != "headless") AddChild(new HiddenWindowDrawKeeper());
+        }
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
@@ -111,6 +115,9 @@ public partial class TerrainViewerApp : Node
         TerrainLoadResult? result = null;
         try
         {
+            // ARC-DATA-037: a map opens under the data rules of the session the load carries; a load that carries none ends the
+            // scene's session and starts a new one, so it opens under the default rules.
+            arguments = WithSessionDataRules(arguments, _mapHandoff?.Session);
             result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
             if (_exiting || !_coordinator.TryPublish(requestGeneration, () => PublishReadyResult(arguments, result))) return;
@@ -120,14 +127,21 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk run.
+                        // walk and census run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); }
+                            // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
+                            else
+                            {
+                                if (Stage("cast")) await RunAreaCastSmokeAsync(result);
+                                // ARC-COMBAT-020: the turn-based round alone (the map battery runs it too).
+                                if (Stage("turn-based")) await RunAreaTurnBasedSmokeAsync(result);
+                            }
                         }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
@@ -144,6 +158,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
+                        // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
+                        if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
@@ -174,6 +190,7 @@ public partial class TerrainViewerApp : Node
             GD.Print($"ARC-RENDER-007 failure stage={exception.Issue.Stage} code={exception.Issue.Code} ready=False");
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload, Progress: TerrainViewerProgress.Empty);
+            if (CensusLoadFailed($"{exception.Issue.Stage}/{exception.Issue.Code}")) return;
             if (_nativeSmoke) { GetTree().Quit(1); return; }
             _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
         }
@@ -188,12 +205,14 @@ public partial class TerrainViewerApp : Node
                     _ => TerrainViewerErrorCode.FingerprintMismatch
                 },
                 Stage: TerrainViewerFailureStage.Fingerprint, Progress: TerrainViewerProgress.Empty);
+            if (CensusLoadFailed($"AreaSteps.{exception.Stage}/{exception.Code}")) return;
             if (_nativeSmoke) { GetTree().Quit(1); return; }
             _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
         }
         catch (TerrainViewerException exception)
         {
             if (_exiting) return;
+            if (CensusLoadFailed($"{exception.Error.Stage}/{exception.Error.Code}")) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, exception.Error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, exception.Error))) return;
         }
@@ -210,6 +229,8 @@ public partial class TerrainViewerApp : Node
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload,
                 Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
+            if (CensusLoadFailed(exception.Message.StartsWith("AREA_", StringComparison.Ordinal) && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
+                ? exception.Message : exception.GetType().Name)) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error))) return;
         }
@@ -265,6 +286,7 @@ public partial class TerrainViewerApp : Node
         // A disposed session's follower must not keep its step snapshot reachable.
         _worldRoute = null; _worldRouteSession = null;
         RetirePassabilityOverlay();
+        RetireAreaOverview();
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
@@ -871,7 +893,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1034,6 +1056,8 @@ public partial class TerrainViewerApp : Node
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
         _conversationHost = null; ReleaseConversationContent();
         DisposeAudio();
+        // ARC-RENDER-033: the extra art's content stack.
+        _extraArt?.Dispose(); _extraArt = null;
         _cache.Dispose();
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();

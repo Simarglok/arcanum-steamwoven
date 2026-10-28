@@ -342,7 +342,7 @@ S8 with inventory.
 
 ## 11. Anomalies recorded, not adopted (S)
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](ledger/scripts.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the earlier readings below where they differ.
 
 Under owner decisions D2 and D8 (fix confirmed slips; only a bug of the original
 game keeps its behaviour behind a switch of the Original setting) these are

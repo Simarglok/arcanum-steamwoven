@@ -21,16 +21,20 @@ public sealed class DataFixTests
     [TestMethod]
     public void Profiles_enable_every_fix_in_Steamwoven_and_none_in_Original()
     {
-        foreach (var id in new[] { "DF1", "DF2", "DF3" })
+        foreach (var id in new[] { "DF1", "DF2", "DF3", "DF4", "MP7" })
         {
             Assert.IsTrue(DataFixProfile.Steamwoven.Applies(id), id);
             Assert.IsFalse(DataFixProfile.Original.Applies(id), id);
         }
         Assert.IsFalse(DataFixProfile.Steamwoven.Applies("DF9"));
-        CollectionAssert.AreEquivalent(new[] { "DF1", "DF2", "DF3" }, DataFixProfile.Rows.ToArray(), "every switch row, and only those");
+        CollectionAssert.AreEquivalent(new[] { "DF1", "DF2", "DF3", "DF4", "MP7" }, DataFixProfile.Rows.ToArray(), "every switch row, and only those");
         Assert.AreSame(DataFixProfile.Original, DataFixProfile.FromName("original"));
         Assert.IsNull(DataFixProfile.FromName("Original"));
         Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", NpcLineEffectsInResponseLost = true }).Applies("DF2"));
+        Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", MapPatchScriptZeroIgnored = true }).Applies("MP7"));
+        Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", RepeatedDamageFlagsLost = true }).Applies("DF4"));
+        // MP7 is the map patch's switch: a DLG catalogue entry for it is refused.
+        Assert.ThrowsExactly<ArgumentException>(() => new DlgDataFixCatalogue([new("MP7", "dlg/00001a.dlg", Sha(SixFields), DlgFixOperation.CompleteLastRecord)]));
     }
 
     [TestMethod]
@@ -108,7 +112,8 @@ public sealed class DataFixTests
             new("DF2", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions),
             new("DF2", "dlg/00001a.dlg", sha, (DlgFixOperation)9, 1),
             new("", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord),
-            new("DF4", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord),
+            new("DF4", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord), // the spell reader's fix, not a DLG entry
+            new("DF9", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord),
             new("DF1", "dlg/00001a.dlg", null!, DlgFixOperation.CompleteLastRecord),
             new("DF1", null!, sha, DlgFixOperation.CompleteLastRecord),
         })

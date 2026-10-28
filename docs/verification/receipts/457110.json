@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x457110",
+  "name": "spell-interrupt",
+  "method": "Arcanum.Simulation.Magic.SpellRunSystem.InterruptAction",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "0fa3eb0d4bdeef3ec0b573f405a7130f893f26a3652ef13cf7dee961878ee8f8",
+  "configuration": "Debug"
+}

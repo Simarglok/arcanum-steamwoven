@@ -434,7 +434,7 @@ and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock 
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher passes the cave input only to an
-ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
+ARC-WORLD-009 build (which `./arcanum area` preferred until ARC-RENDER-028 made it map mode on the main world map); exported AREA builds that predate
 it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
 
 ### Actor anchor and wall fade (ARC-RENDER-011)
@@ -518,8 +518,10 @@ step.
 While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
 `user://saves/quicksave.json` (Godot user data of the viewer; an automated run keeps its slots in its own
-folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). There is no save
-list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved. Map mode
+folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). Since ARC-UI-010 this slot is the
+[save list](#save-list-arc-ui-010)'s auto-save: F7 writes it with its details and a preview, and F8 loads the
+**newest** save of the list by file date, which is the auto-save only when nothing newer was saved, as the
+original's F8 (ledger SL1, SL2). Elsewhere F7/F8 stay reserved. Map mode
 has its own slot and also loads a save of another map
 ([ARC-WORLD-038](area-map-mode.md#quick-save-arc-world-038)).
 
@@ -555,7 +557,7 @@ has its own slot and also loads a save of another map
   whose dialog values it cannot read is refused before anything changes. Snapshot sections other domains
   add later are restored with the session; the day/night driver (ARC-WORLD-010) rebinds
   there to the loaded clock, so a load restores the saved time, pause and applied scheme.
-- **HUD.** The area status line shows the slot and the last F7/F8 result.
+- **HUD.** The area status line shows the save folder and the last F7/F8 result, a load naming the save it read.
 
 The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after
 the transition phase, on a temporary slot, never the player's: F7 through the
@@ -609,7 +611,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   ground goal: *no route* when the route planner refuses it without a search (the cell or
   the actor outside the area, or no neighbour step entering the cell), else *walk here*;
   since ARC-WORLD-042 a goal more than 32 cells from the actor on an axis is *walk here*
-  too (the follower walks it along a corridor). The search itself is not run on hover, so
+  too (the follower walks it along a corridor), and since ARC-WORLD-072 *no route* under the
+  Original rule mode (its far click does not move); the *walk to …* actions of far objects do
+  not read the mode yet (hover and use reach are ARC-WORLD-068's). The search itself is not run on hover, so
   a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
   is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
@@ -641,6 +645,8 @@ is wired to the viewer: items can be picked up from the ground and taken from de
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
 [`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
+Since ARC-WORLD-066 ammunition can be picked up and looted too: it merges into the hero's stack of its prototype, and the
+inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inventory-runtime.md#ammunition-arc-world-066)).
 
 - **Seeds.** When the area session is created, the exterior (and, with `--area-cave-mobile`,
   the cave) seed is built from the [T0 inventory view](../world/area-inventory-view.md) and
@@ -663,13 +669,17 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   (the use-range helper, 0x428930);
   the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
   choice). Living NPCs, chests (contents generated on first open, not modelled) and items
-  inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
+  inside holders are not targets. A ground item the session refuses (gold, keys,
   a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
   click reports the refusal. Not modelled: the pickup animation and action-point cost.
 - **Use on self (ARC-SKILLS-005).** A healing item in the PC's list (the kit's from the hero load's prototype fields, a taken
   item's from its object row) gets a *Use on self* button under the list: the hero heals itself through the session's heal
   check ([heal runtime](../world/heal-runtime.md)), and the message line names the amount, the cure and the uses left or the item
   used up. No pre-made kit and nothing on the Crash Site exterior is a healing item; the synthetic self-test covers the button.
+- **Repair (ARC-SKILLS-007).** A damaged or broken item in the PC's list (its condition: the session's record over the hero
+  load's or the object row's baseline) gets a *Repair* button: the hero repairs it with its Repair skill
+  ([repair runtime](../world/repair-runtime.md)), and the message line names the hit points repaired, "nothing to repair" or
+  "the repair restored nothing". The native smoke damages an original hero's kit item and repairs it through the button.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.
@@ -884,7 +894,8 @@ export), switching on other GPUs and handhelds.
 In `crash-site-area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
 follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walks after the PC on his own grid session
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
-Virgil block each other where they stand, and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
+Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode; Virgil is still
+admitted against the PC), and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
 (no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
 session on F7 and when the PC leaves the map. HUD: `companion script 1324 <standing> at
 (x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
@@ -909,8 +920,10 @@ human ART's average time for its gait (walk 547/773 ms, run 168/235 ms per axis/
 draws the run ART (animation 6, loaded only in this mode). A ground click walks; Ctrl+click runs once (walks once
 with Always Run on); Num Lock flips the always-run lock; the palette's **Always Run on/off** is the original option
 (`user://always_run_v1.json`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
-Virgil runs while he is farther than range + 2. HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
-current gait …` (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
+Virgil runs while he is farther than range + 2. Since ARC-SKILLS-008 the palette's **Prowl (stealth) on/off** toggles the
+hero's and its followers' concealment ([stealth](../world/stealth-runtime.md)); while concealed, a run becomes a walk unless the
+hero is a master of prowling with fatigue left (the crouch and the stealth walk animations are not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
+current gait …` (with `prowling: walks only` or `prowling: a master, runs allowed` while concealed) (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
 Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
 stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a window step takes 1.125 s and draws the
 vault ART); the Crash Site maps have no jumpable window, so the map-mode smoke observes it (`ARC-WORLD-021 native-smoke vault PASS`,
@@ -940,7 +953,7 @@ auto-level scheme spends its 5 starting points at the start and each level's poi
 experience award (a dialog's quest completion, a hit, a kill) the followers and the NPCs waiting on this map follow the
 hero's level step with their own schemes ([auto-level schemes](../world/advancement-runtime.md#viewer-host); the log prints
 `ARC-WORLD-036 follower-level`). The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
-race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
+race/gender ART. Launcher: `./arcanum area --hero NAME` (since ARC-RENDER-028 the main world map in map mode), `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
 
@@ -964,7 +977,7 @@ run may end under a roof.
 
 In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the exterior, in the cave and in `--area-map`
 ([hero attack runtime](../world/hero-attack-runtime.md#viewer-area), ledger
-[FA1–FA10](../research/original-verification-ledger.md#hero-attack-arc-combat-005)): the hero walks (running) within its
+[FA1–FA10](../research/ledger/combat.md#hero-attack-arc-combat-005)): the hero walks (running) within its
 weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
 action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
 it the attempt-attack goal (here the same attack); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
@@ -981,7 +994,7 @@ living NPC with combat values.
 The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
 crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
-[CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
+[CS1–CS7](../research/ledger/character.md#character-sheet-arc-ui-007)), every value a session query:
 
 - the hero's project name (no PC name in the session), race and gender;
 - level, experience still needed for the next level (`last level` at 51; `next level unknown` without experience data),
@@ -1017,7 +1030,7 @@ not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_Experience
 #### Skills page (ARC-UI-009)
 
 Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
-in the original executable (ledger rows [SP1–SP8](../research/original-verification-ledger.md#skills-page-arc-ui-009)):
+in the original executable (ledger rows [SP1–SP8](../research/ledger/skills.md#skills-page-arc-ui-009)):
 
 - the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
   groups at once instead of the original's tabs;
@@ -1045,13 +1058,77 @@ spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay 
 mode of the original (mode 2, + and − hidden) has no caller in the viewer.
 
 **Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
-errors), tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
+errors), tech disciplines and schematics panels, age (not session state), the portrait and PC lens,
 followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
 while open, rebuild on change, the skills page's `+` and `−` with the editor's floor over a close and reopen, dead-hero close
 and refusal); native smoke with `--hero` after the hero stage: `ARC-UI-009 native-smoke skills page PASS` (the original skill
 texts describe all sixteen rows; a `+` the pool accepts, its `−` and a refused second `−`, or with no unspent points a refused
 `+`) and `ARC-UI-007 native-smoke character sheet PASS`.
+
+#### Spells page (ARC-MAGIC-008)
+
+Requirements: [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004) (the character sheet's spell page),
+[FR-MAGIC-002](../requirements/combat-magic-tech.md#fr-magic-002) (learning colleges in order with the editor).
+
+Since ARC-MAGIC-008 (slice MT19 of the [magic implementation plan](../research/magic-implementation-plan.md)) the sheet has
+the original's college page as a second tab beside the skills, checked in the original executable (ledger rows
+[SG1–SG8](../research/ledger/magic.md#spell-page-arc-magic-008)). Code: `AreaSpellsPage` (Core, Godot-free)
+and the panel's "Spells" tab; tests `AreaSpellsPageTests`.
+
+- **Colleges.** Sixteen college tabs, one shown at a time. The shown college is kept between opens, as the original keeps
+  it (initially the first).
+- **The shown college's five spells**, in rank order. Each row has the spell's name and the minimum level it needs, as the
+  original prints it beside the name. Known ranks are drawn white, the next rank gold and the ranks above it grey, as the
+  original draws the names; the original also greys the icons of every rank not yet known.
+- **Hover hints, as the original's text bar shows them.**
+  - Over a spell, or over `+` (the next rank) and `−` (the highest known rank):
+    - the name;
+    - the minimum willpower;
+    - the fatigue cost the hero would pay (a dwarf twice, the mastered college half);
+    - for a maintained spell, the maintenance per second or per period (a dwarf twice; the mastered college doubles the
+      period);
+    - the description.
+  - Over a college: its name, then its description — or the mastery description for the college the hero mastered.
+  - Names and descriptions come from the player's `mes\spell.mes`, costs from `rules\spelllist.mes`. Both load in the
+    background through the module's game folder, with `rules\magictech.mes`, as the original's magic init reads them;
+    without them the project's labels are shown and no costs.
+  - The willpower is the minimum the session's pool checks (the spell list's `IQ:` loaded with the hero, else the
+    defaults).
+- **`+` learns the college's next rank.** It is enabled below five ranks. It goes through the session's point pool
+  (`SpendHeroPoint`, track College: the [spell book](../world/spell-book-runtime.md)'s lane). Unspent points are tested
+  first, then the level, intelligence and willpower. A refusal names the failing check in project words, matching the
+  original's `charedit.mes` messages 18, 30, 26 and 36.
+- **`−` unlearns the highest rank** (`RefundHeroPoint`). It is enabled only above the rank the hero had when the sheet
+  opened (the editor's floor), as the original's in-game sheet shows its `−`. A press at the floor is refused with the
+  original's meaning (message 27): a spell learned before the sheet opened cannot be unlearned.
+- **Feedback.** Each press reports on the page: the spell learned or unlearned, or the refusal.
+
+Differences from the original, all of the page's presentation:
+
+- the college names as tab texts instead of the college icons;
+- no spell icons; the look of each rank is given as a word and a colour;
+- the hint as a tooltip; the original's 3-second hint delay after a refusal is not kept (SG6, SP5);
+- project refusal texts, with no refusal sound (the original plays 3004, SG6, SP7);
+- a success reported in words; the original clears its text bar.
+
+The view-only and character-creation modes of the original sheet have no caller in the viewer. Those modes also show `−` down
+to rank 0.
+
+**Not implemented:**
+
+- clearing an unlearned spell from the spell bar (SB10): the spell bar is MT20's;
+- casting;
+- followers' pages.
+
+**Checks:**
+
+- The self-test inside `ARC-UI-007 self-test PASS` uses a synthetic hero with willpower 8. A college tab shows its spells;
+  `+` learns rank 1; a second `+` is refused for willpower; `−` unlearns the rank and is then disabled at the floor. The
+  shown college is kept over a close and reopen.
+- The native smoke with `--hero`, after the skills page, prints `ARC-MAGIC-008 native-smoke spells page PASS`. It checks
+  that the original data names the sixteen colleges and all eighty spells and gives every spell a description and a cost.
+  Then a `+` on the first college either learns the next rank (`−` then unlearns it) or is refused with the failing check.
 
 ### Level-up messages (ARC-UI-046)
 
@@ -1093,10 +1170,52 @@ files load; an award built in the smoke, without changing the session, posts a p
 player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
 window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
 
+### Save list (ARC-UI-010)
+
+While `crash-site-area` has a game session, the palette's **Save game (save list)** and **Load game (save list)**
+open the save and load windows over the session's save folder (`user://saves`, map mode `user://saves/map`, an
+automated run its own folder). The original opens these windows from its in-game menu, which is a later task; the
+rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)), the window's
+art and layout are the project's.
+
+- **Folder.** `GameSaveLibrary` ([save list](../world/game-session-runtime.md#save-list-arc-ui-010)): the auto-save
+  (`quicksave`, the original's `SlotAuto` "Auto-Save" that F7 writes) and numbered saves `slot0000`..`slot9998`,
+  each a snapshot file with a details file (description, hero and level, place, game date and time) and a PNG
+  preview of the screen fitted into the original's fixed 468×300.
+- **List.** The auto-save first, then the other saves newest first by file date. A row shows the description
+  (the slot name when it is empty); the side shows the details and the preview; a save without details (a quick
+  save from before ARC-UI-010) or with details from another snapshot is listed and marked.
+- **Save window.** A "new save" row first, then the saves; the first save is selected on opening (as the original).
+  (In an empty window the original selects nothing; here the new-save row is selected so Return saves.)
+  The description field has the keyboard on the new-save row only. Return or **Save** there writes a new
+  numbered save (the highest number plus one; refused at 9999) with the typed description (empty or only
+  spaces: the slot name); on a listed save it asks first, Return or **Yes** overwrites it keeping that save's
+  own description (as the original, which puts it in the field before asking) and Escape or **No** keeps it.
+  A double click on a row confirms it, but never answers an open question. A save that succeeds closes the
+  window, as the original; a failure keeps it open with the reason. The save is the game as it was when the window opened (the window is modal: the gate
+  closes, the clock pauses, a walk stops), with the preview taken when the palette had left the screen.
+- **Load window.** The saves; Return or **Load** loads the selected save through the quick load's path (every check
+  before anything changes; a save of another map loads that map in map mode) and closes the window; a failed load
+  keeps the window and the session and names the reason.
+- **Delete.** Delete or Backspace on a selected save or **Delete** asks first, then removes the save, its details
+  and preview and clears the selection, as the original; the auto-save is never deleted.
+- **Keys.** The open window owns every key except the typing in its description field: Up/Down select, Return
+  confirms or answers yes, Escape answers no or closes; F7, F8 and the window letters do nothing under it. A
+  controller confirm, cancel and menu direction do the same.
+
+Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
+temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
+Escape refuses, Return accepts) keeping the save's description, keys owned, the F7 auto-save's details (and the
+preview when a frame can be read), the auto-save first and not deletable, a load by row under a new session, F8
+loading the newest save (the auto-save, then a numbered save made newer; the HUD names the loaded save), a delete
+asked first that clears the selection. The native quick-save smoke checks the auto-save's
+details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
+original window art, sorting or paging options, a text cursor of the original's own, and the original `.gsi` format.
+
 ### Logbook (ARC-UI-008)
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
-`l`/`L`, ledger [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)) toggles a read-only diagnostic
+`l`/`L`, ledger [LB1](../research/ledger/ui-audio.md#logbook-arc-ui-008)) toggles a read-only diagnostic
 logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
 the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
 (ledger rows LB2–LB13):
@@ -1142,7 +1261,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 ### Schematic window (ARC-TECHNOLOGY-005)
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
-PC as crafter and viewer, ledger [SW1](../research/original-verification-ledger.md#schematic-window-arc-technology-005)) toggles
+PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
 a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
@@ -1175,7 +1294,7 @@ holding a learned record's components one assembly makes its product).
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use
 ([reading window runtime](../world/reading-window-runtime.md), ledger
-[WR1–WR16](../research/original-verification-ledger.md#reading-window-arc-ui-049)). A schematic document registers and the
+[WR1–WR16](../research/ledger/ui-audio.md#reading-window-arc-ui-049)). A schematic document registers and the
 inventory message shows `tech.mes` 89 with its name (88 when known); any other kind replaces the inventory with a modal reading
 window, as the original's mode change pops the inventory. Script actions 64, 65 and 114 of the dialog, use, tile and sector scripts
 open it for a PC viewer once nothing else owns input. The window owns every key: `Escape` or a controller cancel closes it, a book's
@@ -1245,7 +1364,7 @@ WORLD starts in Follow at preferred zoom 2.00 when no valid preference exists.
 This is a hypothesis for an assessable actor, not a QHD comfort measurement.
 LT out / RT in are admitted complete-frame levels with deadzone 0.10 and full
 drive one octave/second. The ratio remains 0.125..8 with nearest filtering (on a map loaded as a window the
-smallest is its zoom floor, ARC-RENDER-032, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
+smallest is its zoom floor, ARC-RENDER-032, or 1/8 again over its terrain overview since ARC-RENDER-034, [map mode](area-map-mode.md#the-main-world-map-arc-render-024));
 camera zoom never changes simulation, asset geometry, UI scale or display DPI.
 Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 
@@ -1404,6 +1523,9 @@ land in the player's file. The self-test checks it first and fails with `SELF_TE
 input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)` and
 `ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
 WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
+
+The same automated runs keep drawing, at full speed, while the window cannot draw (minimized): see
+[minimized window draw](../workflow/toolchain.md#minimized-window-draw-arc-dev-045) (ARC-DEV-045).
 
 ## Reproducible local verification
 

@@ -39,8 +39,11 @@ public enum AreaSchematicDataStatus { Ready, ModuleOutsideGameRoot, MountFailed,
 /// </summary>
 public sealed class AreaSchematicData
 {
-    public AreaSchematicData(SchematicCatalog catalog, TechTexts texts, IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> prototypes)
+    public AreaSchematicData(SchematicCatalog catalog, TechTexts texts, IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> prototypes,
+        IReadOnlyDictionary<int, (int AmmoType, int Units)>? ammo = null, IReadOnlyDictionary<int, uint>? art = null)
     {
+        Ammo = ammo ?? new Dictionary<int, (int, int)>();
+        Art = art ?? new Dictionary<int, uint>();
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(texts);
         ArgumentNullException.ThrowIfNull(prototypes);
@@ -53,6 +56,16 @@ public sealed class AreaSchematicData
     public TechTexts Texts { get; }
     /// <summary>Prototype number (base + 20) → its item facts.</summary>
     public IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> Prototypes { get; }
+
+    /// <summary>ARC-WORLD-066: an ammunition prototype's type and units (its quantity), for an ammunition product.</summary>
+    public IReadOnlyDictionary<int, (int AmmoType, int Units)> Ammo { get; }
+
+    public (int AmmoType, int Units)? AmmoOf(int prototype) => Ammo.TryGetValue(prototype, out var a) ? a : null;
+
+    /// <summary>ARC-WORLD-070: a schematic prototype's ground ART id (its current art), for a made product lying on the ground.</summary>
+    public IReadOnlyDictionary<int, uint> Art { get; }
+
+    public uint? ArtOf(int prototype) => Art.TryGetValue(prototype, out var a) ? a : null;
 
     public ComponentFacts? Facts(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Facts : null;
     public SessionItemKind? Kind(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Kind : null;
@@ -89,6 +102,8 @@ public static class AreaSchematics
         if (texts.Texts is null) return new(AreaSchematicDataStatus.TextsFailed, null, $"{texts.Refusal}");
         var prototypes = ContentPrototypes.Open(stack);
         var facts = new Dictionary<int, (ComponentFacts, SessionItemKind)>();
+        var ammo = new Dictionary<int, (int, int)>();
+        var art = new Dictionary<int, uint>();
         foreach (var record in catalog.Catalog.Records)
             foreach (var base_ in record.Component1.Bases.Concat(record.Component2.Bases).Concat(record.Product.Bases).Distinct())
             {
@@ -97,8 +112,10 @@ public static class AreaSchematics
                 if (!Enum.IsDefined((SessionItemType)fields.Object.Type)) continue;
                 facts[prototype] = (new(item.MagickTechComplexity, item.Discipline),
                     new((SessionItemType)fields.Object.Type, prototype, fields.Object.Name, fields.Object.Description));
+                if (fields.Ammo is { } a) ammo[prototype] = (a.AmmoType, a.Quantity);
+                art[prototype] = fields.Object.CurrentArt;
             }
-        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts),
+        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts, ammo, art),
             $"records {catalog.Catalog.Records.Count}, prototypes {facts.Count}");
     }
 
@@ -185,6 +202,16 @@ public static class AreaSchematics
     public static string CompletedText(AreaSchematicData data, MesTextProfile profile) =>
         Text(data.Catalog.Text(SchematicAssemblyRules.CompletedMessage), profile);
 
+    /// <summary>ARC-WORLD-070: the note after a completed assembly whose inventory refused some product units: they lie on the crafter's
+    /// tile (the original shows the insert check's refusal for a PC, ledger SA5); empty when every unit entered.</summary>
+    public static string OnGroundText(SessionAssemblyResult result, bool npc = false)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.OnGround.Count == 0) return string.Empty;
+        var why = npc ? "the NPC cannot take it" : AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, result.Verdict);
+        return $" — {why}: {(result.OnGround.Count == 1 ? "the product lies" : $"{result.OnGround.Count} products lie")} on the ground";
+    }
+
     /// <summary>The sound the original plays after an assembly: 3018 + the current discipline (ledger SW6).</summary>
     public static int CompletedSound(int discipline) => SchematicAssemblyRules.CompletedSoundBase + discipline;
 
@@ -192,7 +219,8 @@ public static class AreaSchematics
     public static string Refused(SessionAssemblyResult result, bool npc = false) => result.Failure switch
     {
         GameSessionFailure.AssemblyRefused => result.Plan?.Button == AssemblyButton.ExpertiseLacking ? "expertise lacking" : "an item is missing",
-        GameSessionFailure.InsertRefused => "no room for the product (the original would leave it on the ground)",
+        GameSessionFailure.InsertRefused when result.Verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses the technological product",
+        GameSessionFailure.InsertRefused => "no room for the product and no tile to leave it on",
         GameSessionFailure.ItemTypeUnsupported => "the product is not an item the session holds (stack or key)",
         GameSessionFailure.BudgetExceeded => "inventory limit",
         GameSessionFailure.InvalidLifeTarget => npc ? "the NPC crafter is dead" : "the hero is dead",

@@ -205,7 +205,10 @@ public sealed class LifeStateTests
         var deathTime = owner.QueryLifeRecord("oid:wolf")!.Value.DeathTimeMs;
         Assert.IsNotNull(deathTime);
 
-        var back = Changed(owner.Heal(owner.Version, Npc(), new LifeHeal { Resurrect = true, Full = true }), owner, 4).Outcome!;
+        // ARC-MAGIC-012: the target's raise script may veto the raise (the host's port); the state stays.
+        var vetoed = owner.Heal(owner.Version, Npc(), new LifeHeal { Resurrect = true, Full = true }, () => false);
+        Assert.AreEqual((GameSessionDisposition.NoChange, LifeEvents.ResurrectionRefused), (vetoed.Disposition, vetoed.Outcome!.Events));
+        var back = Changed(owner.Heal(owner.Version, Npc(), new LifeHeal { Resurrect = true, Full = true }, () => true), owner, 4).Outcome!;
         Assert.AreEqual(new LifeState(0, 10, 0, LifeConditions.None, 0), back.After);
         // The death time stays after a resurrection, like the source's.
         Assert.AreEqual(deathTime, owner.QueryLifeRecord("oid:wolf")!.Value.DeathTimeMs);

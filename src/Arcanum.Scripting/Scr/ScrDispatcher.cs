@@ -29,6 +29,9 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
         options.Validate(host);
+        // ARC-SCRIPT-018: a callee of a dialog-point run would need the runner's dialog gates (E6), which are not modelled.
+        if (e.Point == ScrPoint.Dialog && options.Admission.Actions.Contains(ScrCatalogue.Action.CallScript))
+            throw new ArgumentException("A dialog-point event cannot run a set with call script (the callee's dialog gates are not modelled).", nameof(options));
         if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0 || e.Attachee.Code is null || e.Triggerer is { Code: null } || e.Extra is { Code: null })
             return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         var slot = host.Slot(e.Attachee, e.Point);
@@ -145,10 +148,10 @@ public static class ScrDispatcher
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
 
-    private static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
+    internal static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
         (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
 
-    private static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
+    internal static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
     {
         ScrScriptStatus.Found when lookup.Program is not null => null,
         ScrScriptStatus.Unreadable => ScrStop.UnreadableScript,
@@ -174,13 +177,14 @@ public static class ScrDispatcher
     internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null,
         IReadOnlyList<ScrCallRequest>? Calls = null, IReadOnlyList<ScrPrintLine>? Lines = null, IReadOnlyList<ScrSound>? Sounds = null,
         IReadOnlyList<ScrTeleport>? Teleports = null, IReadOnlyList<ScrSchemeRequest>? Schemes = null, IReadOnlyList<ScrSchematicRequest>? Schematics = null,
-        IReadOnlyList<ScrReadingRequest>? Readings = null)
+        IReadOnlyList<ScrReadingRequest>? Readings = null, IReadOnlyList<ScrSkillUse>? SkillUses = null, IReadOnlyList<ScrStateRequest>? States = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
             writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null && (Calls?.Count ?? 0) == 0 && (Lines?.Count ?? 0) == 0
                 && (Sounds?.Count ?? 0) == 0 && (Teleports?.Count ?? 0) == 0 && (Schemes?.Count ?? 0) == 0 && (Schematics?.Count ?? 0) == 0 && (Readings?.Count ?? 0) == 0
+                && (SkillUses?.Count ?? 0) == 0 && (States?.Count ?? 0) == 0
                 ? ScrEffects.None
                 : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls, Lines, Sounds, Teleports, Schemes,
-                    Schematics, Readings));
+                    Schematics, Readings, SkillUses, States));
     }
 }

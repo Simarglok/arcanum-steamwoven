@@ -1,0 +1,76 @@
+using System.Collections.Immutable;
+using Arcanum.Data.Magic;
+using Arcanum.Simulation.Magic;
+
+namespace Arcanum.Session;
+
+/// <summary>
+/// One component of a translated record (ARC-MAGIC-014): its action and its index among that action's components (the run rules'
+/// component number), its type, its own area (the gate's test, MT8), its <c>Apply_AoE:</c> (the re-aim), its item triggers, and the
+/// typed data the components implemented so far read (<see cref="Damage"/> for Damage and Heal, MT12).
+/// </summary>
+public sealed record SessionSpellComponent(SpellRunAction Action, int Index, SpellComponentType Type, SpellTargetArea Area, ulong ApplyTargets,
+    int ItemTriggers, SpellDamageComponent? Damage);
+
+/// <summary>
+/// A spell record of the data (<see cref="SpellRecord"/>, ARC-MAGIC-001/002) in the rules' own types (ARC-MAGIC-014): the run rules'
+/// record (cost, maintenance, duration, flags, the invocation check's record, the components per action), the resistance's record,
+/// the target area of each action (line +0) and the components in file order with their per-action index.
+/// </summary>
+public sealed record SessionSpellRecord(SpellRecord Data, SpellRunRecord Run, SpellResistRecord Resist, ImmutableArray<SpellTargetArea> Areas,
+    ImmutableArray<SessionSpellComponent> Components)
+{
+    /// <summary>The components of one action, in their run-rules order.</summary>
+    public IEnumerable<SessionSpellComponent> Of(SpellRunAction action) => Components.Where(c => c.Action == action);
+
+    /// <summary>The component a run's action processes as number <paramref name="index"/>, or null.</summary>
+    public SessionSpellComponent? Component(SpellRunAction action, int index) =>
+        Components.FirstOrDefault(c => c.Action == action && c.Index == index);
+}
+
+/// <summary>
+/// ARC-MAGIC-014: the translation of the spell data into the magic rules' types, for any record. Field by field as the original's
+/// record holds them (ledger "Spell records" SR rows, RS9): the BEGIN area's self bit (+0x70 bit 0x1) makes a self spell, the
+/// aggressive bit of <c>Info:</c> (0x2, aggressive and may-be-aggressive) and a Damage component (0x80) feed the resistance, and
+/// <c>No_Stack:</c> as written (non-zero) turns the no-stack test on.
+/// </summary>
+public static class SessionSpellRecords
+{
+    /// <summary>The self bit of an area's target word (<c>Tgt_Self</c>).</summary>
+    public const ulong SelfTarget = 0x1;
+
+    public static SessionSpellRecord Translate(SpellRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        var areas = record.Areas.Select(Area).ToImmutableArray();
+        var counts = new int[SpellRecord.Actions];
+        var components = ImmutableArray.CreateBuilder<SessionSpellComponent>(record.Components.Count);
+        foreach (var component in record.Components)
+        {
+            var action = (SpellRunAction)(int)component.Action;
+            var damage = component.Data is DamageData d && component.Type is SpellComponentType.Damage or SpellComponentType.Heal
+                ? new SpellDamageComponent(d.DamageType, d.Minimum, d.Maximum, unchecked((int)d.Flags)) : null;
+            components.Add(new(action, counts[(int)action]++, component.Type, Area(component.Area), component.ApplyTargets,
+                unchecked((int)component.ItemTriggers), damage));
+        }
+        var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
+            unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));
+        var run = new SpellRunRecord(record.IsTechnology, record.NoResist, record.SkipsBeginCost, record.Cost, record.MaintainCost, record.MaintainPeriod,
+            new(record.DurationSeconds, record.DurationStat, record.DurationStatLevel, record.DurationStatModifier), record.DurationTriggerCount,
+            record.MinimumWillpower, record.CastingAnimation, record.NoStack != 0, record.ChargesFromCells, invocation)
+        {
+            ActionComponents = [.. counts],
+            ItemTriggers = record.ItemTriggers != 0,
+            NoReflect = record.NoReflect,
+            CancelsSpellFlags = unchecked((int)record.CancelsSpellFlags),
+            CancelsEnvironmentSpellFlags = unchecked((int)record.CancelsEnvironmentSpellFlags),
+            SelfSpell = areas.Length > 0 && (areas[0].Targets & SelfTarget) != 0,
+        };
+        var resist = new SpellResistRecord(record.Number, record.IsTechnology, record.HasDamage, ((int)record.Info & (int)SpellInfo.Aggressive) != 0,
+            record.MaintainPeriod, record.ResistStat, record.ResistModifier);
+        return new(record, run, resist, areas, components.ToImmutable());
+    }
+
+    private static SpellTargetArea Area(SpellArea area) =>
+        new(area.Targets, area.RequiredSpellFlags, area.ExcludedSpellFlags, area.Radius, area.Count);
+}

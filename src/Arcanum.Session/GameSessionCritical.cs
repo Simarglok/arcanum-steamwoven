@@ -44,8 +44,15 @@ public enum SessionCriticalStepOutcome
     ScriptUnsupported,
     /// <summary>Not applied: the host passed no item data for the critter (<see cref="SessionWearSide.Worn"/> null) or no cell.</summary>
     Unknown,
-    /// <summary>Not applied, NOT READY: no ammunition is modelled (FR-COMBAT-007).</summary>
+    /// <summary>NOT READY: the critical miss struck an NPC's ammunition, whose weapon facts the session does not hold (no NPC attacks
+    /// yet; an NPC without a PC leader would lose nothing, CR15).</summary>
     AmmunitionNotReady,
+    /// <summary>ARC-COMBAT-013: the units <see cref="SessionCriticalStep.Units"/> left the hero's stack <see cref="SessionCriticalStep.Entity"/>
+    /// of the weapon's ammunition type (<see cref="GameSessionOwner.SpendAmmo"/>); a stack spent to 0 is deleted.</summary>
+    AmmunitionSpent,
+    /// <summary>ARC-COMBAT-013: nothing spent: the hero holds no ammunition of the weapon's type, or fewer units than five shots take
+    /// (the original spends all or nothing, 0x4B65D0).</summary>
+    NoAmmunition,
 }
 
 /// <summary>
@@ -54,7 +61,11 @@ public enum SessionCriticalStepOutcome
 /// placement and its draws are NOT READY, so the item lies on the holder's cell and the session generator does not draw for it.
 /// </summary>
 public sealed record SessionCriticalStep(SessionCriticalStepKind Kind, DamageRecipient Whose, EquipmentSlot? Slot, string? Entity,
-    SessionCriticalStepOutcome Outcome, CellCoord? Cell);
+    SessionCriticalStepOutcome Outcome, CellCoord? Cell)
+{
+    /// <summary>ARC-COMBAT-013: the ammunition units a step spent (0 for any other step).</summary>
+    public int Units { get; init; }
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -79,7 +90,12 @@ public sealed partial class GameSessionOwner
     internal CellCoord? LooseCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
         seed.Items.TryGetValue(item, out var row) ? row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item) : null;
 
-    private static long DroppedValue(CellCoord cell) => ((long)cell.Y << 24 | (uint)cell.X) + 1;
+    private static long DroppedValue(CellCoord cell) => ItemDroppedValue(cell);
+
+    /// <summary>The <see cref="ItemDroppedProperty"/> value of a cell (each coordinate 0 .. 2^24 − 1, packed in 24 bits, + 1), for a
+    /// host that observes the drop's map change (ARC-RENDER-033).</summary>
+    public static long ItemDroppedValue(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24
+        ? ((long)cell.Y << 24 | (uint)cell.X) + 1 : throw new ArgumentOutOfRangeException(nameof(cell));
 
     /// <summary>A cell the drop's packing holds: each coordinate 0 .. 2^24 − 1.</summary>
     internal static bool DropCellFits(CellCoord cell) => cell.X is >= 0 and < 1 << 24 && cell.Y is >= 0 and < 1 << 24;
@@ -182,6 +198,8 @@ public sealed partial class GameSessionOwner
             if (NpcItemSeed(side.Life.Entity!, item.Entity) is null) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
             var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
+            // ARC-WORLD-062: the dropped item decays (ledger ID4).
+            ScheduleDecay(item.Entity, _actor.Map);
         }
         steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, landed));
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
@@ -203,15 +221,44 @@ public sealed partial class GameSessionOwner
         _inventory.Pc.Find(pc => pc.Entity == item) is { Entity: not null } taken && _inventory.Seeds.TryGetValue(taken.Origin, out var origin) &&
         origin.Items.TryGetValue(item, out var listed) && listed.Facts.HasScript(SessionScriptPoint.Drop);
 
-    // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3): not ready (no
-    // ammunition model); none when the weapon was destroyed.
-    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, List<SessionCriticalStep> steps)
+    // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3; ARC-COMBAT-013, ledger
+    // CR15, AM4): the damage step's 0x4B65D0 takes, for "destroy ammunition" (0x40000), every unit of the weapon's ammunition type the
+    // holder carries, and for "lose ammunition" (0x20000) five times the weapon's per-shot consumption, all or nothing. None when the
+    // weapon was destroyed. The hero's ammunition goes through SpendAmmo; an NPC's is NOT READY (no NPC attacks yet).
+    // The weapon's facts are the attack's (captured before the steps of this attack broke or dropped it). A count of 0 (no units, or a
+    // consumption of 0) spends nothing; a type outside 0..3 names no stack the session holds (AMA3).
+    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, EquipmentWeapon? attackWeapon, List<SessionCriticalStep> steps,
+        ref GameSessionFailure failure)
     {
         if (side.Worn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } weapon && _durability.Destroyed.Contains(weapon.Entity)) return;
-        if (damage.MissEffects.HasFlag(CriticalMissEffects.DestroyAmmo))
-            steps.Add(new(SessionCriticalStepKind.DestroyAmmo, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
-        if (damage.MissEffects.HasFlag(CriticalMissEffects.LoseAmmo))
-            steps.Add(new(SessionCriticalStepKind.LoseAmmo, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
+        foreach (var (effect, kind) in new[] { (CriticalMissEffects.DestroyAmmo, SessionCriticalStepKind.DestroyAmmo), (CriticalMissEffects.LoseAmmo, SessionCriticalStepKind.LoseAmmo) })
+        {
+            if (!damage.MissEffects.HasFlag(effect)) continue;
+            // After a refused step, as the other steps, nothing more is applied or reported.
+            if (failure != GameSessionFailure.None) return;
+            if (side.Life is not { IsHero: true })
+            {
+                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
+                continue;
+            }
+            // The attack's weapon gives the type and the consumption (fields 125 and 126 through its equipment facts).
+            var held = attackWeapon;
+            var stack = held?.AmmoType is { } type and >= 0 and < SessionAmmoRecord.AmmoTypes ? HeroStackOfType(type) : null;
+            var count = stack is { } carried ? effect == CriticalMissEffects.DestroyAmmo ? carried.Units : checked(5 * held!.AmmoConsumption) : 0;
+            if (stack is not { } found || found.Units < count || count == 0)
+            {
+                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, stack?.Entity, SessionCriticalStepOutcome.NoAmmunition, null));
+                continue;
+            }
+            var spent = SpendAmmo(Version, SessionAmmoHolder.Hero, found.AmmoType, count);
+            if (spent.Disposition == GameSessionDisposition.Rejected)
+            {
+                failure = spent.Failure;
+                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, found.Entity, SessionCriticalStepOutcome.Unknown, null));
+                continue;
+            }
+            steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, found.Entity, SessionCriticalStepOutcome.AmmunitionSpent, null) { Units = count });
+        }
     }
 }
 

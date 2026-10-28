@@ -47,6 +47,11 @@ public partial class TerrainViewerApp
         if (_mapWindowCentre is null) { _mapStreamStatus = null; _mapWindowMoves = 0; _mapStreamFailedAt = null; _mapFarGoal = null; }
     }
 
+    /// <summary>ARC-DATA-037: the arguments with the data rules of the session a load carries (a transfer, a window move, a quick
+    /// load), so a map opens under the session's mode; without one the default rules (no rules kept from an earlier load).</summary>
+    private static TerrainViewerArguments WithSessionDataRules(TerrainViewerArguments arguments, Arcanum.Session.GameSessionOwner? session) =>
+        arguments with { DataRules = session?.Rules.Data };
+
     private bool MapStreamInFlight => _mapHandoff is { Kind: MapHandoffKind.Stream };
 
     /// <summary>How many cells the tile lies beyond the sector's square (the larger of the two axes; 0 inside it).</summary>
@@ -107,6 +112,7 @@ public partial class TerrainViewerApp
         _generation = _coordinator.BeginGeneration();
         var generation = _generation;
         TerrainLoadResult result;
+        next = WithSessionDataRules(next, handoff.Session);
         try { result = await _coordinator.LoadAsync(generation, next, token); }
         catch (OperationCanceledException) { EndMapStream(handoff); return; }
         catch (Exception exception)
@@ -176,7 +182,7 @@ public partial class TerrainViewerApp
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
-            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke()), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
+            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke(), () => !HeroInCombatMode), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
         {
             follower.SetTarget(resume.Target, WorldTime); resumed = true;
             if (resume.FarGoal is { } far) _mapFarGoal = (far, placed.Chart.ToWorld(resume.Target));
@@ -209,8 +215,9 @@ public partial class TerrainViewerApp
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
     private readonly List<(AreaSectorCoordinate From, AreaSectorCoordinate To, AreaStepCell Actor, bool Walking, GameSessionOwner? Session, long LoadMs)> _mapStreamLog = [];
 
-    // "walk" (ARC-WORLD-042) runs only when named: it walks across the main map for minutes.
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk"];
+    // "walk" (ARC-WORLD-042) and "census" (ARC-RENDER-027) run only when named: they walk across the main map or open every
+    // map, for minutes.
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>

@@ -39,10 +39,10 @@ Agreed through the coordinator on 2026-10-20:
 - The item trigger executor (0x4CB830) is one shared later slice for magic and
   tech items, owned by the magic research; this document only says which tech items reach it.
 - The **skills** research owns the four technical skills, the Repair skill
-  rule ([SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
+  rule ([SK7](ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)),
   fate points (built as ARC-WORLD-054) and the shared character-point spend and refund
   path (built as ARC-WORLD-052). Item durability (item hit points and the broken
-  state) is owned here and is the input of the Repair slice ARC-SKILLS-011.
+  state) is owned here and is the input of the Repair slice (built as ARC-SKILLS-007, [repair](../world/repair-runtime.md)).
 
 ## Vocabulary and evidence
 
@@ -151,7 +151,7 @@ zero.
 
 The module has 17 functions:
 
-- **Init** (0x4AFCD0, F2 by ARC-TECHNOLOGY-001, [ledger SD1](original-verification-ledger.md#schematic-data-arc-technology-001))
+- **Init** (0x4AFCD0, F2 by ARC-TECHNOLOGY-001, [ledger SD1](ledger/technology.md#schematic-data-arc-technology-001))
   loads `mes\tech.mes`, 90 entries: 0..7 discipline names,
   8..15 degree names, 16..23 discipline descriptions, 24..87 the 64 degree
   descriptions at `24 + discipline + 8 × degree`, 88 and 89 the two
@@ -202,7 +202,7 @@ The module has 17 functions:
 The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
 0x56D040) to the next module at 0x56EA90.
 
-- **Init** (0x56CD60, F2 by ARC-TECHNOLOGY-001, [ledger SD2](original-verification-ledger.md#schematic-data-arc-technology-001))
+- **Init** (0x56CD60, F2 by ARC-TECHNOLOGY-001, [ledger SD2](ledger/technology.md#schematic-data-arc-technology-001))
   loads `rules\schematic.mes` and `mes\schematic_text.mes`;
   without the second it unloads the first and fails. The number of learned
   schematics is the count of entries in 2000..3999 divided by 7 (0 when entry
@@ -214,7 +214,7 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
   n+1 the description's entry, n+2 the art, n+3 and n+4 components 1 and 2,
   n+5 the product, n+6 the quantity. Components and products hold up to three
   alternative base numbers; the prototype is the number + 20.
-- **Parse** (0x56DD20, F2 by ARC-TECHNOLOGY-001, [ledger SD6](original-verification-ledger.md#schematic-data-arc-technology-001)):
+- **Parse** (0x56DD20, F2 by ARC-TECHNOLOGY-001, [ledger SD6](ledger/technology.md#schematic-data-arc-technology-001)):
   the line is copied into a 2000-byte buffer, split at
   single spaces with `strtok`, each token through `atoi`. One or two tokens: the last value repeats
   to fill three; no token: the field is left unwritten; more than three: the
@@ -224,7 +224,7 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
 - **Discipline of a schematic** (0x56DB00, F2 by ARC-TECHNOLOGY-001): number ≥ 4000 → the discipline
   field of the first product's prototype; 2000..3999 → `(n − 2000) / 200`;
   otherwise 0.
-- **Selection** (0x56DB60, F2 by ARC-TECHNOLOGY-001, [ledger SD4](original-verification-ledger.md#schematic-data-arc-technology-001)):
+- **Selection** (0x56DB60, F2 by ARC-TECHNOLOGY-001, [ledger SD4](ledger/technology.md#schematic-data-arc-technology-001)):
   the k-th record (k the page) of the current tab
   with the current discipline; a tab count of 0 for the discipline (or no
   match) gives −1, and the record read then reads
@@ -255,11 +255,11 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
 - **Openers**: key `T`/`t` in both key-handler tables (0x54BCA0, 0x54CFB0) and
   the interface button, both with (player, player) and the same guard as the
   character sheet and logbook keys
-  ([CS1](original-verification-ledger.md#character-sheet-arc-ui-007),
-  [LB1](original-verification-ledger.md#logbook-arc-ui-008)); the dialog action
+  ([CS1](ledger/character.md#character-sheet-arc-ui-007),
+  [LB1](ledger/ui-audio.md#logbook-arc-ui-008)); the dialog action
   `su` sets outcome 7, which calls 0x567E30 → 0x56D130(**NPC**, player) (F2);
   script action 129 (TC2).
-- **Component gate** (0x56E190, F2 by ARC-TECHNOLOGY-004, [ledger SA1](original-verification-ledger.md#schematic-assembly-arc-technology-004)), drawn per component slot: only the
+- **Component gate** (0x56E190, F2 by ARC-TECHNOLOGY-004, [ledger SA1](ledger/technology.md#schematic-assembly-arc-technology-004)), drawn per component slot: only the
   crafter's own inventory is searched (0x462540, flags 7), without the party
   or nested containers; a match is the exact prototype; worn items (slots
   1000..1008), broken items and items with a changed description are skipped,
@@ -273,7 +273,7 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
   assembles in the first, otherwise shows `schematic_text.mes` 0 or 1; hover
   texts 3, 4, 5. Code 2 is "expertise lacking" (checked first, message 1) and
   code 1 "an item is missing" (message 0): settled by a third reading and the
-  installed texts (ARC-TECHNOLOGY-004, [ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004);
+  installed texts (ARC-TECHNOLOGY-004, [ledger SA2](ledger/technology.md#schematic-assembly-arc-technology-004);
   O7 closed). Sounds: page 3010, tab 3011, open 3008.
 
 ### Assembly (0x56E720, FR-ITEM-018, F2)
@@ -293,7 +293,7 @@ The Schematic-UI module runs from init 0x56CD60 (reset 0x56D0B0, exit
    `schematic_text.mes` 2 and sound `3018 + current discipline` (3018..3025;
    corrected by ARC-TECHNOLOGY-005: the first reading wrote "current tab", but
    the value is read from the current discipline, not the learned/found tab;
-   [ledger SW6](original-verification-ledger.md#schematic-window-arc-technology-005)).
+   [ledger SW6](ledger/technology.md#schematic-window-arc-technology-005)).
 
 Assembly does **not** check expertise (TC5). There is no random roll, skill
 check, action-point or time cost and no experience.
@@ -301,7 +301,7 @@ check, action-point or time cost and no experience.
 ### Technological items (FR-MAGIC-010, FR-MAGIC-011)
 
 - **Power** (0x4614A0, 0x461520, 0x461540, 0x461590; agrees with
-  [EQ9](original-verification-ledger.md#equipment-arc-world-028)): a critter
+  [EQ9](ledger/items.md#equipment-arc-world-028)): a critter
   holder gives `p = (c + aptitude) / 2`, clamped to `[c, 0]` for technology and
   `[0, c]` for magick (a non-critter holder gives c); ratio `100 × p / c` (100
   for c = 0); adjustment `v × p / c` (magick) or `v − v × p / c` (technology).
@@ -341,7 +341,8 @@ check, action-point or time cost and no experience.
   parent it checks the record's intelligence and willpower and charges the
   maintenance cost through 0x450420 (dwarves × 2) unless the run is free, so a
   maintained tech record pays each period (fatigue per the magic study, cells
-  for the cell-powered records 168 and 187).
+  for a cell-powered record; the installed 168 and 187 have maintenance 0, so their
+  cells come from a ChargeNBranch component instead, ledger [DV7](ledger/technology.md#tech-devices-arc-technology-008)).
 - **Degrees do not change devices.** Effective expertise has no caller outside
   the sheet and the schematic gate; degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
@@ -349,7 +350,7 @@ check, action-point or time cost and no experience.
 - **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) **falls** with
   `|complexity|`, to nothing at 100, for magickal and technological weapons
   alike (ARC-COMBAT-007 corrected the earlier "up to × 2",
-  [ledger CW6](original-verification-ledger.md#combat-wear-arc-combat-007)).
+  [ledger CW6](ledger/combat.md#combat-wear-arc-combat-007)).
 
 ### Scripts and dialogs
 
@@ -377,9 +378,10 @@ check, action-point or time cost and no experience.
 
 ### Item durability (FR-ITEM-011)
 
-Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](original-verification-ledger.md#item-durability-arc-world-053)): every row
+Re-read for ARC-WORLD-053 by a second reader (F2, [ledger DU1–DU8](ledger/items.md#item-durability-arc-world-053)): every row
 below agrees; the second reader added the price's final bounds (negative 0, exactly 1 is 2), that the unwield moves only items in wear
-slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item).
+slots and the item is dropped when it fails, and the repair table (training none 10, apprentice 5, expert 1, master 0; 5 for a broken item,
+corrected by [RP2](ledger/skills.md#repair-arc-skills-007) to a master's broken item only).
 
 - **Fields and formulas**: hp_pts (0x1B), hp_adj (0x1C) and hp_damage (0x1D)
   are ordinary saved object fields (an instance stores overrides). A
@@ -405,7 +407,7 @@ slots and the item is dropped when it fails, and the repair table (training none
     material: stone 4, brick 3, wood 2, plant 1, metal 5, fire 5, glass 5 only for
     an unarmed attacker, others 0; **minus** `trunc(wear × min(|complexity|, 100) / 100)`; minus 2 for
     art subtype 4 and minus 1 for subtypes 5 and 13. Unarmed it hurts the attacker
-    but never takes its last hit point (ARC-COMBAT-007, [ledger CW5–CW7](original-verification-ledger.md#combat-wear-arc-combat-007));
+    but never takes its last hit point (ARC-COMBAT-007, [ledger CW5–CW7](ledger/combat.md#combat-wear-arc-combat-007));
   - script action 40 (transform) keeps the health percentage. Items inside an
     inventory, other than worn ones, are not reached by areas.
 - **Break** (0x43F1C0, item types 5..14, F2): the first time sets the destroyed
@@ -415,7 +417,7 @@ slots and the item is dropped when it fails, and the repair table (training none
   time deletes the object with a sound and no BUST. Traps and scenery have
   their own branches.
 - **What "broken" blocks**: wearing
-  ([EQ1](original-verification-ledger.md#equipment-arc-world-028)); selling
+  ([EQ1](ledger/items.md#equipment-arc-world-028)); selling
   (0x462170 refuses, price 0); the schematic component search; repair, which
   needs a master. Use (0x462CC0) and item spells (0x4CB830) do not check it
   (TC9). The inventory shows the broken art through the current art.
@@ -432,7 +434,7 @@ slots and the item is dropped when it fails, and the repair table (training none
   falls and hp_adj falls by a percentage of the maximum (a table by training,
   with its own step for a broken item); a master clears the destroyed bit on
   the current art only. The skill rule is
-  [SK7](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027),
+  [SK7](ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027),
   owned by the skills research.
 
 ## Data census
@@ -477,7 +479,7 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 
 | ID | Where | Original 1.0.7.4 | Verdict | Proposal (Steamwoven / Original) |
 | --- | --- | --- | --- | --- |
-| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); TECH-6 |
+| TC1 | cell payment (0x450420 with 0x461590), F2 | An item source pays `cost × (1 + p / c)` cells: a strong technologist pays double, a mage the minimum; the technological adjustment branch looks swapped | Original bug | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven `2 × cost − trunc(cost × p / c)` (a technologist pays fewer cells); Original keeps it. Reaches records 147 (one weapon) and 168 (three armours); **implemented** by ARC-TECHNOLOGY-007 |
 | TC2 | action 129 (0x44A7BD, 0x460B50, 0x45FD40, 0x57C6E0), F2 | Calls an unfilled slot of an uninitialised callback structure: undefined | Original bug (crash class) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: open the window with (PC, PC) or (NPC, its PC leader); unused in the data; **implemented** for the PC by ARC-TECHNOLOGY-005 and for an NPC with a PC leader by ARC-TECHNOLOGY-006 |
 | TC3 | assembly (0x56E720), F2 | A failed product creation returns after the components are spent and some products given | Original bug (latent) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes all or nothing (room and creation checked before consuming); no switch; TECH-4 |
 | TC4 | assembly (0x56E720), second reader | Both components are found before consuming, so one item matching both lists would be consumed twice (the second time a deleted object) | Original bug (latent, use of a deleted object) | **Decided** ([owner](#owner-decisions-2026-10-20)): both fixed: a found item is reserved for one component; no installed record triggers it; TECH-4 |
@@ -486,9 +488,9 @@ decided every row on 2026-10-20 ([owner decisions](#owner-decisions-2026-10-20))
 | TC7 | repair quote (0x578760) | Damage counts twice (sale price already × current / maximum, then × damage / maximum): a badly damaged item is nearly free to repair, the dearest is half damaged | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch. Steamwoven quotes from the undamaged sale price; Original keeps the double count; item durability slice |
 | TC8 | data: one schematic written prototype | Its schematic number is 0: reading registers a schematic 0 whose record reads all zeros and can never be built | Original (data) | **Decided** ([owner](#owner-decisions-2026-10-20)): switch, a recorded project improvement: Steamwoven refuses the registration and keeps the document; Original registers it; TECH-3 |
 | TC9 | use (0x462CC0), triggers (0x4CB830) | A broken item can still be used and its item spells fire | Original (intent unknown) | **Decided** ([owner](#owner-decisions-2026-10-20)): both follow the original (broken items still usable) |
-| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the editor-open snapshot, unlike skills, tech skills and colleges, so degrees bought on earlier levels could be refunded; the snapshot (0x64DEEC) is read only by the tech page's draw, which in the in-game editor hides the − button at it (ledger [CP2](original-verification-ledger.md#character-point-pool-arc-world-052); the 0x64DF10 named first is a per-player copy, never read) | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
-| TC11 | window init (0x56CD60), selection (0x56DB60), found by ARC-TECHNOLOGY-001 ([ledger](original-verification-ledger.md#schematic-data-arc-technology-001)) | The learned list has "count" (entries / 7) slots but is filled with every existing start without a bound and walked to the count; a start at 3600 or above counts past the eight-entry discipline table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): the schematic catalogue refuses such a file; the installed data has 56 starts for a count of 56 |
-| TC12 | window open (0x56D130), found by ARC-TECHNOLOGY-003 ([ledger](original-verification-ledger.md#schematic-knowledge-arc-technology-003)) | A found number whose discipline is outside 0..7 is counted past the window's eight-entry table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): left out of the found tab; the installed found records all have disciplines 0..7 |
+| TC10 | editor decrease (0x55F5F0, 0x55D940) → sell (0x589AF0), F2 | Selling a degree is not compared with the editor-open snapshot, unlike skills, tech skills and colleges, so degrees bought on earlier levels could be refunded; the snapshot (0x64DEEC) is read only by the tech page's draw, which in the in-game editor hides the − button at it (ledger [CP2](ledger/character.md#character-point-pool-arc-world-052); the 0x64DF10 named first is a per-player copy, never read) | Original bug (if the button is reachable, O2) | **Decided** ([owner](#owner-decisions-2026-10-20)): both modes sell a degree only down to its value when the character window was opened; no switch; TECH-2 |
+| TC11 | window init (0x56CD60), selection (0x56DB60), found by ARC-TECHNOLOGY-001 ([ledger](ledger/technology.md#schematic-data-arc-technology-001)) | The learned list has "count" (entries / 7) slots but is filled with every existing start without a bound and walked to the count; a start at 3600 or above counts past the eight-entry discipline table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): the schematic catalogue refuses such a file; the installed data has 56 starts for a count of 56 |
+| TC12 | window open (0x56D130), found by ARC-TECHNOLOGY-003 ([ledger](ledger/technology.md#schematic-knowledge-arc-technology-003)) | A found number whose discipline is outside 0..7 is counted past the window's eight-entry table | Original bug (latent, out of bounds) | both fixed (owner rule of 2026-10-17): left out of the found tab; the installed found records all have disciplines 0..7 |
 
 ## Owner decisions (2026-10-20)
 
@@ -500,7 +502,8 @@ of the anomaly table above under D2; each is implemented by the slice named.
   No switch (TECH-4).
 - **TC1, switch.** Steamwoven: an experienced technologist pays fewer cells; an item source needs `2 × cost −
   trunc(cost × p / c)` cells (a strong technologist `cost`, a neutral holder about `1.5 × cost`, a mage `2 × cost`).
-  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source in TECH-6.
+  Original keeps the executable's `cost + trunc(cost × p / c)`. Implemented with the cell source by ARC-TECHNOLOGY-007
+  ([charge cells](../world/charge-cell-runtime.md), ledger [CC1–CC8](ledger/technology.md#charge-cells-arc-technology-007)).
 - **TC7, switch.** Steamwoven: the repair quote starts from the undamaged sale price, `trunc(P_full / 2) × damage /
   maximum`, at least 2, so the cost grows with the damage and a nearly intact item is cheap. Original keeps the
   executable's double count. Implemented in the item durability slice.
@@ -546,7 +549,7 @@ button state.
   reading. **Settled by ARC-TECHNOLOGY-004:** a third independent reading of
   0x56DDC0 and its click handler and the installed texts (message 0 names missing
   items, message 1 lacking expertise) confirm the first reader
-  ([ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004)).
+  ([ledger SA2](ledger/technology.md#schematic-assembly-arc-technology-004)).
 - TC4 was found by the second reader.
 
 ## Open questions
@@ -565,7 +568,7 @@ button state.
   map instances and their auto-level schemes; needs a pass over map instances.
 - **O6** Buy prices (0x462230, 0x4C1150) were not re-read (ledger R9 and O6
   stay with their tasks).
-- **O7** The button state codes: answered by ARC-TECHNOLOGY-004 (code 2 expertise lacking, code 1 an item missing; [ledger SA2](original-verification-ledger.md#schematic-assembly-arc-technology-004)).
+- **O7** The button state codes: answered by ARC-TECHNOLOGY-004 (code 2 expertise lacking, code 1 an item missing; [ledger SA2](ledger/technology.md#schematic-assembly-arc-technology-004)).
 
 ## Steamwoven inputs that already exist
 
@@ -643,20 +646,23 @@ this document start at F1 or F2.
    3008/3009/3010/3011/3018 + discipline, and script action 129 for the PC (TC2). The NPC
    crafter (the dialog action `su` and action 129 for an NPC with a PC leader) is done by
    ARC-TECHNOLOGY-006 over the NPC inventory store (ARC-WORLD-055), its degrees from the NPC's
-   map data ([ledger NC1–NC8](original-verification-ledger.md#npc-schematic-crafter-arc-technology-006)).
+   map data ([ledger NC1–NC8](ledger/technology.md#npc-schematic-crafter-arc-technology-006)).
    No launcher change (no new argument).
 6. **TECH-6 Charge cells and tech devices** (Simulation, with the magic
    engine; FR-MAGIC-010/011): the cell source behind the engine's payment port
-   (critter `cost`, item source TC1 decided, ammunition type 2), the list of
-   tech items and records that reach the engine (70 item spell slots, records
-   147, 168 and 187), a test that the engine's MAINTAIN charges maintained
+   (critter `cost`, item source TC1 decided, ammunition type 2; **done** as rules and a
+   session port by ARC-TECHNOLOGY-007, [runtime](../world/charge-cell-runtime.md); the
+   the hero's cells are spent in session state since ARC-WORLD-066), the list of
+   tech items and records that reach the engine (70 item spell slots; cell records
+   147, 168 and 187; maintained 146, 149, 168, 187, 209 and 216; **done** with the MAINTAIN test and the device rule by ARC-TECHNOLOGY-008,
+   [runtime](../world/tech-devices-runtime.md)), a test that the engine's MAINTAIN charges maintained
    tech records (the stage itself stays with the magic slices), and the rule that
    tech items are not refused to mages outside combat (the wear refusal of
    item-spell items is lifted with the shared item trigger slice, which the
    magic research owns).
 
 **Item durability** (FR-ITEM-011; done: ARC-WORLD-053, [runtime](../world/item-durability-runtime.md), ledger DU1–DU8) is one more slice, owned by this research and
-needed by ARC-SKILLS-011 (Repair). Its type is `WORLD` (item state in the
+needed by the Repair slice (built as ARC-SKILLS-007). Its type is `WORLD` (item state in the
 session runtime; the next free `WORLD` number at task creation): hp fields per item in the session (prototype values with
 instance overrides), maximum and current, the damage setter, the two-step
 break (destroyed bit, damage reset, unwield or drop, BUST hook, deletion),

@@ -343,6 +343,7 @@ public sealed class SpellRecordTableTests
         for (var n = 0; n < SpellRecord.Count; n++) texts.Append($"{{{n}}}{{spell {n}}}\n");
         for (var c = 0; c < 16; c++) texts.Append($"{{{500 + c}}}{{college {c}}}{{{8000 + c}}}{{about {c}}}{{{9000 + c}}}{{master {c}}}\n");
         for (var n = 0; n < 80; n++) texts.Append($"{{{700 + n}}}{{does {n}}}\n");
+        texts.Append("{600}{tired}{604}{blocked}\n");
         var components = Mes(string.Concat(Enumerable.Range(10, 25).Select(n => $"{{{n}}}{{type {n}}}\n")));
         foreach (var mode in Modes)
         {
@@ -352,6 +353,17 @@ public sealed class SpellRecordTableTests
             Assert.AreEqual(("type 10", "type 34", 25), (data.ComponentTypeNames[0], data.ComponentTypeNames[24], data.ComponentTypeNames.Count));
             Assert.AreEqual(("spell 0", "spell 222", "college 15", "does 79", "about 3", "master 4"), (data.Texts.Names[0], data.Texts.Names[222],
                 data.Texts.CollegeNames[15], data.Texts.SpellDescriptions[79], data.Texts.CollegeDescriptions[3], data.Texts.MasteryDescriptions[4]));
+            // The sheet's getters (ARC-MAGIC-008): 0x4B1600, 0x4B1620, 0x4B1A40 and 0x4B1A50 with the mastered college.
+            Assert.AreEqual(("spell 222", "does 0", "college 2", "about 3", "master 3"), (data.Texts.Name(222), data.Texts.Description(0),
+                data.Texts.CollegeName(2), data.Texts.CollegeDescription(3, 4), data.Texts.CollegeDescription(3, 3)));
+            Assert.AreEqual("about 3", data.Texts.CollegeDescription(3, -1), "no mastery: the college's description");
+            // ARC-MAGIC-015: the magic messages 600..699; another number or a missing one is null (not refused in strict mode).
+            Assert.AreEqual(("tired", "blocked", (string?)null, (string?)null, (string?)null), (data.Texts.Message(600), data.Texts.Message(604),
+                data.Texts.Message(606), data.Texts.Message(599), data.Texts.Message(700)));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => data.Texts.Name(223));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => data.Texts.Description(80));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => data.Texts.CollegeName(16));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => data.Texts.CollegeDescription(-1, -1));
         }
         var gap = Mes(texts.ToString().Replace("{9007}{master 7}", ""));
         Assert.IsNull(SpellData.Create(components, gap, List(), SpellRecordMode.LikeOriginal).Data!.Texts.MasteryDescriptions[7]);

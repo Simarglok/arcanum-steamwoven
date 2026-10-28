@@ -11,7 +11,7 @@ Requirements: [FR-MAGIC-003](../requirements/combat-magic-tech.md#fr-magic-003) 
 definition's parameters: self, object, group, tile and radius, line, the NPC fallback).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell target areas"](../research/original-verification-ledger.md#spell-target-areas-arc-magic-007), rows TA1–TA16),
+([ledger "Spell target areas"](../research/ledger/spell-runs.md#spell-target-areas-arc-magic-007), rows TA1–TA16),
 and the area test (0x4F2D20), the collection (0x4F40B0), the re-aim (0x453D40) and the AI notice (0x453EE0) were compared with
 the original in the function oracle on 10,000 seeded inputs each (F3, receipts [`4F2D20.json`](../verification/receipts/4F2D20.json),
 [`4F40B0.json`](../verification/receipts/4F40B0.json), [`453D40.json`](../verification/receipts/453D40.json),
@@ -99,7 +99,7 @@ The MT7 check's area questions: the BEGIN target mask alone (no spell flags), ra
 the invocation's source, the source's location as origin (the invocation's +0x38) and the target object and tile as candidate and action target. The
 NPC fallback marks the target's location as candidate and target tile, adds the tile-radius and indoor/outdoor bits, gathers
 the list and answers the first tile that passes the same test (an object target with object bits fails again; tile areas find
-a tile). The line of fire stays the caller's (I2).
+a tile). The line of fire stays the caller's (`LineOfFireRules.Trace`, ARC-COMBAT-012).
 
 ## Differences from the original
 
@@ -121,11 +121,11 @@ bit on its own (the not-dead and non-party tests run without the critter bit, th
 bit gathers the source's tile), so the values follow the original in both modes. MG27: the tile-radius test measures the target
 tile's distance to itself, so it never refuses a radius ≥ 0; the comparison it was meant to make is unknown, and with the
 installed records (tile-radius components of records 11, 27, 180 and 200 have their action's radius, and their entries come from
-the same square) any likely fix changes nothing, so it follows the original in both modes, as MG5 does (this slice's recommendation, pending the owner's confirmation).
+the same square) any likely fix changes nothing, so it follows the original in both modes, as MG5 does (decided under the owner's 2026-10-20 acceptance of the MG5 rule; recorded by ARC-MAGIC-008).
 
 ## Not ready
 
 - No caller: the run lifecycle (MT9a) gathers the list per action and the per-target stage (MT10) filters and re-aims per
-  component; the spell UI's picker (0x4F2680, 0x4F28A0) is MT19's.
+  component; the spell UI's picker (0x4F2680, 0x4F28A0) is the casting UI's (MT20a-2).
 - No host fills `ISpellTargetWorld` yet; the viewer's map data and the session's party are its sources.
-- The line of fire (0x4ADE00) is the AI awareness stage I2's.
+- The line of fire (0x4ADE00) is ARC-COMBAT-012's `LineOfFireRules.Trace`; no caller passes it here yet.

@@ -11,8 +11,8 @@ Requirements: [FR-MAGIC-001](../requirements/combat-magic-tech.md#fr-magic-001) 
 [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) (their data part: target areas and effect components).
 
 Every behaviour below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell records"](../research/original-verification-ledger.md#spell-records-arc-magic-001), rows SR1–SR16, and
-["Spell components"](../research/original-verification-ledger.md#spell-components-arc-magic-002), rows SC1–SC12);
+([ledger "Spell records"](../research/ledger/magic.md#spell-records-arc-magic-001), rows SR1–SR16, and
+["Spell components"](../research/ledger/magic.md#spell-components-arc-magic-002), rows SC1–SC12);
 where it differs from the earlier reading in the [load map](../research/combat-domain-load-map.md#42-spell-records) or the
 [magic core definitions](../research/magic-core-evidence.md#definitions-fr-magic-001), the ledger is the newer evidence.
 
@@ -23,7 +23,7 @@ Code: [`src/Arcanum.Data/Magic`](../../src/Arcanum.Data/Magic); tests:
 
 - `SpellData.Open(stack, mode)` reads the three files from the content stack in the original's init order (component type
   file, text file, component type names, record file). They are init files, so each comes from the **first base source**
-  that holds it ([load phases](../research/original-verification-ledger.md#load-phases-arc-data-027),
+  that holds it ([load phases](../research/ledger/data.md#load-phases-arc-data-027),
   `ContentLoadPhase.GameStart`); a module copy is never read. Nothing names a map or a location.
 - `SpellData.Create(componentTypes, spellTexts, spellList, mode)` builds the same from parsed MES tables (synthetic data).
 - `SpellRecordTable.Read(list, componentTypes, mode)` reads the records alone (`componentTypes`: the 25 `Type:` names);
@@ -302,5 +302,5 @@ the reader modes cover them, and no installed record reaches any of them.
 - No rule reads the records yet (spell book MT3, cost MT5, resistance MT6, invocation MT7, target lists MT8, components
   MT12–MT18); the auto-level scheme keeps its own willpower read. What the target names and the component data do at run
   time is those slices'.
-- The record 221 `Dmg_Flags:` data defect is data fix DF4, decided 2026-10-21 under the owner's data-fix rule; it lands with MT12, where `Scaled` takes effect (the reader keeps reading the file as the original does).
+- The record 221 `Dmg_Flags:` data defect is data fix DF4, decided 2026-10-21 under the owner's data-fix rule and landed by ARC-MAGIC-012: with the Steamwoven profile (`SpellData.Open(..., fixes)`) the reader ORs a repeated `Dmg_Flags:` in; without a profile or with the Original one it reads the file as the original does. Under the original's damage rules the restored `Scaled` changes no amount ([spell damage and heal](../world/spell-damage-heal.md#data-fix-df4)).
 - The eye-candy file `Rules\SpellEyeCandy.mes` and the 512 run slots of the same init are not read here.

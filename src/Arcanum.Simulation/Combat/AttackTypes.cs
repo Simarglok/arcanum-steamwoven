@@ -296,9 +296,15 @@ public sealed record AttackRequest
     public int CoverRating { get; init; }
     public bool LineOfFireBlocked { get; init; }
     public GameDifficulty Difficulty { get; init; } = GameDifficulty.Normal;
+
+    /// <summary>ARC-COMBAT-012: the attacker needs ammunition for this shot and carries fewer units than its weapon takes a shot (the
+    /// dispatcher's 0x4B65D0, which the host answers: a PC or an NPC led by one, a weapon with an ammunition type). The attack is
+    /// refused after the hit location's roll and before every other roll.</summary>
+    public bool AmmunitionShort { get; init; }
 }
 
-/// <summary>Why the resolver refused the attack before any roll (ARC-RES-030 C11, C16).</summary>
+/// <summary>Why the resolver refused the attack: before any roll (ARC-RES-030 C11, C16), or after the hit location's roll for want of
+/// ammunition (ARC-COMBAT-012).</summary>
 public enum AttackRefusal
 {
     None,
@@ -306,6 +312,9 @@ public enum AttackRefusal
     AttackerInactive,
     /// <summary>The target critter is dead; corpses are not attacked.</summary>
     TargetDead,
+    /// <summary>ARC-COMBAT-012: too little ammunition for the shot (<see cref="AttackRequest.AmmunitionShort"/>); refused after the
+    /// hit location's roll, as the original's dispatcher checks it there (nothing is spent).</summary>
+    OutOfAmmunition,
 }
 
 /// <summary>The attack's result for the target.</summary>
@@ -337,6 +346,28 @@ public enum AttackMissCause
 
 /// <summary>Which PC fate the attack consumed.</summary>
 public enum FateUse { None, AttackerCriticalHit, TargetCriticalMiss }
+
+/// <summary>
+/// ARC-MAGIC-012: one damage step without an attack (<see cref="AttackResolver.DamageStep"/>; the spell Damage component's
+/// call of the original's damage step). <see cref="Attacker"/> is the context's attacker (a PC gets the difficulty share),
+/// <see cref="Weapon"/> the context's weapon (the attacker's wielded weapon in the original, which the nigh-invulnerable,
+/// ignore-resistance and damage-armour tests read), <see cref="Damage"/> the amount per type, <see cref="Effects"/> the damage
+/// flags that are life effects, and <see cref="FullAmount"/> the target's current hit points when the full or death flag is set
+/// (the amount is then those hit points, not the sum). <see cref="DifficultyScalesFullAmount"/> false skips the difficulty share
+/// for that amount (MG35's Steamwoven fix).
+/// </summary>
+public sealed record DamageStepRequest
+{
+    public required Combatant Attacker { get; init; }
+    public required Combatant Target { get; init; }
+    public AttackTargetKind TargetKind { get; init; } = AttackTargetKind.Critter;
+    public CombatWeapon Weapon { get; init; } = CombatWeapon.Unarmed();
+    public GameDifficulty Difficulty { get; init; } = GameDifficulty.Normal;
+    public DamageByType Damage { get; init; } = DamageByType.Zero;
+    public CriticalHitEffects Effects { get; init; }
+    public int? FullAmount { get; init; }
+    public bool DifficultyScalesFullAmount { get; init; } = true;
+}
 
 /// <summary>Hit-point damage multiplier from a critical hit.</summary>
 public enum DamageMultiplier { None, OneAndHalf, Double, Triple }

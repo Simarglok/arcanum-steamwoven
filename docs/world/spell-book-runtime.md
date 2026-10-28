@@ -10,7 +10,7 @@ Requirements: [FR-MAGIC-002](../requirements/combat-magic-tech.md#fr-magic-002) 
 [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (points spent and refunded, the stat-decrease guard).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell book"](../research/original-verification-ledger.md#spell-book-arc-magic-004), rows SB1–SB11), and the learn
+([ledger "Spell book"](../research/ledger/magic.md#spell-book-arc-magic-004), rows SB1–SB11), and the learn
 (0x4B1790) was compared with the original in the function oracle on 10,000 seeded inputs (F3, receipt
 [`4B1790.json`](../verification/receipts/4B1790.json); re-run with `./arcanum oracle --function 0x4B1790`, which the
 `SpellBookOriginalExeTests` compare with four planted mutants). Code: [`SpellBookRules`](../../src/Arcanum.Simulation/Magic/SpellBookRules.cs),
@@ -91,6 +91,7 @@ Owner decision 2026-10-20: every difference is documented. This slice adds no ru
 
 ## Not ready
 
-- No caller in the viewer: the character sheet's spell page and its learn and unlearn buttons are MT19; the script actions
-  (`knows_spell`, give mastery) are MT21; the AI's use of the book is slice I8.
+- The viewer's caller is the character sheet's spells page (ARC-MAGIC-008, MT19,
+  [viewer](../rendering/terrain-viewer.md#spells-page-arc-magic-008)): its + and − learn and unlearn through the pool, and a
+  refusal names the failing check. The script actions (`knows_spell`, give mastery) are MT21; the AI's use of the book is slice I8.
 - The spell bar and the maintained spells of an unlearned rank are MT20.

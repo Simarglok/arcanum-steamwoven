@@ -14,7 +14,7 @@ diagnostic `follow.pc` key. Since ARC-WORLD-045 the session has the original's w
 ([below](#wait-timer-and-loyalty-arc-world-045)) and since ARC-WORLD-046 the out-of-combat orders
 ([companion orders](companion-orders-runtime.md)), whose wait order schedules the timer; the dialog `WA` action is not admitted,
 there are no NPC leaders other than the PC, and no generated line text (lines are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
-are checked in the retail executable ([ledger AP3, AP4](../research/original-verification-ledger.md#ai-parameters-and-follow-consent-arc-data-033));
+are checked in the retail executable ([ledger AP3, AP4](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
 the rest of the party state's numbers and order are earlier source claims, **NOT_VERIFIED** in the executable.
 
 ## Follow check (`Arcanum.Simulation.Party`)

@@ -59,16 +59,17 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
   (not in that holder's current list);
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
-- then the shared item rules: `ItemTypeUnsupported` (gold and ammunition merge into stacks, a key may go onto the PC's
-  key ring), `WornItemUnsupported` (a parented item in slots 1000..1008),
+- then the shared item rules: `ItemTypeUnsupported` (gold merges into the PC's gold, a key may go onto the PC's
+  key ring; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008),
 `ItemScriptUnsupported` (an item `SAP_GET` for pickup or `SAP_REMOVE_ITEM` for loot and IN, or an item
 `SAP_INSERT_ITEM` when the caller passes no script host; other attachments such as examine and use do not run on a
 transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
 last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
-Technophobia background against technology items, free grid room around its own items), none of which the session owns.
-The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
+Technophobia background against technology items, free grid room around its own items). The session applies the Technophobia
+part for the hero after the host's weight answer ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); the weight and the
+room are the host's. The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
 changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
 A refusal changes nothing: for pickup and
@@ -139,7 +140,7 @@ the host replaces the owner, like the party port.
 
 Decoding keeps the list order and refuses an entity listed twice, in either list (`NotCanonical`), an unknown type name or a map below
 1 (`OutOfRange`), missing or unknown fields and more than 512 items (`BudgetExceeded`). `Restore` refuses a type a
-transfer cannot produce (gold, ammunition, key, key ring: `InvalidItem`), a repeated entity (`InvalidSnapshot`) and the
+transfer cannot produce (gold, key, key ring: `InvalidItem`; ammunition without its stack record: `InvalidSnapshot`, ARC-WORLD-066), a repeated entity (`InvalidSnapshot`) and the
 caller's lower limit, kit and taken items together (`BudgetExceeded`); gold or a kit item without a hero, and a kit
 item that is not the next `kit:n`, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
 (`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
@@ -153,7 +154,7 @@ in schema 4 to lose (its `IN` record was in memory only).
 ## NPC inventory changes (ARC-WORLD-055)
 
 One store of NPC inventory changes for every NPC on every map (`GameSessionNpcInventory.cs`), read in the executable first
-([ledger "NPC inventory changes"](../research/original-verification-ledger.md#npc-inventory-changes-arc-world-055), NI1–NI7).
+([ledger "NPC inventory changes"](../research/ledger/items.md#npc-inventory-changes-arc-world-055), NI1–NI7).
 
 **Original (NI1–NI5).** The original keeps no inventory store of its own: an NPC's list is fields of the NPC, each item its own
 object with a parent field, and all of them are saved with the map the NPC stands on when the PC leaves it (changed fields of
@@ -185,7 +186,8 @@ components and adds its products through the same rules.
 
 The NPC must be known to the session: an NPC holder of an attached seed, a party record, or an NPC that already holds added items
 (else `UnknownHolder`). Refusals, before any effect: `InvalidItem` (an invalid id, a `made:` id as the NPC, an undefined type),
-`StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, ammunition, keys and key rings, as for the PC),
+`StaleVersion`, `UnknownHolder`, then for an addition `ItemTypeUnsupported` (gold, keys and key rings, as for the PC; ammunition since
+ARC-WORLD-066, with its type and units: `InvalidAmmo` without them),
 `BudgetExceeded` (the NPC's list at 512 with its seed items, the store at `GameSessionLimits.MaxNpcItems` = 4,096, or no free made
 number), `RevisionExhausted` and last `InsertRefused` (the host's insert check for the NPC; a call back into the owner from it, a seed
 attach included, is `StaleVersion`); for a deletion `ItemNotAvailable` (not in the NPC's current list), `WornItemUnsupported` (unequipping an NPC is not
@@ -208,15 +210,15 @@ not migrated.
 | A reference to an item no longer found is kept as a null list element with the count unchanged (NI2). | The list holds only items it has; a deleted item is gone from it. |
 | Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1). | Not modelled (no barter); added items stay. |
 | A teleport clears an NPC's substitute-inventory link; an insert makes the NPC re-equip its best items (NI7, F1). | Not modelled. |
-| Any object type can enter an NPC's list. | Gold, ammunition, keys and key rings are refused, as for the PC's lists. |
+| Any object type can enter an NPC's list. | Gold, keys and key rings are refused, as for the PC's lists; ammunition merges into the NPC's stack of its prototype (ARC-WORLD-066). |
 
 Not modelled: moving a seed item from one NPC to another (no caller yet), giving an NPC an item from the PC (barter, drop on a
-follower), NPC worn slots, stacks, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
+follower), NPC worn slots, gold, and a visiting companion's items in the map-bound calls of a map whose seed does not list it.
 
 ## Placed items (ARC-WORLD-059)
 
 The hero's items the session placed on the ground (`GameSessionOwner.QueryPlacedItems`, `SessionPlacedItem`), read in the
-executable first ([ledger "Placed items"](../research/original-verification-ledger.md#placed-items-arc-world-059), PI1–PI6). In the
+executable first ([ledger "Placed items"](../research/ledger/items.md#placed-items-arc-world-059), PI1–PI6). In the
 original an item is an object anywhere: dropping it removes it from the owner (unwielding a worn one) and moves it to a tile,
 where it stays until something picks it up or its 48-hour decay destroys it; a pickup is the ordinary transfer.
 
@@ -232,6 +234,10 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
   (`SessionCriticalStepOutcome.Dropped`). One revision. A no-drop item is refused, as in the original (PI1); an item an earlier
   step of the same attack broke has already left its slot (`NoItem`); a made item's number is never handed out again while it lies
   on the ground.
+- **Assembly products** (ARC-WORLD-070): a schematic product unit the inventory's insert check refuses lies on the crafter's tile
+  as a made item (source `made`): the hero's tile for the hero's assembly, the tile the host gives for an NPC crafter (on the hero's
+  map), as the original's creation on the tile and unchecked transfer leave it (SA3–SA5). An ammunition unit there is a stack of its
+  own with its units. The assembly checks the store's bound before it spends anything ([assembly](schematic-assembly-runtime.md)).
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.
@@ -249,9 +255,6 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 **Not ready (the original's behaviour, PI1–PI6).**
 
-- The 48-hour Item Decay (PI4): the original destroys an item lying on the ground or in a junk pile 48 game hours after it was
-  dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
-  and spilled containers' items stay. A follow-up task.
 - Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
@@ -259,12 +262,41 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
-- The viewer draws no placed item and cannot click one (ARC-RENDER-033); NPC made items (ARC-WORLD-055) and the junk pile of OD13
-  can use this store later.
+- NPC made items (ARC-WORLD-055) and the junk pile of OD13 can use this store later. The viewer draws placed items and picks
+  them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
+  product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
+
+## Item decay (ARC-WORLD-062)
+
+Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read in the retail 1.0.7.4 executable by two readers
+([ledger "Item decay"](../research/ledger/items.md#item-decay-arc-world-062), ID1–ID9; it settles PI4).
+
+| Rule | Value |
+| --- | --- |
+| Event (ID1) | The original's Item Decay (kind 25): saved, on the game clock (the column Poison, Resting and Lock use). `SessionEventKinds.ItemDecay` (`item.decay`): scoped to the item's map, so it fires while that map is the actor's (late, on return, as the Lock event); entity the item; values the game time it was scheduled at and its delay. |
+| Which items (ID2, ID4, ID7, ID9) | Every drop on the ground schedules it two game days (172,800,000 ms) on, replacing the item's earlier one: the hero's critical drops, an NPC's items a critical dropped, and the items a broken container spilled. An item a map's data lays on the ground gets none (nothing dropped it), and neither does an assembly product the inventory refused (ARC-WORLD-070, ammunition stacks among them): the original creates it on the crafter's tile and the refused transfer leaves it there, and neither path reaches the schedule (ID9), so it lies until it is moved. |
+| No decay (ID2, ID5) | An item with item flag 0x20000 (`SessionItemFacts.NoDecay`, from the map data) gets no event; no installed item prototype carries it (opt-in census `ItemDecayFlagCensusTests`: 0 of 798), but map instances can (two Crash Site items, [item inventory](../research/crash-site-item-inventory.md)). The switch that turns decay off is the world editor's; the game never sets it. |
+| Pickup (ID4) | A pickup of the item ends its event (`PickUpItem`); a deleted item loses it too. |
+| Firing (ID3, ID6) | An item that still lies loose on its map is deleted (one revision; it leaves the placed items or its seed's ground). While the host's loot window shows a container (`ISessionLootWindowWorld.LootWindowShowsContainer`) the event waits a minute more each time. An item no longer on the ground: nothing. The pass reports each firing (`SessionEventPassResult.Decays`: map, item, `ItemDecayStep`). Two session limits postpone a deletion a minute (`Postponed`): a seed item whose map's seed is not attached yet, and a full deleted-item budget (`MaxDurabilityRecords`; every decayed item stays in the saved deleted list). |
+| Budget | At most 8,192 pending decay events (`MaxItemDecays`, project bound; the original has none): a drop beyond it does not decay. |
+
+`QueryItemDecays` lists the pending events. No snapshot change: the event queue is already saved (schema 9 form); a restore checks
+each decay event (one item on a map, set no later than the saved clock, the decay delay or the retry's, one per item). The viewer's
+event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
+
+Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
+the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
+the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
+installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
+whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
+original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
+budget (`MaxDurabilityRecords`) is full, each due decay postpones itself a minute at a time, so a long wait runs it once a game
+minute; a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
+with decay in the original (ID8), are not modelled.
 
 ## Drop cell (ARC-COMBAT-010)
 
-Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/original-verification-ledger.md#drop-cell-arc-combat-010),
+Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/ledger/combat.md#drop-cell-arc-combat-010),
 DC1–DC8, with CR14). `DropPlacementRules` (Simulation) is the drop's draws and tries: `Distance` draws 2..4 (0x461A90), `Place` makes
 up to ten tries of 0x4F4E40, each with a direction draw 0..8 (8 stays), over an injected `IDropMap`: the original's step
 (0x4B8FF0), its path request with the drop's flags (0x41F3C0, flags 0x10) for a `DropOwner` (an object, the PC side, or an NPC on
@@ -290,7 +322,34 @@ plus the hero's and the companions' live cells.
   cannot settle is treated as blocked (DCA3).
 - A generator that runs out during the tries (after about 2^63 draws) leaves the distance draw made and the item where it was
   (`RandomExhausted`); the drop's draws are not taken on trial.
-- The viewer still draws no dropped item (ARC-RENDER-033).
+
+## Ground items in the viewer (ARC-RENDER-033)
+
+The AREA viewer draws what the session holds on the ground but no T0 body drew, and the art a T0 body changes to:
+
+- **Items.** Every item in `QueryMapInventory(map).Ground` that does not lie on its own T0 body's cell: spilled from a container
+  (ARC-COMBAT-008), dropped by an NPC (ARC-COMBAT-009/010) or placed by the hero (ARC-WORLD-059). Its ground ART is its map row's
+  current art (field 0; for a placed world item, the row of the map whose seed lists it) or, for a kit item, its prototype's
+  (`AreaStartingHero.KitArt`), or, for a made item (ARC-WORLD-070), its product prototype's current art from the schematic data
+  (`AreaSchematicData.ArtOf`). The viewer's own insert check accepts every item, so in play a product reaches the ground only with a
+  refusing host; the native smoke checks the store and that the product's art reads. It is placed on its cell as the plan places a body there with no object offset and scale 100
+  (`AreaScenePlan.Place`; whether the original keeps a dropped item's offsets and scale was not read in the executable: NOT
+  VERIFIED), flat when its object flags carry OF_FLAT (0x4), and joins the moved bodies: an upright one the upright order,
+  a flat one the flat commands in plan order (`AreaScenePlan.WithMovingFlat`). It is lit where it lies by its own art's channel.
+  A click picks it up as any ground item, walking to its cell; a placed item without a row of the shown map (a kit item, a world
+  item from another map) is named and picked under a key of its own, with its origin row's fields when there is one.
+- **Destroyed ART.** A scenery or trap the session busted is drawn from its destroyed ART (field 24) at its T0 anchor
+  (`AreaScenePlan.Repose`, as a fallen pose).
+- **Art.** `AreaExtraArt` reads an art id the T0 snapshot did not decode from the game's content stack in its search order
+  (ARC-DATA-018), named by the area owner's rules for classes 4, 6 and 7 (`AreaObjectArt`, shared with the owner) and decoded by
+  its frame rules (the selected frame, group 0 of a single-rotation ART, the ART's own extent); explicit limits
+  (`AreaExtraArtLimits`, for the whole viewer run of one module: 4,096 art ids, 64 MiB of pixels, 16 MiB per file; the opt-in
+  census `AreaExtraArtOriginalTests` reads every destroyed ART and every held item's ground ART of the 80 interiors: 4 destroyed
+  ARTs, 2,449 held items, 328 distinct art ids, none failing). An art id that does not resolve or read leaves the
+  body as it was and is logged once (`ARC-RENDER-033 extra-art`).
+
+**Not ready.** The junk pile of OD13
+(ARC-WORLD-063); a busted window's busted ART. The items' decay is in since ARC-WORLD-062 (the event pump redraws the ground).
 
 ## Evidence
 
@@ -319,6 +378,50 @@ plus the hero's and the companions' live cells.
   refused for its `SAP_INSERT_ITEM` script; with the content (ARC-SCRIPT-013) it loots too, script 1341 prints line 1 of
   its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
+
+## Ammunition (ARC-WORLD-066)
+
+Ammunition (type 6) is admitted to the hero's and NPCs' lists since ARC-WORLD-066 (snapshot schema 34), read in the executable
+([ledger AM1–AM7](../research/ledger/items.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
+rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionAmmo.cs) and the transfers above; tests
+[`AmmoStateTests`](../../tests/Arcanum.Session.Tests/AmmoStateTests.cs) and
+[`AreaAmmoLinesTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaAmmoLinesTests.cs).
+
+- **Facts.** A seed's ammunition item carries its unit count (`Quantity`, field 0x8E) and its ammunition type (`AmmoType`,
+  field 0x8F, 0..3: arrows, bullets, charge cells, fuel). A type outside 0..3 or a negative count refuses the seed (AMA2, AMA3:
+  the original indexes past its tables). The Data reader gives the type (`AreaInventoryItem.AmmoType`).
+- **State.** The session keeps a `SessionAmmoRecord(entity, type, units)` for every ammunition item the hero holds or placed,
+  every one added to an NPC, and any other whose units it changed (a seed stack an NPC spent from or received into); by entity in
+  ordinal order, at most `GameSessionLimits.MaxAmmoRecords` (4,096). A record's units are 0 or more (the original never removes a
+  stack at 0 by itself). `QueryAmmo(entity)` gives a tracked stack or a seed stack's units; `QueryHeroAmmo()` the hero's stacks in
+  list order; the map views (`QueryMapInventory`) show the current units.
+- **Insertion (AM1, AM2).** Pickup, loot, negative `IN` and a placed item picked up again: an ammunition item merges into the
+  hero's first held stack of the same prototype (its units added, the inserted item deleted with the durability deletion, as the
+  original destroys it); without one it enters the list as a new stack. The insert check still runs. A sum that does not fit 32 bits
+  is refused (`BudgetExceeded`, AMA1). `AddItemToNpc` takes ammunition with its type and units and merges it into the NPC's stack of
+  the prototype in the same way.
+- **Spending (AM4).** `SpendAmmo(expected, holder, type, count)` spends from the hero's, an NPC's or (ARC-TECHNOLOGY-009,
+  `SessionAmmoHolder.ContainerOf`) a container's first stack of the type (the original's one stack a critter field names; AMA4
+  latent; a container's only where the item rules find it, AMA5 below): fewer units refuse with nothing spent (`AmmoShort`), exactly the count
+  deletes the stack, more leave the rest; a count of 0 changes nothing; a negative count or a type out of 0..3 is `InvalidAmmo`.
+  One revision.
+- **Charge cells (ARC-TECHNOLOGY-007).** `HeroCellSource(itemComplexity?)` is the engine's `ISpellCellSource` over the hero's own
+  power-cell stack: an applied, paid plan spends the cells at once through `SpendAmmo`; an unapplied request writes nothing.
+  `ContainerCellSource(container, itemComplexity)` (ARC-TECHNOLOGY-009) does the same for a device in a container from the
+  container's stack. AMA5 is a switch (owner decision 2026-10-21): Original keeps the failed lookup (AM6: a container's stack is
+  never found, so a spend finds nothing and a device in it has no cells), Steamwoven finds the container's first stack of the type
+  (`ItemRuleProfile.ContainerStackLookupFails`). A container's spent units are kept as the session's record of that seed stack.
+- **Assembly (TECH-4).** An ammunition component loses one unit (0x4658E0) and its stack goes at its last unit; an ammunition product
+  (the product prototype's type and units, `productAmmo`) merges each unit into the crafter's stack of its prototype, one new
+  `made:n` stack only when it holds none; a unit the insert check refuses is a stack of its own on the crafter's tile
+  (ARC-WORLD-070). The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
+  type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
+- **Not modelled.** Gold (the AMA5 fix will apply to its container lookup too); transfers of units between holders (AM4's destination); the critter field and its
+  clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). Since ARC-COMBAT-012 the hero's
+  attacks spend a shot's ammunition through `SpendAmmo` with the weapon's ammunition type and per-shot count, hit or miss, and a
+  short stack refuses the attack after the hit location ([hero attack](hero-attack-runtime.md#reach-and-line-of-fire-arc-combat-012));
+  the critical misses that take the
+  whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
 
 ## Next steps
 

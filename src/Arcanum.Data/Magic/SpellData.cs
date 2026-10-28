@@ -1,5 +1,6 @@
 using System.Text;
 using Arcanum.Data.Content;
+using Arcanum.Data.Fixes;
 using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Magic;
@@ -7,16 +8,22 @@ namespace Arcanum.Data.Magic;
 /// <summary>
 /// ARC-MAGIC-001: the texts of <c>mes\spell.mes</c> the original keeps (ledger "Spell records"): the name of each of the 223
 /// records (message n), the 16 college names (500 + c), the descriptions of the 80 college spells (700 + n), the college
-/// descriptions (8000 + c) and the mastery descriptions (9000 + c). A missing message is null: the original then shows its
+/// descriptions (8000 + c) and the mastery descriptions (9000 + c); since ARC-MAGIC-015 also the magic messages 600..699 the spell UI
+/// and the runs show (0x44FDC0 reads any number). A missing message is null: the original then shows its
 /// shared missing-line text, which the host formats. Text is the stored bytes as Latin-1 characters.
 /// </summary>
 public sealed class SpellTexts
 {
     public const string Path = "mes/spell.mes";
-    public const int FirstCollegeName = 500, FirstSpellDescription = 700, FirstCollegeDescription = 8000, FirstMasteryDescription = 9000;
+    public const int FirstCollegeName = 500, FirstSpellDescription = 700, FirstCollegeDescription = 8000, FirstMasteryDescription = 9000,
+        FirstMessage = 600, Messages = 100;
 
-    private SpellTexts(string?[] names, string?[] colleges, string?[] descriptions, string?[] collegeDescriptions, string?[] masteries)
+    private readonly string?[] _messages;
+
+    private SpellTexts(string?[] names, string?[] colleges, string?[] descriptions, string?[] collegeDescriptions, string?[] masteries,
+        string?[] messages)
     {
+        _messages = messages;
         Names = Array.AsReadOnly(names);
         CollegeNames = Array.AsReadOnly(colleges);
         SpellDescriptions = Array.AsReadOnly(descriptions);
@@ -29,6 +36,32 @@ public sealed class SpellTexts
     public IReadOnlyList<string?> SpellDescriptions { get; }
     public IReadOnlyList<string?> CollegeDescriptions { get; }
     public IReadOnlyList<string?> MasteryDescriptions { get; }
+
+    /// <summary>A record's name (0x4B1600, message <paramref name="spell"/>, 0..222); null when missing (the original's −1 and 10000
+    /// give its shared missing-line text, which the host formats).</summary>
+    [OriginalFunction(0x4B1600, OriginalFunctionScope.Partial)]
+    public string? Name(int spell) => Names[Check(spell, SpellRecord.Count, nameof(spell))];
+
+    /// <summary>A college spell's description (0x4B1620, message 700 + <paramref name="spell"/>, 0..79).</summary>
+    [OriginalFunction(0x4B1620, OriginalFunctionScope.Partial)]
+    public string? Description(int spell) => SpellDescriptions[Check(spell, SpellRecord.CollegeSpells, nameof(spell))];
+
+    /// <summary>A college's name (0x4B1A40, message 500 + <paramref name="college"/>, 0..15).</summary>
+    [OriginalFunction(0x4B1A40, OriginalFunctionScope.Partial)]
+    public string? CollegeName(int college) => CollegeNames[Check(college, SpellRecord.Colleges, nameof(college))];
+
+    /// <summary>A college's description as the sheet's hint shows it (0x4B1A50): the mastery description (9000 + college) when
+    /// <paramref name="masteredCollege"/> is that college, else the college description (8000 + college). The original tests the
+    /// local player's mastered college; the caller passes it.</summary>
+    [OriginalFunction(0x4B1A50, OriginalFunctionScope.Partial)]
+    public string? CollegeDescription(int college, int masteredCollege) =>
+        masteredCollege == Check(college, SpellRecord.Colleges, nameof(college)) ? MasteryDescriptions[college] : CollegeDescriptions[college];
+
+    /// <summary>A magic message 600..699 (the spell UI's 600, 604 and 606, the runs' 601..603 and 643); null when missing or outside
+    /// the range. Not read in strict mode's completeness test: the original shows its missing-line text.</summary>
+    public string? Message(int number) => number is >= FirstMessage and < FirstMessage + Messages ? _messages[number - FirstMessage] : null;
+
+    private static int Check(int value, int count, string name) => value >= 0 && value < count ? value : throw new ArgumentOutOfRangeException(name);
 
     /// <summary>Reads the texts; strict mode refuses a missing one.</summary>
     public static SpellTextsRead Read(MesFile file, SpellRecordMode mode)
@@ -46,7 +79,8 @@ public sealed class SpellTexts
                 .Order().Cast<int?>().FirstOrDefault();
             if (missing is { } number) return new(SpellDataStatus.MissingText, null, new(SpellDataStatus.MissingText, Path, number));
         }
-        return new(SpellDataStatus.Read, new(names, texts.Colleges, texts.Descriptions, texts.CollegeDescriptions, texts.Masteries));
+        return new(SpellDataStatus.Read, new(names, texts.Colleges, texts.Descriptions, texts.CollegeDescriptions, texts.Masteries,
+            Range(file, FirstMessage, Messages)));
     }
 
     /// <summary>The spell module's init: the college names, spell descriptions, college and mastery descriptions.</summary>
@@ -90,9 +124,10 @@ public sealed class SpellData
     public SpellRecordTable Records { get; }
 
     /// <summary>Reads the three files from the first base source holding each, in the original's order (the component type
-    /// file, the text file, the component type names, the record file).</summary>
+    /// file, the text file, the component type names, the record file). <paramref name="fixes"/> names the rule mode's data fixes
+    /// (DF4, a repeated <c>Dmg_Flags:</c>); none reads the data as the original does.</summary>
     [OriginalFunction(0x44EF50, OriginalFunctionScope.Partial)]
-    public static SpellDataLoad Open(ContentStack stack, SpellRecordMode mode, MesReaderOptions? options = null)
+    public static SpellDataLoad Open(ContentStack stack, SpellRecordMode mode, MesReaderOptions? options = null, DataFixProfile? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
         ValidateMode(mode);
@@ -102,24 +137,24 @@ public sealed class SpellData
         if (Load(stack, SpellTexts.Path, options, out var textFile) is { } textRefusal) return Refused(textRefusal);
         if (ReadComponentTypes(componentFile!, out var names) is { } missing) return Refused(missing);
         if (Load(stack, SpellRecordTable.Path, options, out var listFile) is { } listRefusal) return Refused(listRefusal);
-        return Create(names, textFile!, listFile!, mode);
+        return Create(names, textFile!, listFile!, mode, fixes);
     }
 
     /// <summary>The data of the three parsed files (synthetic data or another loader).</summary>
-    public static SpellDataLoad Create(MesFile componentTypes, MesFile spellTexts, MesFile spellList, SpellRecordMode mode)
+    public static SpellDataLoad Create(MesFile componentTypes, MesFile spellTexts, MesFile spellList, SpellRecordMode mode, DataFixProfile? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(componentTypes);
         ArgumentNullException.ThrowIfNull(spellTexts);
         ArgumentNullException.ThrowIfNull(spellList);
         ValidateMode(mode);
-        return ReadComponentTypes(componentTypes, out var names) is { } missing ? Refused(missing) : Create(names, spellTexts, spellList, mode);
+        return ReadComponentTypes(componentTypes, out var names) is { } missing ? Refused(missing) : Create(names, spellTexts, spellList, mode, fixes);
     }
 
-    private static SpellDataLoad Create(string[] names, MesFile spellTexts, MesFile spellList, SpellRecordMode mode)
+    private static SpellDataLoad Create(string[] names, MesFile spellTexts, MesFile spellList, SpellRecordMode mode, DataFixProfile? fixes)
     {
         ArgumentNullException.ThrowIfNull(spellTexts);
         ArgumentNullException.ThrowIfNull(spellList);
-        var records = SpellRecordTable.Read(spellList, names, mode);
+        var records = SpellRecordTable.Read(spellList, names, mode, fixes);
         if (records.Refusal is { } recordRefusal) return Refused(recordRefusal);
         var texts = SpellTexts.Read(spellTexts, mode);
         if (texts.Refusal is { } textRefusal) return Refused(textRefusal);

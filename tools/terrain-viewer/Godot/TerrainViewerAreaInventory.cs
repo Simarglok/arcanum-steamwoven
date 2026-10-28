@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -89,6 +90,8 @@ public partial class TerrainViewerApp
             if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
+        // ARC-RENDER-033: an item picked up or dropped leaves or joins the drawn ground at once.
+        if (SyncAreaGroundBodies()) _canvas.SetAreaMovingBodies(AreaMovingCommands());
     }
 
     private bool AreaTakenByPc(AreaDrawCommand command) => command.Identity is { } key && _inventoryHidden?.Contains(key) == true;
@@ -97,7 +100,7 @@ public partial class TerrainViewerApp
     private AreaInventoryTarget? InventoryTargetAt(Vector2 screen)
     {
         if (!InventoryActive || AreaObjectAtScreen(screen) is not { } key) return null;
-        return _inventoryHost!.Target(_areaSession!, CurrentAreaMap, key);
+        return AreaInventoryTargetOf(key);
     }
 
     private static long Chebyshev(AreaObjectRecord row, (long X, long Y) cell) =>
@@ -132,11 +135,15 @@ public partial class TerrainViewerApp
 
     private void ActOnInventoryTarget(AreaInventoryTarget target)
     {
-        if (target.Kind == AreaInventoryTargetKind.DeadNpc) { OpenInventory(target.Entity); return; }
+        // ARC-COMBAT-020: in a turn-based round a pickup costs 1 action point and a body's loot (an object's use) 2 (ledger CT3).
+        var pickup = target.Kind != AreaInventoryTargetKind.DeadNpc;
+        if (!ChargeHeroAction(pickup ? TurnBasedRules.PickUpCost : TurnBasedRules.UseObjectCost, pickup ? "pickup" : "loot"))
+        { _inventoryStatus = _turnBasedNotice; RefreshAreaStatus(); return; }
+        if (!pickup) { OpenInventory(target.Entity); return; }
         var result = _inventoryHost!.PickUp(_areaSession!, target.Entity);
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
         _inventoryStatus = result.Disposition == GameSessionDisposition.Changed
-            ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure)}";
+            ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}";
         if (result.Disposition == GameSessionDisposition.Changed) PlayPickupSound(target.Entity);
         GD.Print($"ARC-UI-004 pickup disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         SyncAreaInventory(); RefreshAreaStatus();
@@ -160,7 +167,7 @@ public partial class TerrainViewerApp
             || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
         _inventoryAfterRoute = null;
         var cell = ActorCell()!.Value;
-        var target = InventoryActive ? _inventoryHost!.Target(_areaSession!, CurrentAreaMap, pending.Key) : null;
+        var target = InventoryActive ? AreaInventoryTargetOf(pending.Key) : null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _inventoryStatus = "walk to pick up/loot cancelled: reset/reload";
         else if (route.Status != RouteFollowStatus.Arrived) _inventoryStatus = "walk to pick up/loot stopped: " + (route.StopReason ?? route.Status.ToString());
         else if (!_worldFocused || WorldModal || WorldUiFocus) _inventoryStatus = "walk to pick up/loot dropped: input quarantined/modal";
@@ -183,6 +190,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.UseRequested += HealSelf;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
+            _inventoryPanel.RepairRequested += RepairItem;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -191,10 +199,11 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
-    /// original's inventory window does). Outside a turn-based round, so no action points are charged.</summary>
+    /// original's inventory window does). In a turn-based round the use charges its action points (ARC-COMBAT-020; the original goes on
+    /// whatever the charge answers).</summary>
     private void HealSelf(string item)
     {
         if (!InventoryOpen || !InventoryActive) return;
@@ -204,7 +213,7 @@ public partial class TerrainViewerApp
         if (healing is null) message = "not used: not a healing item the hero holds";
         else
         {
-            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing);
+            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, CombatWorldOrNull());
             var life = _areaSession.QueryHeroLife()?.Record.State;
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
                 : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
@@ -237,6 +246,33 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    /// <summary>ARC-SKILLS-007: the hero repairs one of its items with the Repair skill (the original's skill-bar repair, which
+    /// charges no action points and makes the hero the repairer).</summary>
+    private SessionRepairResult? _lastRepair;
+
+    private void RepairItem(string item)
+    {
+        _lastRepair = null;
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        string message;
+        if (_inventoryHost!.RepairBaseline(_areaSession!, item, _areaKitDurability) is not { } baseline) message = "not repaired: no condition for this item";
+        else
+        {
+            var result = _areaSession!.RepairWithSkill(_areaSession.Version, item, baseline);
+            _lastRepair = result;
+            message = result.Disposition == GameSessionDisposition.Rejected ? $"not repaired: {result.Failure}"
+                : (result.Repair == Arcanum.Simulation.Items.ItemRepairStatus.NothingToRepair ? "nothing to repair"
+                    : result.Amount > 0 ? $"repaired {result.Amount} hit point(s)" : "the repair restored nothing")
+                + (result.FateUsed ? " (fate point)" : string.Empty);
+            GD.Print($"ARC-SKILLS-007 repair item={item} disposition={result.Disposition} failure={result.Failure} status={result.Repair} amount={result.Amount} " +
+                $"damage={result.Condition?.Damage} broken={result.Condition?.Broken}");
+        }
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
+
     private void EndInventory()
     {
         if (_inventoryPanel is null || !_inventoryPanel.IsOpen) return;
@@ -251,7 +287,7 @@ public partial class TerrainViewerApp
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
         if (result.Disposition == GameSessionDisposition.Changed) PlayTakenItemSound(item);
         var message = result.Disposition == GameSessionDisposition.Changed
-            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure)}";
+            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}";
         GD.Print($"ARC-UI-004 loot disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
@@ -269,7 +305,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
             if (result.Disposition == GameSessionDisposition.Changed) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
-            else refused.Add($"{line.Text}: {AreaInventoryHost.Refusal(result.Failure)}");
+            else refused.Add($"{line.Text}: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}");
         }
         var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
         GD.Print($"ARC-UI-004 loot-all taken={taken} refused={refused.Count} pc={_areaSession!.QueryPcInventory().Count}");
@@ -293,7 +329,7 @@ public partial class TerrainViewerApp
     private void HandleInventoryKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && routed is Key.I or Key.Escape) EndInventory();
+        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.I && !CharacterKeySilenced(key, routed)))) EndInventory();
     }
 
     private void HandleInventoryPulse(IntentFrame intent)

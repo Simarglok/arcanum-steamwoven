@@ -163,6 +163,9 @@ public sealed class GameEventQueue
         return new(GameEventFailure.None, moved.ToImmutableArray());
     }
 
+    /// <summary>The pending events of <paramref name="kind"/>, saved or not, in queue order (deadline, sequence). Detached.</summary>
+    public ImmutableArray<GameEvent> QueryPending(string kind) => [.. PendingOf(kind)];
+
     /// <summary>All pending events, saved or not, in queue order (domain, deadline, sequence). Detached.</summary>
     public ImmutableArray<GameEvent> QueryPending() =>
         PassOrder.SelectMany(d => DomainSet(d)).Select(o => _events[o.Sequence]).ToImmutableArray();

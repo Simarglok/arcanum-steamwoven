@@ -221,7 +221,7 @@ prototype4047, world `(92910,82598)`, SAP1, script2793 has a literal action44 at
 line0/true targeting catalogue5078 at `(2087,2018)`. Cave sector/index99,
 prototype4047, world `(2093,2019)`, SAP1, script1532 has line0/true action44 targeting
 catalogue5000 at `(92913,82598)`. The game converts these script map IDs by subtracting4999
-(ledger [TR1 of map transitions](original-verification-ledger.md#map-transitions-arc-data-025)).
+(ledger [TR1 of map transitions](ledger/world.md#map-transitions-arc-data-025)).
 These are **directed potential endpoints**, not an executed round trip; attached
 object position and destination position intentionally differ.
 

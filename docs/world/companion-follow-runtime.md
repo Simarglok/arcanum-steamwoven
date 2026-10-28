@@ -10,7 +10,7 @@ covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-
 through the cave entrance and exit with the PC ([map change](#map-change-arc-world-017)), the bounded
 [FR-WORLD-010](../requirements/world.md#fr-world-010) A→B→A case for one follower.
 
-**NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
+**NOT READY:** a companion does not walk through living critters outside combat mode, as the original's NPC movers do (the request's flag 0x10, ledger LR2): since ARC-WORLD-074 the PC does, and may stand on a cell a companion wants, while a companion's admission and planning overlays still block on the PC, the other companions and T0 critters (the companions lane's follow-up). A visible effect meanwhile: when a frame ends with the PC on a companion's cell, the companion's follow decides Separate (distance 0) and steps aside, and a step it picks onto the cell the PC is entering is refused (`ROUTE_STEP_DENIED`); nothing stalls. No walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
 follower of a follower, no unconscious-follower rule, no carried inventory payload), no combat orders, combat or turn-based cost, no
 refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)). Since ARC-WORLD-067 the PC side of the follow check, the orders, the loyalty step and the wait timer is the
@@ -35,8 +35,9 @@ distances ([C7–C10](../research/companion-follow-evidence.md#findings)):
 the leader's committed cell with the follow range (`SetTarget(target, at, range)`, new in this task: the goal is reached
 when the actor settles within `range` of it; a click route uses 0). Its route follower has no corridor limits, so a
 leader beyond the local planner's reach is not followed along a corridor as a click goal is (ARC-WORLD-042,
-[corridors](click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042)). So the follower walks through the same bounded
-planner, exact movement and step evidence as a click route, re-plans at each step end toward the leader's current
+[corridors](click-route-runtime.md#corridors-beyond-the-local-reach-arc-world-042)), and no straight-line retry (the PC's,
+ARC-WORLD-073). So the follower walks through the same planner (since ARC-WORLD-073 the original's path request with the
+walk's budget), exact movement and step evidence as a click route, re-plans at each step end toward the leader's current
 cell, and never cancels a started step. The host calls `Update(state, leader, spreadOut, following, frontier)` once
 per frame and then `Drive` to the same frontier:
 
@@ -66,7 +67,7 @@ live actors on every directed step (project policy):
 
 `AreaGridSession.Occupancy` (read at each advance) and `AreaRouteSource(…, occupancy)` apply the same overlay, so a
 planned step is the step the runtime admits (FR-NAV-002). The evidence keeps the T0 assessment and adds `Live`, the
-verdict the step was admitted with, when the overlay changed it. The PC is admitted against the companions; each
+verdict the step was admitted with, when the overlay changed it. The PC is admitted against the companions in combat mode (since ARC-WORLD-074 outside it the PC's steps pass them and every living critter, [click route](click-route-runtime.md#follower-routefollower)); each
 companion against the PC and the other companions, except that a companion **plans** toward the PC without the PC's
 cells (the goal is the PC's cell; with range ≥ 2 the route never enters it).
 

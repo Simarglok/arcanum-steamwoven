@@ -95,10 +95,10 @@ public partial class TerrainViewerApp
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
         _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
-            ? host.Run(row, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+            ? Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
         _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
-            ? host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
@@ -161,6 +161,13 @@ public partial class TerrainViewerApp
 
     // ARC-SCRIPT-017: one use-script host per shown map, session and script content (entry runs come every step).
     private (AreaSnapshot Snapshot, GameSessionOwner Session, Arcanum.Data.Scripts.ScriptContent? Content, AreaInventoryHost? Inventory, AreaUseScriptHost Host)? _useScriptHost;
+
+    // ARC-SCRIPT-019: a run's completed quest levels the followers and shows the level-up messages, as a dialog's does.
+    private AreaScriptedUse Awarded(AreaUseScriptHost host, AreaScriptedUse ran)
+    {
+        foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
+        return ran;
+    }
 
     private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
     {
@@ -355,7 +362,7 @@ public partial class TerrainViewerApp
             if (_areaSession is not null)
             {
                 quickDirectory = System.IO.Directory.CreateTempSubdirectory("arc-world-038-").FullName;
-                _quickSaveSlotForSelfTest = GameSessionSaveSlot.QuickSave(quickDirectory);
+                _saveLibraryForSelfTest = new(quickDirectory);
                 QuickKey(Key.F7);
                 if (_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) != true) throw new InvalidOperationException("AREA_MAP_QUICK_SAVE " + _quickSaveStatus);
                 var away = Enum.GetValues<NeighborDirection>().Select(d => RoutePlanner.Neighbor(near, d))
@@ -430,7 +437,7 @@ public partial class TerrainViewerApp
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
-            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
     }

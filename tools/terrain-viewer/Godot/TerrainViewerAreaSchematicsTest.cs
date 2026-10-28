@@ -269,10 +269,10 @@ public partial class TerrainViewerApp
                 tried++;
                 var definition = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 20, 8, 8, 8, 0, 0], 1, 5, 0,
                     null, null, 0, [new(first), new(second)], Advancement: SessionHeroAdvancement.None with { TechDegrees = [7, 7, 7, 7, 7, 7, 7, 7] });
-                var created = AreaTransitionCoordinator.CreateSession(session.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
+                GameSessionOwner? Copy() => AreaTransitionCoordinator.CreateSession(session.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
                     new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap,
-                    new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic"));
-                if (created.Owner is not { } copy) continue;
+                    new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic")).Owner;
+                if (Copy() is not { } copy) continue;
                 using (copy)
                 {
                     if (AreaSchematics.Build(copy, data, AreaSchematicTab.Learned, 0, 0, SchematicItems, AreaHoverIndex.TextProfile).View is null) continue;
@@ -282,6 +282,27 @@ public partial class TerrainViewerApp
                     Require(result.Made.Count == record.Quantity && copy.QueryMadeItems().Count == record.Quantity && copy.QueryHeroKit().Count == 0,
                         "the products replace the components");
                     made = $"record {record.Number}: {result.Made.Count} made";
+                    // ARC-WORLD-070: with a full inventory the products lie on the hero's tile in the ground store, whose items on an attached
+                    // map the drawing reads (RENDER-033; this detached copy has no map seed, so the store itself is checked).
+                    var fullCopy = Copy();
+                    Require(fullCopy is not null, "a second detached hero for the full-inventory assembly");
+                    using var full = fullCopy!;
+                    var ground = full.AssembleSchematic(full.Version, record, SchematicItems, data.Facts, data.Kind, _ => SessionInsertVerdict.NoRoom, data.AmmoOf);
+                    var lying = full.QueryPlacedItems().Where(p => ground.OnGround.Contains(p.Entity)).ToArray();
+                    Require(ground.Disposition == GameSessionDisposition.Changed && ground.OnGround.Count == record.Quantity && full.QueryHeroKit().Count == 0 &&
+                        lying.Length == record.Quantity && lying.All(p => p.Map == actor.Map && p.Cell == actor.Cell), "a full inventory leaves the products on the hero's tile");
+                    // The drawing finds a made product's ground ART through the schematic data (the extra-art reader of RENDER-033).
+                    var productArt = data.ArtOf(lying[0].Kind.Prototype) is { } art ? ExtraArt()?.Load(art).Status.ToString() ?? "no extra art" : "no art";
+                    Require(productArt == nameof(AreaExtraArtStatus.Ready), "the product's ground art reads: " + productArt);
+                    made += $", full inventory: {lying.Length} on the ground ({AreaSchematics.OnGroundText(ground).Trim()}), ground art {productArt}";
+                    // ARC-WORLD-062: a product created on the tile is not dropped, so it never decays (ledger ID9): two game days on the
+                    // viewer's event pump fires nothing for it and the products still lie there.
+                    Require(!full.QueryItemDecays().Any(d => ground.OnGround.Contains(d.Entity)), "no product on the ground has a decay event");
+                    var later = new AreaEventPump(full, new PlainEventWorld()).Jump(Arcanum.Simulation.Items.ItemDecayRules.DelayMs);
+                    Require(later.Decays.Count == 0 && ground.OnGround.All(entity => !full.IsItemDestroyed(entity)) &&
+                        ground.OnGround.All(entity => full.QueryPlacedItems().Any(p => p.Entity == entity)),
+                        $"two game days on the products still lie ({later.Decays.Count} decays fired)");
+                    made += $", still {ground.OnGround.Count} on the ground after 48 game hours";
                     break;
                 }
             }
@@ -297,6 +318,12 @@ public partial class TerrainViewerApp
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
+}
+
+// ARC-WORLD-062: a pass world for a detached session in a smoke (no NPC, no loot window).
+internal sealed class PlainEventWorld : ISessionEventWorld
+{
+    public Arcanum.Simulation.Combat.LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
 }
 
 public partial class TerrainViewerApp

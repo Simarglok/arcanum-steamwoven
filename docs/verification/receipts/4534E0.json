@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4534E0",
+  "name": "spell-cancels",
+  "method": "Arcanum.Simulation.Magic.SpellTargetStage.Cancelled",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "91f98a34331f1b88f4ef7b503f61183809ccf5baccbc643f7c1481bee38724a2",
+  "configuration": "Debug"
+}

@@ -4,6 +4,8 @@ using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -14,7 +16,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -22,19 +24,32 @@ public sealed class AreaScriptHost : IScrHost
     public const string CountersProperty = "dialog.counters", ScriptProperty = "dialog.script";
 
     /// <summary>
-    /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> without get and set story state, because the session
-    /// has no story-state number yet (a script that would use one is refused, not run on a made-up value), plus the three
+    /// The set the viewer runs: <see cref="ScrAdmissionSet.S3"/> (with the session's story-state number since ARC-SCRIPT-019), plus the three
     /// sound actions of <see cref="ScrAdmissionSet.S7"/> (ARC-SCRIPT-040), plus call script in and remove script call of
     /// <see cref="ScrAdmissionSet.S5"/> since the viewer pumps the session's event queue (ARC-WORLD-039), plus set auto-level
     /// scheme of <see cref="ScrAdmissionSet.S8"/> (ARC-SCRIPT-016), plus start schematic UI of <see cref="ScrAdmissionSet.S9"/>
-    /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049).
+    /// (ARC-TECHNOLOGY-005), plus the reading actions of <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049). The actions of
+    /// <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018) are left out: a call from a dialog-point run would need the runner's dialog
+    /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
+    /// and get object type needs object queries this host does not answer. Plus the quest, area, rumor and reputation actions of
+    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading", ScrAdmissionSet.S3.Conditions,
-        ScrAdmissionSet.S3.Actions.Where(a => a is not ScrCatalogue.Action.GetStoryState and not ScrCatalogue.Action.SetStoryState)
-            .Concat([ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions,
+        ScrAdmissionSet.S3.Actions
+            .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
                 ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+
+    /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
+    /// the session has a hero (the PC's levels are the hero's; without one a script that reads a skill is refused, not run on a made-up
+    /// level). Use item with skill (79) stays out: no live script of the installed data uses it (census ARC-RES-045: 2 lines, none live).</summary>
+    public static ScrAdmissionSet SkillAdmission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-skill", Admission.Conditions,
+        Admission.Actions.Append(ScrCatalogue.Action.GetSkill), Admission.ValueKinds, Admission.FocusKinds);
+
+    /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>.</summary>
+    public ScrAdmissionSet RunAdmission => _session.QueryHero() is null ? Admission : SkillAdmission;
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
@@ -77,16 +92,19 @@ public sealed class AreaScriptHost : IScrHost
     private readonly AreaConversationState _state;
     private readonly ScriptContent? _content;
     private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
+    private readonly Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? _npcSheet;
 
+    /// <param name="npcSheet">ARC-SKILLS-009: an NPC's sheet and effects as its map data holds them, by entity id, for get skill; null for
+    /// an object that is not such an NPC (its level is 0).</param>
     /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing.
     /// The host borrows it.</param>
     /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's advancement as its map data holds it (sheet and scheme), by entity id, or
     /// null for an object that is not such an NPC; a scheme request for one is ignored, as the original ignores an object that is
     /// neither a PC nor an NPC. Without it only the PC's scheme changes.</param>
     public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, ScriptContent? content,
-        Func<string, SessionNpcAdvancement?>? npcAdvancement = null)
+        Func<string, SessionNpcAdvancement?>? npcAdvancement = null, Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? npcSheet = null)
     {
-        _session = session; _map = map; _speakers = speakers; _state = state; _content = content; _npcAdvancement = npcAdvancement;
+        _session = session; _map = map; _speakers = speakers; _state = state; _content = content; _npcAdvancement = npcAdvancement; _npcSheet = npcSheet;
         Pc = new ScrObjectRef(map.RuntimeMap, PcCode);
     }
 
@@ -172,8 +190,8 @@ public sealed class AreaScriptHost : IScrHost
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>Never asked: <see cref="Admission"/> leaves out the story-state actions.</summary>
-    public int StoryState() => throw new InvalidOperationException("AREA_SCRIPT_STORY_STATE_NOT_BOUND");
+    /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
+    public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
@@ -183,6 +201,17 @@ public sealed class AreaScriptHost : IScrHost
     public bool IsJilted(ScrObjectRef critter) => false;
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
+    /// <summary>ARC-SKILLS-009 (SX1, SX2): the PC's effective level from the session hero (0 without one; the run's set then has no get
+    /// skill); an NPC of this host's map whose map data the viewer reads: from the sheet the session saved for it, else that map data,
+    /// with the map data's effects; 0 for any other object (an NPC whose map data is not read, a saved sheet included, or an object that
+    /// names another map, as a deferred call's role can).</summary>
+    public int SkillLevel(ScrObjectRef obj, int skill)
+    {
+        if (skill is < 0 or >= SkillRules.BasicCount + SkillRules.TechCount) return 0;
+        if (obj == Pc) return _session.QueryHeroSkills() is { } hero ? hero[(Skill)skill].Level : 0;
+        return obj.Map == _map.RuntimeMap && _npcSheet?.Invoke(obj.Code) is { } npc ? _session.QueryNpcSkills(npc.Loaded, npc.Modifiers)[(Skill)skill].Level : 0;
+    }
+
     /// <summary>
     /// Applies a run's effects: the global flags, the sound requests, the deferred calls, the scheme changes (ARC-SCRIPT-016), the schematic window requests (ARC-TECHNOLOGY-005), then
     /// the speaker's slot as map changes (a value equal to the loaded one clears its key). The session has no transaction across its flag owner and its map changes; a rejected step
@@ -191,14 +220,16 @@ public sealed class AreaScriptHost : IScrHost
     public bool Apply(ScrEffects effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        // The viewer's set admits no story state; a trap object is not modelled.
-        if (effects.StoryState is not null || effects.DestroyTrapObject is not null) return false;
+        // The viewer's set admits no use item with skill; a trap object is not modelled.
+        if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
         // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
         // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).

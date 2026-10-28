@@ -12,7 +12,7 @@ Snapshot schema 26. Requirements: [FR-CHAR-024](../requirements/characters-skill
 
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers: rows FT1–FT8 of the
-  [verification ledger](../research/original-verification-ledger.md#fate-points-arc-world-054). They agree on every row; no
+  [verification ledger](../research/ledger/skills.md#fate-points-arc-world-054). They agree on every row; no
   anomaly, no rule-mode switch. DR6 (force good reaction) and SC14 (the skill fates) were already at F2.
 - The function oracle ([ARC-DEV-007](../../tools/original-oracle/README.md)) runs the armed test (0x4F5090), arm (0x4F50C0), undo
   (0x4F51B0) and use (0x4F5270) on 10,000 seeded inputs each (one PC with its points and armed flags, recording stubs of every
@@ -65,7 +65,7 @@ the revision. Every change is one revision; the full heal writes the points and 
 ## Snapshot schema 26
 
 The hero's object gains `fatePoints` (0..100) and `armedFates` (the bits of kinds 1..11); restore refuses anything else as
-`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-33)).
+`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-36)).
 
 ## Boundaries
 

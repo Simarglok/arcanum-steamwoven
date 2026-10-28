@@ -200,7 +200,7 @@ the lock only when both call it leaving: out of an indoor portal tile (raw rotat
 3..7) whose tile along the rotation is not indoor, or into an outdoor portal tile
 from across when that tile along the rotation is indoor (for an odd rotation, the
 tile the walker comes from)
-([ledger LV1–LV5](original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)). When a walk reaches a closed door the move goal pushes an open-door
+([ledger LV1–LV5](ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049)). When a walk reaches a closed door the move goal pushes an open-door
 goal that animates it open
 (move node 8,
 open-door goals);
@@ -209,7 +209,7 @@ using a portal toggles it
 An unlock relocks the portal after one game hour and closes it
 (lock timer (0x441DD0, 0x441E90)). **Original (ARC-RES-065):** the lock, jam, key, frame
 and bust functions are read in the executable in
-[ledger LK1–LK13](original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+[ledger LK1–LK13](ledger/world.md#doors-containers-and-locks-arc-res-065).
 
 **Data + restated rule (D/S):** the probe evaluates the restated rule for the player
 character, without a key and with no unlock script attached:
@@ -354,7 +354,7 @@ Each slice needs its own synthetic fixtures; none may reuse real record bytes.
 
 ## Unknowns
 
-**Original check (ARC-RES-048):** U4 is answered: the original swaps the portal and far tiles (no self-assignment), so the statement of the [door admission](#door-admission-fr-scene-014) that a walker from across never counts as leaving holds only for the earlier reading (ledger row LA4 (c), building U4); the house door's result does not change (rechecked by ARC-RES-049 with the original's test in the probe). The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** U4 is answered: the original swaps the portal and far tiles (no self-assignment), so the statement of the [door admission](#door-admission-fr-scene-014) that a walker from across never counts as leaving holds only for the earlier reading (ledger row LA4 (c), building U4); the house door's result does not change (rechecked by ARC-RES-049 with the original's test in the probe). The verdicts in the [verification ledger](ledger/world.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the earlier readings below where they differ.
 
 - **U1** Whether the house lies on or near the route a new player takes towards the
   town; next check: a route survey from the start point to townmap 3.

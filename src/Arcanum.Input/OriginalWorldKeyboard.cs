@@ -58,7 +58,7 @@ public static class OriginalWorldKeyboard
         [WorldKey.Home] = "Center on PC",
         [WorldKey.A] = "Last active action",
         [WorldKey.C] = "Character sheet",
-        [WorldKey.E] = "Turn-Based sub-turn (source reading only)",
+        [WorldKey.E] = "Turn-Based: end the sub-turn",
         [WorldKey.F] = "Fate points",
         [WorldKey.I] = "Inventory",
         [WorldKey.K] = "Skills pane (source reading only)",
@@ -88,6 +88,15 @@ public static class OriginalWorldKeyboard
             return $"Quick slot {(key == WorldKey.Digit0 ? 10 : key - WorldKey.Digit0)}";
         return Reserved.GetValueOrDefault(key);
     }
+
+    /// <summary>ARC-INPUT-004: true when a held modifier leaves a character letter of the original without any action. The
+    /// in-game filter (0x54B5D0, with 0x57DC60 for A) reads A, C, F, I, L, R, S, T and W, in either case, from character
+    /// messages, which the window procedure makes only from WM_CHAR: Shift gives the capital (the same action), Ctrl gives a
+    /// control code outside the filter's table, Alt gives a system character the game never reads. Command (Meta) belongs to
+    /// the system.</summary>
+    public static bool CharacterKeySilenced(WorldKey key, WorldKeyModifiers modifiers)
+        => key is WorldKey.A or WorldKey.C or WorldKey.F or WorldKey.I or WorldKey.L or WorldKey.R or WorldKey.S or WorldKey.T or WorldKey.W
+            && (modifiers & (WorldKeyModifiers.Ctrl | WorldKeyModifiers.Alt | WorldKeyModifiers.Meta)) != 0;
 }
 
 /// <summary>Owns the diagnostic palette chord Ctrl+Shift+F9 ahead of every other

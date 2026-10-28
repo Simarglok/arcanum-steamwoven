@@ -11,7 +11,7 @@ Requirements: [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assem
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe`: the first reading of ARC-RES-062
 ([the window and its gate](../research/technology-evidence.md#the-window-and-its-gate-fr-item-018-fr-magic-012),
 [assembly](../research/technology-evidence.md#assembly-0x56e720-fr-item-018-f2)) and a reading for this slice
-([ledger "Schematic assembly"](../research/original-verification-ledger.md#schematic-assembly-arc-technology-004), SA1–SA6).
+([ledger "Schematic assembly"](../research/ledger/technology.md#schematic-assembly-arc-technology-004), SA1–SA6).
 Code: [`SchematicAssemblyRules`](../../src/Arcanum.Simulation/Technology/SchematicAssemblyRules.cs),
 [`GameSessionAssembly`](../../src/Arcanum.Session/GameSessionAssembly.cs); tests
 [`SchematicAssemblyRulesTests`](../../tests/Arcanum.Simulation.Tests/Technology/SchematicAssemblyRulesTests.cs),
@@ -58,18 +58,28 @@ a creation fails):
   item's state the session's durability record);
 - a record without a product at the found index or with a quantity below 1 is `InvalidSchematics`;
 - the product kind (`productKind`, the product prototype's type, name and description) must be a type the hero's lists admit
-  (gold, ammunition, keys and key rings are not: `ItemTypeUnsupported`);
-- each of the "quantity" products must pass the insert check; the host answers each unit as if both components were already
-  gone and the earlier units already inserted (the session asks before it changes anything); The original creates each product on the crafter's tile
-  (0x4ED8B0) and moves it into the inventory (0x4617F0), which leaves it on the tile when the inventory refuses it; the
-  session keeps no new ground items, so a refusal refuses the assembly (`InsertRefused`) instead;
-- the item limit (the two components leave, the products enter) and the durability records for the two deletions;
+  (gold, keys and key rings are not: `ItemTypeUnsupported`; an ammunition product needs its type and units, `productAmmo`, and
+  merges into the hero's stack of its prototype since ARC-WORLD-066, [ammunition](inventory-runtime.md#ammunition-arc-world-066));
+- the insert check is asked for each of the "quantity" products; the host answers each unit as if both components were already
+  gone and the earlier units already inserted (the session asks before it changes anything). The original creates each product on
+  the crafter's tile (0x4ED8B0) and moves it into the inventory (0x4617F0) without checking the result: a refused unit shows the
+  insert check's message for a PC and stays on the tile (ledger SA3–SA5). Since ARC-WORLD-070 the session does the same: a refused
+  unit lies on the hero's tile as a made item in the [ground store](inventory-runtime.md#placed-items-arc-world-059)
+  (`SessionAssemblyResult.OnGround`, the first refusal in `Verdict`), which the hero can pick up like any item it placed; the
+  assembly succeeds. An ammunition unit the inventory accepts merges into the hero's stack of its prototype (one an earlier unit
+  started included); a refused one is a stack of its own on the ground;
+- the item limit (the two components leave, the products enter the inventory or the ground: the ground store counts toward
+  `MaxPcItems`), the ammunition records and sum, the made numbers and the durability records for the two deletions — all before
+  anything is consumed, so a budget refusal still spends nothing; a tile outside the store's range refuses a refused unit
+  (`InsertRefused`, nothing spent);
 - then component 1 and component 2 are deleted ([durability](item-durability-runtime.md) deletion), and the products enter
-  as made items `made:n` (n one past every made entity held, deleted or with a durability record; the `made:` prefix is the
-  session's own: a seed or a taken item may not carry it). No roll, skill, action points, time or experience.
+  as made items `made:n` (n one past every made entity held, placed, deleted or with a durability record; the `made:` prefix is the
+  session's own: a seed or a taken item may not carry it). No roll, skill, action points, time or experience. No snapshot field is
+  added (the ground store's `placed` list already holds made items).
 
-The result names the plan, the made and the consumed items. The host shows `schematic_text.mes` 2 and plays sound 3018 + the
-current discipline (3018..3025, the window's, ARC-TECHNOLOGY-005) on success, or the refusal message of the plan's button.
+The result names the plan, the made, the grounded and the consumed items. The host shows `schematic_text.mes` 2 and plays sound
+3018 + the current discipline (3018..3025, the window's, ARC-TECHNOLOGY-005) on success (the AREA viewer adds the refusal and the
+count on the ground), or the refusal message of the plan's button.
 
 `QueryHeroAssembly(schematic, items, facts)` gives the plan without changing anything (the page the window draws).
 
@@ -89,28 +99,33 @@ item the PC takes from an NPC joins this list in entry order (so the numbers nee
 | Assembly does not re-check the expertise (TC5). | The plan checks the gate again. |
 | One item that matches both component lists serves both and is consumed twice (TC4). | Component 1's item is reserved. |
 | The components are consumed before the products are made; a failed creation loses them (TC3). | Every product is checked before anything is consumed. |
-| A product the inventory refuses stays on the crafter's tile. | The assembly is refused (the session keeps no new ground items). |
-| Each product enters the inventory after the components left and the earlier products entered. | The insert check is asked first for every unit; the host answers each as if that had happened. |
+| Each product enters the inventory after the components left and the earlier products entered. | The insert check is asked first for every unit; the host answers each as if that had happened. A refused unit lies on the crafter's tile as in the original (ARC-WORLD-070). |
 | — | The reservation is greedy: component 1 takes its first alternative present even when another would leave component 2 an item (latent: no installed record lists one prototype in both lists). |
-| An ammunition component loses one unit. | The rule does (`UseUnits`); the hero's lists hold no ammunition, so the session never meets one. |
+| An ammunition component loses one unit. | The rule does (`UseUnits`), and since ARC-WORLD-066 the session spends one unit of the held stack (the stack goes at its last unit). |
 
 ## NPC crafter (ARC-TECHNOLOGY-006)
 
 `QueryNpcTechnology(crafter)`, `QueryNpcAssembly(crafter, schematic, items, facts)` and
-`AssembleSchematicForNpc(expected, crafter, schematic, items, facts, productKind, insertCheck)` run the same gate, button and plan for
-an NPC (ledger [NC4–NC7](../research/original-verification-ledger.md#npc-schematic-crafter-arc-technology-006), SW7). `SessionNpcCrafter`
+`AssembleSchematicForNpc(expected, crafter, schematic, items, facts, productKind, insertCheck, productAmmo, crafterCell)` run the same gate, button and plan for
+an NPC (ledger [NC4–NC7](../research/ledger/technology.md#npc-schematic-crafter-arc-technology-006), SW7). `SessionNpcCrafter`
 is the NPC's map data (sheet and scheme, read only while the session keeps no advancement record of it) and its effects' stat
 changes. The components are searched in the NPC's current list (seed items still there on every attached seed that lists it, then
 its added made items), with its expertise; on success both components leave the NPC with the durability deletion and the products
-enter its list as `made:n` ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)), one revision.
-Refusals, before any effect: an invalid crafter (`InvalidAdvancement`), the version, an NPC the session does not know
-(`UnknownHolder`), a dead NPC (`InvalidLifeTarget`: the original's open refuses a dead crafter), then the hero's: the gate, the
-record, the product kind, the budgets (the NPC's list bound, the store, the made numbers, the durability records), the revision and
-the insert check for the NPC (a call back into the owner, a seed attach included, is `StaleVersion`). The original leaves a product
-the NPC cannot take on the ground at the crafter and still completes (NC7); the session refuses instead, as for the hero.
+enter its list as `made:n` ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)) or lie on
+`crafterCell` (below), one revision. Refusals, before any effect: an invalid crafter (`InvalidAdvancement`), the version, an NPC the
+session does not know (`UnknownHolder`), a dead NPC (`InvalidLifeTarget`: the original's open refuses a dead crafter), then the
+hero's: the gate, the record, the product kind, the insert check for the NPC asked for every unit (a call back into the owner, a
+seed attach included, is `StaleVersion`), a refused unit that can go nowhere (`InsertRefused`), the budgets (the NPC's list bound,
+the store, the ground store, the made numbers, the durability records) and the revision. The original leaves a product
+the NPC cannot take on the ground at the crafter and still completes (NC7); so does the session since ARC-WORLD-070: a refused unit
+lies on `crafterCell` (the NPC's tile on the hero's map, the host's to give) in the ground store, which the hero can pick up. The
+ground store is the hero's: without a hero or without the crafter's tile a refused unit refuses the assembly (`InsertRefused`,
+nothing spent); the ground units count toward the hero's `MaxPcItems`.
 
 ## Not ready
 
 - NPC crafters are done by ARC-TECHNOLOGY-006 (above); the "expertise in discipline" effects of an NPC are not modelled.
-- Ammunition and stack products and components in the hero's lists (ARC-WORLD-014 refuses stacks).
-- Dropping a product on the ground when the inventory cannot take it.
+- Gold and key products and components (the hero's lists hold neither); ammunition is done by ARC-WORLD-066.
+- Junk piles and the player's drop (WORLD-063, WORLD-064); not a gap: a refused product gets no decay event, as in the original
+  ([ARC-WORLD-062](inventory-runtime.md#item-decay-arc-world-062), ledger ID9); the AREA viewer passes no NPC crafter tile (its
+  insert check for an NPC accepts, so it never needs one).

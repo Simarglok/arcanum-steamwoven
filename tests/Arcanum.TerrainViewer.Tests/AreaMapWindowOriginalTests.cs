@@ -90,6 +90,21 @@ public sealed class AreaMapWindowOriginalTests
         Assert.IsTrue(result.Area.Plan.DrawableBodies > 0);
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void The_map_census_lists_every_catalogued_map_and_the_ones_map_mode_opens()
+    {
+        // ARC-RENDER-027: 81 catalogued maps, all of which map mode opens (the main world map as a window around its map-list
+        // start); the two scienticians underground levels have sector files but no map-list row (no transfer leads to them).
+        var maps = AreaMapCensus.Maps(Arguments(Root(), null));
+        Assert.AreEqual(81, maps.Count);
+        Assert.AreEqual(81, maps.Count(m => m.Openable));
+        CollectionAssert.AreEquivalent(new[] { "scienticians underground lev 1", "scienticians underground lev 2" },
+            maps.Where(m => !m.Listed).Select(m => m.Name).ToArray());
+        var main = maps.Single(m => m.Name.Equals(MainMap, StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual((true, (WorldLocation?)new WorldLocation(92958, 82592)), (main.Window, main.Start));
+        Assert.AreEqual(1, maps.Count(m => m.Window));
+    }
+
     private static string Root()
     {
         if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root) return root;

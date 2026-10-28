@@ -59,11 +59,20 @@ public partial class TerrainViewerApp
                 : "cave: not loaded (no session clock)";
             return;
         }
+        // A map the map list does not name has no runtime number, hence no session (and no dialogs, transfers or saves); ARC-RENDER-027
+        // found the session refusing it (AREA_SESSION_InvalidActor) since unlit maps get a clock (ARC-WORLD-057).
+        if (carried is null && mapMode && area.Snapshot.RuntimeMap < 1)
+        {
+            StartMapTransfers(arguments, result);
+            _areaUseStatus = $"map {arguments.AreaMapName}: not in the map list (no runtime number), no session; " + _areaUseStatus;
+            return;
+        }
         _areaEffectRules = result.Hero?.Effects;
         _areaKitHealing = result.Hero?.KitHealing;
         _areaKitLockpicks = result.Hero?.KitLockpicks;
         _areaKitDurability = result.Hero?.KitDurability;
-        if (carried is not null) _areaSession = carried;
+        _areaKitArt = result.Hero?.KitArt;
+        if (carried is not null) { _areaSession = carried; SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is
@@ -105,6 +114,7 @@ public partial class TerrainViewerApp
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
+        EndSaveList();
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).

@@ -13,7 +13,7 @@ Status: **Implemented bounded component**, ARC-WORLD-044 (2026-10-21). Slice 4 o
 ## Evidence
 
 The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers that saw only the questions
-([ledger "Reputations"](../research/original-verification-ledger.md#reputations-arc-world-044), RP1–RP8, RM1, A9); they agree
+([ledger "Reputations"](../research/ledger/social.md#reputations-arc-world-044), RP1–RP8, RM1, A9); they agree
 on every row. Local data: the opt-in census below (counts only).
 
 ## Table (`Arcanum.Data.Reputations.ReputationTable`)

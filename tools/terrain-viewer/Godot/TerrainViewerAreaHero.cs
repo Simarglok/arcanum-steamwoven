@@ -53,7 +53,74 @@ public partial class TerrainViewerApp
             hero.Hero.Name, definition.Prototype, Flag = flag, definition.Gold, Kit = definition.Kit.Count, hero.DroppedChanges,
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
         RunAreaSheetSmoke(hero);
+        RunAreaRepairSmoke();
+        RunAreaProwlSmoke();
         return Task.CompletedTask;
+    }
+
+    // ARC-SKILLS-008 native observation with the original hero: the palette's Prowl action conceals the hero and its followers;
+    // the next step's gait follows the hero's prowling training (ST3); the action again ends it. Outcomes only.
+    private void RunAreaProwlSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-008 prowl smoke: " + why); }
+        var session = _areaSession!;
+        var revision = session.Version.Revision;
+        PaletteProwlToggle();
+        Require(session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.Version.Revision == revision + 1, "prowl on: " + _prowlNotice);
+        var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Prowling].Training;
+        var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
+        var stepped = StepGait();
+        Require(stepped == (StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
+        Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
+        var followers = session.QueryConcealment().Npcs.Count;
+        PaletteProwlToggle();
+        // A waiting NPC keeps its own state (HK2), so only the following ones are checked.
+        Require(!session.IsConcealed(Arcanum.Session.SessionCombatant.Hero) && session.QueryParty().Followers
+            .All(member => !session.IsConcealed(Arcanum.Session.SessionCombatant.Critter(member.Entity))), "prowl off");
+        (_worldGait, _gaitOrigin) = (gait, origin);
+        GD.Print("ARC-SKILLS-008 native-smoke prowl PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Training = training.ToString(), Step = stepped.ToString(), Followers = followers }));
+    }
+
+    // ARC-SKILLS-007 native observation with the original hero: one of its kit items with a condition takes 12 damage (the
+    // session's damage write, as combat wear does), the inventory window then lists a Repair button for it, and a press repairs it
+    // through the hero's Repair skill. Outcomes and counts only. The kit item stays damaged and repaired afterwards on purpose: no
+    // later stage reads its condition.
+    private void RunAreaRepairSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-SKILLS-007 repair smoke: " + why); }
+        var session = _areaSession!;
+        var item = session.QueryHeroKit().Select(kit => (kit.Entity, Baseline: _inventoryHost?.RepairBaseline(session, kit.Entity, _areaKitDurability)))
+            .FirstOrDefault(kit => kit.Baseline is { } b && b.MaximumHitPoints > 12);
+        if (item.Baseline is not { } baseline) { GD.Print("ARC-SKILLS-007 native-smoke repair NONE (no kit item with a condition)"); return; }
+        Require(session.DamageItem(session.Version, item.Entity, baseline, 12).Disposition == Arcanum.Session.GameSessionDisposition.Changed, "damage the kit item");
+        var damaged = session.QueryItemCondition(item.Entity, baseline)!.Value;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
+        _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        try
+        {
+            InventoryKey(Key.I);
+            Require(InventoryOpen && _inventoryPanel!.RepairButtonsForSelfTest.Count == 1, "one Repair button: " + _inventoryPanel?.RepairButtonsForSelfTest.Count);
+            // The button's handler, called at once (its signal is deferred to the next frame, which this synchronous stage does not wait for).
+            RepairItem(item.Entity);
+            var repaired = session.QueryItemCondition(item.Entity, baseline)!.Value;
+            Require(_lastRepair is { Disposition: Arcanum.Session.GameSessionDisposition.Changed } result && result.Condition == repaired,
+                $"the session holds the repair's condition: {_lastRepair?.Failure} {repaired}");
+            Require(_inventoryStatus.StartsWith("repaired", StringComparison.Ordinal) || _inventoryStatus == "the repair restored nothing", "the repair ran: " + _inventoryStatus);
+            var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Repair].Training;
+            Require(repaired.Damage == Math.Max(0, damaged.Damage - _lastRepair!.Amount)
+                && (training == Arcanum.Simulation.Combat.SkillTraining.Master || repaired.Adjustment < damaged.Adjustment),
+                $"the condition followed the repair ({training}, amount {_lastRepair.Amount}): {damaged} -> {repaired}");
+            InventoryKey(Key.Escape);
+            GD.Print("ARC-SKILLS-007 native-smoke repair PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                item.Entity, Maximum = baseline.MaximumHitPoints, DamageBefore = damaged.Damage, DamageAfter = repaired.Damage,
+                AdjustmentBefore = damaged.Adjustment, AdjustmentAfter = repaired.Adjustment, Notice = _inventoryStatus }));
+        }
+        finally
+        {
+            if (InventoryOpen) EndInventory();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
     }
 
     // ARC-UI-009 native observation on the open sheet: the original skill texts name all sixteen rows, a + press on the first
@@ -65,7 +132,7 @@ public partial class TerrainViewerApp
         AdoptSkillTexts();
         Require(_skillTexts is { Status: AreaSkillTextsStatus.Ready }, "skill texts " + _skillTexts?.Status + " " + _skillTexts?.Detail);
         // Texts that finished loading after C opened the sheet: render the page with them now.
-        _sheetPanel!.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage());
+        _sheetPanel!.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage(), BuildSpellsPage());
         var page = _sheetPanel.SkillsForSelfTest!;
         Require(session.HeroEditorOpen, "the open sheet opened the hero's editor");
         var described = page.Rows.Count(row => row.Description is not null);
@@ -105,6 +172,48 @@ public partial class TerrainViewerApp
         return new { OriginalNames = original, SpentRow = spentRow };
     }
 
+    // ARC-MAGIC-008 native observation on the open sheet: the original spell data names the sixteen colleges and their spells
+    // and gives each spell's hint its cost; + on the shown college learns its next rank when the pool allows it (then − unlearns
+    // it and is disabled at the floor again), otherwise it is refused with the failing check. Counts and outcomes only.
+    private object RunAreaSpellsSmoke(Arcanum.Session.GameSessionOwner session)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-MAGIC-008 spells smoke: " + why); }
+        _spellDataTask?.Wait(TimeSpan.FromSeconds(60));
+        AdoptSpellData();
+        Require(_spellData is { Status: AreaSpellDataStatus.Ready }, "spell data " + _spellData?.Status + " " + _spellData?.Detail);
+        var named = 0; var costed = 0; var maintained = 0; var described = 0;
+        for (var college = 0; college < AreaSpellsPage.Colleges; college++)
+        {
+            _sheetPanel!.CollegeTabForSelfTest(college).EmitSignal(BaseButton.SignalName.Pressed);
+            var shown = _sheetPanel.SpellsForSelfTest!;
+            Require(shown.College == college && shown.EditorOpen, "college tab " + college);
+            named += shown.Spells.Count(row => row.Name != AreaSpellsPage.SpellName(null, row.Spell));
+            costed += shown.Spells.Count(row => row.Cost > 0);
+            maintained += shown.Spells.Count(row => row.MaintainPeriod is > 0);
+            described += shown.Spells.Count(row => row.Description is not null);
+        }
+        var colleges = _sheetPanel!.SpellsForSelfTest!.Colleges.Count(tab => tab.Name != AreaSpellsPage.CollegeName(null, tab.College) && tab.Description is not null);
+        Require(named == 80 && described == 80 && colleges == 16, $"original texts named={named} costed={costed} described={described} colleges={colleges}");
+        _sheetPanel.CollegeTabForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+        var page = _sheetPanel.SpellsForSelfTest!;
+        var revision = session.Version.Revision;
+        _sheetPanel.SpellPlusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+        var learned = _sheetPanel.SpellsForSelfTest!.Rank == page.Rank + 1;
+        var message = _sheetPanel.SkillMessageForSelfTest;
+        if (learned)
+        {
+            Require(message.StartsWith("learned ", StringComparison.Ordinal) && _sheetPanel.SpellsForSelfTest.CanUnlearn, "+ learned: " + message);
+            _sheetPanel.SpellMinusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.SpellsForSelfTest!.Rank == page.Rank && _sheetPanel.SpellMinusForSelfTest.Disabled, "− unlearned it: " + _sheetPanel.SkillMessageForSelfTest);
+        }
+        else Require(message.StartsWith("refused: ", StringComparison.Ordinal) && session.Version.Revision == revision, "+ refused: " + message);
+        Require(_sheetPanel.SpellMinusForSelfTest.Disabled == !_sheetPanel.SpellsForSelfTest!.CanUnlearn, "− follows the floor");
+        GD.Print("ARC-MAGIC-008 native-smoke spells page PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Colleges = colleges, Named = named, Costed = costed, Maintained = maintained, Learned = learned, Refusal = learned ? null : message,
+            Unspent = page.UnspentPoints }));
+        return new { Named = named, Maintained = maintained, Learned = learned };
+    }
+
     // ARC-UI-007 native observation with the original hero: the production C key opens the sheet over the session values
     // (experience data loaded with the hero), the open sheet owns the keys and Escape closes it. Prints outcomes and counts
     // only, no values of the original data.
@@ -134,6 +243,7 @@ public partial class TerrainViewerApp
                 && shown.Stats.Select(v => v.Value).SequenceEqual(order.Select(stats.GetEffective)), "the sheet shows the session hero");
             Require(_sheetPanel.TextForSelfTest.Split('\n').Length == AreaCharacterSheet.Lines(shown).Count, "sheet text rows");
             var skills = RunAreaSkillsSmoke(session);
+            var spells = RunAreaSpellsSmoke(session);
             revision = session.Version.Revision;
             InventoryKey(Key.I);
             Require(SheetOpen && !InventoryOpen, "the open sheet owns the I key");
@@ -141,7 +251,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && session.Version.Revision == revision && !session.HeroEditorOpen, "Escape closed the sheet and its editor; nothing else changed");
             GD.Print("ARC-UI-007 native-smoke character sheet PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 hero.Hero.Name, Rows = AreaCharacterSheet.Lines(shown).Count, NextLevelKnown = shown.ToNextLevel is not null,
-                Marked = shown.Stats.Count(v => v.Mark != AreaSheetMark.None), Skills = skills }));
+                Marked = shown.Stats.Count(v => v.Mark != AreaSheetMark.None), Skills = skills, Spells = spells }));
         }
         finally
         {

@@ -217,11 +217,15 @@ public sealed partial class GameSessionOwner
         _inventory.Made.RemoveAll(item => item.Entity == entity);
         _inventory.Placed.RemoveAll(item => item.Entity == entity);
         _inventory.RemoveFromNpc(entity);
+        // ARC-WORLD-066: a deleted ammunition stack is gone with its units.
+        _inventory.Ammo.Remove(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);
         _durability.Uses.Remove(entity);
         _durability.Destroyed.Add(entity);
+        // ARC-WORLD-062: a deleted item no longer decays.
+        CancelDecay(entity);
     }
 
     /// <summary>An item of the hero's kit, one the PC took or made, a made item added to an NPC (ARC-WORLD-055), or one an attached seed

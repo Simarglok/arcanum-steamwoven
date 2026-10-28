@@ -21,7 +21,7 @@ Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001
   mode.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); the rows RT1–RT12 are in the
-  [verification ledger](../research/original-verification-ledger.md#real-time-combat-arc-combat-004). The original does
+  [verification ledger](../research/ledger/combat.md#real-time-combat-arc-combat-004). The original does
   what that first reading describes except in three places: the `auto attack` default is "1" (RT6), Speed 8 gives the
   middle rate (LA1, RT10) and the attack start clears invisibility for an attacker that is not the local PC (RT8). None
   is a bug of the original, so there is no rule-mode switch.
@@ -88,9 +88,9 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
   repeat shot have no host yet.
 - AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer), the attacked
   NPC's AI pass, NPC attacks.
-- The turn-based setting in the viewer (Space) and its round world; the session supports both.
-- The event-queue pump in the viewer: fatigue spent running in combat mode does not recover there (quick load resets);
-  an unconscious hero still moves (movement does not read life yet).
+- The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020
+  ([viewer host](turn-based-round-runtime.md#viewer-host-arc-combat-020)); the event pump (ARC-WORLD-039) recovers the fatigue
+  spent running as the clock flows. Outside a round an unconscious hero still moves (movement does not read life yet).
 - The viewer leaves combat mode before its own dialog-start checks (the source checks the speaker first); a dialog that
   then fails to start leaves the hero out of combat mode.
 - Encumbrance, fatigue-limiting and fatigue-draining heroes, the stunned-animation activation (a no-op for an inactive

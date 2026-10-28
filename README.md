@@ -5,7 +5,7 @@ Research-first, independent reimplementation of **Arcanum: Of Steamworks and Mag
 **Status (merged main `894b944`, 2026-10-16, through PR #157).** Not a playable game yet: every component is deliberately bounded and original-runtime parity is unverified. The [component catalogue](docs/project/status.md) lists implemented scope, evidence and source links.
 
 - **Original data.** DAT and resource precedence over the original mount order, MES text and object names, ART, DLG (all 709 installed files), a universal map catalogue of all 81 maps, whole-map plans that open every interior through the area owner (52 of 80 publish a complete snapshot, with T0 step evidence), T0 inventory and the stored combat fields of weapons, ammunition, armour and critters.
-- **Crash Site area viewer** (`./arcanum area`). The whole Crash Site exterior and the cave with return: click-to-move, hover names and action cursor, inventory window with pickup and loot, multi-turn NPC conversation, Virgil joining the party and following the PC, day/night and cave lighting on the session clock, one quick-save slot (F7/F8), the diagnostic palette (Ctrl+Shift+F9 or gamepad Start) and an optional local HD pack for characters and objects.
+- **Crash Site area viewer** (`./arcanum area`, since ARC-RENDER-028 the main world map's map mode at the Crash Site; the list below was written for the pinned exterior profile, see the [map mode](docs/rendering/area-map-mode.md) for what map mode draws). The Crash Site exterior and the cave with return: click-to-move, hover names and action cursor, inventory window with pickup and loot, multi-turn NPC conversation, Virgil joining the party and following the PC, day/night and cave lighting on the session clock, one quick-save slot (F7/F8), the diagnostic palette (Ctrl+Shift+F9 or gamepad Start) and an optional local HD pack for characters and objects.
 - **Headless rules** (Godot-free). One game-session owner (clock, global flags, story state, party, inventory, starting hero, seeded randomness, life state, snapshot schema), character stats, the starting hero from a pre-made PC, a pure attack resolver for one attack and the life rules (hit points, fatigue, poison, injuries, knockout, death).
 - **Research** (merged, not runtime). Combat core, magic, skills, NPC reaction, the NPC combat AI plan, the SCR event dispatcher and opcode census, character creation, map transitions and HD upscale methods.
 
@@ -30,7 +30,7 @@ With the game installed at `/Applications/Arcanum` and an exported build present
 ./arcanum setup    # find the installed game's inputs and configure the launcher
 ./arcanum map "crash site cave"   # one whole map, on any installation
 ./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start (--sector X,Y for another place)
-./arcanum area     # walk the Crash Site exterior and cave (the pinned installation)
+./arcanum area     # the Crash Site on the main world map (map mode; --hero NAME, --sector X,Y)
 ./arcanum world    # the WORLD diagnostic
 ./arcanum status   # which modes have every input configured
 ./arcanum clean    # which builds are protected and which may go (dry run)

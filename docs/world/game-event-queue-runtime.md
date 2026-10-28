@@ -136,6 +136,27 @@ records the scenery off; a host whose `ISessionScriptWorld.ObjectExists` answers
 the scenery stays off. A restore refuses one whose scenery is not recorded off, set after the saved clock, with a delay below
 1 ms or above `MaxRespawnDelayMs`, or whose deadline is not its time plus its delay. See [object damage](object-damage-runtime.md).
 
+**Item Decay events (ARC-WORLD-062).** The kind `item.decay` (also added to registry version 1 without a new version) is the
+original's Item Decay event (kind 25, ledger ID1–ID9): game time, saved, scoped to the item's map, one per item (a new drop replaces
+the item's earlier one), at most `SessionEventKinds.MaxItemDecays` (8,192) on top of the others. One entity, the item; values: the
+game time it was set at and its delay (two game days, or a minute for the loot window's retry). Every drop on the ground sets it; a
+pickup or a deletion removes it; when due an item still on the ground is deleted (one revision), and
+`SessionEventPassResult.Decays` reports it. The session answers for the items its pending decay events name (in that pass, for
+any kind of event that names them), so a host's object check does not drop the event of a kit or made item, nor that of a seed
+item whose map's seed is not attached yet: the firing then postpones the deletion a minute (`SessionDecayFiring.Postponed`), as
+it does while the deleted-item budget (`MaxDurabilityRecords`) is full. A restore refuses one with another delay, set after the saved
+clock, whose deadline is not its time plus its delay, or a second one of the same item. See [item decay](inventory-runtime.md#item-decay-arc-world-062).
+
+**Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
+original's magic-tech event (kind 5, ledger RP11–RP14): game time, **not saved** (`NotSaved`: the session's spell runs are not
+saved either until MT9b, so a restored session has neither), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
+(1,024, a budget of about a tick and an interrupt for each of the 512 runs; interrupt and process events are not deduplicated) on
+top of the others. No entity; values: the game time it was set at,
+the run (0..511) and the code (1 a tick, 2 an interrupt, 3 a process). The run rules queue it (a tick after the run's period or
+duration, an interrupt 1 ms after an end by event, the BEGIN of a run without a parent 2 ms after its creation) and remove a
+run's ticks; when due it runs through an `ISessionSpellWorld` host (`SessionEventPassResult.SpellRuns` reports it with the rules'
+notes), and a pass with another host consumes it and reports it not run. See [spell run rules](spell-run-rules.md#processing-and-scheduling-arc-magic-010).
+
 **Wait timers (ARC-WORLD-045).** The kind `party.wait` (also added to registry version 1 without a new version) is the
 original's wait event (kind 17, OL23–OL26): game time, saved, scoped to the waiting NPC's map, one per NPC, at most
 `SessionEventKinds.MaxWaitTimers` (64, one per recorded companion) on top of the others. One entity, the NPC; values: the game
@@ -157,16 +178,17 @@ only for a critter that already has damage or poison but no pending timer: an NP
 poisoned, or a follower whose resting timer ended while it had a PC leader and who then left the party. The next
 change of the value sets the timer. The hero gets no resting timer: the source schedules one but its handler heals
 only NPCs. Whether the source also ticks the poison of a switched-off critter is open (ledger
-[TE11](../research/original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)).
+[TE11](../research/ledger/scripts.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)).
 Sources: fatigue (0x45E610), resting (0x45E910, 0x45EA00, 0x45EA80, 0x45EAB0), poison (0x4B1170),
 poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 34,947 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  step. The session's queue holds 45,187 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
   since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls, 64 timed-effect ENDs, 1,024 Lock
-  events and 64 wait timers), so the
+  events, 64 wait timers, 1,024 respawn events, 1,024 magic-tech events and, since ARC-WORLD-062, 8,192 Item Decay
+  events), so the
   timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
   refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
@@ -220,7 +242,7 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-34,947 events (34,883 before ARC-WORLD-045), 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+45,187 events (34,883 before ARC-WORLD-045, 34,947 before ARC-COMBAT-008, 35,971 before ARC-MAGIC-010, 36,995 before ARC-WORLD-062), 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
 registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
 value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was

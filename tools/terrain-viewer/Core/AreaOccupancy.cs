@@ -7,7 +7,8 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// Live actors over the T0 step evidence (ARC-WORLD-016): <see cref="Moved"/> are T0 records the T0 evidence no longer
-/// speaks for (every companion's, wherever it stands: its live cell is in <see cref="Occupied"/> instead),
+/// speaks for (every companion's, wherever it stands: its live cell is in <see cref="Occupied"/> instead; since ARC-WORLD-065
+/// also the objects the session destroyed or switched off, which the original's object lists skip),
 /// <see cref="Occupied"/> the chart cells other live actors hold for the mover (committed cell and the other cell of a
 /// started step). Immutable.
 /// </summary>
@@ -25,6 +26,14 @@ public sealed class AreaOccupancy
     public IReadOnlySet<AreaObjectKey> Moved { get; }
     public IReadOnlySet<CellCoord> Occupied { get; }
     public bool IsEmpty => Moved.Count == 0 && Occupied.Count == 0;
+
+    /// <summary>ARC-WORLD-065: this overlay with <paramref name="removed"/> T0 records moved too (objects the session destroyed or
+    /// switched off); the same overlay when there are none.</summary>
+    public AreaOccupancy WithRemoved(IReadOnlySet<AreaObjectKey> removed)
+    {
+        ArgumentNullException.ThrowIfNull(removed);
+        return removed.Count == 0 || removed.IsSubsetOf(Moved) ? this : new(Moved.Concat(removed), Occupied);
+    }
 }
 
 /// <summary>One directed step's verdict after the live overlay; <see cref="Overlaid"/> when it differs from the T0 assessment.</summary>
@@ -65,6 +74,25 @@ public static class AreaOccupancyRules
         return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open,
             assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
     }
+
+    internal const int PcType = 15, NpcType = 16;
+
+    /// <summary>
+    /// ARC-WORLD-073/074: the overlay of a mover that passes living critters (a walk outside combat mode, the request's flag 0x10 and the
+    /// traversal mode 4 of the original, ledger LR2 and DC5; the owner's decision of 2026-10-21 that outside combat NPCs do not block
+    /// the way): the step's T0 PC and NPC records count as moved, and no live actor holds a cell; removed objects stay moved. The
+    /// click route plans with it and the PC's steps are admitted with it.
+    /// </summary>
+    public static AreaOccupancy PassingCritters(AreaStepAssessment assessment, AreaOccupancy? occupancy)
+    {
+        ArgumentNullException.ThrowIfNull(assessment);
+        var critters = assessment.Objects.Where(o => o.ObjectType is PcType or NpcType).Select(o => o.Key);
+        return new AreaOccupancy((occupancy?.Moved ?? (IEnumerable<AreaObjectKey>)[]).Concat(critters), []);
+    }
+
+    /// <summary><see cref="Apply"/> for a mover that passes living critters (<see cref="PassingCritters"/>).</summary>
+    public static AreaStepVerdict ApplyPassingCritters(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction, AreaOccupancy? occupancy) =>
+        Apply(assessment, from, direction, PassingCritters(assessment, occupancy));
 
     /// <summary>The route verdict of an overlaid step: only Supported Open is Open.</summary>
     public static RouteStepVerdict Route(AreaStepVerdict verdict) => verdict.Coverage switch

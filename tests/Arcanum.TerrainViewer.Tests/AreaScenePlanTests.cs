@@ -48,6 +48,31 @@ public sealed class AreaScenePlanTests
     }
 
     [TestMethod]
+    public void A_placed_body_stands_where_a_T0_body_of_its_frame_would_and_a_flat_one_joins_the_flat_commands_in_plan_order()
+    {
+        // ARC-RENDER-033: an item lying where no T0 body stood is placed by the rule Create places a body with.
+        var tile = TerrainKey(100, 0);
+        var upright = Body(1); var flat = Body(2, x: 92930, flags: 0x4);
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [upright, flat],
+            [Visual(tile), BodyVisual(upright), BodyVisual(flat, 40, 20, 20, 10)]);
+        var drawn = plan.Commands.Single(c => c.Identity == upright.Key);
+        var placedKey = upright.Key with { SourceIndex = 9 };
+        var placed = AreaScenePlan.Place(plan.Chart, placedKey, BodyVisual(upright), 92928, 82560, flat: false);
+        Assert.AreEqual((drawn.Destination, drawn.Phase, drawn.FirstRank, drawn.SecondRank), (placed.Destination, placed.Phase, placed.FirstRank, placed.SecondRank));
+        var flatDrawn = plan.Commands.Single(c => c.Identity == flat.Key);
+        var lying = AreaScenePlan.Place(plan.Chart, placedKey, BodyVisual(flat, 40, 20, 20, 10), 92929, 82560, flat: true);
+        Assert.AreEqual(3, lying.Phase);
+        // Flat commands in plan order: the tile, then the lying body at x 92929 before the flat T0 body at 92930.
+        var flats = plan.Commands.Where(c => c.Phase < 4).ToArray();
+        var merged = AreaScenePlan.WithMovingFlat(flats, [lying, placed], new HashSet<AreaObjectKey?> { placedKey });
+        CollectionAssert.AreEqual(new[] { flats[0], lying, flatDrawn }, merged.ToArray(), "the upright one stays out of the flat list");
+        // A flat T0 body that moved is drawn only where it moved to.
+        var moved = flatDrawn with { MapX = 92931 };
+        CollectionAssert.AreEqual(new[] { flats[0], moved }, AreaScenePlan.WithMovingFlat(flats, [moved], new HashSet<AreaObjectKey?> { flat.Key }).ToArray());
+        Assert.ThrowsExactly<ArgumentException>(() => AreaScenePlan.Place(plan.Chart, placedKey, Visual(tile) with { RawArt = 1u << 28 }, 92928, 82560, false));
+    }
+
+    [TestMethod]
     public void AdjacentSeamsRetainOccurrenceKeysAndGlobalChart()
     {
         var a = TerrainKey(100, 63); var b = TerrainKey(101, 0); var c = TerrainKey(102, 0);

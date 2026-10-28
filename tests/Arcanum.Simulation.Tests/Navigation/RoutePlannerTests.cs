@@ -100,7 +100,8 @@ public sealed class RoutePlannerTests
         Assert.AreEqual((RouteOutcome.Refused, 0, 0), (refused.Outcome, refused.Assessments, source.Asked.Count));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(segmentSteps: 9));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(axisDistance: 33));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(expansions: 4097));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(budget: RouteLimits.BudgetMaximum + 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(budget: 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new RouteLimits(segmentSteps: 0));
     }
 
@@ -131,7 +132,7 @@ public sealed class RoutePlannerTests
     }
 
     [TestMethod]
-    public void SearchStaysInsideItsWindowAndExpansionBudget()
+    public void SearchStaysInsideItsWindowAndBudget()
     {
         // The only gap in the wall lies 40 cells east, outside the 64-cell window around source and target.
         var rows = Enumerable.Range(0, 5).Select(y => new string('.', 100)).ToArray();
@@ -140,10 +141,15 @@ public sealed class RoutePlannerTests
         var far = RoutePlanner.Plan(source, new(0, 0), new(0, 4));
         Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_WINDOW_EXHAUSTED"), (far.Outcome, far.ReasonCode), "A route may exist outside the window.");
         Assert.IsTrue(source.Asked.Keys.All(k => k.Item1.X >= -32 && k.Item1.X < 32), "No cell outside the window is expanded.");
-        Assert.IsTrue(far.Expansions <= RouteLimits.ExpansionMaximum);
+        Assert.IsTrue(far.Expansions <= OriginalPathRequest.Window * OriginalPathRequest.Window);
+        // ARC-WORLD-073 (ledger DC4, LR2): a tile whose estimate over 10 exceeds the budget is dropped, so a detour longer than the
+        // budget fails; the walk's budget for these 4 cells, min(4 × 4 + 5, 200) = 21, finds the six-step detour.
         var walled = new GridSource(".......", "...#...", "...#...", "...#...", ".......");
-        var budget = RoutePlanner.Plan(walled, new(1, 2), new(5, 2), new RouteLimits(expansions: 2));
-        Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_EXPANSION_LIMIT", 2), (budget.Outcome, budget.ReasonCode, budget.Expansions));
+        var budget = RoutePlanner.Plan(walled, new(1, 2), new(5, 2), new RouteLimits(budget: 4));
+        Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_BUDGET_EXHAUSTED"), (budget.Outcome, budget.ReasonCode));
+        Assert.AreEqual(21, RouteLimits.WalkBudget(new(1, 2), new(5, 2)));
+        Assert.AreEqual((RouteOutcome.Found, 6), (RoutePlanner.Plan(walled, new(1, 2), new(5, 2), new RouteLimits(budget: 21)) is var walk ? (walk.Outcome, walk.Steps.Count) : default));
+        Assert.AreEqual(200, RouteLimits.WalkBudget(new(0, 0), new(60, 0)));
     }
 
     [TestMethod]

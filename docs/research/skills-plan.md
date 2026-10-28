@@ -203,7 +203,7 @@ Depends on: S2.
 
 **S5 Buying and refunding character points** (rest of K1; a `WORLD` code).
 **Built by ARC-WORLD-052** (2026-10-21, [contract](../world/character-point-pool.md), ledger
-[CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)): the pool covers stats, hit and fatigue
+[CP1–CP12](ledger/character.md#character-point-pool-arc-world-052)): the pool covers stats, hit and fatigue
 points and both skill families; spell ranks and tech degrees plug in through a lane (MT3, TECH-2); the − click is an
 option for S6, by default the original's "until the level changes", which stops at the floor in both modes (CP6).
 Result: the session's one spend-a-point / refund-a-point path over the hero's
@@ -220,7 +220,7 @@ Depends on: S1.
 
 **S6 Skills page on the character sheet** (UI part of K7).
 **Built by ARC-UI-009** (2026-10-21, [viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009), ledger
-[SP1–SP8](original-verification-ledger.md#skills-page-arc-ui-009)): the sixteen skills in the original's four groups with the
+[SP1–SP8](ledger/skills.md#skills-page-arc-ui-009)): the sixteen skills in the original's four groups with the
 skill texts of `mes\skill.mes` (`SkillTexts`, Data), + and − through the point pool with the editor the sheet opens; the − click
 is the original's default (no owner choice of the alternative). The owner's look at the page (L3) is still open.
 Result: the AREA viewer's sheet shows the 16 skills with level, training and
@@ -233,7 +233,7 @@ Depends on: S2, S5.
 
 **S7 Fate points** (shared owner; a `WORLD` code).
 **Built by ARC-WORLD-054** (2026-10-21, [contract](../world/fate-points-runtime.md), ledger
-[FT1–FT8](original-verification-ledger.md#fate-points-arc-world-054)): the session's fate owner with the attack, conversation-start
+[FT1–FT8](ledger/skills.md#fate-points-arc-world-054)): the session's fate owner with the attack, conversation-start
 and dialog `fp` readers; the skill uses and magic call its API. Snapshot schema 26.
 Result: the hero's fate points in the session: count, armed fate per kind
 (skill critical success, attack critical hit and miss, spell at maximum, save
@@ -248,7 +248,7 @@ Depends on: S3.
 
 **S8 Heal with bandages and healing items** (first K4 use).
 **Built by ARC-SKILLS-005** (2026-10-21, [contract](../world/heal-runtime.md), ledger
-[HL1–HL5](original-verification-ledger.md#heal-arc-skills-005)): the hero heals any critter with a healing item; the best-follower
+[HL1–HL5](ledger/skills.md#heal-arc-skills-005)): the hero heals any critter with a healing item; the best-follower
 substitution and target choice in the viewer are left out. Snapshot schema 31 (the items' uses).
 Result: the hero (or the best follower) uses a healing item on any living
 critter: the check, healed amount, Master and critical cures, item charges and
@@ -269,15 +269,15 @@ All of S9..S15 also need S3; S11 needs S7 for the fated repair.
 
 | Task | Result | Requirements | Original check (read) | Waits for |
 | --- | --- | --- | --- | --- |
-| S9 Pick locks (**built by ARC-SKILLS-006**, [contract](../world/pick-locks-runtime.md), ledger [PL1–PL7](original-verification-ledger.md#pick-locks-arc-skills-006); witnesses, best-follower substitution and the AI's timed goal with the apprentice speed-up not modelled) | Unlock and lock portals and containers, jam on a critical failure, lockpick bonus, Expert ignores light, Master halves the lock, Apprentice works faster, best-follower substitution | FR-ITEM-004, FR-AI-003, FR-CHAR-019 | pick-lock case of 0x4C7160, 0x436220, 0x571CB0, 0x4C8FA0..0x4C9050 | ARC-WORLD-050: the session owner of portal and container lock state (open, locked, jammed, busted, lock rules, relock timer), universal across maps, built in the world lane after its executable research ARC-RES-065 (both planned, not merged on 2026-10-20) |
+| S9 Pick locks (**built by ARC-SKILLS-006**, [contract](../world/pick-locks-runtime.md), ledger [PL1–PL7](ledger/skills.md#pick-locks-arc-skills-006); witnesses, best-follower substitution and the AI's timed goal with the apprentice speed-up not modelled) | Unlock and lock portals and containers, jam on a critical failure, lockpick bonus, Expert ignores light, Master halves the lock, Apprentice works faster, best-follower substitution | FR-ITEM-004, FR-AI-003, FR-CHAR-019 | pick-lock case of 0x4C7160, 0x436220, 0x571CB0, 0x4C8FA0..0x4C9050 | ARC-WORLD-050: the session owner of portal and container lock state (open, locked, jammed, busted, lock rules, relock timer), universal across maps, built in the world lane after its executable research ARC-RES-065 (both planned, not merged on 2026-10-20) |
 | S10 Spot and disarm traps | Spot on every path step and use, Master second roll, magical traps need Expert, disarm, Expert's critical yields the device | FR-ITEM-016, FR-CHAR-019 | 0x4BBE40, 0x427110, 0x441980, 0x4BC7B0, 0x4BBFE0, 0x4BC090, 0x57A620 | trap state on objects through the SCR dispatcher |
-| S11 Repair | Repair by percentage with the durability cost per tier, Master fixes broken items, SK7 as the original, fated repair | FR-ITEM-011, FR-CHAR-019 | repair case of 0x4C7160, 0x4C8E60, 0x57A320, 0x57A5E0 | item durability in the session (item HP, the two-step break, what a broken item blocks, the item side of a repair quote): one `WORLD` task of the [technology research](technology-evidence.md#item-durability-fr-item-011) ARC-RES-062, code taken when it starts |
-| S12 Stealth | Concealment toggle for the hero and followers (saved), prowling margin for observers, stealth walk, only a Master runs | FR-AI-002, FR-CHAR-019 | 0x57A0A0, 0x45EE30, 0x425BF0, 0x42EDC0 (sight and hearing already read, ARC-RES-056) | AI slice I2 to consume it; can merge before I2 |
+| S11 Repair (**built by ARC-SKILLS-007**, [contract](../world/repair-runtime.md), ledger [RP1–RP5](ledger/skills.md#repair-arc-skills-007); the merchant's paid service waits for the barter window) | Repair by percentage with the durability cost per tier, Master fixes broken items, SK7 as the original, fated repair | FR-ITEM-011, FR-CHAR-019 | repair case of 0x4C7160, 0x4C8E60, 0x57A320, 0x57A5E0 | item durability in the session (item HP, the two-step break, what a broken item blocks, the item side of a repair quote): one `WORLD` task of the [technology research](technology-evidence.md#item-durability-fr-item-011) ARC-RES-062, code taken when it starts |
+| S12 Stealth (**built by ARC-SKILLS-008**, [contract](../world/stealth-runtime.md), ledger [ST1–ST6](ledger/skills.md#stealth-arc-skills-008), snapshot schema 35; the observers are AI slice I2) | Concealment toggle for the hero and followers (saved), prowling margin for observers, stealth walk, only a Master runs | FR-AI-002, FR-CHAR-019 | 0x57A0A0, 0x45EE30, 0x425BF0, 0x42EDC0 (sight and hearing already read, ARC-RES-056) | AI slice I2 to consume it; can merge before I2 |
 | S13 Haggle | Buy and sell prices, Expert and Master trade gates | FR-ITEM-013, FR-CHAR-019 | 0x461F80, 0x462170, 0x462230; oracle for 0x461F80 | a barter window |
 | S14 Gambling | Gamble an item, PC limit table, the saved pre-drawn roll (snapshot: next free schema number) | FR-ITEM-019, FR-CHAR-019 | 0x579840, 0x579B60, 0x4C6520, 0x4C6560, the skill module save; SK5 as the original | a barter window |
 | S15 Pick pocket | Steal and plant one item, gold and ammunition limits, detection, the theft as an attack | FR-ITEM-015, FR-CHAR-019 | 0x575100, 0x575180, pick-pocket case of 0x4C7160 | NPC inventories in the session; AI hostility slice for the consequence |
 | S16 Trainers and skill services | Dialog trainers (`t:`, Apprentice for 100 gold), NPC skill services (`u:`, SK8), `map.patch` `training`, Educator | FR-CHAR-018, FR-DIALOG-004, FR-CHAR-006 | 0x418CA0, 0x418DE0, 0x418F30, 0x416C10, 0x4C62D0, 0x419B50..0x419CB0, 0x411940, 0x4C2950 | S4; Educator also waits for backgrounds (FR-CHAR-005); SK8 switch decided by the owner when it starts |
-| S17 Script skill commands | SCR "get skill" (SK1 as the original: no fall-through) and "use item with skill" with a modifier (A2) | FR-SCRIPT-002 | the two cases of 0x447220 | S3 and the SCR dispatcher |
+| S17 Script skill commands (**built by ARC-SKILLS-009**, [contract](../scripting/scr-dispatcher-runtime.md#skill-commands-arc-skills-009-set-s11), ledger [SX1–SX6](ledger/skills.md#script-skill-commands-arc-skills-009); use item with skill is a request only, no live installed use) | SCR "get skill" (SK1 as the original: no fall-through) and "use item with skill" with a modifier (A2) | FR-SCRIPT-002 | the two cases of 0x447220 | S3 and the SCR dispatcher |
 
 ### Order and the first visible results
 

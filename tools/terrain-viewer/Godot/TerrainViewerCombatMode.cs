@@ -41,12 +41,17 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         if (session.QueryHero() is null) { _combatModeNotice = "combat mode needs a hero (start with --hero)"; RefreshAreaStatus(); return; }
         // ARC-COMBAT-005: an attack animation playing keeps the hero in combat mode (the exit gate's attempt-attack test).
-        var result = session.ToggleHeroCombatMode(session.Version, SessionCombatModeContext.RealTime,
+        // ARC-COMBAT-020: with the turn-based setting on, entering starts a round and leaving ends it.
+        PlaceHeroForRound();
+        var result = session.ToggleHeroCombatMode(session.Version, CombatModeContext(),
             AttackPlaying ? new SessionCombatExit { AttemptingAttack = true } : SessionCombatExit.Clear);
         if (!HeroInCombatMode) CancelAreaAttack("left combat mode");
+        if (result.Round is { Disposition: GameSessionDisposition.Changed } && session.QueryCombatRound() is not null) InterruptForRound();
+        LogRound(result.Round?.Events ?? []);
         _combatModeNotice = result switch
         {
-            { Disposition: GameSessionDisposition.Changed, InCombatMode: true } => "entered combat mode (real time)",
+            { Disposition: GameSessionDisposition.Changed, InCombatMode: true } => session.QueryCombatRound() is { } round
+                ? $"entered combat mode: round {round.Turn} began" : _turnBasedSetting ? "entered combat mode (turn-based, no round)" : "entered combat mode (real time)",
             { Disposition: GameSessionDisposition.Changed } => "left combat mode",
             { Disposition: GameSessionDisposition.NoChange } => $"combat mode unchanged: {Refusal(result.Refusal)}",
             _ => $"combat mode refused: {result.Failure}",
@@ -71,7 +76,7 @@ public partial class TerrainViewerApp
     {
         if (!HeroInCombatMode) return true;
         var session = _areaSession!;
-        var result = session.LeaveHeroCombatMode(session.Version, SessionCombatModeContext.RealTime, SessionCombatExit.Clear);
+        var result = session.LeaveHeroCombatMode(session.Version, CombatModeContext(), SessionCombatExit.Clear);
         GD.Print($"ARC-COMBAT-004 dialog-leave disposition={result.Disposition} refusal={result.Refusal} on={result.InCombatMode}");
         if (result.Refusal == SessionCombatModeRefusal.UnderAttack) { _combatModeNotice = "no dialog: " + Refusal(result.Refusal); return false; }
         if (result.Disposition == GameSessionDisposition.Changed) _combatModeNotice = "left combat mode to talk";
@@ -81,8 +86,9 @@ public partial class TerrainViewerApp
     /// <summary>A new move starts its run counter at 0 (the source counts per move goal).</summary>
     private void ResetCombatRunSteps() => _combatRunSteps = 0;
 
-    /// <summary>The gait a step starts with: a hero out of fatigue walks (the source's step cost).</summary>
-    private MovementGait StepGait() => _worldGait == MovementGait.Run && HeroFatigue() is <= 0 ? MovementGait.Walk : _worldGait;
+    /// <summary>The gait a step starts with: a hero out of fatigue walks (the source's step cost), and a concealed hero runs only
+    /// as a master of prowling (ARC-SKILLS-008).</summary>
+    private MovementGait StepGait() => _worldGait == MovementGait.Run && (HeroFatigue() is <= 0 || !StealthAllowsRun()) ? MovementGait.Walk : _worldGait;
 
     private int? HeroFatigue() => _areaSession?.QueryHeroLife()?.Status.Fatigue;
 
@@ -112,7 +118,7 @@ public partial class TerrainViewerApp
     {
         if (!HeroInCombatMode) return;
         var session = _areaSession!;
-        var result = session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+        var result = session.SetCombatMode(session.Version, SessionCombatant.Hero, false, CombatModeContext());
         GD.Print($"ARC-COMBAT-004 map-change-leave disposition={result.Disposition} refusal={result.Refusal}");
         if (result.Disposition == GameSessionDisposition.Changed) _combatModeNotice = "left combat mode with the map change";
     }
@@ -124,7 +130,7 @@ public partial class TerrainViewerApp
         if (_combatModeStatus is not { } cached || !ReferenceEquals(cached.Session, session) || cached.Revision != session.Version.Revision)
         {
             var text = session.QueryHero() is null ? "combat mode: needs a hero"
-                : $"combat mode: {(session.QueryCombatMode(SessionCombatant.Hero) ? "ON (real time)" : "off")}, fatigue {HeroFatigue()}/{session.QueryHeroLife()?.Status.MaxFatigue}";
+                : $"combat mode: {(session.QueryCombatMode(SessionCombatant.Hero) ? session.QueryCombatRound() is null ? "ON (real time)" : "ON (turn-based)" : "off")}, fatigue {HeroFatigue()}/{session.QueryHeroLife()?.Status.MaxFatigue}";
             _combatModeStatus = cached = (session, session.Version.Revision, text);
         }
         return $" | {cached.Text} ({_combatModeNotice})";

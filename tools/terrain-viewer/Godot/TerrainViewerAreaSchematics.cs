@@ -161,14 +161,15 @@ public partial class TerrainViewerApp
         if (view.Button != AssemblyButton.CanAssemble) { _schematicMessage = view.ButtonText; Render(); return; }
         if (data.Catalog.Read(view.Record).Record is not { } record) return;
         var result = _schematicCrafter is { } crafter
-            ? _areaSession!.AssembleSchematicForNpc(_areaSession.Version, crafter, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck)
+            ? _areaSession!.AssembleSchematicForNpc(_areaSession.Version, crafter, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck,
+                data.AmmoOf)
             : _areaSession!.AssembleSchematic(_areaSession.Version, record, SchematicItems, data.Facts, data.Kind,
-                _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
+                _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, data.AmmoOf);
         if (result.Disposition == GameSessionDisposition.Changed)
         {
-            _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile);
+            _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile) + AreaSchematics.OnGroundText(result, _schematicCrafter is not null);
             SchematicSound(AreaSchematics.CompletedSound(view.Discipline), "schematics assembled");
-            GD.Print($"ARC-TECHNOLOGY-005 assembled crafter={view.Crafter ?? "hero"} record={view.Record} made={string.Join(",", result.Made)} consumed={string.Join(",", result.Consumed)}");
+            GD.Print($"ARC-TECHNOLOGY-005 assembled crafter={view.Crafter ?? "hero"} record={view.Record} made={string.Join(",", result.Made)} ground={string.Join(",", result.OnGround)} consumed={string.Join(",", result.Consumed)}");
         }
         else
         {
@@ -265,7 +266,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed is Key.T or Key.Escape) CloseSchematicsByPlayer();
+        if (routed == Key.Escape || (routed == Key.T && !CharacterKeySilenced(key, routed))) CloseSchematicsByPlayer();
         else if (routed == Key.Tab) _schematicsPanel!.Confirm();
     }
 

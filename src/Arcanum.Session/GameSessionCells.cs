@@ -1,0 +1,53 @@
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Technology;
+
+namespace Arcanum.Session;
+
+public sealed partial class GameSessionOwner
+{
+    /// <summary>
+    /// ARC-TECHNOLOGY-007: the charge-cell facts of the hero as payer (it pays a cell-powered spell from its one power-cell
+    /// stack), or null without a hero. The stack is the host's and nothing is written; since ARC-WORLD-066
+    /// <see cref="HeroCellSource"/> uses the hero's own stack and spends an applied payment.
+    /// </summary>
+    public CellPayer? QueryHeroCellPayer(CellStack? cells)
+    {
+        ThrowIfDisposed();
+        return _hero is null ? null : new CellPayer(SpellPayerKind.Critter, CellOwnerKind.Critter, cells);
+    }
+
+    /// <summary>
+    /// The charge-cell facts of an item the hero holds as payer: its complexity and the hero's magick/tech aptitude, the cells
+    /// from the hero's power-cell stack (the item's parent). Null without a hero.
+    /// </summary>
+    public CellPayer? QueryHeroItemCellPayer(int itemComplexity, CellStack? cells)
+    {
+        ThrowIfDisposed();
+        return _hero is null ? null : new CellPayer(SpellPayerKind.Item, CellOwnerKind.Critter, cells, itemComplexity, HeroAptitude());
+    }
+
+    /// <summary>
+    /// The engine's charge-cell port for a payer under the session's technology rules (TC1 in <see cref="GameRules.Technology"/>):
+    /// each request returns the original's answer and keeps the plan (<see cref="ChargeCellSource.LastPlan"/>). Asking changes no
+    /// session state; an applied plan is the host's to write until the session holds ammunition.
+    /// </summary>
+    public ChargeCellSource CellSource(CellPayer payer)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(payer);
+        return new ChargeCellSource(payer, _rules.Technology);
+    }
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-008: how a device of this magick/tech complexity works for the hero (<see cref="TechDeviceRules.Use"/> with
+    /// the hero's effective aptitude): usable outside combat, the power the hero draws and, for a weapon, the combat failure
+    /// chance. Null without a hero or for a complexity outside the equipment limits.
+    /// </summary>
+    public TechDeviceUse? QueryHeroDeviceUse(int complexity, bool weapon)
+    {
+        ThrowIfDisposed();
+        if (_hero is null || complexity is < -EquipmentLimits.MaxMagnitude or > EquipmentLimits.MaxMagnitude) return null;
+        return TechDeviceRules.Use(complexity, HeroAptitude(), weapon);
+    }
+}

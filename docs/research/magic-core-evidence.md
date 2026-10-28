@@ -162,12 +162,15 @@ drives the resistance rules below.
 ### Learning, colleges and mastery (FR-MAGIC-002)
 
 **Original check (ARC-MAGIC-004, 2026-10-21).** The facts of this section, Answer items 2 and 3 and the state model's "Known
-spells" and "Magick points" rows were read in the executable by two readers ([ledger SB1–SB11](original-verification-ledger.md#spell-book-arc-magic-004); the learn by the
+spells" and "Magick points" rows were read in the executable by two readers ([ledger SB1–SB11](ledger/magic.md#spell-book-arc-magic-004); the learn by the
 function oracle, F3) and stand at F2. Three corrections to the text below: the forced learn adds the magick points of the
 missing ranks only and never lowers a rank (SB3); unlearning keeps the mastered college (SB6); and the re-validation on a stat
 decrease runs for a base decrease of intelligence or willpower through the stat setter, not for an effect (SB11). The
 character editor reports a failed learn by testing the level and then intelligence, naming willpower for anything else
-(SB8). The runtime is the [spell book](../world/spell-book-runtime.md).
+(SB8). The runtime is the [spell book](../world/spell-book-runtime.md). The editor's spell page itself (ARC-MAGIC-008, [ledger
+SG1–SG8](ledger/magic.md#spell-page-arc-magic-008)) was read the same way: the spell texts named above (0x4B1600,
+0x4B1620, 0x4B1A40, with 0x4B1A50) and the UI callers (0x57C540, 0x57C670) stand at F2; the refusal messages are charedit.mes
+18, 30, 26 and 36, the − floor message 27, and a college's hint shows the mastery text for the local player's mastered college.
 
 - **Order.** Learning rank r of a college requires knowing exactly r − 1
   ranks, character level ≥ {1, 1, 5, 10, 15}[r − 1], intelligence ≥ 5 and
@@ -195,7 +198,7 @@ character editor reports a failed learn by testing the level and then intelligen
 
 ### Choosing the target (FR-MAGIC-003)
 
-Read in the executable by two readers (ARC-MAGIC-006, [ledger "Spell invocation"](original-verification-ledger.md#spell-invocation-arc-magic-006),
+Read in the executable by two readers (ARC-MAGIC-006, [ledger "Spell invocation"](ledger/spell-runs.md#spell-invocation-arc-magic-006),
 IV1–IV12): the steps below are F2, the range, the flags and the item gate F3 (function oracle). Precisions from that reading:
 the turn test applies to a PC or NPC parent only; the range measures from the parent's location and admits a parent without
 one; the NPC fallback tests only the record's BEGIN target mask and lists the tiles of radius 2 around the target object in the
@@ -228,7 +231,7 @@ The invocation check runs before any slot or payment (check (0x4564E0)):
 9. **Intelligence** ≥ 5 for a critter casting its own spell, and Teleportation
    is refused in anti-teleport areas.
 
-Read in the executable by two readers (ARC-MAGIC-007, [ledger "Spell target areas"](original-verification-ledger.md#spell-target-areas-arc-magic-007),
+Read in the executable by two readers (ARC-MAGIC-007, [ledger "Spell target areas"](ledger/spell-runs.md#spell-target-areas-arc-magic-007),
 TA1–TA16; the area test, the collection, the re-aim and the AI notice F3), with these precisions: the "cone" is a square of the
 radius (objects with the self bit, else tiles); the count limits only the radius, wall and cone branches and counts duplicates;
 party critter, non-party and attacker gather nothing (they only filter); the run's object list is built in reverse; the list has
@@ -244,6 +247,17 @@ by its own area and may re-aim at self, the source, the last summoned object
 or the target tile (apply area (0x453D40, 0x453EE0, 0x453F20)). The earlier reading flagged doubts in the cone
 and count code (targets (0x4F40B0)); this reading did not audit the
 target module beyond those paths.
+
+**Original check of the casting goal (ARC-MAGIC-014, 2026-10-21).** Read in the executable by two readers ([ledger "Cast host and
+casting goal"](ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8, F2; the goal table and the
+release re-check F1). Precisions:
+- the goal's start charges the parent 4 action points before the pre-animation check, which reads the cast spell's own cost (MG1
+  settled: the record table, not the run table);
+- a target destroyed or off ends the goal;
+- at the release frame the target is checked again before BEGIN;
+- a goal that ends before its release frees the run with its BEGIN charged, even when it was refused before its animation (MG39) or
+  the run is free or technology (MG40);
+- a failed re-check at the release frame leaves the run in its slot (MG41).
 
 ### Paying (FR-MAGIC-004)
 
@@ -266,7 +280,7 @@ if caster is a dwarf PC or NPC: cost × 2
 ```
 
 Read in the executable by ARC-MAGIC-003 (two readers, three functions in the function oracle):
-[ledger "Spell cost and payment"](original-verification-ledger.md#spell-cost-and-payment-arc-magic-003) and the
+[ledger "Spell cost and payment"](ledger/magic.md#spell-cost-and-payment-arc-magic-003) and the
 [runtime contract](../world/spell-cost-runtime.md); the odd test reads the cost before halving.
 
 **From where** (pay (0x450420)):
@@ -302,7 +316,7 @@ cast cost gives `7 × 2 / 2 = 7` (MG2). With `Cost: 6` both give 6 (ledger MG2, 
 ### Resistance, saving throw and aptitude (FR-MAGIC-005, FR-MAGIC-010)
 
 **Original check (ARC-MAGIC-005, 2026-10-21).** The resistance pseudo-code below, the predictor paragraph and the fate save
-against magick were read in the executable by two readers ([ledger RS1–RS10](original-verification-ledger.md#spell-resistance-arc-magic-005))
+against magick were read in the executable by two readers ([ledger RS1–RS10](ledger/magic.md#spell-resistance-arc-magic-005))
 and run in the function oracle (the resistance and the predictor, F3); they stand at F2/F3. Two precisions: an action other
 than BEGIN, a technology record or an unresistable run returns before the margins are reset, so the run keeps its previous
 margin; and the predictor answers the resistance R itself (its save penalty is R / 10) unless it answers 100, at least 50 or 0.
@@ -345,6 +359,17 @@ normal charge (MG3). The margin is rolled per target but stored once per run,
 so the last target's margin is the one later ticks use. A skipped target
 plays the "resisted" effect.
 
+**Original check (ARC-MAGIC-012, 2026-10-21).** The Damage and Heal paths were read in the executable by two readers ([ledger
+"Spell damage and heal"](ledger/spell-runs.md#spell-damage-and-heal-arc-magic-012), DH1–DH10, F2; the Damage and Heal
+components and the acid's steps F3 by the function oracle). Precisions:
+- the margin's share is taken from the component's own slot, at least 1 even from an amount of 0 (MG37);
+- acid takes no margin;
+- `Scaled` needs a parent of type PC or NPC (another parent rolls the range);
+- `Full` on a slot other than fatigue leaves the target's current hit points to the damage step: a kill. A PC's difficulty
+  share still applies to it (MG35);
+- the spell's combat context carries the caster's wielded weapon (MG36);
+- acid hits every worn item before the wearer's third, and body armour never spares the wearer (MG38).
+
 **Worked example.** Magic resistance 30, target aptitude −40: `R = 100 −
 70 × 60 / 100 = 58`; a d100 of 20 gives margin 38. A fireball-like damaging
 spell then deals 62 % of its roll before the target's fire resistance step;
@@ -377,6 +402,14 @@ below do not test the technology flag (open question O8).
 
 ### Shells, reflection, stacking and cancels
 
+**Original check (ARC-MAGIC-011, 2026-10-21).** Read in the executable by two readers ([ledger "Spell per-target
+stage"](ledger/spell-runs.md#spell-per-target-stage-arc-magic-011), PT1–PT10; the stage, no-stack and cancels by the
+function oracle, F3) and implemented as the [spell per-target stage](../world/spell-target-stage.md). Corrections to the text
+below: the reflection's caster is the parent of the run that set the reflection on the target, and it pays the last positive cost
+of any payment (not this run's; MG15); a run once reflected turns every later target and pass on its caster; the cancels select
+runs by source, and the environment loop compares the starting record's own fields (MG33); a resisted target after the swap leaves
+the run's source swapped (MG34).
+
 - **Anti-magic shell** on the source: its own spells fail ("you lose your
   concentration"); on a target: the effect is nullified for that target. The
   run that grants the shell is exempt (source (0x453710),
@@ -397,11 +430,18 @@ below do not test the technology flag (open question O8).
 ### Duration, maintenance and ending (FR-MAGIC-006)
 
 Read in the executable by two readers for the run's creation, stage, times and cap (ARC-MAGIC-009,
-[ledger "Spell runs"](original-verification-ledger.md#spell-runs-arc-magic-009), RN1–RN14; time, stage and cap F3), with these
+[ledger "Spell runs"](ledger/spell-runs.md#spell-runs-arc-magic-009), RN1–RN14; time, stage and cap F3), with these
 precisions: a timed run makes `DurationTriggerCount:` + 1 periods before its END; the cap counts runs that were processed at
 least once and refuses a parent that is no critter; MAINTAIN checks and charges technology records too, and charges the
-surcharged maintenance even for a free run (MG29); a full run table quits the game (MG28). The implementation is the
-[spell run rules](../world/spell-run-rules.md); the scheduler's order and the interrupts below are MT9a-2's.
+surcharged maintenance even for a free run (MG29: Steamwoven does not, owner decision 2026-10-21); a full run table quits the game (MG28). The implementation is the
+[spell run rules](../world/spell-run-rules.md). The scheduler and the interrupts below were read the same way by ARC-MAGIC-010
+([ledger "Spell run processing"](ledger/spell-runs.md#spell-run-processing-arc-magic-010), RP1–RP14; the scheduler
+and the interrupt's action F3) and stand at F2/F3, with these precisions: "nothing applied" is decided per pass (an action
+without components or with an empty target list counts as applied; every target resisted or filtered does not); an unresistable
+run ends after BEGIN because of the shared bit (MG19); a sourceless maintained run ends inside its last counted tick; a callback
+whose animation cannot start runs once and frees the run; the interrupt picks END over END_CALLBACK from MAINTAIN; a refused
+BEGIN still runs its END components (through its interrupt event); detaching a source marks the run's final END unless it is
+being processed; three bugs were recorded for the owner (MG30–MG32; decided 2026-10-21: MG30 and MG32 fixed with switches, MG31 follows the original). The implementation is the run system of the same contract.
 
 After each action the scheduler decides what comes next
 (schedule (0x453FA0), timers (0x454790, 0x4547F0, 0x4548D0), time (0x455250)):
@@ -450,7 +490,7 @@ is hit (entangle (0x459A30, 0x459C10)).
 ### Effect components (FR-MAGIC-007)
 
 The data side of this table (each type's keys, positional values, name tables and defaults) was read in the executable
-by ARC-MAGIC-002 (two readers, [ledger "Spell components"](original-verification-ledger.md#spell-components-arc-magic-002),
+by ARC-MAGIC-002 (two readers, [ledger "Spell components"](ledger/magic.md#spell-components-arc-magic-002),
 [contract](../formats/spell-records.md#components-lines-5-onward)); what each type does at run time stays at the level
 given here until its slice reads it.
 
@@ -467,13 +507,13 @@ the list.
 | AIRedirect | AI redirect with critter flags and `MinIQ:` (AI section) |
 | Cast | the parent casts another spell at the current target or tile as a friendly cast, through the full invocation check (cast (0x451740, 0x451850)) |
 | ChargeNBranch | pay `Cost:` from the source; on failure jump to `Branch:` or end the list |
-| Damage | `DmgType:` normal, poison, electrical, fire, "magic" (index 4, the fatigue slot) or acid; `Dmg:a-b` uniform; `Scaled` makes it `min + aptitude % × (max − min)`, no roll (aptitude ≤ 0: min); `Full` fatigue knocks out (current fatigue + 10); other `Dmg_Flags:` (death, stun, scars, dropped weapon, crippling, …) pass to the combat damage step; margin reduces it (damage (0x4518D0)) |
+| Damage | `DmgType:` normal, poison, electrical, fire, "magic" (index 4, the fatigue slot) or acid; `Dmg:a-b` uniform; `Scaled` makes it `min + aptitude % × (max − min)` for a PC or NPC parent, no roll (aptitude ≤ 0: min); `Full` fatigue knocks out (current fatigue + 10), `Full` on another slot takes the current hit points; other `Dmg_Flags:` (death, stun, scars, dropped weapon, crippling, …) pass to the combat damage step; margin reduces it; acid hits the worn items, then the wearer's third (damage (0x4518D0), acid (0x4B5810); F3, ARC-MAGIC-012) |
 | Destroy | destroy the target unless resisted; summoned objects always (destroy (0x451AF0, 0x451B90, 0x451BB0, 0x451C40)) |
 | Dispel | interrupt every other magic run sourced by, aimed at, summoned as or listing the target; clear "magically held", "stoned", perma-polymorph; destroy a summoned target (dispel (0x451AF0, 0x451B90, 0x451BB0, 0x451C40)) |
 | Effect | add or remove `Count:` entries of effect `N` with `Cause:`; `Scaled:` adds `scaled × aptitude / 100` more (effect (0x451F20)) |
 | EnvFlag | stub: logs an error, changes nothing (stub (0x452F10)) |
 | EyeCandy | add or remove a visual on the target; callback flags drive the CALLBACK actions (fx (0x451FE0)) |
-| Heal | heal HP, poison or fatigue by a range (scaled as Damage); `Full` heals everything; `Resurrect`/`Reanimate` raise the dead unless flagged unresurrectable or vetoed by the resurrect script; `Scars` remove injuries (heal (0x4521A0), combat heal (0x4B58C0)) |
+| Heal | heal HP, poison or fatigue by a range (scaled as Damage); `Full` heals all hit-point damage (fatigue only with a fatigue amount) and the injuries; `Resurrect`/`Reanimate` raise the dead unless flagged unresurrectable or vetoed by the raise script, which runs either way; `Scars` remove five scars (heal (0x4521A0), combat heal (0x4B58C0); F3, ARC-MAGIC-012) |
 | Identify | identify a critter, container contents or item |
 | Interrupt | meant to interrupt another spell on the target; a no-op, also in the original (ledger MG7) (interrupt (0x452300)) |
 | Movement | move the target to the target tile, a random tile in a radius, a world-map teleport (anti-teleport checked) or the nearest known area; skipped when resisted (movement (0x4524C0, 0x452650)) |
@@ -514,7 +554,7 @@ them.
 
 ## Anomalies (recorded, not adopted)
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](ledger/magic.md#magic-arc-res-043-load-map-arc-res-040) supersede the earlier readings below where they differ.
 
 "Inference" marks a reading of intent. MG numbers continue ARC-RES-040's
 LM1..LM20 (LM5 and LM6 also concern magic). The reconstruction's own
@@ -536,7 +576,7 @@ deliberate changes are listed after the table.
 | MG12 | maintain bar (UI (0x57C290, 0x57C320, 0x57C370, 0x57C3F0, 0x57C470, 0x57C4B0)) | with every slot taken the "no candidate" value −1 passes the `≥ count` test and writes slot −1; `INT / 4` above 5 indexes past five slots; latent while the run-time cap equals `INT / 4` | refuse when no slot is free; cap at 5 |
 | MG13 | fate "save against magick" (resist (0x4537B0)) | sets a margin of 10 (and a display value of 100); the target still rolls its save | a full save (margin 100); low confidence |
 | MG14 | fail-chance predictor (fail (0x453B20, 0x453CC0)) | differs from the resolver (R / 10, 100 % above R 40, no margin) and consumes a d20 | a pure estimate that matches the resolver |
-| MG15 | reflection cost (reflect (0x455550)) | the reflection caster pays "the last cost charged" from a global, stale for free or item casts | the reflected spell's cost |
+| MG15 | reflection cost (reflect (0x455550)) | the reflection caster pays "the last cost charged" from a global, stale for a free cast, which paid nothing (an item cast writes it too, ARC-MAGIC-011 PT9) | the reflected spell's cost |
 | MG16 | no-stack refusal (stage (0x452F20)) | the BEGIN cost is paid before the no-stack test, so a refused recast is paid | test before paying; low confidence that it is a slip |
 | MG17 | fate maximisation (process (0x4510F0)) | evaluated on every action with components, so an END can be maximised when its BEGIN was not and then removes more scaled effect entries than were added | capture once at BEGIN |
 | MG18 | target names (target table 0x596140) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (flagged in the earlier reading) | the original (intent): the not-dead test runs without the critter bit (ARC-MAGIC-007, ledger TA6) |

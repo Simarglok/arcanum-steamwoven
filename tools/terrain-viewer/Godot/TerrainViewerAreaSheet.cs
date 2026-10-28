@@ -12,13 +12,19 @@ namespace Arcanum.TerrainViewer;
 // it is modal (gate closed, clock paused, a walk stopped: the original interrupts the PC's animation when it opens). It opens
 // only with a hero (--hero) and not for a dead hero. ARC-UI-009: the sheet opens the hero's character editor in the session
 // (its floor, as the original's open takes its snapshot) and closes it on close; the skills page's + and − spend and refund
-// through the session's point pool. Stats, tech disciplines and spells have no buttons yet.
+// through the session's point pool. ARC-MAGIC-008: the spells page's college tabs, + and − learn and unlearn spell ranks through
+// the same pool (the spell book's lane); the shown college is kept between opens, as the original keeps it. Stats and tech
+// disciplines have no buttons yet.
 public partial class TerrainViewerApp
 {
     private AreaCharacterSheetPanel? _sheetPanel;
     private Task<AreaSkillTextsLoad>? _skillTextsTask;
     private string? _skillTextsModule;
     private AreaSkillTextsLoad? _skillTexts;
+    private Task<AreaSpellDataLoad>? _spellDataTask;
+    private string? _spellDataModule;
+    private AreaSpellDataLoad? _spellData;
+    private int _sheetCollege;
     private string? _sheetStatus;
     private (GameSessionOwner Session, long Revision)? _sheetStamp;
     private bool SheetOpen => _sheetPanel?.IsOpen == true;
@@ -27,7 +33,7 @@ public partial class TerrainViewerApp
     private void OpenSheet()
     {
         if (!SheetActive || SheetOpen) return;
-        AdoptSkillTexts();
+        AdoptSkillTexts(); AdoptSpellData();
         var build = AreaCharacterSheet.Build(_areaSession!);
         if (build.View is not { } view)
         {
@@ -43,13 +49,16 @@ public partial class TerrainViewerApp
             _sheetPanel.CloseRequested += EndSheet;
             _sheetPanel.SkillSpendRequested += row => PressSkill(row, spend: true);
             _sheetPanel.SkillRefundRequested += row => PressSkill(row, spend: false);
+            _sheetPanel.CollegeSelected += SelectCollege;
+            _sheetPanel.SpellLearnRequested += college => PressSpell(college, learn: true);
+            _sheetPanel.SpellUnlearnRequested += college => PressSpell(college, learn: false);
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
-        _sheetPanel.Open(view, BuildSkillsPage()); _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
+        _sheetPanel.Open(view, BuildSkillsPage(), BuildSpellsPage()); _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
         GD.Print($"ARC-UI-007 sheet open level={view.Level} unspent={view.UnspentPoints} next={view.ToNextLevel?.ToString() ?? "none"}");
         RefreshReadyStatus();
     }
@@ -78,7 +87,7 @@ public partial class TerrainViewerApp
             // Defensive: the open sheet owns every key, so no quick load or map change replaces the session under it; should a
             // session's editor be closed anyway, the open sheet opens it again.
             if (!_areaSession!.HeroEditorOpen) _areaSession.OpenHeroEditor();
-            _sheetPanel!.Render(view, BuildSkillsPage());
+            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage());
         }
         else EndSheet();
     }
@@ -102,6 +111,48 @@ public partial class TerrainViewerApp
     }
 
     private AreaSkillsPageView? BuildSkillsPage() => AreaSkillsPage.Build(_areaSession!, _skillTexts?.Texts, AreaHoverIndex.TextProfile);
+
+    /// <summary>Starts loading the spell data for this module once, as the skill texts.</summary>
+    private void BindAreaSpellData(TerrainViewerArguments arguments)
+    {
+        if (_spellDataModule == arguments.ModulePath) return;
+        _spellDataModule = arguments.ModulePath; _spellData = null; _spellRecords = null;
+        var module = arguments.ModulePath;
+        _spellDataTask = Task.Run(() => AreaSpellsPage.LoadData(module));
+    }
+
+    private void AdoptSpellData()
+    {
+        if (_spellData is not null || _spellDataTask is not { IsCompleted: true } task) return;
+        _spellData = task.IsCompletedSuccessfully ? task.Result
+            : new(AreaSpellDataStatus.DataFailed, null, "load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
+        _spellDataTask = null;
+        GD.Print($"ARC-MAGIC-008 spell data status={_spellData.Status} detail={_spellData.Detail}");
+    }
+
+    private AreaSpellsPageView? BuildSpellsPage() => AreaSpellsPage.Build(_areaSession!, _spellData?.Data, _sheetCollege);
+
+    /// <summary>A college tab press shows that college's spells.</summary>
+    private void SelectCollege(int college)
+    {
+        if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
+        AdoptSpellData();
+        _sheetCollege = college;
+        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage());
+    }
+
+    /// <summary>A + or − press on the spells page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
+    private void PressSpell(int college, bool learn)
+    {
+        if (!SheetOpen || !SheetActive) return;
+        AdoptSpellData();
+        var data = _spellData?.Data;
+        var press = learn ? AreaSpellsPage.Learn(_areaSession!, college, data) : AreaSpellsPage.Unlearn(_areaSession!, college, data);
+        _sheetPanel!.ShowSkillMessage(press.Message);
+        GD.Print($"ARC-MAGIC-008 spell {(learn ? "learn" : "unlearn")} college={college} changed={press.Changed} failure={press.Result.Failure} " +
+            $"status={press.Result.Change?.Status}");
+        SyncAreaSheet();
+    }
 
     /// <summary>A + or − press on the skills page: one call of the session's point pool, its message on the page, and the sheet
     /// rebuilt at once.</summary>
@@ -130,7 +181,7 @@ public partial class TerrainViewerApp
     private void HandleSheetKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && routed is Key.C or Key.Escape) EndSheet();
+        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.C && !CharacterKeySilenced(key, routed)))) EndSheet();
     }
 
     private void HandleSheetPulse(IntentFrame intent)

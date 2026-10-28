@@ -14,32 +14,57 @@ public interface IRouteStepSource
     /// <summary>Whether the cell belongs to the admitted chart. Outside cells are refused, not searched.</summary>
     bool Contains(CellCoord cell);
     RouteStepVerdict Assess(CellCoord from, NeighborDirection direction);
-    /// <summary>Extra search cost of an Open step on top of the plain step's 10 (for example a window jump, +50 as the
-    /// source's path search, ARC-WORLD-021), 0..1000. Asked only for Open steps, at most once per step and plan, and
-    /// must be deterministic within one plan. A step with extra cost also ends the straight attempt. Default none: a
-    /// wrapping source must forward it.</summary>
+    /// <summary>Extra search cost of an Open step on top of the plain step's 10, 0..1000: a positive value marks a step across a
+    /// window piece (ARC-WORLD-021), which the original's search costs 50 more (ledger DC4; since ARC-WORLD-073 the search adds
+    /// those 50 whatever the positive value). Asked only for Open steps, at most once per step and plan, and must be deterministic
+    /// within one plan. Such a step also ends the straight attempt. Default none: a wrapping source must forward it.</summary>
     int ExtraCost(CellCoord from, NeighborDirection direction) => 0;
+
+    /// <summary>ARC-WORLD-073 (ledger DC4): whether a refused cardinal step was refused by an object other than a wall or portal,
+    /// which drops the tile stepped onto from the search (no other step may then enter it). Asked only for refused cardinal steps.
+    /// Default no.</summary>
+    bool StepRefusedByObject(CellCoord from, NeighborDirection direction) => false;
+
+    /// <summary>ARC-WORLD-073 (ledger DC2): whether a living PC or NPC stands on the goal, which refuses it even when the plan's steps
+    /// pass critters (outside combat mode). Default no.</summary>
+    bool GoalHoldsCritter(CellCoord goal) => false;
+
+    /// <summary>ARC-WORLD-073 (ledger LR5, 0x427110): whether the cell this step enters holds a living PC or NPC (the dead skipped),
+    /// asked before a segment's last step. Default no.</summary>
+    bool StepEntersCritter(CellCoord from, NeighborDirection direction) => false;
 }
 
 public enum RouteOutcome { Found, AlreadyAtTarget, Refused, NoRoute }
-public enum RouteMethod { Direct, LocalSearch }
+/// <summary>How a found plan was made: the request's direct attempt, its search, or (ARC-WORLD-073, ledger LR4) the PC's one
+/// straight-line retry after no path, whose steps are not tested when planned.</summary>
+public enum RouteMethod { Direct, LocalSearch, StraightRetry }
 
 /// <summary>Planner limits can be lowered, never raised above the policy maxima.</summary>
 public sealed class RouteLimits
 {
-    /// <summary>Policy maxima: returned segment, per-axis reach (window is twice the reach), expanded cells.</summary>
-    public const int SegmentMaximum = 8, AxisDistanceMaximum = 32, ExpansionMaximum = 4096;
+    /// <summary>Policy maxima (ARC-WORLD-073, the original's request, ledger LR1–LR3): the returned segment (8 rotations), the
+    /// per-axis reach (32: the direct attempt's; the search's window is 64 × 64 and needs both axes under 32) and the search
+    /// budget (200: a tile whose estimate over 10 exceeds it is dropped; a walk asks <c>min(4 × distance + 5, 200)</c>).</summary>
+    public const int SegmentMaximum = 8, AxisDistanceMaximum = 32, BudgetMaximum = OriginalPathRequest.BufferRotations;
 
-    public RouteLimits(int segmentSteps = SegmentMaximum, int axisDistance = AxisDistanceMaximum, int expansions = ExpansionMaximum)
+    public RouteLimits(int segmentSteps = SegmentMaximum, int axisDistance = AxisDistanceMaximum, int budget = BudgetMaximum)
     {
         if (segmentSteps is < 1 or > SegmentMaximum || axisDistance is < 1 or > AxisDistanceMaximum ||
-            expansions is < 1 or > ExpansionMaximum) throw new ArgumentOutOfRangeException(nameof(segmentSteps));
-        SegmentSteps = segmentSteps; AxisDistance = axisDistance; Expansions = expansions;
+            budget is < 1 or > BudgetMaximum) throw new ArgumentOutOfRangeException(nameof(segmentSteps));
+        SegmentSteps = segmentSteps; AxisDistance = axisDistance; Budget = budget;
     }
     public int SegmentSteps { get; }
     public int AxisDistance { get; }
-    public int Expansions { get; }
-    public int WindowSize => 2 * AxisDistance;
+    public int Budget { get; }
+
+    /// <summary>The walk's first budget toward a goal (ledger LR2, 0x426320): <c>min(4 × distance + 5, 200)</c>, the distance
+    /// the larger axis.</summary>
+    [OriginalFunction(0x426320, OriginalFunctionScope.Partial)]
+    public static int WalkBudget(CellCoord from, CellCoord to) =>
+        (int)Math.Min(4L * Math.Max(Math.Abs((long)to.X - from.X), Math.Abs((long)to.Y - from.Y)) + 5, BudgetMaximum);
+
+    /// <summary>The same limits with another budget.</summary>
+    public RouteLimits WithBudget(int budget) => new(SegmentSteps, AxisDistance, budget);
 }
 
 /// <summary>

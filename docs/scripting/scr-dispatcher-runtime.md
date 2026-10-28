@@ -161,9 +161,8 @@ request and the resumption through the dispatcher with `AreaScriptHost`
 attachment overridden by the session's entity map changes `dialog.lf`,
 `dialog.counters` and `dialog.script` (no schema change; a value equal to the
 loaded one clears its key); global flags are the session's; the PC leads a
-following speaker. It runs `S3` without the story-state actions (the session has
-no story-state number yet, so such a script is refused instead of run on a
-made-up value). Run default is the original's generic greeting (shown as a
+following speaker. It runs `S3` (until ARC-SCRIPT-019 without the story-state actions, which
+now read and raise the session's story-state number). Run default is the original's generic greeting (shown as a
 status, not modelled); a skip default without a dialog action ends the talk; a
 refusal is `EntryNotAdmitted` with the line, code and type. The session applies
 global flags and the slot as separate steps (it has no transaction across its
@@ -264,17 +263,45 @@ conversation is not run).
 - Set numbers no longer follow the slice plan of the [event dispatcher research](../research/scr-event-dispatcher.md):
   S6 is print line and S7 the sound actions, not heartbeat and combat.
 
+## Skill commands (ARC-SKILLS-009, set S11)
+
+- **`ScrAdmissionSet.S11`** is S10 plus get skill (47) and use item with skill (79); `ScrRunOptions` accepts any subset of S11 (now
+  the interpreter's widest set; the default stays S5). A set with 47 needs a host that implements `IScrSkillQueries`, checked before
+  any event runs. Read in the retail 1.0.7.4 executable by two independent readers: ledger
+  [SX1–SX6](../research/ledger/skills.md#script-skill-commands-arc-skills-009).
+- **Get skill (47)**: the skill number (a value), the object, the store (operand 2, the only store outside operand 0; admission refuses
+  a number literal there). The run stores `IScrSkillQueries.SkillLevel(object, skill)`: the effective level the original's level
+  functions give (basic 0..11, tech 12..15 as tech index skill − 12), never the points or the training. A number outside 0..15 stores 0
+  without asking the host; the host answers 0 for an object that is not a PC or an NPC (SX2). An absent object stops the run
+  (`MissingObject`) as every object read does: the original reads its null handle through the object pool, whose result is undefined.
+  The run goes on to the next line (SK1: no fall-through).
+- **Use item with skill (79)**: source, item, target (objects), skill and modifier (values), as read. The run returns one
+  `ScrSkillUse(Source, Item, Target, Skill, Modifier)` per action in `ScrEffects.SkillUses` and goes on; an absent target or source
+  asks for nothing (SX3). The item may be absent. What the original does next is the host's and is not built: the source's
+  use-item-with-skill goal (gate cost 4, no action points charged, no flags), which runs the shared skill check once with the modifier
+  as the invocation modifier (counted twice, SC12 and the A2 switch) and the skill's handler (SX4).
+- **The AREA viewer** admits get skill in its dialog set while the session has a hero (`AreaScriptHost.SkillAdmission`,
+  "S3-area-sound-calls-scheme-schematic-reading-skill", through `RunAdmission`; without a hero a script that reads a skill is refused,
+  not run on a made-up level). The PC's level is the session hero's. An NPC of the host's map whose map data the viewer reads (the
+  combat host's fields, with `--hero`) takes the sheet the session saved for it (a levelled follower) or else that map data, with the map
+  data's effects (`GameSessionOwner.QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)`); any other object is 0, including an
+  NPC whose map data is not read (even with a saved sheet) and an object naming another map, as a deferred call's role can. Use item with
+  skill is not admitted there: the [census](../research/scr-census.md) counts its 2 installed lines, none live, and `Apply` refuses a
+  request.
+- Installed scripts (opt-in census test): 17 use action 47, 2 action 79 (none live by the ARC-RES-045 census), 1 action 115; S11 admits 683 scripts whole, 2 more
+  than S10. Action 115 (try to steal 100 coins, SX5) belongs to pick pocket (task S15) and is not admitted.
+
 ## Reading actions (ARC-UI-049, set S10)
 
 - **`ScrAdmissionSet.S10`** is S9 plus show book (64), show picture (65) and show plaque (114); `ScrRunOptions` accepts any subset
-  of S10 (now the interpreter's widest set; the default stays S5).
-- **The actions** (ledger [WR15](../research/original-verification-ledger.md#reading-window-arc-ui-049)): a value operand (the
+  of S10 (the interpreter's widest set until ARC-SKILLS-009 widened it to S11; the default stays S5).
+- **The actions** (ledger [WR15](../research/ledger/ui-audio.md#reading-window-arc-ui-049)): a value operand (the
   book's or plaque's first text line, the picture's art) and an object operand (the viewer). The run returns one
   `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
   absent viewer shows nothing. The
   original opens the reading window only for a player viewer, with no dead check; the host decides.
 - **The AREA viewer** admits them in its dialog set (`AreaScriptHost.Admission`, "S3-area-sound-calls-scheme-schematic-reading") and
-  in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading"); both keep the requests whose viewer is the
+  in its use, tile and sector set (`AreaUseScriptHost.Admission`, "S4-area-use-reading-objects"); both keep the requests whose viewer is the
   PC and the viewer opens the [reading window](../world/reading-window-runtime.md#script-openers-scripting-wr15).
 - Installed scripts (opt-in census): 10 use action 64, 3 action 65, 13 action 114; S10 admits 681 scripts whole, 24 more than S9.
   Action 94 (set a written item's first text line, 2 scripts) is not admitted.
@@ -283,7 +310,7 @@ conversation is not run).
 
 - **`ScrAdmissionSet.S9`** is S8 plus start schematic UI (129); `ScrRunOptions` accepted any subset of S9 until ARC-UI-049 widened
   it to S10 (the default stays S5).
-- **The action** (ledger [SW8](../research/original-verification-ledger.md#schematic-window-arc-technology-005)): its object
+- **The action** (ledger [SW8](../research/ledger/technology.md#schematic-window-arc-technology-005)): its object
   operand names one object; the original opens the window with (PC, PC) for a PC, (NPC, its PC leader) for an NPC that has one,
   and nothing otherwise, but calls it through a callback slot the game never fills (TC2). The run returns one
   `ScrSchematicRequest(Object)` in `ScrEffects.Schematics` and goes on to the next line; an absent object names none. The host
@@ -299,7 +326,7 @@ conversation is not run).
 
 - **`ScrAdmissionSet.S8`** is S4 plus set auto-level scheme (139); `ScrRunOptions` accepts any subset of S9 since
   ARC-TECHNOLOGY-005 (the default stays S5). Its focus kinds stay the four single objects, so focus groups are not admitted.
-- **The action** (ledger [OL30](../research/original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064)): its object
+- **The action** (ledger [OL30](../research/ledger/social.md#companion-orders-and-loyalty-arc-res-064)): its object
   operand is a list in the original (one object or a group, 0x44B4E0), and each object gets the number (a value operand, no range
   check) through the scheme setter (0x4A6D90), which writes a PC's or an NPC's scheme and ignores any other object. The run returns
   one `ScrSchemeRequest(Object, Scheme)` per object in `ScrEffects.Schemes`, in action order, and goes on to the next line; an
@@ -333,14 +360,14 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   subset of S4 (the default set stays S5). Focus stays one object (triggerer, attachee, extra object, player), so the
   guards over focus groups are not admitted yet.
 - **Teleports.** `ScrEffects.Teleports` holds one `ScrTeleport(Object, CatalogueMap, X, Y, Fade)` per action, in order, and
-  the run goes on to the next line (ledger [TR1, TR2](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
+  the run goes on to the next line (ledger [TR1, TR2](../research/ledger/world.md#map-transitions-arc-data-025)):
   the object from operand 0 (fade-and-teleport: 3), then the map as the script gives it, x and y as values;
   `RuntimeMap` is the map less 4,999 in 32 bits, as the original computes it. A fade-and-teleport also carries its seconds,
   sound and movie (`ScrTeleportFade`); the original skips it only in a network game. An absent object asks for nothing
   (the original would queue a teleport of no object; what its processing does with one is NOT_VERIFIED). The host owns the
   pending-teleport rule: the original keeps one pending teleport, a new request replaces it unless the pending one is the
   local PC's, which refuses the rest (TR4).
-- **Guards** (ledger [SG1–SG6](../research/original-verification-ledger.md#guard-conditions-arc-script-014)). A host whose set
+- **Guards** (ledger [SG1–SG6](../research/ledger/scripts.md#guard-conditions-arc-script-014)). A host whose set
   holds them implements `IScrObjectQueries`: the quest state of the object, whether it holds an item with that name number,
   its name number, whether it is mind-controlled, the name number of the item it wields in each location 1000..1008, and
   whether it has the reputation. The interpreter asks only for the object the condition names: quest state equals the
@@ -353,6 +380,67 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 - **Installed original** (opt-in `ScrTeleportTests`, `DAT_ROOT`): from line 0 set S7 admits 469 scripts and S4 774. Of the
   357 scripts with a teleport action, S7 admits 22 (none of their teleports is reached from line 0) and S4 294; with a host
   with no quests, items, names, wielded items, reputations or flags, those runs ask for 257 teleports.
+
+## Object variables and calls (ARC-SCRIPT-018, set S12)
+
+`ScrAdmissionSet.S12` is S11 (the skill commands, ARC-SKILLS-009) plus call script (7), assign object (15), get object
+type (34) and the run's ten object variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](../research/ledger/scripts.md#object-variables-and-calls-arc-script-018)).
+
+- **Object variables** start empty in every run. Assign object writes the object operand 1 names (none for an absent one)
+  into the triggerer, the attachee, the extra object or an object variable; any other focus kind is not written. The run's
+  roles are its own copy, so a later action sees the new triggerer.
+- **Get object type** writes the object's type into the number store of operand 1 through
+  `IScrObjectQueries.ObjectType` (15 for a PC, 16 for an NPC, the type field of any other object); a set with it needs a
+  host with the queries, checked before any event runs. An absent object, or one the host does not know, stops the run
+  (`MissingObject`); a literal store is refused at admission.
+- **Call script** runs the script of operand 0 at once from the line of operand 1, with operands 2 and 3 as triggerer and
+  attachee, no extra object, the callee's own header flags and counters and fresh variables. It is admitted from that line
+  with the caller's set when the call happens. Its effects join the caller's (one global-flag overlay, one list of
+  requests), nothing it changes about itself is kept (its remove or change this script included), its return code is
+  ignored and the caller goes on; a callee that stops on an absent object, an index or its line budget ends only itself.
+  A missing callee runs nothing, and so do a trap script and a monster-generator attachee (the runner's gates E4, E5).
+  A callee outside the set refuses the whole dispatch (`Refused`, the callee's refusal), and so does a dialog action in
+  its admitted lines (the original's dialog store for a called run is not read; refused at that line as
+  `ActionNotAdmitted`). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
+  `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles; kept at 16 by the owner's decision of 2026-10-21, [rule modes](../world/rule-modes.md)) or more than `MaxCallDepth` ×
+  `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
+  top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
+  applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  attachee pair of two groups.
+- **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
+  from 254 to 644 of 3,012, and a tile of `void-kerghans castle` (script 3070) teleports through a call; the 21 guarded use
+  sites keep 9 running and 12 refused (they need loops, call-ex or other conditions).
+- **Hosts**: the viewer's use, tile and sector set gains all three and the object variables ("S4-area-use-reading-objects");
+  a call that ends the dispatch (an unreadable callee, the call bounds) counts there as a run refused before it started, so
+  a tile's unconditional teleport still fires. Its dialog set stays without them ("S3-area-sound-calls-scheme-schematic-reading"):
+  a callee there would need the dialog gates, assign object could change the dialog's NPC, which the conversation takes
+  from the click, and the host answers no object queries. A dialog-point event with call script in its set is refused
+  before it runs (`ArgumentException`).
+
+## Story state and story actions (ARC-SCRIPT-019, set S13)
+
+`ScrAdmissionSet.S13` is S12 plus set PC quest state (16), mark map location (49), set rumor (50), add reputation (72) and
+remove reputation (73), as the original runs them (ledger [SS1–SS5](../research/ledger/scripts.md#story-state-and-story-actions-arc-script-019)).
+
+- **Story state** is the session's number (`GameSessionOwner.QueryStoryState`, `RaiseStoryState`; snapshot schema 37): 0 at a
+  new game, only ever raised. Get story state (42) reads it through the host, set story state (43) asks to raise it; the
+  viewer's hosts apply the raise after the run.
+- **Requests**: each action hands one `ScrStateRequest` per object to the host in action order (`ScrEffects.States`): the
+  quest and state with the run's attachee as the giver (16, every object of operand 0), the area (49) and the rumor (50) for
+  the first object of operand 1 (none for an absent one), the reputation (72, 73, every object of operand 0). Only single
+  objects are admitted.
+- **Hosts** (`AreaScriptStory.Apply`): the viewer's use, tile and sector set and its dialog set take them and apply each
+  request for the PC through the session (`SetQuestState`, `DiscoverArea`, `LearnRumor`, `AddReputation`,
+  `RemoveReputation`); a request for any other object is ignored, as the original's functions store nothing for it. A request
+  the session refuses (a number outside its ranges, a quest state outside 0..6, where the original stores it unchecked)
+  stops the later ones. A completed quest's experience award goes on as a dialog command's does: the dialog host queues it
+  with its talk's awards, the use host hands it to the viewer, which levels the followers and shows the level-up messages.
+  Not applied: the quest giver's reaction change (to 41 at state 2, 10 more at state 4) and the alignment and sound of a
+  completion (owned by the reaction and quest domains).
+- **Registry**: `QueryStoryState` marks 0x445090 (full) and `RaiseStoryState` 0x4450A0 (partial: single player).
+- **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
+  from 644 to 684 of 3,012; the 21 guarded use sites keep 9 running and 12 refused.
 
 ## Checks
 
@@ -387,6 +475,12 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrSkillTests.cs` (ARC-SKILLS-009): get skill storing the host's levels, 0 outside 0..15 without
+  asking, an absent object stopping the run, the store refused as a literal, the action refused below S11, a set with 47 refused for a
+  host without skill queries; use item with skill handing its five operands on, nothing without a source or a target, the run going on.
+  Opt-in `ScrAdmissionRealDataTests`: the installed uses of 47, 79 and 115 and the S11 count. Viewer:
+  `AreaScriptHostTests.Get_skill_reads_the_heros_and_an_npcs_effective_levels`; session: `HeroSkillsTests` (the NPC skills from map data
+  until the session saves a sheet).
 - `tests/Arcanum.Scripting.Tests/Scr/ScrReadingTests.cs` (ARC-UI-049): the reading actions refused below S10, one request per action in
   order with the number and the viewer, an absent viewer showing nothing, the run going on, a run with only a request not empty; opt-in
   `ScrAdmissionRealDataTests`: the installed uses of 64, 65, 114 and 94 and the S10 count.
@@ -410,28 +504,36 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   mind-controlled object, the use slot written back and a self-removing script, refusals that change nothing.
   `AreaMapTransfersTests`: which guarded use sites are scripted, the script's outcomes and teleport as the transfer.
   Opt-in `AreaUseScriptsOriginalTests`: the guarded door of `tulla interior` and the census of 21 guarded use sites.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrObjectVariableTests.cs` (ARC-SCRIPT-018): object variables, types and role writes,
+  unset variables, admission of stores and indexes, the host check, and call script (header, start line, shared flags,
+  effects, no writeback, the caller going on, a missing, a refused and a too deep callee).
   ARC-SCRIPT-017: tile and sector scripts run for the PC with their slot on the sector, per rule mode; the transfers run
   them on entry (tile, then sector) and drop a teleport while one is pending; opt-in: the exit tiles of `iron clan hq` and
   the census of 3,012 tile and 20 sector scripts.
 
 ## Not ready
 
-- The session has no story-state number and no global variables (a snapshot
-  schema change, coordinated with other schema work); the viewer binding refuses
-  the story-state actions and no admitted set reads global variables.
+- The session has no global variables (a snapshot schema change, coordinated with other schema work); no admitted set reads
+  them. The story-state number is the session's since ARC-SCRIPT-019.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading": S3 without
-  story state, plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI and the reading actions); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use-reading", and since ARC-SCRIPT-017 the tile and sector scripts the player
-  enters; heartbeat and combat are later slices.
-- Not in any admitted set yet: focus groups and local objects, loops, immediate calls and
-  call-ex, and the world actions other than teleport and fade-and-teleport (set S4), set auto-level scheme (set S8), start schematic UI (set S9) and the reading actions (set S10); float line, quests,
-  reactions... are not admitted.
+- The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-story": S3,
+  plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions and the story
+  actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
+  clicks on guarded use sites run it under "S4-area-use-reading-objects-story", and since ARC-SCRIPT-017 the tile and sector scripts the player
+  enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
+  the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
+  combat are later slices.
+- Not in any admitted set yet: focus groups, loops, call-ex, float line, reactions and most other world actions.
+  Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
+  actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
+  location, set rumor and add or remove reputation (S13).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
+- Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled
+  (SX3, SX4; no live installed script uses it). Try to steal 100 coins (115) waits for pick pocket (task S15).
 - X2 (an uninitialised attachee type without attachee) is reachable only through
   call-script and is left to the slice that admits calls.

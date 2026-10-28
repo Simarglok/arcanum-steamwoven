@@ -1,6 +1,9 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -76,6 +79,35 @@ public sealed class AreaUseScriptsOriginalTests
         }
     }
 
+    // ARC-SCRIPT-020: the use scripts of the two readable prototypes with one (note 14086: script 1146, book 14090: script 1891) run
+    // in a new game's state and let the reading go on, with their story effects in the session. The item rows are synthetic.
+    [TestMethod, TestCategory("RealData")]
+    public void The_use_scripts_of_the_readable_note_and_book_let_the_reading_go_on()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        using var session = ConversationSessionFixture.Create();
+        static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
+        static AreaObjectRecord Item(int index, int script) => new(Key(index), 0, 13, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20,
+            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null,
+                [new AreaSparseElement(1, [0, 0, script])], null)], true, true, true);
+        var note = "oid:" + Key(1).ObjectIdSha256; var book = "oid:" + Key(2).ObjectIdSha256;
+        static SessionItemFacts Facts(int prototype) => new(new(SessionItemType.Written, prototype, 0, 0), 1, 0, 0, null, [1]);
+        var items = new AreaInventoryMap(1, new([], [new(note, Facts(14086), new CellCoord(11, 20)), new(book, Facts(14090), new CellCoord(12, 20))]),
+            new Dictionary<string, AreaObjectRecord> { [note] = Item(1, 1146), [book] = Item(2, 1891) });
+        var host = new AreaUseScriptHost(session, 1, [], [items], content);
+
+        var read = host.RunItemUse(1, note, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (read.Outcome, read.Run!.Outcome), read.Detail);
+        Assert.AreEqual((15, SessionQuestState.Completed), (session.QueryStoryState(), session.QueryQuest(1016)!.Value.State));
+        Assert.IsNotNull(session.QueryRumor(2107));
+
+        var opened = host.RunItemUse(1, book, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (opened.Outcome, opened.Run!.Outcome), opened.Detail);
+        CollectionAssert.Contains(session.QueryKnownAreas().ToArray(), 44);
+        Assert.AreEqual(SessionQuestState.Accepted, session.QueryQuest(1103)!.Value.State, "the PC does not hold item 2021");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set()
     {
@@ -84,6 +116,7 @@ public sealed class AreaUseScriptsOriginalTests
         var first = AreaLoadOperation.Execute(1, Arguments(root, "crematorium-lev 1"), default);
         var outcomes = new Dictionary<AreaScriptedUseOutcome, int>();
         var placedOutcomes = new Dictionary<(Arcanum.Data.Maps.MapTransitionTrigger, AreaScriptedUseOutcome), int>();
+        var teleports = new List<string>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -102,20 +135,24 @@ public sealed class AreaUseScriptsOriginalTests
                 using var session = ConversationSessionFixture.Create(map.RuntimeMap);
                 var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts);
                 placedOutcomes[(placed.Trigger, ran.Outcome)] = placedOutcomes.GetValueOrDefault((placed.Trigger, ran.Outcome)) + 1;
+                if (ran.Outcome == AreaScriptedUseOutcome.Teleport) teleports.Add($"{destination.Name}:{placed.Script}");
             }
         }
         // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
         CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
-            outcomes.Select(p => (p.Key, p.Value)).ToArray());
-        // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): most need
-        // actions outside the set; the five that teleport are the exit tiles of `iron clan hq` to the start map.
+            outcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", outcomes.Select(p => $"{p.Key}={p.Value}")));
+        // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): since
+        // ARC-SCRIPT-018 (call script, assign object, get object type) 644 tile scripts run, since ARC-SCRIPT-019 (story state and
+        // story actions) 684; the 6 that teleport are the exit tiles
+        // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
+        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 5), ((tile, AreaScriptedUseOutcome.NoTeleport), 249), ((tile, AreaScriptedUseOutcome.Refused), 2758),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 678), ((tile, AreaScriptedUseOutcome.Refused), 2328),
             ((sector, AreaScriptedUseOutcome.NoTeleport), 1), ((sector, AreaScriptedUseOutcome.Refused), 19),
-        }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray());
+        }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
 
     private static string Root()

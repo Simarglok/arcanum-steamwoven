@@ -62,6 +62,28 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionWaitFiring> Waits { get; init; } = Array.Empty<SessionWaitFiring>();
     /// <summary>The respawning scenery switched on again (ARC-COMBAT-008), in firing order.</summary>
     public IReadOnlyList<SessionRespawnFiring> Respawns { get; init; } = Array.Empty<SessionRespawnFiring>();
+    /// <summary>The magic-tech events that came due (ARC-MAGIC-010), in firing order.</summary>
+    public IReadOnlyList<SessionSpellRunFiring> SpellRuns { get; init; } = Array.Empty<SessionSpellRunFiring>();
+    /// <summary>The Item Decay events that came due (ARC-WORLD-062), in firing order.</summary>
+    public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
+}
+
+/// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the rules say the event does.
+/// <see cref="Postponed"/>: a deletion the session could not make yet (the item's map seed not attached, or the deleted-item budget
+/// full) was scheduled again a minute on instead.</summary>
+public sealed record SessionDecayFiring(GameEvent Event, SessionMapId Map, string Entity, Arcanum.Simulation.Items.ItemDecayStep Step)
+{
+    public bool Postponed { get; init; }
+}
+
+/// <summary>
+/// ARC-WORLD-062: a host that knows whether the loot window shows a container (the original's counter 0x5E8800, lowered when the
+/// inventory window opens on a container in its loot mode or its second container mode, raised when it closes). An Item Decay event that fires meanwhile
+/// waits a minute (ledger ID3, ID6). A pass whose host does not implement it runs as if no container were shown.
+/// </summary>
+public interface ISessionLootWindowWorld : ISessionEventWorld
+{
+    bool LootWindowShowsContainer { get; }
 }
 
 /// <summary>A respawn event that came due (ARC-COMBAT-008, ledger OD10): the scenery switched on again.</summary>
@@ -98,7 +120,8 @@ public static class SessionEventKinds
 {
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
-    /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/> and ARC-COMBAT-008 <see cref="ObjectRespawn"/> without a new version:
+    /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
+    /// <see cref="SpellRun"/> (not saved) and ARC-WORLD-062 <see cref="ItemDecay"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -159,9 +182,10 @@ public static class SessionEventKinds
     public const long RestingDelayMs = 3_600_000;
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
-    /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events and the wait timers.</summary>
+    /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
+    /// magic-tech events and the Item Decay events.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
     public const int MaxLockResets = 1024;
 
@@ -173,6 +197,27 @@ public static class SessionEventKinds
     public const string ObjectRespawn = "object.respawn";
     /// <summary>Pending respawn events a session holds (project policy; the original has no bound).</summary>
     public const int MaxObjectRespawns = 1024;
+
+    /// <summary>
+    /// The original's Item Decay event (kind 25, saved, game time; ARC-WORLD-062, ledger ID1–ID9): an item dropped on the ground is
+    /// destroyed two game days later unless it was picked up (<see cref="Arcanum.Simulation.Items.ItemDecayRules"/>). Scoped to the
+    /// item's map, one per item (a new one replaces the item's earlier one). Entity: the item; values: the game time it was
+    /// scheduled at and its delay (<see cref="Arcanum.Simulation.Items.ItemDecayRules.DelayMs"/>, or the retry's
+    /// <see cref="Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs"/>).
+    /// </summary>
+    public const string ItemDecay = "item.decay";
+    /// <summary>Pending Item Decay events a session holds (project policy; the original has no bound): a drop beyond it does not decay.</summary>
+    public const int MaxItemDecays = 8192;
+    /// <summary>
+    /// The original's magic-tech event (kind 5; ARC-MAGIC-010, ledger RP): a run's tick, interrupt or process
+    /// (<see cref="Arcanum.Simulation.Magic.SpellRunEventCode"/>). Global, any number. No entities; values: the game time it was
+    /// scheduled at, the run (0..511) and the code. Not saved: the session's runs are not saved either until MT9b, so a restored
+    /// session has neither.
+    /// </summary>
+    public const string SpellRun = "magic.run";
+    /// <summary>Pending magic-tech events a session holds (a budget: about a tick and an interrupt for each of the 512 runs; the
+    /// interrupts and process events are not deduplicated).</summary>
+    public const int MaxSpellRunEvents = 2 * Arcanum.Simulation.Magic.SpellRunTable.Slots;
     /// <summary>The longest respawn delay: the most negative respawn field in game minutes.</summary>
     public const long MaxRespawnDelayMs = 2_147_483_648L * 60_000L;
 
@@ -203,8 +248,19 @@ public static class SessionEventKinds
             new(ObjectRespawn, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ObjectRespawnHandler(owner),
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
+            new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
+                new ItemDecayHandler(owner), Validate: DecayPayload),
+            new(SpellRun, GameEventDomain.Game, GameEventPersistence.NotSaved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
+                new SpellRunHandler(owner),
+                Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
+                    && payload.Values[2] is >= 1 and <= 3),
         ]);
     }
+
+    // Scheduled at a game time, after the decay delay or the retry's, naming an item.
+    internal static bool DecayPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Items.ItemDecayRules.DelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
+        && payload.Entities[0].Code != AbsentRole;
 
     /// <summary>The original's wait-event predicate (0x4AAA30): whether the event names the NPC.</summary>
     [Arcanum.Simulation.OriginalFunction(0x4AAA30, Arcanum.Simulation.OriginalFunctionScope.Full)]
@@ -302,6 +358,18 @@ internal sealed class ObjectRespawnHandler(SessionEventSink sink) : IGameEventHa
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireObjectRespawn(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class ItemDecayHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireItemDecay(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class SpellRunHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireSpellRun(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler

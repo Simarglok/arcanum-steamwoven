@@ -147,6 +147,25 @@ public sealed record LifeDamage
     public int Poison { get; init; }
     public CriticalHitEffects Effects { get; init; }
     public HitLocation Location { get; init; }
+    /// <summary>The death flag of the packet (a spell's <c>Death</c>): a death falls with the plain animation (ledger FA10).</summary>
+    public bool PlainDeath { get; init; }
+
+    /// <summary>ARC-MAGIC-012: the damage of a step without an attack (<see cref="AttackResolver.DamageStep"/>) at
+    /// <paramref name="location"/>, or null when it was prevented.</summary>
+    public static LifeDamage? FromStep(AttackDamage damage, HitLocation location = HitLocation.Torso, bool plainDeath = false)
+    {
+        ArgumentNullException.ThrowIfNull(damage);
+        if (damage.Prevented != DamagePrevention.None) return null;
+        return new LifeDamage
+        {
+            HitPoints = damage.HitPointDamage,
+            Fatigue = damage.FatigueDamage,
+            Poison = damage.PoisonDamage,
+            Effects = damage.HitEffects,
+            Location = location,
+            PlainDeath = plainDeath,
+        };
+    }
 
     /// <summary>
     /// The damage of a resolved attack for its recipient (<see cref="AttackDamage.Recipient"/>: the target, or the attacker
