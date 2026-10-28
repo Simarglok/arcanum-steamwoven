@@ -70,7 +70,7 @@ public sealed partial class GameSessionOwner
         _inventory.SetWeight(item.Entity, weight);
         _inventory.Taken.Add(item.Entity);
         if (ammo is { } kept) _inventory.Ammo[item.Entity] = new(item.Entity, kept.AmmoType, kept.Units);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, Version);
     }
 
@@ -87,7 +87,7 @@ public sealed partial class GameSessionOwner
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, stack.Entity, verdict, Version);
     }
 
@@ -117,7 +117,7 @@ public sealed partial class GameSessionOwner
         if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         Delete(item);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item, null, Version);
     }
 

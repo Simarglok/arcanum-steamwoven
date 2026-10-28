@@ -25,9 +25,14 @@ public readonly record struct SessionItemWeightRecord(string Entity, SessionItem
 /// <summary>
 /// ARC-WORLD-085: what the hero carries: the total weight of its list (<see cref="CarryRules.TotalWeight"/> with the hero as holder,
 /// worn items included, its coins weightless), its effective carry weight (stat 8) and the encumbrance level these give
-/// (<see cref="CarryRules.Level"/>, 0..6). The level's consequences (effect 158, the fatigue timer, the message) are not applied yet.
+/// (<see cref="CarryRules.Level"/>, 0..6). Its consequences follow a recalculation (ARC-WORLD-087), which may lag this level (ledger WE7).
 /// </summary>
-public sealed record SessionHeroCarry(int Weight, int CarryWeight, int Level);
+public sealed record SessionHeroCarry(int Weight, int CarryWeight, int Level)
+{
+    /// <summary>ARC-WORLD-087: whether the level lets the hero run (<see cref="CarryRules.CanRun"/>, below level 4; ledger WE9). The run's
+    /// fatigue test is the host's.</summary>
+    public bool CanRun => CarryRules.CanRun(Level);
+}
 
 public sealed partial class GameSessionOwner
 {

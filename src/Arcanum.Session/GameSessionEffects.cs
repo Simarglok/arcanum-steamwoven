@@ -484,7 +484,7 @@ public sealed partial class GameSessionOwner
         }
         if (cancel is not null) _events.RemoveFirst(cancel.Kind, e => e.Sequence == cancel.Sequence);
         apply?.Invoke(now);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Length, prepared.LifeChanged ? _life.Hero : null, sequence,
             new(_identity, _revision));
     }

@@ -414,3 +414,33 @@ Not read: what the original's flight does when a scatter walks back onto the thr
 the flight goal does not start; the projectile and the hidden item were not followed): Steamwoven lands the item on the thrower's tile
 at once. Not modelled: the hit script and item event of PS5 (as PF9, PF10).
 
+
+## Boomerangs (ARC-COMBAT-019)
+
+Source: the [hero attack runtime](../../world/hero-attack-runtime.md#boomerangs-arc-combat-019). Question: what marks a boomerang's
+projectile and its thrower (RH3), what the projectile's end (0x4B2690) does with attack flag 0x1000 on its first and its second
+end, where and how the return flies and what it strikes on the way, what the thrower may do while the boomerang is away, and what
+follows its return. Read on 2026-10-28 by this task, once, in the retail 1.0.7.4 executable (SHA-256 checked), so the rows are F1;
+they refine RH3, RT7, PF8, PF9, PF12 and PS5. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BR1 | projectile (0x4B24F0) | For a parent weapon (type 5): weapon flag 0x20 draws additive (PF2); weapon flag 0x40 (boomerangs, which makes the skill throwing, 0x465D80) sets the attacker's field 219 bit 0x4 and the context flag 0x1000 before the flags are stored in field 0x4D, so every projectile of such a weapon carries it, also after a critical miss of the dispatcher (0x4B6410, PF1) dropped or broke the weapon. The weapon stays wielded: nothing removes it (it has no "default throws" flag 0x200, TW1). | Original |
+| BR2 | attack start (0x434B00) | After the attack cost and the round gate (0x4B7C30, 0x4348E0, which charges nothing) and the goal checks, when no attack goal of the attacker is to be updated instead (0x436720 → 0x4363E0, which skips the test), an attacker whose field 219 has bit 0x4 fails the start (its exit through 0x4364D0): no new attack, of any weapon, while its boomerang is away. The real-time repeat (RT7, 0x429760) does not repeat then either, so the attack goal ends. | Original (agrees with EX7's boomerang refusal, [AI action execution](npc-ai.md#npc-ai-action-execution-arc-res-066)) |
+| BR3 | projectile end (0x4B2690), flag 0x1000 | Arguments: the projectile, the thrower, the goal's target object, the context and a "may turn" word. The tile crossing (0x4B2870) passes 1 for a strike, the range end and the destination end; the flight goal's own end (0x42CAC0 → 0x4B2650, a goal stopped or failed, a point off the map) passes 0 and no target. With the word set and flag 0x2000 clear: flag 0x2000 is stored and the turn 0x435A00 runs with the thrower's location at that moment and the target object; the projectile is not destroyed, and the struck object's alert follows as for any end. Otherwise (no turn allowed, returning already, or a turn that found no flight goal): the second end: the thrower's field 219 loses bit 0x4, the projectile is destroyed (0x43CCA0) and 0x4A9AD0 runs with the thrower and the target object (BR6). | Original |
+| BR4 | turn (0x435A00), path node (0x42F5C0) | The projectile's flight goal (0x24, found by 0x44E830) takes the thrower's location as its destination and the target object as its target slot; the record's path flag (+0xC00 bit 0x1) is set and its flag 0x10 cleared, so the tick (0x42F6A0) idles until the path node runs again: step index 0, the range start the projectile's own location (node +0x38), and the line built anew from the projectile's tile to the thrower's tile (PF3's line; the builder 0x4269D0 and the pixel offset at the turn were not followed). Neither function sets the facing (PF13, PF14 are launch-only). A thrower that walks on is not followed: the boomerang flies to the tile it stood on at the turn. | Original (the line's start inferred from the path node, not read in 0x4269D0) |
+| BR5 | tile crossing (0x4B2870), flag 0x2000 | Leaving the destination (the thrower's tile at the turn) ends the shot with the turn allowed and flag 0x2000 set, so the second end runs (PS5's branch: also the weapon's hit script, point 7 and 34 on a critical, and the item event 0x800000 at that tile). Leaving any other tile, flag 0x2000 skips every test after the destination check (0x4B2A9E): no hit, no stray strike, no obstruction and no range end; the returning boomerang strikes nothing. | Original |
+| BR6 | critter attacks (0x4A9AD0) | Nothing when the two are the same; else an optional hook (0x5F848C); a thrower not in combat mode (field 0xDA bit 0x40000, 0x4B3D50) takes it up (0x4B3F80), and in a turn-based round (0x4B6D70) the target joins it (0x4B6E70); then, unless the goal-slot tests 0x423300 and 0x423470 refuse, when 0x4B8230 allows (0 in a turn-based round; in single player the "auto attack" option; on a network the player's flag 0x200) and no goal 0x13 runs, the attack 0x434AE0 → 0x434B00 on the target, not aimed (hit location −1). | Original (the goal-slot tests not read in detail) |
+| BR7 | range end (0x4B2870), check range (0x4C8430) | A boomerang's flight ends its outward leg by the weapon's range (0x465E30: 20 or 8 installed, TW7), as flag 0x40 is not set (PF9); the check measures the throwing skill's range, the thrown range of RH4 (strength and the boomerang's weight), and the attack goal's reach is the weapon's range (RH1). | Original (F2 for RH1, RH4, PF9; their combination for a boomerang F1) |
+
+Anomalies: none. Implemented by ARC-COMBAT-019 for the hero: BR1 (the session's shot of a throwing-skill weapon that stays in the
+hand, `QueryBoomerangInFlight`), BR2 (`GameSessionFailure.WeaponInFlight` before any roll; the viewer's repeat waits), BR3 (a strike
+turns the session's shot, `ReturnShot` turns it at the range end or a target-less destination, `EndShot` is the second end, also for
+a flight given up), BR4 (`ProjectileRules.TurnBack`: a new line from the tile being left to the hero's tile now), BR5
+(`ProjectileRules.Cross` with `ProjectileShot.Returning`), BR6 in the viewer (combat mode on, in real time with the auto-attack
+setting a new attack goal on the NPC or object the shot was fired at when none runs) and BR7 (`BoomerangHero`: the thrown range from the
+session's weight row with the hero as holder). Steamwoven differences: the session keeps no projectile and no mark in a snapshot, so a
+session restored while a boomerang flies has it in the hand and may attack at once (the original's map keeps both); a turn on the
+hero's own tile ends the flight at once (the original's line of no step was not read). Not modelled: the return's hit script and
+item event (BR5, as PS5), the hook and the turn-based round's join of BR6, its goal-slot tests, a give-up's re-attack without a
+target, NPC boomerangs (no AI) and the struck object's alert.

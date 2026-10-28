@@ -160,7 +160,7 @@ public sealed partial class GameSessionOwner
         if (check.Fated) hero.Apply(hero.State.WithFate(FateRules.Use(hero.State.Fate, FateKind.Heal).After));
         if (destroyed) Delete(item.Entity);
         else _durability.Uses[item.Entity] = (int)left;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, check, outcome, life, destroyed ? null : (int)left, destroyed,
             check.Fated, Version);
     }

@@ -468,7 +468,7 @@ public sealed partial class GameSessionOwner
             }
             // ARC-WORLD-045 (OL17): a reaction drop of a follower arms its leader check in the same revision.
             foreach (var arm in armed) owner._party.Put(arm, false);
-            owner._revision++;
+            owner.Revise();
             return with(result, GameSessionDisposition.Changed, owner.Version);
         }
 

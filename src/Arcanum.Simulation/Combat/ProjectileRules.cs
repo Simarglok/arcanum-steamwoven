@@ -37,13 +37,15 @@ public enum ProjectileStrikeKind
     /// <summary>Nothing was struck and the tile left lies beyond the range from the start: the flight ends.</summary>
     RangeEnd,
     /// <summary>ARC-COMBAT-018: a shot without a target (a missed throw's scatter) leaves its destination: the flight ends there,
-    /// before anything on the tile is struck (0x4B2870).</summary>
+    /// before anything on the tile is struck (0x4B2870). ARC-COMBAT-019: so does a returning boomerang leaving the tile it flies
+    /// back to.</summary>
     DestinationEnd,
 }
 
 /// <summary>A shot in flight as the original's projectile carries it (field 0x4D): whether it hit (flag 0x2) and whether it flies free
-/// (flag 0x20: a missed shot that passed its destination, which then meets obstructions), and the range that ends it.</summary>
-public readonly record struct ProjectileShot(bool Hit, bool FreeFlight, int Range);
+/// (flag 0x20: a missed shot that passed its destination, which then meets obstructions), and the range that ends it.
+/// ARC-COMBAT-019: <see cref="Returning"/> is flag 0x2000, a boomerang flying back to its thrower (<see cref="ProjectileRules.TurnBack"/>).</summary>
+public readonly record struct ProjectileShot(bool Hit, bool FreeFlight, int Range, bool Returning = false);
 
 /// <summary>What leaving a tile did: the shot as it flies on (a missed shot leaving its destination flies free), what it struck
 /// (the target, a stray critter or an obstruction, or the end of its range) and the struck object (null for none or the range end).</summary>
@@ -143,6 +145,21 @@ public static class ProjectileRules
     public const uint SceneryArtClass = 4;
 
     /// <summary>
+    /// ARC-COMBAT-019 (the projectile's end 0x4B2690 with attack flag 0x1000, the turn 0x435A00, ledger BR rows): a boomerang's
+    /// projectile at its first end (a strike, the end of its range, or the destination of a shot without a target) turns back: its
+    /// flight goal flies on from the tile it is on (<paramref name="flight"/>'s tile, the one being left) to
+    /// <paramref name="thrower"/>, the thrower's tile at the turn, on a new line (PF3's), and the shot returns (flag 0x2000) with its
+    /// outcome, range and facing kept. Null when the two tiles are the same or no line is built: the boomerang is back at once
+    /// (Steamwoven; the original's flight with a line of no step was not read).
+    /// </summary>
+    [OriginalFunction(0x435A00, OriginalFunctionScope.Partial)]
+    public static (ProjectileFlight? Flight, ProjectileShot Shot) TurnBack(ProjectileFlight flight, ProjectileShot shot, CellCoord thrower)
+    {
+        ArgumentNullException.ThrowIfNull(flight);
+        return (Launch(flight.Tile, thrower), shot with { Returning = true });
+    }
+
+    /// <summary>
     /// The flight from <paramref name="start"/> to <paramref name="destination"/> (0x435870 and its path node): the pixel line between
     /// the two tiles' screen centres in 10-pixel steps, the projectile on the start tile's centre. Null when the two tiles are the same
     /// or the line cannot be built (more than <see cref="LineOfFireRules.MaxLinePixels"/> pixels on its major axis).
@@ -191,7 +208,9 @@ public static class ProjectileRules
     /// <paramref name="roll"/>(1, 3) is 1 (the first that rolls it; nothing more is rolled). When nothing was struck and the tile left
     /// lies more than the range from the start, the flight ends. ARC-COMBAT-018: a shot without a <paramref name="target"/> (a missed
     /// throw's scatter) is a miss flying free from the start (else <see cref="ArgumentException"/>) and ends when it leaves its
-    /// destination, before any of these tests.
+    /// destination, before any of these tests. ARC-COMBAT-019: a returning boomerang (<see cref="ProjectileShot.Returning"/>, flag
+    /// 0x2000) strikes nothing, meets no obstruction and has no range: it ends when it leaves its destination (the tile it flies back
+    /// to), whatever its target, and flies on through every other tile.
     /// </summary>
     [OriginalFunction(0x4B2870, OriginalFunctionScope.Partial)]
     public static ProjectileCrossingResult<TObject> Cross<TObject>(ProjectileShot shot, ProjectileCrossing crossing, CellCoord destination,
@@ -200,6 +219,8 @@ public static class ProjectileRules
         ArgumentNullException.ThrowIfNull(attacker);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(roll);
+        // ARC-COMBAT-019: flag 0x2000 ends the shot at its destination and skips every other test (0x4B2A45–0x4B2AA1).
+        if (shot.Returning) return new(shot, crossing.Left == destination ? ProjectileStrikeKind.DestinationEnd : ProjectileStrikeKind.None, null);
         // ARC-COMBAT-018: a shot without a target (a missed throw's scatter cleared it and set flag 0x20, 0x4B39B0) flies free and
         // ends on leaving its destination.
         if (target is null && (shot.Hit || !shot.FreeFlight)) throw new ArgumentException("A shot without a target is a miss flying free.", nameof(shot));
