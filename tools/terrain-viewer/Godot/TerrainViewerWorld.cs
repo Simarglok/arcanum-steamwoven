@@ -130,8 +130,9 @@ public partial class TerrainViewerApp
         _worldActor.AreaOccupancy = AreaPcOccupancy;
         // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
         _worldActor.AreaCrittersPass = () => !HeroInCombatMode;
-        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points.
-        _worldActor.AreaStepCharge = HeroStepCharge;
+        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points; ARC-WORLD-110: the walk's trap check
+        // of the next tile comes first.
+        _worldActor.AreaStepCharge = HeroStepGate;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
@@ -590,6 +591,7 @@ public partial class TerrainViewerApp
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
+        NoteTrapSteps(session, advance);
         NoteMapPortals(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
