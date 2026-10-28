@@ -370,6 +370,21 @@ public sealed class PremadeHeroTests
     }
 
     [TestMethod]
+    public void One_kit_item_reads_from_its_basic_prototype_with_the_kit_refusals()
+    {
+        // ARC-UI-036: the opening shop's kit reads its items one by one (basic number + 20 is the file).
+        var files = Files();
+        Func<int, PrototypeFile> read = number => files.GetValueOrDefault(number, new(PrototypeFileStatus.Missing, null));
+        Assert.AreEqual(PremadeHeroFailure.None, PremadeHeroReader.ReadItem(read, 8168, out var item, out var number));
+        Assert.AreEqual((8188, 8168, 8188, 7, 2850, 8168), (number, item!.BasicPrototype, item.Prototype, item.Type, item.Name, item.Description));
+        Assert.AreEqual((PremadeHeroFailure.ItemPrototypeMissing, 7020), (PremadeHeroReader.ReadItem(read, 7000, out item, out number), number));
+        Assert.IsNull(item);
+        Assert.AreEqual((PremadeHeroFailure.ItemPrototypeMissing, -1), (PremadeHeroReader.ReadItem(read, -1, out _, out number), number));
+        files[8188] = new(PrototypeFileStatus.Found, Prototype(8188, 8));
+        Assert.AreEqual(PremadeHeroFailure.ItemTypeUnsupported, PremadeHeroReader.ReadItem(read, 8168, out _, out _), "gold is coins");
+    }
+
+    [TestMethod]
     public void TheDirectoryLookupFindsOneFilePerNumber()
     {
         var root = Path.Combine(Path.GetTempPath(), $"premade-hero-test-{Guid.NewGuid():N}");

@@ -1781,9 +1781,9 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   begins or ends the name's typing, or presses the button.
 
 Since ARC-UI-034 Accept opens the [character editor](#character-editor-in-creation-mode-arc-ui-034) instead of starting the
-game. Not built yet (later N10b slices): the portrait's image in the window and the opening shop with the background's money
-and items and the clothes (FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no
-gold and no items. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
+game, and since ARC-UI-036 the editor's Accept opens the [opening shop](#opening-shop-arc-ui-036), whose kit (the background's
+money and items, the clothes, lockpicks and bandages) the new character starts with. Not built yet (later N10b slices): the
+portrait's image in the window; the body type and art by race and gender are N15. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
 back, the default name refused, a name typed through the keys and an Accept that opens the editor and, through it, starts a
 dwarf with a background and its effect, the name and the portrait); native smoke on the original data: the `menu` stage
 (`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
@@ -1803,16 +1803,16 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   so the editor works on a draft session made from the window's character exactly as the start makes it (the scene's
   new-game recipe, the race, gender, portrait, name and background with its effect; `AreaCreationEditor`), with its
   character editor open: the floor is the character's start (eight stats 8, nothing bought), as in the original (CM4). The
-  draft is disposed whenever the window is left or the menu ends. A scene without its new-game recipe (its session came from
+  draft is disposed when the window goes back to the new-character window or the menu ends (the opening shop keeps it). A scene without its new-game recipe (its session came from
   a transfer or a load) cannot open the editor and names the reason.
 - **Pages.** The character sheet in its creation mode above the main menu's backdrop: the sheet's values, the stats page
   (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
   rules and texts, [skills page](#skills-page-arc-ui-009)), and Cancel and Accept. Each press that changes the draft is
   recorded; a refused one is not.
-- **Accept** (or Return, CM5) starts the new game as Start does for a pre-made hero, then replays the recorded presses on the new
-  session inside an editor of its own opened on the same start (`AreaNewCharacter.Apply`), and closes that editor: the game
-  starts with nothing refundable (owner rule 2026-10-20). A press the new session refuses fails the start and names it. The
-  original goes on to the opening shop (window 15, CM2), which is not built.
+- **Accept** (or Return, CM5) opens the [opening shop](#opening-shop-arc-ui-036) (window 15, CM2), whose Accept starts the new
+  game as Start does for a pre-made hero, then replays the recorded presses on the new session inside an editor of its own
+  opened on the same start (`AreaNewCharacter.Apply`), and closes that editor: the game starts with nothing refundable. A press
+  the new session refuses fails the start and names it. The draft and its editor stay, hidden, while the shop is open.
 - **Cancel** (or Escape, CM5) goes back to the new-character window, which, as in the original, starts a new character (the
   generic human man; CM6). The name field starts with message 500 again (the original keeps the typed name, NW7: a later
   slice).
@@ -1825,6 +1825,52 @@ refused `−` at the floor, and Return starts the dwarf with the presses replaye
 stage, original data): the elf woman's willpower, a hit point, the first skill and a college 1 spell, the hit point taken
 back and a second `−` refused, then Return; `ARC-UI-034 native-smoke character editor PASS` with the started session's values.
 Checks: `AreaNewCharacterTests` (draft, record, replay, a refused replay, the menu's window 14), `AreaStatsPageTests`.
+
+### Opening shop (ARC-UI-036)
+
+N10b, slice 4 (FR-CHAR-007, FR-CHAR-015): the original's window 15, which the character editor's Accept opens
+([ledger OS1–OS6](../research/ledger/character.md#opening-shop-arc-ui-036)). In the original its opening makes the new character's
+kit (`item_generate_inventory`) and opens barter with the first NPC of the shop map the new game runs on behind the menu; its
+Accept starts the game, its Back returns to the editor.
+
+- **The kit** (`AreaOpeningKit.Make`, `OpeningKitRules`, OS3, OS4), made from the editor's draft each time the shop opens: the money
+  and items of the background the character holds (block 0, 400 gold installed, when no background button was pressed: the shop
+  reads the PC's field), then the clothes for its gender and armour size (men 8065, 8049, 8069; women 8134, 8133, 8135), kept
+  when the draft's wear check allows them in the body-armour slot (`GameSessionOwner.CheckHeroWear`; the art lookup answered
+  yes, as the viewer's start answers it), else the size's jacket (8118, 8110, 8126); then crude lockpicks (15178) for any
+  pick-locks points and bandages (15179) for any heal points the editor bought. An item whose prototype is missing is skipped,
+  as the original's failed creation; an item with a get or insert-item script, which the transfer to the PC runs, refuses the
+  shop with the reason, as a pre-made kit refuses it. The items keep their prototypes' item flags (the original marks the
+  background's items identified, OS4: not modelled). The generic start reads the prototype files the kit can make once
+  (`AreaHeroLoad.KitPrototypes`: every background's items, the clothes, jackets, lockpicks and bandages).
+- **The window** lists the kit: the gold, each item's name (the game's text when the names loaded) with its prototype, the
+  clothes chosen and the items skipped; Back (left) and Accept (right), the controller's rows Accept and Back. No letters;
+  Return accepts, Escape goes back (CM5, MM6).
+- **Accept** (or Return) starts the game with the kit: the session's hero is the new character with the kit's gold and items
+  (`AreaNewCharacter.StartHero`, the kit's tables with it), the window's choices and the editor's presses are applied, then the
+  start wields the best weapon and the best body armour, each only into an empty slot (`AreaNewCharacter.WieldStart`,
+  `GameSessionOwner.WieldStartBest`, the original's 0x5412E0, OS5; the art lookup and insert check answered yes); no other
+  slot, unlike a pre-made hero's start, which wields every slot (WB1–WB8). The suit is worn unless it has a move script or item
+  spells (then it stays in the pack, as the best-items policy keeps such an item).
+- **Back** (or Escape) returns to the editor with the same draft: every point spent before the shop can still be taken back
+  down to the character's start (the original reopens the editor on the snapshot it took when the character was made, CM4, OS6;
+  owner decision 2026-10-28: points stay free until the game starts, in both rule modes). The kit goes; the next opening makes
+  it anew, so it is never doubled.
+- **Map transfers and loads.** A new character's map transfer or load reads the generic start again (its kit is empty), so the
+  viewer rebuilds the kit's tables (wear, healing, lockpicks, durability, art, item spells, grid, use) from the session's own
+  kit items by kit number (`AreaStartingHero.WithSessionKit`).
+
+**Not built:** the merchant. The original runs the new game on the shop map (`SHOPPING_MAP`, ShopMap) behind the menu and opens
+barter with its first NPC (OS2: the NPC forgets the PC, its inventory and its substitute container restock); Steamwoven's menu
+has no shop map behind it, so the shop is the kit alone (`AreaMainMenu.NoShopBarter` in the window's note), and the start-map
+teleport is the scene flow's (ARC-UI-012). The barter on the shop map is a later N10b slice.
+
+Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: Return in the editor opens the shop on the dwarf's kit (120
+gold, the clothes skipped: no prototype reads in the fixture), Back returns to the editor where the strength bought before the
+shop is taken back and bought again, Return opens the shop again and Accept starts the dwarf with the gold. Native smoke (`menu`
+stage, original data): the elf woman's shop with her background's money and items and the clothes, Back, her willpower taken
+back and bought again, Return twice; `ARC-UI-036 native-smoke opening shop PASS` with the kit, the worn armour and the started
+session's gold. Checks: `AreaOpeningShopTests`, `OpeningKitRulesTests`, `EquipBestTests`, `PremadeHeroTests`.
 
 ### Interface bars (ARC-UI-018)
 

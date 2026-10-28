@@ -16,8 +16,9 @@ public readonly record struct AreaCreationPress(AdvancementTrack Track, int Inde
 /// in creation mode", CM1–CM8): window 14 has no art, two buttons (Accept, Cancel) and no execute; its refresh opens the ordinary
 /// character editor (0x5597C0) on the new PC in mode 0 (creation; mode 3 on a later opening), whose open takes the snapshot every
 /// refund stops at, so the five starting points can be spent and taken back on the stats, skills and spells pages while the window
-/// stays open. Accept (or Return) goes on to the opening shop (window 15, not built: Steamwoven starts the game); Cancel (or Escape)
-/// goes back to window 12, whose opening makes a new PC (NW1).
+/// stays open. Accept (or Return) goes on to the opening shop (window 15, ARC-UI-036: <see cref="AreaOpeningKit"/>), whose Back
+/// returns here with the draft and its floor unchanged (the original's mode-3 reopening, CM4); Cancel (or Escape) goes back to
+/// window 12, whose opening makes a new PC (NW1).
 /// Steamwoven makes the PC's session when Accept starts the game, possibly after the start scene loaded (ARC-UI-012). So the editor
 /// works on a draft: a session made from the window's character exactly as the start makes it (<see cref="AreaNewCharacter.ApplyChoices"/>),
 /// with its editor open; each press that changed it is recorded in <see cref="AreaNewCharacter.Presses"/>, and the start replays

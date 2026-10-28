@@ -214,8 +214,21 @@ public partial class TerrainViewerApp
         if (_mainMenu is null || _mainMenuPanel is null) return;
         BindOptionsWindow();
         _mainMenu.Rules = CreationRules();
-        _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero) : "");
+        _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
+            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit) : "");
         RenderCharacterEditor();
+    }
+
+    /// <summary>ARC-UI-036: the opening shop's kit as the window lists it: the gold, then each item's name (the game's text when the names
+    /// loaded) with its prototype, the clothes the kit chose and the items it skipped.</summary>
+    private string ShopDescription(AreaOpeningKit kit)
+    {
+        var lines = new List<string> { $"gold {kit.Gold} (background {kit.Background})" };
+        for (var i = 0; i < kit.Kit.Count; i++)
+            lines.Add($"kit:{i + 1} {AreaInventoryHost.KindName(kit.Kit[i].Kind, _hoverNames?.Catalog)} (prototype {kit.Kit[i].Kind.Prototype})");
+        lines.Add(kit.Clothes is null ? "no clothes for this race's size" : kit.Jacket ? $"the suit did not fit: jacket {kit.Clothes}" : $"clothes {kit.Clothes}");
+        if (kit.Skipped > 0) lines.Add($"{kit.Skipped} item(s) skipped: no prototype");
+        return string.Join("\n", lines);
     }
 
     /// <summary>ARC-UI-030: the character-creation rules of the rule setting the launcher and options window hold (NW4).</summary>
@@ -307,6 +320,17 @@ public partial class TerrainViewerApp
                 }
                 else _mainMenu.Notice = "the character editor cannot open: " + draftRefused;
                 break;
+            case AreaMenuCommandKind.OpenShop:
+                // ARC-UI-036: the editor's Accept opens window 15, whose refresh makes the kit (0x545E80 → 0x460FF0, OS2, OS3).
+                if (_mainMenu.Editor is not { } shopEditor) { _mainMenu.Notice = "the opening shop cannot open: the character editor is gone"; break; }
+                if (AreaOpeningKit.Make(shopEditor, out var kitRefused) is { } kit)
+                {
+                    _mainMenu.OpenShop(kit);
+                    GD.Print($"ARC-UI-036 shop open background={kit.Background} gold={kit.Gold} items={string.Join(",", kit.Items)} kit={kit.Kit.Count} "
+                        + $"clothes={kit.Clothes} jacket={kit.Jacket} skipped={kit.Skipped} presses={shopEditor.Creation.Presses.Count}");
+                }
+                else _mainMenu.Notice = "the opening shop cannot open: " + kitRefused;
+                break;
             case AreaMenuCommandKind.StartNewCharacter:
                 var made = _mainMenu.Creation!;
                 if (StartNewGame(-1, creation: made) is { } madeRefused) _mainMenu.Notice = madeRefused;
@@ -349,7 +373,8 @@ public partial class TerrainViewerApp
     {
         AreaHeroLoad hero;
         if (creation is null) hero = MainMenuHero(index);
-        else if (creation.Hero(out var why) is { } made) hero = made;
+        // ARC-UI-036: the new character starts with the opening shop's kit.
+        else if (creation.StartHero(out var why) is { } made) hero = made;
         else return "new game refused: the new character cannot be made (" + why + ")";
         if (hero.Status != AreaHeroStatus.Ready) return $"new game refused: the hero cannot be read ({hero.Status} {hero.Detail})";
         var name = creation is null ? hero.Hero.Name : CreationName(creation);
@@ -369,6 +394,12 @@ public partial class TerrainViewerApp
         {
             owner.Dispose();
             return "new game refused: " + backgroundRefused;
+        }
+        // ARC-UI-036: then the start's best weapon and body armour (0x5412E0, OS5).
+        if (creation is not null && AreaNewCharacter.WieldStart(owner, hero.KitWear ?? []) is { } wieldRefused)
+        {
+            owner.Dispose();
+            return "new game refused: " + wieldRefused;
         }
         // As a load: the maps' inventory seeds and the dialog host move to the new session before anything changes.
         if (_inventoryHost?.Attach(owner) is { } attached && attached != GameSessionFailure.None)
@@ -422,11 +453,24 @@ public partial class TerrainViewerApp
         if (loaded.QueryHero() is not { } hero) return null;
         // ARC-UI-030: a new character's session takes the generic start's tables (its race and gender are the session's own).
         if (hero.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset)
-            return MainMenuNewCharacter() is { Status: AreaHeroStatus.Ready } generic ? generic : null;
+            return MainMenuNewCharacter() is { Status: AreaHeroStatus.Ready } generic ? SessionKitTables(generic, loaded) : null;
         for (var i = 0; i < AreaStartingHero.Premade.Count; i++)
             if (AreaStartingHero.Premade[i].BasicPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset == hero.Prototype)
                 return MainMenuHero(i) is { Status: AreaHeroStatus.Ready } ready ? ready : null;
         return null;
+    }
+
+    /// <summary>ARC-UI-036: a new character's hero tables for the kit its session holds (the opening shop's kit): a map transfer or a
+    /// load reads the generic start again, whose kit is empty, so the kit's tables are rebuilt from the session's kit items, held, placed
+    /// or given
+    /// (<see cref="AreaStartingHero.WithSessionKit"/>). A pre-made hero's load, or null, as it is; a kit whose facts do not read keeps the
+    /// generic tables (its items then have no facts here) and says so.</summary>
+    private static AreaHeroLoad? SessionKitTables(AreaHeroLoad? hero, GameSessionOwner session)
+    {
+        if (hero is null || hero.Hero.BasicPrototype != AreaStartingHero.GenericPrototype) return hero;
+        if (AreaStartingHero.WithSessionKit(hero, session.QueryKitItemsAnywhere(), out var detail) is { } rebuilt) return rebuilt;
+        GD.Print("ARC-UI-036 kit tables not rebuilt: " + detail);
+        return hero;
     }
 
     /// <summary>The scene ends under the menu (a load of a save on another map tears it down): the menu ends with it, so the save
@@ -476,7 +520,7 @@ public partial class TerrainViewerApp
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
         // ARC-UI-034: Return in the character editor goes on as its Accept does (the menu's key handler, CM5).
-        if (routed is Key.Enter or Key.KpEnter && _mainMenu.Window == AreaMenuWindow.CharacterEditor) { MainMenuCommand(() => _mainMenu.Accept()); return; }
+        if (routed is Key.Enter or Key.KpEnter && _mainMenu.Window is AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop) { MainMenuCommand(() => _mainMenu.Accept()); return; }
         // ARC-UI-033: while the name field is typed into, Backspace removes its last character and Enter ends the typing.
         if (routed is Key.Backspace or Key.Enter or Key.KpEnter && _mainMenu.Creation is { TypingName: true })
         {
@@ -656,7 +700,9 @@ public partial class TerrainViewerApp
             var beforeAccept = _areaSession;
             // ARC-UI-034: Accept opens the character editor on her draft; the real stats, skills and spells pages spend her points: willpower
             // (the original's sheet order, row 7), a hit point, the first skill and a college 1 spell (willpower 9 lets rank 1 be learned); a
-            // second hit-point − is refused at the opening; Return starts the game with the presses replayed.
+            // second hit-point − is refused at the opening. ARC-UI-036: Return opens the opening shop with her kit; its Back returns to the
+            // editor, where the willpower bought before the shop is still free (taken back and bought again); Return twice starts the game
+            // with the presses replayed, the kit's gold and items and its best weapon and body armour worn.
             _mainMenuPanel!.AcceptForSelfTest();
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && ReferenceEquals(beforeAccept, _areaSession)
                 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 5, EditorOpen: true } && _editorPanel.SkillsForSelfTest is not null,
@@ -676,6 +722,22 @@ public partial class TerrainViewerApp
                 && _editorPanel!.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund",
                 $"the editor's presses: {editorPresses} learned='{learned}' last='{_editorPanel!.SkillMessageForSelfTest}'");
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
+            var shopKit = _mainMenu!.Creation!.Kit ?? throw new InvalidOperationException("ARC-UI-036 opening shop smoke: no kit (" + _mainMenu.Notice + ")");
+            Require(MainMenuOpen && _mainMenu.Window == AreaMenuWindow.Shop && !CharacterEditorShown && shopKit is { Background: var kitBackground, Clothes: not null }
+                && kitBackground == chosen.Background && shopKit.Gold == creation.Generic.Backgrounds!.Block(chosen.Background).Block!.Money
+                && shopKit.Items.Contains(shopKit.Clothes!.Value) && ReferenceEquals(beforeAccept, _areaSession)
+                && _mainMenuPanel!.ShopForSelfTest.StartsWith($"gold {shopKit.Gold}", StringComparison.Ordinal),
+                $"Return opened the opening shop with her kit: {_mainMenu.Notice} '{_mainMenuPanel!.ShopForSelfTest}'");
+            _mainMenuPanel.ShopPressForSelfTest(accept: false);
+            Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "the shop's Back returned to the editor");
+            _editorPanel!.StatMinusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
+            var refundedAfterShop = _editorPanel!.StatsForSelfTest is { UnspentPoints: 3 } && _editorPanel.StatsForSelfTest.Rows[7].Value == 8;
+            _editorPanel!.StatPlusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(refundedAfterShop && _editorPanel!.StatsForSelfTest is { UnspentPoints: 2 } && _mainMenu!.Creation!.Presses.Count == editorPresses + 2,
+                "the willpower bought before the shop was taken back and bought again: " + _editorPanel!.SkillMessageForSelfTest);
+            HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
+            Require(_mainMenu!.Window == AreaMenuWindow.Shop && _mainMenu.Creation!.Kit is { } again && again.Items.SequenceEqual(shopKit.Items), "Return opened the shop again");
+            HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
             var made = _areaSession!.QueryHero();
             Require(!MainMenuOpen && !CharacterEditorShown && !ReferenceEquals(beforeAccept, _areaSession) && made is { Race: Arcanum.Simulation.Character.CharacterRace.Elf,
                 Gender: Arcanum.Simulation.Character.CharacterGender.Female, Level: 1, UnspentPoints: 2 }
@@ -684,7 +746,7 @@ public partial class TerrainViewerApp
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == chosen.Background && _areaSession.QueryHeroBackgroundDescription() == chosen.Description
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
-                && _areaSession.QueryGold() == 0, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()}");
+                && _areaSession.QueryGold() == shopKit.Gold && _areaSession.QueryHeroKit().Count == shopKit.Kit.Count, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()}");
             Require(made!.Portrait == secondPortrait && AreaStartingHero.Name(made) == "Vela", $"the session's portrait and name: {made.Portrait} {AreaStartingHero.Name(made)}");
             for (var i = 0; i < 3; i++)
             {
@@ -697,6 +759,11 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-034 native-smoke character editor PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Presses = editorPresses, made.UnspentPoints, Willpower = made.Stats[(int)Arcanum.Simulation.Character.CharacterStat.Willpower],
                 Skill = made.Advancement.BasicSkills[0], College = made.Advancement.Colleges[0], Learned = learned, Life = _areaSession.QueryHeroLife()?.Status.HitPoints }));
+            var armour = _areaSession.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
+            GD.Print("ARC-UI-036 native-smoke opening shop PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                shopKit.Background, shopKit.Gold, Items = string.Join(",", shopKit.Items), Kit = shopKit.Kit.Count, shopKit.Clothes, shopKit.Jacket,
+                shopKit.Skipped, Armour = armour?.Entity, Worn = _areaSession.QueryEquipment().Worn.Count, RefundedAfterShop = refundedAfterShop,
+                Presses = editorPresses + 2 }));
             GD.Print("ARC-UI-033 native-smoke name and portrait PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Portraits = portraits.GameCount, FirstPortrait = firstPortrait, made.Portrait, NameBytes = made.PlayerName.Length,
                 DefaultNameBytes = creation.DefaultName.Length, Refusal = CharacterNameRules.RefusalMessage }));

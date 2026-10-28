@@ -77,7 +77,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-030: a synthetic new-character start: the generic human man, race effects that raise constitution by the race
     /// number, background block 0 for everyone (effect 86, +1 strength) and block 1 for a dwarf man; ARC-UI-033: human men's portraits
-    /// 1000, 1003 and 1005 (the start), elf women's 1001 and 1004, an NPC's 1002 and 1006 for anyone.</summary>
+    /// 1000, 1003 and 1005 (the start), elf women's 1001 and 1004, an NPC's 1002 and 1006 for anyone. ARC-UI-036: the dwarf's block gives
+    /// 120 gold and no item prototype reads, so the opening shop's kit is the gold alone (the clothes are skipped).</summary>
     private static AreaHeroLoad SyntheticNewCharacter()
     {
         static Arcanum.Data.Messages.MesFile Mes(string text) =>
@@ -93,8 +94,9 @@ public partial class TerrainViewerApp
         return new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.NewCharacter, AreaStartingHero.Definition(read, out _), null, 0,
             new(Arcanum.Data.Characters.PremadeHeroFailure.None, read), "synthetic", Effects: Effect)
         {
-            Backgrounds = Arcanum.Data.Characters.BackgroundTable.Create(Mes("{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{86}{12}{DWM}{13}{0}{14}{}"),
+            Backgrounds = Arcanum.Data.Characters.BackgroundTable.Create(Mes("{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{86}{12}{DWM}{13}{120}{14}{}"),
                 Mes("{1000}{Default\nplain}{1001}{Stout\nstub}")),
+            KitPrototypes = _ => new(Arcanum.Data.Characters.PrototypeFileStatus.Missing, null),
             Portraits = Arcanum.Data.Characters.PortraitCatalogue.Create(Mes("{1000}{HUM1}{1001}{ELF1}{1002}{NPC1}{1003}{HUM2}{1004}{ELF2}{1005}{HUM3}{1006}{ANY1}")),
         };
     }
@@ -238,7 +240,21 @@ public partial class TerrainViewerApp
             _editorPanel!.StatMinusForSelfTest(3).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 2 } && _editorPanel!.SkillMessageForSelfTest.StartsWith("refused: nothing bought", StringComparison.Ordinal)
                 && _mainMenu.Creation!.Presses.Count == 5, "the presses on the draft: " + _editorPanel!.SkillMessageForSelfTest);
+            // ARC-UI-036: Return opens the opening shop with the kit (120 gold, the clothes skipped); Back returns to the editor with
+            // the points still free; Return twice starts the game with the kit.
             InventoryKey(Key.Enter);
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Shop && !CharacterEditorShown && _mainMenuPanel.ShopForSelfTest.StartsWith("gold 120 (background 1)", StringComparison.Ordinal)
+                && _mainMenu.Creation!.Kit is { Gold: 120, Skipped: 1, Clothes: 8065, Jacket: false } && _mainMenu.Creation.Kit.Kit.Count == 0,
+                "Return opened the shop: " + _mainMenu?.Notice + " " + _mainMenuPanel.ShopForSelfTest);
+            Require(_mainMenuPanel.NoteForSelfTest.Contains(AreaMainMenu.NoShopBarter, StringComparison.Ordinal), "the shop names the merchant it lacks");
+            _mainMenuPanel.ShopPressForSelfTest(accept: false);
+            Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "Back returned to the editor");
+            _editorPanel!.StatMinusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.StatPlusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_mainMenu!.Creation!.Presses.Count == 7 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 2 }, "the strength bought before the shop is still free");
+            InventoryKey(Key.Enter);
+            Require(_mainMenu!.Window == AreaMenuWindow.Shop, "Return opened the shop again");
+            _mainMenuPanel.ShopPressForSelfTest(accept: true);
             var made = _areaSession!.QueryHero();
             Require(!MainMenuOpen && _mainMenu is null && !CharacterEditorShown && !ReferenceEquals(beforeCreation, _areaSession) && made?.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf
                 && made.UnspentPoints == 2 && made.Stats[(int)Arcanum.Simulation.Character.CharacterStat.Strength] == 9 && made.Advancement.HitPointPoints == 1
@@ -246,7 +262,7 @@ public partial class TerrainViewerApp
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == 1 && _areaSession.QueryHeroBackgroundDescription() == 1001
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Number == 86 && e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
-                && made.Portrait == 1006 && AreaStartingHero.Name(made) == "Dain"
+                && made.Portrait == 1006 && AreaStartingHero.Name(made) == "Dain" && _areaSession.QueryGold() == 120
                 && _quickSaveStatus == "new game as Dain, a new Dwarf Male character", "Accept began a new game as the new character: " + _quickSaveStatus);
             Require(_menuTablesHero == AreaStartingHero.NewCharacter, "the new character's tables were adopted");
 
@@ -261,7 +277,7 @@ public partial class TerrainViewerApp
                 "browser cycles, Start begins a new game as the hero, Last Save loads the newest, Load Game window over the waiting menu (back unused, ends on a load), " +
                 "New Character window (arrows, Escape back, Accept starts with the background and its effect; portrait row, the default name refused, " +
                 "a typed name stored with the portrait), character editor (stats and skill presses on the draft, Cancel back to a new character, " +
-                "Return starts with the presses replayed), controller Exit";
+                "Return opens the opening shop with the kit, its Back keeps the points free, its Accept starts with the presses replayed and the kit's gold), controller Exit";
         }
         finally
         {

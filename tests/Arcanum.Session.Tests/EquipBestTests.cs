@@ -60,6 +60,43 @@ public sealed class EquipBestTests
     }
 
     [TestMethod]
+    public void TheNewCharacterStartWieldsOnlyTheWeaponAndBodyArmourIntoEmptySlots()
+    {
+        // ARC-UI-036 (OS5): the original's menu close 0x5412E0 runs the best-item call for slots 1004 and 1006 only, each only when empty.
+        using var owner = Owner();
+        var lookup = Lookup(Offer(1, Knife), Offer(2, Coat()), Offer(3, Coat(ArmorCoverage.Ring, ArmorSizes.None)));
+        var result = owner.WieldStartBest(owner.Version, lookup, Drawn, Accept);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1L), (result.Disposition, owner.Version.Revision));
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1"), (EquipmentSlot.Armor, "kit:2") }, Worn(owner), "the ring stays in the pack");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.WieldStartBest(owner.Version, lookup, Drawn, Accept).Disposition,
+            "occupied slots are skipped: the weapon is not taken off and put back as by EquipBest");
+        Assert.AreEqual(GameSessionDisposition.Rejected, owner.WieldStartBest(owner.Version with { Revision = 0 }, lookup, Drawn, Accept).Disposition);
+
+        // A held weapon stays untouched while the empty armour slot takes its best item; armour with item spells stays in the pack.
+        using var armed = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, armed.Equip(armed.Version, "kit:1", EquipmentSlot.Weapon, Offer(1, Knife), Drawn, Accept).Disposition);
+        var spelled = Offer(2, Coat()) with { HasItemSpells = true };
+        var kept = armed.WieldStartBest(armed.Version, Lookup(Offer(1, Knife), spelled), Drawn, Accept);
+        Assert.AreEqual((GameSessionDisposition.NoChange, "kit:2", GameSessionFailure.ItemEffectUnsupported),
+            (kept.Disposition, kept.Steps.Single().Unsupported, kept.Steps.Single().Failure), "only the armour slot is tried");
+        var worn = armed.WieldStartBest(armed.Version, Lookup(Offer(1, Knife), Offer(2, Coat())), Drawn, Accept);
+        Assert.AreEqual(new SessionEquipBestStep(EquipmentSlot.Armor, null, "kit:2", EquipmentRefusal.None, null), worn.Steps.Single());
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1"), (EquipmentSlot.Armor, "kit:2") }, Worn(armed));
+    }
+
+    [TestMethod]
+    public void TheWearCheckAnswersForAnItemTheHeroDoesNotHold()
+    {
+        // ARC-UI-036 (OS3): the opening shop asks the wear check (0x464D20) for the clothes before it keeps them.
+        using var owner = Owner();
+        Assert.AreEqual(EquipmentRefusal.None, owner.CheckHeroWear(Offer(2, Coat()), EquipmentSlot.Armor));
+        Assert.AreEqual(EquipmentRefusal.WrongSize, owner.CheckHeroWear(Offer(2, Coat(sizes: ArmorSizes.Small)), EquipmentSlot.Armor), "a half-elf is medium");
+        Assert.AreEqual(0L, owner.Version.Revision, "a query");
+        using var none = Create();
+        Assert.IsNull(none.CheckHeroWear(Offer(2, Coat()), EquipmentSlot.Armor), "no hero");
+    }
+
+    [TestMethod]
     public void AMoreValuableItemReplacesAKeptOne()
     {
         using var owner = Owner();

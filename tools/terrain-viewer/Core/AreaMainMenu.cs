@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2; ARC-UI-013: the options window 6, OP1; ARC-UI-030:
 /// the new-character window 12, NW1; ARC-UI-034: the character editor window 14, CM1).</summary>
 public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, Options = 6, NewGame = 11, NewCharacter = 12, PickCharacter = 13,
-    CharacterEditor = 14 }
+    CharacterEditor = 14, Shop = 15 }
 
 /// <summary>What a menu button does in Steamwoven.</summary>
 public enum AreaMenuRole
@@ -57,9 +57,12 @@ public enum AreaMenuCommandKind
     /// <summary>ARC-UI-034: the new-character window's Accept passed: make the draft session of the new character and open the
     /// character editor (window 14) on it (<see cref="AreaMainMenu.OpenCharacterEditor"/>).</summary>
     OpenCharacterEditor,
-    /// <summary>ARC-UI-030: start a new game as the new character (<see cref="AreaMainMenu.Creation"/>); since ARC-UI-034 the character
-    /// editor's Accept, with the editor's presses in the character.</summary>
+    /// <summary>ARC-UI-030: start a new game as the new character (<see cref="AreaMainMenu.Creation"/>); since ARC-UI-034 with the editor's
+    /// presses in the character; since ARC-UI-036 the opening shop's Accept (or Return), with the shop's kit.</summary>
     StartNewCharacter,
+    /// <summary>ARC-UI-036: the character editor's Accept (or Return): make the opening shop's kit from the editor's draft and open the
+    /// shop (window 15) with it (<see cref="AreaMainMenu.OpenShop"/>).</summary>
+    OpenShop,
     /// <summary>ARC-UI-013: set <see cref="AreaMenuCommand.Option"/> to <see cref="AreaMenuCommand.Value"/> (the original's setter runs at
     /// once, OP3); the host applies it and gives the window the values it then has (<see cref="AreaMainMenu.SetOptions"/>).</summary>
     ChangeOption,
@@ -184,16 +187,19 @@ public sealed class AreaMainMenuTexts
 /// (<see cref="AreaNewCharacter"/>) and opens its window (window 12, ledger NW1): gender, race and background buttons, Accept and
 /// Cancel; it has no letters (its buttons are art only), Escape and Cancel go back and drop the character. ARC-UI-033: portrait buttons and
 /// the name field (typed while it is being typed into; Enter ends it), and Accept refuses the default name (NW6). ARC-UI-034: a passed
-/// Accept asks the host for the character editor (window 14, ledger CM1–CM8) over a draft session of the character; its Accept or
-/// Return starts the game, its Cancel or Escape goes back to window 12 with a new character (the original's opening makes one).
+/// Accept asks the host for the character editor (window 14, ledger CM1–CM8) over a draft session of the character; its
+/// Cancel or Escape goes back to window 12 with a new character (the original's opening makes one).
+/// ARC-UI-036: the editor's Accept or Return asks the host for the opening shop (window 15, ledger OS1–OS6) with the kit made from the
+/// draft; the shop's Accept or Return starts the game with it, its Back or Escape goes back to the editor, whose points stay free.
 /// </summary>
 public sealed class AreaMainMenu
 {
     public const string NoNetworkPlay = "network play is not built";
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
-    /// <summary>ARC-UI-034: what the character editor's Accept leads to in the original and Steamwoven does not have yet.</summary>
-    public const string NoShop = "the opening shop is not built: Accept starts the game at once (without the background's money and items)";
+    /// <summary>ARC-UI-036: what the opening shop does in the original and Steamwoven does not have yet (ledger OS2).</summary>
+    public const string NoShopBarter = "the shop map's merchant is not built: the original opens barter with the first NPC of the shop map here; "
+        + "Accept starts the game with the kit";
     /// <summary>The quit box's fixed letters (the original's yes/no box, SF3).</summary>
     public const char YesLetter = 'Y', NoLetter = 'N';
     private readonly List<AreaMenuWindow> _back = [];
@@ -262,9 +268,9 @@ public sealed class AreaMainMenu
     public IReadOnlyList<AreaMenuButton> Shown => Buttons.Where(button => button.Shown).ToArray();
 
     /// <summary>The hidden buttons of the window with the reason, for its note; in the options window also the page's hidden controls
-    /// and the values a shown control does not offer; in the character editor what its Accept skips.</summary>
+    /// and the values a shown control does not offer; in the opening shop what it skips.</summary>
     public IReadOnlyList<string> HiddenNotes => Buttons.Where(button => !button.Shown).Select(button => $"{Texts.Text(button.Message)}: {button.Unavailable}")
-        .Concat(Window == AreaMenuWindow.CharacterEditor ? [NoShop] : [])
+        .Concat(Window == AreaMenuWindow.Shop ? [NoShopBarter] : [])
         .Concat(Window != AreaMenuWindow.Options ? [] : AreaOptionTable.Page(Page)
             .Where(control => !control.Shown || control.LimitNote is not null)
             .Select(control => $"{OptionsTexts.Label(control)}: {control.Unavailable ?? control.LimitNote}"))
@@ -378,9 +384,13 @@ public sealed class AreaMainMenu
             DropEditor();
             Creation = new AreaNewCharacter(left.Generic, left.DefaultName);
         }
+        // ARC-UI-036: back from the opening shop is the editor again (0x5417A0), which the original reopens in mode 3 on the snapshot it
+        // took when the character was made (CM1, CM4): every point spent so far can still be taken back (owner decision 2026-10-28: the
+        // points stay free until the game starts, in both rule modes). The kit goes; the next opening of the shop makes it anew (OS3).
+        if (Window == AreaMenuWindow.Shop) Creation!.TakeKit(null);
         Window = _back[^1];
         _back.RemoveAt(_back.Count - 1);
-        Focus = Window == AreaMenuWindow.NewCharacter ? 0 : Shown.Count > 0 ? 0 : -1;
+        Focus = Window is AreaMenuWindow.NewCharacter or AreaMenuWindow.CharacterEditor ? 0 : Shown.Count > 0 ? 0 : -1;
         Notice = null;
         return true;
     }
@@ -396,7 +406,7 @@ public sealed class AreaMainMenu
         }
         var count = Window == AreaMenuWindow.PickCharacter || QuitPending ? 0 : Window switch
         {
-            AreaMenuWindow.NewCharacter => CreationRows, AreaMenuWindow.CharacterEditor => EditorRows, _ => Shown.Count,
+            AreaMenuWindow.NewCharacter => CreationRows, AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop => EditorRows, _ => Shown.Count,
         };
         if (count == 0 || direction == 0) return;
         Focus = Focus < 0 ? 0 : ((Focus + Math.Sign(direction)) % count + count) % count;
@@ -410,7 +420,7 @@ public sealed class AreaMainMenu
         if (Window == AreaMenuWindow.PickCharacter) return Start();
         if (Window == AreaMenuWindow.NewCharacter) return ConfirmCreation();
         // ARC-UI-034: the editor's rows Accept and Cancel.
-        if (Window == AreaMenuWindow.CharacterEditor) { if (Focus == 1) { Back(); return AreaMenuCommand.Nothing; } return Accept(); }
+        if (Window is AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop) { if (Focus == 1) { Back(); return AreaMenuCommand.Nothing; } return Accept(); }
         if (Window != AreaMenuWindow.Options) return Activate(Focus);
         var controls = Controls.Count;
         return OptionsFocus < 0 ? AreaMenuCommand.Nothing : OptionsFocus < controls ? Change(OptionsFocus, 1) : Activate(OptionsFocus - controls);
@@ -455,12 +465,13 @@ public sealed class AreaMainMenu
 
     /// <summary>ARC-UI-030: the new-character window's Accept. ARC-UI-033: the press ends the name's typing as a click elsewhere does,
     /// then the name check (NW6) refuses the default name with message 506 as the window's notice. ARC-UI-034: a passed check asks the
-    /// host for the character editor (window 14, CM1); the editor's Accept (or Return, CM5) starts the new game as the character, the
-    /// opening shop the original's goes on to not being built (<see cref="NoShop"/>).</summary>
+    /// host for the character editor (window 14, CM1). ARC-UI-036: the editor's Accept (or Return, CM5) asks the host for the opening
+    /// shop (window 15, CM2), whose Accept (or Return) starts the new game as the character with the shop's kit (OS1).</summary>
     public AreaMenuCommand Accept()
     {
         if (NewGameRefusal is not null || QuitPending || Creation is not { } creation) return AreaMenuCommand.Nothing;
-        if (Window == AreaMenuWindow.CharacterEditor) { Notice = null; return new(AreaMenuCommandKind.StartNewCharacter); }
+        if (Window == AreaMenuWindow.CharacterEditor) { Notice = null; return new(AreaMenuCommandKind.OpenShop); }
+        if (Window == AreaMenuWindow.Shop) { Notice = null; return new(AreaMenuCommandKind.StartNewCharacter); }
         if (Window != AreaMenuWindow.NewCharacter) return AreaMenuCommand.Nothing;
         creation.EndName(enter: false);
         if (!creation.AcceptName().Accepted) { Notice = Texts.Text(CharacterNameRules.RefusalMessage); return AreaMenuCommand.Nothing; }
@@ -488,7 +499,19 @@ public sealed class AreaMainMenu
         Open(AreaMenuWindow.CharacterEditor);
     }
 
-    /// <summary>ARC-UI-034: disposes the editor's draft session (the host calls it whenever the menu ends; leaving window 14 does it).</summary>
+    /// <summary>ARC-UI-036: opens the opening shop (window 15) with the kit the host made from the editor's draft (from the character
+    /// editor only, and only a kit made for the window's character). The editor and its draft stay, hidden, for the shop's Back (the original's mode-3 reopening keeps the floor, CM4).</summary>
+    public void OpenShop(AreaOpeningKit kit)
+    {
+        ArgumentNullException.ThrowIfNull(kit);
+        if (QuitPending || Window != AreaMenuWindow.CharacterEditor || Creation is not { } creation || Editor is null || NewGameRefusal is not null
+            || !ReferenceEquals(kit.Creation, creation)) return;
+        creation.TakeKit(kit);
+        Open(AreaMenuWindow.Shop);
+    }
+
+    /// <summary>ARC-UI-034: disposes the editor's draft session (the host calls it whenever the menu ends; leaving window 14 back to
+    /// window 12 does it; the opening shop keeps it).</summary>
     public void DropEditor()
     {
         Editor?.Dispose();
@@ -548,6 +571,6 @@ public sealed class AreaMainMenu
         if (target == AreaMenuWindow.PickCharacter) Hero = 0;
         // The original's options window opens at its Game page (OP4).
         if (target == AreaMenuWindow.Options) { Page = AreaOptionsPage.Game; OptionsFocus = Controls.Count > 0 ? 0 : -1; }
-        Focus = target is AreaMenuWindow.NewCharacter or AreaMenuWindow.CharacterEditor ? 0 : Shown.Count > 0 ? 0 : -1;
+        Focus = target is AreaMenuWindow.NewCharacter or AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop ? 0 : Shown.Count > 0 ? 0 : -1;
     }
 }

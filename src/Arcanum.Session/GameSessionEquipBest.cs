@@ -44,7 +44,34 @@ public sealed partial class GameSessionOwner
     /// and the call goes on. One revision when the worn items changed; NoChange otherwise.
     /// </summary>
     [OriginalFunction(0x4654F0, OriginalFunctionScope.Partial)]
-    public EquipBestResult EquipBest(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
+    public EquipBestResult EquipBest(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck) =>
+        Best(expected, items, artCheck, insertCheck, Enum.GetValues<EquipmentSlot>(), emptyOnly: false);
+
+    /// <summary>
+    /// ARC-UI-036: the start of a new character's game (the original's menu close 0x5412E0 with the best-items flag 0x64C424 that the
+    /// new-character window's Accept sets): only the weapon slot (1004) and then the body-armour slot (1006), each only when it is empty
+    /// (the item-wield-get test 0x4649C0), take the hero's best item (<see cref="WieldBest"/>, 0x465170). The other slots stay as they
+    /// are. The same refusals, policy and revision as <see cref="EquipBest"/>.
+    /// </summary>
+    [OriginalFunction(0x5412E0, OriginalFunctionScope.Partial)]
+    public EquipBestResult WieldStartBest(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck) =>
+        Best(expected, items, artCheck, insertCheck, [EquipmentSlot.Weapon, EquipmentSlot.Armor], emptyOnly: true);
+
+    /// <summary>
+    /// ARC-UI-036: the wear rules (<see cref="EquipmentRules.CheckWear"/>) for <paramref name="item"/> in <paramref name="slot"/> on the
+    /// hero as it is now, whether or not the hero holds the item (the original's wear check 0x464D20, which the opening shop's kit asks
+    /// before it keeps the clothes it made, ledger OS3); the art lookup is the host's. Null when the session has no hero.
+    /// </summary>
+    public EquipmentRefusal? CheckHeroWear(SessionWearableItem item, EquipmentSlot slot)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(item);
+        if (!Enum.IsDefined(slot) || !ValidWearable(item)) throw new ArgumentException("invalid wearable item or slot", nameof(item));
+        return _hero is null ? null : EquipmentRules.CheckWear(item.Item, slot, HeroWearer(), _equipment.Items());
+    }
+
+    private EquipBestResult Best(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck,
+        IReadOnlyList<EquipmentSlot> slots, bool emptyOnly)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(items);
@@ -56,7 +83,7 @@ public sealed partial class GameSessionOwner
         try
         {
             plan.Collect();
-            foreach (var slot in Enum.GetValues<EquipmentSlot>()) WieldBest(plan, slot);
+            foreach (var slot in slots) if (!emptyOnly || !plan.Worn.ContainsKey(slot)) WieldBest(plan, slot);
         }
         catch (BestPlan.Refused refused) { return RejectBest(refused.Failure); }
         var changed = plan.Worn.Count != _equipment.Worn.Count || plan.Worn.Any(pair => !_equipment.Worn.TryGetValue(pair.Key, out var worn) || worn != pair.Value);

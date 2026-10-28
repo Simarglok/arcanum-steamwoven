@@ -199,19 +199,16 @@ public sealed class AreaTransitionCoordinator
             named.Dispose();
             return new(null, refused.Failure, ClockFailure.None, GlobalFlagReason.None);
         }
-        if (hero?.KitWear is not { } wear || created.Owner is not { } owner) return created;
+        // ARC-UI-036: the new character wields only its best weapon and body armour, at the start after the opening shop
+        // (AreaNewCharacter.WieldStart, the original's 0x5412E0), not here.
+        if (hero?.KitWear is not { } wear || created.Owner is not { } owner || hero.Hero.BasicPrototype == AreaStartingHero.GenericPrototype) return created;
         // ARC-WORLD-034: the pre-made start wields the hero's best items before the game begins (the original's best-items call,
         // 0x4654F0, from the pre-made menu step 0x545B60). The viewer has one diagnostic body art and no inventory grid, so it answers
         // the art lookup and the insert check with yes; a refused call fails the start, typed.
-        var worn = owner.EquipBest(owner.Version, entity => KitIndex(entity) is { } index && index < wear.Count ? wear[index] : null,
+        var worn = owner.EquipBest(owner.Version, entity => AreaStartingHero.KitIndex(entity) is { } index && index < wear.Count ? wear[index] : null,
             (_, _) => true, _ => SessionInsertVerdict.Accepted);
         if (worn.Disposition != GameSessionDisposition.Rejected) return created;
         owner.Dispose();
         return new(null, worn.Failure, ClockFailure.None, GlobalFlagReason.None);
     }
-
-    // kit:1 is the first kit item.
-    private static int? KitIndex(string entity) =>
-        entity.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(entity.AsSpan(4), System.Globalization.NumberStyles.None,
-            System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1 ? number - 1 : null;
 }
