@@ -29,12 +29,16 @@ public sealed record SessionWornItem(EquipmentSlot Slot, string Entity, Equipmen
     /// remove item (28); empty for an item without them. Its next move runs them only through a script host.</summary>
     public IReadOnlyList<int> ScriptPoints { get; init; } = NoScripts;
 
+    /// <summary>ARC-MAGIC-022: the item carries item spells and was worn through a trigger host (its wear executor ran), so it comes off
+    /// only through one, which runs its unwear (<see cref="GameSessionOwner.Unequip"/>).</summary>
+    public bool ItemSpells { get; init; }
+
     internal static readonly IReadOnlyList<int> NoScripts = Array.AsReadOnly(Array.Empty<int>());
 
     public bool Equals(SessionWornItem? other) => other is not null && Slot == other.Slot && Entity == other.Entity && Item == other.Item &&
-        ScriptPoints.SequenceEqual(other.ScriptPoints);
+        ScriptPoints.SequenceEqual(other.ScriptPoints) && ItemSpells == other.ItemSpells;
 
-    public override int GetHashCode() => HashCode.Combine(Slot, Entity, Item, ScriptPoints.Count);
+    public override int GetHashCode() => HashCode.Combine(Slot, Entity, Item, ScriptPoints.Count, ItemSpells);
 }
 
 /// <summary>Saved equipment of the hero: the worn items in slot order.</summary>
@@ -305,7 +309,8 @@ public sealed partial class GameSessionOwner
             ThrowIfDisposed();
             if (!supported) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
         }
-        if (triggers is null && (HasItemRuns(entity) || current is not null && HasItemRuns(current.Entity)))
+        if (triggers is null && (HasItemRuns(entity) || _equipment.SlotOf(entity) is { } wornIn && _equipment.Worn[wornIn].ItemSpells ||
+                current is not null && (current.ItemSpells || HasItemRuns(current.Entity))))
             return RejectWear(GameSessionFailure.ItemEffectUnsupported);
 
         var worn = _equipment.Items();
@@ -323,7 +328,8 @@ public sealed partial class GameSessionOwner
         refusal = EquipmentRules.CheckRemove(item.Item);
         if (refusal == EquipmentRefusal.None && current is not null) refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
-        if (scripts is not null && (points.Count > 0 || current?.ScriptPoints.Count > 0)) return EquipWithScripts(entity, slot, item, points, current, insertCheck, scripts, revision);
+        if (scripts is not null && (points.Count > 0 || current?.ScriptPoints.Count > 0))
+            return EquipWithScripts(entity, slot, item, points, current, insertCheck, scripts, revision, item.HasItemSpells && triggers is not null);
         SessionInsertVerdict? verdict = null;
         if (current is not null)
         {
@@ -334,14 +340,14 @@ public sealed partial class GameSessionOwner
             if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
         }
         if (_equipment.SlotOf(entity) is { } previous) _equipment.Worn.Remove(previous);
-        _equipment.Worn[slot] = new(slot, entity, item.Item);
+        _equipment.Worn[slot] = new(slot, entity, item.Item) { ItemSpells = item.HasItemSpells && triggers is not null };
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current?.Entity, verdict, Version);
     }
 
     // ARC-SCRIPT-042: the move of Equip with its item events (IE3–IE6), after the checks that come before any move.
     private EquipmentMutationResult EquipWithScripts(string entity, EquipmentSlot slot, SessionWearableItem item, IReadOnlyList<int> points,
-        SessionWornItem? current, SessionInsertCheck insertCheck, ISessionItemScriptHost scripts, long revision)
+        SessionWornItem? current, SessionInsertCheck insertCheck, ISessionItemScriptHost scripts, long revision, bool itemSpells)
     {
         var previous = _equipment.SlotOf(entity);
         var items = new Dictionary<string, int>(StringComparer.Ordinal) { [entity] = item.Item.MagickTechComplexity };
@@ -391,7 +397,7 @@ public sealed partial class GameSessionOwner
         if (!rolledBack)
         {
             if (previous is { } worn) _equipment.Worn.Remove(worn);
-            _equipment.Worn[slot] = new(slot, entity, item.Item) { ScriptPoints = points };
+            _equipment.Worn[slot] = new(slot, entity, item.Item) { ScriptPoints = points, ItemSpells = itemSpells };
         }
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, rolledBack ? null : current?.Entity, verdict, Version)
@@ -446,7 +452,7 @@ public sealed partial class GameSessionOwner
         if (!_equipment.Worn.TryGetValue(slot, out var current))
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
         if (scripts is null && current.ScriptPoints.Count > 0) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
-        if (triggers is null && HasItemRuns(current.Entity)) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
+        if (triggers is null && (current.ItemSpells || HasItemRuns(current.Entity))) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
         var refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);

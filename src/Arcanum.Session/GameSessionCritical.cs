@@ -53,6 +53,9 @@ public enum SessionCriticalStepOutcome
     /// <summary>ARC-COMBAT-013: nothing spent: the hero holds no ammunition of the weapon's type, or fewer units than five shots take
     /// (the original spends all or nothing, 0x4B65D0).</summary>
     NoAmmunition,
+    /// <summary>Not applied, NOT READY (ARC-MAGIC-022): the hero's worn item carries the item spells mark, whose unwear and drop
+    /// executors (0x4CBFC0, 0x4CC130) this path does not run.</summary>
+    ItemSpellsUnsupported,
 }
 
 /// <summary>
@@ -182,6 +185,7 @@ public sealed partial class GameSessionOwner
         // The drop's refusals (PI1): the item's drop script, which the session does not run, then the no-drop flag.
         var script = hero ? HeroItemDropScript(item.Entity) : NpcItemSeed(side.Life.Entity!, item.Entity) is { } listed && listed.Facts.HasScript(SessionScriptPoint.Drop);
         if (script) { Skip(SessionCriticalStepOutcome.ScriptUnsupported); return side; }
+        if (hero && _equipment.Worn[slot].ItemSpells) { Skip(SessionCriticalStepOutcome.ItemSpellsUnsupported); return side; }
         if (item.NoDrop) { Skip(SessionCriticalStepOutcome.Refused); return side; }
 
         CellCoord landed;
