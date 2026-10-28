@@ -66,34 +66,69 @@ public static class AreaOriginalValidator
     }
 }
 
-/// <summary>Read-only Unix file adapter with handle/path device+inode binding.
-/// The normalized .NET 8 System.Native file-status ABI is used, not platform
-/// guesses about libc stat layouts. Public errors never include input paths.</summary>
+/// <summary>How <see cref="AreaPathStream"/> binds its open handle to its path (ARC-DEV-049). <see cref="Unix"/> (macOS, Linux)
+/// compares the device, inode, size and modified/changed times of the handle and of the path, through the normalized .NET 8
+/// System.Native file-status ABI, not platform guesses about libc stat layouts. <see cref="Windows"/> has no System.Native: the
+/// handle's share mode (read only) makes the system refuse every other writer, rename and delete of the file while the stream is
+/// open, so the path keeps naming the opened file; the size and last write time of the handle and of the path are compared as
+/// well, with managed calls only.</summary>
+internal enum AreaPathBinding { Unix, Windows }
+
+/// <summary>Read-only file adapter with a handle/path binding (<see cref="AreaPathBinding"/>). Public errors never include
+/// input paths.</summary>
 internal sealed class AreaPathStream : Stream
 {
     private readonly string _path;
     private readonly FileStream _file;
+    private readonly AreaPathBinding _binding;
     private readonly Status _opened;
-    internal AreaPathStream(string path)
+    private readonly long _openedBytes;
+    private readonly DateTime _openedWritten;
+    internal AreaPathStream(string path) : this(path, CurrentBinding()) { }
+    internal AreaPathStream(string path, AreaPathBinding binding)
     {
         _path = path;
-        if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("The path-bound adapter requires macOS or Linux.");
+        _binding = binding;
         try
         {
             _file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.RandomAccess);
-            if (FileStatus(_file.SafeFileHandle, out _opened) != 0) { _file.Dispose(); throw Changed(); }
+            if (binding == AreaPathBinding.Unix && FileStatus(_file.SafeFileHandle, out _opened) != 0) { _file.Dispose(); throw Changed(); }
+            if (binding == AreaPathBinding.Windows && !HandleWritten(_file.SafeFileHandle, out _openedBytes, out _openedWritten)) { _file.Dispose(); throw Changed(); }
             try { Check(); } catch { _file.Dispose(); throw; }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         { throw new AreaException(new(AreaErrorCode.MissingSource, AreaStage.Input)); }
     }
+    /// <summary>This machine's binding: <see cref="AreaPathBinding.Unix"/> on macOS and Linux, <see cref="AreaPathBinding.Windows"/> on
+    /// Windows; another system is not supported.</summary>
+    internal static AreaPathBinding CurrentBinding()
+        => OperatingSystem.IsMacOS() || OperatingSystem.IsLinux() ? AreaPathBinding.Unix
+            : OperatingSystem.IsWindows() ? AreaPathBinding.Windows
+            : throw new PlatformNotSupportedException("The path-bound adapter requires macOS, Linux or Windows.");
     internal void Check()
     {
+        if (_binding == AreaPathBinding.Windows)
+        {
+            if (!HandleWritten(_file.SafeFileHandle, out var bytes, out var written) || !PathWritten(_path, out var pathBytes, out var pathWritten) ||
+                bytes != _openedBytes || pathBytes != _openedBytes || written != _openedWritten || pathWritten != _openedWritten)
+                throw Changed();
+            return;
+        }
         if (FileStatus(_file.SafeFileHandle, out var opened) != 0 || PathStatus(_path, out var path) != 0 ||
             opened.Device != _opened.Device || opened.Inode != _opened.Inode || path.Device != _opened.Device || path.Inode != _opened.Inode ||
             opened.Size != _opened.Size || path.Size != _opened.Size || opened.Modified != _opened.Modified || opened.ModifiedNanos != _opened.ModifiedNanos ||
             opened.Changed != _opened.Changed || opened.ChangedNanos != _opened.ChangedNanos)
             throw Changed();
+    }
+    private static bool HandleWritten(SafeFileHandle handle, out long bytes, out DateTime written)
+    {
+        try { bytes = RandomAccess.GetLength(handle); written = File.GetLastWriteTimeUtc(handle); return true; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { bytes = -1; written = default; return false; }
+    }
+    private static bool PathWritten(string path, out long bytes, out DateTime written)
+    {
+        try { var info = new FileInfo(path); bytes = info.Length; written = info.LastWriteTimeUtc; return true; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { bytes = -1; written = default; return false; }
     }
     private static AreaException Changed() => new(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Input));
     [StructLayout(LayoutKind.Explicit, Size = 120)]

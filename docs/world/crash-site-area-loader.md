@@ -112,10 +112,16 @@ opt-in test). Neither is executed by Data.
 
 - `AreaInput(key, stream, leaveOpen)` transfers an explicit readable, seekable
   stream. Keys and stream instances must be distinct in `AreaInputSet`.
-- `AreaInput.FromFile(key, path)` opens a read-only path-bound adapter on macOS or
-  Linux. It binds handle/path device, inode, size and modification/change times
-  using the .NET 8 `System.Native` file-status ABI. Stream-only inputs bind bytes,
-  not a filesystem path. The adapter is not a portable Windows filesystem guard.
+- `AreaInput.FromFile(key, path)` opens a read-only path-bound adapter. On macOS
+  and Linux it binds handle/path device, inode, size and modification/change times
+  using the .NET 8 `System.Native` file-status ABI. On Windows (ARC-DEV-049), where
+  that ABI does not exist, the handle's read-only share mode makes the system refuse
+  every other writer, rename and delete of the file while it is open, so the path
+  keeps naming the opened file; the adapter also compares the handle's and the
+  path's size and last write time, with managed calls only. Another system is
+  refused (`PlatformNotSupportedException`). Stream-only inputs bind bytes, not a
+  filesystem path. The Windows binding is tested on macOS (its managed calls are
+  the same there) and has not yet run on Windows.
 - `AreaDataOwner.Open(inputs, plan, limits)` authenticates every input against the
   explicit length/SHA-256 plan and creates owned archive indexes. Constructor
   `AreaSourcePlan` values produce `structural-file-effective-v1`, **not** proof of
