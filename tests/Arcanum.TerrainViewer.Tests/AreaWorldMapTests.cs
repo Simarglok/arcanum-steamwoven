@@ -63,6 +63,55 @@ public sealed class AreaWorldMapTests
     }
 
     [TestMethod]
+    public void A_debug_teleport_names_any_located_area_and_changes_nothing_in_the_session()
+    {
+        // ARC-DEV-050: an unknown area across the wall (no route there) is still a teleport target; area 0's slot has no location.
+        using var session = ConversationSessionFixture.Create();
+        var data = Data();
+        var map = new AreaWorldMap(data, session, Sector(5, 10));
+        var known = session.QueryKnownAreas().Count; var revision = session.Version.Revision;
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Teleport(2, out var landing));
+        Assert.AreEqual(data.TravelAreas[2].Location, landing);
+        Assert.AreEqual((known, revision, false), (session.QueryKnownAreas().Count, session.Version.Revision, session.IsAreaKnown(2)), "no discovery, no session write");
+        Assert.Throws<ArgumentOutOfRangeException>(() => map.Teleport(0, out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => map.Teleport(3, out _));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Start());
+        Assert.AreEqual(AreaWorldMapRefusal.Travelling, map.Teleport(2, out _), "not during a journey");
+
+        var unplaced = new AreaWorldMapData("start", 1, WorldAreaTable.Create(["0, 0, 0, 0 /Unknown/none", "0, 0, 0, 0 /Nowhere/n"]), data.Sectors, Width, data.PictureSize, data.Picture);
+        Assert.AreEqual(AreaWorldMapRefusal.NoLocation, new AreaWorldMap(unplaced, session, Sector(5, 10)).Teleport(1, out _));
+    }
+
+    [TestMethod]
+    public void A_view_off_the_start_map_only_teleports()
+    {
+        // ARC-DEV-050: debug mode opens the view on another map without a position: no waypoint, no journey, teleport only.
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, null);
+        Assert.IsFalse(map.OnStartMap);
+        Assert.AreEqual(AreaWorldMapRefusal.NotOnStartMap, map.AddArea(1));
+        Assert.AreEqual(AreaWorldMapRefusal.NotOnStartMap, map.AddWaypoint(AreaWorldMap.PixelOf(1, 1)));
+        Assert.AreEqual(AreaWorldMapRefusal.NotOnStartMap, map.Start());
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Teleport(1, out _));
+        Assert.IsTrue(new AreaWorldMap(Data(), session, Sector(5, 10)).OnStartMap);
+    }
+
+    [TestMethod]
+    public void The_debug_flag_is_taken_from_the_arguments_and_marks_save_locations()
+    {
+        var args = new List<string> { "--native-smoke", ViewerDebugMode.Flag, "--mode", "crash-site-area", ViewerDebugMode.Flag };
+        Assert.IsTrue(ViewerDebugMode.Take(args));
+        CollectionAssert.AreEqual(new[] { "--native-smoke", "--mode", "crash-site-area" }, args);
+        Assert.IsFalse(ViewerDebugMode.Take(args));
+        var none = new List<string>();
+        Assert.IsFalse(ViewerDebugMode.Take(none));
+        Assert.AreEqual("[DEBUG] Arcanum1-024-fixed", ViewerDebugMode.MarkLocation("Arcanum1-024-fixed", true));
+        Assert.AreEqual("[DEBUG] Arcanum1-024-fixed", ViewerDebugMode.MarkLocation("[DEBUG] Arcanum1-024-fixed", true), "marked once");
+        Assert.AreEqual("Arcanum1-024-fixed", ViewerDebugMode.MarkLocation("Arcanum1-024-fixed", false));
+    }
+
+    [TestMethod]
     public void A_route_through_the_wall_is_refused_and_one_around_it_plans()
     {
         using var session = ConversationSessionFixture.Create();

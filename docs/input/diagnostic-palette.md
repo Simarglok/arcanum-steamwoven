@@ -24,6 +24,13 @@ The standalone (non-WORLD) viewer modes and the Gamepad Lab keyboard scaffolding
 (`GodotInputAdapter` with `WorldRoute = false`) keep their historical lab keys; they
 are not an original-controls gate.
 
+## Hiding the diagnostic panel (ARC-DEV-050)
+
+**Ctrl+Shift+F10** hides the diagnostic HUD panel (the text panel at the top of the window, with the palette button) and
+shows it again, in every mode and window, with or without the debug mode. It is per run: every start shows the panel. The
+HUD consumes the chord's press (and its release while Ctrl and Shift are still held) before the world's key routing, so F10
+alone stays the original's reserved interface key; a later bare F10 release does nothing, as reserved keys act on a press. The panel's text keeps updating while it is hidden.
+
 ## Palette
 
 One bounded modal surface (`DiagnosticInputSettingsPanel`), opened and closed by any

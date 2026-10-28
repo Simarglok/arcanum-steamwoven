@@ -20,6 +20,7 @@ public partial class LauncherPanel : CanvasLayer
     private VBoxContainer _candidates = null!;
     private HBoxContainer _rules = null!;
     private CheckBox _showAtStart = null!;
+    private CheckBox _debugMode = null!;
     private Button _play = null!;
     private Label _notice = null!;
     private FileDialog _dialog = null!;
@@ -28,21 +29,23 @@ public partial class LauncherPanel : CanvasLayer
     public event Action<string>? FolderChosen;
     public event Action<RuleMode>? RulesRequested;
     public event Action<bool>? ShowAtStartRequested;
+    public event Action<bool>? DebugModeRequested;
     public event Action? PlayRequested;
     public event Action? ResetRequested;
     public event Action? QuitRequested;
     public bool IsOpen => Visible;
-    /// <summary>The screen's lines, top to bottom: reason, file, folder, rules (the chosen one in brackets), show at start, notice.</summary>
+    /// <summary>The screen's lines: reason, file, folder, rules (the chosen one in brackets), show at start, notice, then the debug mode.</summary>
     internal IReadOnlyList<string> LinesForSelfTest =>
     [
         _reason.Text, _file.Text, _folder.Text,
         "Rules: " + string.Join(" ", _rules.GetChildren().OfType<Button>().Select(button => button.ButtonPressed ? $"[{button.Text}]" : button.Text)),
-        "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), _notice.Text,
+        "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), _notice.Text, "Debug mode: " + (_debugMode.ButtonPressed ? "on" : "off"),
     ];
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
     internal void ChooseForSelfTest(string path) => FolderChosen?.Invoke(path);
     internal void RulesForSelfTest(RuleMode mode) => RulesRequested?.Invoke(mode);
     internal void ShowAtStartForSelfTest(bool show) => ShowAtStartRequested?.Invoke(show);
+    internal void DebugModeForSelfTest(bool on) => DebugModeRequested?.Invoke(on);
     internal void PlayForSelfTest() => PlayRequested?.Invoke();
     internal void ResetForSelfTest() => ResetRequested?.Invoke();
 
@@ -76,6 +79,13 @@ public partial class LauncherPanel : CanvasLayer
         }
         _showAtStart = new CheckBox { Name = "ShowAtStart", Text = "Show this screen at every start", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _showAtStart.Toggled += on => { if (!_rendering) ShowAtStartRequested?.Invoke(on); };
+        // ARC-DEV-050: a development aid, never gameplay; stored, so it stays on until it is turned off here.
+        _debugMode = new CheckBox
+        {
+            Name = "DebugMode", Text = "Debug mode: every world-map area open, teleport from the world map (W); not gameplay", FocusMode = Control.FocusModeEnum.None,
+            Modulate = new Color(.45f, .1f, .05f),
+        };
+        _debugMode.Toggled += on => { if (!_rendering) DebugModeRequested?.Invoke(on); };
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
         actions.AddChild(_play);
@@ -86,7 +96,7 @@ public partial class LauncherPanel : CanvasLayer
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. "
                     + "The rules can also be switched in play in Options. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
                     + "The game folder is only read, never written.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, choose, _rules, _showAtStart, actions, _notice, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, choose, _rules, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -127,6 +137,7 @@ public partial class LauncherPanel : CanvasLayer
             }
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
+            _debugMode.ButtonPressed = screen.Settings.DebugMode;
             _play.Disabled = !screen.CanPlay;
             _notice.Text = screen.Notice ?? "";
         }

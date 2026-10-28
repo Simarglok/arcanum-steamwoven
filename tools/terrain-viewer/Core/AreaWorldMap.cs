@@ -43,9 +43,10 @@ public sealed class AreaWorldMapData
 
 public sealed record AreaWorldMapDataLoad(AreaWorldMapDataStatus Status, AreaWorldMapData? Data, string Detail);
 
-/// <summary>Why a waypoint or a journey was refused: none, the journey is running, no waypoints, too many, no route (the
-/// original's message 601), or a pixel off the map.</summary>
-public enum AreaWorldMapRefusal { None, Travelling, NoWaypoints, TooMany, NoRoute, OffMap }
+/// <summary>Why a waypoint, a journey or a debug teleport was refused: none, the journey is running, no waypoints, too many, no route
+/// (the original's message 601), a pixel off the map, the PC not on the start map (ARC-DEV-050: a debug-mode view opened elsewhere),
+/// or an area without a location on the map.</summary>
+public enum AreaWorldMapRefusal { None, Travelling, NoWaypoints, TooMany, NoRoute, OffMap, NotOnStartMap, NoLocation }
 
 /// <summary>What one travel step did to the session: the step, the game time applied, and the area it made known (0 for none).</summary>
 public sealed record AreaWorldMapStep(TravelStepResult Step, long GameMs, int Discovered);
@@ -69,12 +70,18 @@ public sealed class AreaWorldMap
     private readonly GameSessionOwner _session;
     private WorldJourney _journey;
 
-    public AreaWorldMap(AreaWorldMapData data, GameSessionOwner session, TravelLocation start)
+    /// <summary>A journey from <paramref name="start"/>, the PC's location on the start map. ARC-DEV-050: without a
+    /// <paramref name="start"/> (debug mode on another map) the view has no position, plans no journey and only teleports.</summary>
+    public AreaWorldMap(AreaWorldMapData data, GameSessionOwner session, TravelLocation? start)
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         _session = session ?? throw new ArgumentNullException(nameof(session));
-        _journey = new(new WorldRoute(), data.TravelAreas, data.Width, WorldTravelGeometry.Pixel(start, data.Width));
+        OnStartMap = start is not null;
+        _journey = new(new WorldRoute(), data.TravelAreas, data.Width, WorldTravelGeometry.Pixel(start ?? default, data.Width));
     }
+
+    /// <summary>The PC stands on the start map, so the view has a position and plans journeys.</summary>
+    public bool OnStartMap { get; }
 
     public AreaWorldMapData Data => _data;
     /// <summary>The session the journey writes to.</summary>
@@ -95,6 +102,7 @@ public sealed class AreaWorldMap
     /// <summary>Adds a waypoint at a world-map pixel (the original's click, WT5): a known area within 320 tiles takes its place.</summary>
     public AreaWorldMapRefusal AddWaypoint(WorldMapPixel pixel)
     {
+        if (!OnStartMap) return AreaWorldMapRefusal.NotOnStartMap;
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (pixel.X < 1 || pixel.X > _data.Width || pixel.Y < 0 || pixel.Y >= _data.Width) return AreaWorldMapRefusal.OffMap;
         Landing = null;
@@ -113,6 +121,21 @@ public sealed class AreaWorldMap
         return AddWaypoint(WorldTravelGeometry.Pixel(_data.TravelAreas[area].Location, _data.Width));
     }
 
+    /// <summary>
+    /// ARC-DEV-050, debug mode only (the host never offers it otherwise): the start-map location to teleport the PC to for an area,
+    /// known or not, at once. The view and the session are not changed: the host lands there as a journey's landing does, with no
+    /// game time and no discovered area. Refused during a journey and for an area that has no location on the map.
+    /// </summary>
+    public AreaWorldMapRefusal Teleport(int area, out TravelLocation landing)
+    {
+        if (area < 1 || area >= _data.TravelAreas.Count) throw new ArgumentOutOfRangeException(nameof(area));
+        landing = _data.TravelAreas[area].Location;
+        if (Travelling) return AreaWorldMapRefusal.Travelling;
+        if (landing == default || landing.X >= _data.Width * 64 || landing.Y >= _data.Width * 64) return AreaWorldMapRefusal.NoLocation;
+        Landing = null;
+        return AreaWorldMapRefusal.None;
+    }
+
     /// <summary>Drops every waypoint (only before the journey starts).</summary>
     public bool Clear()
     {
@@ -123,6 +146,7 @@ public sealed class AreaWorldMap
 
     public AreaWorldMapRefusal Start()
     {
+        if (!OnStartMap) return AreaWorldMapRefusal.NotOnStartMap;
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (_journey.Waypoints.Count == 0) return AreaWorldMapRefusal.NoWaypoints;
         Travelling = true; Landing = null; Steps = 0; GameMs = 0;

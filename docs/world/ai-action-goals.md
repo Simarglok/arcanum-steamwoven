@@ -10,7 +10,8 @@ EX19](../research/ledger/npc-ai.md#npc-ai-action-execution-arc-res-066); this ta
 [AG1–AG16](../research/ledger/npc-ai.md#npc-ai-action-goals-arc-world-089)). The rules extend `Arcanum.Simulation.Ai.AiExecutorRules`
 (`ExecutorActionGoals.cs`) over the [executor's](ai-executor.md) `IAiPerformWorld` and `IAiGoalWorld`; animations, the magic run, the
 skill invocation, the throw, the pickup and the item's own effects are the world's. The viewer's AI host (slice I10) runs
-perform's cast and the casting goals since ARC-WORLD-102 ([casting](ai-host.md#casting-arc-world-102)); the other goals have no host yet.
+perform's cast and the casting goals since ARC-WORLD-102 ([casting](ai-host.md#casting-arc-world-102)) and the skill goals since
+ARC-WORLD-109 ([skill goals](ai-host.md#skill-goals-arc-world-109)); the other goals have no host yet.
 
 Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (the NPC's actions in a fight),
 [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (their action points in a round),
@@ -29,7 +30,7 @@ Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (the NPC
 The pass target of these actions is the choice's (`AiPassChoice.Target`, which the chooser writes into the pass record, SP6); the
 `target` argument stands in when the choice has none.
 | Grenade | 0x4AC910 | Combat perform asks the host's grenade step (`IAiPerformWorld.Grenade`, i.e. `AiGroundRules.Grenade`); a throw runs `StartThrow` with the grenade at the target's tile, and perform goes no further whether the starter started or refused (AG13). |
-| Thrown weapon | 0x434B00 | The attack starter takes a removable "default throws" weapon off (`Unwield`, 0x466E00) and answers `StartThrow`'s answer; a refused throw leaves the weapon in the inventory (AG13). |
+| Thrown weapon | 0x434B00 | The attack starter takes a removable "default throws" weapon off (`Unwield`, 0x466E00) and answers `StartThrow`'s answer (AG13). The removal takes it out of the inventory entirely, so in the original a refused throw loses it ([TA1](../research/ledger/npc-ai.md#npc-ai-throw-host-arc-world-113)); the AI host keeps it wielded until the throw ([AI host](ai-host.md#throw-arc-world-113)). |
 
 ## Starters
 
@@ -98,8 +99,9 @@ an object may hold several runs at once (inference: the call stands in for that)
 ## Not ready
 
 - **Host (slice I10).** The viewer's AI host implements perform's cast and the cast host's `StartGoal`/`Release`/`EndGoal` behind
-  `StartCast`/`ReleaseCast`/`EndCast` (ARC-WORLD-102, [casting](ai-host.md#casting-arc-world-102)); no host implements the other new
-  world members (the other animations and their timing, the skill invocation, the throw and the pickup) or calls `UseItemNow` for the
+  `StartCast`/`ReleaseCast`/`EndCast` (ARC-WORLD-102, [casting](ai-host.md#casting-arc-world-102)) and, since ARC-WORLD-109, the
+  skill goals' turn, skill animation and invocation (the heal; [skill goals](ai-host.md#skill-goals-arc-world-109)); no host implements
+  the other new world members (the throw animation, the throw and the pickup) or calls `UseItemNow` for the
   chooser's AI-action item; the item search's `StartPickup` is the host's call of
   `AiExecutorRules.StartPickup`.
 - **Queued cast.** A cast the magic domain queues under the caster's running cast (SU13) is kept by the host: the viewer's queue for
