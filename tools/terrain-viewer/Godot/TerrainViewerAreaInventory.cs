@@ -409,9 +409,10 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-MAGIC-020: the item spell executors for a wear move, over the shown map's cast host (none without spell data); its item
-    /// lookup is the hero's items (ARC-UI-016). ARC-UI-025: the window's item use casts through it too.</summary>
+    /// lookup is the hero's items (ARC-UI-016) and the shown map's NPCs' (ARC-UI-031). ARC-UI-025: the window's item use casts through
+    /// it too. ARC-UI-031: the same executors the cast host fires its own life steps' item events through.</summary>
     private ISessionItemTriggers? ItemTriggersNow() =>
-        _combatHost is not null && _worldActor.Session is AreaGridSession && SpellCasterNow() is { } caster ? new SessionItemTriggers(caster, AreaCombatWorldNow()) : null;
+        _combatHost is not null && _worldActor.Session is AreaGridSession && SpellCasterNow() is { } caster ? caster.ItemTriggers : null;
 
     private void EndInventory()
     {

@@ -98,9 +98,13 @@ public partial class TerrainViewerApp
         ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds);
-        _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents, HeroItemSpells);
+        var runtimeMap = area.Snapshot.RuntimeMap;
+        _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
+            id => HeroItemSpells(id) ?? _combatHost!.NpcItemSpells(owner, runtimeMap, id));
+        // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
+        _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, AreaCombatWorldNow());
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
-        GD.Print($"ARC-MAGIC-015 cast-host map={area.Snapshot.RuntimeMap} records={records.Length}");
+        GD.Print($"ARC-MAGIC-015 cast-host map={runtimeMap} records={records.Length} item-triggers=on");
         return _spellCaster;
     }
 
@@ -119,7 +123,8 @@ public partial class TerrainViewerApp
         return known.Held.Contains(id);
     }
 
-    // ARC-UI-016: the cast host's item lookup: the spell facts of an item the hero holds, kit or taken.
+    // ARC-UI-016: the spell facts of an item the hero holds, kit or taken; the cast host's item lookup asks it first, then the shown
+    // map's NPCs (ARC-UI-031).
     private SessionItemSpells? HeroItemSpells(string id) =>
         _lentItemSpellsForSelfTest is { } lent && lent.Entity == id ? lent
         : _areaSession is { } owner && _inventoryHost is { } host ? host.ItemSpells(owner, id, _areaKitItemSpells) : null;
