@@ -15,7 +15,7 @@ public sealed class HeroPartySideTests
     // The fixtures' session clock starts at 15:00.
     private const long T0 = 54_000_000;
 
-    private static GameSessionOwner Hero(int charisma = 8, int persuasionTraining = 0, int alignment = 0)
+    private static GameSessionOwner Hero(int charisma = 8, int persuasionTraining = 0, int alignment = 0, int background = 0)
     {
         var stats = Defaults();
         stats[(int)CharacterStat.Charisma] = charisma;
@@ -24,6 +24,7 @@ public sealed class HeroPartySideTests
         var hero = HalfElf(stats) with
         {
             Alignment = alignment,
+            Background = background,
             Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. skills] },
         };
         return CreateWith(hero);
@@ -114,11 +115,12 @@ public sealed class HeroPartySideTests
     [TestMethod]
     public void An_alignment_change_writes_the_hero_and_arms_its_followers()
     {
-        using var owner = Hero(alignment: 100);
+        using var owner = Hero(alignment: 100, background: SessionBackgrounds.Technophobia);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, "npc", Diagnostic(), false).Disposition);
         var revision = owner.Version.Revision;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ChangeHeroAlignment(owner.Version, 150).Disposition);
         Assert.AreEqual((150, revision + 1), (owner.QueryHero()!.Alignment, owner.Version.Revision));
+        Assert.AreEqual(SessionBackgrounds.Technophobia, owner.QueryHeroBackground(), "the change keeps the rest of the hero");
         Assert.AreEqual(CompanionLoyalty.CheckLeader | CompanionLoyalty.TestTooGood, owner.QueryCompanion("npc").Loyalty);
         // The stat's range bounds it; the same value changes nothing.
         owner.ChangeHeroAlignment(owner.Version, -5000);
