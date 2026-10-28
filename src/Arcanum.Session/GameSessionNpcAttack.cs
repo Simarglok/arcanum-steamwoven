@@ -76,8 +76,9 @@ public sealed partial class GameSessionOwner
     /// <see cref="ThrowRules.MaxWeight"/>, a struck critter without its cell or both struck kinds, a no-drop item
     /// (<see cref="GameSessionFailure.InvalidAttack"/>), an item not in the NPC's seed list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// an item with scripts (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item that is not the wielded melee weapon
-    /// (<see cref="GameSessionFailure.AttackUnsupported"/>), then <see cref="AttackByNpc"/>'s refusals, the version, the revision.
-    /// A resolver refusal throws nothing (NoChange, as the hero's).
+    /// (<see cref="GameSessionFailure.AttackUnsupported"/>), then <see cref="AttackByNpc"/>'s refusals (without a struck critter the
+    /// thrower's: its life record, its worn items), the version, the revision. A resolver refusal throws nothing (NoChange, as the
+    /// hero's), as does an inactive thrower without a struck critter.
     /// </summary>
     [OriginalFunction(0x4B3C00, OriginalFunctionScope.Partial)]
     public SessionNpcThrowResult ThrowByNpc(GameSessionVersion expected, SessionNpcThrow request)
@@ -101,6 +102,18 @@ public sealed partial class GameSessionOwner
         if (wielded.NoDrop) return Refused(GameSessionFailure.InvalidAttack);
         if (!struck)
         {
+            // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive
+            // thrower throws nothing (the resolver's refusal on the attack's path).
+            var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
+            if (resolved != GameSessionFailure.None) return Refused(resolved);
+            if (!ValidWear(new SessionWearSide { Life = request.Thrower.Target, Worn = request.ThrowerWorn }, new SessionWearSide(), targetBroken: false, wear: null))
+                return Refused(GameSessionFailure.InvalidWear);
+            var status = LifeRules.Evaluate(record.State, facts!);
+            SessionNpcAttackValues values;
+            try { values = Levelled(request.Thrower).AttackValues(status, record.State, _rules.Combat, request.ThrowerWorn?.Keys); }
+            catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
+            if (values.Weapon.Kind != WeaponKind.Weapon || values.Skill != CombatSkill.Melee) return Refused(GameSessionFailure.AttackUnsupported);
+            if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
             var failure = LandNpcItem(request.Item, request.Target);

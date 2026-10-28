@@ -1028,8 +1028,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// magic adjustment under the thrower's aptitude) and the critter the line of fire to the tile names (TW4,
     /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
-    /// viewer. NOT READY: the projectile's flight (the item lands at once) and a scenery or wall blocker (the item lands on the tile,
-    /// striking nothing).
+    /// viewer. NOT READY: the projectile's flight (the item lands at once), and a first blocker on the line that is a scenery, a wall,
+    /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
+    /// tile, striking nothing.
     /// </summary>
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
@@ -1046,7 +1047,11 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             weight = Math.Clamp(Arcanum.Simulation.Items.CarryRules.ItemWeight(new(fields.Object.Type, stored.Weight, stored.MagicWeight,
                 stored.MagickTechComplexity), Arcanum.Simulation.Items.CarryHolder.Critter, aptitude), 0, ThrowRules.MaxWeight);
         }
-        catch (ArgumentException) { weight = 0; }
+        catch (ArgumentException)
+        {
+            Trace(id).Throw = $"throw {item}: weight facts out of range";
+            return false;
+        }
         var struck = StruckAt(id, from, tile);
         var hero = struck?.Who == Pc;
         var request = new SessionNpcThrow(thrower, item, weight, from, tile)
@@ -1208,12 +1213,14 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     /// <summary>ARC-WORLD-113: the attack starter's throw (0x434B00, TW1, AG13): the item the NPC wears in its weapon slot (the session's
     /// view) when it is a weapon with the "default throws" flag (weapon flag 0x200) that the remove check (0x466DA0: no no-drop flag)
-    /// lets go.</summary>
+    /// lets go. Not ready: a weapon the session's throw refuses (one with scripts, or one the session added to the NPC, which no seed
+    /// holds) is answered as not throwable, so the NPC attacks with it instead of starting a throw that always fails.</summary>
     public string? ThrowableWeapon(string npc)
     {
         if (!_npcs.ContainsKey(npc) || _scene.Combat.Worn(_session, _scene.RuntimeMap, npc) is not { } worn) return null;
         foreach (var item in worn)
-            if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop)
+            if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop
+                && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity))
                 return item.Entity;
         return null;
     }

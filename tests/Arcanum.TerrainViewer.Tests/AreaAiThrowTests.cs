@@ -136,7 +136,8 @@ public sealed class AreaAiThrowTests
         var (_, host, npc, _) = Open(weaponFlags: 0);
         Assert.IsNull(host.ThrowableWeapon(npc));
         host.PerformAttack(npc, AiSchedulerRules.Pc);
-        Assert.AreNotEqual(AiGoalType.ThrowItem, host.RunOf(npc)?.Bottom.Goal, "an attack, not a throw");
+        Assert.AreEqual(AiGoalType.Attack, (host.RunOf(npc) ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}")).Bottom.Goal,
+            "an attack, not a throw");
     }
 
     [TestMethod]

@@ -149,7 +149,7 @@ throw goal 37 at its target's tile instead of an attack ([action goals](ai-actio
 
 | Part | Original | What it does |
 | --- | --- | --- |
-| Throwable weapon | 0x434B00 (TA2, TW1) | `ThrowableWeapon` answers the item the NPC wears in its weapon slot as the session shows it (`AreaCombatHost.Worn`) when it is a weapon with weapon flag 0x200 and no no-drop flag (the remove check 0x466DA0). |
+| Throwable weapon | 0x434B00 (TA2, TW1) | `ThrowableWeapon` answers the item the NPC wears in its weapon slot as the session shows it (`AreaCombatHost.Worn`) when it is a weapon with weapon flag 0x200 and no no-drop flag (the remove check 0x466DA0); not ready: one with scripts or one the session added to the NPC is not answered, as the session's throw would refuse it. |
 | Unwield | 0x466E00 (TA1) | The original takes the weapon out of the NPC's inventory here, before the goal runs, and loses it when the goal never reaches its throw (a refused start, an interrupt, a replacement, the NPC's death). A lost object (owner rule on technical bugs): in both rule modes `Unwield` changes nothing and the weapon stays wielded until the throw removes it. |
 | Animation | 0x42BD40, 0x42C390, 0x42CB10 (AG10) | `FaceForAction` turns the NPC to the tile; `BeginAction` plays the throw animation (14) with the skill animation's stand-in (the fixed human attack ART's 9 frames, action frame 6, 15 per second: the throw 400 ms after the start, the end 200 ms later; NPC ART is not read). Goal 37 has priority 3. |
 | Throw | 0x42AB90 → 0x4B3C00, 0x4B3170 (TW2–TW6) | At the action frame `ThrowItem` needs an item the NPC still holds (the session's view; else the throw fails, AG10), weighs it as the thrower holds it (0x461370 with the thrower: its stored weight and its magic adjustment under the thrower's aptitude, TW5) and names the struck critter (TW4): the first object the line of fire to the tile stops at, when it is a living walked NPC or companion, else the living critter on the tile (the hero, a walked NPC, a companion). Then the session's `ThrowByNpc` (below) and, for a resolved attack, the attack event on the struck critter (the projectile's end alerts it, PF8). A `Throw` notice tells the viewer, which logs `ARC-WORLD-113 ai-throw` and treats a struck critter's attack as an NPC hit (status line, floaters, stun, fall, the bodies and the inventory). Goal 37 then charges 2 and takes the end step on every path (AG10, EX6). |
@@ -178,10 +178,12 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   pocket and lock picking are the hero's); any skill but heal does nothing either. The skill animation is the fixed stand-in (NPC ART
   is not read) and is not drawn; the record's flag 0x2 from the goal frame's flag 0x1 is not read (AK2, F0).
 - **Throws.** The thrown item does not fly (ARC-WORLD-113 lands it at once): no projectile is drawn, a miss strikes no critter on
-  the tiles it passes (PF6), no item event fires at its end (PF10) and the item is never hidden while it flies; a scenery or wall
-  first on the line is not struck (the item lands on the tile); only the wielded "default throws" weapon is thrown (no generic
-  items or grenades: the grenade step answers no grenade), only a seed item of the NPC's list (not one the session added to it);
-  the throw and remove-item scripts are not run and the item spells' unwear (0x4CBFC0) is not run.
+  the tiles it passes (PF6), no item event fires at its end (PF10) and the item is never hidden while it flies; a first blocker on the line that
+  is a scenery, a wall, a dead or unknown critter is not struck, nor is the hero standing on the line to another target (the
+  line's map holds no hero): the item then lands on the tile without a roll; only the wielded "default throws" weapon is thrown (no
+  generic items or grenades: the grenade step answers no grenade), only a seed item of the NPC's list without scripts
+  (`ThrowableWeapon` answers no weapon for one the session added to the NPC or one with scripts, so the NPC attacks with it); the
+  throw and remove-item scripts are not run and the item spells' unwear (0x4CBFC0) is not run.
 - **Action goals.** Item use and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
   no item spell or AI-action item is chosen;
