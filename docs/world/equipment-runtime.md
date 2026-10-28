@@ -9,7 +9,8 @@ from the world, and what the worn items give the [attack resolver](attack-resolv
 `Arcanum.Simulation.Equipment.EquipmentRules`; the session holds the worn items (snapshot schema 12). Requirements:
 [FR-ITEM-005](../requirements/items-economy.md#fr-item-005) (slot legality, wield and remove),
 [FR-ITEM-006](../requirements/items-economy.md#fr-item-006) (weapon and armour item values into combat) and the light part
-of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses it only for the pre-made start
+of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). The viewer uses it for the pre-made start and, since ARC-UI-015,
+for the inventory window's paper doll ([viewer](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004))
 ([Not ready](#not-ready)).
 
 ## Evidence
@@ -207,8 +208,8 @@ times; wield off reaches the same script's removal loop through call-ex, which r
 - **Rewield** (0x465530, WE6): the original runs every worn item's wield off and wield on when the hero's magick or tech points
   change (the stat setter, stats 22 and 23), with the rewielding condition true; the session's advancement does not, so a worn
   scaled item keeps the count of its wield (the condition answers false).
-- **Hosts.** No viewer host calls `Equip` or `Unequip` (no paperdoll); the AREA viewer's item script host answers no effect rule
-  and no identified test, so such a run refuses there.
+- **Hosts.** The AREA viewer's inventory window calls `Equip` and `Unequip` with its item script host (ARC-UI-015); that host
+  answers no effect rule and no identified test, so such a run refuses there.
 - **Other paths.** Giving a worn item with item event points to an NPC (ARC-WORLD-071) and throwing such a wielded weapon
   (ARC-COMBAT-017) are refused (`ItemScriptUnsupported`), as those paths run no item events; a worn item deleted by wear or destruction,
   a weapon a critical miss drops (ARC-COMBAT-009) and an item whose first break takes it off (ARC-WORLD-053) leave the slot without their
@@ -248,8 +249,9 @@ times; wield off reaches the same script's removal loop through call-ex, which r
 
 ## Not ready
 
-- **No paperdoll.** The viewer's inventory window has no paperdoll and no host calls `Equip`; the pre-made start wields the
-  kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and its ammunition stacks (ARC-WORLD-066); a custom
+- **Paperdoll.** The viewer's inventory window has a diagnostic paper doll with wear and take-off buttons (ARC-UI-015, ledger
+  IW1–IW9); the original's grid, drag and drop and the doll's art are not built, and a made item has no wear values there. The
+  pre-made start wields the kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and its ammunition stacks (ARC-WORLD-066); a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.

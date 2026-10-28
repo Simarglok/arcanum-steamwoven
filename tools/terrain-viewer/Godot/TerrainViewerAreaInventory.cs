@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -27,6 +28,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionLockpick?>? _areaKitLockpicks;
     // ARC-COMBAT-008: the kit's durability values for the attack's wear.
     private IReadOnlyList<SessionWearItem?>? _areaKitDurability;
+    // ARC-UI-015: the kit's wear facts (the best-items start's), for wearing a kit item from the window.
+    private IReadOnlyList<SessionWearableItem?>? _areaKitWear;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -198,6 +201,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
             _inventoryPanel.RepairRequested += RepairItem;
+            _inventoryPanel.WearRequested += WearItem;
+            _inventoryPanel.TakeOffRequested += TakeOffItem;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -208,7 +213,7 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
     /// original's inventory window does). In a turn-based round the use charges its action points (ARC-COMBAT-020; the original goes on
@@ -281,6 +286,56 @@ public partial class TerrainViewerApp
         _inventoryPanel.Render(InventoryView(holder), message);
         RefreshReadyStatus();
     }
+
+    /// <summary>
+    /// ARC-UI-015: puts a PC item into a wear slot through the session (the original's drop of a held item on a doll slot, ledger IW3):
+    /// the wear check and the occupant's insert check refuse with a message, an occupant goes back to the pack. The viewer has one
+    /// diagnostic body art, so it answers the art lookup with yes (as the best-items start does). Moving, wearing and taking off cost
+    /// no action points, in a turn-based round too (IW8). The item's scripts run through the item script host; its item spells through
+    /// the cast host's triggers when the map has one.
+    /// </summary>
+    private void WearItem(string item, EquipmentSlot slot)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        var session = _areaSession!;
+        var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
+        string message;
+        if (_inventoryHost.Wearable(session, item, _areaKitWear) is not { } wearable) message = $"not worn: {name} has no wear values here";
+        else
+        {
+            var result = session.Equip(session.Version, item, slot, wearable, (_, _) => true, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), ItemTriggersNow());
+            message = AreaInventoryHost.WearText(result, name, slot, false, entity => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog));
+            GD.Print($"ARC-UI-015 wear item={item} slot={slot} disposition={result.Disposition} failure={result.Failure} refusal={result.Refusal} " +
+                $"displaced={result.Displaced ?? "-"} rolled-back={result.RolledBack} scripts={result.Scripts.Count} spells={result.ItemSpells.Count} worn={session.QueryEquipment().Worn.Count}");
+        }
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-UI-015: takes a worn item off into the pack (the original's drop of a worn item on the grid, ledger IW4); the insert
+    /// check (weight, Technophobia) and the item's no-drop flag refuse with a message.</summary>
+    private void TakeOffItem(EquipmentSlot slot)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        var session = _areaSession!;
+        var worn = session.QueryEquipment().Worn.FirstOrDefault(item => item.Slot == slot);
+        var name = worn is null ? AreaInventoryHost.SlotName(slot) : _inventoryHost!.ItemName(session, worn.Entity, _hoverNames?.Catalog);
+        var result = session.Unequip(session.Version, slot, _inventoryHost!.InsertCheck, _inventoryHost.ItemScripts(session), ItemTriggersNow());
+        var message = AreaInventoryHost.WearText(result, name, slot, true, entity => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog));
+        GD.Print($"ARC-UI-015 take-off slot={slot} disposition={result.Disposition} failure={result.Failure} refusal={result.Refusal} " +
+            $"scripts={result.Scripts.Count} spells={result.ItemSpells.Count} worn={session.QueryEquipment().Worn.Count}");
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-MAGIC-020: the item spell executors for a wear move, over the shown map's cast host (none without spell data). The
+    /// viewer's cast host has no item lookup yet, so it supports no item: an item with spells stays refused.</summary>
+    private ISessionItemTriggers? ItemTriggersNow() =>
+        _combatHost is not null && _worldActor.Session is AreaGridSession && SpellCasterNow() is { } caster ? new SessionItemTriggers(caster, AreaCombatWorldNow()) : null;
 
     private void EndInventory()
     {

@@ -1,6 +1,6 @@
 # Item spell triggers (ARC-MAGIC-020)
 
-Status: **Implemented bounded component; no viewer caller yet.** Work items ARC-MAGIC-020 and ARC-MAGIC-022 (2026-10-28), the first parts of the shared
+Status: **Implemented bounded component; the viewer passes the triggers on wear and take-off (ARC-UI-015) but its cast host has no item lookup yet.** Work items ARC-MAGIC-020 and ARC-MAGIC-022 (2026-10-28), the first parts of the shared
 item trigger slice of [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-magic-011) ("Outside this plan" of the
 [magic implementation plan](../research/magic-implementation-plan.md#outside-this-plan)). Behaviour is the 1.0.7.4 executable's,
 read twice ([ledger IT1–IT10](../research/ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the item spell fields and the
@@ -133,5 +133,7 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 - The item spell pane and hotkeys (0x57C040, 0x57C080, IT9), and spells aimed at an inventory item.
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.
 - A first break of a marked worn item takes it off without its unwear (0x4CBFC0), and its runs keep the item as source.
-- The viewer has no equip action, so nothing calls these executors there yet; the session's runs are not saved (MT9b), so a loaded
-  game wears its items without their runs.
+- The viewer's inventory window (ARC-UI-015) passes `SessionItemTriggers` over the shown map's cast host to `Equip` and `Unequip`,
+  but that cast host is built without an item lookup (the spell charges field is not read for map or kit items), so it supports no
+  item and an item with spells stays refused there; the session's runs are not saved (MT9b), so a loaded game wears its items without
+  their runs.

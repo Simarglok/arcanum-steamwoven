@@ -763,9 +763,25 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the host's insert check
+  diagnostic window: no inventory grid, drop or stacks (ARC-UI-015 added the paper doll and the weight line); the host's insert check
   accepts every item (grid room is NOT READY); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
   and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
+- **Paper doll, wear and take-off (ARC-UI-015).** Above the PC's list the window shows the hero's nine wear slots in slot order
+  (helmet, ring 1, ring 2, medallion, weapon, shield, armor, gauntlets, boots; the original's locations 1000..1008) with the worn
+  item's name, a *Take off* button per worn item and a *Wear (slot)* button per slot an item of the PC's list can go to (its wear
+  location; a ring offers both ring slots). The buttons stand in for the original's drag of a held item onto a doll slot or onto the
+  grid ([ledger IW1–IW9](../research/ledger/ui-audio.md#inventory-window-arc-ui-015)): *Wear* runs the session's `Equip`
+  ([equipment](../world/equipment-runtime.md)) with the wear check, the occupant's no-drop and insert checks, and an occupant goes
+  back to the pack (in the original it lands in the grid and is then held on the cursor, IW3); *Take off* runs `Unequip`. A refusal
+  is named in the message line (the wear rule, the weight or Technophobia of the insert check, an item script or item spell that
+  cannot run). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
+  body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
+  scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
+  lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
+  taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
+  weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
+  "no hero: nothing can be worn". Not built yet (follow-up slices): the grid, drag and drop, dropping on the ground or the use icon,
+  right-click use, stack splitting and the gold drag.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -777,12 +793,15 @@ after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInven
 admitted cell with life evidence, every core ground item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot
 without script content and the amulet's script with it (ARC-SCRIPT-013), 37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
 production click path: walk-to-pickup hover and press from 2..6 cells, its cancel by a ground
-click, pickup next to the item, I/Escape, loot by the take button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
+click, pickup next to the item, I/Escape, loot by the take button; ARC-UI-015: two ring wear buttons and a take-off button that run
+the app's wear and take-off), `AreaInventoryWearTests` (ARC-UI-015: doll lines, wear slots, swap, take-off, refusals, the weight facts)
+and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
 (one pickup next to an item, one walk to pick up, the four dead NPCs looted with *Take all*:
 5 taken, 1 left, every taken item named in the window; `ARC_AREA_INVENTORY_CAPTURE=PATH.png` saves a
-readback of the open window) and the quick-save phase, which now
+readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
+button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop, paper doll), a human on a physical mouse and display.
+(grid, drag and drop, the doll's art), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 

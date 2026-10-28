@@ -1,6 +1,7 @@
 using System.Reflection;
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
@@ -166,9 +167,23 @@ public partial class TerrainViewerApp
             _inventoryPanel.RepairButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(InventoryOpen && _inventoryStatus == "not repaired: no condition for this item", "unknown item: " + _inventoryStatus);
+            // ARC-UI-015: a doll slot with an item gets a take-off button and a wearable line a wear button per slot; this session has no
+            // hero, so the app's wear finds no wear values and its take-off no hero.
+            _inventoryPanel.Render(new AreaInventoryView([new("syn:ring", "ring") { WearSlots = [EquipmentSlot.Ring1, EquipmentSlot.Ring2] }], null, null, [])
+                { Doll = [new(EquipmentSlot.Shield, "syn:torch", "torch"), new(EquipmentSlot.Helmet, null, null)] }, null);
+            Require(_inventoryPanel.WearButtonsForSelfTest.Count == 2 && _inventoryPanel.TakeOffButtonsForSelfTest.Count == 1
+                && _inventoryPanel.DollTextForSelfTest.Contains("shield: torch", StringComparison.Ordinal), "two ring wear buttons, one take-off button: " + _inventoryPanel.DollTextForSelfTest);
+            _inventoryPanel.WearButtonsForSelfTest[1].EmitSignal(BaseButton.SignalName.Pressed);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InventoryOpen && _inventoryStatus.StartsWith("not worn: ", StringComparison.Ordinal) && _inventoryStatus.EndsWith("has no wear values here", StringComparison.Ordinal),
+                "the wear button ran the app's wear: " + _inventoryStatus);
+            _inventoryPanel.Render(new AreaInventoryView([], null, null, []) { Doll = [new(EquipmentSlot.Shield, "syn:torch", "torch")] }, null);
+            _inventoryPanel.TakeOffButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InventoryOpen && _inventoryStatus == "not taken off: no hero to wear it", "the take-off button ran the app's take-off: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
-            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button, repair button";
+            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button, repair button, wear and take-off buttons";
         }
         finally
         {
@@ -269,6 +284,25 @@ public partial class TerrainViewerApp
             InventoryKey(Key.I);
             var view = _inventoryPanel!.ViewForSelfTest!;
             Require(InventoryOpen && view.Pc.Count == _areaSession.QueryHeroKit().Count + start + 2 + looted && view.Pc.All(line => !line.Text.StartsWith('[')), "I lists the named items");
+            // ARC-UI-015: with a hero, every worn item comes off through its take-off button and goes back on through its wear button.
+            var wornCycled = 0;
+            if (_areaSession.QueryHero() is not null)
+            {
+                Require(view.Doll.Count == 9 && view.Carry is not null && _inventoryPanel.HeaderForSelfTest.Contains("encumbrance level", StringComparison.Ordinal), "the doll and weight line");
+                foreach (var slot in view.Doll.Where(slot => slot.Entity is not null).ToArray())
+                {
+                    var button = _inventoryPanel.TakeOffButtonsForSelfTest.First(b => b.Text.StartsWith($"Take off ({AreaInventoryHost.SlotName(slot.Slot)})", StringComparison.Ordinal));
+                    button.EmitSignal(BaseButton.SignalName.Pressed);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(_areaSession.QueryEquipment().Worn.All(w => w.Slot != slot.Slot) && _inventoryStatus.StartsWith("took off ", StringComparison.Ordinal), "take off: " + _inventoryStatus);
+                    var wear = _inventoryPanel.WearButtonsForSelfTest[_inventoryPanel.WearTargetsForSelfTest.ToList().IndexOf((slot.Entity!, slot.Slot))];
+                    wear.EmitSignal(BaseButton.SignalName.Pressed);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(_areaSession.QueryEquipment().Worn.Any(w => w.Slot == slot.Slot && w.Entity == slot.Entity) && _inventoryStatus.StartsWith("wore ", StringComparison.Ordinal), "wear: " + _inventoryStatus);
+                    wornCycled++;
+                }
+                view = _inventoryPanel.ViewForSelfTest!;
+            }
             // ARC_AREA_INVENTORY_CAPTURE saves an in-app readback of the open window to the caller's ignored path.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture)
             {
@@ -282,8 +316,8 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-004 native-smoke inventory PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
-                PrintedLines = printed,
-                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no grid or weight)" }));
+                PrintedLines = printed, WornCycled = wornCycled,
+                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no grid or drag)" }));
         }
         finally
         {
