@@ -146,17 +146,21 @@ app is). On Windows, in a command prompt in the game folder: `"Arcanum Steamwove
 **Use it:** press **W** in play, select an area in the list on the right and press **Teleport**. The game loads the world
 around that area and puts you on a walkable spot in it, together with the companions that follow you. A teleport takes
 no game time and does not mark the area as discovered; areas you have really discovered stay marked in yellow. Normal
-travel on the world map works as without the debug mode.
+travel on the world map works as without the debug mode. The debug mode also shows the panel of diagnostic text at the top
+of the window from the start (section 8).
 
 **Saves:** the debug mode does not change the rules or what a save holds, but a save made while it is on has `[DEBUG]`
 before its location in the save's details (the line under the list in the save and load windows), so you can tell it apart. Such a save loads normally with the debug mode off.
 
-## 8. Hiding the diagnostic panel
+## 8. Showing and hiding the diagnostic panel
 
-The panel of diagnostic text at the top of the window is a development aid. Press **Ctrl+Shift+F10** to hide it and
-again to show it (on a Mac keyboard where the F keys control brightness or volume, hold **fn** as well:
-**fn+Ctrl+Shift+F10**). It works with or without the debug mode and shows again at the next start. The diagnostic palette
-keeps its own key, **Ctrl+Shift+F9**.
+The panel of diagnostic text at the top of the window (the mode, the status and the diagnostic palette button) is a
+development aid, so it is hidden unless the debug mode is on (section 7). Press **Ctrl+Shift+F10** to show it and again to
+hide it (on a Mac keyboard where the F keys control brightness or volume, hold **fn** as well: **fn+Ctrl+Shift+F10**). It
+works with or without the debug mode and lasts until the game closes: the next start hides the panel again (or shows it,
+with the debug mode). If the game folder or an area fails to load while the panel is hidden, the failure line still appears
+on its own at the top of the window. The diagnostic palette keeps its own key, **Ctrl+Shift+F9**, whether the panel is shown
+or not.
 
 ## 9. Reporting a bug (Ctrl+B)
 

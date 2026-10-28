@@ -149,6 +149,43 @@ frame key), like the other load checks; it is not a runtime failure.
 - ARC-WORLD-017: the transfer carries the following companions (above). In the cave a visiting companion is the only
   dialog NPC; on the exterior an absent one is not a speaker.
 
+## Drawing the walk (ARC-WORLD-111)
+
+A playtest of the packaged build showed Virgil sliding after the PC as a still picture: until now a companion (and an NPC
+the AI walks, [AI host](ai-host.md)) was drawn with its T0 frame moved along. The original draws every walker's step the
+same way, PC or NPC: the step gait (0x42EDC0, read in the executable for any critter, ledger
+[ST3](../research/ledger/skills.md)) sets the walk (animation 1) or run (6), the stealth walk (3) for a concealed one; the
+frames run at the ART rate the Speed table scales (research [ARC-RES-047](../research/locomotion-evidence.md) L5–L7, F0);
+facing selects the ART rotation; a stand is animation 0 frame 0 (ST1, and the end of a move,
+[actor placement](../research/actor-placement-evidence.md), F0). This is a technical bug of ours, fixed in both rule modes.
+
+- **Move ARTs** (`AreaBodyMoveArt.Load`, viewer Core): read on demand from the archive the body's standing art came from,
+  once per standing art (dropped with the map's frame overlay at a map change or reload), its archive entry checked
+  against the published snapshot (a changed archive is refused); bytes after an ART's last frame are not part of it. The
+  names are the body's ART name with new shield, weapon and animation letters (ledger MA3): walk `x<weapon>b` (walk
+  clears the shield, MA2), run `xag` (animations 6–19 clear both), stand `<shield><weapon>a`. Missing-art repair (MA1):
+  a missing run is drawn as the walk, a missing armed walk as the walk without the weapon (`xab`), a missing
+  stand with weapon 0 as weapon 1; an unreadable candidate leaves the next one. Critter, monster and unique-NPC art only (classes 2, 12, 13), not bad art; any
+  other status keeps the T0 frame and the log says why once (`ARC-WORLD-111 body-moves …`).
+- **Facing and placement** (`AreaBodyArt.Pose`, `AreaBodyMoveArt.Animate`): facing octant = ART rotation; rotations 1..3
+  draw groups 7..5 mirrored with hotspot X `width − hotX − 1` (AP-006), a one-rotation ART serves every facing from its
+  group 0 (mirrored for 1..3, as the T0 body). The
+  frame is placed by `AreaScenePlan.Repose` at the body's anchor where it stands now; the object's own flip stays. The
+  frames join the shown map's frame overlay, as the fallen poses do.
+- **Clock** (`AreaBodyCycle`): as the PC's, a walk's steps share one cycle; it restarts when the walker starts moving or
+  changes gait. Frame = elapsed ms × ART fps ÷ 1000 mod frames, on the viewer's world clock (the clock the walks run on).
+  A companion: its grid's drawn action and facing (`DiagnosticGridActor.RenderState`), its clock `AreaCompanion.Cycle`
+  living with its group; until it first moves it keeps its T0 frame and facing. An AI mover: walking or running while
+  its step lasts (`AreaAiMover.Stepping`, `Running` from the run's gait), else its stand frame turned as it faces (a
+  turn in place is drawn at once); until it first moves, standing with its T0 facing keeps its T0 frame. Once moved, a
+  body always stands on its stand ART: the T0 frame of a mirrored critter is placed by its unmirrored hotspot (the T0
+  plan's rule), and going back to it would shift the body sideways.
+- **Bounded.** The frame rate is the ART's own (the Speed table's middle rate, as the PC at Speed 8); the sprite moves
+  linearly across the step, not by the ART's frame offsets; the vault, stealth walk, attack, cast and other NPC
+  animations are not drawn (a follower's window step shows the walk); no footstep sounds for NPCs. The move ARTs are
+  looked up in the standing art's archive only, not through the resource order (a loose file or a later archive that
+  overrides one is NOT READY). Original UI parity NOT VERIFIED.
+
 ## Loyalty and the wait timer (ARC-WORLD-045)
 
 The session's loyalty step and wait timer ([party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)) in the AREA
@@ -186,6 +223,12 @@ viewer (exterior, cave and map mode):
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionTests.cs`: the overlay rule (moved record, destination and shoulder
   actors, precedence, core edge), placement packing, a companion following the PC through the session party and drawn
   on its cell, waiting, the jump, and the placement surviving a save and load.
+- `tests/Arcanum.TerrainViewer.Tests/AreaBodyMoveTests.cs` (ARC-WORLD-111): the move ART names and their missing-art
+  repair, the refusals, a facing's group and its mirrored hotspot, a walking body's cycle frame at its anchor, the stand
+  frame of a turned body, the gait clock and an AI mover's gait. Native smoke: `ARC-WORLD-111 native-smoke follower walk
+  PASS` (Virgil's walk drawn with ≥ 3 distinct frames of his walk cycle and never his T0 frame while he walks, inside the
+  ARC-WORLD-016 follow stage) and the `ai` map stage's NPC steps drawn with its move cycle (`StepFrames` in
+  `ARC-WORLD-092 native-smoke ai PASS`).
 - `tests/Arcanum.TerrainViewer.Tests/AreaVisitorTalkTests.cs` (ARC-WORLD-048): a visitor's host reads and writes its home map's
   dialog keys and slot, follows through the session party, keeps its state over a save and load, a companion without a kept
   body is reported, and a give-item without the home seed is refused.
@@ -235,5 +278,5 @@ measured roster.
 ## Next
 
 The combat orders (stage A7; the out-of-combat orders are ARC-WORLD-046, [companion orders](companion-orders-runtime.md), the
-loyalty step and wait timer ARC-WORLD-045), a walk cycle for NPC bodies, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
+loyalty step and wait timer ARC-WORLD-045), and the rest of the general map-change carry (followers of followers, unconscious followers, carried
 inventory).

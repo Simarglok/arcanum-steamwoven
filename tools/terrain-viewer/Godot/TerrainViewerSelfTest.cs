@@ -350,6 +350,7 @@ public static partial class TerrainViewerSelfTest
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         await AssertResponsiveHudAsync(host, viewport, app);
+        await AssertHiddenHudDefaultAsync(host);
         // The HUD matrix above validates its actual production overlay. Hide
         // that overlay only for later actor-pixel probes so a deliberately
         // top-anchored diagnostic panel cannot cover their world landmarks.
@@ -471,6 +472,36 @@ public static partial class TerrainViewerSelfTest
         if (exitApp.GetSelfTestSnapshot().DisposedTextures != 185)
             throw new InvalidOperationException("Repeated production _ExitTree double-disposed textures.");
         exitViewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    /// <summary>ARC-DEV-052: outside the debug mode and automated runs the panel starts hidden; a failure stays on screen as a
+    /// line of its own while it is hidden, and Ctrl+Shift+F10 shows and hides the panel.</summary>
+    private static async Task AssertHiddenHudDefaultAsync(Node host)
+    {
+        var viewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var hud = new TerrainDiagnosticHud { Name = "Hud" };
+        viewport.AddChild(hud);
+        host.AddChild(viewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        void Require(bool condition, string what) { if (!condition) throw new InvalidOperationException($"ARC-DEV-052 hidden HUD: {what}."); }
+        void Chord(bool pressed) => hud._Input(new InputEventKey { Keycode = Key.F10, Pressed = pressed, CtrlPressed = true, ShiftPressed = true });
+        Require(!hud.PanelShown && !hud.FailureLineShown, "the panel starts hidden with no failure line");
+        hud.SetDiagnosticText("Diagnostic mode crash-site-area | ready", automatedTestMode: false);
+        Require(!hud.PanelShown && !hud.FailureLineShown, "a status shows neither the panel nor a failure line");
+        const string failure = "Diagnostic mode unresolved | failure stage=GameFolder code=StartFailed";
+        hud.SetDiagnosticText(failure, automatedTestMode: false, failure: true);
+        Require(hud.FailureLineShown && hud.FailureLineText == failure && !hud.PanelShown, "a failure shows its line, not the panel");
+        Chord(true); Chord(false);
+        Require(hud.PanelShown && !hud.FailureLineShown && hud.Text.Contains(failure, StringComparison.Ordinal),
+            "Ctrl+Shift+F10 shows the panel with the failure in it, the separate line gone");
+        Chord(true); Chord(false);
+        Require(!hud.PanelShown && hud.FailureLineShown, "Ctrl+Shift+F10 hides the panel again and the failure line returns");
+        hud.SetDiagnosticText("Diagnostic mode crash-site-area | ready", automatedTestMode: false);
+        Require(!hud.FailureLineShown, "a later status clears the failure line");
+        hud.ShowPanel("self-test");
+        Require(hud.PanelShown, "ShowPanel shows the panel");
+        viewport.QueueFree();
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 

@@ -56,7 +56,7 @@ public partial class TerrainViewerApp
         var ordered = _canvas!.AreaVisibleCommands.ToList();
         var index = ordered.IndexOf(command);
         if (index < 0) { AreaBlendDetail(command, "not visible"); return null; }
-        var frame = area.Frames[command.Frame];
+        var frame = AreaFramesOf(area)[command.Frame];
         var transform = AreaRasterTransform(GetViewport());
         var hud = _hud!.Rect; var size = GetViewport().GetVisibleRect().Size;
         var actor = _readyActor?.Destination;

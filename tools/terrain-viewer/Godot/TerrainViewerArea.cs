@@ -201,7 +201,7 @@ public partial class TerrainViewerApp
         // The caller releases its load result, then runs S5 and quits.
     }
     private bool TryAreaPixel(AreaDrawCommand command, AreaLoadResult area, Image image, out object sample, out AreaPixelDiagnostics diagnostics)
-        => TryAreaPixel(command, area.Frames, _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
+        => TryAreaPixel(command, AreaFramesOf(area), _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
             _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5,
                 actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
             _camera!.State.Zoom, out sample, out diagnostics);

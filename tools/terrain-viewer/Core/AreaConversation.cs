@@ -743,7 +743,9 @@ public static class AreaConversationText
         var text = option.TextKind switch
         {
             DialogOptionTextKind.Record => option.Text,
+            DialogOptionTextKind.Generated when option.Text.Length > 0 => option.Text,
             DialogOptionTextKind.Generated => $"[generated '{option.Marker!.Value.Letter}:' phrase; generic text not loaded]",
+            _ when option.Text.Length > 0 => option.Text,
             _ => "[no reply qualifies: generated farewell; generic text not loaded]",
         };
         var block = option.Block is { } blocked ? $"  (not supported here: {blocked.Kind}{Where(blocked.Source)})" : string.Empty;

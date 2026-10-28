@@ -42,9 +42,11 @@ public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, Generated
 /// (<see cref="CombatFieldReader"/>: base stats gender 26, race 27 and intelligence 4 for the dumb test, social class); the
 /// PC's are the conversation's PC facts; the category is the speaker's effective reaction (<see cref="ReactionRules.Category"/>)
 /// and met before the session's. Of the states only "NPC down" is modelled (the session holds a death time for it); the
-/// others (surrendered, summoned associates, the PC's spell flags and art code) read as not that state. The override dialog is
+/// others (surrendered, summoned associates, the PC's spell flags and art code) read as not that state. The NPC is led by the PC
+/// (the barter phrase, ARC-SCRIPT-043) when it follows the PC (<see cref="AreaConversationState.Follows"/>). The override dialog is
 /// the DLG of the script at the speaker's SAP key 31 (<see cref="ScriptContent.Dialog"/>). Rolls are the session's
-/// labelled rolls (<c>dialog.greeting.line</c>, <c>dialog.greeting.reputation</c>, <c>dialog.greeting.pick</c>) and the
+/// labelled rolls (<c>dialog.greeting.line</c>, <c>dialog.greeting.reputation</c>, <c>dialog.greeting.pick</c>, and
+/// <c>dialog.phrase.line</c> for a Player option's phrase) and the
 /// rules the session's current dialog profile.
 /// </summary>
 public sealed class AreaGreeting : IDialogGreetingPort
@@ -92,7 +94,7 @@ public sealed class AreaGreeting : IDialogGreetingPort
     {
         var entity = AreaConversationState.EntityId(_speaker.Row);
         return FactsFor(CombatFieldReader.Read(_speaker.Row).Fields, _pc, _state.Reaction(_speaker.Index), _state.MetBefore(_speaker.Index),
-            _session.QueryLifeRecord(entity)?.DeathTimeMs is not null);
+            _session.QueryLifeRecord(entity)?.DeathTimeMs is not null) is { } facts ? facts with { NpcLedByPc = _state.Follows(_speaker.Index) } : null;
     }
 
     /// <summary>The greeting facts of an NPC's stored fields (null when they are not an NPC's), the PC's facts, the NPC's effective
@@ -122,6 +124,7 @@ public sealed class AreaGreeting : IDialogGreetingPort
     {
         DialogGreetingRoll.Line => "dialog.greeting.line",
         DialogGreetingRoll.ReputationChance => "dialog.greeting.reputation",
+        DialogGreetingRoll.Phrase => "dialog.phrase.line",
         _ => "dialog.greeting.pick",
     }, min, max).Roll?.Value;
 }
