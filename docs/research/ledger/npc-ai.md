@@ -517,3 +517,20 @@ flight, the legs, the arrival and the loss) and MG44 agree and are not re-read. 
 | --- | --- | --- | --- |
 | AC8 | launch node (0x429C40), missile creation (0x4248A0, called at 0x424892) | The launch node reads the goal's magic run (+0xD00), asks the projectile art (0x458B70) and, with art, stores it in the goal's slot (+0x90) and plays the secondary cast eye candy (0x456E00) on the run, answering 1; without art it answers 0. Neither the node nor the creation tests the player or the caster's kind: the creation takes the stored art, the goal's object slots and its owner's location, and tests only the network flags (0x62AC6C). So an NPC's casting goal 27 launches as the hero's: from the caster's tile, at the run's target, with the release (re-check and BEGIN) at the arrival. | Original (the hero's SM1 holds for any caster) |
 
+
+## NPC AI skill goals host (ARC-WORLD-109)
+
+Source: the [AI viewer host](../../world/ai-host.md#skill-goals-arc-world-109) contract (slice I10, part 3f: the skill goals 33, 34,
+86 and 67 of an NPC). Questions: the goals' priorities for the gate's busy test, what the skill attempt's run flag 0x40000 means, and
+whether the heal case of the skill invocation holds for an NPC user. Read on 2026-10-28 by one reader (F1) with `llvm-objdump` in the
+retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`): the goal table 0x5B03D0, the skill attempt 0x42A2A0, the record setup 0x4C7090
+and the invocation 0x4C7160 (its check, its end and its heal case). AG6–AG9 and AG12 (the goals' nodes and starters) and HL1–HL5 (the
+heal) agree and are not re-read. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| AK1 | goal table headers (0x5B03D0: goal 33 at 0x5A97D0, 34 at 0x5A99D0, 67 at 0x5ADBD0, 86 at 0x5B01D0) | Word 1, the priority (AH3), is 3 for the skill goal 33 and for its attempts 34, 67 and 86 (word 0, the node count: 7, 9, 7, 9), so a skill run holds its NPC busy at the gate (AC6) as an attack or a casting run does. | Original |
+| AK2 | skill attempt (0x42A2A0), record setup (0x4C7090), invocation's check and end (0x4C7160: 0x4C7255–0x4C727D, 0x4C7403–0x4C742A, 0x4C812D–0x4C8140) | The setup clears the record's flags (+0x98) and sets its skill (+0x9C) to −1; the attempt fills the user, target, tool item and the goal's skill, and the goal frame's flag 0x1 (+0x70) sets the record's flag 0x2 (its meaning for the skills is not read: F0). The check succeeds when the roll is within the skill's value or the record's flag 0x1000 forces it, then the fate step may set it; at the end a success sets the record's flag 0x1 and a failure clears it, and a critical sets 0x10. The attempt copies flag 0x1 into the run's flag 0x40000: it means "the check succeeded", so a pickpocket that succeeds plays no animation (AG8) and goal 34 ignores it. | Original |
+| AK3 | heal case of the invocation (0x4C79DF–0x4C7BCE; the case table 0x4C8164 by the byte table 0x4C8184 on skill − 1) | No player or user-kind test: the healer's level is 0x4C5EB0 (the basic-skill level of any critter) for skill 10 with its training, the amount, the cure, the record's apply (0x4B58C0) and the item's uses follow HL1 for an NPC user too; only a multiplayer message depends on a global (0x62AC6C bit 0x1). | Original |
+
+**F0 facts raised:** the goal priorities of 33, 34, 67, 86 and the meaning of the run flag 0x40000 (F1); the record's flag 0x2 from the goal frame's flag 0x1 (F0).
