@@ -110,4 +110,30 @@ public sealed class RestockRulesTests
         Assert.ThrowsExactly<ArgumentException>(() => RestockRules.Generate(new RestockSet(0, 0, Enumerable.Repeat(new RestockLine(100, 6029), 301).ToArray()),
             new Rolls([0, .. Enumerable.Repeat(1, 301)])));
     }
+
+    [TestMethod]
+    public void AGeneratedOnceSeedIsTheTileXPlusThePcsRaceBackgroundGenderAndNamePairs()
+    {
+        static RestockSeedPc Pc(params byte[] name) => new(2, 1, 40, name);
+        Assert.AreEqual(1000, RestockRules.GeneratedOnceSeed(null, 1000), "no PC: the tile x alone");
+        Assert.AreEqual(1000 + 2 * 40 + 1 + 65 * 98, RestockRules.GeneratedOnceSeed(Pc(65, 98), 1000));
+        Assert.AreEqual(1000 + 2 * 40 + 1 + 65 * 98, RestockRules.GeneratedOnceSeed(Pc(65, 98, 99), 1000), "an odd last byte pairs with the zero");
+        Assert.AreEqual(1000 + 2 * 40 + 1 - 23 * 65, RestockRules.GeneratedOnceSeed(Pc(0xE9, 0x41), 1000), "bytes are signed chars");
+        Assert.AreEqual(1000 + 2 * 40 + 1 + 65 * 66, RestockRules.GeneratedOnceSeed(Pc(65, 66, 0, 67, 68), 1000), "the name ends at its first zero");
+        Assert.AreEqual(1000 + 2 * 40 + 1, RestockRules.GeneratedOnceSeed(Pc(), 1000), "an unset name adds nothing");
+        Assert.AreEqual(-2, RestockRules.GeneratedOnceSeed(new(int.MaxValue, 0, 2, []), 0), "the product wraps");
+        Assert.ThrowsExactly<ArgumentNullException>(() => RestockRules.GeneratedOnceSeed(new(0, 0, 0, null!), 0));
+    }
+
+    [TestMethod]
+    public void AGeneratedOnceContainerDrawsFromTheOriginalGeneratorSeededForIt()
+    {
+        var set = new RestockSet(10, 20, [new(50, 300), new(39, 301), new(22, 302)]);
+        var loot = RestockRules.GenerateOnce(set, 12345);
+        Assert.AreEqual(11, loot.Coins, "draw 11 of 10..20");
+        CollectionAssert.AreEqual(new[] { 301 }, loot.BasicPrototypes.ToArray(), "percent draws 83, 39, 23 against 50, 39, 22");
+        Assert.AreEqual(loot.Coins, RestockRules.GenerateOnce(set, 12345).Coins, "the same seed gives the same goods");
+        var fixedCoins = RestockRules.GenerateOnce(new RestockSet(5, 5, [new(39, 301)]), 12345);
+        Assert.AreEqual((5, 1), (fixedCoins.Coins, fixedCoins.BasicPrototypes.Count), "equal coin bounds draw nothing: the first draw (14620) is the percent 21");
+    }
 }

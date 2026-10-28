@@ -163,13 +163,36 @@ panned until the container was off screen the next event found the merchant (no 
 items removed, 934 coins and 26 new wares (none refused or skipped); the window opened again with 26 wares and the merchant's gold
 631 → 1565 (the container's new coins moved at the open). Marker `ARC-WORLD-096 native-smoke restock PASS`.
 
+## Generated-once containers (ARC-WORLD-098)
+
+A container with flag 0x200 (116 installed, all with a source) is generated once, the first time something reaches its whole list,
+from draws the original makes reproducible (ledger [RK10–RK14](../research/ledger/items.md#generated-once-containers-arc-world-098),
+one reading, F1). Simulation holds the rules; the session and the viewer do not run them yet.
+
+| API | Original | Rule |
+| --- | --- | --- |
+| `RestockRules.GeneratedOnceSeed(pc, locationX)` | 0x463E20 (seeded branch), 0x40DA50, 0x4B0490, 0x4C2690, 0x441B60 | The container's tile x, plus with a PC race × background + gender and the products of the player name's byte pairs as signed chars (the name ends at its first zero; an odd last byte pairs with the zero); 32-bit wrapping. `RestockSeedPc` carries race (stat 27) and gender (stat 26) as the stat getter gives them, the background (field 0x101) and the name bytes (field 0x10E). |
+| `OriginalRandom` | 0x4CEF40, 0x4CEF50, 0x4CEF00 | The original's one generator: state × 0x19660D + 0x3C6EF35F, a draw is bits 8..22 (0..32767); `Between` draws nothing for equal bounds, swaps reversed ones and takes the draw modulo the width in signed 32-bit arithmetic. The whole 32-bit range, where the original divides by zero, gives the low bound plus the draw (technical fix, both modes). |
+| `RestockRules.GenerateOnce(set, seed)` | 0x463E20 | `Generate` drawing from `OriginalRandom(seed)` through `OriginalRestockRolls`: the same PC at the same container gets the same goods. |
+
+The caller's part, for the session task: the clear before (RK5), then after the lines the container's source and flag 0x200 are
+cleared, so the window's restock schedule right after the first open finds no source and the container never restocks (RK12). The
+original reaches the generation at the first open in loot mode (2) or mode 4 (RK12), at a restock event (RK3), and before any
+whole-list work: the summon marking, the spill of a broken container, the death and destruction moves (RK13). The session keeps its
+own generator for every other draw ([session random](session-random-runtime.md)); the original leaves its one generator in the seeded
+state after the generation, which only the original's later draws notice. Tests:
+[`OriginalRandomTests`](../../tests/Arcanum.Simulation.Tests/Randomness/OriginalRandomTests.cs),
+[`RestockRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/RestockRulesTests.cs).
+
 ## Not modelled (NOT READY)
 
 - **Restock limits**: the viewer's loot window opens only on dead NPCs and junk piles (no container loot window yet), so only the barter
   window schedules a container. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
-  zoom and the merchant search's area the viewport's size, not the original's fixed window. The first-open generation of containers with flag 0x200 (RK4, RK8; 116 installed), an NPC's best-items
-  wield after a regeneration (0x4654F0) and the other callers of 0x463E20 and 0x463C60 (RK8) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
+  zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 is a rule only
+  ([above](#generated-once-containers-arc-world-098)): the session still keeps their lists at a restock and no viewer window opens a
+  container, so none is generated; an NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
+  broken or destroyed holder, objects created in play) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
   session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
   clear (not guarded).
