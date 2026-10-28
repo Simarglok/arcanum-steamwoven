@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.Data.Tests.Magic;
 
 /// <summary>ARC-MAGIC-020 opt-in census of the installed original (DAT_ROOT = the game folder): the item prototypes' spell slots
-/// and the item triggers of the records they name (docs/world/item-spell-triggers.md). Counts only; no game text.</summary>
+/// and the item triggers of the records they name (docs/world/item-spell-triggers.md); ARC-MAGIC-022: the item uses. Counts only; no game text.</summary>
 [TestClass]
 public sealed class ItemSpellCensusRealDataTests
 {
@@ -60,5 +60,47 @@ public sealed class ItemSpellCensusRealDataTests
         Assert.AreEqual(0, slots.Count(s => (s.Triggers & 0x81000000) != 0), "no installed record fires on pickup or drop");
         Assert.AreEqual("8168:168:-1:0 8169:168:-1:0 8170:168:-1:0 8207:182:-1:0", string.Join(" ", slots.Where(s => (s.Triggers & 0x60000000) != 0)
             .Select(s => $"{s.Prototype}:{s.Spell}:{s.Charges}:{scripts[s.Prototype]}")), "the wear items: unlimited charges, no move scripts, slot 0");
+    }
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_item_uses_match_the_census()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in item use census; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var spells = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
+        Assert.AreEqual(SpellDataStatus.Read, spells.Status, $"{spells.Refusal}");
+        var records = spells.Data!.Records;
+        var prototypes = ContentPrototypes.Open(stack);
+        var rows = new List<string>();
+        foreach (var number in prototypes.Numbers)
+        {
+            if (CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is not { Item: { } item } fields) continue;
+            var magical = (item.Flags & 0x4) != 0;
+            var spellPath = item.SpellManaStore != 0 || magical;
+            var slot0 = item.Spells[0];
+            if (!spellPath && slot0 == NoSpell) continue;
+            string kind;
+            if (slot0 == NoSpell) kind = "empty";
+            else
+            {
+                var r = records[slot0 & 0xFF];
+                var area = r.Areas.Count > 0 ? r.Areas[0].Targets : 0;
+                var low = (uint)area; var high = (uint)(area >> 32);
+                kind = r.ItemTriggers != 0 ? "trig" : (low & 0x2000000) != 0 ? "inv" : area == 0 || area == 0x10 || ((low & 1) != 0 && (high & 0x8000) == 0) ? "now" : "cursor";
+                kind += r.Enabled ? "" : "-disabled";
+            }
+            rows.Add($"t{fields.Object.Type} path:{(spellPath ? "spell" : "plain")} ch:{(item.SpellManaStore < 0 ? "-" : item.SpellManaStore.ToString())} mag:{(magical ? 1 : 0)} tgt:{((item.Flags & 0x100) != 0 ? 1 : 0)} slot0:{kind}");
+        }
+        var census = string.Join("; ", rows.GroupBy(r => r).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Key} x{g.Count()}"));
+        Console.WriteLine(census);
+        // ARC-MAGIC-022: the use's spell path (0x462CC0: charges not 0 or the magical flag 0x4) and what its slot-0 spell does through the
+        // activation callback (0x57CE30): a record with item triggers casts nothing there (its Item_Used fires instead), an inventory
+        // area opens the inventory, an immediate area casts at the caster's tile, the rest takes the use's target. No prototype sets the
+        // magical flag, no item has a slot-0 spell outside the spell path, and none of these records is disabled.
+        Assert.AreEqual("t10 path:spell ch:1 mag:0 tgt:1 slot0:cursor x69; t10 path:spell ch:1 mag:0 tgt:1 slot0:inv x1; " +
+            "t10 path:spell ch:1 mag:0 tgt:1 slot0:now x13; t10 path:spell ch:1 mag:0 tgt:1 slot0:trig x1; t14 path:spell ch:- mag:0 tgt:0 slot0:trig x13; " +
+            "t14 path:spell ch:- mag:0 tgt:1 slot0:trig x1; t5 path:spell ch:- mag:0 tgt:0 slot0:cursor x1; t5 path:spell ch:- mag:0 tgt:0 slot0:trig x3; " +
+            "t5 path:spell ch:20 mag:0 tgt:0 slot0:cursor x3; t7 path:spell ch:- mag:0 tgt:0 slot0:trig x5; t9 path:spell ch:1 mag:0 tgt:0 slot0:trig x1; " +
+            "t9 path:spell ch:1 mag:0 tgt:1 slot0:cursor x2; t9 path:spell ch:1 mag:0 tgt:1 slot0:trig x40", census);
     }
 }

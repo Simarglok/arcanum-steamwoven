@@ -88,6 +88,8 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-017: an EyeCandy component's Remove (0x4CD940) took entry <see cref="SpellCastEvent.Value"/> off
     /// <see cref="SpellCastEvent.Object"/>: only this run's, or any run's with the <c>no_id</c> play flag (0x100).</summary>
     EyeCandyRemoved,
+    /// <summary>ARC-MAGIC-022: a payment spent a charge of the item <see cref="SpellCastEvent.Object"/>; the value is the charges left.</summary>
+    ChargeSpent,
 }
 
 /// <summary>
@@ -599,6 +601,15 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     private void Pay(int run, string payer, SpellPayment payment)
     {
+        // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved.
+        if (payment.ChargeSpent && Item(payer) is { Charges: > 0 } item)
+        {
+            // The item's own count is the baseline until the session holds one.
+            var baseline = Math.Max(1, _items!(payer)!.Charges);
+            if (_owner.SpendItemCharge(_owner.Version, payer, baseline).Disposition == GameSessionDisposition.Changed)
+                _log.Add(new(SpellCastEventKind.ChargeSpent, run, item.Charges - 1, payer));
+            return;
+        }
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
         var result = _owner.PaySpellFatigue(_owner.Version, target, payment.FatigueDamageAdded);
         if (result.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.FatiguePaid, run, payment.FatigueDamageAdded, payer));

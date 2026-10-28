@@ -209,5 +209,37 @@ public sealed partial class GameSessionOwner
         return Life(expected, payer, fatigue is >= 1 and <= LifeLimits.MaxAmount, (state, facts, _) => LifeRules.ChargeFatigue(state, facts, fatigue));
     }
 
+    /// <summary>ARC-MAGIC-022: the spell charges (field 0x69) the session left on <paramref name="entity"/> after spending some, or null
+    /// when it spent none (the item's own field holds them). A charge left also means the item's magical flag (0x4) is set.</summary>
+    public int? QueryItemCharges(string entity)
+    {
+        ThrowIfDisposed();
+        return _durability.Charges.TryGetValue(entity, out var left) ? left : null;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-022: a spell payment's spent charge (<see cref="SpellPayment.ChargeSpent"/>, the cast host's payment of an item source):
+    /// one of the item's positive charges goes, from the session's count or else <paramref name="baseline"/> (the item's own field), and
+    /// the item is marked magical (0x450420, ledger DV1). Refused for an invalid entity or a baseline outside 1..1,000,000
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the session does not track or deleted
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. No charge left is NoChange (the payment refuses
+    /// that before it spends). One revision.
+    /// </summary>
+    public GameSessionMutationResult SpendItemCharge(GameSessionVersion expected, string entity, int baseline)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity) || baseline is < 1 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        var recorded = _durability.Charges.TryGetValue(entity, out var left);
+        var current = recorded ? left : baseline;
+        if (current <= 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        _durability.Charges[entity] = current - 1;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
     private SessionSpellRunResult RejectRun(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, [], Version);
 }

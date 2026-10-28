@@ -5,6 +5,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.SessionFixtures;
 using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 using static Arcanum.Simulation.Magic.ItemSpellTriggerRules;
 
@@ -107,13 +108,69 @@ public sealed class SessionItemSpellTests
     [TestMethod]
     public void Without_a_trigger_host_an_item_with_spells_is_still_refused()
     {
-        var (owner, _, triggers) = Session(charges: 3);
+        var (owner, _, _) = Session(charges: 3);
         using var _ = owner;
         Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept).Failure);
-        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported,
-            owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept, triggers: triggers).Failure,
-            "a positive charge count needs saved charges: not ready");
         Assert.AreEqual(0, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_spent_charge_is_saved_with_the_magical_flag_and_survives_a_restore()
+    {
+        // ARC-MAGIC-022: a positive charge count is supported now; the BEGIN's payment by the item source spends one (0x450420, DV1).
+        var (owner, caster, triggers) = Session(charges: 3, record: Record150(technology: false, cost: 5));
+        using var _ = owner;
+        Assert.IsTrue(triggers.Supports(Coat));
+        Assert.IsNull(owner.QueryItemCharges(Coat));
+        Assert.IsFalse(caster.Item(Coat)!.Magical);
+        var worn = owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"{worn.Failure}");
+        Assert.AreEqual(SpellCastGoalOutcome.Started, worn.ItemSpells.Single().Goals.Single()!.Outcome);
+        Assert.AreEqual(2, owner.QueryItemCharges(Coat));
+        Assert.AreEqual((2, true), (caster.Item(Coat)!.Charges, caster.Item(Coat)!.Magical), "the host reads the session's count and the flag");
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ChargeSpent && e.Value == 2 && e.Object == Coat));
+        Assert.IsTrue(owner.QueryEquipment().Worn.Single().ItemSpells, "worn through the host");
+
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"charges\":[{\"entity\":\"kit:2\",\"charges\":2}]");
+        StringAssert.Contains(text, "\"itemSpells\":true}");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(new SessionItemCharges(Coat, 2), restored.QueryDurability().Charges.Single());
+        Assert.IsTrue(restored.QueryEquipment().Worn.Single().ItemSpells);
+        // Runs are not saved (MT9b): the mark alone keeps the coat on until a host takes it off with its unwear.
+        Assert.AreEqual(0, restored.QuerySpellRuns().Runs.Count());
+        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, restored.Unequip(restored.Version, EquipmentSlot.Armor, Accept).Failure);
+        var negative = GameSessionSnapshotCodec.TryDecode(text.Replace("\"charges\":2}", "\"charges\":-1}"));
+        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.durability.charges[0].charges"), (negative.Failure, negative.Path));
+    }
+
+    [TestMethod]
+    public void The_last_charge_goes_and_an_empty_item_then_refuses_its_payment()
+    {
+        var (owner, caster, triggers) = Session(charges: 1, record: Record150(technology: false, cost: 5));
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept, triggers: triggers).Disposition);
+        Assert.AreEqual(0, owner.QueryItemCharges(Coat), "no charge left; the row keeps the magical flag");
+        var off = owner.Unequip(owner.Version, EquipmentSlot.Armor, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, off.Disposition, $"{off.Failure}");
+        Assert.IsFalse(owner.QueryEquipment().Worn.Any());
+        Assert.AreEqual(SpellCastGoalOutcome.CannotAfford, off.ItemSpells.Single().Goals.Single()!.Outcome, "the unwear's recast has no charge to pay");
+        Assert.AreEqual(0, owner.QueryItemCharges(Coat));
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SpendItemCharge(owner.Version, Coat, 1).Disposition);
+    }
+
+    [TestMethod]
+    public void Spending_a_charge_refuses_bad_input_and_items_the_session_does_not_track()
+    {
+        var (owner, _, _) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.SpendItemCharge(owner.Version, Coat, 0).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.SpendItemCharge(owner.Version, "", 1).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.SpendItemCharge(owner.Version with { Revision = 7 }, Coat, 1).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.SpendItemCharge(owner.Version, "kit:99", 1).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, Coat, 4).Disposition);
+        Assert.AreEqual(3, owner.QueryItemCharges(Coat));
+        Assert.AreEqual(1, owner.Version.Revision);
     }
 
     [TestMethod]
