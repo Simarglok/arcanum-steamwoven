@@ -57,6 +57,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right click on
     /// it does (the item use 0x462CC0 with the hero as user and target, IW5).</summary>
     public event Action<string>? UseRequested;
+    /// <summary>ARC-UI-035: the pointer rested on another item of the doll or the grid (its entity) or on none (null).</summary>
+    public event Action<string?>? PointerStill;
     /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>
     public event Action<string>? ReadRequested;
     /// <summary>ARC-SKILLS-006: lockpicks chosen to pick a lock (the original's use of lockpicks on an object).</summary>
@@ -130,6 +132,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "DollAndGrid" };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
+        _area.PointerStill += item => PointerStill?.Invoke(item);
         _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
         _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
         _quantity.AddChild(_quantityLabel);
@@ -150,7 +153,7 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     public void Open(AreaInventoryView view, string? message = null)
     {
-        Show(); Render(view, message);
+        _area.ResetStill(); Show(); Render(view, message);
     }
 
     /// <summary>ARC-UI-019: puts an item on the cursor (a wear move's occupant).</summary>

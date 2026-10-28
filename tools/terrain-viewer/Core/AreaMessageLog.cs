@@ -1,24 +1,43 @@
+using Arcanum.Presentation.Hud;
+
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// The original's message-log entry types the viewer posts (the entry's first field, ledger ML2–ML5): 0 the level-up entry, 4 a game
 /// message with sound 3004, 5 the same text layout without a sound, 6 a hover text (a bar button's name), which is shown but never
-/// stored. The other types (1–3 and 7–13) are listed in the ledger and not posted by the viewer.
+/// stored; ARC-UI-035: 7 a skill's hint and 8 a spell's hint (the hotkey bar's hover descriptions, HK20), shown like a hover text.
+/// <see cref="Item"/> is not an entry type: it is the item window the original draws straight into the message window (0x554F10,
+/// HK22), never stored and drawn whatever the time since the last entry. The other types (1–3 and 9–13) are listed in the ledger
+/// and not posted by the viewer.
 /// </summary>
-public enum AreaMessageKind { LevelUp = 0, Message = 4, Plain = 5, Hover = 6 }
+public enum AreaMessageKind { LevelUp = 0, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, Item = 100 }
+
+/// <summary>The colours of the message window's fonts (ML6, HK22): white (font art 27 and 229), red (229, the right-hand number of a
+/// skill hint), and an item name's blue for a magickal item and orange for an identified hexed one (font art 27, 0x64C470, 0x64C538).</summary>
+public enum AreaMessageColour { White, Red, Magick, Hexed }
 
 /// <summary>
 /// One message-log entry. A level-up entry keeps its three lines as composed (title, level line, points or scheme line; <paramref
 /// name="Scheme"/> when the last one is the scheme text, which gets two lines); a text entry (message, plain, hover) keeps its whole text
-/// in <paramref name="Title"/>, split at its first line break when drawn (ML4).
+/// in <paramref name="Title"/>, split at its first line break when drawn (ML4). ARC-UI-035: a skill hint keeps its name and description
+/// (<paramref name="Title"/>, <paramref name="Detail"/>) and its right-hand number line in <see cref="Value"/>; a spell hint its name,
+/// willpower line (<paramref name="Line"/>), cost line (<see cref="Value"/>), description and the college's icon (<see cref="Icon"/>); an
+/// item window its name in <see cref="TitleColour"/> and the item's type icon.
 /// </summary>
 public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string Line = "", string Detail = "", bool Scheme = false)
 {
-    public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
-        kind == AreaMessageKind.LevelUp ? throw new ArgumentException("a level-up entry has lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
+    /// <summary>An icon art drawn in place of the type's own (a spell hint's college, an item's type icon); null the type's.</summary>
+    public int? Icon { get; init; }
+    /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line.</summary>
+    public string Value { get; init; } = "";
+    public AreaMessageColour TitleColour { get; init; } = AreaMessageColour.White;
 
-    /// <summary>Hover texts are shown, never stored (the original's types 6–12, ML2).</summary>
-    public bool Stored => Kind != AreaMessageKind.Hover;
+    public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
+        kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item
+            ? throw new ArgumentException("a level-up entry, a hint and an item window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
+
+    /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window.</summary>
+    public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.Message or AreaMessageKind.Plain;
 }
 
 /// <summary>What one post did: whether the entry went into the log, whether the window now shows it (or the entry it repeats), and the
@@ -53,8 +72,11 @@ public sealed class AreaMessageLog
 
     /// <summary>True while a pane (spells, skills, the weapon's spells) owns the window: nothing of the log is drawn.</summary>
     public bool PaneMode { get; private set; }
-    /// <summary>What the window draws now: a stored entry, a hover text, or null (blank).</summary>
+    /// <summary>What the window draws now: a stored entry, a hover text or hint, an item window, or null (blank).</summary>
     public AreaMessageEntry? Shown { get; private set; }
+    /// <summary>ARC-UI-035: a name a hover wrote into the pane's text area while a pane owns the window (0x5509C0, HK21): the bar mode
+    /// whose area it is in and the name; null none.</summary>
+    public (int Mode, string Name)? PaneName { get; private set; }
     public int Count => _count;
 
     /// <summary>The entry the scroll position is at (null with an empty log).</summary>
@@ -71,6 +93,7 @@ public sealed class AreaMessageLog
     public AreaMessagePost Post(AreaMessageEntry entry, long nowMilliseconds)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Kind == AreaMessageKind.Item) throw new ArgumentException("an item window is drawn with ShowItem", nameof(entry));
         if (!entry.Stored)
         {
             // 0x552770: shown only in the message mode and more than 3 s after the last stored entry; the scroll position stays.
@@ -91,6 +114,32 @@ public sealed class AreaMessageLog
         _view = _head;
         return Redraw(sound: true);
     }
+
+    /// <summary>ARC-UI-035: the item window of an item description (0x553BE0 → 0x554F10, HK22): drawn in the message mode at once (no
+    /// time test: it does not go through the post), never stored; the scroll position stays. False in a pane mode (the caller writes the
+    /// name into the pane, <see cref="ShowPaneName"/>).</summary>
+    public bool ShowItem(AreaMessageEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Kind != AreaMessageKind.Item) throw new ArgumentException("not an item window", nameof(entry));
+        if (PaneMode) return false;
+        Shown = entry;
+        return true;
+    }
+
+    /// <summary>ARC-UI-035: a hover in a pane mode writes only the name into the mode's text area (0x5509C0 with the rectangle at
+    /// 0x5C6D60 + 20 × mode, HK21); an item's description writes nothing in bar mode 3 (0x553BE0). False in the message mode.</summary>
+    public bool ShowPaneName(int mode, string name, bool item = false)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (!PaneMode || mode is < 1 or > AreaMessageLayout.LastPaneMode || (item && mode == 3)) return false;
+        PaneName = (mode, name);
+        return true;
+    }
+
+    /// <summary>ARC-UI-035: the pane changed its bar mode (the spells and the weapon's spells, 0x5506C0): the mode's build redraws its text
+    /// area, so a name a hover wrote into the old mode's area goes.</summary>
+    public void ClearPaneName() => PaneName = null;
 
     /// <summary>The upper half of the window was clicked (0x5528E0): the next older entry, at most as far back as the log holds.</summary>
     public bool Older()
@@ -118,7 +167,7 @@ public sealed class AreaMessageLog
     }
 
     /// <summary>A pane took the window (its button went down): nothing of the log is drawn.</summary>
-    public void EnterPane() { PaneMode = true; Shown = null; }
+    public void EnterPane() { PaneMode = true; Shown = null; PaneName = null; }
 
     /// <summary>The window went back to the message mode (the pane's button went up). The original draws only the mode's background;
     /// Steamwoven shows the scroll position's entry again (ML7).</summary>
@@ -126,6 +175,7 @@ public sealed class AreaMessageLog
     {
         if (!PaneMode) return;
         PaneMode = false;
+        PaneName = null;
         Shown = Viewed;
     }
 
@@ -173,12 +223,14 @@ public sealed class AreaMessageLog
         _count = _head = _view = 0;
         _lastStored = null;
         Shown = null;
+        PaneName = null;
     }
 
     // 0x552960: the window goes to the message mode and draws the scroll position's entry (nothing with an empty log).
     private AreaMessagePost Redraw(bool sound)
     {
         PaneMode = false;
+        PaneName = null;
         if (_count == 0) return new(true, false, null);
         Shown = _ring[_view]!;
         return new(true, true, sound ? Sound(Shown.Kind) : null);
@@ -190,7 +242,9 @@ public enum AreaMessageFont { Title, Text }
 
 /// <param name="Rect">On the original's 800×600 screen.</param>
 /// <param name="Truncate">Characters are cut from the end until the text fits (the wide layout).</param>
-public sealed record AreaMessageText((int X, int Y, int Width, int Height) Rect, AreaMessageFont Font, string Text, bool Truncate);
+/// <param name="Right">ARC-UI-035: a text that fits one line is drawn at the rectangle's right edge (0x550A10 flag 2).</param>
+public sealed record AreaMessageText((int X, int Y, int Width, int Height) Rect, AreaMessageFont Font, string Text, bool Truncate, bool Right = false,
+    AreaMessageColour Colour = AreaMessageColour.White);
 
 /// <summary>One way to draw an entry: its icon art (null none) and its texts. <paramref name="Widens"/>: when the last text does not
 /// fit, the entry is drawn again in its wide layout.</summary>
@@ -211,19 +265,38 @@ public static class AreaMessageLayout
     /// <summary>The two invisible scroll areas (0x5C65F8, 0x5C6608; 382 × 41, no art, no sound): the upper shows an older entry.</summary>
     public static readonly (int X, int Y, int Width, int Height) OlderArea = (210, 504, 382, 41), NewerArea = (210, 545, 382, 41);
 
+    // The rectangles of 0x5C70C8..0x5C7177 (window-relative there, on the screen here). SpellBody (0x5C7128) holds a spell hint's
+    // description under its willpower and cost line.
     private static readonly (int, int, int, int) Title = (290, 504, 291, 19), Second = (290, 528, 291, 18), Third = (290, 546, 291, 18),
         Whole = (290, 504, 291, 78), SchemeBlock = (290, 546, 291, 36), Body = (290, 528, 291, 54),
         WideTitle = (217, 504, 364, 19), WideWhole = (217, 504, 364, 78), WideBody = (217, 528, 364, 54);
+    private static readonly (int, int, int, int) SpellBody = SchemeBlock;
 
-    /// <summary>The icon arts by entry type (0x5C708C).</summary>
+    /// <summary>The last bar mode with a text area (the table at 0x5C6D60 holds modes 0..8; mode 9's is all zero).</summary>
+    public const int LastPaneMode = 8;
+
+    // The text areas of bar modes 0..8 (0x5C6D60, 20 bytes a mode): mode 1 spells, 2 skills, 8 the weapon's spells.
+    private static readonly (int X, int Y, int Width, int Height)[] ModeText =
+    [
+        (211, 503, 383, 82), (208, 574, 387, 18), (208, 567, 387, 18), (291, 566, 268, 19), (208, 574, 387, 18), (211, 507, 383, 84),
+        (262, 508, 303, 24), (220, 503, 350, 82), (355, 506, 227, 18),
+    ];
+
+    /// <summary>ARC-UI-035: the text area of bar mode <paramref name="mode"/> 0..8 (0x5C6D60 + 20 × mode, HK21), where a hover in a pane
+    /// mode writes the name.</summary>
+    public static (int X, int Y, int Width, int Height) PaneText(int mode) =>
+        mode is >= 0 and <= LastPaneMode ? ModeText[mode] : throw new ArgumentOutOfRangeException(nameof(mode));
+
+    /// <summary>The icon arts by entry type (0x5C708C); a skill hint takes 444 too (0x5C70A4, HK20).</summary>
     public static int Icon(AreaMessageKind kind) => kind switch
     {
         AreaMessageKind.LevelUp => 438, AreaMessageKind.Message => 442, AreaMessageKind.Plain => 443, _ => 444,
     };
 
-    /// <summary>Every interface art the message window draws.</summary>
+    /// <summary>Every interface art the message window draws: the background, the entry icons, the colleges' icons (spell hints,
+    /// <see cref="HotkeyBarRules.CollegeIcon"/>) and the items' type icons (item windows).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [BackgroundArt, .. Enum.GetValues<AreaMessageKind>().Select(Icon).Distinct()];
+        [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers).Distinct()];
 
     /// <summary>The entry's drawing; <paramref name="wide"/> the second layout of a text entry whose text did not fit.</summary>
     public static AreaMessageDraw Draw(AreaMessageEntry entry, bool wide = false)
@@ -232,6 +305,18 @@ public static class AreaMessageLayout
         if (entry.Kind == AreaMessageKind.LevelUp)
             return new(Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Second, AreaMessageFont.Text, entry.Line, false),
                 new(entry.Scheme ? SchemeBlock : Third, AreaMessageFont.Text, entry.Detail, false)], false);
+        // ARC-UI-035 (HK20): 0x5529C0 case 7, a skill: the name, its description, and the number line (red, right-aligned in the title's
+        // rectangle) when the entry has one. Case 8, a spell: the college's icon, the name, the willpower line with the cost line
+        // right-aligned on the same rectangle, the description. Neither has a wide layout.
+        if (entry.Kind == AreaMessageKind.SkillHint)
+            return new(entry.Icon ?? Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Body, AreaMessageFont.Text, entry.Detail, false),
+                .. entry.Value.Length == 0 ? Array.Empty<AreaMessageText>() : [new(Title, AreaMessageFont.Text, entry.Value, false, true, AreaMessageColour.Red)]], false);
+        if (entry.Kind == AreaMessageKind.SpellHint)
+            return new(entry.Icon ?? Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Second, AreaMessageFont.Text, entry.Line, false),
+                new(Second, AreaMessageFont.Text, entry.Value, false, true), new(SpellBody, AreaMessageFont.Text, entry.Detail, false)], false);
+        // ARC-UI-035 (HK22): the item window's first part, the type icon and the name in its colour; the further lines are not drawn yet.
+        if (entry.Kind == AreaMessageKind.Item)
+            return new(entry.Icon, [new(Title, AreaMessageFont.Title, entry.Title, false, false, entry.TitleColour)], false);
         var cut = entry.Title.IndexOf('\n');
         var (head, rest) = cut < 0 ? (entry.Title, (string?)null) : (entry.Title[..cut], entry.Title[(cut + 1)..]);
         if (wide)

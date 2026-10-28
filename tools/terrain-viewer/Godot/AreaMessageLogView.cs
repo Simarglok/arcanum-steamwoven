@@ -9,7 +9,9 @@ namespace Arcanum.TerrainViewer;
 /// a black text area with the entry's icon and texts where <see cref="AreaMessageLayout"/> puts them; a text entry whose last text does
 /// not fit is drawn again in its wide layout without the icon, cut until it fits. The upper half of the window shows an older entry and
 /// the lower half a newer one (invisible areas, no sound, acting on a release over the area pressed). The original's font art is not
-/// drawn: the texts use the viewer's font in the original's colours.
+/// drawn: the texts use the viewer's font in the original's colours. ARC-UI-035: the hints and the item window draw like the entries
+/// (a text flagged right-aligned at its rectangle's right edge, an item name in its colour), and while a pane owns the window a hover's
+/// name is drawn centred on a black fill of the pane mode's text area (0x5509C0).
 /// </summary>
 public partial class AreaMessageLogView : Control
 {
@@ -17,7 +19,8 @@ public partial class AreaMessageLogView : Control
     private AreaMessageLog _log = new();
     private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
     private TextureRect _background = null!, _icon = null!;
-    private ColorRect _clear = null!;
+    private ColorRect _clear = null!, _paneClear = null!;
+    private Label _paneName = null!;
     private readonly List<Label> _labels = [];
     private Control _older = null!, _newer = null!;
     private Control? _pressed;
@@ -30,6 +33,13 @@ public partial class AreaMessageLogView : Control
     private static bool Drawn(Label label) => label.Visible && label.Text.Length > 0 && label.GetVisibleLineCount() > 0;
     /// <summary>The hover text drawn now ("" when the window shows no hover text).</summary>
     internal string HoverTextForSelfTest => _log.Shown is { Kind: AreaMessageKind.Hover } && Visible && _clear.Visible ? ShownTextForSelfTest : "";
+    /// <summary>ARC-UI-035: the kind of the drawing shown now (null when nothing is drawn), the colour of its first text, the icon drawn
+    /// and the name a hover wrote into a pane's text area ("" none).</summary>
+    internal AreaMessageKind? ShownKindForSelfTest => Visible && _clear.Visible ? _log.Shown?.Kind : null;
+    internal Color FirstTextColourForSelfTest => _labels[0].Modulate;
+    internal int? IconForSelfTest => _icon.Visible && _icon.Texture is not null ? _iconNumber : null;
+    private int? _iconNumber;
+    internal string PaneNameForSelfTest => Visible && _paneName.Visible ? _paneName.Text : "";
     internal bool IconShownForSelfTest => _icon.Visible && _icon.Texture is not null;
     internal bool BackgroundShownForSelfTest => _background.Visible && _background.Texture is not null;
     internal bool WideForSelfTest => _wide;
@@ -47,7 +57,7 @@ public partial class AreaMessageLogView : Control
         AddChild(_clear);
         _icon = new TextureRect { Name = "Icon", Position = Local(AreaMessageLayout.IconX, AreaMessageLayout.IconY), MouseFilter = MouseFilterEnum.Ignore };
         AddChild(_icon);
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < 4; i++)
         {
             var label = new Label
             {
@@ -58,6 +68,15 @@ public partial class AreaMessageLogView : Control
             _labels.Add(label);
             AddChild(label);
         }
+        _paneClear = new ColorRect { Name = "PaneClear", Color = Colors.Black, MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+        AddChild(_paneClear);
+        _paneName = new Label
+        {
+            Name = "PaneName", MouseFilter = MouseFilterEnum.Ignore, ClipText = true, Visible = false, Modulate = Colors.White,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        _paneName.AddThemeFontSizeOverride("font_size", TextFontSize);
+        AddChild(_paneName);
         _older = Area("OlderArea", AreaMessageLayout.OlderArea);
         _newer = Area("NewerArea", AreaMessageLayout.NewerArea);
         Render();
@@ -105,6 +124,15 @@ public partial class AreaMessageLogView : Control
         _background.Visible = !_log.PaneMode;
         _background.Texture = Art(AreaMessageLayout.BackgroundArt);
         _wide = false;
+        // A hover's name in a pane mode: the mode's text area cleared to black and the name centred in it (0x5509C0, flags 0x4 | 0x8).
+        _paneClear.Visible = _paneName.Visible = _log.PaneMode && _log.PaneName is not null;
+        if (_log.PaneName is { } pane && _log.PaneMode)
+        {
+            var (px, py, pw, ph) = AreaMessageLayout.PaneText(pane.Mode);
+            _paneClear.Position = _paneName.Position = Local(px, py);
+            _paneClear.Size = _paneName.Size = new(pw, ph);
+            _paneName.Text = pane.Name;
+        }
         if (_log.PaneMode || _log.Shown is not { } entry)
         {
             _clear.Visible = _icon.Visible = false;
@@ -120,6 +148,7 @@ public partial class AreaMessageLogView : Control
     private bool Apply(AreaMessageDraw draw)
     {
         _icon.Texture = draw.Icon is { } icon ? Art(icon) : null;
+        _iconNumber = draw.Icon;
         _icon.Visible = _icon.Texture is not null;
         var fits = true;
         for (var i = 0; i < _labels.Count; i++)
@@ -128,6 +157,8 @@ public partial class AreaMessageLogView : Control
             if (i >= draw.Texts.Count) { label.Visible = false; continue; }
             var text = draw.Texts[i];
             label.AddThemeFontSizeOverride("font_size", text.Font == AreaMessageFont.Title ? TitleFontSize : TextFontSize);
+            label.Modulate = Colour(text.Colour);
+            label.HorizontalAlignment = text.Right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
             label.Position = Local(text.Rect.X, text.Rect.Y);
             label.Text = text.Text;
             // A rectangle at least one of the viewer's lines high: Godot draws no line taller than the label (the original's fonts
@@ -141,6 +172,15 @@ public partial class AreaMessageLogView : Control
         }
         return fits;
     }
+
+    // The fonts' colours (ML6, HK22): white, red (255, 0, 0), a magickal item's blue (100, 100, 255), a hexed item's orange (255, 114, 0).
+    private static Color Colour(AreaMessageColour colour) => colour switch
+    {
+        AreaMessageColour.Red => new Color(1, 0, 0),
+        AreaMessageColour.Magick => Color.Color8(100, 100, 255),
+        AreaMessageColour.Hexed => Color.Color8(255, 114, 0),
+        _ => Colors.White,
+    };
 
     // The rectangle holds as many lines as its height takes, at least one (the text library draws a line while one fits, 0x535570).
     private static bool Fits(Label label) => label.GetLineCount() <= Math.Max(1, label.GetVisibleLineCount());

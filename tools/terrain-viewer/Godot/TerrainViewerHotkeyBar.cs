@@ -44,6 +44,10 @@ public partial class TerrainViewerApp
             // The light button has no function in 1.0.7.4 (HK14): its release over it only sounds.
             _hotkeyBarView.LightReleased += over => { if (over) PlayBarSound(AreaGameBarLayout.ReleaseSound, "hotkey light"); };
             _hotkeyBarView.DragReleased += HotkeyDragReleased;
+            _hotkeyBarView.SlotEntered += HotkeySlotEntered;
+            _hotkeyBarView.RecentEntered += HotkeyRecentEntered;
+            _hotkeyBarView.SlotLeft += _ => HotkeyDescriptionLeft();
+            _hotkeyBarView.RecentLeft += _ => HotkeyDescriptionLeft();
         }
         var module = _arguments?.ModulePath;
         if (_hotkeyBarContent is null || module != _hotkeyBarModule)

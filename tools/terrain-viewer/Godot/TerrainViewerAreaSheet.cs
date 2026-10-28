@@ -13,8 +13,9 @@ namespace Arcanum.TerrainViewer;
 // only with a hero (--hero) and not for a dead hero. ARC-UI-009: the sheet opens the hero's character editor in the session
 // (its floor, as the original's open takes its snapshot) and closes it on close; the skills page's + and − spend and refund
 // through the session's point pool. ARC-MAGIC-008: the spells page's college tabs, + and − learn and unlearn spell ranks through
-// the same pool (the spell book's lane); the shown college is kept between opens, as the original keeps it. Stats and tech
-// disciplines have no buttons yet.
+// the same pool (the spell book's lane); the shown college is kept between opens, as the original keeps it. ARC-UI-034: the stats
+// page's + and − (hit points, fatigue, the eight primary stats) through the same pool (ledger CP3, CP4). Tech disciplines have no
+// buttons yet.
 public partial class TerrainViewerApp
 {
     private AreaCharacterSheetPanel? _sheetPanel;
@@ -52,13 +53,15 @@ public partial class TerrainViewerApp
             _sheetPanel.CollegeSelected += SelectCollege;
             _sheetPanel.SpellLearnRequested += college => PressSpell(college, learn: true);
             _sheetPanel.SpellUnlearnRequested += college => PressSpell(college, learn: false);
+            _sheetPanel.StatSpendRequested += row => PressStat(row, spend: true);
+            _sheetPanel.StatRefundRequested += row => PressStat(row, spend: false);
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
-        _sheetPanel.Open(view, BuildSkillsPage(), BuildSpellsPage()); _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
+        _sheetPanel.Open(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!)); _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
         GD.Print($"ARC-UI-007 sheet open level={view.Level} unspent={view.UnspentPoints} next={view.ToNextLevel?.ToString() ?? "none"}");
         RefreshReadyStatus();
     }
@@ -87,7 +90,7 @@ public partial class TerrainViewerApp
             // Defensive: the open sheet owns every key, so no quick load or map change replaces the session under it; should a
             // session's editor be closed anyway, the open sheet opens it again.
             if (!_areaSession!.HeroEditorOpen) _areaSession.OpenHeroEditor();
-            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage());
+            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
         }
         else EndSheet();
     }
@@ -138,7 +141,7 @@ public partial class TerrainViewerApp
         if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
         AdoptSpellData();
         _sheetCollege = college;
-        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage());
+        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
     }
 
     /// <summary>A + or − press on the spells page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
@@ -162,6 +165,17 @@ public partial class TerrainViewerApp
         var press = spend ? AreaSkillsPage.Spend(_areaSession!, row) : AreaSkillsPage.Refund(_areaSession!, row);
         _sheetPanel!.ShowSkillMessage(press.Message);
         GD.Print($"ARC-UI-009 skill {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
+            $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
+        SyncAreaSheet();
+    }
+
+    /// <summary>ARC-UI-034: a + or − press on the stats page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
+    private void PressStat(int row, bool spend)
+    {
+        if (!SheetOpen || !SheetActive) return;
+        var press = spend ? AreaStatsPage.Spend(_areaSession!, row) : AreaStatsPage.Refund(_areaSession!, row);
+        _sheetPanel!.ShowSkillMessage(press.Message);
+        GD.Print($"ARC-UI-034 stat {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
         SyncAreaSheet();
     }

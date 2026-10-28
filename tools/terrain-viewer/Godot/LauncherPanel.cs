@@ -51,6 +51,7 @@ public partial class LauncherPanel : CanvasLayer
         Layer = 5;
         _backdrop = new ColorRect { Name = "LauncherBackdrop", Color = new Color(.06f, .05f, .04f, 1f), MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
+        _backdrop.AddChild(ViewerBuild.MakeLabel()); // ARC-DEV-047: which build this is
         _panel = new PanelContainer { Name = "Launcher", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
