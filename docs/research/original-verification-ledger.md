@@ -118,6 +118,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="queued-cast-arc-magic-019"></a>[Queued cast (ARC-MAGIC-019)](ledger/spell-runs.md#queued-cast-arc-magic-019) | [Magic: casting and spell runs](ledger/spell-runs.md) | QC1–QC6, MG43 |
 | <a id="item-spell-triggers-arc-magic-020"></a>[Item spell triggers (ARC-MAGIC-020)](ledger/spell-runs.md#item-spell-triggers-arc-magic-020) | [Magic: casting and spell runs](ledger/spell-runs.md) | IT1–IT10 |
 | <a id="item-use-and-moves-arc-magic-022"></a>[Item use and moves (ARC-MAGIC-022)](ledger/spell-runs.md#item-use-and-moves-arc-magic-022) | [Magic: casting and spell runs](ledger/spell-runs.md) | IU1–IU10 |
+| <a id="combat-and-life-item-triggers-arc-magic-023"></a>[Combat and life item triggers (ARC-MAGIC-023)](ledger/spell-runs.md#combat-and-life-item-triggers-arc-magic-023) | [Magic: casting and spell runs](ledger/spell-runs.md) | IC1–IC6 |
 | <a id="spell-missile-and-caster-facing-arc-magic-018"></a>[Spell missile and caster facing (ARC-MAGIC-018)](ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018) | [Magic: casting and spell runs](ledger/spell-runs.md) | SM1–SM9, MG44 |
 | <a id="target-picker-arc-magic-021"></a>[Target picker (ARC-MAGIC-021)](ledger/spell-runs.md#target-picker-arc-magic-021) | [Magic: casting and spell runs](ledger/spell-runs.md) | SU15–SU19, MG45 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
@@ -176,6 +177,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="weight-and-encumbrance-arc-world-085"></a>[Weight and encumbrance (ARC-WORLD-085)](ledger/items.md#weight-and-encumbrance-arc-world-085) | [Items and inventory](ledger/items.md) | WE1–WE9 |
 | <a id="barter-arc-ui-050"></a>[Barter (ARC-UI-050)](ledger/items.md#barter-arc-ui-050) | [Items and inventory](ledger/items.md) | BT1–BT10 |
 | <a id="merchant-stock-arc-world-090"></a>[Merchant stock (ARC-WORLD-090)](ledger/items.md#merchant-stock-arc-world-090) | [Items and inventory](ledger/items.md) | BT11 |
+| <a id="merchant-restock-arc-world-093"></a>[Merchant restock (ARC-WORLD-093)](ledger/items.md#merchant-restock-arc-world-093) | [Items and inventory](ledger/items.md) | RK1–RK8 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -183,6 +185,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="second-projectile-and-scatter-arc-combat-018"></a>[Second projectile and scatter (ARC-COMBAT-018)](ledger/combat.md#second-projectile-and-scatter-arc-combat-018) | [Combat](ledger/combat.md) | PS1–PS6 |
 | <a id="boomerangs-arc-combat-019"></a>[Boomerangs (ARC-COMBAT-019)](ledger/combat.md#boomerangs-arc-combat-019) | [Combat](ledger/combat.md) | BR1–BR7 |
 | <a id="inventory-window-arc-ui-015"></a>[Inventory window (ARC-UI-015)](ledger/ui-audio.md#inventory-window-arc-ui-015) | [Interface windows and audio](ledger/ui-audio.md) | IW1–IW9 |
+| <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
 
 ## Decisions to revisit
 
