@@ -3,8 +3,9 @@
 A packaged build is the game for a player: the terrain viewer project exported with its own player name and user
 folder, started without inputs, so it opens the launcher ([ARC-UI-014](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014))
 and the original main menu. It is separate from the developer builds of the export endpoints (`artifacts/world-builds`,
-the build registry, `./arcanum area`/`map`), which it neither reads nor changes. The player instruction is
-[docs/player/alpha-build.md](../player/alpha-build.md). Platforms: **macOS** (universal `.app`, ad-hoc signed, smoked on
+the build registry, `./arcanum area`/`map`), which it neither reads nor changes. The owner's build instruction
+(prerequisites, `main` or a chosen commit, outputs) is the [README](../../README.md#how-to-build-the-alpha-for-a-player); the player
+instruction is [docs/player/alpha-build.md](../player/alpha-build.md). Platforms: **macOS** (universal `.app`, ad-hoc signed, smoked on
 the Mac) and **Windows 11 x64** (exported on the Mac from the installed Godot 4.7.2 .NET Windows templates, unsigned,
 checked by its files only, delivered as one zip).
 

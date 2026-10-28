@@ -14,13 +14,10 @@ beside the build). The sections below name only the keys of their own steps.
 
 ## 1. Get the build
 
-Both builds are made on the developer's Mac, `./arcanum package mac` and `./arcanum package win`
-([packaging](../workflow/packaging.md)), and land in the project checkout:
-
-    artifacts/packages/macos/Arcanum Steamwoven.app
-    artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
-    artifacts/packages/<macos|windows>/BUILD.txt   (the commit and date it was built from)
-    artifacts/packages/<macos|windows>/README.md   (this instruction)
+Both builds are made on the developer's Mac with `./arcanum package mac` and `./arcanum package win`, from `main` or from
+a chosen commit. How to build them, where they land and which commit they come from is in the repository README:
+[How to build the alpha for a player](https://github.com/Simarglok/arcanum-steamwoven#how-to-build-the-alpha-for-a-player)
+(a web link, as this instruction is also copied beside the build as its `README.md`, next to `BUILD.txt`).
 
 **macOS:** copy `Arcanum Steamwoven.app` wherever you like (for example `/Applications`). It is a self-contained app;
 nothing else is installed.
@@ -124,10 +121,8 @@ the game as on its first run. The game folder of Arcanum is only read.
 
 ## 6. Updating
 
-The build does not update itself. A newer build is made from the current `main` with `./arcanum package mac` or
-`./arcanum package win` on the developer's Mac; it replaces the app or the zip in `artifacts/packages/macos/` or
-`artifacts/packages/windows/` (the one before moves to `previous/` there). On macOS copy the new app over the old one; on
-Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
+The build does not update itself. A newer build is made on the developer's Mac as the README says (section 1). On macOS
+copy the new app over the old one; on Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
 the old build may stay). Settings and saves stay in the folder above. A newer build loads the saves of older builds (from the first packaged
 build on); an older build refuses a save made by a newer one.
 

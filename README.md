@@ -1,15 +1,35 @@
 # Arcanum Steamwoven
 
-Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
+Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura** in C# and Godot 4, using
+the player's original game data.
 
-**Status (merged main `894b944`, 2026-10-16, through PR #157).** Not a playable game yet: every component is deliberately bounded and original-runtime parity is unverified. The [component catalogue](docs/project/status.md) lists implemented scope, evidence and source links.
+**Status (main, 2026-10-28, through PR #525).** An early alpha for testing, not a finished game: every component is
+deliberately bounded, its original behaviour is read from the retail executable component by component, and parity with
+the original runtime as a whole is not verified. The [component catalogue](docs/project/status.md) lists each component's implemented scope, evidence and
+source links; the [coverage matrix](docs/requirements/coverage.md) gives each of the 191 functional requirements one
+status (4 implemented, 150 partly in the viewer, 13 rules without a host yet, 15 researched only, 9 not started, as its
+summary counts them; requirements differ in size, so this is not a percentage of the game).
 
-- **Original data.** DAT and resource precedence over the original mount order, MES text and object names, ART, DLG (all 709 installed files), a universal map catalogue of all 81 maps, whole-map plans that open every interior through the area owner (52 of 80 publish a complete snapshot, with T0 step evidence), T0 inventory and the stored combat fields of weapons, ammunition, armour and critters.
-- **Crash Site area viewer** (`./arcanum area`, since ARC-RENDER-028 the main world map's map mode at the Crash Site; the list below was written for the pinned exterior profile, see the [map mode](docs/rendering/area-map-mode.md) for what map mode draws). The Crash Site exterior and the cave with return: click-to-move, hover names and action cursor, inventory window with pickup and loot, multi-turn NPC conversation, Virgil joining the party and following the PC, day/night and cave lighting on the session clock, one quick-save slot (F7/F8), the diagnostic palette (Ctrl+Shift+F9 or gamepad Start; every key: [Hotkeys](#hotkeys)) and an optional local HD pack for characters and objects.
-- **Headless rules** (Godot-free). One game-session owner (clock, global flags, story state, party, inventory, starting hero, seeded randomness, life state, snapshot schema), character stats, the starting hero from a pre-made PC, a pure attack resolver for one attack and the life rules (hit points, fatigue, poison, injuries, knockout, death).
-- **Research** (merged, not runtime). Combat core, magic, skills, NPC reaction, the NPC combat AI plan, the SCR event dispatcher and opcode census, character creation, map transitions and HD upscale methods.
+- **Packaged alpha** for macOS and Windows 11 ([how to build it](#how-to-build-the-alpha-for-a-player)): a launcher that
+  finds the player's GOG Arcanum and picks the *Steamwoven* or *Original* rules, then the original main menu, character
+  creation and the opening shop.
+- **Map mode** on every map of the game: the main world map streamed by window around the hero, the interiors and caves,
+  map transitions and world-map travel (W), day/night and lights, roofs, doors and windows, sounds, music and voices, and
+  an optional local [HD pack](docs/formats/hd-pack.md) for characters and objects.
+- **Play**: click-to-move, walk and run, hover names and action cursor; inventory, pickup, loot and barter; NPC
+  conversations; companions who follow and take orders; real-time and turn-based combat with the hero's and NPCs'
+  attacks; spells and schematics; the character sheet, the logbook, experience and levels; skills such as picking locks;
+  quick save and the save list. Every key: [Hotkeys](#hotkeys).
+- **Testing aids**: the [debug mode](docs/player/alpha-build.md#7-debug-mode) (teleport to any area), the in-game bug
+  report (Ctrl+B) and the diagnostic palette.
+- **Headless rules** (Godot-free `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting`, `Arcanum.Session`): the
+  original data formats, the game session and its save snapshot, character rules, combat, magic, technology, skills,
+  NPC reaction and AI, and the SCR script dispatcher.
 
-Not yet there: a viewer mode for other maps and map transitions beyond the cave, combat in the viewer, NPC AI, a full SCR runtime, quests and journal, levels and XP, save list, main menu, overland travel and Windows/Linux/handheld validation.
+Not there yet, among others: much of the NPC AI and the full SCR script runtime, traps that are spotted and fire, resting
+(S) and random encounters, the original look of several windows (character sheet, logbook, world map, save and load), and
+a run of the Windows build on a Windows 11 PC.
+The requirement rows name what each part still lacks.
 
 ## Direction
 
@@ -18,63 +38,135 @@ Not yet there: a viewer mode for other maps and map transitions beyond the cave,
 - Preserve original gameplay; distinguish original behavior, bug fixes and optional mod profiles.
 - Modern resolutions, scalable UI and high-DPI from the early Legacy frontend.
 - Keyboard/mouse and first-class gamepad interaction.
-- Legacy graphics first. HD is an optional local pack: existing frames of characters and objects upscaled (4× soft-edge by default, 2× supported) with the same directions, frames, anchors and timing. Each player builds the pack from their own installation or imports it from another of their devices; it stays outside the repository and is never distributed ([HD pack format](docs/formats/hd-pack.md), [HD presentation contract](docs/rendering/hd-presentation-contract.md)). Additional frames/directions and 3D are future options, not commitments.
+- Legacy graphics first. HD is an optional local pack: existing frames of characters and objects upscaled (4× soft-edge by default, 2× supported) with the same directions, frames, anchors and timing. Each player builds the pack from their own installation or imports it from another of their devices (the build and import tooling, ARC-DEV-003, is deferred by the owner); it stays outside the repository and is never distributed ([HD pack format](docs/formats/hd-pack.md), [HD presentation contract](docs/rendering/hd-presentation-contract.md)). Additional frames/directions and 3D are future options, not commitments.
 
 Players provide their own legally acquired copy. Original game assets, third-party binaries and extracted content are not distributed here. MIT applies to independently authored project code and documentation, not to Arcanum or archived third-party material. This unofficial fan project is not affiliated with the game's rights holders.
 
-## Run the viewer
+## The `./arcanum` launcher
 
-With the game installed at `/Applications/Arcanum` and an exported build present:
+`./arcanum` in the repository root is the project's developer launcher, a Python script over `tools/arcanum-local` and
+`tools/local_dev` ([project launcher](docs/workflow/local-development.md#project-launcher)). It starts the viewer modes
+from the exported developer builds, builds the player's alpha and puts every Godot and `dotnet` run into one queue.
+`./arcanum --help` and `./arcanum COMMAND --help` list every option.
 
 ```sh
-./arcanum setup    # find the installed game's inputs and configure the launcher
-./arcanum map "crash site cave"   # one whole map, on any installation
-./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start (--sector X,Y for another place)
-./arcanum area     # the Crash Site on the main world map (map mode; --hero NAME, --sector X,Y)
-./arcanum world    # the WORLD diagnostic
-./arcanum status   # which modes have every input configured
-./arcanum clean    # which builds are protected and which may go (dry run)
+./arcanum setup                   # find the installed game (default /Applications/Arcanum, --game-root DIR) and configure the launcher
+./arcanum status                  # which modes have every input configured, and their builds
+./arcanum area                    # the Crash Site on the main world map (map mode), main menu first; --hero NAME, --sector X,Y, --no-main-menu
+./arcanum map "crash site cave"   # one whole map by its folder name; --main-menu, --hero NAME, --sector X,Y
+./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start
+./arcanum world                   # the WORLD diagnostic
+./arcanum package mac|win         # the player's alpha (below)
+./arcanum run --kind window|headless|export|dotnet -- COMMAND   # any Godot run, export or dotnet build/test through the queue
+./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones)
+./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle
+./arcanum clean                   # which builds are protected and which may go (dry run; --apply removes only those)
 ```
+
+`area` and `map` also take `--debug-mode`, `--dry-run` (print the command) and `--no-queue`. They run the current build
+exported by ARC-DEV-015 (the universal map-mode build, preferred) or ARC-RENDER-008, so a feature on `main` shows only
+after that build is exported again ([universal map-mode export](docs/workflow/local-development.md#universal-map-mode-candidate-arc-dev-015)).
+Runs are quiet: the whole output goes to a log file, the terminal keeps `PASS` or `FAIL` with the first error
+([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)).
 
 Never delete `artifacts/` or a build in it by hand: the launcher and the export need the current builds. See
 [which builds may be deleted](docs/workflow/build-retention.md).
 
-The launcher runs the newest exported build of each mode; the features above need a build exported from current `main`. See [the project launcher](docs/workflow/local-development.md#project-launcher).
-
 ## How to build the alpha for a player
 
-The packaged alpha (the launcher and the original main menu, reading the player's own GOG Arcanum) is built on a Mac
-from a fresh commit of `origin/main`, never from local changes ([packaging](docs/workflow/packaging.md)).
+This section is the one instruction for building the packaged alpha (the launcher and the original main menu, reading
+the player's own GOG Arcanum). The build runs on a Mac from a committed state of the repository, never from local
+changes: `git archive` of one commit into a fresh temporary folder, so uncommitted or untracked files cannot enter it.
+The steps, checks and package presets are in [packaging](docs/workflow/packaging.md); installing and starting a build is
+in [the player instruction](docs/player/alpha-build.md), which ships beside every build as its `README.md`.
 
-Prerequisites on the Mac:
+### Prerequisites on the Mac
 
 - .NET SDK **8.0.425** (pinned by `global.json`) in `~/.local/share/dotnet` or the folder `DOTNET_ROOT` names;
 - Godot **4.7.2 .NET** at `/Applications/Godot_mono.app`;
 - its export templates `4.7.2.stable.mono` (Godot: Editor → Manage Export Templates), which hold both the macOS and the
   Windows templates;
-- this repository cloned with the `origin` remote (the command fetches `origin main` itself).
+- this repository cloned with the `origin` remote (the command fetches `origin main` itself);
+- for the macOS smoke only: the game in `/Applications/Arcanum`, `~/Applications/Arcanum` or a CrossOver bottle (without
+  it the smoke is skipped and the run says so).
 
-Build:
+### Build from `main`
 
 ```sh
-./arcanum package mac    # Arcanum Steamwoven.app (universal, ad-hoc signed), launcher and menu smoke if the game is installed
-./arcanum package win    # Windows 11 x64: Arcanum Steamwoven.exe folder as one zip (unsigned, file checks only)
-./arcanum package mac --ref COMMIT   # another commit; --no-smoke, --keep-work, --verbose: see --help
+./arcanum package mac    # Arcanum Steamwoven.app (universal, ad-hoc signed), launcher and main menu smoke
+./arcanum package win    # Windows 11 x64: the Arcanum Steamwoven.exe folder as one zip (unsigned, file checks only)
 ```
 
-The run goes through the launch queue and prints `PASS` or `FAIL` with the failed step and its log. Output, in the main
-checkout (also when run from a worktree):
+Each fetches `origin main` and builds its newest commit (`--ref` defaults to `origin/main`). The run goes through the
+[launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033) as an `export` and prints `PASS` or `FAIL` with the
+failed step, its log and the log's last lines.
+
+### Build from a specific commit
+
+```sh
+./arcanum package mac --ref 1a2b3c4d5e   # a commit hash, full or an unambiguous prefix
+./arcanum package win --ref 1a2b3c4d5e
+./arcanum package mac --ref origin/BRANCH   # or anything else `git rev-parse` names as a commit, e.g. a tag
+```
+
+`--ref` is resolved in the main checkout with `git rev-parse` after `git fetch origin main`, so every commit of `main`
+(also an older one) works directly. A commit that is only on another branch must be in the checkout first:
+`git fetch origin BRANCH`, then `--ref origin/BRANCH` or the hash. Only committed files of that commit are built; the
+checkout itself is not touched. `--no-fetch` skips the fetch (offline, or a commit already present).
+
+Two limits of the current packager: the build line in the game always reads `main <commit>`, also for a commit that is not
+on `main` (check `BUILD.txt` for the real commit), and the player instruction copied beside the build is the one of that
+commit, so an older commit ships its older instruction.
+
+Other options (`./arcanum package --help`): `--no-smoke` skips the macOS smoke, `--keep-work` keeps the temporary source
+and export folder for a look, `--verbose` streams the step lines instead of the quiet run log.
+
+### Where the build lands
+
+In the main checkout (also when the command runs from a worktree):
 
     artifacts/packages/macos/Arcanum Steamwoven.app
     artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
     artifacts/packages/<platform>/BUILD.txt     the full commit, its date, the product and the smoke result
-    artifacts/packages/<platform>/README.md     the player instruction
+    artifacts/packages/<platform>/README.md     the player instruction of that commit
     artifacts/packages/<platform>/previous/     the build before (the next build replaces it)
+    artifacts/packages/logs/<platform>/         the last run's step logs
 
-Which commit a build is from: `BUILD.txt` beside it, and the line
-`Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of its launcher and main menu.
-Do not delete these folders by hand ([build retention](docs/workflow/build-retention.md)). Players install and start a
-build with [the player instruction](docs/player/alpha-build.md) (macOS "Open Anyway", Windows SmartScreen, GOG detection).
+Only a build that passed every step replaces the current one. `artifacts/` is ignored by git, so these files are local
+copies, not the source of any instruction. Do not delete them by hand ([build retention](docs/workflow/build-retention.md)).
+
+### Which build is it
+
+The launcher and the main menu show `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right
+corner; `BUILD.txt` beside the build has the full commit. While the debug mode is on, the main menu's line ends in
+`DEBUG MODE`. A build started from the source says `not a packaged build`. Every run also prints
+`ARC-DEV-047 build <that line>` at start.
+
+### Giving it to a player: signing
+
+Both builds are signed for free only, so the first start of a copy that came from the internet asks once:
+
+- **macOS** (ad-hoc signed, no notarization): a build made or copied locally opens with a double click. A downloaded,
+  AirDropped or mailed copy is refused first; then **System Settings → Privacy & Security → Open Anyway**
+  ([player steps](docs/player/alpha-build.md#2-first-start-on-macos-open-anyway)).
+- **Windows 11** (unsigned): unpack the zip first, then on the blue SmartScreen window press **More info → Run anyway**,
+  or tick **Unblock** in the zip's Properties before unpacking. Smart App Control, when on, blocks the build outright
+  ([player steps](docs/player/alpha-build.md#3-first-start-on-windows-11-unzip-then-run-anyway)).
+
+### User data, debug mode and bug reports
+
+- **User folder** (settings `launcher_v1.json`, options, `saves/`, `logs/godot.log`, fallback `reports/`), separate from
+  any developer build: `~/Library/Application Support/Arcanum Steamwoven Game/` on macOS,
+  `%APPDATA%\Arcanum Steamwoven Game\` on Windows. Deleting it starts the game as on its first run
+  ([details](docs/player/alpha-build.md#5-where-your-settings-and-saves-live)).
+- **Debug mode** (testing aid, off by default): hold **Shift** at start to open the launcher, tick **Debug mode**, **Play**
+  (stored until unticked); or for one start pass `-- --debug-mode` to the executable. The world map (**W**) then lists
+  every area with **Teleport**, the diagnostic panel shows, and saves carry `[DEBUG]`
+  ([details](docs/player/alpha-build.md#7-debug-mode)).
+- **Bug report**: **Ctrl+B** in play, in the main menu or over any window writes `report.md`, `log.txt` (the last 120 seconds), `screenshot.png` and a save
+  into a `reports/<date_time>/` folder next to the app (macOS) or the `.exe` (Windows), or into the user folder's
+  `reports/` when that place cannot be written. It holds content of the player's own copy of Arcanum: never commit it
+  ([details](docs/player/alpha-build.md#9-reporting-a-bug-ctrlb)).
 
 ## Hotkeys
 
