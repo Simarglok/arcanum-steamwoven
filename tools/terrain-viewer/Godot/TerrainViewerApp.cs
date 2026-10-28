@@ -166,8 +166,9 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("container")) await RunAreaContainerLootSmokeAsync();
                                 // ARC-WORLD-063: the junk pile stage alone (the map battery runs it last).
                                 if (Stage("junk")) await RunAreaJunkPileSmokeAsync();
-                                // ARC-UI-050: the barter window over a speaker of the map (with --hero).
-                                if (Stage("barter")) await RunAreaBarterSmokeAsync();
+                                // ARC-UI-050: the barter window over a speaker of the map (with --hero); ARC-WORLD-103: then an NPC's redress after
+                                // its own regeneration (any map with such an NPC, a speaker or not).
+                                if (Stage("barter")) { await RunAreaBarterSmokeAsync(); RunAreaNpcRedressSmoke(); }
                                 // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
                                 if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
                                 // ARC-UI-012: the scene flow from another map (with --main-menu true; the start map loads in it).
