@@ -117,6 +117,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="spell-eye-candy-arc-magic-017"></a>[Spell eye candy (ARC-MAGIC-017)](ledger/spell-runs.md#spell-eye-candy-arc-magic-017) | [Magic: casting and spell runs](ledger/spell-runs.md) | EC1–EC13 |
 | <a id="queued-cast-arc-magic-019"></a>[Queued cast (ARC-MAGIC-019)](ledger/spell-runs.md#queued-cast-arc-magic-019) | [Magic: casting and spell runs](ledger/spell-runs.md) | QC1–QC6, MG43 |
 | <a id="item-spell-triggers-arc-magic-020"></a>[Item spell triggers (ARC-MAGIC-020)](ledger/spell-runs.md#item-spell-triggers-arc-magic-020) | [Magic: casting and spell runs](ledger/spell-runs.md) | IT1–IT10 |
+| <a id="item-use-and-moves-arc-magic-022"></a>[Item use and moves (ARC-MAGIC-022)](ledger/spell-runs.md#item-use-and-moves-arc-magic-022) | [Magic: casting and spell runs](ledger/spell-runs.md) | IU1–IU10 |
 | <a id="spell-missile-and-caster-facing-arc-magic-018"></a>[Spell missile and caster facing (ARC-MAGIC-018)](ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018) | [Magic: casting and spell runs](ledger/spell-runs.md) | SM1–SM9, MG44 |
 | <a id="target-picker-arc-magic-021"></a>[Target picker (ARC-MAGIC-021)](ledger/spell-runs.md#target-picker-arc-magic-021) | [Magic: casting and spell runs](ledger/spell-runs.md) | SU15–SU19, MG45 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |

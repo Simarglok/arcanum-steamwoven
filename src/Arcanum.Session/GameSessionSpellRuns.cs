@@ -244,5 +244,29 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
+    /// <summary>
+    /// ARC-MAGIC-022: the destruction of a food or scroll the hero used (0x462CC0's tail, 0x43CCA0; the cast host clears the runs'
+    /// sources, 0x4574D0): the item leaves the hero's lists and is deleted, as a destroying break deletes an item. Refused for an
+    /// invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the hero does not hold or wears
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>), an item that is not food or a scroll (<see cref="GameSessionFailure.InventoryMismatch"/>)
+    /// and a full durability budget (the deletion's record). The item's destroy script (point 2) is the host's; the session does not
+    /// run it. One revision.
+    /// </summary>
+    public GameSessionMutationResult DestroyUsedItem(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InventoryMismatch, Version);
+        if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        Delete(entity);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
     private SessionSpellRunResult RejectRun(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, [], Version);
 }
