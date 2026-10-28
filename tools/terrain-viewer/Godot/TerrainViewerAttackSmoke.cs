@@ -29,11 +29,11 @@ public partial class TerrainViewerApp
         var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
         var candidates = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
-            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(map.RuntimeMap, h.Entity)))
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
             .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core)
             .OrderBy(c => LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
         var refused = session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Where(h => h.Kind == SessionHolderKind.Npc)
-            .Select(h => _combatHost.Build(map.RuntimeMap, h.Entity).Failure).Where(f => f != SessionCritterCombatFailure.None)
+            .Select(h => _combatHost.Build(session, map.RuntimeMap, h.Entity).Failure).Where(f => f != SessionCritterCombatFailure.None)
             .GroupBy(f => f).ToDictionary(g => g.Key.ToString(), g => g.Count());
         if (candidates.Length == 0)
         {

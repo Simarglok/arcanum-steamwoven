@@ -245,6 +245,23 @@ public partial class TerrainViewerApp
             Regeneration = $"{done.Outcome}: removed {done.Removed}, coins {done.Coins}, created {done.Created.Count}, refused {done.Refused}, skipped {done.Skipped}",
             Wield = string.Join(", ", done.Wield!.Steps.Select(step => $"{step.Slot}:{(step.Wielded is null ? "-" : "on")}{(step.Unsupported is null ? "" : " unsupported " + step.Failure)}")),
             Worn = string.Join(", ", worn.Worn.Select(item => $"{item.Slot}:{(item.Item.StartsWith("made:", StringComparison.Ordinal) ? "made" : "kept")}")) }));
+
+        // ARC-WORLD-106: the viewer's NPC combat values read what the session dressed the NPC in (made items by their prototypes).
+        static void Check(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-106 npc-wear smoke: " + why); }
+        var fights = combat.Worn(session, CurrentAreaMap, npc);
+        Check(fights is not null && fights.Select(item => (item.Entity, item.Slot)).SequenceEqual(worn.Worn.Select(item => (item.Item, item.Slot))),
+            "the combat host wears the recorded items: " + string.Join(", ", fights?.Select(item => item.Slot) ?? []));
+        var build = combat.Build(session, CurrentAreaMap, npc);
+        Check(build.Combat is not null, "the NPC builds: " + build.Failure);
+        var life = session.QueryLife(build.Combat!.Target).View;
+        Check(life is not null, "the NPC's life view");
+        var state = life!.Record.State;
+        var attack = build.Combat.AttackValues(life.Status, state, session.Rules.Combat);
+        var weapon = worn.Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
+        Check(weapon == (attack.Weapon.Kind == WeaponKind.Weapon), $"a wielded weapon strikes ({weapon}, {attack.Weapon.Kind})");
+        GD.Print("ARC-WORLD-106 native-smoke npc-wear PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Worn = string.Join(", ", fights!.Select(item => item.Slot)), Weapon = attack.Weapon.Kind.ToString(), attack.Skill, attack.SkillLevel,
+            Firearms = build.Combat.Chooser(state).FirearmsLevel }));
     }
 
     /// <summary>

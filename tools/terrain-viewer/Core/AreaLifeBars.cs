@@ -29,6 +29,6 @@ public readonly record struct AreaLife(int Health, int MaxHealth, int Fatigue, i
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(host);
-        return host.Build(runtimeMap, entity).Combat is { } combat && session.QueryLife(combat.Target).View is { } view ? From(view) : null;
+        return host.Build(session, runtimeMap, entity).Combat is { } combat && session.QueryLife(combat.Target).View is { } view ? From(view) : null;
     }
 }

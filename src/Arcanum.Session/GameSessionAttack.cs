@@ -61,6 +61,7 @@ public sealed class SessionCritterCombat
     private readonly CharacterStatsOwner _stats;
     private readonly IReadOnlyDictionary<EquipmentSlot, EquipmentItem> _worn;
     private readonly IReadOnlyList<int> _basicSkills;
+    private readonly IReadOnlyList<int> _techSkills;
     private readonly SessionSkills? _sheetSkills;
     private readonly int _baseArmorClass;
     private readonly DamageResistances _storedResistances;
@@ -74,12 +75,12 @@ public sealed class SessionCritterCombat
     private readonly DamageRanges _natural;
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
-        IReadOnlyList<int> basicSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight, CombatantFlags flags,
-        ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
+        IReadOnlyList<int> basicSkills, IReadOnlyList<int> techSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight,
+        CombatantFlags flags, ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
         SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionSkills? sheetSkills = null)
     {
         _natural = natural;
-        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
+        Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _techSkills = techSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
         _race = race; _gender = gender; _constitutionMaximum = CharacterStatRules.Range(race, CharacterStat.Constitution).Maximum; Facts = facts; Loaded = loaded; Experience = experience; Monstrous = monstrous; Level = level;
         Target = SessionLifeTarget.Critter(entity, facts, loaded);
@@ -100,17 +101,33 @@ public sealed class SessionCritterCombat
     /// <summary>The same NPC defending with the dodge and backstab of the sheet the session levelled it to (ARC-SKILLS-002, a
     /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
-    internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, _baseArmorClass,
+    internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
         _natural, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
-    /// (<paramref name="carried"/>; only those in a wear slot, inventory location 1000..1008, count). Never throws for data.
+    /// (<paramref name="carried"/>; only those whose stored inventory location is a wear slot, 1000..1008, count). Never throws for data.
     /// </summary>
     public static SessionCritterCombatBuild From(string entity, CombatFields fields, IEnumerable<CombatFields>? carried = null)
     {
         ArgumentNullException.ThrowIfNull(fields);
+        var worn = new List<KeyValuePair<EquipmentSlot, CombatFields>>();
+        foreach (var item in carried ?? [])
+            if (item?.Item is { } held && Enum.IsDefined((EquipmentSlot)held.InventoryLocation)) worn.Add(new((EquipmentSlot)held.InventoryLocation, item));
+        return FromWorn(entity, fields, worn);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-106: builds the values of the NPC <paramref name="entity"/> from its fields and the items it wears now, each in the wear
+    /// slot the caller names (the session's lists: a regeneration's best-items record, else the map data's locations; an item's stored
+    /// location is not read, so a made item's prototype fields serve). An item must be a wearable of that slot (a ring in either ring slot),
+    /// one per slot, else <see cref="SessionCritterCombatFailure.InvalidWornItem"/>. Never throws for data.
+    /// </summary>
+    public static SessionCritterCombatBuild FromWorn(string entity, CombatFields fields, IEnumerable<KeyValuePair<EquipmentSlot, CombatFields>> wornItems)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(wornItems);
         if (!SessionValidation.Entity(entity)) return Fail(SessionCritterCombatFailure.InvalidEntity);
         if (fields.Object.Type != CombatFieldReader.NpcType || fields.Critter is not { } critter || fields.Npc is not { } npc)
             return Fail(SessionCritterCombatFailure.NotAnNpc);
@@ -118,7 +135,8 @@ public sealed class SessionCritterCombat
         var raceValue = stats[RaceStat]; var genderValue = stats[GenderStat];
         if (raceValue is < 0 or > 10 || genderValue is not (0 or 1)) return Fail(SessionCritterCombatFailure.InvalidRaceOrGender);
         static bool Bounded(int value) => Math.Abs((long)value) <= CombatSkillRules.MaxValue;
-        if (critter.BasicSkills.Count < 5 || !critter.BasicSkills.All(Bounded) || !fields.Object.Resistances.All(Bounded) || !Bounded(fields.Object.ArmorClass))
+        if (critter.BasicSkills.Count < 5 || !critter.BasicSkills.All(Bounded) || !critter.TechSkills.All(Bounded) || !fields.Object.Resistances.All(Bounded)
+            || !Bounded(fields.Object.ArmorClass))
             return Fail(SessionCritterCombatFailure.InvalidCombatValues);
         var race = (CharacterRace)raceValue;
         var gender = genderValue == 0 ? CharacterGender.Female : CharacterGender.Male;
@@ -132,11 +150,10 @@ public sealed class SessionCritterCombat
         }
 
         var worn = new SortedDictionary<EquipmentSlot, EquipmentItem>();
-        foreach (var item in carried ?? [])
+        foreach (var (location, item) in wornItems)
         {
-            if (item?.Item is not { } held || !Enum.IsDefined((EquipmentSlot)held.InventoryLocation)) continue;
-            if (SessionEquipmentFacts.FromCombatFields(item) is not { } wearable || EquipmentRules.WearSlot(wearable) is not { } slot ||
-                !Fits(slot, (EquipmentSlot)held.InventoryLocation) || !worn.TryAdd((EquipmentSlot)held.InventoryLocation, wearable))
+            if (item?.Item is null || !Enum.IsDefined(location) || SessionEquipmentFacts.FromCombatFields(item) is not { } wearable ||
+                EquipmentRules.WearSlot(wearable) is not { } slot || !Fits(slot, location) || !worn.TryAdd(location, wearable))
                 return Fail(SessionCritterCombatFailure.InvalidWornItem);
         }
 
@@ -198,7 +215,9 @@ public sealed class SessionCritterCombat
         var experience = new SessionNpcExperience(entity, npc.ExperienceWorth, npc.ExperiencePool);
         if (!ExperienceDomain.Valid(experience)) return Fail(SessionCritterCombatFailure.InvalidExperience);
         var lightEmission = (LightEmission)Math.Max((int)light, (int)equipment.Light);
-        return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, fields.Object.ArmorClass,
+        // ARC-WORLD-106: the four stored tech skills (repair, firearms, pick locks, disarm traps); a missing entry is 0.
+        var tech = Enumerable.Range(0, SkillRules.TechCount).Select(index => index < critter.TechSkills.Count ? critter.TechSkills[index] : 0).ToArray();
+        return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, Array.AsReadOnly(tech), fields.Object.ArmorClass,
             StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), critter.CriticalHitChart,
             race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage)));
 
@@ -223,8 +242,8 @@ public sealed class SessionCritterCombat
     /// <summary>
     /// ARC-WORLD-103: the NPC as its best-items choice scores it (<see cref="EquipmentChoice"/>) in this life state: its effective damage
     /// bonus, aptitude and intelligence under its poison and crippled legs, and the melee, bow and throwing levels of its stored basic skills
-    /// (or of the sheet it was levelled to), as <see cref="AttackValues"/> reads them; firearms 0 (a tech skill the map data's basic skills
-    /// do not hold). An NPC chooser (<see cref="EquipmentChooser.IsPc"/> false), with no ammunition: the session adds its stacks.
+    /// (or of the sheet it was levelled to), as <see cref="AttackValues"/> reads them; firearms from its stored tech skill (ARC-WORLD-106,
+    /// <see cref="FirearmsLevel"/>). An NPC chooser (<see cref="EquipmentChooser.IsPc"/> false), with no ammunition: the session adds its stacks.
     /// </summary>
     public EquipmentChooser Chooser(LifeState state)
     {
@@ -240,7 +259,7 @@ public sealed class SessionCritterCombat
             MeleeLevel = Level(BasicCombatSkill.Melee, Skill.Melee),
             BowLevel = Level(BasicCombatSkill.Bow, Skill.Bow),
             ThrowingLevel = Level(BasicCombatSkill.Throwing, Skill.Throwing),
-            FirearmsLevel = _sheetSkills?[Skill.Firearms].Level ?? 0,
+            FirearmsLevel = _sheetSkills?[Skill.Firearms].Level ?? FirearmsLevel(snapshot),
             ExtraordinaryIntelligence = snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
             IsPc = false,
         };
@@ -298,12 +317,14 @@ public sealed class SessionCritterCombat
 
     /// <summary>
     /// ARC-WORLD-092: what the NPC attacks with in this life state (the AI's hit step, 0x4B3170 with an NPC attacker): its
-    /// <see cref="Combatant"/>, the wielded weapon from its map data's worn items, else a monstrous critter's own damage table (NPC
+    /// <see cref="Combatant"/>, the wielded weapon from the worn items it was built with (its map data's, or since ARC-WORLD-106 the
+    /// session's through <see cref="FromWorn"/>), else a monstrous critter's own damage table (NPC
     /// field 0x12F, two values per damage type) and any other critter's bare hands with its gauntlets' bonus (0x465F70 reads the
     /// gauntlets for melee only, then the monster test 0x45F730 picks the table over them); the weapon's skill with the level and training
-    /// of the NPC's stored basic skill (melee 20 and the tiers for a monstrous critter), or of the sheet it was levelled to; the weapon
+    /// of the NPC's stored basic skill (melee 20 and the tiers for a monstrous critter; firearms its stored tech skill, ARC-WORLD-106), or
+    /// of the sheet it was levelled to; the weapon
     /// speed and attack cost; the reach (1 bare-handed). <see cref="SessionNpcAttackValues.Supported"/> is a melee attack: bows,
-    /// throws and firearms are the ranged slice's. <paramref name="wornNow"/> names the wear slots whose map-data item the NPC still
+    /// throws and firearms are the ranged slice's. <paramref name="wornNow"/> names the wear slots whose built item the NPC still
     /// wears (a critical may have dropped or destroyed one); null: all of them.
     /// </summary>
     public SessionNpcAttackValues AttackValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile, IEnumerable<EquipmentSlot>? wornNow = null)
@@ -330,14 +351,25 @@ public sealed class SessionCritterCombat
             level = CombatSkillRules.Level(stored, _basicSkills[(int)stored], dexterity, Monstrous);
             training = CombatSkillRules.Training(stored, _basicSkills[(int)stored], Monstrous, level, Level);
         }
-        // The firearms skill is a tech skill, which the map data's basic skills do not hold.
-        else (level, training) = (0, SkillTraining.None);
+        // ARC-WORLD-106: the firearms skill is the NPC's stored tech skill (0x4C65E0, 0x4C67F0).
+        else (level, training) = (FirearmsLevel(snapshot), SkillRules.Training(Skill.Firearms, _techSkills[FirearmsTech], false, 0, Level));
         var equipment = EquipmentRules.Evaluate(worn, aptitude, training);
         var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
         var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
         return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
             range, skill == CombatSkill.Melee);
     }
+
+    // The tech index of firearms (repair 0, firearms 1, pick locks 2, disarm traps 3).
+    private static readonly int FirearmsTech = SkillRules.FamilyIndex(Skill.Firearms);
+
+    /// <summary>
+    /// ARC-WORLD-106: the NPC's firearms level from its stored tech skill, as the original's tech level (0x4C65E0, ledger SX2, AL5) reads it
+    /// for a PC or an NPC alike: four per stored point, clamped to 0..20, capped by the key stat's table (perception, effective under the
+    /// life state's <paramref name="snapshot"/>). The NPC's stored effects are not applied (no reader yet), as for its basic skills.
+    /// </summary>
+    private int FirearmsLevel(CharacterStatsSnapshot snapshot) =>
+        SkillRules.Level(Skill.Firearms, _techSkills[FirearmsTech], snapshot.GetEffective(SkillRules.KeyStat(Skill.Firearms)), false);
 
     // The monster damage table in the damage order (normal, poison, electrical, fire, fatigue); a missing entry is 0.
     private static DamageRanges Natural(IReadOnlyList<CombatDamageRange> stored)

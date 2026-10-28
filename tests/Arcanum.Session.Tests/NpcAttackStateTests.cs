@@ -186,4 +186,40 @@ public sealed class NpcAttackStateTests
         Assert.AreEqual(GameSessionDisposition.NoChange, dead.Disposition);
         Assert.AreNotEqual(AttackRefusal.None, dead.Resolution!.Refusal);
     }
+
+    [TestMethod]
+    public void AnNpcsFirearmsLevelComesFromItsStoredTechSkillAsTheHerosDoes()
+    {
+        // ARC-WORLD-106: 0x4C65E0 reads the tech skill of a PC or an NPC alike: 4 per point, 0..20, capped by perception (stats[5] 9 → 11).
+        var fields = Npc(critterFlags: 0);
+        var stored = 2 | (int)SkillTraining.Expert << 6;
+        var gunner = fields with { Critter = fields.Critter! with { TechSkills = [0, stored, 0, 0] } };
+        var gun = Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Firearms, range: 10));
+        var values = Combat(gunner, carried: [gun]).AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
+        Assert.AreEqual((CombatSkill.Firearms, 8, SkillTraining.Expert, false), (values.Skill, values.SkillLevel, values.Training, values.Supported),
+            "two points, expert; NPC firearms attacks are the ranged slice's");
+        Assert.AreEqual(8, Combat(gunner).Chooser(LifeState.Unharmed).FirearmsLevel, "the best-items choice scores a firearm by it");
+        var sharp = gunner with { Critter = gunner.Critter! with { TechSkills = [0, 5, 0, 0] } };
+        Assert.AreEqual(SkillRules.KeyStatCap(9), Combat(sharp).Chooser(LifeState.Unharmed).FirearmsLevel, "20 capped by perception 9");
+        Assert.AreEqual(0, Combat().Chooser(LifeState.Unharmed).FirearmsLevel, "no stored points");
+        var shortList = fields with { Critter = fields.Critter! with { TechSkills = [7] } };
+        Assert.AreEqual(0, Combat(shortList).Chooser(LifeState.Unharmed).FirearmsLevel, "a missing tech entry is 0");
+        var unbounded = fields with { Critter = fields.Critter! with { TechSkills = [0, 2_000_000, 0, 0] } };
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, unbounded).Failure);
+    }
+
+    [TestMethod]
+    public void AnNpcBuiltFromItsWornItemsWearsEachInTheSlotTheCallerNames()
+    {
+        // ARC-WORLD-106: the session's slot wins over the stored location (a made item's prototype stores none).
+        var stored = Worn(5, EquipmentSlot.Helmet, Weapon(CombatWeaponSkill.Melee));
+        var build = SessionCritterCombat.FromWorn(Rat, Npc(critterFlags: 0), [KeyValuePair.Create(EquipmentSlot.Weapon, stored)]);
+        Assert.AreEqual(SessionCritterCombatFailure.None, build.Failure);
+        Assert.AreEqual(new DamageRange(2, 6), build.Combat!.AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Weapon.Damage.Normal);
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidWornItem,
+            SessionCritterCombat.FromWorn(Rat, Npc(), [KeyValuePair.Create(EquipmentSlot.Helmet, stored)]).Failure, "a weapon in the helmet slot");
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidWornItem, SessionCritterCombat.FromWorn(Rat, Npc(),
+            [KeyValuePair.Create(EquipmentSlot.Weapon, stored), KeyValuePair.Create(EquipmentSlot.Weapon, stored)]).Failure, "two in one slot");
+        Assert.AreEqual(SessionCritterCombatFailure.None, SessionCritterCombat.FromWorn(Rat, Npc(), []).Failure, "nothing worn");
+    }
 }

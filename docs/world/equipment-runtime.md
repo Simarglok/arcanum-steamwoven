@@ -125,6 +125,31 @@ wearer and chooser from the host and its list in place of the hero's items; the 
 (`inventory.npcWorn`, schema 57), which replaces its map data's inventory locations
 ([NPC best items after a regeneration](barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
+## NPC wear in combat (ARC-WORLD-106)
+
+The viewer's NPC combat values read what the session's NPC wears, not its map data. `AreaCombatHost.Worn(session, map, npc)` is the
+NPC's list as `QueryMapInventory` shows it (the regeneration's record over the map data's inventory locations; the items given to or
+made for it; never a taken, dropped or destroyed one) with a wear-slot location (1000..1008), without a broken item (the original takes
+an item off at its first break). An item's fields are its object row's on that map, else on another covered map (a taken item the hero
+gave away), else its prototype's stored fields (a made item, an item a regeneration created, a hero kit item given away, as the
+regeneration's wielder reads them; the viewer passes the barter data's prototypes, so before they load such an item is skipped: NOT
+READY). A worn item whose fields give no durability values, or two in one slot, fail the build (`InvalidWornItem`); the event world's
+life facts then fall back to the map data's worn items, so the NPC's life timers keep running.
+
+`AreaCombatHost.Build(session, map, npc)` builds the NPC with `SessionCritterCombat.FromWorn` (each item in the slot the session names,
+its stored location not read) and rebuilds when that set (slot, item, prototype) or the session changes; the worn sets are kept per
+session revision. It serves the AI host (what the NPC strikes with, its reach and the
+weapon kind the approach reads), the hero's attack target (armour class, resistances and light), the life bars, the cast map and the
+event world's life facts (the poison tick's normal resistance; the viewer gives the host its shown session). `AreaCombatHost.Critter`
+keeps the map data's worn items for the regeneration's wearer and chooser, which do not depend on them. The hit sound's body armour
+(`WornArmor`) and the cast host's NPC item lookup (`NpcItemSpells`, a made item by its prototype) read the same set.
+
+An NPC's firearms level is its stored tech skill (index 1), read as the original's tech level reads it for a PC or an NPC alike
+(0x4C65E0, ledger [NF1](../research/ledger/skills.md#npc-firearms-level-arc-world-106)): four per point, 0..20, capped by its effective
+perception; the training is the stored bits. The best-items choice scores a firearm by it (WB3: a level of 0 scores −1) and the AI's
+attack values report it (NPC ranged attacks stay refused). The NPC's stored effects are not applied, as for its basic skills. Tests:
+`AreaNpcSessionWearTests`, `NpcAttackStateTests`.
+
 ## Backgrounds (ARC-WORLD-069)
 
 The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 36; a pre-made hero's comes from
@@ -285,7 +310,9 @@ times; wield off reaches the same script's removal loop through call-ex, which r
   character's start (weapon and armour only) and the AI's call with a target are not wired.
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations) until a regeneration dresses the NPC (ARC-WORLD-103: the
   session's record then wins); `EquipmentRules.Evaluate` serves them too, and looting a worn item is still `WornItemUnsupported`.
-  The AI's best-items call (item insert's CHECK_WIELD, the gate with a target) is not wired.
+  Since ARC-WORLD-106 the viewer's NPC combat values read the session's worn items
+  ([NPC wear in combat](#npc-wear-in-combat-arc-world-106)). The AI's best-items call (item insert's CHECK_WIELD, the gate with a
+  target, SP13) is not wired: `AreaAiHost.ReWield` does nothing.
 - **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
   whether the original charges for changing equipment in a round is not researched here.
 - **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield without a script host (refused;

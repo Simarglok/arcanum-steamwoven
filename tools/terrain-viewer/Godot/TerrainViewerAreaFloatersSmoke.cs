@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
         var mapId = new SessionMapId(CurrentAreaMap);
         var candidates = session.QueryMapInventory(mapId)?.Holders
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
-            .Select(h => (h.Entity, Combat: host.Build(CurrentAreaMap, h.Entity).Combat))
+            .Select(h => (h.Entity, Combat: host.Build(session, CurrentAreaMap, h.Entity).Combat))
             .Where(c => c.Combat is not null && session.QueryLife(c.Combat.Target).View?.Status is { IsDead: false })
             .OrderByDescending(c => LifeRules.MaxHitPoints(c.Combat!.Facts, 0)).ThenBy(c => c.Entity, StringComparer.Ordinal).ToArray() ?? [];
         if (candidates.Length == 0) { GD.Print($"ARC-UI-021 native-smoke floaters NONE map={_readyMapName} (no living NPC with combat values)"); return; }

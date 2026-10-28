@@ -212,3 +212,13 @@ stat and its cap SR7, the skill module's texts SR12.
 | SP6 | skill module init (0x4C5BD0), text getters (0x4C62B0, 0x4C69A0, 0x4C69D0, 0x4C62C0, 0x4C69B0) | `mes\skill.mes` loads at the skill module's init (SR12, before a module mounts): names 0..11 and 12..15, training names 16..19, descriptions 20..31 and 32..35; each getter returns the stored text of its number. | Original |
 | SP7 | refusal messages (0x57ACD0, 0x57AEB0 and the editor's message helpers 0x55F160..0x55F340) | Shown only for the player while the editor is open: + without enough points charedit.mes 18, at level 20 message 21, a key stat too low one message per stat (22 by default); − without points 24, another failure 25; the page's floor refusal 23. Each refusal message plays sound 3004; a successful + or − plays none and clears the text bar. | Original |
 | SP8 | tech hover exit (0x55D6F0) | The pointer-leave test of the tech buttons loops over 12 entries instead of 4, past the tech entries. A match only clears the hint. | Original (a harmless bug of the game; no switch) |
+
+## NPC firearms level (ARC-WORLD-106)
+
+Source: the [AI host](../../world/ai-host.md) contract's NPC attack values and the best-items choice of an NPC
+([equipment](../../world/equipment-runtime.md#npc-wear-in-combat-arc-world-106)). Read on 2026-10-28 by one reader with `llvm-objdump`
+on the retail 1.0.7.4 executable; it confirms rows SX2 and AL5 for an NPC and adds no new rule.
+
+| Row | Original function | Behaviour | Verdict |
+|---|---|---|---|
+| NF1 | tech skill level (0x4C65E0), tech base (0x4C6580), tech points (0x4C6680) | The same path for a PC (type 15) and an NPC (type 16), with no PC-only branch: the stored tech skill's points × 4 (0x4C6580 via 0x4C6680, field 0x14F type test first), the effect adjustment (0x4EA990), a clamp to 0..20, then the cap of the key stat (0x4C6B10 gives the stat, 0x4B0490 its effective value, 0x4C5F70 the cap table). Any other object type or a tech index outside 0..3 reads 0. So an NPC's firearms level (tech index 1, key stat perception) is read from its own stored tech skill, as the weapon score (WB3, 0x465D80) and the attack read it. | Original |
