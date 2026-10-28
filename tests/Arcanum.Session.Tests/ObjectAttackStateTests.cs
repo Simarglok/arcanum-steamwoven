@@ -102,6 +102,26 @@ public sealed class ObjectAttackStateTests
     }
 
     [TestMethod]
+    public void ItemsSoldIntoABrokenContainerAreNotSpilledAndTheSaveStaysValid()
+    {
+        // ARC-WORLD-090: a merchant's stock chest with a sale in it; the attack spills only the chest's own items.
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var seed = Seed() with { Holders = [.. Seed().Holders, new("smith", SessionHolderKind.Npc, false, true, [], [])] };
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        var pile = new SessionItemKind(SessionItemType.Gold, 9056, 3200, 33200);
+        Assert.AreEqual(GameSessionFailure.None, owner.BarterSell(owner.Version, "smith", "kit:1", 1, 0, default, Accept, container: "chest", identify: true).Failure);
+        Assert.AreEqual(ObjectBreak.ContainerSpilled, BreakIt(owner, new() { Target = Target("chest", DamageableObjectKind.Container) }).Object!.Break);
+        CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryJunkPiles().Single().Items.Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray(), "the sold item does not decay");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, seed).Disposition);
+        // A broken container is no substitute any more: the open refuses it (the viewer then opens the merchant's own list).
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.OpenBarter(owner.Version, "smith", "chest", true, pile, Accept).Failure);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.OpenBarter(owner.Version, "smith", null, true, pile, Accept).Disposition);
+    }
+
+    [TestMethod]
     public void AContainerSpillsItsItemsAtItsCellAndAJunkPileIsSpared()
     {
         using var owner = Owner();

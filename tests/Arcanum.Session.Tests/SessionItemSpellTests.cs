@@ -453,6 +453,55 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual((SessionItemUseCast.InventoryTarget, true), (notReady.Cast, notReady.Spent), "the scroll is still spent, as in the original");
     }
 
+    // ---- ARC-MAGIC-022: pickup and drop through the session's inventory moves (IU9, IU10) ----
+
+    [TestMethod]
+    public void Giving_an_item_away_ends_its_runs_and_drops_and_taking_it_back_fires_its_pickup()
+    {
+        // Record 170 fires on the pickup and the drop and deals 2 at the holder; record 164 is the wand's lasting spell (30 s).
+        var moved = Use(170, 0x4, Pickup | Drop);
+        var lasting = Use(164, 0x4, duration: 30);
+        var records = new[] { moved, lasting }.ToDictionary(r => r.Data.Number);
+        var owner = CreateWith(HalfElf());
+        using var _ = owner;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(SessionFixtures.Exterior, InventoryStateTests.Seed()).Failure);
+        var caster = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner), new Events(),
+            id => id switch
+            {
+                // The lookup follows the move: once given, the coat is the merchant's.
+                Coat => new SessionItemSpells(Coat, owner.QueryHeroKit().Any(k => k.Entity == Coat) ? SessionSpellCaster.Hero : "merchant", 7,
+                    [170, 10000, 10000, 10000, 10000], -1, 10),
+                Wand => new SessionItemSpells(Wand, SessionSpellCaster.Hero, 5, [164, 10000, 10000, 10000, 10000], 5, 10),
+                _ => null,
+            });
+        var triggers = new SessionItemTriggers(caster, new NoCombat());
+        var hp = HitPoints(owner);
+
+        var given = owner.GiveItemToNpc(owner.Version, "merchant", Coat, Accept, triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition, $"{given.Failure}");
+        var drop = given.ItemSpells.Single();
+        Assert.AreEqual(new ItemSpellFiring(0, 170, ItemSpellAim.Parent, true), drop.Spells.Single().Firing, "the drop's withdrawal recasts at the holder");
+        Assert.AreEqual(SessionItemSpellOutcome.Started, drop.Spells.Single().Outcome, "the coat counts as the hero's while it withdraws");
+        Assert.AreEqual(hp - 2, HitPoints(owner));
+        Assert.AreEqual(given.Version, owner.Version);
+
+        var taken = owner.TakeItemFromNpc(owner.Version, "merchant", Coat, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, taken.Disposition, $"{taken.Failure}");
+        Assert.AreEqual(new ItemSpellFiring(0, 170, ItemSpellAim.Parent), taken.ItemSpells.Single().Spells.Single().Firing, "the pickup (0x4CBAA0)");
+        Assert.AreEqual(hp - 4, HitPoints(owner));
+
+        // A run the wand is the source of: without a host the wand cannot leave; with one its run ends by event.
+        var use = triggers.UseItem(Wand, SessionSpellCaster.Hero);
+        Assert.AreEqual(SpellCastGoalOutcome.Started, use.Goal!.Outcome);
+        var run = use.Attempt!.RunId!.Value;
+        Assert.AreEqual(Wand, owner.QuerySpellRuns()[run]!.Source!.Id, "a lasting run with the wand as source");
+        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, owner.GiveItemToNpc(owner.Version, "merchant", Wand, Accept).Failure);
+        var gone = owner.GiveItemToNpc(owner.Version, "merchant", Wand, Accept, triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, gone.Disposition, $"{gone.Failure}");
+        CollectionAssert.AreEqual(new[] { run }, gone.ItemSpells.Single().Stopped.ToArray(), "0x457450 ends the wand's run");
+        Assert.AreEqual(0, gone.ItemSpells.Single().Spells.Count, "record 164 has no drop trigger");
+    }
+
     [TestMethod]
     public void The_slot_zero_cast_does_nothing_for_an_empty_slot_or_a_disabled_spell_and_a_surviving_potion_run_loses_its_source()
     {

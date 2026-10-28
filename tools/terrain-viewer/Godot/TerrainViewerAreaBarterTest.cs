@@ -132,8 +132,10 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-050 native observation on the original data (stage `barter`, with --hero): a living NPC speaker of the shown map, a merchant
     /// when one is there, is passed to the production path a `b:` reply takes once its talk ended; the window opens over the live session
-    /// with its quotes and Escape closes it, changing nothing. Then, on a detached copy with the seeds attached again, the hero sells one
-    /// item to that NPC as a merchant buying everything and buys one ware it can pay for. Prints counts and outcomes only.
+    /// with its quotes (ARC-WORLD-090: the open moves a substitute container's coins onto the merchant and identifies the goods, its only
+    /// change) and Escape closes it, changing nothing. Then, on a detached copy with the seeds attached again, the hero sells one item to
+    /// that NPC (into its container when it has one) as a merchant buying everything and buys one ware it can pay for. Prints counts and
+    /// outcomes only.
     /// </summary>
     private async Task RunAreaBarterSmokeAsync()
     {
@@ -147,6 +149,12 @@ public partial class TerrainViewerApp
             .Where(c => c.Fields?.Npc is not null && !session.QueryNpcDead(c.Entity)).ToArray();
         if (candidates.Length == 0) { GD.Print($"ARC-UI-050 native-smoke barter SKIP (no living NPC speaker among {talk.Speakers.Count})"); return; }
         var chosen = candidates.FirstOrDefault(c => data.BuyList(c.Fields!.Critter!.InventorySource).Status is InventorySourceBuyStatus.Listed or InventorySourceBuyStatus.Everything);
+        // ARC-WORLD-090: else a speaker with a substitute container in reach that buys something (the installed merchants).
+        if (chosen.Entity is null)
+            chosen = candidates.FirstOrDefault(c => new AreaBarterMerchant(c.Entity, "", 0, false, false, InventorySourceBuyList.Nothing, session.QueryCompanion(c.Entity).LedByPc)
+                .WithSubstitute(_inventoryHost?.Maps.FirstOrDefault(map => map.TryGetRow(c.Entity, out _))?.Substitute(c.Entity),
+                    new(checked((int)talk.Speakers[c.Index].WorldX), checked((int)talk.Speakers[c.Index].WorldY)), data)
+                .ContainerBuyList?.Status is InventorySourceBuyStatus.Listed or InventorySourceBuyStatus.Everything);
         if (chosen.Entity is null) chosen = candidates.FirstOrDefault(c => c.Fields!.Npc!.RetailPriceMultiplier != 0);
         if (chosen.Entity is null) chosen = candidates[0];
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
@@ -158,6 +166,8 @@ public partial class TerrainViewerApp
             TakeDialogBarter();
             Require(BarterOpen && _barterPanel!.View is { } view && view.Merchant.Entity == chosen.Entity, "the window opened with the speaker: " + _barterStatus);
             var live = _barterPanel!.View!;
+            Require(session.Version.Revision - revision is 0 or 1, "the open is one revision at most");
+            revision = session.Version.Revision;
             InventoryKey(Key.Escape);
             Require(!BarterOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
 
@@ -181,6 +191,7 @@ public partial class TerrainViewerApp
             Require(session.Version.Revision == revision, "the live session is untouched");
             GD.Print("ARC-UI-050 native-smoke barter PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Merchant = $"speaker {chosen.Index} of {talk.Speakers.Count}, multiplier {live.Merchant.Multiplier}, buys {live.Merchant.BuyList.Status}, fence {live.Merchant.Fence}, script {live.Merchant.BuyScript}",
+                Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",
                 Live = $"hero items {live.Hero.Count} (priced {live.Hero.Count(l => l.Quote.Price > 0)}), wares {live.Wares.Count} (priced {live.Wares.Count(l => l.Quote.Price > 0)}), gold {live.HeroGold}/{live.MerchantGold}, haggle {live.Haggle} {live.Training}, reaction {live.Reaction}",
                 Sold = sold.Text, Bought = bought }));
         }

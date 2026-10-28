@@ -599,8 +599,9 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   nothing moves, `InsertRefused`); the transfer script's veto and the item and holder events (refused when present, not run); a source
   without a pile or stack, which the original credits from nothing (AMA6: refused here); the no-drop item flag
   (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers. The barter window's trades
-  (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); its substitute container,
-  identified flag and restock are not modelled.
+  (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); since ARC-WORLD-090 they move
+  items out of and into a merchant's substitute container (its added list in the NPC store, marked as a container), and the barter open
+  moves the container's coins onto the merchant; restock is not modelled.
 
 ## Made item complexity (ARC-WORLD-083)
 

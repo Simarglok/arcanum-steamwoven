@@ -763,9 +763,27 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the host's insert check
+  diagnostic window: no inventory grid, drop or stacks (ARC-UI-015 added the paper doll and the weight line); the host's insert check
   accepts every item (grid room is NOT READY); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
   and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
+- **Paper doll, wear and take-off (ARC-UI-015).** Above the PC's list the window shows the hero's nine wear slots in slot order
+  (helmet, ring 1, ring 2, medallion, weapon, shield, armor, gauntlets, boots; the original's locations 1000..1008) with the worn
+  item's name, a *Take off* button per worn item and a *Wear (slot)* button per slot an item of the PC's list can go to (its wear
+  location; a ring offers both ring slots). The buttons stand in for the original's drag of a held item onto a doll slot or onto the
+  grid ([ledger IW1–IW9](../research/ledger/ui-audio.md#inventory-window-arc-ui-015)): *Wear* runs the session's `Equip`
+  ([equipment](../world/equipment-runtime.md)) with the wear check, the occupant's no-drop and insert checks, and an occupant goes
+  back to the pack (in the original it lands in the grid and is then held on the cursor, IW3); *Take off* runs `Unequip`. A refusal
+  is named in the message line (the wear rule, the no-drop flag, a Technophobia hero's technological occupant, an item script or
+  item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
+  body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
+  scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
+  lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
+  taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
+  weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
+  "no hero: nothing can be worn". Not built yet (follow-up slices): the grid, drag and drop, moving a worn ring to the other ring
+  slot, dropping on the ground or the use icon, right-click use, stack splitting and the gold drag. NOT READY with a worn taken
+  (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
+  taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -777,12 +795,15 @@ after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInven
 admitted cell with life evidence, every core ground item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot
 without script content and the amulet's script with it (ARC-SCRIPT-013), 37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
 production click path: walk-to-pickup hover and press from 2..6 cells, its cancel by a ground
-click, pickup next to the item, I/Escape, loot by the take button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
+click, pickup next to the item, I/Escape, loot by the take button; ARC-UI-015: two ring wear buttons and a take-off button that run
+the app's wear and take-off), `AreaInventoryWearTests` (ARC-UI-015: doll lines, wear slots, swap, take-off, refusals, the weight facts)
+and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
 (one pickup next to an item, one walk to pick up, the four dead NPCs looted with *Take all*:
 5 taken, 1 left, every taken item named in the window; `ARC_AREA_INVENTORY_CAPTURE=PATH.png` saves a
-readback of the open window) and the quick-save phase, which now
+readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
+button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop, paper doll), a human on a physical mouse and display.
+(grid, drag and drop, the doll's art), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 
@@ -1529,15 +1550,19 @@ button is disabled; a follower's window is free. A stack trades whole at the uni
 prints `sold …`/`bought … for N` with a reaction change, or `not enough money`, `won't buy (…)`, `the merchant cannot pay`, and requests
 the trade sound 8158. Like the schematic window it is modal (gate closed, clock paused, a walk stopped) and owns every key: `Escape`, a
 controller cancel or `Close` closes it. A quick load, a map change or a dead hero closes it. The inventory sources and every item
-prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal.
+prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal. ARC-WORLD-090: a
+merchant with a substitute container within 20 tiles of where it talked (no leader) shows the container's items (`(stock chest)` in
+the right header, the container's buy list in brackets after the merchant's); the open moves the container's coins onto the merchant
+and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken container leaves the merchant's own list, another refused
+open shows no window.
 
 **Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
-the follower menu and cycling, the substitute container (installed merchants keep their stock there, so they show only their own list),
-the identified flag and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+the follower menu and cycling and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
 with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
-`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, its quotes, `Escape` closes
-with nothing changed; one sale and one buy on a detached copy).
+`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
+its substitute container when no speaker buys itself, its quotes, the open is at most one revision, `Escape` closes with nothing changed;
+one sale and one buy on a detached copy, through the container when there is one).
 
 ### Reading window (ARC-UI-049)
 

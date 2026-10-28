@@ -136,7 +136,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _items = items;
-        _map = items is null ? map : new ItemCastMap(map, items);
+        _map = items is null ? map : new ItemCastMap(map, Item);
     }
 
     /// <summary>The session this host casts in.</summary>

@@ -87,9 +87,16 @@ public interface ISessionItemTriggers
     /// ARC-MAGIC-022 the session saves the charges its spells spend). The host must cast in the same session as the move that asks.</summary>
     bool Supports(string item);
 
-    SessionItemTriggerResult Fire(uint eventMask, string item, string holder);
+    /// <summary>The executor for one item of <paramref name="holder"/>; <paramref name="other"/> is the event's other object (since
+    /// ARC-MAGIC-023: an attack's other party), the aim of <c>Target_Attacker</c>.</summary>
+    SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null);
 
     SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder);
+
+    /// <summary>ARC-MAGIC-022: the spell steps of the inventory removal (0x467860, IU9) of <paramref name="item"/>, which has just left
+    /// <paramref name="holder"/>'s inventory: its runs as source end (0x457450), then the drop's withdrawal (0x4CC130) with the holder
+    /// as parent.</summary>
+    SessionItemTriggerResult Remove(string item, string holder);
 }
 
 public sealed partial class SessionSpellCaster
@@ -101,6 +108,7 @@ public sealed partial class SessionSpellCaster
     public SessionItemSpells? Item(string id)
     {
         if (_items?.Invoke(id) is not { } item || item.Entity != id) return null;
+        if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
 
@@ -169,6 +177,54 @@ public sealed partial class SessionSpellCaster
         }
         return (stopped, started);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-022: the spell steps of the inventory removal (0x467860, IU9) of <paramref name="item"/> from
+    /// <paramref name="holder"/>, called after the session's move: every run whose source is the item ends by event unless its record
+    /// is technological or has item triggers without a maintenance period (0x457450, <see cref="SessionSpellRunActionKind.Demaintain"/>);
+    /// then the drop's withdrawal (0x4CC130, <see cref="WithdrawItemSpells"/> with <see cref="ItemSpellTriggerRules.Drop"/>) with the
+    /// holder passed, as the original passes it and leaves the item's parent field unwritten: the item counts as the holder's while it
+    /// runs (<see cref="HeldAs"/>), so the lookup need only still know it. The runs the first step ends come first in the stopped list
+    /// (none when the session refused the step), each once.
+    /// </summary>
+    public (IReadOnlyList<int> Stopped, IReadOnlyList<SessionItemSpellStart> Spells) RemoveItemSpells(string item, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(holder);
+        // The runs 0x457450 ends (by event: an interrupt event, or freed before their BEGIN), as SpellRunSystem.Demaintain picks them.
+        var ended = _owner.QuerySpellRuns().Runs.Where(run => run.Source?.Id == item && Record(run.Spell) is var r && !r.Technology &&
+            (!r.ItemTriggers || r.MaintainPeriod > 0)).Select(run => run.Id).ToList();
+        using var held = HeldAs(item, holder);
+        if (Act(new(SessionSpellRunActionKind.Demaintain, Object: item)).Disposition == GameSessionDisposition.Rejected) ended.Clear();
+        var (stopped, spells) = WithdrawItemSpells(ItemSpellTriggerRules.Drop, item, holder);
+        return ([.. ended.Concat(stopped).Distinct()], spells);
+    }
+
+    /// <summary>ARC-MAGIC-022: until the scope ends, <paramref name="item"/> counts as <paramref name="holder"/>'s for this host (the item
+    /// lookup's holder is replaced), as an item the removal withdraws keeps its parent field (IU9). Scopes nest; each restores the one
+    /// before it.</summary>
+    public IDisposable HeldAs(string item, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(holder);
+        var previous = _heldBy;
+        _heldBy = (item, holder);
+        return new HeldScope(this, previous);
+    }
+
+    private sealed class HeldScope(SessionSpellCaster caster, (string Item, string Holder)? previous) : IDisposable
+    {
+        private bool _done;
+        public void Dispose()
+        {
+            if (_done) return;
+            _done = true;
+            caster._heldBy = previous;
+        }
+    }
+
+    // ARC-MAGIC-022: an item a removal is withdrawing counts as its former holder's (IU9: the parent field is not rewritten).
+    private (string Item, string Holder)? _heldBy;
 
     // The record's trigger mask (+0x38) of a slot's whole value (0x4CB760): 0 for a value outside the table, which the original reads
     // past it (no installed slot holds one).
@@ -259,12 +315,20 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero };
 
-    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder) =>
-        Played([], _caster.StartItemSpells(eventMask, item, holder));
+    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null) =>
+        Played([], _caster.StartItemSpells(eventMask, item, holder, other));
 
     public SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder)
     {
         var (stopped, spells) = _caster.WithdrawItemSpells(eventMask, item, holder);
+        return Played(stopped, spells);
+    }
+
+    public SessionItemTriggerResult Remove(string item, string holder)
+    {
+        // The recast's goal plays while the item still counts as the holder's.
+        using var held = _caster.HeldAs(item, holder);
+        var (stopped, spells) = _caster.RemoveItemSpells(item, holder);
         return Played(stopped, spells);
     }
 

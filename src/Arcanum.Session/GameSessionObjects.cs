@@ -384,7 +384,8 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already).
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown) }, ShotProjectiles(hero)) : [];
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
+                ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying };
@@ -499,7 +500,9 @@ public sealed partial class GameSessionOwner
         if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
             _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
         {
-            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).Reverse().ToArray();
+            // ARC-WORLD-090: the items a barter window sold into the container are not spilled (not modelled; they stay in its store).
+            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity), added: false)
+                .Select(item => item.Entity).Reverse().ToArray();
             var later = items.ToHashSet(StringComparer.Ordinal);
             foreach (var item in items)
             {

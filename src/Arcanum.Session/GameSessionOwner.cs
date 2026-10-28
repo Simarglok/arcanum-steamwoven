@@ -782,8 +782,10 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.Piles.Keys.Any(entity => admitted.Items.TryGetValue(entity, out var listed) && listed.Facts.Kind.Type != SessionItemType.Gold) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
-        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
-        if (admitted.Holders.Values.Any(holder => holder.Kind != SessionHolderKind.Npc && _inventory.Npcs.ContainsKey(holder.Entity)))
+        // ARC-WORLD-055: a holder that holds added items is an NPC, or (ARC-WORLD-090) a container a barter window filled, of the same
+        // kind as the seed's holder, and its seed items and added items fit one list.
+        if (admitted.Holders.Values.Any(holder => _inventory.Npcs.ContainsKey(holder.Entity) &&
+                (holder.Kind == SessionHolderKind.Container) != _inventory.Containers.Contains(holder.Entity)))
             return Reject(GameSessionFailure.InventoryMismatch);
         if (admitted.Holders.Values.Any(holder => _inventory.AddedTo(holder.Entity).Count +
                 holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) > SessionMapInventorySeed.MaxListLength))
@@ -832,9 +834,13 @@ public sealed partial class GameSessionOwner : IDisposable
     /// merges into the hero's stack of its prototype (or starts one; a sum past 32 bits is <see cref="GameSessionFailure.BudgetExceeded"/>). An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
     /// without a host such an item is refused.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     [OriginalFunction(0x4617F0, OriginalFunctionScope.Partial)]
-    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
+    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
+        ISessionItemTriggers? triggers = null) => PickedUp(PickUp(expected, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult PickUp(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -861,10 +867,13 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script without a host. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled without a host (the
     /// session has no PC object); since ARC-SCRIPT-041 that slot runs through <paramref name="scripts"/>, with the item's remove-item script.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     [OriginalFunction(0x461CA0, OriginalFunctionScope.Partial)]
     public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(Loot(expected, holder, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult Loot(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -891,9 +900,12 @@ public sealed partial class GameSessionOwner : IDisposable
     /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
     /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
     /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move.
     /// </summary>
     public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(GiveToPc(expected, npc, name, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult GiveToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -1670,6 +1682,15 @@ public sealed partial class GameSessionOwner : IDisposable
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
 
+    /// <summary>ARC-MAGIC-022: the pickup executor (0x4CBAA0, IU10) through <paramref name="triggers"/> for an item that entered the hero's
+    /// list (not for an ammunition item merged into a stack: it is deleted, and the original returns before the pickup).</summary>
+    private InventoryMutationResult PickedUp(InventoryMutationResult result, ISessionItemTriggers? triggers)
+    {
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item))
+            return result;
+        return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
+    }
+
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
         new(GameSessionDisposition.Rejected, failure, null, verdict, new(_identity, _revision));
 
@@ -1763,6 +1784,8 @@ public sealed partial class GameSessionOwner : IDisposable
                 npc.Items.Count is 0 or > SessionMapInventorySeed.MaxListLength || previous is not null && string.CompareOrdinal(previous, npc.Npc) >= 0)
                 return GameSessionFailure.InvalidSnapshot;
             previous = npc.Npc;
+            // ARC-WORLD-090: a container's list (a barter window's sales).
+            if (npc.Container) inventory.Containers.Add(npc.Npc);
             foreach (var item in npc.Items)
             {
                 // A gold item is only a made pile with its record.
@@ -1811,6 +1834,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
+        // ARC-WORLD-090: the identified items by entity in ordinal order, within the bound, none deleted.
+        if (saved.Identified.Count > SessionInventoryState.MaxIdentified) return GameSessionFailure.BudgetExceeded;
+        string? lastIdentified = null;
+        foreach (var entity in saved.Identified)
+        {
+            if (!SessionValidation.Entity(entity) || lastIdentified is not null && string.CompareOrdinal(lastIdentified, entity) >= 0 || destroyed.Contains(entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastIdentified = entity;
+            inventory.Identified.Add(entity);
+        }
         // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
         // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
         if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;

@@ -106,8 +106,19 @@ public sealed partial class GameSessionOwner
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
     /// The original's no-drop item flag and the NPC flag 0x40 (re-wield) are not modelled. One revision.
+    /// ARC-MAGIC-022: an item that is the source of a spell run needs <paramref name="triggers"/> (else
+    /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>); with one, the removal's spell steps run after the move
+    /// (<see cref="ISessionItemTriggers.Remove"/>, <see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
-    public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck)
+    public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
+        ISessionItemTriggers? triggers = null)
+    {
+        var result = GiveToNpc(expected, npc, item, insertCheck, triggers);
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
+        return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
+    }
+
+    private InventoryMutationResult GiveToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemTriggers? triggers)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -115,13 +126,24 @@ public sealed partial class GameSessionOwner
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        return GiveItemTo(npc, SessionHolderKind.Npc, item, insertCheck, identify: false, triggers);
+    }
+
+    // The move of GiveItemToNpc after its input, version and holder checks, into an NPC's or (ARC-WORLD-090) a container's list;
+    // identify marks the moved item identified in the same revision (a barter window's sale, BT5); without triggers (ARC-MAGIC-022) an
+    // item that is the source of a spell run is refused.
+    private InventoryMutationResult GiveItemTo(string npc, SessionHolderKind kind, string item, SessionInsertCheck insertCheck, bool identify,
+        ISessionItemTriggers? triggers = null)
+    {
         if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
-        if (NpcHasScript(npc, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        if (HolderHasScript(npc, kind, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         var worn = _equipment.SlotOf(item) is not null;
         // ARC-SCRIPT-042: a worn item with item event scripts (a kit or made item too) would leave without its wield-off and remove-item runs.
         if (_equipment.SlotOf(item) is { } wornIn && _equipment.Worn[wornIn].ScriptPoints.Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-MAGIC-022: a worn item with the item spells mark would leave without its unwear (0x4CBFC0).
         if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
+        // ARC-MAGIC-022: the removal ends the item's runs and runs its drop (IU9) only through an item trigger host.
+        if (triggers is null && HasItemRuns(item)) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (held.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item, out var listed) &&
             (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
                 worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
@@ -132,8 +154,11 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-085: the host's insert check for the NPC sees the item's weight facts.
         var weights = _inventory.Weights.TryGetValue(item, out var row) ? row : default;
         var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity) with { Weight = weights.Weight, MagicWeight = weights.MagicWeight });
-        var into = held.Kind.Type == SessionItemType.Ammo
-            ? NpcStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() : null;
+        // ARC-WORLD-090: a container's stack is found only where its lookup finds one (AMA5, ContainerStackOfType).
+        var into = held.Kind.Type != SessionItemType.Ammo ? null : kind == SessionHolderKind.Container
+            ? _rules.Items.ContainerStackLookupFails ? null
+                : ContainerStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault()
+            : NpcStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault();
         if (into is { } stack)
         {
             var units = _inventory.Ammo[item].Units;
@@ -141,7 +166,9 @@ public sealed partial class GameSessionOwner
             if (!_inventory.Ammo.ContainsKey(stack.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
             if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         }
-        else if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        else if (_inventory.AddedTo(npc).Count + SeedItemCount(npc, kind) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+            return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (identify && into is null && !_inventory.Identified.Contains(item) && _inventory.Identified.Count >= SessionInventoryState.MaxIdentified)
             return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
@@ -162,8 +189,10 @@ public sealed partial class GameSessionOwner
             _inventory.Pc.RemoveAll(entry => entry.Entity == item);
             _inventory.Made.RemoveAll(entry => entry.Entity == item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
-            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+            if (kind == SessionHolderKind.Container) _inventory.AddToContainer(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+            else _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
             if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
+            if (identify) _inventory.Identified.Add(item);
         }
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
@@ -177,10 +206,13 @@ public sealed partial class GameSessionOwner
     /// input, the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a holder that is not an NPC of
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// gold (<see cref="TakeGoldFromNpc"/>) or a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), and the rules of
-    /// <see cref="LootItem"/>. One revision.
+    /// <see cref="LootItem"/>. One revision. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
+    /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(TakeFromNpc(expected, npc, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult TakeFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -304,22 +336,24 @@ public sealed partial class GameSessionOwner
         return (item, null);
     }
 
-    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
+    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck,
+        SessionHolderKind holder = SessionHolderKind.Npc)
     {
-        var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal);
+        var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal, holder);
         if (created is null) return (null, refusal);
         _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, ammoType, units);
         return (created, null);
     }
 
-    // A new made item at the end of the NPC's list after the host's insert check for it (the original's new object moved in by
-    // 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
-    private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal)
+    // A new made item at the end of the NPC's (ARC-WORLD-090: or a container's) list after the host's insert check for it (the
+    // original's new object moved in by 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
+    private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal,
+        SessionHolderKind holder = SessionHolderKind.Npc)
     {
         refusal = null;
         // The new object moves in through 0x4617F0, whose first step is the NPC's transfer script (NT2): not run here.
-        if (NpcHasScript(npc, SessionScriptPoint.Transfer)) { refusal = RejectItem(GameSessionFailure.HolderScriptUnsupported); return null; }
-        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        if (HolderHasScript(npc, holder, SessionScriptPoint.Transfer)) { refusal = RejectItem(GameSessionFailure.HolderScriptUnsupported); return null; }
+        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc, holder) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
         {
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
             return null;
@@ -335,7 +369,8 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
         if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
-        _inventory.AddToNpc(npc, item);
+        if (holder == SessionHolderKind.Container) _inventory.AddToContainer(npc, item);
+        else _inventory.AddToNpc(npc, item);
         _inventory.SetWeight(item.Entity, weight);
         _inventory.Taken.Add(item.Entity);
         return item;
@@ -356,8 +391,11 @@ public sealed partial class GameSessionOwner
     }
 
     // Whether any attached seed's holder row of the NPC has a script at the point.
-    private bool NpcHasScript(string npc, int point) => _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) &&
-        holder.Kind == SessionHolderKind.Npc && holder.ScriptPoints.Contains(point));
+    private bool NpcHasScript(string npc, int point) => HolderHasScript(npc, SessionHolderKind.Npc, point);
+
+    // ARC-WORLD-090: the same for a holder of either kind.
+    private bool HolderHasScript(string holder, SessionHolderKind kind, int point) => _inventory.Seeds.Values.Any(seed =>
+        seed.Holders.TryGetValue(holder, out var row) && row.Kind == kind && row.ScriptPoints.Contains(point));
 
     // One of the hero's held items (not placed) with its list, for a taken item its origin map, and for a made item its complexity.
     private (SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, int Complexity)? HeroListed(string entity)

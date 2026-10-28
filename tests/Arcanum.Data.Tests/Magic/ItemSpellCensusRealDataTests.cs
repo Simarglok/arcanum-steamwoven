@@ -12,6 +12,9 @@ namespace Arcanum.Data.Tests.Magic;
 public sealed class ItemSpellCensusRealDataTests
 {
     private const int NoSpell = 10000;
+    // The masks of the combat and life wrappers (ARC-MAGIC-023): parent hit, stunned, going unconscious, dying, attacks an opponent or
+    // a location, damages an opponent (with or without the item), target hit and target going unconscious.
+    private const uint CombatEvents = 0x2000000 | 0x4000000 | 0x8000000 | 0x100000 | 0x400000 | 0x800000 | 0x10000 | 0x20000 | 0x40000 | 0x80000;
 
     [TestMethod, TestCategory("RealData")]
     public void The_installed_item_spells_match_the_census()
@@ -51,6 +54,10 @@ public sealed class ItemSpellCensusRealDataTests
         foreach (var w in slots.Where(s => (s.Triggers & 0x60000000) != 0))
             Console.WriteLine($"wear item {w.Prototype} t{w.Type} scripts {scripts[w.Prototype]} slot {w.Slot} record {w.Spell} charges {w.Charges} cells {records[w.Spell].ChargesFromCells} maintain {records[w.Spell].MaintainCost}/{records[w.Spell].MaintainPeriod} duration {records[w.Spell].DurationSeconds} areas {string.Join(",", records[w.Spell].Areas.Select(a => a.Targets.ToString("X")))}: " +
                 string.Join(" ", records[w.Spell].Components.Select(c => $"{c.Action}/{c.Type}/{Triggers(c.ItemTriggers)}/{c.Area.Targets:X}")));
+        // ARC-MAGIC-023: the items whose records fire on the combat and life events (parent hit .. target going unconscious).
+        foreach (var c in slots.Where(s => (s.Triggers & CombatEvents) != 0))
+            Console.WriteLine($"combat item {c.Prototype} t{c.Type} slot {c.Slot} record {c.Spell} charges {c.Charges} triggers {Triggers(c.Triggers)}: " +
+                string.Join(" ", records[c.Spell].Components.Select(k => $"{k.Action}/{k.Type}/{Triggers(k.ItemTriggers)}/{k.Area.Targets:X}")));
         Console.WriteLine($"out of range {slots.Count(s => s.Spell is < 0 or >= SpellRecord.Count)}");
 
         Assert.AreEqual((158, 155, 146, 0), (slots.Count, slots.Select(s => s.Prototype).Distinct().Count(), slots.Select(s => s.Spell).Distinct().Count(),
@@ -61,6 +68,11 @@ public sealed class ItemSpellCensusRealDataTests
         Assert.AreEqual(0, slots.Count(s => (s.Triggers & 0x81000000) != 0), "no installed record fires on pickup or drop");
         Assert.AreEqual("8168:168:-1:0 8169:168:-1:0 8170:168:-1:0 8207:182:-1:0", string.Join(" ", slots.Where(s => (s.Triggers & 0x60000000) != 0)
             .Select(s => $"{s.Prototype}:{s.Spell}:{s.Charges}:{scripts[s.Prototype]}")), "the wear items: unlimited charges, no move scripts, slot 0");
+        Assert.AreEqual("6130:5:147:-1 6175:5:203:-1 6179:5:204:-1 8215:7:87:-1", string.Join(" ", slots
+            .Where(s => (s.Triggers & CombatEvents & ~0x800000u) != 0).Select(s => $"{s.Prototype}:{s.Type}:{s.Spell}:{s.Charges}")),
+            "ARC-MAGIC-023: three weapons and an armour fire on the damage step, unlimited, no chance bit");
+        Assert.AreEqual((14, 14), (slots.Count(s => (s.Triggers & 0x800000) != 0), slots.Count(s => s.Triggers == 0x800000 && s.Type is 9 or 14)),
+            "the location records are thrown items' alone (food 10105, generic 14), without an aim bit");
     }
 
     [TestMethod, TestCategory("RealData")]

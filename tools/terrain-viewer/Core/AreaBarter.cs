@@ -5,6 +5,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -84,11 +85,31 @@ public sealed class AreaBarterData
 /// <summary>
 /// The merchant of an open barter window: its entity and name, its retail price multiplier (NPC field 0x125), whether it is a fence
 /// (NPC flag 0x4000) and has a buy-object script (point 17, not run here: below Expert haggle it refuses every sale), its buy list,
-/// and whether it follows the hero (a follower trades for nothing, ledger BT6).
+/// and whether it follows the hero (a follower trades for nothing, ledger BT6). ARC-WORLD-090: its substitute container when the window
+/// uses one (<see cref="Container"/>, with the container's own buy list, which the dealer test tries second, BT8).
 /// </summary>
 public sealed record AreaBarterMerchant(string Entity, string Name, int Multiplier, bool Fence, bool BuyScript, InventorySourceBuyList BuyList, bool Follower)
 {
     public const int BuyObjectPoint = 17;
+    /// <summary>The substitute container's reach in tiles (0x45F650, ledger BT4).</summary>
+    public const int SubstituteRange = 20;
+
+    /// <summary>ARC-WORLD-090: the substitute container the window shows and fills, or null.</summary>
+    public string? Container { get; init; }
+    /// <summary>ARC-WORLD-090: the container's buy list (its inventory source, field 0x3D), or null.</summary>
+    public InventorySourceBuyList? ContainerBuyList { get; init; }
+
+    /// <summary>The dealer test (0x464200): the merchant's own buy list, else its substitute container's.</summary>
+    public bool Deals(int basic) => BuyList.Deals(basic) || ContainerBuyList?.Deals(basic) == true;
+
+    /// <summary>ARC-WORLD-090: the merchant with its substitute container (0x45F650): an NPC with no leader (none at T0, not following the
+    /// hero) whose container lies within <see cref="SubstituteRange"/> tiles of <paramref name="cell"/>, the merchant's (Chebyshev, 0x4B96F0).</summary>
+    public AreaBarterMerchant WithSubstitute(AreaSubstituteContainer? substitute, CellCoord cell, AreaBarterData data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (substitute is null || Follower || Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) > SubstituteRange) return this;
+        return this with { Container = substitute.Entity, ContainerBuyList = data.BuyList(substitute.InventorySource) };
+    }
 
     /// <summary>The merchant facts of an NPC's stored fields; null for anything that is not an NPC.</summary>
     public static AreaBarterMerchant? From(string entity, string name, CombatFields fields, AreaBarterData data, bool follower)
@@ -123,8 +144,9 @@ public sealed record AreaBarterTrade(InventoryMutationResult Result, int Count, 
 /// (<see cref="TradeRules.Price"/>), and the trades through <see cref="GameSessionOwner.BarterBuy"/> and
 /// <see cref="GameSessionOwner.BarterSell"/>, then the reaction change of a generous trade (0x4C11D0 through the session). A
 /// quote of 0 cancels the trade outside a follower's window, a hero with less gold than a unit price is refused before the move
-/// ("not enough money"), and a sale pays at most the merchant's coins. Not modelled: the substitute container, the identified flag,
-/// the restock timer, the buy-object script run and the generated quote lines (ledger BT6–BT9).
+/// ("not enough money"), and a sale pays at most the merchant's coins. ARC-WORLD-090: with a substitute container the window shows and
+/// fills the container (<see cref="Open"/> moves its coins onto the merchant and identifies both lists, BT4); an item counts as identified
+/// by its stored flag or the session's. Not modelled: the restock timer, the buy-object script run and the generated quote lines.
 /// </summary>
 public sealed class AreaBarter
 {
@@ -152,9 +174,18 @@ public sealed class AreaBarter
 
     public AreaBarterMerchant Merchant { get; }
 
+    /// <summary>ARC-WORLD-090: the same window for the merchant's own list (its substitute container gone).</summary>
+    public AreaBarter WithoutContainer() => new(_session, _inventory, _data, Merchant with { Container = null, ContainerBuyList = null }, _reaction,
+        _adjustReaction, _name);
+
     /// <summary>Whether the window opens: a hero that is alive (the original's open refuses only a dead or missing PC, 0x572370).</summary>
     public static bool HeroCanTrade(GameSessionOwner session) =>
         session.QueryHero() is not null && session.QueryHeroLife() is { Status.IsDead: false };
+
+    /// <summary>ARC-WORLD-090: the open's session part (0x572640): the container's coins onto the merchant and, outside a follower's
+    /// window, every item of the merchant and of the container identified.</summary>
+    public SessionBarterOpenResult Open() => _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower, GoldKind(),
+        AreaInventoryHost.DiagnosticInsertCheck);
 
     /// <summary>The window's lines now.</summary>
     public AreaBarterView View()
@@ -169,7 +200,8 @@ public sealed class AreaBarter
             .Where(item => !_session.IsItemDestroyed(item.Entity))
             .Select(item => Line(item.Entity, item.Kind, TradeDirection.PcSells, parties, worn.Contains(item.Entity), Units(item.Entity) ?? 1))
             .ToArray();
-        var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
+        var shown = Merchant.Container ?? Merchant.Entity;
+        var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == shown);
         var wares = (holder?.Items ?? [])
             .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, false,
@@ -186,7 +218,7 @@ public sealed class AreaBarter
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't sell ({line.Quote.Refusal})");
         if (_session.QueryGold() < line.Quote.Price) return Refused("not enough money");
         var result = _session.BarterBuy(_session.Version, Merchant.Entity, entity, line.Count, Merchant.Follower ? 0 : line.Quote.Price, line.Kind,
-            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
+            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session), Merchant.Container);
         return Settle(TradeDirection.PcBuys, line, result);
     }
 
@@ -197,7 +229,8 @@ public sealed class AreaBarter
         if (line is null) return Refused("not one of the hero's items");
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
-        var result = _session.BarterSell(_session.Version, Merchant.Entity, entity, line.Count, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck);
+        var result = _session.BarterSell(_session.Version, Merchant.Entity, entity, line.Count, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
+            Merchant.Container, identify: !Merchant.Follower);
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
     }
 
@@ -228,10 +261,9 @@ public sealed class AreaBarter
     {
         var fields = Fields(entity, kind);
         var item = fields?.Item;
-        // The identified test of 0x464370 (EquipmentChoice.Identified); the merchant's goods are all identified when the window opens
-        // (0x572640), a follower's are not.
-        var identified = item is not null && (item.MagickTechComplexity <= 0 || (item.Flags & 0x1) != 0 ||
-            direction == TradeDirection.PcBuys && !Merchant.Follower);
+        // The identified test of 0x464370 (EquipmentChoice.Identified) with the stored flag or the session's (ARC-WORLD-090: the open
+        // identifies a merchant's goods, a sale the sold item).
+        var identified = item is not null && (item.MagickTechComplexity <= 0 || (item.Flags & 0x1) != 0 || _session.QueryItemIdentified(entity));
         var stored = item?.Worth ?? 0;
         var worth = identified ? Math.Max(Arcanum.Simulation.Equipment.EquipmentChoice.MinimumWorth, stored)
             : Arcanum.Simulation.Equipment.EquipmentChoice.UnidentifiedWorth;
@@ -239,7 +271,7 @@ public sealed class AreaBarter
             ? _session.QueryItemCondition(entity, baseline) ?? baseline : default;
         var trade = new TradeItem(worth, stored, item?.Flags ?? 0, condition, worn, kind.Type == SessionItemType.Gold);
         var quote = Merchant.Follower ? new TradeQuote(0, TradeRefusal.None)
-            : TradeRules.Price(direction, trade, parties with { Deals = Merchant.BuyList.Deals(kind.Prototype - 20) });
+            : TradeRules.Price(direction, trade, parties with { Deals = Merchant.Deals(kind.Prototype - 20) });
         var text = _name(entity, kind) + (count > 1 ? $" ×{count}" : "") + (worn ? " (worn)" : "");
         return new(entity, text, count, quote, worth, kind);
     }
