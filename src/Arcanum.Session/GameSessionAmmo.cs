@@ -187,16 +187,24 @@ public sealed partial class GameSessionOwner
     /// <see cref="HeroStackOfType"/>) passes the raw prototype number where a handle is compared and never finds one (ledger AM6); under
     /// <see cref="Arcanum.Simulation.Items.ItemRuleProfile.ContainerStackLookupFails"/> this answers null as there (AMA5).
     /// </summary>
-    private SessionAmmoRecord? ContainerStackOfType(string container, int ammoType)
+    private SessionAmmoRecord? ContainerStackOfType(string container, int ammoType) => _rules.Items.ContainerStackLookupFails ? null
+        : ContainerStacks(container).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(stack => stack!.Value.AmmoType == ammoType);
+
+    /// <summary>A container's current ammunition stacks in its list order (not spilled): its seed items still in it, then (ARC-WORLD-090)
+    /// the stacks a barter window sold into it, each with its tracked or seed units. Found by entity, not through the type lookup.</summary>
+    private IEnumerable<(SessionAmmoRecord Stack, int Prototype)> ContainerStacks(string container)
     {
-        if (_rules.Items.ContainerStackLookupFails) return null;
         foreach (var (map, seed) in _inventory.Seeds)
             if (seed.Holders.TryGetValue(container, out var holder) && holder.Kind == SessionHolderKind.Container && SpillCell(map, seed, container) is null)
+            {
                 foreach (var entity in holder.Items)
-                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { AmmoType: { } type, Quantity: { } units } &&
-                        type == ammoType)
-                        return _inventory.Ammo.TryGetValue(entity, out var tracked) ? tracked : new(entity, type, units);
-        return null;
+                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { AmmoType: { } type, Quantity: { } units } facts)
+                        yield return (_inventory.Ammo.TryGetValue(entity, out var tracked) ? tracked : new(entity, type, units), facts.Kind.Prototype);
+                if (_inventory.Containers.Contains(container))
+                    foreach (var item in _inventory.AddedTo(container))
+                        if (item.Kind.Type == SessionItemType.Ammo) yield return (_inventory.Ammo[item.Entity], item.Kind.Prototype);
+                yield break;
+            }
     }
 
     /// <summary>A container's power-cell stack as the cell rules see it (null when the lookup finds none).</summary>

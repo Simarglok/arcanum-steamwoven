@@ -79,17 +79,30 @@ public partial class TerrainViewerApp
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog) ?? "merchant";
         if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) { Refuse("the speaker is not an NPC"); return; }
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
+        // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
+        var talker = host.Speakers[speaker];
+        merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
+            new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
         var state = host.State;
         OpenBarterWindow(new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
             (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog)));
     }
 
-    /// <summary>Shows the window over the area session for <paramref name="barter"/> (the dialog path above, or a self-test's model).</summary>
+    /// <summary>Shows the window over the area session for <paramref name="barter"/> (the dialog path above, or a self-test's model), after
+    /// the open's session part (ARC-WORLD-090: the container's coins, the identification); a refused open shows no window.</summary>
     private void OpenBarterWindow(AreaBarter barter)
     {
         var session = _areaSession!;
         var merchant = barter.Merchant;
+        var opened = barter.Open();
+        if (opened.Disposition == GameSessionDisposition.Rejected)
+        {
+            _barterStatus = "open refused: " + opened.Failure;
+            GD.Print($"ARC-UI-050 barter refused: open {opened.Failure}");
+            RefreshAreaStatus();
+            return;
+        }
         _barter = barter;
         if (_barterPanel is null)
         {
@@ -105,6 +118,7 @@ public partial class TerrainViewerApp
         _barterPanel.Open(view);
         _barterRevision = session.Version.Revision;
         GD.Print($"ARC-UI-050 barter open merchant={merchant.Entity} follower={merchant.Follower} multiplier={merchant.Multiplier} buys={merchant.BuyList.Status} fence={merchant.Fence} script={merchant.BuyScript} hero={view.Hero.Count} wares={view.Wares.Count} gold={view.HeroGold}/{view.MerchantGold} haggle={view.Haggle} reaction={view.Reaction}");
+        GD.Print($"ARC-WORLD-090 barter stock container={merchant.Container ?? "none"} containerBuys={merchant.ContainerBuyList?.Status.ToString() ?? "-"} movedCoins={opened.Coins} movedPiles={opened.Piles} identified={opened.Identified}");
         RefreshReadyStatus();
     }
 

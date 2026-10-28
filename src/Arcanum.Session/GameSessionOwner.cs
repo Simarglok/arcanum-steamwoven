@@ -782,8 +782,10 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.Piles.Keys.Any(entity => admitted.Items.TryGetValue(entity, out var listed) && listed.Facts.Kind.Type != SessionItemType.Gold) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
             return Reject(GameSessionFailure.InventoryMismatch);
-        // ARC-WORLD-055: a holder that holds added items is an NPC, not a container, and its seed items and added items fit one list.
-        if (admitted.Holders.Values.Any(holder => holder.Kind != SessionHolderKind.Npc && _inventory.Npcs.ContainsKey(holder.Entity)))
+        // ARC-WORLD-055: a holder that holds added items is an NPC, or (ARC-WORLD-090) a container a barter window filled, of the same
+        // kind as the seed's holder, and its seed items and added items fit one list.
+        if (admitted.Holders.Values.Any(holder => _inventory.Npcs.ContainsKey(holder.Entity) &&
+                (holder.Kind == SessionHolderKind.Container) != _inventory.Containers.Contains(holder.Entity)))
             return Reject(GameSessionFailure.InventoryMismatch);
         if (admitted.Holders.Values.Any(holder => _inventory.AddedTo(holder.Entity).Count +
                 holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) > SessionMapInventorySeed.MaxListLength))
@@ -1763,6 +1765,8 @@ public sealed partial class GameSessionOwner : IDisposable
                 npc.Items.Count is 0 or > SessionMapInventorySeed.MaxListLength || previous is not null && string.CompareOrdinal(previous, npc.Npc) >= 0)
                 return GameSessionFailure.InvalidSnapshot;
             previous = npc.Npc;
+            // ARC-WORLD-090: a container's list (a barter window's sales).
+            if (npc.Container) inventory.Containers.Add(npc.Npc);
             foreach (var item in npc.Items)
             {
                 // A gold item is only a made pile with its record.
@@ -1811,6 +1815,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
+        // ARC-WORLD-090: the identified items by entity in ordinal order, within the bound, none deleted.
+        if (saved.Identified.Count > SessionInventoryState.MaxIdentified) return GameSessionFailure.BudgetExceeded;
+        string? lastIdentified = null;
+        foreach (var entity in saved.Identified)
+        {
+            if (!SessionValidation.Entity(entity) || lastIdentified is not null && string.CompareOrdinal(lastIdentified, entity) >= 0 || destroyed.Contains(entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastIdentified = entity;
+            inventory.Identified.Add(entity);
+        }
         // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
         // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
         if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;

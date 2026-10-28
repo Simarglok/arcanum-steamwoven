@@ -209,6 +209,22 @@ buy-everything flag (BT8) has no defined original value; Steamwoven reads 0. Cen
 35 sets with a buy list (2 `all`, 33 listed); on the 80 whole maps no NPC buys through its own source and 4 merchants buy through
 their substitute containers (wheel clan 3, shopmap 1), multipliers 58 and 300.
 
+## Merchant stock (ARC-WORLD-090)
+
+Source: [barter runtime](../../world/barter-runtime.md). Question: what does the barter window's open do with a merchant's substitute
+container and the identified flag? Read on 2026-10-28 by this task alone (one reading, F1): the substitute gate 0x45F650, the open's
+partner part 0x572640 in barter mode, the gold move 0x464830 and the identification 0x4643D0, with the identified test 0x464370 for
+WB7. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BT11 | substitute 0x45F650, open stock 0x572640 (mode 1), gold 0x464830, identify all 0x4643D0 | The substitute: an NPC (type 16) with no leader (0x45DE00) whose field 0x126 is set and whose distance to it (0x441AE0, tiles) is at most 20, else none. The open with a substitute takes the gold prototype (0x468570 of type 8) and loops: the container's first item of that prototype (0x462540) moves with all its coins (0x464780) onto the NPC through 0x464830 with the pile given (source pile destroyed when the count is its coins; the NPC's pile from 0x4647D0 grows, else a new pile is created with the count and moved in, 0x464970 → 0x4617F0), until the container has no gold item; a count of 0 returns at once with nothing changed, so a pile of 0 coins is found again for ever (a hang). Then, when the NPC has no PC at the top of its leader chain (0x45DDA0), 0x4643D0 sets item flag 0x1 (field 0x57) on every entry of the NPC's list (fields 0xED/0xEE) and of the container's (0x3B/0x3C), worn and gold included; a null container does nothing. | Original; the 0-coin pile is a crash-class hang, kept out in both settings (the pile stays) |
+
+The identified test (0x464370) reads the flag only for an item with complexity above 0 (WB7), so marking every entry changes the worth
+of magickal items alone. Census of the installed data (`AreaBarterTests`, opt-in, 2026-10-28): the four merchants' substitute
+containers all lie within 20 tiles of their merchants, who have no leader; together they hold 113 items, among them 4 gold piles of
+5085 coins in all.
+
 ## Made item complexity (ARC-WORLD-083)
 
 Source: [inventory runtime](../../world/inventory-runtime.md#made-item-complexity-arc-world-083). Question: does an item's magick/tech
