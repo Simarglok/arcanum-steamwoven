@@ -284,6 +284,21 @@ restock event generate a container with flag 0x200 once and record it (its sourc
 the race, gender and background, the host the tile x and the player name. ARC-WORLD-101 calls it from the viewer's container window
 ([LW1–LW4](#container-loot-window-arc-world-101)); the callers of RK13–RK14 are later tasks.
 
+## NPC best items after a regeneration (ARC-WORLD-103)
+
+Source: [barter runtime](../../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103). Question: when does the
+regeneration dress an NPC, with which target, and does an empty generation still dress it? Read on 2026-10-28 by this task alone (one
+reading, F1): the tail of the regeneration 0x463E20 (0x463FDE..0x4640B9) and the best-items loop 0x4654F0 (0x4654F0..0x465523). Every
+direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RK15 | regeneration 0x463E20 (0x464069..0x46407E), best items 0x4654F0 | After the line loop (also when it ran no line: a set without lines or one the getter left empty, RK6–RK7), an object whose type (read at the start) is 16 (NPC) calls 0x4654F0 with a null target (two zero words); a PC (type 15) is not dressed here. A source of 0 jumps from the clear to the end (0x4640B0) before it, so such a regeneration dresses nobody. 0x4654F0 calls 0x465170 for slots 1000 to 1008 in increasing order with the object and the target passed through, as at the pre-made hero's start (WB6), so the choice is WB1–WB5 for the NPC. A container's flag and source clearing (RK10) follows at 0x464081 and does not concern an NPC. | Original |
+
+The session runs it in `FireRestock` after each NPC regeneration that is not `Unsupported` (`Regenerated` or `Cleared`), with the host's
+wearer, chooser and item facts, and records what the NPC wears (`inventory.npcWorn`, snapshot schema 57); an item the session made for
+the NPC is then worn in the session's lists, a seed item it took off is in its pack.
+
 ## Container loot window (ARC-WORLD-101)
 
 Source: [barter runtime](../../world/barter-runtime.md#container-loot-window-arc-world-101). Question: what does the inventory window's

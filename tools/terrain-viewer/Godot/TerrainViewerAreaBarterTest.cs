@@ -205,6 +205,49 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-WORLD-103 native observation (stage `barter`, after the barter part, on the live session): the first living NPC of the shown
+    /// map's seed with an inventory source of its own whose set the project admits and with combat values gets its restock event through the window open's schedule
+    /// (<see cref="AreaRestockHost.Schedule"/>); the game time jumps to it, the NPC regenerates and then wields its best items through the
+    /// production event world (its combat values from the area's combat fields, its items' wear facts from their rows or prototypes), and
+    /// the session's list shows the worn slots its record names. Prints counts and slots only. SKIP when the map has no such NPC.
+    /// </summary>
+    private void RunAreaNpcRedressSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-103 redress smoke: " + why); }
+        if (_areaSession is not { } session || _areaAmbient is not { Events: not null } driver || _inventoryHost is not { } inventory || _combatHost is not { } combat)
+        { GD.Print("ARC-WORLD-103 native-smoke redress SKIP (no session, event pump or combat host)"); return; }
+        var host = RestockHostNow();
+        Require(host is not null, "the restock host is ready");
+        var map = inventory.Maps.Single(m => m.RuntimeMap == CurrentAreaMap);
+        // A set the project does not admit keeps the list (Unsupported): only an NPC whose set reads regenerates.
+        var npc = map.Seed.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).Select(holder => holder.Entity)
+            .FirstOrDefault(entity => map.RestockSeed(entity).InventorySource is var source and not 0 && host!.Set(source).Status != SessionRestockSetStatus.Unsupported &&
+                !session.QueryNpcDead(entity) && !session.QueryCompanion(entity).LedByPc && combat.Critter(CurrentAreaMap, entity) is not null &&
+                !session.QueryRestocks().Any(e => e.Holder == entity));
+        if (npc is null) { GD.Print("ARC-WORLD-103 native-smoke redress SKIP (no living NPC with a readable source of its own on this map)"); return; }
+        Require(AreaRestockHost.Schedule(session, inventory, npc)?.Disposition == GameSessionDisposition.Changed, "the window open's schedule set the NPC's event");
+        var before = session.QueryMapInventory(new(CurrentAreaMap))!.Holders.Single(h => h.Entity == npc).Items.Count(item => item.Facts.Worn);
+        var due = session.QueryRestocks().Single(e => e.Holder == npc).DeadlineMs - session.QueryClockSnapshot().GameTimestampMs;
+        driver.AdvanceMilliseconds(Math.Max(1, due), AmbientSector());
+        LogAreaEvents(driver);
+        var fired = driver.Events!.Last.Restocks.Single(f => f.Holder == npc);
+        Require(fired is { Postponed: false, Decision.Step: Arcanum.Simulation.Items.RestockStep.Regenerate }, $"the NPC regenerates: {fired.Decision.Step} postponed {fired.Postponed}");
+        var done = fired.Regenerations.Single();
+        Require(done.Outcome is SessionRestockOutcome.Regenerated or SessionRestockOutcome.Cleared, "a regeneration: " + done.Outcome);
+        Require(done.Wield is { Failure: GameSessionFailure.None }, "the NPC wielded its best items: " + done.Wield?.Failure);
+        var worn = session.QueryNpcWorn(npc);
+        Require(worn is not null, "the session records what the NPC wears");
+        var shown = session.QueryMapInventory(new(CurrentAreaMap))!.Holders.Single(h => h.Entity == npc).Items.Where(item => item.Facts.Worn)
+            .Select(item => (item.Entity, item.Facts.InventoryLocation)).ToArray();
+        Require(shown.OrderBy(item => item.InventoryLocation).SequenceEqual(worn!.Worn.Select(item => (item.Item, (int)item.Slot))), "the list shows the recorded slots");
+        GD.Print("ARC-WORLD-103 native-smoke redress PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Npc = $"source {map.RestockSeed(npc).InventorySource}, worn {before} before",
+            Regeneration = $"{done.Outcome}: removed {done.Removed}, coins {done.Coins}, created {done.Created.Count}, refused {done.Refused}, skipped {done.Skipped}",
+            Wield = string.Join(", ", done.Wield!.Steps.Select(step => $"{step.Slot}:{(step.Wielded is null ? "-" : "on")}{(step.Unsupported is null ? "" : " unsupported " + step.Failure)}")),
+            Worn = string.Join(", ", worn.Worn.Select(item => $"{item.Slot}:{(item.Item.StartsWith("made:", StringComparison.Ordinal) ? "made" : "kept")}")) }));
+    }
+
+    /// <summary>
     /// ARC-UI-050 native observation on the original data (stage `barter`, with --hero): a living NPC speaker of the shown map, a merchant
     /// when one is there, is passed to the production path a `b:` reply takes once its talk ended; the window opens over the live session
     /// with its quotes (ARC-WORLD-090: the open moves a substitute container's coins onto the merchant and identifies the goods, its only

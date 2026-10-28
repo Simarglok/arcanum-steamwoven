@@ -1,4 +1,5 @@
 using Arcanum.Data.Characters;
+using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
@@ -131,6 +132,27 @@ public sealed class AreaRestockHost
     {
         if (Holder(map.RuntimeMap, container) is not { Holder.Kind: SessionHolderKind.Container } found || Cell(found.Map, container) is not { } at) return null;
         return new(at.X, _session.QueryHero() is { } hero ? hero.PlayerName : []);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-103: the facts of an NPC's best-items wield after its regeneration (0x4654F0, RK15): the NPC as a wearer and as the choice
+    /// scores it from its combat values (<paramref name="combat"/>, its fields on that map) in its session life state (the map data's when
+    /// the session has none); an item's wear facts from its object row on that map, or (an item the session made, a kit item the hero gave)
+    /// from its prototype's stored fields. The viewer has one diagnostic body art, so it answers the art lookup with yes, as at the hero's
+    /// start. Null for an object that is no NPC of that map's seed or without combat values.
+    /// </summary>
+    public SessionNpcWielder? Wielder(SessionMapId map, string npc, SessionCritterCombat? combat)
+    {
+        if (combat is null || Holder(map.RuntimeMap, npc) is not { Holder.Kind: SessionHolderKind.Npc } found) return null;
+        var state = _session.QueryLife(combat.Target).View?.Record.State ?? combat.Loaded;
+        var inventoryMap = found.Map;
+        SessionWearableItem? Item(SessionInventoryItem item)
+        {
+            if (inventoryMap.TryGetRow(item.Entity, out var row))
+                return CombatFieldReader.Read(row).Fields is { } fields ? SessionEquipmentFacts.Wearable(item.Facts.Kind, fields) : null;
+            return _data?.Prototype(item.Facts.Kind.Prototype) is { } prototype ? SessionEquipmentFacts.Wearable(item.Facts.Kind, prototype) : null;
+        }
+        return new(combat.Wearer(state.Conditions), combat.Chooser(state), Item, (_, _) => true);
     }
 
     /// <summary>Whether a seed item carries the persistent flag 0x2000 (RK5); an item the session made carries none.</summary>
