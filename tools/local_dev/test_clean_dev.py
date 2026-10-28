@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from tools.local_dev import clean, config, retention, test_local_dev
 
@@ -147,15 +148,110 @@ class CleanDevTests(unittest.TestCase):
         (artifacts / "world-builds" / "ARC-RENDER-008").mkdir()
         (artifacts / "builds" / "ARC-RENDER-005").mkdir(parents=True)
         (artifacts / "gamepad-builds").mkdir()
-        (artifacts / "packages" / "macos").mkdir(parents=True)
+        (artifacts / "packages" / "macos").mkdir(parents=True)  # classified by clean.packages, not here
         home = checkout / "local" / "gpad005-pr-home"; home.mkdir(parents=True)
         (home / "config-v1.json").write_text(json.dumps({"artifactRoots": {"gpad005": str(artifacts / "gamepad-builds")}}), encoding="utf-8")
         conf = config.default_config(); conf["artifactRoots"] = {"world": str(artifacts / "world-builds")}
         found = {Path(item["path"]).relative_to(checkout).as_posix(): item for item in clean.unmanaged(conf, checkout)}
-        self.assertEqual(sorted(found), ["artifacts/builds", "artifacts/gamepad-builds", "artifacts/packages", "artifacts/world-builds/ARC-NOT-A-TASK"])
+        self.assertEqual(sorted(found), ["artifacts/builds", "artifacts/gamepad-builds", "artifacts/world-builds/ARC-NOT-A-TASK"])
         self.assertTrue(all(item["class"] == "keep" for item in found.values()))
-        self.assertEqual(found["artifacts/packages"]["reason"], clean.PACKAGES_REASON)
         self.assertIn(str(home.resolve()), found["artifacts/gamepad-builds"]["reason"])
+        (artifacts / "elsewhere").mkdir(); (artifacts / "packages").rename(artifacts / "elsewhere" / "packages")
+        (artifacts / "packages").symlink_to(artifacts / "elsewhere" / "packages")
+        linked = {Path(item["path"]).name: item for item in clean.unmanaged(conf, checkout)}
+        self.assertEqual((linked["packages"]["class"], linked["packages"]["reason"]), ("keep", clean.PACKAGES_REASON))
+        self.assertEqual(clean.packages(checkout), [])
+
+    def package_fixture(self) -> Path:
+        """macOS: current app, previous/, an interrupted .incoming; Windows: only previous/ (no current zip); logs, a stranger."""
+        checkout = self.root / "checkout"; base = checkout / "artifacts" / "packages"
+        mac, win = base / "macos", base / "windows"
+        for folder in (mac / "Arcanum Steamwoven.app/Contents/MacOS", mac / "previous/Arcanum Steamwoven.app/Contents/MacOS",
+                       mac / ".incoming-Arcanum Steamwoven.app", win / "previous", base / "logs/macos", base / "mine"):
+            folder.mkdir(parents=True)
+        (mac / "Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven").write_bytes(b"n" * 300)
+        (mac / "previous/Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven").write_bytes(b"o" * 200)
+        (mac / ".incoming-Arcanum Steamwoven.app/part").write_bytes(b"p" * 50)
+        (win / "previous/Arcanum Steamwoven Windows x64.zip").write_bytes(b"z" * 100)
+        for folder, commit in ((mac, "1" * 40), (mac / "previous", "2" * 40), (win / "previous", "3" * 40)):
+            (folder / "BUILD.txt").write_text(f"commit {commit}\ndate 2026-10-28\nproduct x\nsmoke PASS\n", encoding="utf-8")
+            (folder / "README.md").write_text("readme", encoding="utf-8")
+        (mac / "notes.txt").write_text("mine")
+        return checkout
+
+    def test_packages_keep_the_current_build_and_offer_only_superseded_ones(self) -> None:
+        checkout = self.package_fixture(); base = checkout / "artifacts" / "packages"
+        found = {Path(item["path"]).relative_to(base).as_posix(): item for item in clean.packages(checkout)}
+        self.assertEqual({path: item["class"] for path, item in found.items()}, {
+            "logs": "keep", "mine": "keep", "macos/Arcanum Steamwoven.app": "keep", "macos/previous": "disposable",
+            "macos/.incoming-Arcanum Steamwoven.app": "disposable", "macos/notes.txt": "keep", "windows/previous": "keep"})
+        self.assertIn("main 1111111111, 2026-10-28", found["macos/Arcanum Steamwoven.app"]["reason"])
+        self.assertIn("main 2222222222", found["macos/previous"]["reason"])
+        self.assertIn("no current package", found["windows/previous"]["reason"])
+        self.assertEqual(found["macos/previous"]["bytes"], 200 + len("commit ") + 40 + len("\ndate 2026-10-28\nproduct x\nsmoke PASS\n") + 6)
+        self.assertIn("player packages", clean.render({"home": "h", "builds": [], "unmanaged": [], "packages": list(found.values()),
+                                                       "worktrees": [], "caches": []}))
+
+    def test_apply_packages_removes_only_superseded_ones_and_respects_running_processes(self) -> None:
+        checkout = self.package_fixture(); mac = checkout / "artifacts/packages/macos"
+        with mock.patch.object(clean, "_processes", return_value=["python3 -B /x/tools/local_dev/package.py mac --ref origin/main"]):
+            self.assertTrue(clean.apply_packages(checkout)["status"].startswith("stopped: ./arcanum package is running"))
+        self.assertTrue((mac / "previous").is_dir())
+        running = [f"{mac}/previous/Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven", "python3 -m unittest test_package.py"]
+        with mock.patch.object(clean, "_processes", return_value=running):
+            result = clean.apply_packages(checkout)
+        self.assertEqual((result["status"], result["removed"]), ("skipped running previous", [str(mac / ".incoming-Arcanum Steamwoven.app")]))
+        self.assertTrue((mac / "previous").is_dir())
+        with mock.patch.object(clean, "_processes", return_value=[]):
+            result = clean.apply_packages(checkout)
+            self.assertEqual((result["status"], result["removed"]), ("done", [str(mac / "previous")]))
+            self.assertEqual(clean.apply_packages(checkout)["status"], "nothing-to-remove")
+        self.assertTrue((mac / "Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven").is_file())
+        self.assertTrue((mac / "BUILD.txt").is_file()); self.assertTrue((mac / "notes.txt").is_file())
+        self.assertTrue((checkout / "artifacts/packages/windows/previous/Arcanum Steamwoven Windows x64.zip").is_file())
+        self.assertTrue((checkout / "artifacts/packages/logs/macos").is_dir())
+
+    def test_previous_with_bug_reports_or_odd_entries_is_kept_and_a_windows_incoming_file_goes(self) -> None:
+        checkout = self.package_fixture(); base = checkout / "artifacts/packages"; mac, win = base / "macos", base / "windows"
+        (mac / "previous/reports/2026-10-28").mkdir(parents=True)
+        (win / "Arcanum Steamwoven Windows x64.zip").write_bytes(b"w" * 10); (win / "BUILD.txt").write_text("garbled")
+        (win / ".incoming-Arcanum Steamwoven Windows x64.zip").write_bytes(b"i" * 7)
+        (base / "stray.txt").write_bytes(b"s" * 5)
+        found = {Path(item["path"]).relative_to(base).as_posix(): item for item in clean.packages(checkout)}
+        self.assertEqual(found["macos/previous"]["class"], "keep"); self.assertIn("reports", found["macos/previous"]["reason"])
+        self.assertIn("main ?", found["windows/Arcanum Steamwoven Windows x64.zip"]["reason"])
+        self.assertEqual((found["windows/previous"]["class"], found["windows/.incoming-Arcanum Steamwoven Windows x64.zip"]["bytes"],
+                          found["stray.txt"]["bytes"]), ("disposable", 7, 5))
+        with mock.patch.object(clean, "_processes", side_effect=OSError("no ps")):
+            self.assertTrue(clean.apply_packages(checkout)["status"].startswith("stopped: cannot list processes"))
+        with mock.patch.object(clean, "_processes", return_value=["python3 -m tools.local_dev.package win"]):
+            self.assertTrue(clean.apply_packages(checkout)["status"].startswith("stopped: ./arcanum package is running"))
+        with mock.patch.object(clean, "_processes", return_value=[]):
+            result = clean.apply_packages(checkout)
+        self.assertEqual(sorted(Path(path).relative_to(base).as_posix() for path in result["removed"]),
+                         ["macos/.incoming-Arcanum Steamwoven.app", "windows/.incoming-Arcanum Steamwoven Windows x64.zip", "windows/previous"])
+        self.assertTrue((mac / "previous/reports/2026-10-28").is_dir()); self.assertTrue((win / "Arcanum Steamwoven Windows x64.zip").is_file())
+
+    def test_links_are_never_followed_or_removed(self) -> None:
+        checkout = self.package_fixture(); mac = checkout / "artifacts/packages/macos"
+        (mac / "previous").rename(self.root / "outside"); (mac / "previous").symlink_to(self.root / "outside")
+        found = {Path(item["path"]).name: item["class"] for item in clean.packages(checkout)}
+        self.assertEqual(found["previous"], "keep")
+        moved = self.root / "real-artifacts"; (checkout / "artifacts").rename(moved); (checkout / "artifacts").symlink_to(moved)
+        self.assertEqual(clean.packages(checkout), [])
+        with mock.patch.object(clean, "_processes", return_value=[]):
+            self.assertEqual(clean.apply_packages(checkout)["status"], "nothing-to-remove")
+        self.assertTrue((self.root / "outside/Arcanum Steamwoven.app").is_dir())
+        self.assertTrue((moved / "packages/macos/.incoming-Arcanum Steamwoven.app").is_dir())
+
+    def test_apply_cli_reports_packages_and_stops_with_exit_2(self) -> None:
+        checkout = self.package_fixture()
+        with mock.patch.object(clean, "_processes", return_value=["/x/tools/local_dev/package.py mac"]), \
+             mock.patch("sys.stdout", new_callable=__import__("io").StringIO) as output:
+            self.assertEqual(clean.run(checkout, do_apply=True, as_json=True), 2)
+        result = json.loads(output.getvalue())
+        self.assertEqual((result["status"], result["packages"]["removed"]), ("nothing-to-remove", []))
+        self.assertTrue((checkout / "artifacts/packages/macos/previous").is_dir())
 
     def test_caches_are_build_outputs_next_to_a_project_only(self) -> None:
         checkout = self.root / "checkout"

@@ -7,8 +7,8 @@ on the advice that the builds "can be rebuilt"; the launcher lost every current 
 measurement and the launch selection named a missing build, and ARC-DEV-026 had to add a first-export path and a
 registry repair before anything could be exported again.
 
-    ./arcanum clean            # dry run: every build, worktree and build output with its class and reason; removes nothing
-    ./arcanum clean --apply    # removes only DISPOSABLE build payloads (the .app); manifests and evidence stay
+    ./arcanum clean            # dry run: every build, player package, worktree and build output with its class, size and reason; removes nothing
+    ./arcanum clean --apply    # removes only DISPOSABLE build payloads (the .app; manifests and evidence stay) and outdated player packages
     ./arcanum clean --json     # the same report as JSON (schema arcanum-clean-report-v1)
 
 `./arcanum clean` is `tools/arcanum-local builds clean --checkout <main checkout>` (`tools/local_dev/clean.py`). It
@@ -23,7 +23,9 @@ reads the default local home (`~/Library/Application Support/Arcanum Steamwoven`
 | **Protected** build | In a configured artifact root: each task's `current.json`/`current-v2.json` and the build it names; every launch selection (even a stale one); accepted and rollback builds; the export measurement build (registry `measurements`) | The launcher picks its build by the current pointer and the selection (never by date); the export estimates its output as the largest verified current/accepted build plus 10% and its temporary space from the measurement build | Never delete. `clean` lists them as PROTECTED with the role |
 | Keep | In a configured root: a build that is not registered, failed, partial, unreadable or unsafe; one being exported; a registered build in review (`open-review`, `unmerged`) or with lifecycle `accepted` that is no longer the accepted or rollback build; an `exported` build that no later current build of its task in the same root supersedes (for example the only build of an older task), or whose later current build does not verify; every build of a tool whose pointer, selection or registry record is unsafe or malformed | Its ownership or need is not proved; a failed candidate is evidence and cannot be exported again | Keep. Owner decides case by case |
 | **Disposable** build | A registered v2 build (lifecycle `exported`) that a current build of the same task in the same root supersedes: registered later, and its manifest, evidence and every payload file verify; a build already `retired` | Nothing reads it: the launcher and the export use the current build, which stays measurable | `./arcanum clean --apply` retires it and removes its `.app`; `manifest.json`, `evidence/` and a `payload-pruned-v1.json` receipt stay (PRUNED) |
-| Not managed | Folders of `artifacts/` that are not a configured root of this home (an older layout such as `artifacts/builds`, a lab output such as `artifacts/audio-lab`), or a root of an owned home (`artifacts/gamepad-builds` of `local/gpad005-pr-home`); the packaged player builds `artifacts/packages` (ARC-DEV-047: the current and previous build per platform, replaced only by the next `./arcanum package`, [packaging](packaging.md)); unknown task folders in a configured root that is a folder of `artifacts/` | This home cannot prove what reads them; another home may treat them as current | Keep. Run `ARCANUM_LOCAL_HOME=<that home> ./arcanum clean` for an owned home; anything else only on the owner's word |
+| Not managed | Folders of `artifacts/` that are not a configured root of this home (an older layout such as `artifacts/builds`, a lab output such as `artifacts/audio-lab`), or a root of an owned home (`artifacts/gamepad-builds` of `local/gpad005-pr-home`); `artifacts/packages` when it is a link instead of a folder; unknown task folders in a configured root that is a folder of `artifacts/` | This home cannot prove what reads them; another home may treat them as current | Keep. Run `ARCANUM_LOCAL_HOME=<that home> ./arcanum clean` for an owned home; anything else only on the owner's word |
+| Current package | In `artifacts/packages/<platform>/` (`macos`, `windows`): the current player build of `./arcanum package` (`Arcanum Steamwoven.app` or `Arcanum Steamwoven Windows x64.zip`) with its `BUILD.txt` and `README.md`; the last run's step logs `artifacts/packages/logs` | The build a player gets now ([packaging](packaging.md)); the logs explain the last run | Never removed by `clean`. The next `./arcanum package` replaces them. The report shows the commit and date from `BUILD.txt` |
+| **Disposable** package | `artifacts/packages/<platform>/previous/` (the build the current one replaced, with its `BUILD.txt` and `README.md`, and nothing else) and an `.incoming-<product>` left by an interrupted install, **only while the current package of that platform is there** (ARC-DEV-055) | Superseded: a package is rebuilt from any commit with `./arcanum package`, so no older package is kept (N = 0 previous builds) | `./arcanum clean --apply` removes them. Without a current package beside them, a `previous/` that holds anything else (an app started from it writes its bug reports there, ARC-DEV-051), links (also a linked `artifacts/`) and anything else in `artifacts/packages` are KEEP (owner decides) |
 | Worktree | `.claude/worktrees/*` (Claude sessions) and `.worktrees/*` (the retired task board) | A session may still work in one; `.worktrees` are evidence (CLAUDE.md §4) | Report only. REMOVABLE means it is not locked, its branch is in `origin/main` (as of the last fetch; a fresh worktree with no commits of its own qualifies too), it has no uncommitted or untracked files and no ignored files besides build outputs; remove it with `git worktree remove PATH` once no thread works in it, and only on the owner's word. `.worktrees` stay |
 | Regenerable | `bin/`, `obj/`, `TestResults/` next to a `.csproj` and `.godot/` next to a `project.godot` in `src`, `tests`, `tools`, `experiments` of the main checkout | The next build, test or editor import recreates them (offline restore needs the NuGet cache) | Report only. Delete only while no thread builds, exports or tests |
 | Outside the project | Time Machine local snapshots, `~/.cache/huggingface`, uv and pip caches, Godot editor caches | Not read by the launcher or the export | The owner's choice; not covered by this rule |
@@ -42,14 +44,24 @@ Everything runs under one registry lock, so an export cannot register in between
 4. It removes only the `.app` payload and writes `payload-pruned-v1.json`; the next report lists the build as PRUNED,
    and a pruned build no longer counts as a surviving payload for the ARC-DEV-026 first export.
 
+Player packages (ARC-DEV-055) are removed first and on their own: they share no lock or lease with the builds, so a
+running viewer does not hold them back. When something is disposable, `--apply` lists the processes once (`ps`): while the package builder runs
+(`tools/local_dev/package.py` or `tools.local_dev.package` in a command line: an `./arcanum package` in the queue or
+started directly) it removes no package, because the install step moves the current build into `previous/`; a
+disposable package with a running process whose command line names a path under it (its app started from there) is
+skipped and named. The check is by command line, so an app started through another spelling of the path is not seen:
+close packaged apps first. Right before each removal the path is classified again (still DISPOSABLE, the current
+package still there, not a link); a removal that fails stops with what was already removed. It removes nothing
+outside `artifacts/packages` and never the current package.
+
 If a recheck fails part-way, the builds already removed stay removed and the retired ones stay retired (a later
-`clean --apply` finishes them); the result names both and the reason. `--apply` never touches unregistered builds,
-unmanaged folders, worktrees, regenerable outputs or anything outside the configured artifact roots; it writes only
-the registry in the local home and the prune records in the builds. Close the viewers first.
+`clean --apply` finishes them); the result names both and the reason. Besides the disposable packages, `--apply` never
+touches unregistered builds, unmanaged folders, worktrees, regenerable outputs or anything outside the configured
+artifact roots; it writes only the registry in the local home and the prune records in the builds. Close the viewers first.
 
 ## Freeing disk space
 
-1. `./arcanum clean`, then `./arcanum clean --apply` for the DISPOSABLE total.
+1. `./arcanum clean`, then `./arcanum clean --apply` for the DISPOSABLE total (builds and outdated player packages).
 2. For owned homes under `local/`, the same with `ARCANUM_LOCAL_HOME=<home>`.
 3. REMOVABLE worktrees and regenerable outputs from the report, with the owner's word, while no thread builds.
 4. Outside the project (snapshots, model caches) as the owner decides.

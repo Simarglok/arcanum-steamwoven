@@ -224,7 +224,7 @@ def queue(args: argparse.Namespace) -> int:
 
 
 def cleanup(args: argparse.Namespace) -> int:
-    """ARC-DEV-028: which builds are protected and which are disposable; removes only with --apply."""
+    """ARC-DEV-028/055: which builds and player packages are protected and which are disposable; removes only with --apply."""
     return local("builds", "clean", "--checkout", str(main_checkout()), *(["--apply"] if args.apply else []),
                  *(["--json"] if args.json else []))
 
@@ -309,8 +309,8 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--exe", type=Path, help="the installed Arcanum.exe (default: $ARCANUM_EXE or the game folder)")
     command.add_argument("--seed", type=int, default=20261017)
     command.set_defaults(func=oracle)
-    command = commands.add_parser("clean", help="show which builds are protected and which are disposable (dry run); --apply removes only the disposable payloads")
-    command.add_argument("--apply", action="store_true", help="retire superseded builds and remove the disposable .app payloads")
+    command = commands.add_parser("clean", help="show which builds and player packages are protected and which are disposable (dry run); --apply removes only the disposable payloads and outdated packages")
+    command.add_argument("--apply", action="store_true", help="retire superseded builds, remove the disposable .app payloads and the outdated player packages (previous/)")
     command.add_argument("--json", action="store_true")
     command.set_defaults(func=cleanup)
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
