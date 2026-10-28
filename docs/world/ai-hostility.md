@@ -62,9 +62,9 @@ hero (leave, the leader check's leave, the expired wait) loses NO_ATTACK (FO7). 
 ## Not ready
 
 - **Callers.** The AI pass (I6) runs the danger update only as a host stage that no host implements yet, no combat path builds an attack event, no host runs the witness rule,
-  peace or stop attacking (the companion "stop" order is I9's; the script and dialog attacks and stop attacking are the
+  peace or stop attacking (the companion orders call them since slice I9, [AI followers](ai-followers.md); the script and dialog attacks and stop attacking are the
   dispatcher's S-slices; pick pocket's detection is ARC-SKILLS-010's). The hosts implement no `IHostilityWorld` yet.
-- **Steps returned, not run.** The follower rule (0x4A9C00, I9), the PC victim's response (0x4A9AD0), the turn, the goal and
+- **Steps returned, not run.** The follower rule (0x4A9C00, `FollowerRules.Rule` of slice I9, [AI followers](ai-followers.md)), the PC victim's response (0x4A9AD0), the turn, the goal and
   animation interrupts, the fleeing line, the flee goal, the round entry and the float lines are the caller's; should-flee is
   slice I5's ([morale](ai-morale.md)).
 - **Nested scan's turn.** Validity's unconscious test outside a scan runs a scan whose turn toward a concealed PC is not
