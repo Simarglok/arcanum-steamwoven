@@ -104,6 +104,30 @@ Not modelled (named in the runtime): the item-spell path, the 4 action points in
 and fonts. The use script before a reading runs since ARC-SCRIPT-020 (IU rows below); the two readable prototypes with one (14086,
 14090) are read.
 
+## Save list (ARC-UI-010)
+
+Source: the [save list](../../world/game-session-runtime.md#save-list-arc-ui-010), the
+[save and load windows](../../rendering/terrain-viewer.md#save-list-arc-ui-010) and
+[FR-LIFECYCLE-002](../../requirements/ui-media-lifecycle.md#fr-lifecycle-002). Question: what F7 and F8 save and load,
+how the save windows order, number, overwrite and delete saves, and what the preview is. Read on 2026-10-27 by this task
+and, independently, by a fresh agent that saw only the questions (method step 6). They first disagreed on which argument
+of the list sort picks the comparator; the second reader recounted the stack offsets and agreed with the first, so every
+row below is agreed. Every direct branch stays inside `.text`. The rows are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SL1 | in-game key handler (0x401560), F7 branch | F7 (scancode 0x41) does nothing for a dead PC; closes an open world map first; refuses with a message in turn-based combat when another critter has the turn; otherwise saves through the game library save (0x403030) under the slot code `SlotAuto` with the description "Auto-Save". There is no other automatic save: the save function's only other callers are the save window and a debug export key. | Original (not modelled: the dead-PC refusal, the other-turn refusal (in the viewer's round, ARC-COMBAT-020, an NPC's subturn ends at once, so the hero has the turn whenever F7 is read) and the world-map close (the open world map owns F7); the viewer adds its own refusals: reset, transfer, cast) |
+| SL2 | F8 branch, quick load (0x543220), latest save (0x403850), list sort (0x403C10, comparators 0x403D40, 0x403DB0) | F8 (0x42) loads the save whose `.gsi` file was modified last, the auto-save or any numbered slot: the latest-save helper lists every `save\slot*.gsi` and sorts by modification time, newest first, without pinning the auto-save. An empty list does nothing. The load checks the save's version (25) and shows a success or failure message. The earlier F0 reading of F8 as "the auto slot" was a slip ([keyboard](../../requirements/original-keyboard-mouse.md) open row). | Reconstruction slip |
+| SL3 | save window open (0x543380), load list, delete refresh | Both windows list the saves with the auto-save first (an entry whose fifth character is `A`), then newest first by file time. The save window adds a "new save" row 0 and selects row 1 (the first save) when there is one, else nothing. | Original (Steamwoven selects the new-save row in an empty window so Return saves) |
+| SL4 | save action (0x5435D0), new-save row | A new save takes the highest slot number plus one: the list is sorted by name, descending, the auto-save skipped, and the number after `Slot` parsed; with no numbered save the name is `Slot0000`. A result of 9999 or more aborts without a message. | Original |
+| SL5 | save action (0x5435D0), listed row; description | Saving onto a listed save (the auto-save included) asks first (message 5064, yes/no); before asking, the field is set to that save's own description, so an overwrite keeps it. An empty or all-space description is replaced by the slot name; other text is kept as typed (leading spaces too). Success shows message 5002 and closes the window, failure 5003. | Original |
+| SL6 | delete in the load window (0x543160) and the save window (0x544320), file delete (0x403790) | Delete or Backspace or the button asks first (message 5150), then deletes the save's `.gsi`, `.bmp`, `.tfaf` and `.tfai`, reloads and re-sorts the list (auto-save first, newest first) and clears the selection. The file delete refuses the auto-save's file name `SlotAutoAuto-Save` (slot code plus its "Auto-Save" description): nothing happens, no message. | Original (Steamwoven protects the auto slot whatever its description) |
+| SL7 | save window keys (0x546EE0) | Up/Down select, Delete/Backspace delete, Return confirms, Escape closes (U3 of the keyboard requirements). | Original |
+| SL8 | save info and preview (0x403DD0, 0x404010), sizes (0x4020F0, 0x4044A0 from the main-menu module init 0x540930) | A save records its module, PC name, map, game date, portrait, level, location, story state, description and a preview written as `save\<slot>.bmp`. The preview buffer is first set to a quarter of the game window each way, then, at the main-menu module's start, to a fixed 468×300; the game view is blitted into it (whether the blit scales was not read). | Original (Steamwoven fits the screen into 468×300 and stores a PNG) |
+
+The original's file layout (`.gsi` metadata, `.tfaf`/`.tfai` archives) is not read or written: Steamwoven keeps its own
+snapshot, details and PNG files with the same list rules.
+
 ## Window key modifiers (ARC-INPUT-004)
 
 Source: the [WORLD keyboard route](../../input/diagnostic-palette.md) and

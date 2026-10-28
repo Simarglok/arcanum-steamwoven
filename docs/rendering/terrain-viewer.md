@@ -518,8 +518,10 @@ step.
 While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
 `user://saves/quicksave.json` (Godot user data of the viewer; an automated run keeps its slots in its own
-folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). There is no save
-list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved. Map mode
+folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). Since ARC-UI-010 this slot is the
+[save list](#save-list-arc-ui-010)'s auto-save: F7 writes it with its details and a preview, and F8 loads the
+**newest** save of the list by file date, which is the auto-save only when nothing newer was saved, as the
+original's F8 (ledger SL1, SL2). Elsewhere F7/F8 stay reserved. Map mode
 has its own slot and also loads a save of another map
 ([ARC-WORLD-038](area-map-mode.md#quick-save-arc-world-038)).
 
@@ -555,7 +557,7 @@ has its own slot and also loads a save of another map
   whose dialog values it cannot read is refused before anything changes. Snapshot sections other domains
   add later are restored with the session; the day/night driver (ARC-WORLD-010) rebinds
   there to the loaded clock, so a load restores the saved time, pause and applied scheme.
-- **HUD.** The area status line shows the slot and the last F7/F8 result.
+- **HUD.** The area status line shows the save folder and the last F7/F8 result, a load naming the save it read.
 
 The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after
 the transition phase, on a temporary slot, never the player's: F7 through the
@@ -1167,6 +1169,48 @@ eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level mess
 files load; an award built in the smoke, without changing the session, posts a points entry and a scheme entry that read the
 player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
 window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
+
+### Save list (ARC-UI-010)
+
+While `crash-site-area` has a game session, the palette's **Save game (save list)** and **Load game (save list)**
+open the save and load windows over the session's save folder (`user://saves`, map mode `user://saves/map`, an
+automated run its own folder). The original opens these windows from its in-game menu, which is a later task; the
+rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)), the window's
+art and layout are the project's.
+
+- **Folder.** `GameSaveLibrary` ([save list](../world/game-session-runtime.md#save-list-arc-ui-010)): the auto-save
+  (`quicksave`, the original's `SlotAuto` "Auto-Save" that F7 writes) and numbered saves `slot0000`..`slot9998`,
+  each a snapshot file with a details file (description, hero and level, place, game date and time) and a PNG
+  preview of the screen fitted into the original's fixed 468×300.
+- **List.** The auto-save first, then the other saves newest first by file date. A row shows the description
+  (the slot name when it is empty); the side shows the details and the preview; a save without details (a quick
+  save from before ARC-UI-010) or with details from another snapshot is listed and marked.
+- **Save window.** A "new save" row first, then the saves; the first save is selected on opening (as the original).
+  (In an empty window the original selects nothing; here the new-save row is selected so Return saves.)
+  The description field has the keyboard on the new-save row only. Return or **Save** there writes a new
+  numbered save (the highest number plus one; refused at 9999) with the typed description (empty or only
+  spaces: the slot name); on a listed save it asks first, Return or **Yes** overwrites it keeping that save's
+  own description (as the original, which puts it in the field before asking) and Escape or **No** keeps it.
+  A double click on a row confirms it, but never answers an open question. A save that succeeds closes the
+  window, as the original; a failure keeps it open with the reason. The save is the game as it was when the window opened (the window is modal: the gate
+  closes, the clock pauses, a walk stops), with the preview taken when the palette had left the screen.
+- **Load window.** The saves; Return or **Load** loads the selected save through the quick load's path (every check
+  before anything changes; a save of another map loads that map in map mode) and closes the window; a failed load
+  keeps the window and the session and names the reason.
+- **Delete.** Delete or Backspace on a selected save or **Delete** asks first, then removes the save, its details
+  and preview and clears the selection, as the original; the auto-save is never deleted.
+- **Keys.** The open window owns every key except the typing in its description field: Up/Down select, Return
+  confirms or answers yes, Escape answers no or closes; F7, F8 and the window letters do nothing under it. A
+  controller confirm, cancel and menu direction do the same.
+
+Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
+temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
+Escape refuses, Return accepts) keeping the save's description, keys owned, the F7 auto-save's details (and the
+preview when a frame can be read), the auto-save first and not deletable, a load by row under a new session, F8
+loading the newest save (the auto-save, then a numbered save made newer; the HUD names the loaded save), a delete
+asked first that clears the selection. The native quick-save smoke checks the auto-save's
+details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
+original window art, sorting or paging options, a text cursor of the original's own, and the original `.gsi` format.
 
 ### Logbook (ARC-UI-008)
 

@@ -52,6 +52,9 @@ its Close button. Contents:
 - **Prowl (stealth) on/off** (ARC-SKILLS-008): the original's skill-bar prowling button; toggles the
   session hero's concealment and its followers'. While concealed, a run is a walk unless the hero is
   a master of prowling with fatigue left ([stealth](../world/stealth-runtime.md)).
+- **Save game (save list)** and **Load game (save list)** (ARC-UI-010): close the palette and open the save or
+  load window of the session's save list; without an AREA game session the line under the actions says so
+  ([save list](../rendering/terrain-viewer.md#save-list-arc-ui-010)).
 - **Sound test: next interface sound** (ARC-UI-040): plays the next of the original's fixed interface
   sounds by id from the area module's sound catalogue; the line under it shows the output device,
   the three channel settings, the catalogue and the last result ([viewer audio](../audio/viewer-audio.md)).
@@ -105,7 +108,8 @@ WORLD host (`TerrainViewerWorld.cs`).
    until the next key press (at window heights below about 550 px the header may then
    take the whole HUD panel). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
-   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
+   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011); F7 writes the
+   auto-save and F8 loads the newest save, [ARC-UI-010](../rendering/terrain-viewer.md#save-list-arc-ui-010)),
    and while its session inventory exists I toggles the inventory window on key down
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)); while it has a game
    session C toggles the character sheet, L the logbook and T the schematic window on key down

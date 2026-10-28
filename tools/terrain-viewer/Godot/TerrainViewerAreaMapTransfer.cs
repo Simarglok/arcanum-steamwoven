@@ -362,7 +362,7 @@ public partial class TerrainViewerApp
             if (_areaSession is not null)
             {
                 quickDirectory = System.IO.Directory.CreateTempSubdirectory("arc-world-038-").FullName;
-                _quickSaveSlotForSelfTest = GameSessionSaveSlot.QuickSave(quickDirectory);
+                _saveLibraryForSelfTest = new(quickDirectory);
                 QuickKey(Key.F7);
                 if (_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) != true) throw new InvalidOperationException("AREA_MAP_QUICK_SAVE " + _quickSaveStatus);
                 var away = Enum.GetValues<NeighborDirection>().Select(d => RoutePlanner.Neighbor(near, d))
@@ -437,7 +437,7 @@ public partial class TerrainViewerApp
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
-            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
     }
