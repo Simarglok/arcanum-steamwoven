@@ -157,12 +157,12 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
-    public void The_skill_animation_stands_in_with_the_fixed_art_and_the_throw_cannot_start()
+    public void The_skill_and_throw_animations_stand_in_with_the_fixed_art()
     {
         var (_, host, npc, _) = Open();
-        // 9 frames at 15 per second: the action frame 6 at 400 ms, the rest 200 ms.
+        // 9 frames at 15 per second: the action frame 6 at 400 ms, the rest 200 ms; ARC-WORLD-113: the throw's too.
         Assert.AreEqual(new AiActionSwing(AiActionStart.Started, 400, 200), host.BeginAction(npc, AiActionAnimation.Skill));
-        Assert.AreEqual(AiActionStart.CannotStart, host.BeginAction(npc, AiActionAnimation.Throw).Start, "the throw is not ready");
+        Assert.AreEqual(new AiActionSwing(AiActionStart.Started, 400, 200), host.BeginAction(npc, AiActionAnimation.Throw));
         Assert.AreEqual(AiActionStart.CannotStart, host.BeginAction(AiSchedulerRules.Pc, AiActionAnimation.Skill).Start, "the host walks no hero");
         Assert.IsTrue(host.FaceForAction(npc, AiSchedulerRules.Pc, null), "it turns to the hero's cell");
         Assert.AreEqual(NeighborDirection.XPlus, host.Movers.FacingOf(npc, NeighborDirection.YMinus));

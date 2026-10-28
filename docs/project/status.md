@@ -145,6 +145,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
 | Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043 |
 | Packaged alpha build (macOS, Windows) | [Verification and tools](status/tools.md) | ARC-DEV-047, ARC-DEV-048, ARC-DEV-049 |
+| In-game bug report | [Verification and tools](status/tools.md) | ARC-DEV-051 |
 
 ## Merged research, not production runtime
 

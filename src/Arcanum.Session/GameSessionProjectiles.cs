@@ -250,13 +250,13 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-COMBAT-018 (0x4B39B0, ledger RH2 and PS rows): where a missed throw flies: from its target location
     /// <paramref name="origin"/>, <see cref="ThrowRules.ScatterTiles"/> tiles (the thrower's throwing level, at most its distance from
-    /// the hero's cell) in <paramref name="rotation"/>, each step the map's (<paramref name="map"/>; without one any cell in
-    /// 0 .. 2^24 − 1). The shot loses its target and flies free from the start.
+    /// the hero's cell; ARC-WORLD-113: from the NPC thrower's <paramref name="thrower"/> cell) in <paramref name="rotation"/>, each step
+    /// the map's (<paramref name="map"/>; without one any cell in 0 .. 2^24 − 1). The shot loses its target and flies free from the start.
     /// </summary>
     private Arcanum.Simulation.Movement.CellCoord ScatterThrow(Arcanum.Simulation.Movement.CellCoord origin, int throwingLevel, int rotation,
-        Arcanum.Simulation.Items.IDropMap? map)
+        Arcanum.Simulation.Items.IDropMap? map, Arcanum.Simulation.Movement.CellCoord? thrower = null)
     {
-        var tiles = ThrowRules.ScatterTiles(throwingLevel, ProjectileRules.Distance(_actor.Cell, origin));
+        var tiles = ThrowRules.ScatterTiles(throwingLevel, ProjectileRules.Distance(thrower ?? _actor.Cell, origin));
         return ThrowRules.Scatter(origin, rotation, tiles, map is not null ? map.Step
             : (cell, r) => Arcanum.Simulation.Navigation.OriginalPathRequest.Neighbor(cell, r) is var next && DropCellFits(next) ? next : null);
     }
