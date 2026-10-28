@@ -184,6 +184,14 @@ def queued(args: argparse.Namespace) -> int:
     return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose)
 
 
+def package_build(args: argparse.Namespace) -> int:
+    """ARC-DEV-047: the packaged alpha from a fresh commit of origin/main into artifacts/packages (docs/workflow/packaging.md)."""
+    command = [sys.executable, "-B", str(ROOT / "tools" / "local_dev" / "package.py"), args.platform, "--ref", args.ref,
+               *(["--no-fetch"] if args.no_fetch else []), *(["--no-smoke"] if args.no_smoke else []),
+               *(["--keep-work"] if args.keep_work else [])]
+    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose)
+
+
 def positive(value: str) -> int:
     number = int(value)
     if number <= 0:
@@ -300,6 +308,15 @@ def parser() -> argparse.ArgumentParser:
                               "output goes to a log file and only PASS or FAIL with the first error is printed")
     command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
     command.set_defaults(func=queued)
+    command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "
+                                  "into artifacts/packages/PLATFORM (ARC-DEV-047; through the launch queue as an export)")
+    command.add_argument("platform", choices=("mac",), help="mac: Arcanum Steamwoven.app, ad-hoc signed")
+    command.add_argument("--ref", default="origin/main", help="the commit to package (default origin/main, fetched first)")
+    command.add_argument("--no-fetch", action="store_true", help="do not fetch origin main first")
+    command.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")
+    command.add_argument("--keep-work", action="store_true", help="keep the temporary source and export folder for a look")
+    command.add_argument("--verbose", action="store_true", help="stream the build's step lines here instead of the quiet default")
+    command.set_defaults(func=package_build)
     command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
     command.set_defaults(func=queue)

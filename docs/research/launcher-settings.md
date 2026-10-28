@@ -325,7 +325,8 @@ project yet).
 Task 1 is done as ARC-DEV-046 (the settings store, the locator and a viewer start without inputs from the stored
 folder; [viewer start](../rendering/terrain-viewer.md#start-without-inputs-arc-dev-046)). Tasks 2 and 3 are done as
 ARC-UI-014 ([launcher screen](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014), the options window's Rules
-line and the stored mode), except applying the display at start. Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
+line and the stored mode), except applying the display at start. Task 5 is started as ARC-DEV-047 ([packaging](../workflow/packaging.md)): the macOS package, its player folder
+`Arcanum Steamwoven Game` and the player instruction; the Windows build, the icon and the Windows smoke remain. Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
 
 ## Questions for the owner
 

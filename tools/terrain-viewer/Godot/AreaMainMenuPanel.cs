@@ -71,6 +71,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Layer = 4;
         _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = new Color(.06f, .05f, .04f, .96f), MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
+        _backdrop.AddChild(ViewerBuild.MakeLabel()); // ARC-DEV-047: which build this is
         _panel = new PanelContainer { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {

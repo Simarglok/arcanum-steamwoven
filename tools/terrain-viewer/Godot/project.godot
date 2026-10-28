@@ -3,6 +3,9 @@ config_version=5
 
 [application]
 config/name="Arcanum Terrain Viewer"
+config/name.steamwoven_package="Arcanum Steamwoven"
+config/use_custom_user_dir.steamwoven_package=true
+config/custom_user_dir_name.steamwoven_package="Arcanum Steamwoven Game"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
