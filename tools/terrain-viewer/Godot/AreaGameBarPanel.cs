@@ -7,9 +7,9 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-018: the original's in-game interface bars drawn with the game's own art: the top strip (Character, Logbook, Map,
 /// Inventory, Fate Points, Sleep) at the top of the window and the bottom strip (Combat, Skills, Spells, Schematics) at its bottom,
 /// each centred and scaled by the largest whole factor at which the original's 800×600 screen fits the window. A strip takes every
-/// press on it (the original's world view never reaches under the bars); its buttons follow <see cref="AreaGameBar"/>, and the hover
-/// name is written where the original's message window draws it. The bottom strip's other parts (message log, hot keys, recent
-/// actions, vials) are drawn as the art shows them and do nothing yet.
+/// press on it (the original's world view never reaches under the bars); its buttons follow <see cref="AreaGameBar"/>. The bottom
+/// strip holds the message window (<see cref="AreaMessageLogView"/>, ARC-UI-023), where the host writes the hover name; its other
+/// parts (hot keys, recent actions) are drawn as the art shows them and do nothing yet.
 /// </summary>
 public partial class AreaGameBarPanel : CanvasLayer
 {
@@ -17,14 +17,19 @@ public partial class AreaGameBarPanel : CanvasLayer
     private readonly Dictionary<AreaBarStrip, Control> _strips = [];
     private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
     private AreaGameBar _bar = new();
-    private AreaGameBarTexts _texts = AreaGameBarTexts.Project("not read");
-    private Label _hover = null!;
+    private AreaMessageLogView _messageLog = null!;
     // ARC-UI-024: the hovered critter's portrait and name in the message window (PA6).
     private TextureRect _hoverImage = null!;
     private Label _hoverName = null!;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
+    /// <summary>The pointer moved while the bars are shown: its place on the original's 800×600 screen (ARC-UI-023: the hover name is
+    /// written again on each move, and a move over the bottom strip gives the message window back to a pane, ML2/ML8).</summary>
+    public event Action<Vector2>? PointerMoved;
+
+    /// <summary>The message window of the bottom strip (ARC-UI-023).</summary>
+    public AreaMessageLogView MessageLog => _messageLog;
 
     /// <summary>The whole factor the bars are drawn at.</summary>
     public int Factor { get; private set; } = 1;
@@ -38,7 +43,7 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
-    internal string HoverTextForSelfTest => _hover.Visible ? _hover.Text : "";
+    internal string HoverTextForSelfTest => _messageLog.HoverTextForSelfTest;
     /// <summary>The message window's hovered portrait (its texture, null none) and name ("" none).</summary>
     internal (Texture2D? Image, string Name, Rect2 Rect) HoverPortraitForSelfTest =>
         (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverName.Visible ? _hoverName.Text : "", _hoverImage.GetGlobalRect());
@@ -71,6 +76,9 @@ public partial class AreaGameBarPanel : CanvasLayer
             _strips[strip] = root;
             AddChild(root);
         }
+        // Under the buttons: the message window's scroll areas lie between them (ARC-UI-023).
+        _messageLog = new AreaMessageLogView();
+        _strips[AreaBarStrip.Bottom].AddChild(_messageLog);
         foreach (var spec in AreaGameBarLayout.Buttons)
         {
             var (left, top, _, _) = AreaGameBarLayout.StripRect(spec.Strip);
@@ -82,13 +90,6 @@ public partial class AreaGameBarPanel : CanvasLayer
             _buttons[button] = rect;
             _strips[spec.Strip].AddChild(rect);
         }
-        var (x, y, w, h) = AreaGameBarLayout.HoverText;
-        _hover = new Label
-        {
-            Name = "HoverName", Position = new Vector2(x, y - AreaGameBarLayout.BottomTop), Size = new Vector2(w, h), MouseFilter = Control.MouseFilterEnum.Ignore,
-            HorizontalAlignment = HorizontalAlignment.Center, Visible = false, Modulate = new Color(1f, .93f, .75f),
-        };
-        _strips[AreaBarStrip.Bottom].AddChild(_hover);
         var (ix, iy) = AreaGameBarLayout.HoverImage;
         _hoverImage = new TextureRect
         {
@@ -110,12 +111,12 @@ public partial class AreaGameBarPanel : CanvasLayer
         Render();
     }
 
-    /// <summary>Gives the panel its textures (by interface art number, each art's frames), its texts and the bar state it draws.</summary>
-    public void Bind(IReadOnlyDictionary<int, ImageTexture[]> art, AreaGameBarTexts texts, AreaGameBar bar)
+    /// <summary>Gives the panel its textures (by interface art number, each art's frames), the bar state and the message log it draws.</summary>
+    public void Bind(IReadOnlyDictionary<int, ImageTexture[]> art, AreaGameBar bar, AreaMessageLog log)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        _texts = texts ?? throw new ArgumentNullException(nameof(texts));
         _bar = bar ?? throw new ArgumentNullException(nameof(bar));
+        _messageLog.Bind(log ?? throw new ArgumentNullException(nameof(log)), art);
         if (IsNodeReady()) Render();
     }
 
@@ -128,6 +129,15 @@ public partial class AreaGameBarPanel : CanvasLayer
         _hoverImage.Visible = portrait is not null;
         _hoverName.Text = portrait is null ? "" : name ?? "";
         _hoverName.Visible = portrait is not null && !string.IsNullOrEmpty(name);
+        // The original's hovered-object panel takes the message window: the log's texts give way while it is shown.
+        _messageLog.Visible = portrait is null;
+    }
+
+    public override void _Input(InputEvent input)
+    {
+        if (input is not InputEventMouseMotion motion || !Visible) return;
+        var strip = _strips[AreaBarStrip.Bottom];
+        PointerMoved?.Invoke(strip.GetGlobalTransform().AffineInverse() * motion.Position + new Vector2(0, AreaGameBarLayout.BottomTop));
     }
 
     private void ButtonInput(AreaBarButton button, TextureRect rect, InputEvent input)
@@ -145,7 +155,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (effect.Sounds.Count > 0 || effect.Act is not null || effect.HoverChanged) Effect?.Invoke(effect);
     }
 
-    /// <summary>Redraws the button frames and the hover name from the bar state.</summary>
+    /// <summary>Redraws the button frames from the bar state and the message window from the log.</summary>
     public void Render()
     {
         foreach (var strip in _strips)
@@ -162,8 +172,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             rect.Size = frames[frame].GetSize();
             rect.SetMeta(FrameMeta, frame);
         }
-        _hover.Visible = _bar.HoverMessage is not null;
-        _hover.Text = _bar.HoverMessage is { } message ? _texts.Text(message) : "";
+        _messageLog.Render();
     }
 
     private void Place()

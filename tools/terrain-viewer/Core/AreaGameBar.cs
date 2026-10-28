@@ -39,8 +39,6 @@ public static class AreaGameBarLayout
     public const int PressSound = 3000, ReleaseSound = 3001;
     /// <summary>The menu windows' text-only buttons (GB7): the pointer entering one plays 3026, a press 3027, a release nothing.</summary>
     public const int MenuHoverSound = 3026, MenuPressSound = 3027;
-    /// <summary>The message window's first text rectangle (0x5C6D60) on the screen, where the hover name is drawn (GB5).</summary>
-    public static readonly (int X, int Y, int Width, int Height) HoverText = (211, 503, 383, 82);
     /// <summary>ARC-UI-024: the PC's gauges' vial art (PA1): the fill art of health (18), health while poisoned (17) and fatigue
     /// (19), each 28 × 96, and the empty vial (20); the gauges draw frame 0 of each.</summary>
     public const int HealthVialArt = 18, PoisonedVialArt = 17, FatigueVialArt = 19, EmptyVialArt = 20;
@@ -307,8 +305,12 @@ public static class AreaInterfaceArt
 /// <summary>ARC-UI-018: what the bars draw from the game folder: their interface art and their hover names. Godot-free.</summary>
 public sealed record AreaGameBarContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, AreaGameBarTexts Texts, string Detail)
 {
-    /// <summary>True when every art number the bars draw read (<see cref="AreaGameBarLayout.ArtNumbers"/>).</summary>
-    public bool ArtReady => AreaGameBarLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);
+    /// <summary>Every interface art number read for the bars: theirs (<see cref="AreaGameBarLayout.ArtNumbers"/>) and the message
+    /// window's (<see cref="AreaMessageLayout.ArtNumbers"/>, ARC-UI-023).</summary>
+    public static IReadOnlyList<int> ArtNumbers { get; } = [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Distinct()];
+
+    /// <summary>True when every art number of <see cref="ArtNumbers"/> read.</summary>
+    public bool ArtReady => ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);
 
     /// <summary>No game folder (the self-test): no art, the project's texts.</summary>
     public static AreaGameBarContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaGameBarTexts.Project(reason), reason);
@@ -322,7 +324,7 @@ public sealed record AreaGameBarContent(IReadOnlyDictionary<int, AreaInterfaceAr
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaGameBarLayout.ArtNumbers);
+        var art = AreaInterfaceArt.Load(stack, ArtNumbers);
         var texts = AreaGameBarTexts.Load(stack);
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToArray();
         return new(art, texts, $"art {art.Count - failed.Length}/{art.Count} read{(failed.Length == 0 ? "" : " (" + string.Join("; ", failed) + ")")}; {texts.Detail}");

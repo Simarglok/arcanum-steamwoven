@@ -200,7 +200,7 @@ public sealed class HeroStateTests
         "{\"stat\":\"Beauty\",\"operator\":\"Add\",\"value\":1},{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":-1}," +
         "{\"stat\":\"MagickPoints\",\"operator\":\"Add\",\"value\":1}]}," +
         "\"genderEffect\":{\"effect\":330,\"modifiers\":[{\"stat\":\"Strength\",\"operator\":\"Add\",\"value\":-1}," +
-        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[],\"fatePoints\":0,\"armedFates\":0,\"background\":0}";
+        "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]},\"innateSkills\":[],\"fatePoints\":0,\"armedFates\":0,\"background\":0,\"backgroundDescription\":0}";
     internal const string KitInventory =
         ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
         "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
@@ -264,6 +264,7 @@ public sealed class HeroStateTests
         Fails("\"techPoints\":0}", "\"techPoints\":0,\"age\":20}", SnapshotDecodeFailure.UnknownField, "$.hero.stats.age");
         Fails(",\"alignment\":0", "", SnapshotDecodeFailure.MissingField, "$.hero.alignment");
         Fails(",\"background\":0", "", SnapshotDecodeFailure.MissingField, "$.hero.background");
+        Fails(",\"backgroundDescription\":0", "", SnapshotDecodeFailure.MissingField, "$.hero.backgroundDescription");
         Fails("\"level\":1,", "\"level\":1,\"xp\":0,", SnapshotDecodeFailure.UnknownField, "$.hero.xp");
         Fails("\"stat\":\"Beauty\"", "\"stat\":\"Age\"", SnapshotDecodeFailure.OutOfRange, "$.hero.raceEffect.modifiers[1].stat");
         Fails("\"operator\":\"Add\",\"value\":-1}", "\"operator\":\"Times\",\"value\":-1}", SnapshotDecodeFailure.OutOfRange,

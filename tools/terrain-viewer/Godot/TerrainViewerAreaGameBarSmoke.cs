@@ -72,7 +72,9 @@ public partial class TerrainViewerApp
             var panel = _gameBarPanel!;
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
 
-            // Hover, press and release one button, watching its frames and sounds.
+            // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
+            // log, drawn only 3 s after the last stored entry (the new game may have posted one).
+            _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
             var character = panel.ButtonCentreForSelfTest(AreaBarButton.Character);
             await Move(character);
             Require(panel.HoverTextForSelfTest == "Character Editor" && panel.FrameForSelfTest(AreaBarButton.Character) == 2,
@@ -129,6 +131,8 @@ public partial class TerrainViewerApp
             await Click(AreaBarButton.FatePoints);
             Require(_gameBarNotice?.Contains("not built") == true, "Fate Points: " + _gameBarNotice);
 
+            await RunAreaMessageLogSmokeAsync(panel);
+
             // A press on the top strip right of every button (its clock) is the bar's, not the world's.
             var strip = panel.StripRectForSelfTest(AreaBarStrip.Top);
             var clock = strip.Position + new Vector2(720, 20) * panel.Factor;
@@ -142,7 +146,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            _gameBarForSelfTest = false;
+            _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

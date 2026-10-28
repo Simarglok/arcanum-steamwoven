@@ -165,6 +165,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="ammunition-arc-world-066"></a>[Ammunition (ARC-WORLD-066)](ledger/items.md#ammunition-arc-world-066) | [Items and inventory](ledger/items.md) | AM1–AM7 |
 | <a id="backgrounds-arc-world-069"></a>[Backgrounds (ARC-WORLD-069)](ledger/character.md#backgrounds-arc-world-069) | [Character](ledger/character.md) | BG1–BG8 |
 | <a id="background-table-arc-data-044"></a>[Background table (ARC-DATA-044)](ledger/character.md#background-table-arc-data-044) | [Character](ledger/character.md) | BD1–BD8 |
+| <a id="hero-background-in-the-session-arc-world-097"></a>[Hero background in the session (ARC-WORLD-097)](ledger/character.md#hero-background-in-the-session-arc-world-097) | [Character](ledger/character.md) | BD9–BD11 |
 | <a id="portrait-catalogue-arc-data-045"></a>[Portrait catalogue (ARC-DATA-045)](ledger/character.md#portrait-catalogue-arc-data-045) | [Character](ledger/character.md) | PO1–PO10 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="ranged-hero-attack-arc-combat-015"></a>[Ranged hero attack (ARC-COMBAT-015)](ledger/combat.md#ranged-hero-attack-arc-combat-015) | [Combat](ledger/combat.md) | RH1–RH7 |
@@ -192,6 +193,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |
 | <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
+| <a id="message-log-arc-ui-023"></a>[Message log (ARC-UI-023)](ledger/ui-audio.md#message-log-arc-ui-023) | [Interface windows and audio](ledger/ui-audio.md) | ML1–ML8 |
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
 
 ## Decisions to revisit
