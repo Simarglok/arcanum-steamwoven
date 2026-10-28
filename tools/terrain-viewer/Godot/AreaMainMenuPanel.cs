@@ -9,6 +9,8 @@ namespace Arcanum.TerrainViewer;
 /// browsed hero with Previous, Next, Start and Back. The app owns the state and rebuilds the window after every change; the
 /// original's menu art and layout are not drawn. ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
 /// ARC-UI-013: the options window: the page's shown controls, each with its label, value and arrows, above the page and Done buttons.
+/// ARC-UI-030: the new-character window: gender, race and background rows with their arrows (the original's art buttons), the
+/// background's name and text from the game, Accept and Cancel.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -18,6 +20,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private VBoxContainer _buttons = null!;
     private VBoxContainer _controls = null!;
     private VBoxContainer _browser = null!;
+    private VBoxContainer _creation = null!;
+    private Label _creationText = null!;
     private Label _hero = null!;
     private Label _note = null!;
     private Label _notice = null!;
@@ -32,6 +36,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-018: a window button's interface sound: the pointer entering it (3026) or a press on it (3027), as the
     /// original's text-only menu buttons sound (ledger GB7).</summary>
     public event Action<int>? SoundRequested;
+    /// <summary>ARC-UI-030: a race, gender or background arrow of the new-character window.</summary>
+    public event Action<AreaNewCharacterButton>? CreationPressed;
+    /// <summary>ARC-UI-030: the new-character window's Accept.</summary>
+    public event Action? AcceptRequested;
     public bool IsOpen => Visible;
     internal Vector2? ButtonCentreForSelfTest(int index) =>
         _buttons.Visible && _buttons.GetChildren().OfType<Button>().ElementAtOrDefault(index) is { } button ? button.GetGlobalRect().GetCenter() : null;
@@ -45,6 +53,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ? _controls.GetChildren().OfType<HBoxContainer>().Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}").ToArray() : [];
     internal void ChangeForSelfTest(int index, int direction) => OptionChangeRequested?.Invoke(index, direction);
     internal void PressForSelfTest(int index) => ButtonPressed?.Invoke(index);
+    /// <summary>ARC-UI-030: the new-character window's rows as "label: value", then the background text.</summary>
+    internal IReadOnlyList<string> CreationForSelfTest => _creation.Visible
+        ? [.. _creation.GetChildren().OfType<HBoxContainer>().Where(row => row.Name.ToString().StartsWith("Creation", StringComparison.Ordinal))
+            .Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}"), _creationText.Text] : [];
+    internal void CreationPressForSelfTest(AreaNewCharacterButton button) => CreationPressed?.Invoke(button);
+    internal void AcceptForSelfTest() => AcceptRequested?.Invoke();
 
     public override void _Ready()
     {
@@ -76,10 +90,13 @@ public partial class AreaMainMenuPanel : CanvasLayer
             browse.AddChild(button);
         }
         _browser.AddChild(_hero); _browser.AddChild(browse);
+        _creation = new VBoxContainer { Name = "NewCharacter" };
+        _creationText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.1f, .1f, .1f), CustomMinimumSize = new Vector2(320, 90) };
+        _creation.AddChild(_creationText);
         _note = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.3f, .3f, .3f) };
         _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
         _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        foreach (var control in new Control[] { _header, _controls, _buttons, _browser, _notice, _note, _hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _header, _controls, _buttons, _browser, _creation, _notice, _note, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -90,11 +107,13 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ArgumentNullException.ThrowIfNull(menu);
         Show();
         var browser = menu.Window == AreaMenuWindow.PickCharacter;
+        var creating = menu.Window == AreaMenuWindow.NewCharacter && menu.Creation is not null && !menu.QuitPending;
         _header.Text = menu.QuitPending ? menu.Texts.Text(AreaMainMenuTexts.QuitQuestion) : menu.Window switch
         {
             AreaMenuWindow.Main => "Main menu", AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => "Game menu",
             AreaMenuWindow.SinglePlayer => menu.Texts.Text(10), AreaMenuWindow.NewGame => menu.Texts.Text(50),
-            AreaMenuWindow.Options => menu.Texts.Text(12) + ": " + menu.Texts.Text(4000 + (int)menu.Page), _ => menu.Texts.Text(420),
+            AreaMenuWindow.Options => menu.Texts.Text(12) + ": " + menu.Texts.Text(4000 + (int)menu.Page),
+            AreaMenuWindow.NewCharacter => menu.Texts.Text(421), _ => menu.Texts.Text(420),
         };
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         RenderControls(menu);
@@ -127,13 +146,16 @@ public partial class AreaMainMenuPanel : CanvasLayer
             button.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
             _buttons.AddChild(button);
         }
-        _buttons.Visible = !browser;
+        RenderCreation(menu, creating);
+        _buttons.Visible = !browser && !creating;
         _browser.Visible = browser;
         _hero.Text = browser ? hero : "";
         var hidden = menu.HiddenNotes;
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
+                : creating ? "the arrows change the gender, race and background (a race or gender change clears the background); Accept begins a new game "
+                    + "as this character, Escape or Cancel goes back; race and gender names are the project's, the background's text the game's"
                 : options && !menu.QuitPending ? "Up/Down choose a control, the arrows or Left/Right change its value at once (it is saved as a user preference, not in a save); "
                     + "a page's letter shows it, Done closes the window" + (menu.Root == AreaMenuWindow.Main ? "" : " and the menu, as the O key does")
                     + "; Escape does nothing here, as in the original; options texts "
@@ -144,6 +166,58 @@ public partial class AreaMainMenuPanel : CanvasLayer
             + " | PROJECT window over the original's menu windows; labels "
             + (menu.Texts.FromGame ? "from the game's MainMenu.mes" : "are the project's (" + menu.Texts.Detail + ")") + "; original art and layout NOT_VERIFIED";
         ResizePanel();
+    }
+
+    /// <summary>ARC-UI-030: the new-character window's rows (gender, race, background) with their arrows, the background's text, Accept
+    /// and Cancel; the controller's focus row is highlighted.</summary>
+    private void RenderCreation(AreaMainMenu? menu, bool creating)
+    {
+        // The background text stays the window's own child (never orphaned); the rows and buttons are rebuilt around it.
+        foreach (var child in _creation.GetChildren()) { if (child == _creationText) continue; _creation.RemoveChild(child); child.QueueFree(); }
+        _creation.Visible = creating;
+        if (!creating || menu?.Creation is not { } creation) return;
+        var text = creation.BackgroundText();
+        var rows = new (string Label, string Value, AreaNewCharacterButton Previous, AreaNewCharacterButton Next)[]
+        {
+            ("Gender", creation.Gender.ToString(), AreaNewCharacterButton.GenderPrevious, AreaNewCharacterButton.GenderNext),
+            ("Race", creation.Race.ToString(), AreaNewCharacterButton.RacePrevious, AreaNewCharacterButton.RaceNext),
+            ("Background", (text?.Name is { Length: > 0 } title ? title : "?") + $" ({creation.Background})", AreaNewCharacterButton.BackgroundPrevious,
+                AreaNewCharacterButton.BackgroundNext),
+        };
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var (label, value, previous, next) = rows[i];
+            var row = new HBoxContainer { Name = "Creation" + label, Modulate = i == menu.Focus ? new Color(1f, .85f, .6f) : Colors.White };
+            row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(120, 30), Modulate = new Color(.15f, .1f, .05f) });
+            var valueLabel = new Label { Text = value, CustomMinimumSize = new Vector2(250, 30), HorizontalAlignment = HorizontalAlignment.Center,
+                Modulate = new Color(.1f, .1f, .1f), ClipText = true };
+            foreach (var (name, arrow, button) in new[] { ("Less", "<", previous), ("More", ">", next) })
+            {
+                var press = new Button { Name = name, Text = arrow, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(34, 30) };
+                press.Pressed += () => CreationPressed?.Invoke(button);
+                press.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
+                press.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
+                if (name == "Less") { row.AddChild(press); row.AddChild(valueLabel); }
+                else row.AddChild(press);
+            }
+            _creation.AddChild(row);
+        }
+        _creationText.Text = text is { } shown ? shown.Body : "(the background table did not read)";
+        _creation.MoveChild(_creationText, _creation.GetChildCount() - 1);
+        var actions = new HBoxContainer { Name = "Actions" };
+        foreach (var (name, label, row, action) in new (string, string, int, Action)[]
+        {
+            ("Accept", "Accept", 3, () => AcceptRequested?.Invoke()), ("Cancel", "Cancel", 4, () => BackRequested?.Invoke()),
+        })
+        {
+            var button = new Button { Name = name, Text = label, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(130, 34),
+                Modulate = row == menu.Focus ? new Color(1f, .85f, .6f) : Colors.White };
+            button.Pressed += action;
+            button.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
+            button.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
+            actions.AddChild(button);
+        }
+        _creation.AddChild(actions);
     }
 
     /// <summary>ARC-UI-013: the options window's controls of the shown page (none in other windows).</summary>
@@ -178,6 +252,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Hide();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
+        RenderCreation(null, false);
         GetViewport().GuiReleaseFocus();
     }
 

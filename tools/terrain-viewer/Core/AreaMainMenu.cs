@@ -1,11 +1,13 @@
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Simulation.Character;
 
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>The original main-menu windows this menu models, by their window type in the original's window table (ledger MM2;
-/// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2; ARC-UI-013: the options window 6, OP1).</summary>
-public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, Options = 6, NewGame = 11, PickCharacter = 13 }
+/// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2; ARC-UI-013: the options window 6, OP1; ARC-UI-030:
+/// the new-character window 12, NW1).</summary>
+public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, Options = 6, NewGame = 11, NewCharacter = 12, PickCharacter = 13 }
 
 /// <summary>What a menu button does in Steamwoven.</summary>
 public enum AreaMenuRole
@@ -27,6 +29,8 @@ public enum AreaMenuRole
     OptionsPage,
     /// <summary>ARC-UI-013: the options window's Done: back to the main menu, or from play closes the menu (OP6).</summary>
     OptionsDone,
+    /// <summary>ARC-UI-030: "New Character": the host makes the new character and opens its window (<see cref="AreaMainMenu.OpenNewCharacter"/>).</summary>
+    NewCharacter,
     /// <summary>A button the original has whose function Steamwoven does not have yet; hidden (FR-UI-001).</summary>
     Unavailable,
 }
@@ -47,6 +51,10 @@ public enum AreaMenuCommandKind
     QuitToMenu,
     /// <summary>ARC-UI-012: close the in-play menu.</summary>
     Continue,
+    /// <summary>ARC-UI-030: make the new character (the original's window 12 opening, 0x5446F0) and open its window with it.</summary>
+    OpenNewCharacter,
+    /// <summary>ARC-UI-030: start a new game as the new character the window holds (<see cref="AreaMainMenu.Creation"/>).</summary>
+    StartNewCharacter,
     /// <summary>ARC-UI-013: set <see cref="AreaMenuCommand.Option"/> to <see cref="AreaMenuCommand.Value"/> (the original's setter runs at
     /// once, OP3); the host applies it and gives the window the values it then has (<see cref="AreaMainMenu.SetOptions"/>).</summary>
     ChangeOption,
@@ -151,7 +159,7 @@ public sealed class AreaMainMenuTexts
 /// ARC-UI-011 main menu state, Godot-free: the original's main, single player and new game windows and the pre-made hero browser
 /// (ledger MM1–MM7). A button opens a window over the current one (a back stack), Cancel and Escape go back; the root window ignores
 /// Escape, as the original's does the first time it opens (later openings, from play, exit the game on Escape). A button's hotkey letter activates
-/// it. Buttons whose function Steamwoven lacks (network play, credits, intro movies, the character editor) are hidden and
+/// it. Buttons whose function Steamwoven lacks (network play, credits, intro movies) are hidden and
 /// named in the window's note (FR-UI-001: the menu shows only what the profile supports). "Pick Character" needs the start map
 /// (the original's new game teleports the PC there); the host says whether the shown map is it. The pre-made browser starts at the
 /// first hero and cycles through all twelve (the original: 1..count-1, twelve heroes when the female heroes' art exists). The host
@@ -165,13 +173,18 @@ public sealed class AreaMainMenuTexts
 /// a slider stops at its ends), the host applying each change. Done goes back to the main menu, or from play closes the menu; Escape
 /// does nothing there, and from play the O key closes the menu (OP6–OP7). The page and Done letters act, as in the other windows,
 /// though the original's window ignores them (an original bug, OP7). Controls Steamwoven lacks are hidden with the reason.
+/// ARC-UI-030: "New Character" (like "Pick Character", only where a new game can start) asks the host to make the new character
+/// (<see cref="AreaNewCharacter"/>) and opens its window (window 12, ledger NW1): gender, race and background buttons, Accept and
+/// Cancel; it has no letters (its buttons are art only), Escape and Cancel go back and drop the character, and Accept starts the game
+/// at once, as the name, portrait, character editor and opening shop the original's Accept leads to are not built.
 /// </summary>
 public sealed class AreaMainMenu
 {
     public const string NoNetworkPlay = "network play is not built";
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
-    public const string NoEditor = "the character editor is not built";
+    /// <summary>ARC-UI-030: what the new-character window's Accept leads to in the original and Steamwoven does not have yet.</summary>
+    public const string NoEditor = "the name, the portrait, the character editor and the opening shop are not built: Accept starts the game at once";
     /// <summary>The quit box's fixed letters (the original's yes/no box, SF3).</summary>
     public const char YesLetter = 'Y', NoLetter = 'N';
     private readonly List<AreaMenuWindow> _back = [];
@@ -218,7 +231,8 @@ public sealed class AreaMainMenu
         AreaMenuWindow.NewGame =>
         [
             NewGameRefusal is null ? new(420, AreaMenuRole.Open, AreaMenuWindow.PickCharacter) : new(420, AreaMenuRole.Unavailable, Unavailable: NewGameRefusal),
-            new(421, AreaMenuRole.Unavailable, Unavailable: NoEditor), new(422, AreaMenuRole.Back),
+            NewGameRefusal is null ? new(421, AreaMenuRole.NewCharacter) : new(421, AreaMenuRole.Unavailable, Unavailable: NewGameRefusal),
+            new(422, AreaMenuRole.Back),
         ],
         AreaMenuWindow.InPlay =>
         [
@@ -239,8 +253,9 @@ public sealed class AreaMainMenu
     public IReadOnlyList<AreaMenuButton> Shown => Buttons.Where(button => button.Shown).ToArray();
 
     /// <summary>The hidden buttons of the window with the reason, for its note; in the options window also the page's hidden controls
-    /// and the values a shown control does not offer.</summary>
+    /// and the values a shown control does not offer; in the new-character window what its Accept skips.</summary>
     public IReadOnlyList<string> HiddenNotes => Buttons.Where(button => !button.Shown).Select(button => $"{Texts.Text(button.Message)}: {button.Unavailable}")
+        .Concat(Window == AreaMenuWindow.NewCharacter ? [NoEditor] : [])
         .Concat(Window != AreaMenuWindow.Options ? [] : AreaOptionTable.Page(Page)
             .Where(control => !control.Shown || control.LimitNote is not null)
             .Select(control => $"{OptionsTexts.Label(control)}: {control.Unavailable ?? control.LimitNote}"))
@@ -295,6 +310,7 @@ public sealed class AreaMainMenu
             case AreaMenuRole.OptionsDone: if (Root != AreaMenuWindow.Main) return new(AreaMenuCommandKind.Continue); Back(); return AreaMenuCommand.Nothing;
             case AreaMenuRole.Open: Open(button.Target!.Value); return AreaMenuCommand.Nothing;
             case AreaMenuRole.Back: Back(); return AreaMenuCommand.Nothing;
+            case AreaMenuRole.NewCharacter: return new(AreaMenuCommandKind.OpenNewCharacter);
             case AreaMenuRole.LoadGame: return new(AreaMenuCommandKind.LoadGame);
             case AreaMenuRole.LastSave: return new(AreaMenuCommandKind.LastSave);
             case AreaMenuRole.Exit: return new(AreaMenuCommandKind.Exit);
@@ -337,6 +353,8 @@ public sealed class AreaMainMenu
     public bool Back()
     {
         if (QuitPending || _back.Count == 0) return false;
+        // ARC-UI-030: leaving the new-character window drops its character (the original's next opening makes a new one, 0x5446F0).
+        if (Window == AreaMenuWindow.NewCharacter) Creation = null;
         Window = _back[^1];
         _back.RemoveAt(_back.Count - 1);
         Focus = Shown.Count > 0 ? 0 : -1;
@@ -353,7 +371,7 @@ public sealed class AreaMainMenu
             if (all > 0 && direction != 0) OptionsFocus = OptionsFocus < 0 ? 0 : ((OptionsFocus + Math.Sign(direction)) % all + all) % all;
             return;
         }
-        var count = Window == AreaMenuWindow.PickCharacter || QuitPending ? 0 : Shown.Count;
+        var count = Window == AreaMenuWindow.PickCharacter || QuitPending ? 0 : Window == AreaMenuWindow.NewCharacter ? CreationRows : Shown.Count;
         if (count == 0 || direction == 0) return;
         Focus = Focus < 0 ? 0 : ((Focus + Math.Sign(direction)) % count + count) % count;
     }
@@ -364,6 +382,7 @@ public sealed class AreaMainMenu
     {
         if (QuitPending) return Answer(true);
         if (Window == AreaMenuWindow.PickCharacter) return Start();
+        if (Window == AreaMenuWindow.NewCharacter) return ConfirmCreation();
         if (Window != AreaMenuWindow.Options) return Activate(Focus);
         var controls = Controls.Count;
         return OptionsFocus < 0 ? AreaMenuCommand.Nothing : OptionsFocus < controls ? Change(OptionsFocus, 1) : Activate(OptionsFocus - controls);
@@ -382,6 +401,52 @@ public sealed class AreaMainMenu
     public AreaMenuCommand Start() => Window == AreaMenuWindow.PickCharacter && NewGameRefusal is null
         ? new(AreaMenuCommandKind.StartNewGame, Hero) : AreaMenuCommand.Nothing;
 
+    /// <summary>ARC-UI-030: the new character the window holds (null outside it).</summary>
+    public AreaNewCharacter? Creation { get; private set; }
+
+    /// <summary>ARC-UI-030: the controller's rows in the new-character window: gender, race, background, Accept, Cancel.</summary>
+    public const int CreationRows = 5;
+
+    /// <summary>ARC-UI-030: opens the new-character window with the new character the host made (from the new game window only).</summary>
+    public void OpenNewCharacter(AreaNewCharacter creation)
+    {
+        ArgumentNullException.ThrowIfNull(creation);
+        if (QuitPending || Window != AreaMenuWindow.NewGame || NewGameRefusal is not null) return;
+        Creation = creation;
+        Open(AreaMenuWindow.NewCharacter);
+    }
+
+    /// <summary>ARC-UI-030: a race, gender or background button of the new-character window under the rule setting
+    /// <paramref name="rules"/> (NW4); a refusal is the window's notice.</summary>
+    public void PressCreation(AreaNewCharacterButton button, CharacterCreationRuleProfile rules)
+    {
+        if (QuitPending || Window != AreaMenuWindow.NewCharacter || Creation is not { } creation) return;
+        Notice = creation.Press(button, rules);
+    }
+
+    /// <summary>ARC-UI-030: the new-character window's Accept: a new game as the new character (the name, editor and shop the
+    /// original's Accept leads to are not built, <see cref="NoEditor"/>).</summary>
+    public AreaMenuCommand Accept() => Window == AreaMenuWindow.NewCharacter && Creation is not null && NewGameRefusal is null && !QuitPending
+        ? new(AreaMenuCommandKind.StartNewCharacter) : AreaMenuCommand.Nothing;
+
+    /// <summary>ARC-UI-030: the controller's Confirm in the new-character window: a row's next button (gender, race, background),
+    /// Accept or Cancel.</summary>
+    private AreaMenuCommand ConfirmCreation()
+    {
+        switch (Focus)
+        {
+            case 0: PressCreation(AreaNewCharacterButton.GenderNext, Rules); return AreaMenuCommand.Nothing;
+            case 1: PressCreation(AreaNewCharacterButton.RaceNext, Rules); return AreaMenuCommand.Nothing;
+            case 2: PressCreation(AreaNewCharacterButton.BackgroundNext, Rules); return AreaMenuCommand.Nothing;
+            case 3: return Accept();
+            case 4: Back(); return AreaMenuCommand.Nothing;
+            default: return AreaMenuCommand.Nothing;
+        }
+    }
+
+    /// <summary>ARC-UI-030: the rule setting the controller's presses use (the host keeps it in step with its setting).</summary>
+    public CharacterCreationRuleProfile Rules { get; set; } = CharacterCreationRuleProfile.Steamwoven;
+
     /// <summary>The "Last Save" outcome with no save: the original returns to the window it came from without a message (MM4);
     /// Steamwoven also names it in the note.</summary>
     public void NoSave() => Notice = "no save to continue from";
@@ -397,6 +462,6 @@ public sealed class AreaMainMenu
         if (target == AreaMenuWindow.PickCharacter) Hero = 0;
         // The original's options window opens at its Game page (OP4).
         if (target == AreaMenuWindow.Options) { Page = AreaOptionsPage.Game; OptionsFocus = Controls.Count > 0 ? 0 : -1; }
-        Focus = Shown.Count > 0 ? 0 : -1;
+        Focus = target == AreaMenuWindow.NewCharacter ? 0 : Shown.Count > 0 ? 0 : -1;
     }
 }

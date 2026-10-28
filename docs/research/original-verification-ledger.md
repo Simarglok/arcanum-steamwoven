@@ -168,6 +168,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="background-table-arc-data-044"></a>[Background table (ARC-DATA-044)](ledger/character.md#background-table-arc-data-044) | [Character](ledger/character.md) | BD1–BD8 |
 | <a id="hero-background-in-the-session-arc-world-097"></a>[Hero background in the session (ARC-WORLD-097)](ledger/character.md#hero-background-in-the-session-arc-world-097) | [Character](ledger/character.md) | BD9–BD11 |
 | <a id="portrait-catalogue-arc-data-045"></a>[Portrait catalogue (ARC-DATA-045)](ledger/character.md#portrait-catalogue-arc-data-045) | [Character](ledger/character.md) | PO1–PO10 |
+| <a id="new-character-window-arc-ui-030"></a>[New-character window (ARC-UI-030)](ledger/character.md#new-character-window-arc-ui-030) | [Character](ledger/character.md) | NW1–NW6 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="ranged-hero-attack-arc-combat-015"></a>[Ranged hero attack (ARC-COMBAT-015)](ledger/combat.md#ranged-hero-attack-arc-combat-015) | [Combat](ledger/combat.md) | RH1–RH7 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |
@@ -198,6 +199,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
 | <a id="message-log-arc-ui-023"></a>[Message log (ARC-UI-023)](ledger/ui-audio.md#message-log-arc-ui-023) | [Interface windows and audio](ledger/ui-audio.md) | ML1–ML8 |
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
+| <a id="npc-ai-turn-based-host-tail-arc-world-099"></a>[NPC AI turn-based host tail (ARC-WORLD-099)](ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099) | [NPC AI](ledger/npc-ai.md) | TH7–TH10 |
 
 ## Decisions to revisit
 

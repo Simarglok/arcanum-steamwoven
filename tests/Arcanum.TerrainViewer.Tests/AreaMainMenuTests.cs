@@ -28,7 +28,7 @@ public sealed class AreaMainMenuTests
         menu.Activate(0);
         Assert.AreEqual(AreaMenuWindow.NewGame, menu.Window);
         CollectionAssert.AreEqual(new[] { 420, 421, 422 }, menu.Buttons.Select(button => button.Message).ToArray(), "MM2 window 11");
-        CollectionAssert.AreEqual(new[] { "Pick Character", "Cancel" }, Labels(menu));
+        CollectionAssert.AreEqual(new[] { "Pick Character", "New Character", "Cancel" }, Labels(menu));
         CollectionAssert.AreEqual(new[] { AreaMenuWindow.Main, AreaMenuWindow.SinglePlayer }, menu.BackStack.ToArray());
     }
 
@@ -104,7 +104,7 @@ public sealed class AreaMainMenuTests
         var menu = Menu("not the start map");
         menu.Type('s'); menu.Type('n');
         CollectionAssert.AreEqual(new[] { "Cancel" }, Labels(menu));
-        CollectionAssert.AreEqual(new[] { "Pick Character: not the start map", "New Character: " + AreaMainMenu.NoEditor }, menu.HiddenNotes.ToArray());
+        CollectionAssert.AreEqual(new[] { "Pick Character: not the start map", "New Character: not the start map" }, menu.HiddenNotes.ToArray());
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('p'));
         Assert.AreEqual(AreaMenuWindow.NewGame, menu.Window);
     }

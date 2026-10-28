@@ -153,8 +153,8 @@ which passes the turn on; Space off ends the round and the event pump recovers t
 
 - **AI.** With the map's AI host the viewer runs an NPC's subturn hook (`RunAiSubturnHook`, 0x4B7010, ARC-WORLD-084,
   [AI scheduler](ai-scheduler.md)) at its subturn start and after each of its runs ([AI viewer host](ai-host.md#turn-based-round-arc-world-095),
-  ARC-WORLD-095); without one (automated runs keep the AI off) its subturn ends at once. The end-of-combat script at
-  `SubturnEnded` does not run, and A9's second start runs the hook once. An NPC never joins a round on its own (the AI's insert).
+  ARC-WORLD-095); without one (automated runs keep the AI off) its subturn ends at once. With the host an NPC's `SubturnEnded`
+  asks its end-combat script (ARC-WORLD-099), which runs no SCR yet (no AI-point scripts), and A9's second start runs the hook once. An NPC never joins a round on its own (the AI's insert).
 - **Charges not wired.** Reading, repairing, assembling and the other inventory and window actions charge nothing in a
   round; the get-up (A3) has no host; a reach-1 attack's adjacent move is charged step by step as the approach walks, not
   as one estimate; the path cost preview and the turn-based cursor are not shown (the HUD is alpha-gap N4).
