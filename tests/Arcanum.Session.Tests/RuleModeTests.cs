@@ -59,6 +59,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Written, Arcanum.Data.Written.WrittenRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Navigation.Name);
             Assert.AreSame(rules.Navigation, Arcanum.Simulation.Navigation.NavigationRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Creation.Name);
+            Assert.AreSame(rules.Creation, Arcanum.Simulation.Character.CharacterCreationRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
@@ -90,6 +92,9 @@ public sealed class RuleModeTests
         // ARC-WORLD-087: WEA1 is a Steamwoven fix with an Original switch.
         Assert.IsTrue(GameRules.Original.Items.EncumbranceLagsOnStackMerge);
         Assert.IsFalse(GameRules.Steamwoven.Items.EncumbranceLagsOnStackMerge);
+        // ARC-UI-030: NW4 is a Steamwoven fix with an Original switch.
+        Assert.IsTrue(GameRules.Original.Creation.RefusedGenderClearsBackground);
+        Assert.IsFalse(GameRules.Steamwoven.Creation.RefusedGenderClearsBackground);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

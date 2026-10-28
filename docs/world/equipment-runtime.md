@@ -160,7 +160,8 @@ snapshot schema 54; 0 for none and for a pre-made hero, whose field is not read 
   its number (0x4EA2E0), in one revision; `NoChange` when both numbers are 0 and no entry has that cause. Refused without a hero
   (`InvalidHero`), on a stale version and with the other refusals of an effect change (the revision).
 
-The creation screen (N10b, not built) clears and then sets on each background button, and clears on a race or gender change (BD10),
+The creation screen (N10b; its window is ARC-UI-030, [viewer](../rendering/terrain-viewer.md#new-character-window-arc-ui-030)) clears
+and then sets on each background button, and clears on a race or gender change (BD10; ledger NW4, NW5),
 so a choice pressed again keeps one entry. The background's effect line enters the effect list like any other entry; only the changes
 the session models (stats, maxima, reactions) change values. Not modelled: a second writer of the two fields that adds no effect
 (BD11), the background of any object but the hero.

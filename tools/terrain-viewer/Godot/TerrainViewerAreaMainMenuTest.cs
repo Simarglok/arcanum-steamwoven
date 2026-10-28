@@ -69,9 +69,32 @@ public partial class TerrainViewerApp
     /// <summary>A synthetic pre-made hero: the premade's prototype, a half-elf level 1 with 385 gold and one kit item.</summary>
     private static AreaHeroLoad SyntheticHero(AreaPremadeHero premade)
     {
+        if (premade.BasicPrototype == AreaStartingHero.GenericPrototype) return SyntheticNewCharacter();
         var hero = new SessionHeroDefinition(premade.BasicPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset, CharacterRace.HalfElf,
             CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, [new SessionHeroKitItem(new(SessionItemType.Weapon, 4027, 6000, 6001))]);
         return new(AreaHeroStatus.Ready, premade, hero, 2350 + premade.Index, 0, null, "synthetic");
+    }
+
+    /// <summary>ARC-UI-030: a synthetic new-character start: the generic human man, race effects that raise constitution by the race
+    /// number, background block 0 for everyone (effect 86, +1 strength) and block 1 for a dwarf man.</summary>
+    private static AreaHeroLoad SyntheticNewCharacter()
+    {
+        static Arcanum.Data.Messages.MesFile Mes(string text) =>
+            Arcanum.Data.Messages.MesFile.Parse(System.Text.Encoding.Latin1.GetBytes(text)).File ?? throw new InvalidOperationException("AREA main menu: synthetic MES");
+        static Arcanum.Data.Characters.EffectRule? Effect(int number) => number switch
+        {
+            >= 64 and <= 71 => new(number, true, [new(Arcanum.Data.Characters.EffectAttributeKind.Stat, 2, Arcanum.Data.Characters.EffectChangeOperator.Add, number - 64)]),
+            86 => new(number, true, [new(Arcanum.Data.Characters.EffectAttributeKind.Stat, 0, Arcanum.Data.Characters.EffectChangeOperator.Add, 1)]),
+            _ => null,
+        };
+        var read = new Arcanum.Data.Characters.PremadeHero(AreaStartingHero.GenericPrototype, AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset,
+            0, 1, 0, 20, 1005, 0, 0, Effect(64)!, null, 0, 0, []);
+        return new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.NewCharacter, AreaStartingHero.Definition(read, out _), null, 0,
+            new(Arcanum.Data.Characters.PremadeHeroFailure.None, read), "synthetic", Effects: Effect)
+        {
+            Backgrounds = Arcanum.Data.Characters.BackgroundTable.Create(Mes("{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{86}{12}{DWM}{13}{0}{14}{}"),
+                Mes("{1000}{Default\nplain}{1001}{Stout\nstub}")),
+        };
     }
 
     internal string AreaMainMenuForSelfTest()
@@ -114,8 +137,21 @@ public partial class TerrainViewerApp
 
             // New game: the browser cycles through the twelve heroes; Start begins a new game with the browsed one.
             Letter('s'); Letter('n');
-            Require(_mainMenu!.Window == AreaMenuWindow.NewGame && Buttons().SequenceEqual(["Pick Character  (P)", "Cancel  (X)"])
-                && _mainMenuPanel.NoteForSelfTest.Contains("New Character: ", StringComparison.Ordinal), "new game buttons: " + string.Join("|", Buttons()));
+            Require(_mainMenu!.Window == AreaMenuWindow.NewGame && Buttons().SequenceEqual(["Pick Character  (P)", "New Character  (N)", "Cancel  (X)"]),
+                "new game buttons: " + string.Join("|", Buttons()));
+            // ARC-UI-030: New Character opens its window with the generic human man; its arrows change him; Escape goes back.
+            Letter('n');
+            Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter && Buttons().Length == 0
+                && _mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Human", "Background: Default (0)", "plain"]),
+                "the new-character window: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
+            Require(_mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Dwarf", "Background: Stout (1)", "stub"]),
+                "race and background arrows: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
+            Letter('p');
+            Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter, "the new-character window takes no letters");
+            InventoryKey(Key.Escape);
+            Require(_mainMenu!.Window == AreaMenuWindow.NewGame && _mainMenu.Creation is null, "Escape went back and dropped the character");
             Letter('p');
             Require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && _mainMenuPanel.HeroForSelfTest.StartsWith("1/12 halfling-male\n", StringComparison.Ordinal),
                 "the browser starts at the first hero: " + _mainMenuPanel.HeroForSelfTest);
@@ -152,6 +188,21 @@ public partial class TerrainViewerApp
             Letter('l'); InventoryKey(Key.Enter);
             Require(!SaveListOpen && !MainMenuOpen && _mainMenu is null && !ReferenceEquals(beforeLoad, _areaSession) && !WorldModal, "a load from the window ended the menu");
 
+            // ARC-UI-030: Accept in the new-character window begins a new game as that character, its background set with its effect.
+            OpenMainMenu(AreaMainMenuTexts.Project("self-test"));
+            Letter('s'); Letter('n'); Letter('n');
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
+            var beforeCreation = _areaSession;
+            _mainMenuPanel.AcceptForSelfTest();
+            var made = _areaSession!.QueryHero();
+            Require(!MainMenuOpen && _mainMenu is null && !ReferenceEquals(beforeCreation, _areaSession) && made?.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf
+                && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
+                && _areaSession.QueryHeroBackground() == 1 && _areaSession.QueryHeroBackgroundDescription() == 1001
+                && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Number == 86 && e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
+                && _quickSaveStatus == "new game as a new Dwarf Male character", "Accept began a new game as the new character: " + _quickSaveStatus);
+            Require(_menuTablesHero == AreaStartingHero.NewCharacter, "the new character's tables were adopted");
+
             // A controller: up to Exit Game (wrapping) and confirm. "Exit Game" exits (here only counted).
             OpenMainMenu(AreaMainMenuTexts.Project("self-test"));
             static IntentFrame Pad(bool confirm, int direction) => new(default, default, confirm, false, false, false, false, false, false,
@@ -161,7 +212,7 @@ public partial class TerrainViewerApp
             Require(_mainMenuExitsForSelfTest == 1, "Exit Game exited");
             return "opened modal by --main-menu with the offered buttons, letters and Escape (not at the root), Last Save without a save stays, " +
                 "browser cycles, Start begins a new game as the hero, Last Save loads the newest, Load Game window over the waiting menu (back unused, ends on a load), " +
-                "controller Exit";
+                "New Character window (arrows, Escape back, Accept starts with the background and its effect), controller Exit";
         }
         finally
         {

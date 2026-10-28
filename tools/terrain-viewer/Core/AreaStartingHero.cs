@@ -88,6 +88,14 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// <summary>ARC-UI-025: each kit item's use facts under its kit entity, by kit index; null for a prototype that does not read or is no
     /// item.</summary>
     public IReadOnlyList<AreaItemUseFacts?>? KitUse { get; init; }
+
+    /// <summary>ARC-UI-030: for <see cref="AreaStartingHero.NewCharacter"/>, the background table the new-character screen browses
+    /// (<see cref="BackgroundTable"/>, ARC-DATA-044); null for a pre-made hero or when it does not read
+    /// (<see cref="BackgroundsDetail"/> says why).</summary>
+    public BackgroundTable? Backgrounds { get; init; }
+
+    /// <summary>ARC-UI-030: why <see cref="Backgrounds"/> is null for the new character, else null.</summary>
+    public string? BackgroundsDetail { get; init; }
 }
 
 /// <summary>
@@ -102,6 +110,8 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 public static class AreaStartingHero
 {
     public const int FirstPremadePrototype = 16067;
+    /// <summary>ARC-UI-030: the generic PC prototype the new-character screen makes its PC from (human, male, background 0; ledger NW1).</summary>
+    public const int GenericPrototype = 16066;
     /// <summary>Main-menu message of the first hero's global flag; hero <c>i</c> reads message <c>551 + i</c> (the original
     /// 0x545B60, checked in the executable).</summary>
     public const int FirstFlagMessage = 551;
@@ -117,6 +127,10 @@ public static class AreaStartingHero
         new("elf-male", 16071), new("human-male", 16072), new("half-orc-male", 16073), new("dwarf-male", 16074),
         new("human-female", 16075), new("elf-female", 16076), new("half-orc-female", 16077), new("half-elf-female", 16078),
     });
+
+    /// <summary>ARC-UI-030: the new character's start: the generic prototype, read as a pre-made hero is (no main-menu flag, no kit);
+    /// the screen then sets its race, gender and background (<see cref="NewCharacterHero"/>). Not one of <see cref="Premade"/>.</summary>
+    public static AreaPremadeHero NewCharacter { get; } = new("new-character", GenericPrototype);
 
     /// <summary>The hero of that name (ordinal, exact), or null.</summary>
     public static AreaPremadeHero? Find(string name) => Premade.FirstOrDefault(hero => string.Equals(hero.Name, name, StringComparison.Ordinal));
@@ -164,7 +178,19 @@ public static class AreaStartingHero
         var read = PremadeHeroReader.Read(new(prototypes.Read, effects, sources, buy), hero.BasicPrototype);
         if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
             return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");
-        if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
+        // ARC-UI-030: the new character has no main-menu flag (only the pre-made step sets one, 0x545B60) and brings the background
+        // table its screen browses, read at game start from the base sources (BD1).
+        int? flag = null;
+        BackgroundTable? backgrounds = null;
+        string? backgroundsDetail = null;
+        if (hero.BasicPrototype == GenericPrototype)
+        {
+            var table = BackgroundTable.Load(stack);
+            backgrounds = table.Table;
+            if (backgrounds is null) backgroundsDetail = $"{table.Status} {table.File}";
+        }
+        else if (Flag(menu, hero) is not { } premadeFlag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
+        else flag = premadeFlag;
         var definition = Definition(read.Hero, out var dropped);
         if (KitWear(prototypes.Read, definition, out detail) is not { } wear) return new(AreaHeroStatus.KitUnreadable, hero, null, null, 0, read, detail!);
         return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear)
@@ -178,7 +204,32 @@ public static class AreaStartingHero
             KitItemSpells = KitItemSpells(prototypes.Read, definition),
             KitGridMove = KitGridMove(prototypes.Read, definition),
             KitUse = KitUse(prototypes.Read, definition),
+            Backgrounds = backgrounds,
+            BackgroundsDetail = backgroundsDetail,
         };
+    }
+
+    /// <summary>
+    /// ARC-UI-030: the new character as the screen leaves it: the generic hero's load (<see cref="NewCharacter"/>, ready) with the
+    /// chosen race and gender, whose setters replace the race effect with 64 + race and add the female effect 330 for a woman
+    /// (ledger NW3), as the pre-made reader reads them. Null with the reason when the load is not the new character's, the pair is not
+    /// one the screen makes (<see cref="CharacterCreationRules.Allows"/>) or an effect does not read.
+    /// </summary>
+    public static AreaHeroLoad? NewCharacterHero(AreaHeroLoad generic, CharacterRace race, CharacterGender gender, out string? detail)
+    {
+        ArgumentNullException.ThrowIfNull(generic);
+        detail = null;
+        if (generic is not { Status: AreaHeroStatus.Ready, Read.Hero: { } read, Effects: { } effects } || read.BasicPrototype != GenericPrototype)
+        {
+            detail = "not the new character's ready load";
+            return null;
+        }
+        if (!CharacterCreationRules.Allows(race, gender)) { detail = $"{race} {gender} is not offered"; return null; }
+        if (effects(EffectRules.RaceEffectBase + (int)race) is not { } raceEffect) { detail = $"effect {EffectRules.RaceEffectBase + (int)race} does not read"; return null; }
+        EffectRule? genderEffect = null;
+        if (gender == CharacterGender.Female && (genderEffect = effects(EffectRules.FemaleEffect)) is null) { detail = $"effect {EffectRules.FemaleEffect} does not read"; return null; }
+        var hero = read with { Race = (int)race, Gender = gender == CharacterGender.Female ? 0 : 1, RaceEffect = raceEffect, GenderEffect = genderEffect };
+        return generic with { Definition = Definition(hero, out var dropped), DroppedChanges = dropped };
     }
 
     /// <summary>
