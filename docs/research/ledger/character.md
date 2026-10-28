@@ -219,3 +219,27 @@ row, so the rows are F2 (BG8's tile tests are inferred from their use by both).
 | BG6 | effective stat (0x4B0490) | Backgrounds 62 and 63 change magick points by ±4 by the hour (6..17); 64 and 65 by an outdoor or natural tile; 66 (outdoors), 67 (on water) and 68 (light below 128) raise strength by 2 and lower dexterity, intelligence and willpower by 2 (66 elsewhere raises intelligence by 2). | Original (not modelled) |
 | BG7 | 0x4C2950, 0x4C26F0, 0x4A5710, 0x4A57F0, 0x463E20 | Educator (51) raises each follower's skill training to one below the PC's; the start kit gives the background's gold and items (each flagged and inserted with the insert check); multiplayer auto-equip scales gold by the background's money; a container's generated inventory seeds its random generator with the player's race × background, gender and name. 0x4C2830 (take the gold and items back) has no caller. | Original (not modelled) |
 | BG8 | effect (rules\effect.mes, cause 1) | Every other effect of a background (stats, skills, resistances, magick and tech points, followers, age) is its effect line; no price, reaction or script reads the background directly. | Original (not modelled) |
+
+## Background table (ARC-DATA-044)
+
+Source: the reader [`BackgroundTable`](../../../src/Arcanum.Data/Characters/BackgroundTable.cs) (N10a, FR-CHAR-005), on top of
+BG1–BG2 and [ARC-RES-025](../character-creation-evidence.md#backgrounds-and-starting-gold). Question: how the original loads
+`rules\backgrnd.mes` and `mes\gameback.mes`, how a block is found, which race and gender may take it, how the creation buttons
+step, and how a description is split into name and text. Read on 2026-10-28 by the implementing task with `llvm-objdump`
+(one reader, F1); the installed counts are checked by the opt-in real-data test (79 blocks, 67 offered to a PC, the CC-06
+counts per race and gender).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BD1 | `background_init` (0x4C2270), gamelib table entry "Background" | Loads `rules\backgrnd.mes` and `mes\gameback.mes` at game start (an init function, so the base sources); either missing fails the init. It also allocates the 32-byte name buffer. | Original |
+| BD2 | search first/next/previous (0x4C2300, 0x4C2390, 0x4C2420) | Block b is looked up by its condition message 10b+2; the search starts at 0, after or before the current block and stops at the first block whose 10b+2 is absent (no wrap), returning the first block the legality check allows. | Original |
+| BD3 | legality (0x4C2B50) | An empty condition allows anyone. Otherwise the condition is upper-cased in place (ASCII a–z) and searched (substring) for the race code (table 0x5B6AEC: HU, DW, EL, HE, GN, HA, HO, HG for races 0..7) followed by `F` or `M` (gender 0 or 1), then for `ANY`, then, for an NPC object (type 16) only, for `NPC`. The table has no entry for races 8..10. | Original |
+| BD4 | creation buttons (0x5452C0, 0x545300), handler (0x544FF0) | Next: the next allowed block, else the first; when neither exists the button changes nothing. Previous: the previous allowed block, else the last one reached by stepping forward from the current block, else the current block; it always succeeds. On success the handler clears the background and sets the result with its description number, so pressing previous with no other choice re-sets the current block (its effect is added once). | Original |
+| BD5 | `background_set` (0x4C25E0), description (0x4C24B0) | Stores the block in field 0x101 and the description number (`atoi` of 10b+0) in 0x102, then adds effect `atoi` of 10b+1 with cause 1. An empty slot is effect 0, the module's `gameeffect.mes` effect. A missing message reads the text "Error! Missing line …" (0x4D43A0), so its number is 0. | Original |
+| BD6 | description text (0x4C24E0, 0x4C2530) | Description 0 reads 1000; 1..999 have no text; the shown description is everything after the first line feed (the whole text when there is none). | Original |
+| BD7 | name (0x4C2590) | Copies at most 32 bytes of the text into the 32-byte buffer and cuts it at the first line feed; without a line feed it logs "Background text has no name!" and returns the copy, which is unterminated when the text has 32 bytes or more. | Technical bug of the original (owner rule 2026-10-28): both modes refuse such a text (`NoName`), no switch; latent, every installed text a PC can see has a short first line |
+| BD8 | money and items (0x4C26F0, 0x4C2B10), base money (0x4C2A70), scaling (0x4C2AA0) | Money is `atoi` of 10b+3; the item list 10b+4 is split on space, tab and line feed and each token `atoi`'d to a basic prototype. Block 0's money is the base the multiplayer money scaling divides by. | Original |
+
+Project admission policy (not a rule mode): a block whose description, effect, money or item message is absent, or whose number
+or item token is not a plain digit run, is refused (`MissingMessage`, `Malformed`, `InvalidText`) instead of read through `atoi`;
+a text without a line feed in its first 32 bytes is `NoName`. No installed block or PC-visible text is refused.
