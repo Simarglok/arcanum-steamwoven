@@ -698,7 +698,8 @@ public interface IAiPerformWorld : IAiGoalWorld
     /// <summary>The weapon in the weapon slot when it is a weapon with the "default throws" flag (field 0x70, 0x200) that the remove
     /// check (0x466DA0) lets go, else null.</summary>
     string? ThrowableWeapon(string npc);
-    /// <summary>Takes the item off its slot into the inventory (0x466E00).</summary>
+    /// <summary>The attack starter's removal of the item from its holder (0x466E00: out of the holder's inventory entirely, ledger TA1;
+    /// the throw places it, 0x4B3C00).</summary>
     void Unwield(string npc, string item);
     /// <summary>The NPC's art has the skill animation (12; 0x503E50, 0x5030B0), which the pick-locks starter needs.</summary>
     bool HasSkillArt(string npc);

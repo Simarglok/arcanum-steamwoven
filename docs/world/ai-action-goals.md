@@ -30,7 +30,7 @@ Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (the NPC
 The pass target of these actions is the choice's (`AiPassChoice.Target`, which the chooser writes into the pass record, SP6); the
 `target` argument stands in when the choice has none.
 | Grenade | 0x4AC910 | Combat perform asks the host's grenade step (`IAiPerformWorld.Grenade`, i.e. `AiGroundRules.Grenade`); a throw runs `StartThrow` with the grenade at the target's tile, and perform goes no further whether the starter started or refused (AG13). |
-| Thrown weapon | 0x434B00 | The attack starter takes a removable "default throws" weapon off (`Unwield`, 0x466E00) and answers `StartThrow`'s answer; a refused throw leaves the weapon in the inventory (AG13). |
+| Thrown weapon | 0x434B00 | The attack starter takes a removable "default throws" weapon off (`Unwield`, 0x466E00) and answers `StartThrow`'s answer (AG13). The removal takes it out of the inventory entirely, so in the original a refused throw loses it ([TA1](../research/ledger/npc-ai.md#npc-ai-throw-host-arc-world-113)); the AI host keeps it wielded until the throw ([AI host](ai-host.md#throw-arc-world-113)). |
 
 ## Starters
 

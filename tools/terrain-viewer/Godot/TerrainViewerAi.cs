@@ -162,6 +162,10 @@ public partial class TerrainViewerApp
                         + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
                     if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
                     break;
+                case AreaAiNoticeKind.Throw:
+                    AiThrow(notice);
+                    redraw = true;
+                    break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
                     _aiFidgets++;
@@ -195,6 +199,24 @@ public partial class TerrainViewerApp
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
+        SyncAreaCombatBodies();
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    // ARC-WORLD-113: an NPC's throw at its action frame: a struck critter's attack reaches the status line and the bodies as a hit's;
+    // the item lies where it landed (the inventory and the ground).
+    private void AiThrow(AreaAiNotice notice)
+    {
+        var thrown = notice.Throw!;
+        GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
+            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}");
+        if (notice.Target is not null && notice.Result is not null)
+        {
+            AiHit(notice);
+            return;
+        }
+        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
