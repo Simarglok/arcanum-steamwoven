@@ -56,6 +56,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionRespawnFiring>? _passRespawns;
     private List<SessionDecayFiring>? _passDecays;
     private List<SessionAiTickFiring>? _passAiTicks;
+    private List<SessionRestockFiring>? _passRestocks;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -1103,12 +1104,19 @@ public sealed partial class GameSessionOwner : IDisposable
         var spellRuns = new List<SessionSpellRunFiring>();
         var decays = new List<SessionDecayFiring>();
         var aiTicks = new List<SessionAiTickFiring>();
+        var restocks = new List<SessionRestockFiring>();
         _passDecays = decays;
         _passAiTicks = aiTicks;
+        _passRestocks = restocks;
         // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
         // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
         var decaying = _events.Any(SessionEventKinds.ItemDecay)
             ? _events.QueryPending(SessionEventKinds.ItemDecay).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
+            : null;
+        // ARC-WORLD-094: so are the objects the pending restock events name, other than an NPC with a life record (the host's facts
+        // answer for it as for its timers): the handler asks the restock host, and a missing object does nothing there (RK3).
+        var restocking = _events.Any(SessionEventKinds.Restock)
+            ? _events.QueryPending(SessionEventKinds.Restock).Select(e => e.Payload.Entities[0].Code).ToHashSet(StringComparer.Ordinal)
             : null;
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
@@ -1126,6 +1134,7 @@ public sealed partial class GameSessionOwner : IDisposable
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
                 || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
+                || restocking?.Contains(entity.Code) == true && !_life.Critters.ContainsKey(entity.Code)
                 || (_life.Critters.ContainsKey(entity.Code)
                     ? world.CritterFacts(new(entity.Map), entity.Code) is not null
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
@@ -1146,11 +1155,12 @@ public sealed partial class GameSessionOwner : IDisposable
             _passSpellRuns = null;
             _passDecays = null;
             _passAiTicks = null;
+            _passRestocks = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly() };
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly() };
     }
 
     /// <summary>
@@ -1844,6 +1854,9 @@ public sealed partial class GameSessionOwner : IDisposable
             lastIdentified = entity;
             inventory.Identified.Add(entity);
         }
+        // ARC-WORLD-094: the highest discarded made number.
+        if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
+        inventory.LastDiscardedMade = saved.LastDiscardedMade;
         // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
         // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
         if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;
@@ -2063,6 +2076,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var converted = ImmutableArray.CreateBuilder<GameEvent>(saved.Pending.Count);
         var maps = new Dictionary<string, int>(StringComparer.Ordinal);
         var decaying = new HashSet<string>(StringComparer.Ordinal);
+        var restocking = new HashSet<GameEventEntity>();
         foreach (var pending in saved.Pending)
         {
             if (pending is null || !registry.TryGet(pending.Kind, out var kind) || pending.Entities.IsDefault || pending.Values.IsDefault ||
@@ -2132,6 +2146,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.Restock)
+            {
+                // A restock event (ARC-WORLD-094): one NPC or container on a map, set no later than the saved clock, a restock delay or
+                // the retry's before its deadline, one per object. Whether the object is still there is asked when it fires.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionEventKinds.RestockPayload(new(pending.Entities, pending.Values)) ||
+                    pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] || !restocking.Add(pending.Entities[0]))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.ObjectRespawn)
             {
                 // A respawn event (ARC-COMBAT-008): one scenery the saved map changes record switched off, set no later than the
@@ -2174,7 +2198,8 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
-            converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

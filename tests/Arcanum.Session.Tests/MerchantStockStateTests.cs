@@ -193,7 +193,7 @@ public sealed class MerchantStockStateTests
         Changed(owner.BarterSell(owner.Version, "smith", "kit:1", 1, 5, Bullets, Accept, container: "chest", identify: true));
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"npcs\":[{\"npc\":\"chest\",\"container\":true,\"items\":[{\"entity\":\"kit:1\"");
-        StringAssert.Contains(text, ",\"identified\":[\"amulet\",\"axe\",\"bullets\",\"gold-zero\",\"hammer\",\"kit:1\",\"purse\"]}");
+        StringAssert.Contains(text, ",\"identified\":[\"amulet\",\"axe\",\"bullets\",\"gold-zero\",\"hammer\",\"kit:1\",\"purse\"],\"lastDiscardedMade\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, Seed()).Disposition);
