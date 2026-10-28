@@ -29,9 +29,9 @@ public sealed class AreaLevelMessagesTests
     public void The_points_message_formats_the_level_and_the_points()
     {
         var entry = AreaLevelMessages.Compose(new(4, 57, null), Texts());
-        Assert.AreEqual(new AreaMessageEntry("TITLE", "Lvl 4!", "Pts 57 (100%)"), entry);
+        Assert.AreEqual(new AreaMessageEntry(AreaMessageKind.LevelUp, "TITLE", "Lvl 4!", "Pts 57 (100%)"), entry);
         // Without the files the project's labels stand in.
-        Assert.AreEqual(new AreaMessageEntry("Level up", "Level 4", "Unspent points: 57"), AreaLevelMessages.Compose(new(4, 57, null), AreaLevelTexts.None));
+        Assert.AreEqual(new AreaMessageEntry(AreaMessageKind.LevelUp, "Level up", "Level 4", "Unspent points: 57"), AreaLevelMessages.Compose(new(4, 57, null), AreaLevelTexts.None));
     }
 
     [TestMethod]
@@ -47,16 +47,16 @@ public sealed class AreaLevelMessagesTests
         // separator becomes ". "; the completion follows a space.
         Assert.AreEqual("Bought: WP 11, Melee 1, Repair 2, Flame 3, Smithy Journeyman, HP 44, FT.  DONE", AreaLevelMessages.SchemeText(scheme, Texts()));
         // A hero with a scheme number gets the scheme's text, never the points line.
-        Assert.AreEqual(new AreaMessageEntry("TITLE", "Lvl 2!", AreaLevelMessages.SchemeText(scheme, Texts())), AreaLevelMessages.Compose(new(2, 99, scheme), Texts()));
+        Assert.AreEqual(new AreaMessageEntry(AreaMessageKind.LevelUp, "TITLE", "Lvl 2!", AreaLevelMessages.SchemeText(scheme, Texts()), Scheme: true), AreaLevelMessages.Compose(new(2, 99, scheme), Texts()));
     }
 
     [TestMethod]
     public void The_encumbrance_message_is_critter_line_eleven_plus_the_level()
     {
         // ARC-WORLD-087 (ledger WE5).
-        Assert.AreEqual(new AreaMessageEntry("Light", "", ""), AreaLevelMessages.Encumbrance(0, Texts()));
-        Assert.AreEqual(new AreaMessageEntry("Crushed", "", ""), AreaLevelMessages.Encumbrance(6, Texts()));
-        Assert.AreEqual(new AreaMessageEntry("Encumbrance level 3", "", ""), AreaLevelMessages.Encumbrance(3, Texts()), "a missing line: the label");
+        Assert.AreEqual(AreaMessageEntry.Text(AreaMessageKind.Message, "Light"), AreaLevelMessages.Encumbrance(0, Texts()));
+        Assert.AreEqual(AreaMessageEntry.Text(AreaMessageKind.Message, "Crushed"), AreaLevelMessages.Encumbrance(6, Texts()));
+        Assert.AreEqual(AreaMessageEntry.Text(AreaMessageKind.Message, "Encumbrance level 3"), AreaLevelMessages.Encumbrance(3, Texts()), "a missing line: the label");
     }
 
     [TestMethod]

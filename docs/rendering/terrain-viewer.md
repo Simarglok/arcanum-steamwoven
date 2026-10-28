@@ -1378,18 +1378,17 @@ game folder like the skill texts); a file that is missing falls back to the proj
 a second for a load still running; then its entries wait in a queue that the next frames post once the texts arrive. The two
 formats take their one number at the first `%d` or `%i` (`%%` is a percent sign; another conversion stays as text).
 
-The message window (`AreaMessageWindow`, bottom centre) is the smallest bounded stand-in for the original's: the newest entry
-with its title and lines, a history of the last ten browsed with ‹ and ›, and × hiding it until the next entry; its buttons take
-no focus, and a click elsewhere on it reaches the world. A different session (a quick load, a new game) empties it and its
+Since ARC-UI-023 the entries go to the original's [message log](#message-log-arc-ui-023) in the bottom strip (the diagnostic
+`AreaMessageWindow` is gone): a level-up entry is drawn with its icon, the title, the level line and the points line (or the
+scheme text on two lines), and its drawing plays 3005. A different session (a quick load, a new game) empties the log and the
 queue, and so does a session that ends without one (a failed reload); a map transfer, the main map's window move or world-map
-travel carries the session and keeps them. No other original
-message uses it yet.
+travel carries the session and keeps them.
 
 Self-test inside `ARC-UI-007 self-test PASS` (synthetic hero: an award to level 3 posts two entries with the project's labels,
 eleven more keep the last ten); native smoke `ARC-UI-046 native-smoke level message PASS` on the original installation (all six
 files load; an award built in the smoke, without changing the session, posts a points entry and a scheme entry that read the
-player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's message
-window art, its other messages and its three interface callbacks after the entry (button state, two refreshes, not traced).
+player's title, formats and names, each with the level-up sound; no text is printed). Not ready: the original's other messages
+and its three interface callbacks after the entry (button state, two refreshes, not traced).
 
 ### Save list (ARC-UI-010)
 
@@ -1612,10 +1611,11 @@ on the bars. The main menu's, in-play menu's and options window's buttons play 3
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
 the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
-diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
-[gauges](#health-and-fatigue-bars-arc-ui-020). The rest of the bottom strip (message log, hot-key slots, recent actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top
-strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated runs draw no bars
-unless their smoke asks.
+diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
+[gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
+[message log](#message-log-arc-ui-023), where the button names appear. The rest of the bottom strip (hot-key slots, recent
+actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the
 installed art and texts read). Native smoke on the original data, map mode on the start map with `--main-menu true`:
@@ -1625,8 +1625,53 @@ name and lit frame, its down frame with 3000, the release with 3001 opening the 
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
-message log, hot-key bar and portraits (later slices; the vials since ARC-UI-020), the skill pane, fate and sleep windows, the town map, the
+hot-key bar and portraits (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
+
+### Message log (ARC-UI-023)
+
+The bottom strip's message window shows the original's message log, as the 1.0.7.4 executable keeps and draws it (ledger
+[ML1–ML8](../research/ledger/ui-audio.md#message-log-arc-ui-023)); the log itself (`AreaMessageLog`, Core) exists in every area
+session, the window only while the [interface bars](#interface-bars-arc-ui-018) are drawn.
+
+- **Entries.** The last ten stored entries are kept; a new one becomes the newest and the shown one, and drawing it plays its
+  sound: a level-up entry 3005, a message 3004 (the hero's encumbrance changes, `mes\critter.mes` 11–17). A message equal to the
+  newest entry's text (A–Z compared without case) is not stored again: the newest is shown and plays its sound once more. Texts (a level-up entry's
+  scheme text) keep at most 199 characters. The viewer's spell lines are a plain text entry (no sound) titled with the project's label "Magic"; the original's
+  own spell messages are not built.
+- **Drawing.** In the message mode the mode's background art (354) lies at (196, 492) of the 800 × 600 screen; an entry fills
+  the text area (211, 503, 383 × 82) with black and draws its icon (438 level up, 442 message, 443 plain, 444 hover) at (217, 510)
+  and its texts in the original's rectangles: a level-up entry its title, level and points lines (the scheme text on two
+  lines); a text entry splits at its first line break into a title line and a body, or fills the whole column (290, 504, 291 × 78).
+  A text entry whose last text does not fit is drawn again without the icon in the wide rectangles (from x 217, 364 wide), cut
+  by characters until it fits. The original's font art (27 for titles, 229 for text, both white) is not drawn: the viewer's font
+  stands in at its sizes.
+- **Scrolling.** The window's upper half (210, 504, 382 × 41) shows the next older entry, as far back as the log holds, and its
+  lower half (210, 545) the next newer one; both are invisible push areas with no sound that act on a release over the area
+  pressed.
+- **Button names.** The pointer entering a bar button and every move while it is there write the button's name
+  (`mes\intgame.mes` 1000–1009) as a hover entry with icon 444, which is never stored and shows only in the message mode and when
+  no entry was stored in the last 3 s (real time). Leaving the button takes the name away.
+- **Panes.** While Spells (the spell pane, `M`) or Skills is down the window belongs to that pane and draws nothing of the log
+  (the panes' own art in the window is a later slice; the viewer's spell pane stays above the strip). A new stored entry puts the
+  window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
+  pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
+  weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up
+  returns the window to the log. The viewer shows the weapon's spells inside the spell pane with Spells down, and treats the
+  whole pane as the original's separate weapon mode while they are open (no return above the strip).
+- **Steamwoven fix (both rule modes).** The original leaves the window blank after a button name is taken away and after the
+  window returns from a pane, until the next entry or scroll click; the viewer shows the scroll position's entry again there
+  (a technical display bug, ML7).
+
+Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
+scroll areas (the original drops it through 0x575770), the compact interface's message window (F10), the hovered object's
+portrait and name in the window (ARC-UI-024). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
+`ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
+drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's
+GUI; Character's name withheld within 3 s and drawn after, leaving it showing the entry again; Spells taking the window, an entry
+taking it back, a move over the strip returning it, a move above the strip giving it to the log, Spells up showing the entry; a
+long text drawn wide).
 
 ### Hotkey bar (ARC-UI-022)
 
