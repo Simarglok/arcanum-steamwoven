@@ -1,7 +1,8 @@
 # Equipment runtime (ARC-WORLD-028)
 
 Status: **Implemented bounded component**, ARC-WORLD-028 (2026-10-17); the best items of a slot and the pre-made start's wield
-ARC-WORLD-034 (2026-10-18, [Best items](#best-items-arc-world-034)). The hero's wear slots in the
+ARC-WORLD-034 (2026-10-18, [Best items](#best-items-arc-world-034)); the item events of a move ARC-SCRIPT-042 (2026-10-28,
+[Wield events](#wield-events-arc-script-042)). The hero's wear slots in the
 [game session](game-session-runtime.md): which item may take which slot, wielding and wearing kit items and items taken
 from the world, and what the worn items give the [attack resolver](attack-resolver-runtime.md) (ARC-COMBAT-001) and the
 [turn-based round](turn-based-round-runtime.md) (ARC-COMBAT-003). The rules are pure functions in
@@ -144,6 +145,70 @@ Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/cha
 creation, its effect line (stats, skills, resistances and so on), the start kit's gold and items, the low-intelligence speech, dark
 sight, the time- and place-dependent stat changes, Educator and the container seed.
 
+## Wield events (ARC-SCRIPT-042)
+
+Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#10-proposed-implementation-slices), the wield half
+(the transfer half is ARC-SCRIPT-041, [item events](inventory-runtime.md#item-events-arc-script-041)). With an
+`ISessionItemScriptHost`, `Equip` and `Unequip` run the item events of the original's removals and insertions through
+`ScrDispatcher.RunObject` in the executable's order (ledger [IE3–IE6](../research/ledger/scripts.md#item-events-arc-script-041),
+[WE7](../research/ledger/scripts.md#wield-events-arc-script-042)); every run has the hero as triggerer and the item as attachee:
+
+| Move | Events in order |
+| --- | --- |
+| Equip into an empty slot (0x464AE0) | item: wield off (25) when it was worn in another slot (a ring), remove item (28); then wield on (24), insert item (21) |
+| Equip over an occupant, the insert check accepts | item: (25), 28; occupant: 25, 28; the occupant's insert check; occupant: 21; item: 24, 21 |
+| Equip over an occupant, the insert check refuses | item: (25), 28; occupant: 25, 28; the check; item back: (24 when it was worn), 21; occupant back: 24, 21 |
+| Unequip (0x464C80) | the no-drop and insert checks first (a refusal runs nothing); then 25, 28, 21 |
+
+- **Which points run.** A worn item keeps the item event points it carries (`SessionWornItem.ScriptPoints`: 21, 24, 25 and 28 of
+  the host's `SessionWearableItem.ScriptPoints`), and a move runs only those; the host's `Slot` answers each, so a point without a
+  slot ends `NoScript`. Without a host, an item or an occupant with item event points is refused (`ItemScriptUnsupported`) as before;
+  a move of items without them runs nothing either way. `EquipBest` runs no scripts: a worn item with item event points stays in its
+  slot (its step names it as unsupported), and a chosen item with them stays in the pack, as before.
+- **What a run may do.** `SessionItemScripts.Admission` (S6 without dialog, story state and deferred calls, plus the item-effect
+  commands of [set S14](../scripting/scr-dispatcher-runtime.md#item-effects-arc-script-042-set-s14) and play sound). The session
+  applies, with the move and in one revision: the global flags; the printed lines (`EquipmentMutationResult.Messages`); the effect
+  changes on the hero (`ScrEffects.EffectChanges` for the PC: add with the host's rule, `ISessionItemScriptHost.EffectDefinition`,
+  and the cause as the original numbers it, `SessionItemScripts.Cause`; remove of the first entry of the number), checked as
+  `AddHeroEffect` and `RemoveHeroEffect` check theirs, the effect list's damage shifts and timers included; and the slots the runs
+  changed of the move's items (the event's own writeback and its call-ex runs'), which the session keeps
+  (`QueryItemScriptSlots`) and every later item run reads instead of the host's slot. Eye candy and sounds stay in the runs
+  (`EquipmentMutationResult.Scripts`) for the host to show and play.
+- **Item questions.** The identified test is the host's (`ISessionItemScriptHost.IsIdentified`); the power ratio of the
+  magick-tech adjustment is the session's, for an item of the move and the hero (its effective magick/tech aptitude under the effect
+  changes of the move's earlier runs) or another item of the move (not a critter: 100); items are never being rewielded (no rewield
+  yet, WE6).
+- **Refusals.** A run outside the set, an effect on any object but the PC, an add whose rule the host lacks, a cause outside 0..9 or
+  one the session does not own (race, gender, injury), an innate effect number, a full or unbounded effect list, a slot change of an
+  object that is not an item of the move, an object the host or session does not know, a ratio read after an effect change of the
+  same run (or after a call-ex in it) that changed the hero's aptitude, and a trap destruction refuse the whole move: nothing is
+  applied and the result lists the runs made (`Scripts`); later runs are not made.
+- **A refused occupant** (`RolledBack`): both items are back where they were after the scripts of both removals and both
+  re-insertions ran, and what those runs changed is applied (`Changed`, or `NoChange` when nothing), as in the original; `Verdict`
+  is the insert check's answer and `Displaced` is null.
+
+**Snapshot schema 42.** A worn item's `scripts` (its item event points, ascending) and the inventory's `scriptSlots` (entity,
+point, script, local flags, counters; by entity in ordinal order, then by point, at most `SessionItemScripts.MaxStoredSlots`). Restore
+refuses a point outside 0..35 or the dialog-override slot, a script number outside 0..99,999, a deleted item's slot, worn points
+other than 21, 24, 25 and 28 and an unsorted list. A deleted item's kept slots go with it.
+
+**Installed data** (the `--script-census` probe's `item_points` and `wield_pairs`): 43 of the 56 wield-on scripts and 50 of the 52
+wield-off scripts run from line 0 inside the item set, and 42 of the 56 objects' wield pairs (wield on, and wield off with the
+wield-on slot its call-ex names, from that line). The others stop first at call script in (54, 8 pairs: the cursed items that hurt
+their wearer every few seconds), get stat (33, 2), remove script call (125, 2), add blessing (25, 1) and get magic-tech adjustment
+(80, 1). The typical pair: wield on scales a base value by the power ratio into counter 0 and adds an item-caused effect that many
+times; wield off reaches the same script's removal loop through call-ex, which reads the count the session kept.
+
+**Not ready.**
+- **Rewield** (0x465530, WE6): the original runs every worn item's wield off and wield on when the hero's magick or tech points
+  change (the stat setter, stats 22 and 23), with the rewielding condition true; the session's advancement does not, so a worn
+  scaled item keeps the count of its wield (the condition answers false).
+- **Hosts.** No viewer host calls `Equip` or `Unequip` (no paperdoll); the AREA viewer's item script host answers no effect rule
+  and no identified test, so such a run refuses there.
+- **Other paths.** A worn item deleted by wear or destruction leaves without its wield-off script (its effects stay); item spells on
+  wear are still refused; NPC equipment runs no events; the effect list's bound (`SessionEffectLimits.MaxHeroEffects`, 64 entries)
+  refuses a move whose adds would pass it (the original has no bound).
+
 ## Tests
 
 - `Arcanum.Simulation.Tests/Equipment/EquipmentRulesTests`: slot mapping, race sizes, the wear check's order and every
@@ -160,6 +225,10 @@ sight, the time- and place-dependent stat changes, Educator and the container se
 - `Arcanum.Session.Tests/EquipBestTests` (ARC-WORLD-034): the start in one revision and a repeated call, a more valuable
   item replacing a kept one, ineligible items and a refused swap, a no-drop weapon that stays on and a shield that crippled
   arms take off, the tie to the later item, refusals and a meddling callback, unsupported items left in the pack.
+- `Arcanum.Session.Tests/WieldEventScriptTests` (ARC-SCRIPT-042): a scaled wield-on script and its call-ex wield-off with the kept
+  counter (also across the snapshot), the power ratio, the order of a swap, a refused occupant's rollback and its applied effects, a
+  moved ring, every refusal with nothing changed, the identified test and eye candy, `EquipBest` leaving a scripted item, decode and
+  restore refusals. `Arcanum.Scripting.Tests/Scr/ScrItemEffectTests`: the S14 commands.
   `Arcanum.TerrainViewer.Tests/AreaStartingHeroTests`: the viewer start wears the kit; mismatched facts and an unreadable
   kit prototype fail it. `EquipBestTests` also keeps the knife on when the better weapon is unsupported; the session's bridge
   test reads the wearable facts and the Data reader test the script points.
@@ -180,7 +249,8 @@ sight, the time- and place-dependent stat changes, Educator and the container se
   looting a worn item is still `WornItemUnsupported`.
 - **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
   whether the original charges for changing equipment in a round is not researched here.
-- **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield (refused), art and
+- **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield without a script host (refused;
+  with one, [wield events](#wield-events-arc-script-042)), art and
   appearance changes, the animation speed recalculation (EQ5), the paperdoll UI's own path, identification
   (combat reads every magic adjustment), weapon wear, hexed items, ammunition pools, drop, barter, weight effects,
   base AC and resistances of the PC and its effects, skills and training.

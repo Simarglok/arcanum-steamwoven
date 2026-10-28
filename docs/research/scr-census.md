@@ -186,6 +186,18 @@ no wield-on or remove-item script; the wield-on scripts stop first at `items are
 magic-tech adjustment (91, 17), the wield-off scripts at call-ex (81, 43)
 ([item events](../world/inventory-runtime.md#item-events-arc-script-041)).
 
+**Wield pairs (ARC-SCRIPT-042).** The item set copy now holds the item-effect commands (47, 50, 77, 78, 81, 91, 120) and play
+sound (82). Each item point also reports `reached_scripts` and, by type, how many of the attached or called scripts a run reaches a
+condition (`live_conditions`) or action (`live_actions`) in; the report's `wield_pairs` checks each object's wield-on and wield-off
+scripts together (an aggregate repeats a mobile and is left out): wield on from line 0, wield off from line 0 and every call-ex it
+reaches, which must name the attachee's wield-on slot (point 24) at a literal line, from that line. On the owner's installation the
+item set admits 43 of the 56 wield-on and 50 of the 52 wield-off scripts and 42 of the 56 distinct wield pairs; the others stop first
+at call script in (54, 8), get stat (33, 2), remove script call (125, 2), add blessing (25, 1) and get magic-tech adjustment (80, 1).
+The wield-on scripts reach add effect (77) in 51 scripts, the magick-tech adjustment (91) in 51, play script eye candy (120) in 36,
+identified (47) and items being rewielded (50) in 27 each; the wield-off scripts reach call-ex (81) in 44 and remove effect (78) in 6.
+The report with these fields has SHA-256 `b2d2bc0b464bc7ebba4c9c0185203d75bb776449fdce87f19e1f044607bed33a` (two runs, same
+digest; [wield events](../world/equipment-runtime.md#wield-events-arc-script-042)).
+
 One dialog slot and one enter-combat slot name a script number that has no
 file (the interpreter returns *skip default* for them, E4 of ARC-RES-042). One
 of the seven trap-flagged use scripts is also on a sector object's dialog slot.

@@ -197,7 +197,7 @@ public sealed class EquipmentStateTests
         var shieldJson = ",{\"slot\":\"Shield\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false," +
             "\"broken\":false,\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null," +
             "\"armor\":{\"coverage\":\"Shield\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":0,\"magicAc\":0," +
-            "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}";
+            "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}},\"scripts\":[]}";
         var paired = text.Replace("],\"durability\":", shieldJson + "],\"durability\":", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidEquipment, GameSessionOwner.Restore(Decode(paired), RestoreOptions()).Failure);
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(paired.Replace("\"handCountFixed\":true", "\"handCountFixed\":false",
@@ -307,11 +307,11 @@ public sealed class EquipmentStateTests
             "\"damage\":[[2,8],[0,0],[0,0],[0,0],[0,0]],\"magicDamage\":[0,0,0,0,0],\"toHit\":0,\"magicToHit\":0,\"speed\":15,\"magicSpeed\":0," +
             "\"range\":1,\"magicRange\":0,\"minStrength\":6,\"magicMinStrength\":0,\"ammoType\":null,\"ammoConsumption\":0," +
             "\"critHitChart\":\"Cutting\",\"critMissChart\":\"Bladed\",\"magicCritHitChance\":0,\"magicCritHitEffect\":0," +
-            "\"magicCritMissChance\":0,\"magicCritMissEffect\":0},\"armor\":null}}," +
+            "\"magicCritMissChance\":0,\"magicCritMissEffect\":0},\"armor\":null},\"scripts\":[]}," +
             "{\"slot\":\"Armor\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false,\"broken\":false," +
             "\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null,\"armor\":{\"coverage\":\"Torso\"," +
             "\"sizes\":2,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":12,\"magicAc\":0,\"resistances\":[4,0,0,0,0]," +
-            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}],\"durability\":");
+            "\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}},\"scripts\":[]}],\"durability\":");
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryEquipment().Worn.ToArray(), restored.QueryEquipment().Worn.ToArray());
         Assert.AreEqual(owner.QueryHeroEquipmentCombat(), restored.QueryHeroEquipmentCombat());

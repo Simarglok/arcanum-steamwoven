@@ -118,8 +118,8 @@ public sealed class ItemEventScriptTests
         Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(ground => ground.Item.Entity == "charm"), "the item stays on the ground");
         Assert.AreEqual("charm", owner.QueryItemDecays().Single().Entity, "a declined pickup keeps the decay event");
 
-        // A declining run whose effects the session cannot apply refuses with no effect.
-        host.Programs[GetScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        // A declining run whose effects the session cannot apply (an effect the host has no rule for) refuses with no effect.
+        host.Programs[GetScript] = Program(C(ScrCatalogue.Action.AddEffect, ((byte)0, 0), (Number, 50), (Number, 5)), C(ScrCatalogue.Action.ReturnSkipDefault));
         var refused = owner.PickUpItem(owner.Version, "charm", Counted, host);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, (int?)null, 1L),
             (refused.Disposition, refused.Failure, refused.DeclinedBy, owner.Version.Revision));
@@ -178,8 +178,8 @@ public sealed class ItemEventScriptTests
         host.Slots[(SessionEventKinds.PlayerEntity, SessionScriptPoint.Transfer)] = TransferScript;
         host.Slots[("torn", SessionScriptPoint.RemoveItem)] = RemoveScript;
         host.Programs[TransferScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
-        // A changed attachment of the moved item has no home: refused, and the transfer script's write goes with it.
-        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)));
+        // An effect the host has no rule for: refused, and the transfer script's write goes with it.
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.AddEffect, ((byte)0, 0), (Number, 50), (Number, 5)));
         var refused = owner.LootItem(owner.Version, "corpse", "torn", _ => SessionInsertVerdict.Accepted, host);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (refused.Disposition, refused.Failure, owner.Version.Revision));
         Assert.AreEqual(2, refused.Scripts.Count, "the insert-item script is not run after a refused run");

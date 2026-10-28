@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S13"/>.
+/// <see cref="ScrAdmissionSet.S14"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -33,6 +33,11 @@ internal sealed class ScrInterpreter
         public readonly List<ScrReadingRequest> Readings = new();
         public readonly List<ScrSkillUse> SkillUses = new();
         public readonly List<ScrStateRequest> States = new();
+        public readonly List<ScrEffectRequest> EffectChanges = new();
+        public readonly List<ScrEyeCandy> EyeCandies = new();
+        // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
+        public readonly List<ScrWriteback> SlotWrites = new();
+        public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
         public readonly SortedDictionary<int, bool> Flags = new();
         public int? Story, StoryBefore;
         // Lines executed by every run of the dispatch (a project bound across nested calls).
@@ -142,7 +147,10 @@ internal sealed class ScrInterpreter
             _schematics.Count == 0 ? null : Array.AsReadOnly(_schematics.ToArray()),
             _readings.Count == 0 ? null : Array.AsReadOnly(_readings.ToArray()),
             _skillUses.Count == 0 ? null : Array.AsReadOnly(_skillUses.ToArray()),
-            _states.Count == 0 ? null : Array.AsReadOnly(_states.ToArray()));
+            _states.Count == 0 ? null : Array.AsReadOnly(_states.ToArray()),
+            _shared.EffectChanges.Count == 0 ? null : Array.AsReadOnly(_shared.EffectChanges.ToArray()),
+            _shared.EyeCandies.Count == 0 ? null : Array.AsReadOnly(_shared.EyeCandies.ToArray()),
+            _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -158,6 +166,11 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
             => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), 0, Queries),
+        // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
+        // object names none, so the condition fails (the set's focus kinds name at most one object).
+        ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
+        // WE6: the global the rewield (0x465530) sets around its runs.
+        ScrCatalogue.Condition.ItemsBeingRewielded => Items.ItemsBeingRewielded(),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -332,6 +345,40 @@ internal sealed class ScrInterpreter
                 if (source is { } user && target is { } on) _skillUses.Add(new(user, item, on, skill, modifier));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.AddEffect:
+            case ScrCatalogue.Action.RemoveEffect:
+            {
+                // WE1: every object operand 0 names, then the effect number (and the cause for an add), as read.
+                var effect = Get(a, 1);
+                var add = a.Type == ScrCatalogue.Action.AddEffect;
+                var cause = add ? Get(a, 2) : 0;
+                foreach (var obj in Objects(a, 0)) _shared.EffectChanges.Add(new(add ? ScrEffectChange.Add : ScrEffectChange.Remove, obj, effect, cause));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.MagickTechAdjustment:
+            {
+                // WE2: the value, the item and its owner, then (ratio × value + 50) / 100 into operand 3, with the original's 32-bit wrap of
+                // the product and the sum and its division, which truncates toward zero. An absent object or one the host does not know
+                // stops the run (the original reads a null handle's fields).
+                var value = Get(a, 0);
+                var item = Object(a, 1, line); var owner = Object(a, 2, line);
+                var ratio = Items.PowerRatio(item, owner) ?? throw new MissingObjectStop(line);
+                Set(a, 3, unchecked(ratio * value + 50) / 100, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.PlayScriptEyeCandy:
+            {
+                // WE4: the table entry, then the object; an absent object shows nothing (the original passes a null handle on).
+                var number = Get(a, 0);
+                if (OptionalObject(a, 1) is { } on) _shared.EyeCandies.Add(new(number, on));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CallScriptEx:
+            {
+                // WE3: the object whose attachment runs (operand 0), the point and the line (values), and the triggerer (operand 3).
+                CallEx(OptionalObject(a, 0), Get(a, 1), Get(a, 2), OptionalObject(a, 3), line);
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
@@ -385,17 +432,60 @@ internal sealed class ScrInterpreter
         if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
-        // A dialog action inside a called script is not modelled (the original's dialog store would write the callee's flags
-        // into its attachee's slot, not read in the executable): the dispatch is refused at that line.
-        foreach (var at in admission.Admitted!.Region)
+        RefuseDialogIn(admission.Admitted!, script);
+        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
+            new(triggerer, attachee, null), _host, _options, _shared, _depth + 1).Run(line);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-042, WE3: call-ex runs the object's attachment of the point as an event of its own (0x441980): the object's slot, the
+    /// triggerer, no extra object, from the line; its result is ignored and the caller goes on. The run shares the dispatch's effects,
+    /// global overlay and bounds; its changed slot is kept for <see cref="ScrEffects.SlotWrites"/> and read by a later call-ex of the same
+    /// slot. No slot, script 0, a missing or trap script and a monster generator run nothing, as for an event. Project limits: an absent
+    /// object stops the caller's run; a use or dialog point (the trap spot and the dialog gates are not modelled for a nested run), a
+    /// dialog action in the callee and a trap object whose script becomes 0 refuse the dispatch, and a point outside 0..35 or the
+    /// dialog-override slot ends it (<see cref="ScrStop.CallExPoint"/>).
+    /// </summary>
+    [OriginalFunction(0x44B170, OriginalFunctionScope.Partial)]
+    private void CallEx(ScrObjectRef? attachee, int point, int line, ScrObjectRef? triggerer, int at)
+    {
+        if (attachee is not { } obj) throw new MissingObjectStop(at);
+        if (point is < 0 or >= ScrPoint.Count || point == ScrPoint.DialogOverride) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
+        if (point is ScrPoint.Use or ScrPoint.Dialog)
+            throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
+        if (_depth + 1 > _options.MaxCallDepth) throw new CallRefusedStop(null, _number, ScrStop.CallDepth);
+        var slot = _shared.Slots.TryGetValue((obj, point), out var written) ? written : _host.Slot(obj, point);
+        if (slot is not { Script: not 0 } own) return;
+        var lookup = _host.Script(own.Script);
+        if (ScrDispatcher.Unavailable(lookup) is { } unavailable)
         {
-            var row = program.Lines[at];
+            if (unavailable == ScrStop.MissingScript) return;
+            throw new CallRefusedStop(null, own.Script, ScrStop.UnreadableScript);
+        }
+        var program = lookup.Program!;
+        if (ScrDispatcher.IsTrapScript(own.Script, program) || _host.IsMonsterGenerator(obj)) return;
+        var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, own.Script, ScrStop.Refused);
+        RefuseDialogIn(admission.Admitted!, own.Script);
+        var run = new ScrInterpreter(admission.Admitted!, own.Script, own, program.FileFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1).Run(line);
+        if (run.Slot == own) return;
+        if (run.Slot.Script == 0 && _host.IsTrapObject(obj))
+            throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
+        _shared.Slots[(obj, point)] = run.Slot;
+        _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
+    }
+
+    // A dialog action inside a called script is not modelled (the original's dialog store would write the callee's flags into its
+    // attachee's slot, not read in the executable): the dispatch is refused at that line.
+    private static void RefuseDialogIn(ScrAdmittedProgram admitted, int script)
+    {
+        foreach (var at in admitted.Region)
+        {
+            var row = admitted.Program.Lines[at];
             var side = row.OnTrue.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnTrue
                 : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
             if (side is { } dialog) throw new CallRefusedStop(new(at, dialog, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), script, ScrStop.Refused);
         }
-        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
-            new(triggerer, attachee, null), _host, _options, _shared, _depth + 1).Run(line);
     }
 
     private int Get(ScrClause c, int slot)
@@ -411,8 +501,8 @@ internal sealed class ScrInterpreter
         };
     }
 
-    // Operand 0 is the store of every writing action in the set but get object type (operand 1) and get skill (operand 2);
-    // admission refuses a number literal there.
+    // Operand 0 is the store of every writing action in the set but get object type (operand 1), get skill (operand 2) and the
+    // magick-tech adjustment (operand 3); admission refuses a number literal there.
     private void Set(ScrClause c, int value, int line) => Set(c, 0, value, line);
 
     private void Set(ScrClause c, int slot, int value, int line)
@@ -475,6 +565,9 @@ internal sealed class ScrInterpreter
 
     private IScrSkillQueries Skills => _host as IScrSkillQueries
         ?? throw new InvalidOperationException("SCR_SKILL_QUERIES_REQUIRED: the admission set holds get skill and the host cannot answer it.");
+
+    private IScrItemQueries Items => _host as IScrItemQueries
+        ?? throw new InvalidOperationException("SCR_ITEM_QUERIES_REQUIRED: the admission set holds an item question the host cannot answer.");
 
     private IScrObjectQueries Queries => _host as IScrObjectQueries
         ?? throw new InvalidOperationException("SCR_OBJECT_QUERIES_REQUIRED: the admission set holds a guard condition the host cannot answer.");

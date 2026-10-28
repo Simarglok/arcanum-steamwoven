@@ -22,7 +22,19 @@ public sealed record SessionWearableItem(SessionItemKind Kind, IReadOnlyList<int
 }
 
 /// <summary>One worn item: its slot, the PC's item entity (a kit item or an item taken from the world) and its saved values.</summary>
-public sealed record SessionWornItem(EquipmentSlot Slot, string Entity, EquipmentItem Item);
+public sealed record SessionWornItem(EquipmentSlot Slot, string Entity, EquipmentItem Item)
+{
+    /// <summary>ARC-SCRIPT-042: the item event points the item carries, ascending: insert item (21), wield on (24), wield off (25) and
+    /// remove item (28); empty for an item without them. Its next move runs them only through a script host.</summary>
+    public IReadOnlyList<int> ScriptPoints { get; init; } = NoScripts;
+
+    internal static readonly IReadOnlyList<int> NoScripts = Array.AsReadOnly(Array.Empty<int>());
+
+    public bool Equals(SessionWornItem? other) => other is not null && Slot == other.Slot && Entity == other.Entity && Item == other.Item &&
+        ScriptPoints.SequenceEqual(other.ScriptPoints);
+
+    public override int GetHashCode() => HashCode.Combine(Slot, Entity, Item, ScriptPoints.Count);
+}
 
 /// <summary>Saved equipment of the hero: the worn items in slot order.</summary>
 public sealed class SessionEquipmentState
@@ -45,7 +57,23 @@ public delegate bool SessionWearArtCheck(EquipmentSlot slot, SessionWearableItem
 /// <see cref="Displaced"/> is the item that left the slot for the inventory; <see cref="Verdict"/> is the insert check's answer when it ran.
 /// </summary>
 public readonly record struct EquipmentMutationResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
-    EquipmentRefusal Refusal, string? Displaced, SessionInsertVerdict? Verdict, GameSessionVersion Version);
+    EquipmentRefusal Refusal, string? Displaced, SessionInsertVerdict? Verdict, GameSessionVersion Version)
+{
+    private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+    private readonly IReadOnlyList<SessionItemScriptRun>? _scripts;
+
+    /// <summary>ARC-SCRIPT-042: the lines the move's scripts printed, in order, for the host to show; empty when none.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+
+    /// <summary>ARC-SCRIPT-042: every item script run of the move, in order (also on a refusal); empty without a script host or
+    /// without item event scripts. Their eye candy (<see cref="Arcanum.Scripting.Scr.ScrEffects.EyeCandies"/>) is the host's to show.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get => _scripts ?? Array.Empty<SessionItemScriptRun>(); init => _scripts = value; }
+
+    /// <summary>ARC-SCRIPT-042: the insert check refused the occupant after the scripts of both removals ran, so both items went back
+    /// where they were, running the scripts of those insertions too (ledger IE6); what the runs changed is applied
+    /// (<see cref="Disposition"/> Changed, or NoChange when they changed nothing) and <see cref="Verdict"/> is the refusal.</summary>
+    public bool RolledBack { get; init; }
+}
 
 /// <summary>The equipment domain of one owner: slot to worn item.</summary>
 internal sealed class EquipmentDomain
@@ -70,6 +98,13 @@ internal sealed class EquipmentDomain
     /// <c>SAP_REMOVE_ITEM</c>, <c>SAP_WIELD_ON</c> and <c>SAP_WIELD_OFF</c> and the item's wear, unwear, pickup and drop spells.</summary>
     internal static readonly int[] MoveScripts =
         [SessionScriptPoint.InsertItem, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem];
+
+    /// <summary>ARC-SCRIPT-042: the item event points among <paramref name="points"/>, ascending (<see cref="SessionWornItem.ScriptPoints"/>).</summary>
+    internal static IReadOnlyList<int> MovePoints(IReadOnlyList<int> points)
+    {
+        var moves = MoveScripts.Where(points.Contains).Order().ToArray();
+        return moves.Length == 0 ? SessionWornItem.NoScripts : Array.AsReadOnly(moves);
+    }
 }
 
 /// <summary>
@@ -213,10 +248,16 @@ public sealed partial class GameSessionOwner
     /// both the item and the occupant already out of the grid (the room the item leaves counts, the occupant's weight once). The facts
     /// it gets are the occupant's saved kind and its complexity; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
     /// One revision.
+    /// ARC-SCRIPT-042: with <paramref name="scripts"/>, the item events of the move run in the original's order (ledger IE6, WE7): the
+    /// item's removal (wield off 25 when it was worn, then remove item 28), for an occupied slot the occupant's removal (25, 28) and then
+    /// its insert check; the occupant's insertion into the inventory (insert item 21) and the item's at the slot (wield on 24, then 21).
+    /// When the check refuses, both go back where they were with those insertions' scripts, and what the runs changed is applied
+    /// (<see cref="EquipmentMutationResult.RolledBack"/>). Without a host, an item or occupant with item event scripts is refused
+    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). A run the session cannot apply refuses the move with nothing changed.
     /// </summary>
     [OriginalFunction(0x464AE0, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Equip(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
-        SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
+        SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(artCheck);
@@ -230,7 +271,8 @@ public sealed partial class GameSessionOwner
         if (kind != item.Kind || !EquipmentDomain.Matches(kind.Type, item.Item.Kind)) return RejectWear(GameSessionFailure.InventoryMismatch);
         _equipment.Worn.TryGetValue(slot, out var current);
         if (current?.Entity == entity) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
-        if (EquipmentDomain.MoveScripts.Any(item.ScriptPoints.Contains)) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
+        var points = EquipmentDomain.MovePoints(item.ScriptPoints);
+        if (scripts is null && (points.Count > 0 || current?.ScriptPoints.Count > 0)) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
         if (item.HasItemSpells) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
 
         var worn = _equipment.Items();
@@ -248,6 +290,7 @@ public sealed partial class GameSessionOwner
         refusal = EquipmentRules.CheckRemove(item.Item);
         if (refusal == EquipmentRefusal.None && current is not null) refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
+        if (scripts is not null && (points.Count > 0 || current?.ScriptPoints.Count > 0)) return EquipWithScripts(entity, slot, item, points, current, insertCheck, scripts, revision);
         SessionInsertVerdict? verdict = null;
         if (current is not null)
         {
@@ -263,15 +306,91 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current?.Entity, verdict, Version);
     }
 
+    // ARC-SCRIPT-042: the move of Equip with its item events (IE3–IE6), after the checks that come before any move.
+    private EquipmentMutationResult EquipWithScripts(string entity, EquipmentSlot slot, SessionWearableItem item, IReadOnlyList<int> points,
+        SessionWornItem? current, SessionInsertCheck insertCheck, ISessionItemScriptHost scripts, long revision)
+    {
+        var previous = _equipment.SlotOf(entity);
+        var items = new Dictionary<string, int>(StringComparer.Ordinal) { [entity] = item.Item.MagickTechComplexity };
+        if (current is not null) items[current.Entity] = current.Item.MagickTechComplexity;
+        var (map, flagVersion) = (_actor.Map, _flags.Version);
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, items);
+        bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion;
+        EquipmentMutationResult Refused(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
+            RejectWear(failure, verdict: verdict) with { Scripts = runs.Runs };
+
+        RemovalRuns(runs, entity, points, previous is not null);
+        SessionInsertVerdict? verdict = null;
+        var rolledBack = false;
+        if (current is null) InsertionRuns(runs, entity, points, wield: true);
+        else
+        {
+            RemovalRuns(runs, current.Entity, current.ScriptPoints, worn: true);
+            ThrowIfDisposed();
+            if (Stale()) return Refused(GameSessionFailure.StaleVersion);
+            if (runs.Failure != GameSessionFailure.None) return Refused(runs.Failure);
+            verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+                current.Item.MagickTechComplexity);
+            ThrowIfDisposed();
+            if (Stale()) return Refused(GameSessionFailure.StaleVersion, verdict);
+            if (verdict == SessionInsertVerdict.Accepted)
+            {
+                InsertionRuns(runs, current.Entity, current.ScriptPoints, wield: false);
+                InsertionRuns(runs, entity, points, wield: true);
+            }
+            else
+            {
+                // The item goes back first, worn again when it was worn, then the occupant into the slot (0x464BC4).
+                rolledBack = true;
+                InsertionRuns(runs, entity, points, wield: previous is not null);
+                InsertionRuns(runs, current.Entity, current.ScriptPoints, wield: true);
+            }
+        }
+        ThrowIfDisposed();
+        if (Stale()) return Refused(GameSessionFailure.StaleVersion, verdict);
+        runs.Prepare();
+        if (runs.Failure != GameSessionFailure.None) return Refused(runs.Failure, verdict);
+        if (rolledBack && !runs.Changes)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, verdict, Version)
+                { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = true };
+        runs.Commit();
+        if (!rolledBack)
+        {
+            if (previous is { } worn) _equipment.Worn.Remove(worn);
+            _equipment.Worn[slot] = new(slot, entity, item.Item) { ScriptPoints = points };
+        }
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, rolledBack ? null : current?.Entity, verdict, Version)
+            { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = rolledBack };
+    }
+
+    // IE3: a removal from the hero's inventory unwields a worn item first (wield off, 0x467CB0), then runs remove item; IE4: an insertion
+    // wields an item put into a wear slot (wield on, 0x4677B0) and then runs insert item. The hero is the triggerer of each, the item the
+    // attachee. Only the points the item carries run.
+    private static void RemovalRuns(ItemScriptRuns runs, string entity, IReadOnlyList<int> points, bool worn)
+    {
+        if (worn && points.Contains(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, entity, SessionEventKinds.PlayerEntity, null);
+        if (points.Contains(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, entity, SessionEventKinds.PlayerEntity, null);
+    }
+
+    private static void InsertionRuns(ItemScriptRuns runs, string entity, IReadOnlyList<int> points, bool wield)
+    {
+        if (wield && points.Contains(SessionScriptPoint.WieldOn)) runs.Run(SessionScriptPoint.WieldOn, entity, SessionEventKinds.PlayerEntity, null);
+        if (points.Contains(SessionScriptPoint.InsertItem)) runs.Run(SessionScriptPoint.InsertItem, entity, SessionEventKinds.PlayerEntity, null);
+    }
+
     /// <summary>
     /// Takes the item in <paramref name="slot"/> off into the hero's inventory (the source's 0x464C80): NoChange for an
     /// empty slot; refused for an item with the no-drop flag (<see cref="GameSessionFailure.WearRefused"/>,
     /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>; a
     /// technological item for a Technophobia hero is <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069), which
     /// the source asks with the item still worn (its weight counts twice near the carry limit). One revision.
+    /// ARC-SCRIPT-042: with <paramref name="scripts"/>, an item with item event scripts runs them after the insert check accepts, as the
+    /// original's removal and insertion do (wield off 25, remove item 28, insert item 21; ledger IE6, WE7); without a host such an item is
+    /// refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
     /// </summary>
     [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
-    public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck)
+    public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -280,6 +399,7 @@ public sealed partial class GameSessionOwner
         if (_hero is null) return RejectWear(GameSessionFailure.EquipmentUnavailable);
         if (!_equipment.Worn.TryGetValue(slot, out var current))
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
+        if (scripts is null && current.ScriptPoints.Count > 0) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
         var refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
@@ -289,6 +409,24 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
+        if (scripts is not null && current.ScriptPoints.Count > 0)
+        {
+            var (map, flagVersion) = (_actor.Map, _flags.Version);
+            var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap,
+                new Dictionary<string, int>(StringComparer.Ordinal) { [current.Entity] = current.Item.MagickTechComplexity });
+            RemovalRuns(runs, current.Entity, current.ScriptPoints, worn: true);
+            InsertionRuns(runs, current.Entity, current.ScriptPoints, wield: false);
+            ThrowIfDisposed();
+            if (_revision != revision || _actor.Map != map || _flags.Version != flagVersion)
+                return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict) with { Scripts = runs.Runs };
+            runs.Prepare();
+            if (runs.Failure != GameSessionFailure.None) return RejectWear(runs.Failure, verdict: verdict) with { Scripts = runs.Runs };
+            runs.Commit();
+            _equipment.Worn.Remove(slot);
+            _revision++;
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version)
+                { Scripts = runs.Runs, Messages = runs.Messages };
+        }
         _equipment.Worn.Remove(slot);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version);
@@ -347,6 +485,9 @@ public sealed partial class GameSessionOwner
         foreach (var worn in saved.Worn)
         {
             if (worn is null || !Enum.IsDefined(worn.Slot) || !EquipmentRules.IsValid(worn.Item)) return GameSessionFailure.InvalidEquipment;
+            // ARC-SCRIPT-042: item event points only, strictly ascending.
+            if (worn.ScriptPoints is null || !worn.ScriptPoints.SequenceEqual(EquipmentDomain.MovePoints(worn.ScriptPoints)) ||
+                worn.ScriptPoints.Distinct().Count() != worn.ScriptPoints.Count) return GameSessionFailure.InvalidEquipment;
             if (!kinds.TryGetValue(worn.Entity, out var kind) || !EquipmentDomain.Matches(kind.Type, worn.Item.Kind)) return GameSessionFailure.InvalidEquipment;
             var location = worn.Slot == EquipmentSlot.Ring2 ? EquipmentSlot.Ring1 : worn.Slot;
             if (EquipmentRules.WearSlot(worn.Item) != location || equipment.SlotOf(worn.Entity) is not null ||

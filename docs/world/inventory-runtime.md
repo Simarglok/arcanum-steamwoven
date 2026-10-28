@@ -134,7 +134,10 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
   remove-item or insert-item point is refused as before, and nothing runs.
 - Every run uses `SessionItemScripts.Admission` (S6 without the dialog action, story state and deferred calls) and the effect rules
   of the insert-item script above (global flags and printed lines only; a changed attachment, a dialog, story state, a deferred call
-  or a trap destruction refuses the transfer). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
+  or a trap destruction refuses the transfer). Since ARC-SCRIPT-042 the set also holds the item-effect commands, and a transfer
+  applies what an equipment move applies ([wield events](equipment-runtime.md#wield-events-arc-script-042)): the hero's effect
+  changes and the moved item's changed slots, which the session keeps (also on a declined gate: the item's slot stays changed where it
+  lies). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
   original; nothing is applied before the commit, and the first refused run ends the transfer (`ItemScriptUnsupported`, no effect,
   no later run).
 - **Skip default of a gate** (get or transfer): the item stays where it is and the insert check is not asked, as in the original. The
@@ -152,10 +155,11 @@ get (4), drop (5) or buy (17) script; insert-item 74 + 12 slots, 41 scripts, 7 a
 get object type, toggle state); remove-item 6 + 8 slots on generic items, 3 scripts, none admitted; transfer 16 slots, all on
 containers (the recipient when the PC puts an item in), 14 scripts, 1 admitted; wield on 309 + 61 slots, 56 scripts, none admitted;
 wield off 299 + 59 slots, 52 scripts, 1 admitted. The wield pair needs add and remove effect (77, 78), magic-tech adjustment (91),
-call-ex (81) and the conditions identified (47) and items being rewielded (50).
+call-ex (81) and the conditions identified (47) and items being rewielded (50); with them (ARC-SCRIPT-042) 43 wield-on and 50
+wield-off scripts are admitted, the other counts stay.
 
-**Not ready.** The wield-on and wield-off events of `Equip`, `Unequip` and `EquipBest` (the order is read, IE5–IE7; the session
-still refuses to wield an item with a move script, [equipment](equipment-runtime.md)); the drop event (no drop command and no
+**Not ready.** The wield-on and wield-off events of `EquipBest` and the rewield (`Equip` and `Unequip` run them since
+ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event (no drop command and no
 installed drop script; the critical drops of [placed items](#placed-items-arc-world-059) run no script); the buy event (no barter);
 the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 

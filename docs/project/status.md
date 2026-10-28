@@ -156,6 +156,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | SCR teleports and guards | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-014, ARC-SCRIPT-015, ARC-UI-049 |
 | SCR deferred calls | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-010, ARC-WORLD-039 |
 | SCR print line and item insert scripts | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-013 |
+| SCR wield events and item effects | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-042 |
 | SCR dialogue through the dispatcher | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-009 |
 | SCR dispatcher core | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-008, ARC-RES-048, ARC-SCRIPT-040 |
 | SCR program and admission | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-007, ARC-RES-045, ARC-SCRIPT-008 |

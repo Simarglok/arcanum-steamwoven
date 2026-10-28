@@ -222,6 +222,8 @@ public sealed partial class GameSessionOwner
         _inventory.Ammo.Remove(entity);
         _inventory.Piles.Remove(entity);
         _inventory.Given.Remove(entity);
+        // ARC-SCRIPT-042: its kept script slots go with it.
+        foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);
