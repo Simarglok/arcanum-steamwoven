@@ -39,6 +39,14 @@ public sealed class HotkeyBarTests
         Assert.AreEqual(282, HotkeyBarRules.SkillIcon(2), "disarm traps");
         Assert.AreEqual(278, HotkeyBarRules.SkillIcon(3), "repair");
         Assert.AreEqual(279, HotkeyBarRules.SkillIcon(7), "outside the table: prowling's");
+        // ARC-UI-035: the skill a button uses (table 0x5CB240) and a college's icon (table 0x5B55F0).
+        CollectionAssert.AreEqual(new int?[] { 6, 5, 15, 12, null, null }, new[] { 0, 1, 2, 3, 4, -1 }.Select(HotkeyBarRules.ButtonSkill).ToArray(),
+            "prowling, pick pocket, tech disarm traps (12 + 3), tech repair (12 + 0)");
+        Assert.AreEqual(446, HotkeyBarRules.CollegeIcon(0), "conveyance");
+        Assert.AreEqual(461, HotkeyBarRules.CollegeIcon(15));
+        Assert.AreEqual(446, HotkeyBarRules.CollegeIcon(16), "outside the table: college 0's");
+        Assert.AreEqual(446, HotkeyBarRules.CollegeIcon(-1));
+        Assert.AreEqual(16, HotkeyBarRules.CollegeIcons.Count);
         CollectionAssert.AllItemsAreUnique(HotkeyBarRules.ArtNumbers.ToArray());
         CollectionAssert.Contains(HotkeyBarRules.ArtNumbers.ToArray(), HotkeyBarRules.SlotArt);
     }

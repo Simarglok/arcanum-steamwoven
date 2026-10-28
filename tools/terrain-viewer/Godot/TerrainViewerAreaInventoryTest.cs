@@ -453,7 +453,43 @@ public partial class TerrainViewerApp
             dragged += 2;
         }
         GD.Print($"ARC-UI-019 native-smoke drag PASS dragged={dragged} grid={session.QueryHeroGrid().Items.Count} unplaced={session.QueryHeroGrid().Unplaced.Count}");
+        await StillPointerForSmoke();
         return (dragged, _inventoryPanel.ViewForSelfTest!);
+    }
+
+    /// <summary>ARC-UI-035: the still pointer over a grid item draws its item window in the bars' message window (0x573C74 → 0x57CCF0): the
+    /// item's type icon and its name; resting on it again draws nothing new, and resting on a free cell keeps the description.</summary>
+    private async Task StillPointerForSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-035 native-smoke inventory-still FAIL " + why); throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); } }
+        var area = _inventoryPanel!.GridAreaForSelfTest;
+        var view = _inventoryPanel.ViewForSelfTest!;
+        if (view.Grid.FirstOrDefault() is not { } item) { GD.Print("ARC-UI-035 native-smoke inventory-still SKIP the grid is empty"); return; }
+        var bars = _gameBarForSelfTest;
+        _gameBarForSelfTest = true;
+        try
+        {
+            for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_gameBarPanel is { Visible: true } && !_messageLog.PaneMode, "the bars show in the message mode");
+            var described = _hotkeyDescriptionsForSelfTest;
+            area.StillAt(AreaInventoryGridArea.CellCentre(item.Slot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var log = _gameBarPanel!.MessageLog;
+            Require(_hotkeyDescriptionsForSelfTest == described + 1 && log.ShownKindForSelfTest == AreaMessageKind.Item, $"the still pointer drew {item.Entity}'s item window: {log.ShownKindForSelfTest}");
+            Require(log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == 1, $"the window shows the type icon and the name (icon {log.IconForSelfTest is not null}, texts {log.DrawnTextsForSelfTest})");
+            area.StillAt(AreaInventoryGridArea.CellCentre(item.Slot));
+            Require(_hotkeyDescriptionsForSelfTest == described + 1, "resting on the same item again draws nothing new");
+            int? free = Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell => AreaInventoryDrag.ItemAt(view.Grid, cell!.Value) is null);
+            if (free is { } cell) area.StillAt(AreaInventoryGridArea.CellCentre(cell));
+            Require(log.ShownKindForSelfTest == AreaMessageKind.Item, "resting on a free cell keeps the description");
+            GD.Print($"ARC-UI-035 native-smoke inventory-still PASS item={item.Entity} colour={log.FirstTextColourForSelfTest.ToHtml(false)} free={(free is null ? "-" : free)}");
+        }
+        finally
+        {
+            _messageLog.ClearHover();
+            _gameBarForSelfTest = bars;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
     }
 
     /// <summary>ARC-UI-025: a right click (its release, IW5) on a worn item does nothing; a usable item (when the hero holds one) is used; a taken item dragged

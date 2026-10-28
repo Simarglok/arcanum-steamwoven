@@ -25,6 +25,12 @@ public sealed class AreaItemIconsTests
         // Not identified: a magickal hexed weapon shows the plain magick icon; identified, the hexed one.
         Assert.AreEqual(392, HotkeyBarRules.ItemTypeIcon(AreaItemIcons.Facts(Item(5, 5, 0x40), false)));
         Assert.AreEqual(HotkeyBarRules.HexedIcon, HotkeyBarRules.ItemTypeIcon(AreaItemIcons.Facts(Item(5, 5, 0x40), true)));
+        // ARC-UI-035: the item window's name colour (0x554F10).
+        Assert.AreEqual(AreaMessageColour.Hexed, AreaItemIcons.NameColour(AreaItemIcons.Facts(Item(5, 5, 0x40), true)), "identified and hexed: orange");
+        Assert.AreEqual(AreaMessageColour.Magick, AreaItemIcons.NameColour(AreaItemIcons.Facts(Item(5, 5, 0x40), false)), "hexed but not identified: magick blue");
+        Assert.AreEqual(AreaMessageColour.Magick, AreaItemIcons.NameColour(AreaItemIcons.Facts(Item(5, 5, 0), false)));
+        Assert.AreEqual(AreaMessageColour.Hexed, AreaItemIcons.NameColour(AreaItemIcons.Facts(Item(5, -5, 0x40), false)), "a technological item counts as identified");
+        Assert.AreEqual(AreaMessageColour.White, AreaItemIcons.NameColour(AreaItemIcons.Facts(Item(5, -5, 0), false)));
     }
 
     [TestMethod]

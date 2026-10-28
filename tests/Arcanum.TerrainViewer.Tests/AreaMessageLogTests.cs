@@ -169,7 +169,11 @@ public sealed class AreaMessageLogTests
         Assert.AreEqual((211, 503, 383, 82), AreaMessageLayout.Window, "0x5C6D60 mode 0");
         Assert.AreEqual((210, 504, 382, 41), AreaMessageLayout.OlderArea);
         Assert.AreEqual((210, 545, 382, 41), AreaMessageLayout.NewerArea);
-        CollectionAssert.AreEquivalent(new[] { 354, 438, 442, 443, 444 }, AreaMessageLayout.ArtNumbers.ToArray());
+        CollectionAssert.IsSubsetOf(new[] { 354, 438, 442, 443, 444 }, AreaMessageLayout.ArtNumbers.ToArray());
+        // ARC-UI-035: the colleges' icons (spell hints) and the items' type icons (item windows) too.
+        CollectionAssert.IsSubsetOf(Enumerable.Range(446, 16).ToArray(), AreaMessageLayout.ArtNumbers.ToArray());
+        CollectionAssert.IsSubsetOf(Arcanum.Presentation.Hud.HotkeyBarRules.TypeIconNumbers.ToArray(), AreaMessageLayout.ArtNumbers.ToArray());
+        CollectionAssert.AllItemsAreUnique(AreaMessageLayout.ArtNumbers.ToArray());
         CollectionAssert.IsSubsetOf(AreaGameBarLayout.ArtNumbers.ToArray(), AreaGameBarContent.ArtNumbers.ToArray());
         CollectionAssert.IsSubsetOf(AreaMessageLayout.ArtNumbers.ToArray(), AreaGameBarContent.ArtNumbers.ToArray());
 
@@ -183,5 +187,66 @@ public sealed class AreaMessageLogTests
         Assert.AreEqual("444 True: (290, 504, 291, 78) Text False 'Inventory'", Of(AreaMessageLayout.Draw(Hover("Inventory"))));
         Assert.AreEqual("- False: (217, 504, 364, 78) Text True 'Heavy'", Of(AreaMessageLayout.Draw(Message("Heavy"), wide: true)));
         Assert.AreEqual("- False: (217, 504, 364, 19) Title True 'Magic' | (217, 528, 364, 54) Text True 'x'", Of(AreaMessageLayout.Draw(Plain("Magic\nx"), wide: true)));
+    }
+
+    [TestMethod]
+    public void Hints_are_shown_like_hover_texts_and_never_stored()
+    {
+        var log = new AreaMessageLog();
+        log.Post(Message("Heavy"), 1_000);
+        var skill = new AreaMessageEntry(AreaMessageKind.SkillHint, "Prowling", Detail: "Sneak.");
+        Assert.IsFalse(skill.Stored);
+        Assert.AreEqual(new AreaMessagePost(false, false, null), log.Post(skill, 4_000), "within 3 s of the last stored entry");
+        Assert.AreEqual(new AreaMessagePost(false, true, null), log.Post(skill, 4_001));
+        Assert.AreSame(skill, log.Shown);
+        Assert.AreEqual(1, log.Count, "never stored");
+        log.ClearHover();
+        Assert.AreEqual("Heavy", log.Shown?.Title, "leaving shows the viewed entry again (ML7)");
+        Assert.IsNull(AreaMessageLog.Sound(AreaMessageKind.SpellHint));
+        Assert.ThrowsExactly<ArgumentException>(() => AreaMessageEntry.Text(AreaMessageKind.SkillHint, "x"));
+        Assert.ThrowsExactly<ArgumentException>(() => log.Post(new AreaMessageEntry(AreaMessageKind.Item, "Sword"), 9_000));
+    }
+
+    [TestMethod]
+    public void The_item_window_draws_at_once_and_a_pane_takes_only_the_name()
+    {
+        var log = new AreaMessageLog();
+        log.Post(Message("Heavy"), 1_000);
+        var item = new AreaMessageEntry(AreaMessageKind.Item, "Sword") { Icon = 391 };
+        Assert.IsTrue(log.ShowItem(item), "no time test: 0x554F10 does not go through the post");
+        Assert.AreSame(item, log.Shown);
+        Assert.AreEqual(1, log.Count);
+        Assert.IsFalse(log.ShowPaneName(1, "Sword"), "no pane name in the message mode");
+        log.EnterPane();
+        Assert.IsFalse(log.ShowItem(item));
+        Assert.IsFalse(log.ShowPaneName(3, "Sword", item: true), "an item writes nothing in bar mode 3 (0x553BE0)");
+        Assert.IsTrue(log.ShowPaneName(3, "Prowling"));
+        Assert.IsTrue(log.ShowPaneName(8, "Sword", item: true));
+        Assert.AreEqual((8, "Sword"), log.PaneName);
+        log.ClearHover();
+        Assert.AreEqual((8, "Sword"), log.PaneName, "leaving in a pane mode keeps the name (0x550720 acts in mode 0 only)");
+        log.EnterMessages();
+        Assert.IsNull(log.PaneName);
+        Assert.AreEqual("Heavy", log.Shown?.Title);
+        Assert.AreEqual((208, 574, 387, 18), AreaMessageLayout.PaneText(1), "0x5C6D60 + 20");
+        Assert.AreEqual((208, 567, 387, 18), AreaMessageLayout.PaneText(2));
+        Assert.AreEqual((355, 506, 227, 18), AreaMessageLayout.PaneText(8));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaMessageLayout.PaneText(9));
+    }
+
+    [TestMethod]
+    public void Hints_and_the_item_window_follow_0x5529C0_and_0x554F10()
+    {
+        static string Of(AreaMessageDraw draw) => $"{draw.Icon?.ToString() ?? "-"} {draw.Widens}: " + string.Join(" | ",
+            draw.Texts.Select(t => $"{t.Rect} {t.Font}{(t.Right ? " right" : "")}{(t.Colour != AreaMessageColour.White ? " " + t.Colour : "")} '{t.Text}'"));
+        Assert.AreEqual("444 False: (290, 504, 291, 19) Title 'Prowling' | (290, 528, 291, 54) Text 'Sneak.'",
+            Of(AreaMessageLayout.Draw(new(AreaMessageKind.SkillHint, "Prowling", Detail: "Sneak."))));
+        Assert.AreEqual("444 False: (290, 504, 291, 19) Title 'Repair' | (290, 528, 291, 54) Text 'Fix.' | (290, 504, 291, 19) Text right Red 'Points: 3'",
+            Of(AreaMessageLayout.Draw(new(AreaMessageKind.SkillHint, "Repair", Detail: "Fix.") { Value = "Points: 3" })));
+        Assert.AreEqual("447 False: (290, 504, 291, 19) Title 'Spark' | (290, 528, 291, 18) Text 'Minimum willpower: 6' | (290, 528, 291, 18) Text right 'Fatigue cost: 5' | (290, 546, 291, 36) Text 'Zap.'",
+            Of(AreaMessageLayout.Draw(new(AreaMessageKind.SpellHint, "Spark", "Minimum willpower: 6", "Zap.") { Icon = 447, Value = "Fatigue cost: 5" })));
+        Assert.AreEqual("391 False: (290, 504, 291, 19) Title Magick 'Sword'",
+            Of(AreaMessageLayout.Draw(new(AreaMessageKind.Item, "Sword") { Icon = 391, TitleColour = AreaMessageColour.Magick })));
+        Assert.AreEqual("- False: (290, 504, 291, 19) Title 'Rock'", Of(AreaMessageLayout.Draw(new(AreaMessageKind.Item, "Rock"))));
     }
 }
