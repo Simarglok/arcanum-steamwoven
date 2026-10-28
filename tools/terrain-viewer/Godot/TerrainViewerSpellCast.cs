@@ -75,6 +75,8 @@ public partial class TerrainViewerApp
         public long? ReleasedMs { get; set; }
         // ARC-MAGIC-019: the target failed the re-check before the cast eye candy was added (0x429F00): the goal ends through the end step.
         public bool TargetFailedAtStart { get; set; }
+        /// <summary>ARC-WORLD-108: the release's refused re-check freed the run (MG41): the goal's end frees nothing.</summary>
+        public bool FreedAtRelease { get; set; }
     }
 
     private bool SpellMapActive => AttackMapActive && _readyArea is not null && _worldActor.Session is AreaGridSession;
@@ -252,6 +254,9 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-MAGIC-015 cast-release run={goal.Run} spell={goal.Spell} begun={released?.Disposition.ToString() ?? "re-check failed"}"
             + $" failure={released?.Failure} at={now - (goal.StartMs ?? now)}ms");
         if (released is not null) PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run, now);
+        // MG41 (fixed in both settings): a refused re-check freed the run, so the goal's end must not touch its slot, which another
+        // cast may take before the end (a queued hero cast, an NPC's cast through the same host).
+        else if (_areaSession?.QuerySpellRuns()[goal.Run] is null) goal.FreedAtRelease = true;
         FlushSpellLog(released is null ? "the target is no longer valid" : null);
         return released is not null;
     }
@@ -261,7 +266,7 @@ public partial class TerrainViewerApp
         _spellGoal = null;
         // The end node removes the cast eye candy (0x429CD0, 0x431A40).
         _eyeCandies.RemoveAll(e => e.Cast is not null && e.Run == goal.Run);
-        var ended = caster.EndGoal(goal.Run);
+        var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run);
         GD.Print($"ARC-MAGIC-015 cast-end run={goal.Run} spell={goal.Spell} released={goal.Released} freed={ended?.Disposition.ToString() ?? "nothing"}"
             + (why is null ? "" : " why=" + why));
         FlushSpellLog(why);

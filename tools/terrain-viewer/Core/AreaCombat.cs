@@ -122,6 +122,46 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return SessionItemSpells.FromCombatFields(entity, holder, fields);
     }
 
+    /// <summary>
+    /// ARC-WORLD-108: the items an NPC of a map this host covers holds now, listed or worn, in its list's order as the session shows the
+    /// map's holders (the AI's inventory, fields 0xED/0xEE), each with its fields (<see cref="ItemFields"/>); a destroyed item and one
+    /// without fields (NOT READY: an item without a row before the prototypes load) are left out. Empty for an NPC the session does
+    /// not list.
+    /// </summary>
+    public IReadOnlyList<(string Entity, CombatFields Fields)> NpcItems(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
+            return [];
+        var items = new List<(string, CombatFields)>();
+        foreach (var item in holder.Items)
+            if (!session.IsItemDestroyed(item.Entity) && ItemFields(map, item) is { Item: not null } fields) items.Add((item.Entity, fields));
+        return items;
+    }
+
+    /// <summary>ARC-WORLD-108: the fields of an item an NPC of a map this host covers holds now (<see cref="ItemFields"/>), or null for
+    /// an item no NPC of that map holds, a destroyed one, or one without fields.</summary>
+    public CombatFields? NpcItemFields(GameSessionOwner session, int runtimeMap, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (!_maps.TryGetValue(runtimeMap, out var map)) return null;
+        var (holders, npcItems) = HolderIndex(session, runtimeMap);
+        return npcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
+            && holders[holder].Items.FirstOrDefault(listed => listed.Entity == item) is { Entity: not null } found
+            && ItemFields(map, found) is { Item: not null } fields ? fields : null;
+    }
+
+    /// <summary>ARC-WORLD-108: the NPC of a map this host covers that holds the item now (0x4612A0 for an NPC's item), or null.</summary>
+    public string? NpcHolder(GameSessionOwner session, int runtimeMap, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        return _maps.ContainsKey(runtimeMap) && HolderIndex(session, runtimeMap).NpcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
+            ? holder : null;
+    }
+
     /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
     public CombatFields? Fields(int runtimeMap, string entity) =>
         _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;

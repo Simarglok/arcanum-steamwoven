@@ -123,13 +123,6 @@ public sealed record MagicAnomalyProfile
     public bool GoalEndChargesAnyRun { get; init; }
 
     /// <summary>
-    /// MG41 (ARC-MAGIC-014, owner decision 2026-10-27: fix): when the target re-check at the release frame (0x456A90) fails, the
-    /// release gate has already marked the frame handled, so the goal's end frees nothing and the run keeps its slot until the game
-    /// ends. Steamwoven frees it, unpaid.
-    /// </summary>
-    public bool ReleaseRefusalKeepsRun { get; init; }
-
-    /// <summary>
     /// MG46 (ARC-MAGIC-024; owner decision 2026-10-28, ARC-MAGIC-025: the narrow fix): a run an item event started takes its parent,
     /// the item's holder, as the attacker of its damage step (DH1), whose wrappers walk the worn items again (IC2, IC9), and the
     /// executor has no guard, so an item fires again on the damage of its own run or of a run it caused: a weapon whose
@@ -141,6 +134,15 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ItemRunDamageFiresHooks { get; init; }
 
+    /// <summary>
+    /// MG47 (ARC-WORLD-108, the owner's standing rule for gameplay slips: fix in Steamwoven): perform's cast with an item (0x4AC250)
+    /// clears the source of every run whose source or parent is the item (0x4574D0) for any item, outside its food-or-scroll test, right
+    /// after the run starts and before its casting goal plays: the run then has no source to pay from, so an NPC casting from a wand or
+    /// another item with charges spends none. The hero's item use clears the sources only of the food or scroll it destroys. Steamwoven
+    /// clears them only for a food or scroll, so the item pays its charge as the hero's does.
+    /// </summary>
+    public bool AiItemCastClearsAnySource { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -151,7 +153,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true, ItemRunDamageFiresHooks = true,
+        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true,
     };
 
     /// <summary>Both settings, default first.</summary>

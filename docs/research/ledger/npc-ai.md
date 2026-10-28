@@ -550,3 +550,18 @@ direct branch stays inside `.text`.
 | TA2 | attack starter (0x434B00, 0x434B64–0x434BE4) | The weapon slot's item (0x4649C0 with 1004), its type (field 0x14F) 5, its weapon flags (field 0x70) bit 0x200 and the remove check 0x466DA0 answering 0; then 0x466E00 and the throw starter 0x434F80 with the attacker, the item and the target's location (0x406DA0, field 2), whose answer is the starter's. Any other attacker goes on to the attack goal (0x4B7C30) and the start gate (0x4348E0). | Original (TW1 holds) |
 
 **F0 facts raised:** the removal 0x466E00 and the inventory removal 0x467860's placement (F1).
+
+## NPC AI item use (ARC-WORLD-108)
+
+Source: the [AI viewer host](../../world/ai-host.md#item-use-arc-world-108) contract (slice I10, part 3e: the NPCs' items). Question:
+what an NPC's use of an item and its cast from an item do, against the hero's (IU1–IU10, SU1–SU3, AG14, AG15). Read on 2026-10-28 by
+one reader (F1) with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`): perform's cast 0x4AC250 (whole),
+the item use's slot-0 callback 0x57CE30, the activation 0x57BC70 up to its caster tests and its common exit, the cancel 0x57BFF0
+and the type test 0x40DA20. EX2, AG14, AG15, IU1–IU10 and SU1–SU3 agree and are not re-read. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| NU1 | perform's cast (0x4AC250) | The invocation (0x455A20) from the pass record's item (+0x20) when it is set, else the NPC (+0x0), with the spell (+0x18); the target object (+0x8) through 0x4440E0; the check 0x4564E0, whose refusal returns at once. Then the run (0x455AC0) and, with an item, 0x4574D0(item) for **any** item, then the destruction 0x43CCA0 only for type 9 (food) or 10 (scroll), whatever the run start answered. | Original (agrees with EX2, AG14) |
+| NU2 | slot-0 callback (0x57CE30), activation (0x57BC70), 0x40DA20 | The callback returns at once for a record with item triggers (0x45A030); else it calls the activation and casts at the use's target (0x57C110) only on 0, then the cancel. The activation takes an item's holder (0x4612A0, for an object of type 5..14) as caster, and its first test after that is 0x40DA20: the caster's type (field 0x14F) is 15 (PC). Any other caster leaves through the common exit with 1. So an NPC's item use never casts its slot-0 spell: only the item used executor (0x4CBF70) and the spend of a food or scroll follow (IU1). | Original (refines SU1, IU4 for an NPC holder) |
+| NU3 | cancel (0x57BFF0) | Called after the activation in every case but a triggered record: it calls 0x500570 when 0x68350C is 0 and puts the interface in mode 0 (0x551A80(0)); the activation left 0x683508 at 1 on its non-PC exit, so the cursor's globals are not cleared. An NPC's item use therefore also returns the player's interface to its normal mode, closing a targeting cursor the player has open. | Original (not modelled: the viewer's cursor stays) |
+| NU4 | NU1's 0x4574D0 for any item | The run started for a wand (a weapon with charges) or another item that is not food or a scroll loses its source before its casting goal plays: the goal's pre-animation check and the BEGIN find no source to pay from, so the item spends no charge and the NPC casts its spell for free, as often as it chooses it. The hero's item use clears the sources only of the food or scroll it destroys (IU1). | Original bug (gameplay): MG47, `MagicAnomalyProfile.AiItemCastClearsAnySource`; Steamwoven clears them only for food or a scroll |

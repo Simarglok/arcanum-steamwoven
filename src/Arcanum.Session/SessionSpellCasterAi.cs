@@ -76,30 +76,71 @@ public sealed partial class SessionSpellCaster
     }
 
     /// <summary>
-    /// Perform's cast (0x4AC250, ledger AG14, IV12) of <paramref name="caster"/>'s own spell at <paramref name="targetObject"/> (null:
-    /// none): the invocation (0x455A20) with the caster as source and parent and the target object, in a turn-based round with the
+    /// ARC-WORLD-108: the predictor for an item's spell (0x453CC0, <see cref="SpellResistanceRules.ItemFailChance"/>): an item with
+    /// the magical flag (its stored flag, or set by a spent charge) answers <see cref="AiFailChance"/> of the critter's spell; any
+    /// other item, or one this host does not know, 0.
+    /// </summary>
+    public int AiItemFailChance(string critter, string item, string target, int spell)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(target);
+        return SpellResistanceRules.ItemFailChance(Item(item)?.Magical == true, spell, s => AiFailChance(critter, target, s));
+    }
+
+    /// <summary>
+    /// ARC-WORLD-108: whether the critter may use the item's spells (0x456A10, <see cref="SpellInvocationRules.HolderCanUseItem"/>):
+    /// by its aptitude, the item's complexity and the power it draws from it (0x4614A0). An item this host does not know may not be
+    /// used; an object without critter facts has no aptitude and may.
+    /// </summary>
+    public bool AiCanUseItem(string critter, string item)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        if (Item(item ?? throw new ArgumentNullException(nameof(item))) is not { } spells) return false;
+        var holder = RunObject(critter) is { IsCritter: true } ? Facts(critter) : null;
+        return SpellInvocationRules.HolderCanUseItem(holder?.Aptitude, spells.Complexity, () => ItemPower(spells, holder!));
+    }
+
+    /// <summary>
+    /// Perform's cast (0x4AC250, ledger AG14, IV12, re-read by ARC-WORLD-108) of <paramref name="caster"/>'s spell at
+    /// <paramref name="targetObject"/> (null: none): the invocation (0x455A20) from <paramref name="item"/> when given (the item as
+    /// source and its holder, the caster, as parent with the power it draws from the item, as the spell UI's item cast,
+    /// <see cref="CastAt"/>), else with the caster as source and parent, and the target object, in a turn-based round with the
     /// round's actor; its check (0x4564E0), a refusal doing nothing; then the run (0x455AC0 → 0x455C30), whose activation checks it a
     /// second time (so a technologist target's MG5 d100 is drawn twice) and whose casting goal, 26 or 82 by the record's casting
-    /// animation, is the host's (<see cref="StartGoal"/>). Unlike the spell UI's cast (<see cref="CastAt"/>) it tests neither the cost
-    /// nor the line of fire itself (the AI's eligibility test did). Nothing for a missing caster, record or target object. An item
-    /// source (its magic call 0x4574D0 and a spent food or scroll) is not ready: the host does not choose item entries yet.
+    /// animation, is the host's (<see cref="StartGoal"/>). Unlike the spell UI's cast it tests neither the cost nor the line of fire
+    /// itself (the AI's eligibility test did). With an item, once the check passed and whether or not a run started: the sources of
+    /// the item's runs are cleared (0x4574D0; in the Steamwoven setting only for food or a scroll, MG47) and a food or scroll is
+    /// destroyed (0x43CCA0, <see cref="SpendUsedItem"/>'s deletion). Nothing for a missing caster, record, target object, or an item
+    /// the host does not know as the caster's.
     /// </summary>
-    public SpellCastAttempt CastByAi(string caster, int spell, string? targetObject)
+    public SpellCastAttempt CastByAi(string caster, int spell, string? targetObject, string? item = null)
     {
         ArgumentNullException.ThrowIfNull(caster);
         if (_records(spell) is not { } record || Facts(caster) is not { } facts) return new(SpellCastAttemptOutcome.Nothing);
+        var spells = item is null ? null : Item(item);
+        if (item is not null && (spells?.Holder != caster || Facts(item) is null)) return new(SpellCastAttemptOutcome.Nothing);
         var target = targetObject is null ? null : Facts(targetObject);
         if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
         var round = _owner.QueryCombatRound();
-        var invocation = new SpellInvocation(spell, facts, facts, target, SpellLocation.None, ParentIsLocalPlayer: caster == Hero,
+        var invocation = new SpellInvocation(spell, facts, item is null ? facts : Facts(item)!, target, SpellLocation.None,
+            spells is null ? null : ItemPower(spells, facts), ParentIsLocalPlayer: caster == Hero,
             TurnBased: round is not null, TurnBasedActor: round is null ? null : round.Actor.Entity ?? Hero);
         var world = InvocationWorld();
         if (!SpellInvocationRules.Check(invocation, record.Run.Invocation, world, _owner.SpellRolls).Allowed)
             return new(SpellCastAttemptOutcome.Refused);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
-        if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
-            return new(SpellCastAttemptOutcome.Refused, null, started);
-        _itemChains.Remove(run.Id);
-        return new(SpellCastAttemptOutcome.Started, null, started, run.Id);
+        var run = started.Disposition == GameSessionDisposition.Changed ? started.Creation?.Run : null;
+        if (run is not null) _itemChains.Remove(run.Id);
+        if (spells is not null) SpendAiItem(spells);
+        return run is null ? new(SpellCastAttemptOutcome.Refused, null, started) : new(SpellCastAttemptOutcome.Started, null, started, run.Id);
+    }
+
+    // 0x4AC250's tail for an item source: 0x4574D0 on the item (any item in the Original setting, MG47), then a food or scroll destroyed.
+    private void SpendAiItem(SessionItemSpells item)
+    {
+        var used = item.Type is SessionItemSpells.FoodType or SessionItemSpells.ScrollType;
+        if (used || Profile.AiItemCastClearsAnySource) Act(new(SessionSpellRunActionKind.ClearSources, Object: item.Entity));
+        if (used) DestroyHeldItem(item);
     }
 }

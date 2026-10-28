@@ -66,8 +66,8 @@ public sealed record SessionItemTriggerResult(IReadOnlyList<int> Stopped, IReadO
 /// target (<see cref="AtTarget"/>).</summary>
 public enum SessionItemUseCast { NoSpell, Triggered, Nothing, InventoryTarget, AtCaster, AtTarget }
 
-/// <summary>Whether the item use took its spell path (ARC-MAGIC-022): the host does not know the item as the hero's
-/// (<see cref="Unknown"/>), the item has no charges and no magical flag (<see cref="NoMagic"/>: the use's other branches are the
+/// <summary>Whether the item use took its spell path (ARC-MAGIC-022): the host does not know the item (<see cref="Unknown"/>; before
+/// ARC-WORLD-108 also any item that was not the hero's), the item has no charges and no magical flag (<see cref="NoMagic"/>: the use's other branches are the
 /// host's), or it did (<see cref="Used"/>).</summary>
 public enum SessionItemUseOutcome { Unknown, NoMagic, Used }
 
@@ -272,17 +272,23 @@ public sealed partial class SessionSpellCaster
 
     /// <summary>
     /// ARC-MAGIC-022: the use's spending of a used food or scroll (0x4574D0, then the destruction 0x43CCA0): the session deletes it
-    /// (<see cref="GameSessionOwner.DestroyUsedItem"/>), then the source of every run whose parent or source is the item is cleared
+    /// (<see cref="GameSessionOwner.DestroyUsedItem"/> for the hero's; ARC-WORLD-108: <see cref="GameSessionOwner.RemoveItemFromNpc"/>
+    /// for an NPC's, refused for food or a scroll it wears), then the source of every run whose parent or source is the item is cleared
     /// (the original clears first; nothing reads the runs in between). Nothing is cleared when the deletion is refused. False when
-    /// nothing was deleted.
+    /// nothing was deleted, also for an item the host does not know or that is not food or a scroll.
     /// </summary>
     public bool SpendUsedItem(string item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (_owner.DestroyUsedItem(_owner.Version, item).Disposition != GameSessionDisposition.Changed) return false;
+        if (Item(item) is not { Type: SessionItemSpells.FoodType or SessionItemSpells.ScrollType } spells || !DestroyHeldItem(spells)) return false;
         Act(new(SessionSpellRunActionKind.ClearSources, Object: item));
         return true;
     }
+
+    // The destruction of a used food or scroll (0x43CCA0) out of its holder's lists: the hero's, or an NPC's (ARC-WORLD-108).
+    private bool DestroyHeldItem(SessionItemSpells item) => (item.Holder == Hero
+        ? _owner.DestroyUsedItem(_owner.Version, item.Entity).Disposition
+        : _owner.RemoveItemFromNpc(_owner.Version, item.Holder, item.Entity).Disposition) == GameSessionDisposition.Changed;
 
     // The map with the items a critter of it holds (ARC-MAGIC-020): an item is an object in its holder's inventory, at its holder's
     // location (the inventory flag 0x1000, owner the holder). Everything else is the map's.
@@ -354,14 +360,19 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     /// <see cref="SessionSpellCaster.CastAt"/> with the item as source); its casting goal plays at once with its end. Then the item
     /// used executor (0x4CBF70: <see cref="ItemSpellTriggerRules.ItemUsed"/>, the target as the other object) and, for food or a
     /// scroll, the spend (<see cref="SessionSpellCaster.SpendUsedItem"/>).
+    /// ARC-WORLD-108: an NPC's use of an item it holds (the AI's item-use goal 39 and the chooser's use at once) takes the same path
+    /// with the NPC as holder; the activation casts nothing for a caster that is not a PC (0x40DA20 in 0x57BC70, SU1), so its slot-0
+    /// spell is never cast (<see cref="SessionItemUseCast.Nothing"/>) and only the item used executor's spells and the spend follow.
+    /// The callback's cancel (0x57BFF0) still returns the player's interface to its normal mode, closing an open targeting cursor
+    /// (NU3): the host's.
     /// </summary>
     public SessionItemUseResult UseItem(string item, string? target)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (_caster.Item(item) is not { Holder: SessionSpellCaster.Hero } spells) return new(SessionItemUseOutcome.Unknown);
+        if (_caster.Item(item) is not { } spells) return new(SessionItemUseOutcome.Unknown);
         if (spells.Charges == 0 && !spells.Magical) return new(SessionItemUseOutcome.NoMagic);
         var (cast, attempt, goal) = CastSlotZero(spells, target);
-        var used = Played([], _caster.StartItemSpells(ItemSpellTriggerRules.ItemUsed, item, SessionSpellCaster.Hero, target));
+        var used = Played([], _caster.StartItemSpells(ItemSpellTriggerRules.ItemUsed, item, spells.Holder, target));
         var spent = spells.Type is SessionItemSpells.FoodType or SessionItemSpells.ScrollType && _caster.SpendUsedItem(item);
         return new(SessionItemUseOutcome.Used, cast, attempt, goal, used, spent);
     }
@@ -377,6 +388,8 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
         var spell = value;
         if (_caster.SpellRecord(spell) is not { } record) return (SessionItemUseCast.NoSpell, null, null);
         if (record.Data.ItemTriggers != 0) return (SessionItemUseCast.Triggered, null, null);
+        // ARC-WORLD-108: the activation's caster is the item's holder, and nothing happens for one that is not a PC (NU2).
+        if (item.Holder != SessionSpellCaster.Hero) return (SessionItemUseCast.Nothing, null, null);
         var begin = record.Areas.Length > 0 ? record.Areas[0].Targets : 0;
         var life = _caster.HeroLife;
         var active = life is { IsDead: false, IsUnconscious: false };

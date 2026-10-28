@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 namespace Arcanum.Session.Tests;
 
 // ARC-MAGIC-014: the cast host over a synthetic map (the hero and a box): the casting goal, the release frame's BEGIN with its payment
-// and Damage component, and MG39–MG41 in both modes. Records and numbers are invented.
+// and Damage component, MG39–MG40 in both modes and MG41 fixed in both. Records and numbers are invented.
 [TestClass]
 public sealed class SessionSpellCasterTests
 {
@@ -157,24 +157,27 @@ public sealed class SessionSpellCasterTests
     [TestMethod]
     public void A_goal_ends_nothing_after_its_release_frame_and_a_reused_slot_is_freed_again()
     {
-        // Original MG41: the box gone at the release frame keeps the run in its slot; its goal's end then frees nothing.
-        var record = SelfBolt(beginTargets: 0x4);
-        var (owner, caster) = Session(RuleMode.Original, record, boxDestroyed: false);
-        using var _ = owner;
-        var run = Start(owner, caster, record, "box");
-        var gone = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
-        Assert.IsNull(gone.Release(run));
-        var before = Hero(owner).Fatigue;
-        Assert.IsNull(gone.EndGoal(run), "the release frame handled the goal's frame");
-        Assert.AreEqual((before, true), (Hero(owner).Fatigue, owner.QuerySpellRuns()[run] is not null), "nothing charged or freed");
+        // MG41 (owner decision 2026-10-28: a slot leak, fixed in both settings): the box gone at the release frame frees the run unpaid;
+        // its goal's end then frees and charges nothing.
+        foreach (var mode in new[] { RuleMode.Original, RuleMode.Steamwoven })
+        {
+            var record = SelfBolt(beginTargets: 0x4);
+            var (owner, caster) = Session(mode, record, boxDestroyed: false);
+            using var _ = owner;
+            var run = Start(owner, caster, record, "box");
+            var gone = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
+            var before = Hero(owner).Fatigue;
+            Assert.IsNull(gone.Release(run), $"{mode}");
+            Assert.IsNull(gone.EndGoal(run), $"{mode}: the release frame handled the goal's frame");
+            Assert.AreEqual((before, true), (Hero(owner).Fatigue, owner.QuerySpellRuns()[run] is null), $"{mode}: freed unpaid");
 
-        // Freed through the same host, its slot reused: the new run's goal ends charged, once.
-        gone.Act(new(SessionSpellRunActionKind.Free, run));
-        var second = Start(owner, caster, record, "box");
-        Assert.AreEqual(run, second, "the slot is reused");
-        Assert.IsNotNull(gone.EndGoal(second));
-        Assert.IsNull(gone.EndGoal(second), "a goal ends once");
-        Assert.AreEqual(before - 7, Hero(owner).Fatigue, "charged once");
+            // Its slot reused: the new run's goal ends charged, once.
+            var second = Start(owner, caster, record, "box");
+            Assert.AreEqual(run, second, $"{mode}: the slot is reused");
+            Assert.IsNotNull(gone.EndGoal(second), $"{mode}");
+            Assert.IsNull(gone.EndGoal(second), $"{mode}: a goal ends once");
+            Assert.AreEqual(before - 7, Hero(owner).Fatigue, $"{mode}: charged once");
+        }
     }
 
     [TestMethod]
@@ -255,9 +258,10 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg41_a_target_gone_at_the_release_frame_keeps_the_run_in_the_original_and_frees_it_in_Steamwoven()
+    public void Mg41_a_target_gone_at_the_release_frame_frees_the_run_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        // Owner decision 2026-10-28: the original keeps the run in its slot until the game ends (a slot leak), fixed in both modes.
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
         {
             // A BEGIN area that takes objects (0x4): the box, destroyed by the release frame, no longer passes.
             var record = SelfBolt(beginTargets: 0x4);
@@ -589,9 +593,9 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg41_a_target_gone_when_the_missile_arrives_keeps_the_run_in_the_original_and_frees_it_in_Steamwoven()
+    public void Mg41_a_target_gone_when_the_missile_arrives_frees_the_run_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
         {
             var record = SelfBolt(beginTargets: 0x4);
             var (owner, caster, map) = MissileSession(mode, record);

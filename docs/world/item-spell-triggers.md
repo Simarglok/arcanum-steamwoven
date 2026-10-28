@@ -76,9 +76,11 @@ and saves the charges the spells spend. The other events are later slices (see [
 ## Item use (ARC-MAGIC-022)
 
 `SessionItemTriggers.UseItem(item, target)` is the spell branch of the hero's item use (0x462CC0, IU1). The host runs the use's
-earlier steps first, as the original does: the scroll test (`SessionSpellCaster.ScrollTooHard`: a scroll's spell needs intelligence
+earlier steps first, as the original does (ARC-WORLD-108: an NPC's use of an item it holds takes the same branch with the NPC as
+holder; the slot-0 activation casts nothing for a caster that is not a PC, ledger NU2, so only `Item_Used` and the spend follow, the
+spend out of the NPC's list, [AI host](ai-host.md#item-use-arc-world-108)): the scroll test (`SessionSpellCaster.ScrollTooHard`: a scroll's spell needs intelligence
 5, 0x4B1750, and a PC is told message 13), the targeting cursor for an item that needs a target (item flag 0x100) and has none, a trap
-device's own use, and the use script, which may stop the use. Outcomes: the host does not know the item as the hero's (`Unknown`);
+device's own use, and the use script, which may stop the use. Outcomes: the host does not know the item (`Unknown`; before ARC-WORLD-108 any item not the hero's);
 no charges and no magical flag (`NoMagic`: the reading, lockpick, healing kit and spending branches stay the host's, with their 4
 action points); else `Used`, in this order (the use charges no action points; each casting goal charges its own 4 in a turn-based
 round, so a goal refused there frees its run while a food or scroll is still spent):

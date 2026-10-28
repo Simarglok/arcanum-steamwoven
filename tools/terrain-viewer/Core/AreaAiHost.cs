@@ -75,8 +75,8 @@ public sealed record AreaAiScene
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
 /// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), (ARC-WORLD-102) a
 /// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
-/// skill attempt at its action frame and (ARC-WORLD-113) a throw at its action frame.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw }
+/// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame and (ARC-WORLD-108) an item use's magic branch.</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -100,9 +100,11 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public int Skill { get; init; } = -1;
     public SessionHealResult? Heal { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
-    /// <see cref="Target"/>, its attack in <see cref="Result"/>).</summary>
+    /// <see cref="Target"/>, its attack in <see cref="Result"/>); ARC-WORLD-108: the used item (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public string? Item { get; init; }
     public SessionNpcThrowResult? Throw { get; init; }
+    /// <summary>ARC-WORLD-108: what the item use's magic branch did (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
+    public SessionItemUseResult? ItemUse { get; init; }
 }
 
 /// <summary>
@@ -126,7 +128,9 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// above it are done; the AI pass itself never meets one, as the gate holds a casting NPC busy (AC6). ARC-WORLD-105: a spell with a
 /// missile launches it at the play's action frame (AC8), the viewer flying it from the NPC. ARC-WORLD-113: the attack starter's throw of
 /// a "default throws" weapon plays the throw goal 37 (<see cref="ThrowItem"/>, the session's <see cref="GameSessionOwner.ThrowByNpc"/>).
-/// NOT READY (later slices): item use and items in the lists, skills, pickups, a thrown item's flight,
+/// ARC-WORLD-108: the NPCs' items are listed (<see cref="Inventory"/>, <see cref="Item"/>), the pass's heal step chooses among them
+/// (<see cref="Heal"/>), perform casts from an item (<see cref="Cast"/>) and goal 39 uses one through the cast host's item use.
+/// NOT READY (later slices): the heal skill's rung and goal 40, pickups, a thrown item's flight,
 /// grenades, the back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
@@ -141,6 +145,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
     // ARC-WORLD-102: critter flag MECHANICAL and NPC flag CAST_HIGHEST (field 0x118, read in 0x4AE720).
     private const uint MechanicalFlag = 0x20000000, CastHighestNpc = 0x40000;
+    // ARC-WORLD-108: item flags identified, hexed and valid AI action (field 0x57, read by 0x4CCA30, 0x4CC810, 0x4CC930).
+    private const uint IdentifiedItem = 0x1, HexedItem = 0x40, ValidAiActionItem = 0x200000;
     // The lists of a host without spell records: every spell without AI values.
     private static readonly AiGlobalLists NoLists = AiGlobalLists.Build([.. Enumerable.Repeat(AiSpellValues.None, AiGlobalLists.Spells)]);
     private const int GuardClass = 5;
@@ -189,6 +195,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // saved), the facing a casting goal's start computed for its turn, and the magic runs whose play reaches no action frame.
     private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
     private AiListCache _listCache = AiListCache.Empty;
+    // ARC-WORLD-108: the items each NPC used or cast from, until they are gone (the list cache's drops, List).
+    private readonly Dictionary<string, HashSet<string>> _usedItems = new(StringComparer.Ordinal);
     private readonly Dictionary<int, SpellFacing?> _castFacing = [];
     private readonly HashSet<int> _noRelease = [];
     // ARC-WORLD-104: the magic runs of queued casting goals that have not started yet (SU13); an end step leaves them unplayed.
@@ -502,7 +510,33 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool AnimationRunning(string npc) => _runs.ContainsKey(npc);
     public void ReWield(string npc, bool allSlots) { }
     public void EndMaintainedSpells(string npc) { }
-    public bool Heal(string npc) => false;
+    /// <summary>
+    /// ARC-WORLD-108: heal (0x4A8940, <see cref="AiSupportRules.Heal"/>), the pass's first step: the healer's lists chosen for the NPC,
+    /// its leader and the party; a choice goes to this pass's perform as the pass record's, an AI-action item is used at once
+    /// (<see cref="UseItemAtOnce"/>). True when it chose: the pass skips the item search and the danger update. The heal skill's rung
+    /// finds no healing item (NOT READY).
+    /// </summary>
+    public bool Heal(string npc)
+    {
+        _passChoices.Remove(npc);
+        var heal = AiSupportRules.Heal(this, npc, _session.AiRolls, _session.Rules.Combat);
+        if (!heal.Chose) return false;
+        Trace(npc).Item = $"heal {heal.Attempts[^1].Target} {heal.Attempts[^1].Step} spell={heal.Choice?.Spell.ToString() ?? "-"} item={heal.Choice?.Item ?? heal.ItemUse?.Entry?.Item ?? "-"}";
+        if (heal.ItemUse is { } atOnce) UseItemAtOnce(npc, atOnce);
+        else if (heal.Choice is { } choice) _passChoices[npc] = choice;
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-108: the chooser's use of an AI-action item at once (0x4ABF10 → 0x462CC0, <see cref="AiChooserOutcome.ItemUsedAtOnce"/>):
+    /// the item use with the NPC as user and the entry's target, unchecked, before the pass goes on; the pass record keeps no choice.
+    /// </summary>
+    private void UseItemAtOnce(string npc, AiChooserResult chosen)
+    {
+        if (chosen.Entry?.Item is not { } item) return;
+        var used = AiExecutorRules.UseItemNow(this, npc, item, chosen.Target);
+        Trace(npc).Item += $" used at once {used.Step} spent={used.Spent}";
+    }
     public bool SearchItems(string npc) => false;
     public bool Loading => false;
 
@@ -524,9 +558,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (plan.ChoosesAction && plan.Target is { } found)
         {
             var chosen = AiSupportRules.ChooseSpell(this, npc, found, _session.AiRolls);
-            // An item AI-action entry used at once (0x462CC0) needs the NPC's items, which the lists do not hold yet.
             choice = chosen.Choice;
-            Trace(npc).Spell = $"{chosen.Stop} chance={chosen.Chance} spell={choice?.Spell.ToString() ?? "-"} target={choice?.Target ?? "-"}";
+            Trace(npc).Spell = $"{chosen.Stop} chance={chosen.Chance} spell={choice?.Spell.ToString() ?? "-"} item={choice?.Item ?? chosen.ItemUse?.Entry?.Item ?? "-"} target={choice?.Target ?? "-"}";
+            // ARC-WORLD-108: an AI-action item entry is used at once (0x462CC0); the setter then runs without a choice.
+            if (chosen.ItemUse is { } atOnce) UseItemAtOnce(npc, atOnce);
         }
         var target = state == DangerState.CombatFocus ? HostilityRules.FocusTarget(plan, choice?.Target ?? plan.Target, _session.Rules.Combat) : null;
         var result = SetDanger(npc, state, target);
@@ -904,7 +939,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The release (0x429C80, <see cref="SessionSpellCaster.Release"/>): the target re-check and the run's BEGIN; false when the
-    /// re-check refused it (the original keeps the run, MG41; Steamwoven frees it) or the frame was released before.</summary>
+    /// re-check refused it (the run freed unpaid in both settings, MG41) or the frame was released before.</summary>
     public bool ReleaseCast(string id, int run)
     {
         _noRelease.Remove(run);
@@ -1101,16 +1136,67 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     public void PickUp(string id, string item) { }
-    public string? ItemHolder(string item) => null;
-    public AiUsedItem UsedItem(string user, string item) => new();
-    public bool RunUseScript(string user, string item, string? target) => true;
-    public void OpenTargeting(string user, string item) { }
-    public void UseTrapDevice(string user, string item, string? target) { }
-    public void ReadWritten(string user, string item) { }
+    /// <summary>ARC-WORLD-108: the NPC of the shown map that holds the item now (0x4612A0), or null (the hero's items are not the AI's).</summary>
+    public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, _scene.RuntimeMap, item);
+
+    // ---- ARC-WORLD-108: an NPC's item use (0x462CC0: goal 39's last node and the chooser's use at once) ----
+
+    /// <summary>The item use's facts of an NPC's item: its fields' type and flags (<see cref="AreaItemUseFacts"/>), its spell charges and
+    /// magical flag as the cast host's item lookup gives them, and the scroll test (a scroll and the user's intelligence below 5,
+    /// 0x4B1750). An item the NPCs do not hold reads as an empty use.</summary>
+    public AiUsedItem UsedItem(string user, string item)
+    {
+        if (UseFacts(item) is not { } facts) return new();
+        var tooHard = facts.Type == AreaItemUseFacts.ScrollType && (Find(user)?.Intelligence ?? 0) < SpellBookRules.MinimumIntelligence;
+        return AreaItemUse.Used(facts, _scene.Spells?.Invoke()?.Item(item), tooHard);
+    }
+
+    /// <summary>The use script (0x441980): NOT READY for an NPC (no SCR runs at the AI points); an item with one goes on as if the
+    /// script let it, which the trace notes.</summary>
+    public bool RunUseScript(string user, string item, string? target)
+    {
+        if (UseFacts(item) is { UseScript: true }) Trace(user).Item += $" use-script {item} not run";
+        return true;
+    }
+
+    // The targeting cursor (0x4EE060) is the player's: an NPC's use always has a target (the starter's and the chooser's), so it never opens.
+    public void OpenTargeting(string user, string item) => Trace(user).Item += $" targeting {item} not ready";
+    // NOT READY for an NPC: a trap device's use, reading a written item, picking a lock and the heal skill with an item (goal 40, 0x4352C0).
+    public void UseTrapDevice(string user, string item, string? target) => Trace(user).Item += $" trap-device {item} not ready";
+    public void ReadWritten(string user, string item) => Trace(user).Item += $" read {item} not ready";
     public bool Lockable(string target) => false;
-    public void StartSkillWithItem(string user, string item, string target, int skill) { }
-    public void UseItemMagic(string user, string item, string? target) { }
-    public void SpendItem(string item) { }
+    public void StartSkillWithItem(string user, string item, string target, int skill) => Trace(user).Item += $" skill {skill} with {item} not ready";
+
+    /// <summary>The magic branch (0x4F2810 … 0x4CBF70) through the cast host's item use (<see cref="SessionItemTriggers.UseItem"/>):
+    /// for an NPC the slot-0 activation casts nothing (NU2), the item used executor's spells start at the target and play at once,
+    /// a food or scroll is spent. Without the map's cast host or its item executor nothing happens (the trace says so).</summary>
+    public void UseItemMagic(string user, string item, string? target)
+    {
+        if (_scene.Spells?.Invoke()?.ItemTriggers is not SessionItemTriggers triggers) { Trace(user).Item += $" magic {item} needs the cast host"; return; }
+        var used = triggers.UseItem(item, target);
+        NoteUsedItem(user, item);
+        Trace(user).Item += $" magic {item} {used.Outcome} {used.Cast} fired={used.ItemUsed?.Spells.Count ?? 0} spent={used.Spent}";
+        _notices.Add(new(AreaAiNoticeKind.ItemUse, user, target) { Item = item, ItemUse = used });
+    }
+
+    /// <summary>Spends a used food or scroll the magic branch did not already spend (<see cref="SessionSpellCaster.SpendUsedItem"/>: the
+    /// deletion out of the NPC's list, then the runs' sources cleared).</summary>
+    public void SpendItem(string item)
+    {
+        if (_session.IsItemDestroyed(item) || _scene.Spells?.Invoke() is not { } caster) return;
+        if (ItemHolder(item) is { } holder) NoteUsedItem(holder, item);
+        caster.SpendUsedItem(item);
+    }
+
+    // An item the NPC used or cast from, whose cached list slot the next list request checks.
+    private void NoteUsedItem(string npc, string item)
+    {
+        if (!_usedItems.TryGetValue(npc, out var items)) _usedItems[npc] = items = new HashSet<string>(StringComparer.Ordinal);
+        items.Add(item);
+    }
+
+    // The item use's facts of an item an NPC holds, or null.
+    private AreaItemUseFacts? UseFacts(string item) => ItemFields(item) is { } fields ? AreaItemUseFacts.From(item, fields) : null;
 
     public bool InRound => _session.QueryCombatRound() is not null;
     public string? RoundActor => _session.QueryCombatRound() is { } round ? Id(round.Actor) : null;
@@ -1161,20 +1247,22 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// beneath it (<see cref="SessionSpellCaster.Queue"/>, the run's current index as its depth): inserted at the bottom of the run,
     /// so the queued goals play in the order they were cast, each when the goals above it have popped. A depth of 4 or more or a
     /// turn-based round refuses, freeing the run. Either way no run starts and perform keeps the current one.
-    /// NOT READY: a choice with an item (the item's spells and AI actions are not listed yet), and a cast while goal 82 or 83 is at
-    /// the run's bottom, which the original starts as a second run beside it (AC5; the host holds one run per NPC): neither starts a run.
+    /// ARC-WORLD-108: a choice with an item casts the item's spell with the item as source (a scroll or food item spent, MG47 for the
+    /// others' run sources). NOT READY: a cast while goal 82 or 83 is at the run's bottom, which the original starts as a second run
+    /// beside it (AC5; the host holds one run per NPC): it starts no run.
     /// </summary>
     public AiCastStart Cast(string npc, AiPassChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
-        if (choice.Item is not null || _scene.Spells?.Invoke() is not { } caster) return new(null);
+        if (_scene.Spells?.Invoke() is not { } caster) return new(null);
         if (RunOf(npc)?.Bottom.Goal is AiGoalType.CastSpellWithAnimation or AiGoalType.AttemptSpellWithAnimation)
         {
             Trace(npc).Cast = $"cast {choice.Spell} not started (goal 82 or 83 plays: a second run)";
             return new(null);
         }
-        var attempt = caster.CastByAi(npc, choice.Spell, choice.Target);
-        Trace(npc).Cast = $"cast {choice.Spell} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
+        var attempt = caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
+        if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
+        Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
         if (!_runs.TryGetValue(npc, out var held) || held.Run.Bottom.Goal is not (AiGoalType.CastSpell or AiGoalType.AttemptSpell))
@@ -1294,19 +1382,64 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// first list, SP11; built fresh in Steamwoven). The cache is not saved: a load or a map change builds the host again.</summary>
     public ImmutableArray<AiListEntry> List(string critter, AiActionList list)
     {
+        // ARC-WORLD-108: an item the NPC used or cast from that is gone drops the NPC's slot (the force-removal 0x467860 → 0x4CCC00), one
+        // out of charges drops it when a list holds the item (0x450420 → 0x4CCC40), once each, so the Original setting's frozen list
+        // lists it no more.
+        if (_usedItems.TryGetValue(critter, out var used))
+            foreach (var item in used.ToArray())
+            {
+                if (_session.IsItemDestroyed(item)) _listCache = _listCache.Clear(critter);
+                else if (_scene.Spells?.Invoke()?.Item(item) is { Charges: 0 }) _listCache = _listCache.ItemExhausted(critter, item);
+                else continue;
+                used.Remove(item);
+            }
         var request = _listCache.Request(this, critter, list, _session.Rules.Combat);
         _listCache = request.Cache;
         return request.Entries;
     }
 
-    // The NPCs' items are not listed yet (item use and goal 40 are their own slice): no hexed weapon, no inventory, no item entry.
-    public string? HexedWeapon(string critter) => null;
-    public IReadOnlyList<string> Inventory(string critter) => [];
-    public AiListItem Item(string item) => new();
-    public bool CanUseItem(string critter, string item) => false;
-    public int ItemFailChance(string critter, string item, string target, int spell) => 0;
+    /// <summary>ARC-WORLD-108: the NPC's wielded weapon (slot 1004, as the session shows what it wears) when it has item flag 0x40
+    /// (hexed); null for the hero (the lists are an NPC's own) and without one.</summary>
+    public string? HexedWeapon(string critter) =>
+        critter != Pc && _scene.Combat.Worn(_session, _scene.RuntimeMap, critter)?.FirstOrDefault(w => w.Slot == EquipmentSlot.Weapon) is { Entity: { } weapon } worn
+            && worn.Fields.Item is { } item && (item.Flags & HexedItem) != 0 ? weapon : null;
+
+    /// <summary>ARC-WORLD-108: the NPC's items, listed or worn, in its list's order as the session shows them (the combat host's
+    /// <see cref="AreaCombatHost.NpcItems"/>); none for the hero.</summary>
+    public IReadOnlyList<string> Inventory(string critter) =>
+        critter == Pc ? [] : [.. _scene.Combat.NpcItems(_session, _scene.RuntimeMap, critter).Select(item => item.Entity)];
+
+    /// <summary>
+    /// ARC-WORLD-108: an item as the list build and the chooser read it: the spell charges (field 0x69, as the cast host's item lookup
+    /// gives them with the session's spent charges), identified (item flag 0x1, or identified in the session), exempt as food or a
+    /// scroll, the five slots (10000 none → −1), the valid-AI-action flag (0x200000) and the AI action (field 0x6A). An item the NPCs
+    /// do not hold reads as empty.
+    /// </summary>
+    public AiListItem Item(string item)
+    {
+        if (ItemFields(item) is not { Item: { } fields } all) return new();
+        var spells = _scene.Spells?.Invoke()?.Item(item);
+        return new AiListItem
+        {
+            ManaStore = spells?.Charges ?? fields.SpellManaStore,
+            Identified = (fields.Flags & IdentifiedItem) != 0 || _session.QueryItemIdentified(item),
+            IdentificationExempt = all.Object.Type is SessionItemSpells.FoodType or SessionItemSpells.ScrollType,
+            Spells = [.. Enumerable.Range(0, ItemSpellTriggerRules.Slots).Select(slot => slot < fields.Spells.Count && fields.Spells[slot] != ItemSpellTriggerRules.NoSpell ? fields.Spells[slot] : -1)],
+            ValidAiAction = (fields.Flags & ValidAiActionItem) != 0,
+            AiAction = fields.AiAction,
+        };
+    }
+
+    public bool CanUseItem(string critter, string item) => _scene.Spells?.Invoke()?.AiCanUseItem(critter, item) ?? false;
+    public int ItemFailChance(string critter, string item, string target, int spell) =>
+        _scene.Spells?.Invoke()?.AiItemFailChance(critter, item, target, spell) ?? 0;
+
+    // The heal skill's rung (0x4C91F0, 0x4AE570) needs the NPC's heal skill goal (33) and its session step: NOT READY, no item.
     public string? HealingItem(string npc) => null;
     public bool HealSkillAccepts(string npc, string item, string target) => false;
+
+    // The fields of an item an NPC of the shown map holds now, or null.
+    private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, _scene.RuntimeMap, item);
 
     public bool Knows(string critter, int spell) => _scene.Spells?.Invoke()?.AiKnows(critter, spell) ?? false;
     public AiSpellFacts Spell(int spell) => _scene.Spells?.Invoke()?.AiSpell(spell) ?? default;
@@ -1613,6 +1746,8 @@ public sealed class AreaAiTrace
     /// <summary>ARC-WORLD-102: its last spell choice and its last cast call (perform's cast, a casting goal's start or release).</summary>
     public string? Spell { get; set; }
     public string? Cast { get; set; }
+    /// <summary>ARC-WORLD-108: its last heal choice and item use.</summary>
+    public string? Item { get; set; }
     /// <summary>ARC-WORLD-109: the last skill attempt.</summary>
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
