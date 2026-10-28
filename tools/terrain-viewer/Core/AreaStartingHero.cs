@@ -70,6 +70,10 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// not read or is no weapon. A shot on the ranged path with an art flies as a projectile.</summary>
     public IReadOnlyList<int?>? KitMissileArt { get; init; }
 
+    /// <summary>ARC-COMBAT-017: the stored weight of each kit weapon that "default throws" (weapon flag 0x200, the throwing dagger), by
+    /// kit index; null for any other item or a prototype that does not read. An attack with it throws it (ledger RH2).</summary>
+    public IReadOnlyList<int?>? KitThrowWeight { get; init; }
+
     /// <summary>ARC-RENDER-033: each kit item's ground ART id (its prototype's current art, field 0), by kit index; null for a
     /// prototype that does not read. The viewer draws a placed kit item with it.</summary>
     public IReadOnlyList<uint?>? KitArt { get; init; }
@@ -159,6 +163,7 @@ public static class AreaStartingHero
             KitDurability = KitDurability(prototypes.Read, definition),
             KitArt = KitArt(prototypes.Read, definition),
             KitMissileArt = KitMissileArt(prototypes.Read, definition),
+            KitThrowWeight = KitThrowWeight(prototypes.Read, definition),
         };
     }
 
@@ -240,6 +245,16 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields?.Weapon is { } weapon
             ? (int?)weapon.MissileArt : null).ToArray();
+    }
+
+    /// <summary>ARC-COMBAT-017: each kit weapon's stored weight when it carries the "default throws" flag, null otherwise (the magic weight
+    /// adjustment is not read, as for <see cref="SessionEquipmentFacts.Wearable"/>).</summary>
+    public static IReadOnlyList<int?> KitThrowWeight(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select(item => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { Weapon: { } weapon, Item: { } stored }
+            && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) ? (int?)stored.Weight : null).ToArray();
     }
 
     /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>
