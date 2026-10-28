@@ -56,14 +56,13 @@ public sealed record AiSpellValues
 }
 
 /// <summary>
-/// One critter as the support rules read it besides <see cref="HostilityCritter"/>: critter flags <see cref="Mechanical"/> 0x20000000
-/// and <see cref="Blinded"/> (0xDA bit 0x80), NPC flag <see cref="CastHighest"/>, <see cref="FatiguePercent"/> (0x4AB430, signed,
+/// One critter as the support rules read it besides <see cref="HostilityCritter"/>: critter flag <see cref="Mechanical"/> 0x20000000,
+/// NPC flag <see cref="CastHighest"/>, <see cref="FatiguePercent"/> (0x4AB430, signed,
 /// truncated), <see cref="CurrentFatigue"/> (0x45D700), the poison level (stat 24), willpower (stat 6) and magick points (stat 22).
 /// </summary>
 public sealed record AiSupportCritter
 {
     public bool Mechanical { get; init; }
-    public bool Blinded { get; init; }
     public bool CastHighest { get; init; }
     public int FatiguePercent { get; init; }
     public int CurrentFatigue { get; init; }
@@ -80,7 +79,7 @@ public readonly record struct AiSupportParameters(int DefensiveSkip, int HealOth
 /// An inventory item as the list build and the chooser read it: the mana store (field 0x69), the identified flag (item flag 0x1),
 /// <see cref="IdentificationExempt"/> (0x504550 of the item's field 1 answers 4 or 5: food or a scroll, research ARC-RES-059), the
 /// five spell slots (fields 0x64..0x68, −1 for none, the original's 10000), <see cref="ValidAiAction"/> (item flag 0x200000) and the
-/// AI action (field 0x6A).
+/// AI action (field 0x6A). Slots past the given ones count as empty.
 /// </summary>
 public sealed record AiListItem
 {

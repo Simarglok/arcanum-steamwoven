@@ -27,9 +27,12 @@ internal static partial class Program
     }
 
     /// <summary>Every AI redirect component in record and line order, and the counts by threshold.</summary>
-    internal static object AiRedirectCensus(IEnumerable<SpellRecord> records)
+    internal static object AiRedirectCensus(IEnumerable<SpellRecord> records) =>
+        AiRedirectCensus(records.SelectMany(r => r.Components.Where(c => c.Data is AiRedirectData).Select(c => (r.Number, c.Action, (AiRedirectData)c.Data!))));
+
+    internal static object AiRedirectCensus(IEnumerable<(int Number, SpellAction Action, AiRedirectData Data)> components)
     {
-        var rows = records.SelectMany(r => r.Components.Where(c => c.Data is AiRedirectData).Select(c => (r.Number, c.Action, Data: (AiRedirectData)c.Data!))).ToList();
+        var rows = components.ToList();
         return new
         {
             redirect_components = rows.Count,
@@ -46,8 +49,13 @@ internal static partial class Program
         {
             if (!condition) throw new InvalidOperationException($"ai-redirect-census self-test failed: {what}");
         }
-        var json = JsonSerializer.Serialize(AiRedirectCensus([]));
+        var json = JsonSerializer.Serialize(AiRedirectCensus(Array.Empty<SpellRecord>()));
         Check(json.Contains("\"redirect_components\":0", StringComparison.Ordinal) && json.Contains("\"thresholds\":{}", StringComparison.Ordinal), "an empty table");
+        var three = JsonSerializer.Serialize(AiRedirectCensus([(7, SpellAction.Begin, new AiRedirectData(0x8, -1)), (7, SpellAction.Maintain, new AiRedirectData(0x8, -1)),
+            (9, SpellAction.Begin, new AiRedirectData(0, 12))]));
+        Check(three.Contains("\"redirect_components\":3,\"spells\":2,\"with_threshold\":1", StringComparison.Ordinal), "the counts");
+        Check(three.Contains("\"thresholds\":{\"-1\":2,\"12\":1}", StringComparison.Ordinal), "the thresholds by value");
+        Check(three.Contains("\"critter_mask\":\"0x8\"", StringComparison.Ordinal) && three.Contains("\"action\":\"Maintain\"", StringComparison.Ordinal), "a component row");
         Console.WriteLine("ai-redirect-census self-test: PASS");
     }
 }

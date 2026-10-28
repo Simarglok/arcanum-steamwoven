@@ -260,8 +260,8 @@ public static class AiSupportRules
         var facts = world.Spell(spell);
         var college = spell / CollegeSpells;
         bool NoSlot() => npc && facts.Maintained && world.FreeMaintainSlots(critter) == 0;
-        bool Spared(int fatigue) => college == HealingCollege && target is not null && world.Find(target) is { } t &&
-            (t.HealthPercent <= CareThreshold || fatigue >= RestedFatigue);
+        bool Spared(int fatigue) => college == HealingCollege && target is not null &&
+            (fatigue >= RestedFatigue || world.Find(target) is { HealthPercent: <= CareThreshold });
         if (item is null)
         {
             if (!world.Knows(critter, spell)) return AiCastRefusal.Unknown;

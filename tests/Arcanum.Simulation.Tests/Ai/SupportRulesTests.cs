@@ -433,6 +433,7 @@ public sealed class SupportRulesTests
         w.EditFacts("mage", f => f with { FatiguePercent = 80 });
         w.Asked.Clear();
         Assert.AreEqual(AiCastRefusal.Accepted, Check(61));
+        Assert.AreEqual(AiCastRefusal.Accepted, AiSupportRules.Eligibility(w, "mage", "wand", "chest", 61), "the fatigue exemption needs no critter target");
         Assert.AreEqual(AiCastRefusal.FailChance, Check(30), "not the healing college");
         Assert.IsFalse(w.Asked.Contains("itemfail:61"));
         w.Known.Add(("mage", 61));

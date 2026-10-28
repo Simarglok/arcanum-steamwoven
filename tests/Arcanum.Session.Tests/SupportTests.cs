@@ -51,6 +51,7 @@ public sealed class SupportTests
         using var owner = Owner();
         var sogg = SessionCombatant.Critter("oid:sogg");
         Assert.AreEqual(GameSessionFailure.InvalidDangerTarget, owner.RedirectDanger(owner.Version, "bad id", sogg).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidDangerTarget, owner.RedirectDanger(owner.Version, Wolf, SessionCombatant.Critter(Wolf)).Failure, "never its own focus");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RedirectDanger(owner.Version, Wolf, sogg).Disposition);
         var danger = owner.QueryDanger(Wolf);
         Assert.AreEqual((DangerState.None, sogg, sogg), (danger.State, danger.Focus, danger.HitBy), "the state is not set");

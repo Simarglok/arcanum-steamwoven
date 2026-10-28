@@ -50,7 +50,7 @@ nothing with the installed records.
 | --- | --- | --- |
 | `SetAiSupportBits(entity, bits)` | (0x4ADFF0, 0x461AB0) | Sets LOOK_FOR_AMMO, LOOK_FOR_WEAPON, LOOK_FOR_ARMOR or CHECK_WEAPON on the NPC's danger record in one revision: an AI ranged attack without ammunition sets the first two and CHECK_WEAPON, a dropped weapon or armour its look-for bit. Any other bit is `InvalidDangerFacts`. |
 | `ClearAiSupportBits(entity, bits)` | (0x4A8E70, 0x4AC910) | Clears the look-for bits (the item search) or CHECK_GRENADE (the grenade step); any other bit is `InvalidDangerFacts`. |
-| `RedirectDanger(entity, target)` | 0x4A94C0 | The redirect's writes after the host's attack event: focus and who-hit-me-last := the target, whatever the state, in one revision. |
+| `RedirectDanger(entity, target)` | 0x4A94C0 | The redirect's writes after the host's attack event: focus and who-hit-me-last := the target, whatever the state, in one revision. A target equal to the NPC is `InvalidDangerTarget` (a critter is never its own focus; the rule never asks it). |
 
 **State.** `DangerFlags.LookForAmmo`, `LookForWeapon` and `LookForArmor` (NPC flags 0x8000000, 0x2000000, 0x4000000) are saved
 with the other danger bits: the snapshot moves to schema 47 (flag names `LookForAmmo`, `LookForWeapon`, `LookForArmor`; schemas
@@ -61,7 +61,7 @@ with the other danger bits: the snapshot moves to schema 47 (flag names `LookFor
 Every draw is a labelled roll of the session's AI random source (`ai.` and the purpose), drawn exactly where the original draws:
 `HealCareRoll` (1..100, only in combat mode), `SpellChoiceRoll` (1..100), `DefensiveListRoll` (1..100, only when the summon list
 found nothing), `ChooserStart` (1..100, once for every non-empty list the chooser is given) and `ChooserEntry` (0..n−1, after a
-start roll of 80 or more). The fail-chance predictors the eligibility test asks draw their d20 from the magic random source
+start roll of 80 or more; a one-entry list draws 0..0, which takes nothing from the generator). The fail-chance predictors the eligibility test asks draw their d20 from the magic random source
 (`magic.FailChanceD20`, ARC-MAGIC-005).
 
 ## Settings

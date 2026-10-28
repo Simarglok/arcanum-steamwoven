@@ -32,12 +32,14 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The redirect's writes for one NPC (0x4A94C0, after the attack event the host runs with <paramref name="target"/> as attacker):
-    /// the combat focus and who-hit-me-last := the target, whatever the danger state, in one revision (none when both hold it).
+    /// the combat focus and who-hit-me-last := the target, whatever the danger state, in one revision (none when both hold it). A target
+    /// that is the NPC itself is <see cref="GameSessionFailure.InvalidDangerTarget"/> (a critter is never its own focus).
     /// </summary>
     [OriginalFunction(0x4A94C0, OriginalFunctionScope.Partial)]
     public SessionDangerResult RedirectDanger(GameSessionVersion expected, string entity, SessionCombatant target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (target.Entity == entity) return RejectDanger(GameSessionFailure.InvalidDangerTarget);
         return ChangeDanger(expected, entity, target, false, plan => plan.Update(entity, record => record with { Focus = target, HitBy = target }));
     }
 }

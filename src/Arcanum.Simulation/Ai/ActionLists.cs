@@ -197,7 +197,7 @@ public static class AiActionLists
         var facts = world.Item(item);
         if (facts.ManaStore != 0 && Identifies(facts, c))
         {
-            for (var slot = 0; slot < ItemSpellSlots && slot < facts.Spells.Length; slot++)
+            for (var slot = 0; slot < ItemSpellSlots && !facts.Spells.IsDefault && slot < facts.Spells.Length; slot++)
             {
                 var spell = facts.Spells[slot];
                 if (spell != -1 && world.GlobalLists.Value(spell, list) != -1 && world.CanUseItem(c.Id, item)) Add(entries, new(spell, item));
