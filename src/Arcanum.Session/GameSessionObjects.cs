@@ -145,6 +145,8 @@ public sealed record SessionObjectAttack
     /// <summary>ARC-COMBAT-016: the shot flies as a projectile (as <see cref="SessionAttack.Flight"/>); a hit waits for
     /// <see cref="GameSessionOwner.LandShotOnObject"/>.</summary>
     public bool Flight { get; init; }
+    /// <summary>ARC-COMBAT-017: the wielded weapon is thrown (as <see cref="SessionAttack.Throw"/>).</summary>
+    public SessionThrow? Throw { get; init; }
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
     /// <summary>The actor's map for a critical self-hit's drops (ARC-COMBAT-010, as <see cref="SessionAttack.DropMap"/>).</summary>
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
@@ -239,7 +241,8 @@ public sealed partial class GameSessionOwner
     /// invalid target (<see cref="GameSessionFailure.InvalidObject"/>), an object destroyed or switched off or an item no longer on
     /// the ground (<see cref="GameSessionFailure.ObjectUnavailable"/>), hero items that do not hold
     /// (<see cref="GameSessionFailure.InvalidWear"/>), an aim at the torso, a distance outside 0..reach
-    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing weapon (<see cref="GameSessionFailure.AttackUnsupported"/>),
+    /// or a throw that does not hold (as for <see cref="AttackCritter"/>, <see cref="GameSessionFailure.InvalidAttack"/>), a wielded
+    /// throwing-skill weapon (<see cref="GameSessionFailure.AttackUnsupported"/>),
     /// the version, the revision, and for a respawning scenery a full event budget. The resolution's draws are spent once it ran,
     /// also when nothing changes (a hit for 0 on an object whose damage is recorded); each later step commits its own revision.
     /// A wall (<see cref="SessionObjectAttack.Wall"/>, ARC-COMBAT-015: the line of fire struck it) is resolved the same way and takes
@@ -256,8 +259,8 @@ public sealed partial class GameSessionOwner
     /// obstruction past the destination: torso, no critical). The damage is rolled now with the shot's weapon and every step of
     /// <see cref="AttackObject"/> after the resolution follows; the shot is gone afterwards and nothing of it is spent again.
     /// <see cref="SessionObjectAttack.Distance"/> and <see cref="SessionObjectAttack.Flight"/> are not read. Refused as
-    /// <see cref="AttackObject"/> is, and with <see cref="GameSessionFailure.InvalidAttack"/> for a shot not in flight or a missed shot
-    /// striking its own target.
+    /// <see cref="AttackObject"/> is, and with <see cref="GameSessionFailure.InvalidAttack"/> for a shot not in flight, a missed shot
+    /// striking its own target or a thrown shot that struck already (a thrown shot waits for its item's landing, <see cref="LandThrownItem"/>).
     /// </summary>
     public SessionObjectAttackResult LandShotOnObject(GameSessionVersion expected, SessionShot shot, SessionObjectAttack attack) =>
         ObjectAttack(expected, attack, shot);
@@ -271,7 +274,7 @@ public sealed partial class GameSessionOwner
         var struckKey = ShotObjectKey(attack);
         PendingShot? pending = null;
         // Walls share one key and take nothing: a missed shot may strike any wall past its destination.
-        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || !pending.Hit && pending.Object == struckKey && !attack.Wall))
+        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || !pending.Hit && pending.Object == struckKey && !attack.Wall))
             return RejectObject(GameSessionFailure.InvalidAttack);
         AttackTargetKind kind;
         Combatant defender;
@@ -315,6 +318,10 @@ public sealed partial class GameSessionOwner
             hero = hero with { Weapon = hero.Weapon with { ArtSubtype = wielded.ArtSubtype } };
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || pending is null && (attack.Distance < 0 || attack.Distance > hero.Range))
             return RejectObject(GameSessionFailure.InvalidAttack);
+        // ARC-COMBAT-017: the reach is the weapon's (RH1); a thrown weapon is then checked with the throwing skill and its thrown range.
+        string? thrown = null;
+        if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
+            return RejectObject(throwFailure);
         if (pending is null && !hero.Supported) return RejectObject(GameSessionFailure.AttackUnsupported);
         if (pending is null && attack.Flight && _shots.Count >= MaxShotsInFlight) return RejectObject(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectObject(GameSessionFailure.StaleVersion);
@@ -348,13 +355,16 @@ public sealed partial class GameSessionOwner
         catch (TrialCombatRolls.ExhaustedException) { return RejectObject(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectObject(GameSessionFailure.InvalidAttack); }
         _random = rolls.Trial;
-        if (landing is { } landed) _shots.Remove(landed);
+        if (landing is { } landed) EndStrike(landed, pending!);
         if (resolution.Fate != FateUse.None && pending is null)
         {
             ClearUsedAttackFate(resolution.Fate);
             _revision++;
         }
         var changed = resolution.Fate != FateUse.None && pending is null;
+        var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;
+        if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
+        changed |= throwing;
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss.
         var ammunition = pending is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
         if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
@@ -363,7 +373,8 @@ public sealed partial class GameSessionOwner
         changed |= ammunition is { Disposition: GameSessionDisposition.Changed };
         // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already).
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
-            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)) : (SessionShot?)null;
+            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null }) : (SessionShot?)null;
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shot = flying };

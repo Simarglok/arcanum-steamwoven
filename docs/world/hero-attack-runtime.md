@@ -57,7 +57,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | --- | --- |
 | `SessionCritterCombat.From(entity, fields, carried)` | One NPC's combat values from its ARC-DATA-021 fields and the fields of the items it carries (those in a wear slot count): life facts (pools, level, effective ST under each poison penalty, CN, WP, HealRate, PoisonRecovery, normal resistance, traits from the critter, object and spell flags), the loaded life state (hit-point and fatigue damage, poison, stun and injury flags), the experience worth and pool, and `Combatant(status, state, profile)` with its effective stats under its poison and crippled legs, armour class, resistances, dodge and backstab, light and conditions. Effective stats are the character owner's for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values beyond it); its stored effects are not applied. Typed `SessionCritterCombatFailure`, never an exception for data. |
 | `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee; since ARC-COMBAT-015 bow and firearms too, [below](#ranged-hero-attack-arc-combat-015)). Null without a hero. |
-| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..reach, for a bow or firearm 0..100,000, or a line-of-fire cost outside 0..100,000 (`InvalidAttack`), a throwing weapon (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
+| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..reach, for a bow or firearm 0..100,000, or a line-of-fire cost outside 0..100,000 (`InvalidAttack`), a throw that does not fly or hold (`InvalidAttack`, ARC-COMBAT-017), a throwing-skill weapon (a boomerang, `AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
 | Critical effects | ARC-COMBAT-009, [below](#critical-effects-arc-combat-009): the resolver runs with `OriginalCriticalEffects`; `SessionAttack.TargetCell` is where the NPC's dropped items go; `SessionAttackResult.Criticals` reports the item steps. |
 | `ApplyAttackWear(expected, wear)` | ARC-COMBAT-007, for any attacker and recipient (the NPC AI will call it for NPC attacks): in the original's order, the armour at the hit location of whoever took the damage (`DamageItem` + 10), that critter's wielded weapon on the critical "damage weapon" (+ 10) and "destroy/explode weapon" (`DestroyItem`) unless invulnerable, and the attacker's weapon (`DamageItem`) or, bare-handed, its own hit points (never the last one). Each step is reported (`SessionWearStep`: kind, slot, item, amount, skip reason, durability result or life outcome); a first break of the hero's item takes it off its slot (item durability), of an NPC's item is reported for the host. `SessionWearItem` carries an item's entity, durability baseline, invulnerable flag and weapon art subtype, all host data passed at each attack (`SessionWearItem.FromCombatFields`); the hero's attack takes its weapon's subtype from it. Refused before any change (`InvalidWear`): no attacker critter, the same critter on both sides, a hero side that is not exactly the hero's worn items, an NPC side naming one of the hero's items, items on an object side, an invalid entity, baseline or subtype, an NPC item a critical dropped (ARC-COMBAT-009), an item the session does not track or deleted (a host leaves out items an earlier attack deleted, `IsItemDestroyed`; the `ItemDeleted` skip is only for an item a step of the same wear deleted), armour or weapon steps on an object; then the version. A refused step ends the wear: `StepFailure` after changes, Rejected when nothing changed. |
 | `AttackObject(expected, attack)` | ARC-COMBAT-008: the hero's attack on a portal, container, scenery, trap or an item on the ground ([object damage](object-damage-runtime.md)). |
@@ -158,7 +158,7 @@ taken), each to be checked against the requirements and read in the executable w
 | Task | Scope |
 | --- | --- |
 | ARC-COMBAT-016 Projectiles in flight | Done ([below](#projectiles-in-flight-arc-combat-016)): the projectile of 0x4B39B0 (field 127, −1 none), its flight, the hit on arrival (0x4B2870), its drawing in the viewer and a miss's stray strike (ledger PF1–PF14). |
-| ARC-COMBAT-017 Thrown weapons | The thrown item leaving the hand (weapon flag 0x200 "default throws" at the attack start 0x434B00, RH2; the session keeps no such flag yet), the throw goal 37 and script point 6, its landing cell, picking it up again, and the auto-switch re-wield. The throwing dagger (6072, melee skill, default throws) is today attacked with as a reach weapon that stays in the hand. |
+| ARC-COMBAT-017 Thrown weapons | Done ([below](#thrown-weapons-arc-combat-017)): the "default throws" weapon (the throwing dagger 6072) leaves the hand at the attack, is checked with the throwing skill and its thrown range, flies hidden and lands where its projectile ends (ledger TW1–TW7); the original wields nothing again afterwards (TW3). |
 | ARC-COMBAT-018 Second projectile and scatter | The second projectile of a bow from expert and the scatter of a missed throw (RH2, RH3), and their ammunition. |
 | ARC-COMBAT-019 Returning weapons | Boomerangs (weapon flag 0x40, the throwing skill): the shot's thrown range (0x4622A0, RH4: strength and the item's weight, which the hero's equipment facts do not hold yet), the projectile's return and the "weapon away" bit (RH3), and their catch. |
 
@@ -172,7 +172,7 @@ distance terms are SC8 and RA2, the shot's ammunition RA3.
 
 | Rule | Value |
 | --- | --- |
-| Supported weapons | Melee, bow and firearms (`SessionHeroAttack.Supported`); a throwing-skill weapon (a boomerang) is `AttackUnsupported` until ARC-COMBAT-019 (its thrown range needs the item's weight, RH4). `RangedSkill` (bow, throwing, firearms: the check's distance terms) and `RangedPath` (the throwing skill or a range above 1: the line of fire may strike another object, RA1) tell the host which applies. |
+| Supported weapons | Melee, bow and firearms (`SessionHeroAttack.Supported`); a throwing-skill weapon (a boomerang) is `AttackUnsupported` until ARC-COMBAT-019 (its return is not modelled); a "default throws" weapon is thrown since ARC-COMBAT-017 (`SessionAttack.Throw`). `RangedSkill` (bow, throwing, firearms: the check's distance terms) and `RangedPath` (the throwing skill or a range above 1: the line of fire may strike another object, RA1) tell the host which applies. |
 | Distance terms (SC8, RA2) | A bow or firearm: impossible (+1,000,000) beyond the weapon's range; 5 per tile beyond half the Perception below master; impossible when `SessionAttack.LineOfFire` is blocked, else its cost as cover. `SessionAttack.Distance` is the tile distance (0x4B96F0) and may lie beyond the range (refused only above 100,000): the original's goal shoots within range, but the check, not the session, refuses a target that moved since; such a shot misses and its ammunition is spent. A melee weapon must be within its reach (`InvalidAttack`) and ignores the line. |
 | Line of fire input | `SessionLineOfFire(Cost, Blocked)`: the host traces the line from the hero's tile to the struck object's (`LineOfFireRules.Trace`, 0x4ADE00) and passes its cost (0..100,000, else `InvalidAttack`) and whether any object stops it; null is an open line without cover. After a redirect the check measures the distance and traces the line to the struck object (RH7, SC5), so the host traces again and passes the distance to it. |
 | Ammunition (RA3) | A bow's or firearm's shot spends its per-shot count from the hero's stack of the weapon's type (`SessionAttackResult.Ammunition`), a hit or a miss; too few units refuse the shot after the hit location's roll. |
@@ -194,7 +194,7 @@ object-attack, critical and line-of-fire stages that follow the cast stage in th
 native observation: the goal's reach test admits only a clear line, so the viewer meets a wall blocker only when the line changed
 after it; the session tests cover the wall's shot.
 
-Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour, and since ARC-COMBAT-016 its shot flies as a projectile while it stays in the hand), boomerangs (RH3, RH4,
+Not ready: boomerangs (RH3, RH4,
 ARC-COMBAT-019), a bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
 bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
 
@@ -228,10 +228,40 @@ with the lent bow and scenery art 0 as its projectile art): from the first cell 
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
 afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
 
-Not ready: the second projectile of a bow (ARC-COMBAT-018), thrown items and their scale arc (PF11, PF12, ARC-COMBAT-017),
-boomerangs (ARC-COMBAT-019), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
+Not ready: the second projectile of a bow (ARC-COMBAT-018), the scale arc of a thrown non-weapon item (PF11),
+boomerangs (ARC-COMBAT-019; thrown weapons since [ARC-COMBAT-017](#thrown-weapons-arc-combat-017)), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
 0x800000 (PF9, PF10), a closed portal stopping a free flight (PF7), the eye-candy speed column, the additive draw of weapon flag 0x20,
 and a projectile across a save.
+
+## Thrown weapons (ARC-COMBAT-017)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (a thrown item is lost by its type: it leaves the
+hand and lands, partly) and [FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-combat-005) (the throw's check, partly). Read in
+the retail 1.0.7.4 executable ([ledger TW1–TW7](../research/ledger/combat.md#thrown-weapons-arc-combat-017), with RH2, RH4 and
+PF12). Of the installed weapons only the throwing dagger (6072) carries the "default throws" flag; the eight throwing-skill weapons
+are boomerangs (ARC-COMBAT-019).
+
+| Rule | Value |
+| --- | --- |
+| Throw request (TW1) | `SessionAttack.Throw` / `SessionObjectAttack.Throw` = `SessionThrow(Weight)`: the host says the wielded weapon carries weapon flag 0x200 and passes its effective weight (0x461370; the session keeps no item weights, ARC-WORLD-085 owns the inventory weight, and the viewer passes the stored weight without its magic adjustment). A throw must fly (`Flight`), its weight lie in 0..1,000,000 and a weapon be wielded, else `InvalidAttack`. A weapon the remove check refuses (no drop) would stay in the hand and attack as without the flag; the session never wields one. |
+| Check (TW4, TW5) | The throwing skill's level and training replace the weapon's skill (a melee-skill dagger too); the weapon's range becomes the thrown range `ThrowRules.Range` (0x4622A0: `max(1, (50 × ST [+ half from expert throwing]) / max(1, W / 10) / 5)`), so the check is impossible beyond it and the range penalty applies as for any ranged skill. The reach test before the attack stays the weapon's range (RH1). The technology-failure and magick-cancel rolls are drawn and cannot succeed; the line of fire and its redirect are those of any ranged shot. No weapon wear (CW5: the throwing skill). |
+| Leaving the hand (TW1, TW3) | Unless the attack is refused, the weapon leaves its slot and the hero's list in a revision of its own and lies hidden on the hero's cell (`QueryItemInFlight`: not drawn, `PickUpItem` refuses it as `ItemNotAvailable`) without a decay event (0x4415C0); the attack's later steps find the hand empty (a critical miss's weapon effects act on no weapon). `QueryThrownShot(shot)` names the item and its thrown range. Nothing wields another weapon (TW3). |
+| Landing (TW6, PF9) | A thrown shot that struck (`LandShot`, `LandShotOnObject`) is not gone: it waits for `LandThrownItem(expected, shot, cell)`, which moves the item to the projectile's tile (the struck object's, or the last one beyond the thrown range or off the map), shows it again and ends the shot, one revision, with no decay event (0x4EDF20, ID9). The original lands it just before the hit (PF8); nothing of the hit reads it. `EndShot` gives the flight up (a map change, a reload): the item stays on the hero's cell. A snapshot taken during the flight keeps the item there, shown (shots are not saved). |
+| Throw script (TW3) | The item's throw script (point 6) may hand the item back in the original; no installed weapon carries one, and the session does not run it. |
+
+Viewer (AREA): a wielded kit weapon with the flag (`AreaStartingHero.KitThrowWeight`, its stored weight) is thrown by the action
+frame's hit, the line of fire's blocker and the wall shot (`ARC-COMBAT-016 projectile-launch … thrown=kit:N range=R`); the projectile
+flies to the thrown range, the ground does not draw the item while it flies, and at the strike or the flight's end the item lands
+on the projectile's tile (`ARC-COMBAT-017 thrown-landing`) and is drawn there; a flight given up leaves it on the hero's cell. It is
+picked up as any placed kit item and wielded again by hand. Native smoke `ARC-COMBAT-017 native-smoke throw PASS` (in the ranged
+stage, after the projectile check): the lent bow becomes a throwing dagger (melee skill, weight 15) with the same projectile art;
+each throw leaves the hand, lies hidden on the hero's cell while it flies, lands on the tile its projectile ended on, drawn and
+without decay, and is picked up and wielded again; at most 12 throws until one hits (a hit is reported, not required: the pre-made
+heroes barely train throwing, and the session's tests strike with one).
+
+Not ready: a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
+throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
+and the item event 0x800000 at the landing (PF10), boomerangs (ARC-COMBAT-019) and a missed throw's scatter (ARC-COMBAT-018).
 
 ## Viewer (AREA)
 
@@ -269,9 +299,9 @@ and a projectile across a save.
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Thrown and returning weapons and a bow's second projectile (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
+- Returning weapons and a bow's second projectile (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
   melee-skill weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots
-  since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016), the "default throws" weapon, backstab (needs facing and
+  since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016, the "default throws" weapon since ARC-COMBAT-017), backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.

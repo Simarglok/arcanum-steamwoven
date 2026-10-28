@@ -357,3 +357,29 @@ the line of fire's step with flags 0x0C, so a closed door or window past the des
 the shot), PF8's strike through the session (the alert, taunt, scripts, item event and attack end are not modelled), PF9's end, PF13
 and PF14. Not ready: the eye-candy speed column (always 4 steps), PF10 and the miss scripts, PF11, PF12, a companion struck (RH6), and
 the projectile across a save (the session keeps no projectile).
+
+## Thrown weapons (ARC-COMBAT-017)
+
+Source: the [hero attack runtime](../../world/hero-attack-runtime.md#thrown-weapons-arc-combat-017). Question: what happens to a
+wielded weapon with the "default throws" flag (0x200) when its holder attacks, which skill, range and target the throw takes, where
+the thrown item lies while it flies and where and how it lands, and whether anything wields a weapon again afterwards. Read on
+2026-10-28 by this task, once, in the retail 1.0.7.4 executable (SHA-256 checked), so the rows are F1 unless marked; they refine RH2
+and PF12. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TW1 | attack start (0x434B00) | For any attacker: the item in its weapon slot (0x4649C0, slot 1004) that is a weapon (type 5) with weapon flag 0x200 (field 112) and that the remove check 0x466DA0 admits leaves its holder (0x466E00: the holder through 0x4612A0, then the removal 0x467860 with its remove-item script) and the throw goal starts (0x434F80) with the thrower, the item and the target's location (field 2): the target object itself is not passed. Otherwise the attack goal starts (0x4B7C30). | Original |
+| TW2 | throw goal (0x434F80, 0x42AB90) | Goal 37 holds the item and the target location; its run skips an item with object flag 0x1 or 0x2, turns a target object of −1 into none and calls the throw 0x4B3C00 with the thrower, the item, the goal's target object (none for an attack's throw) and location. | Original |
+| TW3 | throw (0x4B3C00) | The thrower's location is kept; a thrower that is not a PC (type 15) removes the item again (0x466E00). The item's throw script (point 6, 0x441980 with the target object) may refuse: the item is then placed on the thrower's tile (0x4415C0) and inserted back (0x4617F0). Otherwise the context is built (0x4B2210) with the target object (none: the throw's location becomes the target location), its flags lose 0xC000 and gain 0x40240, its skill is 3 (throwing) and its weapon the item; the item is hidden (0x4EFF50 → 0x43D0E0 with object flag 0x2) and placed on the thrower's tile (0x4415C0, which schedules no decay, ID4), then the dispatcher 0x4B3170 runs. Nothing wields another weapon: neither the attack start nor the throw calls the auto-switch 0x4B83E0, whose only callers are the ammunition refusal (0x4B32A9) and the damage step (0x4B53DE, 0x4B5770). | Original |
+| TW4 | dispatcher (0x4B3170) for a throw | Without a target object no target-type branch runs before the ranged branch. For skill 3 the technology-failure and magick-cancel rolls each still draw d100 and cannot succeed (their chances 0x461700 and 0x461620 are skipped). The line of fire to the target location (0x4ADE00) names the struck object as for any ranged shot (RA4, RH1: the target itself may be the blocker), so the critter on the target's tile, or a blocker before it, is checked as in a ranged attack; flag 0x800 stays clear, as the intended target is none. The check's range is the thrown range (0x4C8430 → 0x4622A0, RH4). | Original (the struck object's naming by 0x4ADE00 F2 from RH1) |
+| TW5 | thrown range (0x4622A0) | Re-read: `max(1, ((A / max(1, W / 10)) / 5))`, `A = 50 × ST` (0x4B0490 with stat 0) raised by `A / 2` when the training of skill 3 (0x4C60C0) is 2 (expert) or more, `W` from 0x461370 of the item and the thrower; signed `idiv`, the halving and the divisions by 10 and 5 toward zero. | Original (F2 with RH4) |
+| TW6 | projectile end (0x4B2690), flag 0x40 | The parent item (field 0x50) moves to the projectile's location (0x4EDF20 → the object move 0x43E770, not the drop's placement 0x466E50, so no decay is scheduled, ID9) and is shown again (0x4EFEE0 clears object flag 0x2); then the projectile is destroyed (0x43CCA0) and the struck object, if any, alerted. A strike calls this end before the hit (PF8); a range end calls it at the last tile (PF9, the thrown range for flag 0x40). | Original |
+| TW7 | data census (opt-in `ThrownWeaponCensusTests`) | Of the 150 weapon prototypes one "default throws": the throwing dagger 6072 (melee skill, range 15, weight 15, projectile art 0x41200000, a scenery art; no-drop clear, no scripts). The eight throwing-skill weapons are boomerangs (flag 0x40, prototypes 6184–6191, ranges 20 and 8, weights 20–150), ARC-COMBAT-019's. No thrown weapon carries a throw script (point 6). | Data |
+
+Anomalies: none. Implemented by ARC-COMBAT-017 for the hero: TW1 (the remove check is the no-drop flag; the session never wields a
+no-drop item), TW3 without the throw script (no installed weapon has one), TW4 (the check with the throwing skill and the thrown
+range, the line of fire and the redirect as for any ranged shot), TW5 (the weight is the host's) and TW6. Steamwoven differences: the
+item lands after its strike in the session (the original lands it just before the hit, PF8; nothing of the hit reads it), and a
+snapshot taken while it flies keeps it on the thrower's cell, shown (the session keeps no projectile). Not ready: a throw at a tile
+without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (PF11's scale arc), NPC throws (no
+AI), the struck object's alert and the item event 0x800000 at the landing (PF10).

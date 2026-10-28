@@ -221,6 +221,8 @@ public partial class TerrainViewerApp
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
             DropMap = AreaDropMapNow(), Flight = flight is not null,
+            // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
+            Throw = flight is null ? null : HeroThrow(),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
@@ -586,7 +588,7 @@ public partial class TerrainViewerApp
             {
                 Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
                 // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
-                Flight = flight is not null,
+                Flight = flight is not null, Throw = flight is null ? null : HeroThrow(),
             });
             goal.Attacks++;
             goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
@@ -617,7 +619,11 @@ public partial class TerrainViewerApp
         PlaceHeroForDrop();
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
         var flight = ShotFlight(owner.QueryHeroAttack());
-        var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with { Flight = flight is not null });
+        // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
+        var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with
+        {
+            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(),
+        });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;

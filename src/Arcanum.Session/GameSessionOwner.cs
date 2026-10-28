@@ -812,7 +812,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
     /// the PC's list. Since ARC-WORLD-059 one of the hero's placed items on the actor's map goes back to the list it came from (a kit
     /// item at its kit number's place, a made item to the made items) after the insert check; it runs no script, and a world item
-    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
+    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), and a
+    /// thrown item still in flight (ARC-COMBAT-017, hidden until it lands) is <see cref="GameSessionFailure.ItemNotAvailable"/>. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> script and no host (ARC-SCRIPT-041: with one it runs before the insert check and
     /// can decline, <see cref="InventoryMutationResult.DeclinedBy"/>), gold or a key type (gold and key rings are not modelled),
     /// and a refusal of <paramref name="insertCheck"/>, which runs after every other check. Since ARC-WORLD-066 an ammunition item
@@ -827,6 +828,8 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands.
+        if (ItemInFlight(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
         if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return Picked(item, TakePlaced(placed, insertCheck));
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
@@ -1497,9 +1500,10 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// ARC-WORLD-059: places one of the hero's items (its kit, a taken or a made item) on the ground of the actor's map at
     /// <paramref name="cell"/>: a worn item leaves its slot, the item leaves its list and joins the placed items, and stays taken.
-    /// One revision. The caller checked the item and the cell.
+    /// One revision. The caller checked the item and the cell. ARC-COMBAT-017: a thrown item is laid down without the drop's decay
+    /// (<paramref name="decays"/> false: the throw's plain placement 0x4415C0 schedules none, ledger ID4).
     /// </summary>
-    internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell)
+    internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell, bool decays = true)
     {
         SessionPlacedItem placed;
         if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit)
@@ -1521,7 +1525,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Placed.Add(placed);
         // ARC-WORLD-062: every drop on the ground schedules the item's decay (ledger ID4).
-        ScheduleDecay(entity, placed.Map);
+        if (decays) ScheduleDecay(entity, placed.Map);
         _revision++;
     }
 
