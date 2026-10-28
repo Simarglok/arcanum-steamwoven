@@ -487,6 +487,8 @@ public partial class TerrainViewerApp
         ProcessTalkAfterRoute();
         ProcessInventoryAfterRoute();
         ProcessAreaAttack();
+        // ARC-COMBAT-016: projectiles fly and strike after the attack's frame.
+        ProcessAreaProjectiles();
         ProcessAreaSpells();
         // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
         ProcessTurnBasedRound();

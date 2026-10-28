@@ -52,7 +52,7 @@ layout of the StaticObjects loader, in the source's field order
 | --- | --- | --- |
 | Object | 0, 18..30 | current art (slot 0, ARC-WORLD-028), flags, spell flags, name class, description, AC, HP points, adjustment and damage, material, five resistances |
 | Item | 36..55 | item flags, weight, worth, mana store, inventory art (42), inventory location, use-art fragment (44), magick/tech complexity, discipline, five spells, spell mana store, AI action |
-| Weapon | 59..81 | weapon flags, to-hit bonus and magic adjustment, damage lower and upper (five types), magic damage adjustment, speed factor, range, minimum strength (each with its magic adjustment), ammunition type and consumption, critical hit and miss charts with magic chance and effect; derived skill |
+| Weapon | 59..81 | weapon flags, to-hit bonus and magic adjustment, damage lower and upper (five types), magic damage adjustment, speed factor, range, minimum strength (each with its magic adjustment), ammunition type and consumption, projectile art (slot 74, field 127 `weapon_missile_aid`, −1 none; ARC-COMBAT-016), critical hit and miss charts with magic chance and effect; derived skill |
 | Ammunition | 59..61 | flags, quantity, ammunition type |
 | Armour | 59..67 | armour flags, AC adjustment and magic adjustment, resistance adjustments and magic adjustments (five each), silent-move adjustment and magic adjustment, unarmed bonus damage |
 | Generic | 59..61 | generic flags (lockpick, trap device, healing item, grenade and others), usage bonus, remaining usage count |

@@ -146,6 +146,14 @@ public static class AttackResolver
             missCause = AttackMissCause.Fate;
         }
 
+        if (hit && request.DeferHit)
+        {
+            // ARC-COMBAT-016: the projectile carries the hit (flags 0x2, 0x4) and the location; its damage is rolled on arrival.
+            return new AttackResolution(AttackRefusal.None, critical ? AttackOutcome.CriticalHit : AttackOutcome.Hit,
+                AttackMissCause.None, location, aimed, magicCancelled, difficulty, attackCheck, dodgeCheck, fate,
+                CriticalSelfHit: false, Damage: null, rolls.Rolls.ToArray());
+        }
+
         if (hit)
         {
             var crit = new CriticalAccumulator();
@@ -189,6 +197,44 @@ public static class AttackResolver
             Wear = CombatWearRules.Of(request, selfDamage, location, attacker.Material, recipientIsCritter: true),
         };
     }
+
+    /// <summary>
+    /// ARC-COMBAT-016: the hit a projectile carries resolves when it strikes (0x4B2870 → 0x4B2F60): the damage of <paramref name="carried"/>
+    /// (a hit or critical hit without a damage packet, from <see cref="Resolve"/> with <see cref="AttackRequest.DeferHit"/>, or
+    /// <see cref="ForcedHit"/>) on <paramref name="request"/>'s target as it is now, with the carried location, aim, critical and
+    /// weapon magic, and the attack's wear; only the damage's rolls are made. The request's check inputs (distance, cover, ammunition)
+    /// are not read. A target that is dead now is refused (<see cref="AttackRefusal.TargetDead"/>, nothing rolled).
+    /// </summary>
+    public static AttackResolution LandHit(AttackRequest request, AttackResolution carried, ICombatRollSource rollSource,
+        ICriticalEffects? criticalEffects = null, CombatAnomalyProfile? profile = null)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(carried);
+        ArgumentNullException.ThrowIfNull(rollSource);
+        if (carried is not { Refusal: AttackRefusal.None, Outcome: AttackOutcome.Hit or AttackOutcome.CriticalHit, Damage: null }
+            || !Enum.IsDefined(carried.HitLocation) || carried.Aimed && carried.HitLocation == HitLocation.Torso)
+            throw new ArgumentException("A carried hit has no damage yet.", nameof(carried));
+        criticalEffects ??= NoCriticalEffects.Instance;
+        profile ??= CombatAnomalyProfile.Steamwoven;
+        Validate(request with { DeferHit = false, AimedLocation = null, AmmunitionShort = false });
+        var rolls = new CombatRollLog(rollSource);
+        if (request.TargetKind == AttackTargetKind.Critter && request.Target.Conditions.HasFlag(CombatantConditions.Dead))
+            return Refused(AttackRefusal.TargetDead, rolls);
+        var critical = carried.Outcome == AttackOutcome.CriticalHit;
+        var damage = Damage(request, DamageRecipient.Target, request.Target, request.TargetKind, critical, carried.HitLocation, carried.Aimed,
+            carried.WeaponMagicCancelled, new CriticalAccumulator(), criticalEffects, rolls, profile);
+        return carried with { Damage = damage, Rolls = rolls.Rolls.ToArray() }
+            with { Wear = CombatWearRules.Of(request, damage, carried.HitLocation, request.Target.Material, request.TargetKind == AttackTargetKind.Critter) };
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-016: the forced hit of a projectile that missed and struck another critter on its way or, flying past its destination,
+    /// an obstruction (0x4B2870: the flags lose the critical and gain the hit, the hit location is 0): a hit at the torso, not aimed,
+    /// without a critical, with the shot's weapon magic; its damage is <see cref="LandHit"/>'s. Nothing is rolled here.
+    /// </summary>
+    public static AttackResolution ForcedHit(bool weaponMagicCancelled) =>
+        new(AttackRefusal.None, AttackOutcome.Hit, AttackMissCause.None, HitLocation.Torso, false, weaponMagicCancelled, null, null, null,
+            FateUse.None, false, null, []);
 
     private static AttackResolution Refused(AttackRefusal refusal, CombatRollLog rolls) =>
         new(refusal, AttackOutcome.Refused, AttackMissCause.None, HitLocation.Torso, false, false, null, null, null,

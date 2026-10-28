@@ -158,6 +158,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="multiplayer-arc-res-072"></a>[Multiplayer (ARC-RES-072)](ledger/multiplayer.md#multiplayer-arc-res-072) | [Multiplayer](ledger/multiplayer.md) | NT1–NT16 |
 | <a id="template-sector-scripts-arc-res-073"></a>[Template sector scripts (ARC-RES-073)](ledger/scripts.md#template-sector-scripts-arc-res-073) | [Scripts and events](ledger/scripts.md) | PG1–PG10 |
 | <a id="turn-based-host-arc-combat-020"></a>[Turn-based host (ARC-COMBAT-020)](ledger/combat.md#turn-based-host-arc-combat-020) | [Combat](ledger/combat.md) | CT1–CT6 |
+| <a id="projectiles-in-flight-arc-combat-016"></a>[Projectiles in flight (ARC-COMBAT-016)](ledger/combat.md#projectiles-in-flight-arc-combat-016) | [Combat](ledger/combat.md) | PF1–PF14 |
 | <a id="save-list-arc-ui-010"></a>[Save list (ARC-UI-010)](ledger/ui-audio.md#save-list-arc-ui-010) | [Interface windows and audio](ledger/ui-audio.md) | SL1–SL8 |
 
 ## Decisions to revisit

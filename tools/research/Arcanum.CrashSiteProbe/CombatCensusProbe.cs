@@ -595,6 +595,16 @@ internal static partial class Program
                 weapons = weapons.Length,
                 weapon_skills = weapons.GroupBy(w => w.Value.Weapon!.Skill.ToString()).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
                 weapon_ammo_types = weapons.GroupBy(w => w.Value.Weapon!.AmmoType).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count()),
+                // ARC-COMBAT-016: the projectile art (field 127) by weapon skill and art class (id >> 28); "none" is -1.
+                weapon_missile_arts = weapons.GroupBy(w => w.Value.Weapon!.MissileArt == CombatWeaponFields.NoMissileArt ? $"{w.Value.Weapon!.Skill}:none"
+                        : $"{w.Value.Weapon!.Skill}:class{unchecked((uint)w.Value.Weapon!.MissileArt) >> 28}")
+                    .OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => new
+                    {
+                        count = g.Count(),
+                        arts = g.Select(w => w.Value.Weapon!.MissileArt).Where(a => a != CombatWeaponFields.NoMissileArt).Distinct()
+                            .Select(a => $"0x{unchecked((uint)a):X8}").Order(StringComparer.Ordinal).ToArray(),
+                        prototypes = g.Select(w => w.Key).Order().Take(8).ToArray(),
+                    }),
             },
         };
     }

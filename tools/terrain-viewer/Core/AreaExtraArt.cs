@@ -10,7 +10,11 @@ public enum AreaExtraArtStatus { Ready, Unresolved, MissingFile, Unreadable, Lim
 
 /// <summary>One decoded frame of an art id no body drew at T0: its visual record (the art id, frame size and hotspot; a key of its
 /// own, <see cref="AreaExtraArt.VisualKey"/>), its frame key in the map's repository and its pixels.</summary>
-public sealed record AreaExtraFrame(AreaVisualRecord Visual, AreaFrameKey Key, DecodedAreaFrame Frame);
+public sealed record AreaExtraFrame(AreaVisualRecord Visual, AreaFrameKey Key, DecodedAreaFrame Frame)
+{
+    /// <summary>ARC-COMBAT-016: the frames of the ART's group (a projectile's frame advances once per flight step).</summary>
+    public int FramesPerGroup { get; init; } = 1;
+}
 
 public sealed record AreaExtraArtLoad(AreaExtraArtStatus Status, AreaExtraFrame? Frame, string Detail);
 
@@ -85,8 +89,8 @@ public sealed class AreaExtraArt : IDisposable
             var visual = new AreaVisualRecord(VisualKey(aid), aid, selection.Lookup, entry, payload, view, selection.Nominal, selection.Group, group, selection.Frame,
                 selection.Palette, decoded.EffectivePaletteSlot, false, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
                 decoded.Frame.OffsetX, decoded.Frame.OffsetY, 0, 0, 100, decoded.Frame.EncodedPayloadLength, rgba.Length, pixels, Policy);
-            return new(AreaExtraArtStatus.Ready, new(visual, AreaFrameKey.From(visual), new(decoded.Width, decoded.Height, rgba)),
-                $"{selection.Path} frame {selection.Frame}");
+            return new(AreaExtraArtStatus.Ready, new(visual, AreaFrameKey.From(visual), new(decoded.Width, decoded.Height, rgba))
+                { FramesPerGroup = metadata.Header.FramesPerGroup }, $"{selection.Path} frame {selection.Frame}");
         }
         catch (Exception error) when (error is ArtException or ArgumentException)
         {
