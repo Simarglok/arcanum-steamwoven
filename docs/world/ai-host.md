@@ -16,6 +16,8 @@ one reader, F1). ARC-WORLD-102 (the next part of I10's third step) is the castin
 danger update and casts it through the map's cast host ([below](#casting-arc-world-102); exe rows
 [AC1–AC4](../research/ledger/npc-ai.md#npc-ai-casting-host-arc-world-102), one reader, F1); it covers the NPC's casts of
 [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004).
+ARC-WORLD-104 (I10 part 3c) queues a cast while the NPC's casting goal plays, as the hero's ([below](#queued-cast-arc-world-104);
+exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104), one reader, F1).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -87,6 +89,20 @@ slice I8b) get their host: the AI host answers `IAiSupportWorld`, its spell ques
 No new state: the pass record's choice, the list cache and the casting goals' play are the host's, not saved (a load builds the
 host again); a magic run itself is the session's, as the hero's.
 
+## Queued cast (ARC-WORLD-104)
+
+Perform's cast reaches the hero's run start (0x4AC250 → 0x455AC0 → 0x455C30, AC5), so a cast while the NPC's casting goal plays
+is queued as the hero's is ([queued cast](spell-cast-host.md), ARC-MAGIC-019, QC1–QC6). The queue lives in the NPC's goal run.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Queue | 0x44E830, 0x4373A0, 0x4B6D70, 0x44DBE0 (AC5, QC1, QC2) | `Cast` runs `CastByAi` first (the run exists from the cast); when the NPC's run has goal 26 or 27 at its bottom (82 and 83 are not found) `SessionSpellCaster.Queue` takes it with the run's current index as the depth: the new goal (26, or 82 for a record with a casting animation) is inserted at the bottom of the run, so the playing goal stays current and the queued goals play in the order they were cast; a depth of 4 or more or a turn-based round refuses and frees the run, silently. Either way no run starts: perform keeps the NPC's run (`AiCastStart.Queued`). Without such a run the cast starts its own run, replacing the NPC's, as before. |
+| Play | goal 27's pop (QC3), the stepper | The attempt goal's pop restarts the goal beneath at its first node in the same step: the queued goal's start, turn, play and release are the NPC's casting goal's (above). A queued goal whose run is no longer the NPC's (cancelled before it, QC6, its slot perhaps another caster's) starts without one and ends (QC4). |
+| Dropped queue | end step, kill (QC5, AC7; MG43) | A run that ends through the end step (a queued goal refused at its start, a play with no eye candy) or is dropped (an interrupt, a replacement, a kill, `Retire`) leaves the casts queued beneath unplayed: the host frees their runs, still waiting for their BEGIN, unpaid, in both settings (the owner's MG43 decision). |
+| Reach | gate 0x4A8570, 0x4233D0 (AC6) | Perform is called only from the pass after the gate, whose busy test reads the bottom goal of the NPC's run: a casting run's (26, 27, 82, 83: priority 3 or 4) holds the NPC busy, so its own AI pass never meets a queue; the branch takes an NPC's cast from another starter of a spell run (the script commands', not run by this host). The host's busy test reads the run's top goal, which is the same goal for a casting run. |
+
+No new state: the queue is the NPC's goal run, the host's and not saved; the queued runs are the session's spell runs.
+
 ## Settings
 
 No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
@@ -105,7 +121,7 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   of every run. The fidget's animation is not played and its run not held (NPC ART is not read).
 - **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
-  no item spell or AI-action item is chosen; a cast while the NPC's casting goal plays starts nothing (the original queues it, SU13);
+  no item spell or AI-action item is chosen;
   a spell whose projectile eye candy has art is released at its action frame as if its missile arrived at once (the flight is not
   run); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
@@ -136,7 +152,11 @@ asked at its subturn ends and no fidget in a round, and a turn set's interrupt o
 exterior the college NPC told of the hero's attack chooses a spell at its danger update, casts it at the hero through the cast host,
 the release begins the run and its goal's end frees nothing; in a turn-based round it casts in its own subturn and the goal's start
 pays 4 action points; an invented cast eye candy times the release frame and the rest, a host retired mid-play frees the run, and a
-play that never reaches its action frame releases nothing and its end frees the run (ARC-WORLD-102). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
+play that never reaches its action frame releases nothing and its end frees the run (ARC-WORLD-102); a cast while the casting goal
+plays is queued beneath it and the queue plays in the order cast, the queue refuses at depth 4 and in a turn-based round, freeing the
+run, a retired host frees the queue, and a queued goal that ends through the end step frees the run of the cast beneath it
+(ARC-WORLD-104). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
+refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
 the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
 the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
 PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted

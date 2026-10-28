@@ -249,6 +249,29 @@ public sealed class ActionGoalsTests
     }
 
     [TestMethod]
+    public void AQueuedCastingGoalAtTheBottomPlaysOnceTheGoalsAboveItHavePopped()
+    {
+        // ARC-WORLD-104 (SU13, QC3): the host inserts a queued goal 26 beneath the playing one; the attempt goal's pop restarts it.
+        var world = Arena(3);
+        var playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
+        var queued = playing with { Frames = playing.Frames.Insert(0, new AiGoalFrame(AiGoalType.CastSpell, Foe) { SpellRun = 8 }) };
+        Assert.AreEqual(AiGoalType.AttemptSpell, queued.Top.Goal, "the playing goal stays current");
+        var steps = Drive(queued, world, Steamwoven);
+        CollectionAssert.AreEqual(new[] { "start cast 7", "face cast", "play cast", "action frame", "end cast", "start cast 8", "face cast",
+            "play cast", "action frame", "end cast" }, world.Calls);
+        Assert.AreEqual(AiRunEnd.Finished, steps[^1].End);
+
+        // A queued goal refused at its start ends through the end step (QC4).
+        world = Arena(3);
+        playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
+        world.CastStart = AiCastGoalStart.Refused;
+        queued = playing with { Frames = playing.Frames.Insert(0, new AiGoalFrame(AiGoalType.CastSpell, Foe) { SpellRun = 8 }) };
+        var refused = Drive(queued, world, Steamwoven)[^1];
+        Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.CastRefused), (refused.End, refused.Reason));
+        Assert.AreEqual("end cast refused", world.Calls[^1]);
+    }
+
+    [TestMethod]
     public void EndRunEndsTheMagicRunOfAReplacedCastOnce()
     {
         var world = Arena(3);

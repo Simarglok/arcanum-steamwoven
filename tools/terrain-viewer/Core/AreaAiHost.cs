@@ -105,7 +105,9 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// ARC-WORLD-102: the support rules' spell half (<see cref="IAiSupportWorld"/>, the spell answers through the map's cast host) chooses
 /// a spell at the danger update's target (<see cref="AiSupportRules.ChooseSpell"/>), perform casts it (<see cref="Cast"/>,
 /// <see cref="SessionSpellCaster.CastByAi"/>) and the casting goals play through the cast host (start, turn, play, release, end).
-/// NOT READY (later slices): queued casts, spell missiles' flights, item use and items in the lists, skills, throws and pickups,
+/// ARC-WORLD-104: a cast while the NPC's casting goal 26 or 27 plays is queued beneath it (SU13, AC5), its goal played once the goals
+/// above it are done; the AI pass itself never meets one, as the gate holds a casting NPC busy (AC6).
+/// NOT READY (later slices): spell missiles' flights, item use and items in the lists, skills, throws and pickups,
 /// grenades, the back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
@@ -163,6 +165,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private AiListCache _listCache = AiListCache.Empty;
     private readonly Dictionary<int, SpellFacing?> _castFacing = [];
     private readonly HashSet<int> _noRelease = [];
+    // ARC-WORLD-104: the magic runs of queued casting goals that have not started yet (SU13); an end step leaves them unplayed.
+    private readonly HashSet<int> _queuedCasts = [];
 
     /// <param name="events">The viewer's event world: the pass's script calls, life facts, party and loot questions.</param>
     /// <param name="round">The turn-based round's world (the scan of the map's critters).</param>
@@ -305,6 +309,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
                 _runs.Remove(npc);
                 // The end step ran the end nodes itself; a killed run, the node limit and an overflow drop the run without them.
                 if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) EndDroppedRun(run);
+                // ARC-WORLD-104: the end step runs the end node of every goal (QC5); a queued goal 26's (0x42B090) frees nothing (MG43).
+                else if (step.End == AiRunEnd.EndStep) FreeQueuedCasts(run);
                 // ARC-WORLD-099: the stepper's end of a done run (TH4): the fidget's call (0x4B4320), after the owner's subturn hook. The
                 // round actor's hook is the round host's next frame (<see cref="FidgetAfterHook"/>); anyone else's hook does nothing. The
                 // node limit frees its run without it; an overflow, which the reading did not follow, is taken as the node limit.
@@ -388,7 +394,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _notices.Clear();
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
-        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear();
+        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear();
         Movers.Clear();
     }
 
@@ -529,12 +535,30 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private void EndDroppedRun(AiGoalRun run)
     {
         AiExecutorRules.EndRun(run, this);
-        if (_scene.Spells?.Invoke() is not { } caster) return;
-        foreach (var frame in run.Frames)
-            if (frame is { Goal: AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation, SpellRun: { } id }
-                && _session.QuerySpellRuns()[id]?.Parent?.Id == run.Owner && caster.DropQueued(id) is { } freed)
-                _notices.Add(new(AreaAiNoticeKind.CastEnd, run.Owner, null) { Run = id, SpellRun = freed });
+        FreeUnbegunCasts(run, queuedOnly: false);
     }
+
+    // ARC-WORLD-104: a run that ended through the end step leaves the casts queued beneath its goals unplayed: their goals' end node,
+    // the animation reset (0x42B090), frees nothing, so in the original the runs keep their slots (MG43, fixed in both modes: the
+    // host frees them unpaid, as the hero's dropped queue). Only the goals that never started are theirs: one that started ended its
+    // own run.
+    private void FreeQueuedCasts(AiGoalRun run) => FreeUnbegunCasts(run, queuedOnly: true);
+
+    private void FreeUnbegunCasts(AiGoalRun run, bool queuedOnly)
+    {
+        var caster = _scene.Spells?.Invoke();
+        foreach (var frame in run.Frames)
+        {
+            if (frame is not { Goal: AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation, SpellRun: { } id }) continue;
+            var queued = _queuedCasts.Remove(id);
+            if ((queuedOnly && !queued) || caster is null) continue;
+            if (OwnRun(run.Owner, id) && caster.DropQueued(id) is { } freed)
+                _notices.Add(new(AreaAiNoticeKind.CastEnd, run.Owner, null) { Run = id, SpellRun = freed });
+        }
+    }
+
+    // A goal's magic run is the NPC's own: a queued run cancelled meanwhile (QC6) may have lent its slot to another caster's run.
+    private bool OwnRun(string id, int run) => _session.QuerySpellRuns()[run]?.Parent?.Id == id;
 
     // The setter call with the facts its rules read; a fight on the hero carries the reaction facts (rule 8).
     private SessionDangerResult SetDanger(string npc, DangerState state, string? target)
@@ -736,7 +760,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// <see cref="FaceCast"/> applies.</summary>
     public AiCastGoalStart StartCast(string id, int run)
     {
-        if (_scene.Spells?.Invoke() is not { } caster) return AiCastGoalStart.Refused;
+        _queuedCasts.Remove(run);
+        // A queued goal whose run was cancelled before it (QC6) starts without one and ends (QC4).
+        if (_scene.Spells?.Invoke() is not { } caster || !OwnRun(id, run)) return AiCastGoalStart.Refused;
         var start = caster.StartGoal(run, _round);
         if (start.ActionPoints is { } points) RoundCall(points);
         Trace(id).Cast = $"start run={run} {start.Outcome}";
@@ -820,7 +846,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _noRelease.Remove(run);
         _castFacing.Remove(run);
         if (_scene.Spells?.Invoke() is not { } caster) return;
-        var freed = caster.EndGoal(run, refused);
+        var freed = OwnRun(id, run) ? caster.EndGoal(run, refused) : null;
         _notices.Add(new(AreaAiNoticeKind.CastEnd, id, null) { Run = run, SpellRun = freed });
     }
     public bool FaceForAction(string id, string? target, CellCoord? tile) => false;
@@ -883,25 +909,38 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
     /// <summary>
-    /// Perform's cast (0x4AC250): the cast host's <see cref="SessionSpellCaster.CastByAi"/> with the choice's spell and target; a started
-    /// run's casting goal is 82 when the record's casting animation is not −1, else 26. NOT READY: a choice with an item (the item's
-    /// spells and AI actions are not listed yet), and a cast while the NPC's casting goal plays, which the original queues under it
-    /// (SU13): neither starts a run.
+    /// Perform's cast (0x4AC250 → 0x455AC0 → 0x455C30): the cast host's <see cref="SessionSpellCaster.CastByAi"/> with the choice's
+    /// spell and target; a started run's casting goal is 82 when the record's casting animation is not −1, else 26. ARC-WORLD-104
+    /// (SU13, AC5): when the NPC's run has goal 26 or 27 at its bottom (0x44E830; 82 and 83 are not found) the new goal is queued
+    /// beneath it (<see cref="SessionSpellCaster.Queue"/>, the run's current index as its depth): inserted at the bottom of the run,
+    /// so the queued goals play in the order they were cast, each when the goals above it have popped. A depth of 4 or more or a
+    /// turn-based round refuses, freeing the run. Either way no run starts and perform keeps the current one.
+    /// NOT READY: a choice with an item (the item's spells and AI actions are not listed yet) starts no run.
     /// </summary>
     public AiCastStart Cast(string npc, AiPassChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
         if (choice.Item is not null || _scene.Spells?.Invoke() is not { } caster) return new(null);
-        if (RunOf(npc) is { } current && current.Frames.Any(f => f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation
-                or AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation))
-        {
-            Trace(npc).Cast = $"cast {choice.Spell} not queued (a casting goal plays)";
-            return new(null);
-        }
         var attempt = caster.CastByAi(npc, choice.Spell, choice.Target);
         Trace(npc).Cast = $"cast {choice.Spell} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);
-        return new(run, CastAnimation: (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1);
+        var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
+        if (!_runs.TryGetValue(npc, out var held) || held.Run.Bottom.Goal is not (AiGoalType.CastSpell or AiGoalType.AttemptSpell))
+            return new(run, CastAnimation: castAnimation);
+        var depth = held.Run.Frames.Length - 1;
+        var queued = caster.Queue(run, depth);
+        Trace(npc).Cast += $" queue depth={depth} {queued}";
+        if (queued == SpellCastQueueOutcome.Queued)
+        {
+            // The perform's target, as a started goal's; a queued goal whose run was freed meanwhile (QC6) lost its slot to this one.
+            var target = choice.Target ?? (_session.QueryDanger(npc).Source is { } source ? Id(source) : null);
+            var goal = new AiGoalFrame(castAnimation ? AiGoalType.CastSpellWithAnimation : AiGoalType.CastSpell, target) { SpellRun = run };
+            var frames = held.Run.Frames.RemoveAll(f => !ReferenceEquals(f, held.Run.Top) && f.SpellRun == run
+                && f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation).Insert(0, goal);
+            _runs[npc] = (held.Run with { Frames = frames }, held.DueMs);
+            _queuedCasts.Add(run);
+        }
+        return new(null, castAnimation, Queued: queued == SpellCastQueueOutcome.Queued);
     }
 
     public void LeaveCombatMode(string npc)
