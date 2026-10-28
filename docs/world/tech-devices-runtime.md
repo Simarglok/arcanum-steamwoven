@@ -80,7 +80,7 @@ without a hero or for a complexity out of range. It changes nothing.
 
 The equipment's refusal of items with spells (`ItemEffectUnsupported`) is not aptitude. Since ARC-MAGIC-020 it holds only without
 an item trigger host: with one, the wear and unwear executors run the item's spells ([item spell triggers](item-spell-triggers.md),
-IT1–IT9; record 168's three armours start their maintained run on the wear).
+IT1–IT10; record 168's three armours start their maintained run on the wear).
 
 ## Not implemented
 

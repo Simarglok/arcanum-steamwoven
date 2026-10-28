@@ -3,7 +3,7 @@
 Status: **Implemented bounded component; no viewer caller yet.** Work item ARC-MAGIC-020 (2026-10-28), the first part of the shared
 item trigger slice of [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-magic-011) ("Outside this plan" of the
 [magic implementation plan](../research/magic-implementation-plan.md#outside-this-plan)). Behaviour is the 1.0.7.4 executable's,
-read twice ([ledger IT1–IT9](../research/ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the item spell fields and the
+read twice ([ledger IT1–IT10](../research/ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the item spell fields and the
 technology side are the [tech devices](tech-devices-runtime.md) contract's (DV1–DV3).
 
 This slice runs an item's spells on its **wear and unwear** through the [cast host](spell-cast-host.md). The other events are later
