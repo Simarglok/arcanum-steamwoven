@@ -122,7 +122,10 @@ public sealed partial class GameSessionOwner
             (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
                 worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind));
+        // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
+        var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
+            ? seedRow.Facts.Complexity : held.Complexity;
+        var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity));
         var into = held.Kind.Type == SessionItemType.Ammo
             ? NpcStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() : null;
         if (into is { } stack)
@@ -153,7 +156,7 @@ public sealed partial class GameSessionOwner
             _inventory.Pc.RemoveAll(entry => entry.Entity == item);
             _inventory.Made.RemoveAll(entry => entry.Entity == item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
-            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind));
+            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
             if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
         }
         _revision++;
@@ -180,7 +183,7 @@ public sealed partial class GameSessionOwner
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
-            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(added.Kind))), npc, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.AddedFacts(added)), npc, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), npc, insertCheck, scripts);
@@ -343,12 +346,12 @@ public sealed partial class GameSessionOwner
     private bool NpcHasScript(string npc, int point) => _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) &&
         holder.Kind == SessionHolderKind.Npc && holder.ScriptPoints.Contains(point));
 
-    // One of the hero's held items (not placed) with its list and, for a taken item, its origin map.
-    private (SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin)? HeroListed(string entity)
+    // One of the hero's held items (not placed) with its list, for a taken item its origin map, and for a made item its complexity.
+    private (SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, int Complexity)? HeroListed(string entity)
     {
-        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit) return (kit.Kind, SessionPlacedSource.Kit, null);
-        if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc) return (pc.Kind, SessionPlacedSource.Pc, pc.Origin);
-        if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made) return (made.Kind, SessionPlacedSource.Made, null);
+        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit) return (kit.Kind, SessionPlacedSource.Kit, null, 0);
+        if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc) return (pc.Kind, SessionPlacedSource.Pc, pc.Origin, 0);
+        if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made) return (made.Kind, SessionPlacedSource.Made, null, made.Complexity);
         return null;
     }
 }
