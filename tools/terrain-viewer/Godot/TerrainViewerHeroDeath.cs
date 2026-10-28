@@ -37,7 +37,8 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: follows the session's hero and moves the death on by the frame's real time.</summary>
     private void SyncHeroDeath(double delta)
     {
-        if (!_heroDeathForSelfTest && (AutomatedVisualRun || _readyMode != TerrainViewerMode.CrashSiteArea)) return;
+        // A death covering the game always runs on (a failed start scene leaves the AREA mode, and the screen must still clear).
+        if (!_heroDeathForSelfTest && !HeroDeathCovering && (AutomatedVisualRun || _readyMode != TerrainViewerMode.CrashSiteArea)) return;
         TickHeroDeath(delta * 1000);
     }
 
@@ -56,7 +57,7 @@ public partial class TerrainViewerApp
         _heroDeath.Tick(milliseconds, _heroDeathHost);
         if (_heroDeath.Stage != before)
         {
-            _heroDeathStatus = $"{_heroDeath.Stage}{(_heroDeath.ResetRefusal is { } refused ? " (reset refused: " + refused + ")" : "")}";
+            _heroDeathStatus = $"{_heroDeath.Stage}{(_heroDeath.ResetRefusal is { } refused ? " (reset refused: " + refused + ")" : "")}{(_heroDeath.ResetAbandoned ? " (reset abandoned)" : "")}";
             GD.Print($"ARC-UI-026 hero death stage={_heroDeath.Stage} slide={_heroDeath.Slide?.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}"
                 + $" shown={_heroDeath.Shown}{(_heroDeath.ResetRefusal is { } why ? " refused=" + why : "")}");
         }
@@ -113,6 +114,14 @@ public partial class TerrainViewerApp
         return _heroDeathPanel;
     }
 
+    /// <summary>A test's or smoke's cleanup: drops a death in any stage with its screen and sounds.</summary>
+    private void StopHeroDeath()
+    {
+        StopDeathSound(ref _deathVoice); StopDeathSound(ref _deathMusic);
+        _heroDeathPanel?.Close();
+        _heroDeath.Stop(_heroDeathHost?.HeroDead ?? false);
+    }
+
     private void StopDeathSound(ref ViewerAudioHandle? handle)
     {
         if (handle is { } playing) _audio?.Stop(playing);
@@ -157,8 +166,7 @@ public partial class TerrainViewerApp
         {
             // The original stops the music and loops the slides' music (PD6); the viewer stops every sound of the scene, whose
             // players stand still under the screen.
-            app._audio?.StopAll();
-            app._schemeVoices.Clear();
+            app.StopSceneSound();
             if (app._audio is not { } audio || app.AreaSoundCatalog() is not { } catalog) return;
             var result = audio.Play(catalog.OpenPayload(catalog.ResolveFile(DeathSlidesMusic)), AudioChannel.Music,
                 AudioVolumeRules.ChannelVolume(app._audioVolumes, AudioChannel.Music), loop: true);

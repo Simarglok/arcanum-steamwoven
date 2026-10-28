@@ -213,6 +213,34 @@ public sealed class AreaHeroDeathTests
     }
 
     [TestMethod]
+    public void A_reset_refused_too_often_or_without_a_menu_gives_up_and_fades_in()
+    {
+        var (death, host) = Died();
+        host.Slides = AreaSlideTable.None("t");
+        host.Refusal = "the launch arguments are not known";
+        death.Tick(AreaHeroDeath.DeathDelay, host); death.Tick(AreaHeroDeath.FadeTime, host);
+        for (var i = 0; i < AreaHeroDeath.MaxResetTries; i++) death.Tick(AreaHeroDeath.MenuRetryDelay, host);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage);
+        Assert.IsTrue(death.ResetAbandoned);
+        Assert.AreEqual("the launch arguments are not known", death.ResetRefusal);
+        Assert.AreEqual(AreaHeroDeath.MaxResetTries, host.Calls.Count(call => call == "reset"));
+        death.Tick(AreaHeroDeath.FadeTime, host);
+        Assert.AreEqual(AreaDeathStage.Watching, death.Stage, "the dead hero stays: a death starts it again, not this one");
+        // A reset that began but whose menu never comes gives up too.
+        var (waiting, other) = Died();
+        other.Slides = AreaSlideTable.None("t");
+        waiting.Tick(AreaHeroDeath.DeathDelay, other); waiting.Tick(AreaHeroDeath.FadeTime, other);
+        waiting.Tick(AreaHeroDeath.ResetTimeout - 1, other);
+        Assert.AreEqual(AreaDeathStage.Reset, waiting.Stage);
+        waiting.Tick(1, other);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, waiting.Stage);
+        Assert.IsTrue(waiting.ResetAbandoned);
+        waiting.Stop(true);
+        Assert.AreEqual(AreaDeathStage.Watching, waiting.Stage);
+        Assert.IsFalse(waiting.Covering);
+    }
+
+    [TestMethod]
     public void A_menu_that_opens_inside_the_reset_fades_in()
     {
         var (death, host) = Died();

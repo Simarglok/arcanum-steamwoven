@@ -1488,8 +1488,9 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
 - **The reset.** The game ends as a quit does ([scene flow](#scene-flow-arc-ui-012)): the start scene loads from the launch
   arguments with a fresh session and the main menu reopens over it (its root Escape exits), fading in from black (2 s).
   Saves are not touched; a load is the main menu's (Single Player, Load Game or Last Save). There is no window with a
-  choice. A reset refused (another map loading, a reset in progress) is tried again every 0.3 s with the screen black;
-  a start scene that fails shows its failure.
+  choice. A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
+  the screen black, up to 20 times; then, or when no menu has come 2 minutes after the reset began, the screen fades in
+  over the game as it is (the original's reset cannot be refused). A start scene that fails shows its failure.
 
 Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
 or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
@@ -1497,7 +1498,8 @@ the synthetic area owner, a synthetic slide table, picture and voice, the start 
 hero dies, the in-play menu opened meanwhile closes after 5 s and the death comes 0.3 s later, the fade to black owns
 the input (Escape opens nothing), the 800 × 600 picture fades in, its voice starts, a key ends it, the reset loads the
 start scene with a fresh session and the reopened main menu, which fades in; a hero brought back to life before the
-death comes is not reset; a voice's end ends the slide. Steamwoven's own death window (load the last save, as the
+death comes is not reset; a voice's end ends the slide; a start scene that does not publish clears the screen over
+the game as it is. Steamwoven's own death window (load the last save, as the
 quit box asks) is a later task: it branches where the show ends, before the reset (`AreaHeroDeath`'s reset step). Native smoke on the original data, map mode on the start map
 with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` (a new game as the
 first pre-made hero, the hero killed through the session, the death after 5 s on the wall clock, the installed default

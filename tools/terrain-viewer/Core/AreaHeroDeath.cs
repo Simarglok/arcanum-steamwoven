@@ -148,10 +148,16 @@ public sealed class AreaHeroDeath
     public const int DefaultSlide = 0;
     /// <summary>The original's slide queue holds up to 100 slides.</summary>
     public const int MaxQueued = 100;
+    /// <summary>A reset refused this many times running gives up (the original's reset cannot be refused): the screen fades in
+    /// over the game as it is, with the refusal kept.</summary>
+    public const int MaxResetTries = 20;
+    /// <summary>A reset that began but whose main menu never came gives up after this long (ms).</summary>
+    public const int ResetTimeout = 120_000;
     private readonly List<int> _queue = [];
     private bool _wasDead;
     private bool _stopShow;
     private AreaSlidePair? _slide;
+    private int _resetTries;
 
     public AreaDeathStage Stage { get; private set; }
     /// <summary>The time left in a waiting or fading stage (ms).</summary>
@@ -162,8 +168,11 @@ public sealed class AreaHeroDeath
     public AreaSlidePair? Slide => _slide;
     /// <summary>The slides shown so far in this death.</summary>
     public int Shown { get; private set; }
-    /// <summary>Why the reset did not begin (it is tried again 0.3 s later); null when it did.</summary>
+    /// <summary>Why the reset did not begin (it is tried again 0.3 s later, up to <see cref="MaxResetTries"/> times); null when it
+    /// did.</summary>
     public string? ResetRefusal { get; private set; }
+    /// <summary>True when the reset gave up (refused too often, or no menu came): the game stays as it was.</summary>
+    public bool ResetAbandoned { get; private set; }
     /// <summary>True while the death screen covers the game (from the fade to black until the menu has faded in).</summary>
     public bool Covering => Stage is not (AreaDeathStage.Watching or AreaDeathStage.Waiting);
 
@@ -211,8 +220,9 @@ public sealed class AreaHeroDeath
                 Next(host);
                 return;
             case AreaDeathStage.Reset:
-                // Waiting for the main menu (MenuReady), or for the next try of a refused reset.
-                if (ResetRefusal is null || (Remaining -= milliseconds) > 0) return;
+                // Waiting for the main menu (MenuReady), or for the next try of a refused reset; neither waits forever.
+                if ((Remaining -= milliseconds) > 0) return;
+                if (ResetRefusal is null || ++_resetTries >= MaxResetTries) { Abandon(host); return; }
                 BeginReset(host);
                 return;
             case AreaDeathStage.MenuFadeIn:
@@ -249,7 +259,7 @@ public sealed class AreaHeroDeath
         if (!host.HeroDead) { Stage = AreaDeathStage.Watching; _wasDead = false; return; }
         host.CloseWindows();
         if (host.MenuOpen) { host.CloseMenu(); Remaining = MenuRetryDelay; return; }
-        _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null;
+        _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetTries = 0;
         if (host.Slides.Loaded) _queue.Add(DefaultSlide);
         host.Fade(true, FadeTime);
         Stage = AreaDeathStage.FadeOut; Remaining = FadeTime;
@@ -289,9 +299,24 @@ public sealed class AreaHeroDeath
     private void BeginReset(IAreaDeathHost host)
     {
         Stage = AreaDeathStage.Reset;
-        ResetRefusal = null; Remaining = 0;
+        ResetRefusal = null; Remaining = ResetTimeout;
         // A host whose menu opens at once calls MenuReady from inside Reset.
         if (host.Reset() is not { } refusal) return;
         ResetRefusal = refusal; Remaining = MenuRetryDelay;
+    }
+
+    /// <summary>The reset gave up: the screen fades in over the game as it is (the refusal stays readable).</summary>
+    private void Abandon(IAreaDeathHost host)
+    {
+        ResetAbandoned = true;
+        host.Fade(false, FadeTime);
+        Stage = AreaDeathStage.MenuFadeIn; Remaining = FadeTime;
+    }
+
+    /// <summary>Drops a death in any stage (a test's or smoke's cleanup): back to watching, the host's screen and sounds being the
+    /// caller's to clear.</summary>
+    public void Stop(bool heroDead)
+    {
+        Stage = AreaDeathStage.Watching; Remaining = 0; _wasDead = heroDead; _slide = null; _stopShow = false;
     }
 }

@@ -4,8 +4,8 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-026 the hero's death screen: the whole window black, a slide's picture centred and scaled to fit (the original's
-/// slides are 800 × 600), and a black veil whose opacity makes the fades (ledger PD7). It sits above the main menu, so the
-/// menu fades in under it after the reset. The app drives it: the veil moves only by <see cref="Advance"/>, with the same
+/// slides are 800 × 600), and a black veil whose opacity makes the fades (ledger PD7). It sits above the main menu and the bars, so
+/// the menu fades in under it after the reset. The app drives it: the veil moves only by <see cref="Advance"/>, with the same
 /// time as the death's state, and the input goes to the app.
 /// </summary>
 public partial class AreaDeathPanel : CanvasLayer
@@ -24,7 +24,7 @@ public partial class AreaDeathPanel : CanvasLayer
 
     public override void _Ready()
     {
-        Layer = 6;
+        Layer = 7;
         Visible = false;
         _back = new ColorRect { Name = "DeathBack", Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Stop };
         _back.SetAnchorsPreset(Control.LayoutPreset.FullRect);

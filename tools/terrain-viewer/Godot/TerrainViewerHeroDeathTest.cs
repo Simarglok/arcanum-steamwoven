@@ -141,14 +141,30 @@ public partial class TerrainViewerApp
             Require(_heroDeath.Stage == AreaDeathStage.SlideOut, "the voice's end ended the slide");
             TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_heroDeath.Stage == AreaDeathStage.Watching && MainMenuOpen && _mainMenu!.Reopened && _sceneLoadsForSelfTest == loads + 2, "the second reset");
+
+            // A start scene that does not publish: the black screen gives way to the game as it is.
+            game = NewGame();
+            var published = _sceneLoadForSelfTest;
+            _sceneLoadForSelfTest = _ => { _sceneLoadsForSelfTest++; return Task.CompletedTask; };
+            Kill(game);
+            TickHeroDeath(16);
+            TickHeroDeath(AreaHeroDeath.DeathDelay); TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
+            voicePlaying = false;
+            TickHeroDeath(16); TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 3 && ReferenceEquals(game, _areaSession) && !MainMenuOpen,
+                "an unpublished start scene fades in over the game as it is: " + _heroDeath.Stage);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(!HeroDeathCovering && !_heroDeathPanel.IsOpen && !WorldModal, "the screen cleared");
+            _sceneLoadForSelfTest = published;
             return "a death waits 5 s, closes the in-play menu and comes 0.3 s later, fades to black owning the input, shows the slide "
-                + "(picture, voice) until a key, resets to the reopened main menu fading in; a hero alive again is not reset; a voice's end ends the slide";
+                + "(picture, voice) until a key, resets to the reopened main menu fading in; a hero alive again is not reset; a voice's end ends the slide; "
+                + "an unpublished start scene clears the screen";
         }
         finally
         {
             if (SaveListOpen) EndSaveList();
             if (_mainMenu is not null) EndMainMenu("self-test end");
-            _heroDeathPanel?.Close();
+            StopHeroDeath();
             _heroDeathForSelfTest = false; _deathSlidesForSelfTest = null; _deathPictureForSelfTest = null; _deathVoiceForSelfTest = null;
             _deathVoicePlayingForSelfTest = null;
             _saveLibraryForSelfTest = null; _quickKeys.Reset(); _heroLoaderForSelfTest = null; _mainMenuExitForSelfTest = null;

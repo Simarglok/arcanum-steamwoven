@@ -99,6 +99,8 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            // A smoke that failed part-way must not leave a covering death for a later stage.
+            if (HeroDeathCovering) { GD.Print($"ARC-UI-026 death smoke: dropped a death at stage {_heroDeath.Stage}"); StopHeroDeath(); }
             _heroDeathForSelfTest = false;
             if (_mainMenu is not null) EndMainMenu("smoke end");
             _quickKeys.Reset();

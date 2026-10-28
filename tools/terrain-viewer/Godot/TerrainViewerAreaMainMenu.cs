@@ -137,6 +137,8 @@ public partial class TerrainViewerApp
     {
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return "a reset or reload is in progress";
         if (_mapHandoff is { Kind: not MapHandoffKind.Stream }) return "another map is loading";
+        // ARC-UI-026: a quit and a death (or two deaths) never load the start scene twice at once.
+        if (_sceneFlow is not null) return "the start scene is loading";
         if (StartSceneArguments(out var why) is not { } next) return why;
         _sceneFlow = new(kind, hero, next.AreaMapName);
         GD.Print("ARC-UI-012 scene flow " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -159,9 +161,10 @@ public partial class TerrainViewerApp
         {
             _sceneFlow = null;
             GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
-            // ARC-UI-026: a death's black screen gives way to the failure.
-            HeroDeathSceneReady();
         }
+        // ARC-UI-026: a death's black screen gives way to whatever is shown now (the reopened menu fades in already; a failure, or a
+        // load another one superseded, is not left under black).
+        HeroDeathSceneReady();
     }
 
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
