@@ -125,7 +125,9 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
         var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
             ? seedRow.Facts.Complexity : held.Complexity;
-        var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity));
+        // ARC-WORLD-085: the host's insert check for the NPC sees the item's weight facts.
+        var weights = _inventory.Weights.TryGetValue(item, out var row) ? row : default;
+        var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity) with { Weight = weights.Weight, MagicWeight = weights.MagicWeight });
         var into = held.Kind.Type == SessionItemType.Ammo
             ? NpcStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() : null;
         if (into is { } stack)

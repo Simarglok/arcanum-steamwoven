@@ -126,7 +126,9 @@ public sealed class CarryStateTests
         Assert.IsNull(owner.QueryItemWeight(invalid.Item!), "facts the rules refuse count as none");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.TakeItemFromNpc(owner.Version, "smith", weighed.Item!, Accept).Disposition);
         Assert.AreEqual(1_800, owner.QueryHeroCarry()!.Weight, "the made item keeps its weight in the hero's list");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "kit:1", Accept).Disposition);
+        SessionItemFacts? seen = null;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "kit:1", item => { seen = item.Facts; return SessionInsertVerdict.Accepted; }).Disposition);
+        Assert.AreEqual(1_000, seen!.Weight, "the NPC's insert check sees the item's weight");
         Assert.AreEqual(800, owner.QueryHeroCarry()!.Weight);
         Assert.AreEqual(new SessionItemWeight(1_000), owner.QueryItemWeight("kit:1"), "a given item keeps its row at the NPC");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.TakeItemFromNpc(owner.Version, "smith", "kit:1", Accept).Disposition);

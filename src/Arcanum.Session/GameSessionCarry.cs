@@ -109,12 +109,13 @@ public sealed partial class GameSessionOwner
             ? new((int)facts.Kind.Type, row.Weight, row.MagicWeight, row.Complexity, facts.Kind.Type == SessionItemType.Ammo ? facts.Quantity ?? 0 : 0)
             : new((int)facts.Kind.Type, facts.Weight, facts.MagicWeight, facts.Complexity, facts.Kind.Type == SessionItemType.Ammo ? facts.Quantity ?? 0 : 0);
 
-    // The prototype's weight facts from the attached host source, with the complexity the session keeps for the object. A host answer
-    // the rules refuse counts as none.
-    private SessionItemWeight CreatedWeight(int prototype, int complexity = 0)
+    // The prototype's weight facts from the attached host source; an assembly product's complexity is the one the session keeps for the
+    // made item (the host's facts for the product), any other created object weighs with the prototype's. A host answer the rules refuse
+    // counts as none.
+    private SessionItemWeight CreatedWeight(int prototype, int? complexity = null)
     {
         var facts = _itemWeights?.Invoke(prototype);
         ThrowIfDisposed();
-        return facts is { IsValid: true } valid ? valid with { Complexity = complexity } : new(0, 0, complexity);
+        return facts is { IsValid: true } valid ? valid with { Complexity = complexity ?? valid.Complexity } : new(0, 0, complexity ?? 0);
     }
 }

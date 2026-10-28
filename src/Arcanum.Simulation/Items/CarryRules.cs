@@ -77,16 +77,15 @@ public static class CarryRules
         if (!Enum.IsDefined(holder)) throw new ArgumentOutOfRangeException(nameof(holder));
         if (complexity == 0) return magicWeight;
         // The power of a non-critter holder is the complexity; a critter's is (complexity + aptitude) / 2 in 32 bits, truncated toward
-        // zero and clamped to 0..complexity on the item's side (0x4614A0). The power never exceeds the complexity in size, so the
-        // quotient stays within the adjustment.
-        long power = complexity;
+        // zero and clamped to 0..complexity on the item's side (0x4614A0). The product wraps at 32 bits as the original's does.
+        var power = complexity;
         if (holder == CarryHolder.Critter)
         {
             power = unchecked(complexity + aptitude) / 2;
             power = complexity > 0 ? Math.Clamp(power, 0, complexity) : Math.Clamp(power, complexity, 0);
         }
-        var share = (int)(magicWeight * power / complexity);
-        return complexity > 0 ? share : magicWeight - share;
+        var share = unchecked(magicWeight * power) / complexity;
+        return complexity > 0 ? share : unchecked(magicWeight - share);
     }
 
     /// <summary>A holder's total weight (0x461410, WE3): the sum of its list's item weights, each weighed with this holder (a critter's

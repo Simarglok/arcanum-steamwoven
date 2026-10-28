@@ -34,7 +34,8 @@ public sealed partial class GameSessionOwner
     /// (<see cref="SessionInsertVerdict.TooHeavy"/> when the hero's total plus the item would pass its carry weight, ledger WE4); a host's
     /// weight refusal counts as well. Between weight and room the session refuses a technological item for a Technophobia hero
     /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A wear move
-    /// passes no incoming item: the item is in the hero's list already, so the session does not weigh it twice.
+    /// passes no incoming item: the item is in the hero's list already, and the original's weight test on an unwield is not read yet
+    /// (not ready).
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x466510, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null)

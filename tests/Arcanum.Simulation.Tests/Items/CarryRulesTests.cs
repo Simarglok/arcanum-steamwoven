@@ -48,6 +48,8 @@ public sealed class CarryRulesTests
         Assert.AreEqual(4, CarryRules.HolderMagicWeight(10, 7, CarryHolder.Critter, 0));
         Assert.AreEqual(-4, CarryRules.HolderMagicWeight(-10, 7, CarryHolder.Critter, 0));
         Assert.AreEqual(0, CarryRules.HolderMagicWeight(10, 7, CarryHolder.None, 0));
+        // The product wraps at 32 bits: power (10 000 + 100) / 2 = 5 050, and 1 000 000 × 5 050 passes 2^31.
+        Assert.AreEqual(unchecked(1_000_000 * 5_050) / 10_000, CarryRules.HolderMagicWeight(1_000_000, 10_000, CarryHolder.Critter, 100));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CarryRules.HolderMagicWeight(10, 7, CarryHolder.Critter, 101));
     }
 
