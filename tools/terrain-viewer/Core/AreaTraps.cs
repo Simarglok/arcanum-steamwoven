@@ -15,10 +15,10 @@ public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, 
 
 /// <summary>
 /// ARC-WORLD-110: one meeting of the PC with a trap through the object entry point (a use, or a step onto a trap object): the trap's row,
-/// the cause, the session's answer (<see cref="GameSessionOwner.TriggerTrap"/>), the effect of a fired native run (null when none was
-/// applied) and why an effect was not applied (null when nothing is missing).
+/// the cause, the session's answer (<see cref="GameSessionOwner.TriggerTrap"/>) and the effect of a fired native run (null when none
+/// was applied: no run, or 30007).
 /// </summary>
-public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Cause, SessionTrapResult Result, SessionTrapEffectResult? Effect, string? NotReady)
+public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Cause, SessionTrapResult Result, SessionTrapEffectResult? Effect)
 {
     public SessionTrapOutcome Outcome => Result.Outcome;
     public bool Rejected => Result.Mutation.Disposition == GameSessionDisposition.Rejected;
@@ -45,7 +45,7 @@ public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Caus
         if (Effect is { Victims.Count: > 0 } effect)
             what += "; " + string.Join(", ", effect.Victims.Select(v => $"{v.Entity} {v.Hit}{(v.HitPointDamage > 0 ? $" -{v.HitPointDamage} HP" : "")}"
                 + (v.SpellRun is { } run ? $" spell run {run}" : "")));
-        return NotReady is null ? what : $"{what}; {NotReady}";
+        return what;
     }
 }
 
@@ -59,10 +59,11 @@ public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutation
 /// (<see cref="WalkCheck"/>) and the step onto a trap object (<see cref="Step"/>). Each asks the session's trap state with the row's
 /// baseline from <see cref="AreaUseScriptHost.TrapBaseline"/>; a fired native run's effect is the cast host's
 /// (<see cref="AreaTrapEffects"/>). The spot attempt of an unknown trap spots without a roll only when the player's spell flags hold
-/// 0x100 (TT3); the spot trap roll itself is not made (S10), so a trap whose spot needs it is not spotted. Without a cast host
-/// (<paramref name="effects"/> answering null) no trap is met, so none is consumed without its effect: a use goes on as before (the
-/// dispatcher stops at a native trap script) and a step meets nothing. The 30002 shot is not applied (its shooter search is a later
-/// slice): the trap fires in the session and the meeting says the shot is not ready. Only the PC meets traps here.
+/// 0x100 (TT3); the spot trap roll itself is not made (S10), so a trap whose spot needs it is not spotted. No trap is consumed without
+/// its effect: without a cast host (<paramref name="effects"/> answering null), for a 30002 shot (its shooter search is a later slice)
+/// and for an ordinary trap script on a step (the step's dispatch with the trap as attachee and extra object is a later slice) the trap
+/// is not met at all, so a use goes on as before (the dispatcher stops at a native trap script) and a step meets nothing. Only the PC
+/// meets traps here.
 /// </summary>
 public sealed class AreaTraps
 {
@@ -112,7 +113,7 @@ public sealed class AreaTraps
     /// <summary>
     /// The walk check before the PC steps onto <paramref name="next"/> (0x427110, TT10): every trap object there the player does not know
     /// gets a spot attempt; the first one spotted is marked and blocks the step, which ends the walk (EX20). Known traps are skipped.
-    /// Nothing without a cast host.
+    /// Nothing without a cast host; a mark the session refuses lets the step go (<see cref="AreaTrapWalk.Mark"/> says so).
     /// </summary>
     public AreaTrapWalk WalkCheck(CellCoord next)
     {
@@ -126,7 +127,9 @@ public sealed class AreaTraps
             switch (_session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags))
             {
                 case TrapSpotGate.Detected:
-                    return new(row, _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player), rolls);
+                    // A mark the session refuses (a full budget) blocks nothing: the trap would stay unknown and block the tile for good.
+                    var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
+                    return new(mark.Disposition == GameSessionDisposition.Rejected ? null : row, mark, rolls);
                 case TrapSpotGate.Roll: rolls++; break;
             }
         }
@@ -144,14 +147,15 @@ public sealed class AreaTraps
     {
         if (_effects() is not { } effects || _host.TrapBaseline(row) is not { } baseline) return null;
         var trapped = AreaUseScriptHost.Trapped(row);
-        if (!_session.QueryTrap(trapped, baseline).Trapped) return null;
+        var state = _session.QueryTrap(trapped, baseline);
+        if (!state.Trapped) return null;
+        var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
+        if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
         // The spot attempt (E2, TT3): only the player's detect-traps flag spots without a roll; the roll itself is S10's.
         var spotted = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags) == TrapSpotGate.Detected;
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
             cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);
-        if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null, null);
-        if (TrapEffectRules.Of(run.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot })
-            return new(row, cause, result, null, "the shot of script 30002 is not ready (its shooter search is a later slice)");
-        return new(row, cause, result, effects.Apply(row, run, baseline.Counters, result.State.ObjectFlags), null);
+        if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null);
+        return new(row, cause, result, effects.Apply(row, run, baseline.Counters, result.State.ObjectFlags));
     }
 }

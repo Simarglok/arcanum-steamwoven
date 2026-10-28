@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations, result.MapTemplateScripts);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
         _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
-            ? Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+            ? Trapped(Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, refusal))) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
         _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");

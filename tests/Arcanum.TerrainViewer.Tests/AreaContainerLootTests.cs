@@ -203,7 +203,7 @@ public sealed class AreaContainerLootTests
             new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic")
             {
                 Trap = new(Container(3, 103), SessionTrapCause.Use, new(new(disposition, GameSessionFailure.None, session.Version), outcome, fired,
-                    new(TrapClass.Nonmagical, 30001, 0, false)), null, null),
+                    new(TrapClass.Nonmagical, 30001, 0, false)), null),
             };
         foreach (var (used, outcome) in new[]
         {

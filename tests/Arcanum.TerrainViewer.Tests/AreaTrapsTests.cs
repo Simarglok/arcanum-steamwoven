@@ -117,7 +117,7 @@ public sealed class AreaTrapsTests
             var used = host.Run(chest, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, used.Outcome, used.Detail);
             Assert.IsNull(used.Run, "the use script does not run");
-            Assert.IsTrue(used.Trap is { Outcome: SessionTrapOutcome.Fired, Cancels: true, Effect: not null, NotReady: null }, used.Detail);
+            Assert.IsTrue(used.Trap is { Outcome: SessionTrapOutcome.Fired, Cancels: true, Effect: not null }, used.Detail);
             Assert.AreEqual(1, effects.Calls.Count);
             Assert.AreEqual((30001, 0x0000_0503, 0), (effects.Calls[0].Run.Script, effects.Calls[0].Counters, effects.Calls[0].Flags));
             Assert.AreSame(chest, effects.Calls[0].Row);
@@ -201,17 +201,37 @@ public sealed class AreaTrapsTests
     }
 
     [TestMethod]
-    public void The_shot_and_the_empty_trap_apply_no_effect()
+    public void The_shot_is_not_met_and_the_empty_trap_applies_no_effect()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects(Detect);
+            var shotRow = Row(1, Scenery, 30002);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, shotRow);
+            Assert.IsNull(traps.Use(shotRow), "the shot slice is not ready: the trap waits, unspotted");
+            Assert.IsTrue(host.Run(shotRow, session.Rules.Scripts) is { Trap: null, Run.Stop: ScrStop.TrapScript });
+            Assert.IsTrue(host.TrapState(shotRow) is { Trapped: true, Spotted: false });
+            effects.SpellFlags = 0;
+            var none = traps.Use(Row(2, Scenery, 30007))!;
+            Assert.IsTrue(none is { Outcome: SessionTrapOutcome.Fired, Effect: null, Cancels: true }, none.Describe());
+            Assert.AreEqual(0, effects.Calls.Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_step_meets_only_the_first_trap_object_and_no_ordinary_trap_script()
     {
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
             var effects = new Effects();
-            var (_, traps) = Hosts(session, content, () => effects.Side, null);
-            var shot = traps.Use(Row(1, Scenery, 30002))!;
-            Assert.IsTrue(shot is { Outcome: SessionTrapOutcome.Fired, Effect: null, NotReady: not null }, shot.Describe());
-            var none = traps.Use(Row(2, Scenery, 30007))!;
-            Assert.IsTrue(none is { Outcome: SessionTrapOutcome.Fired, Effect: null, NotReady: null, Cancels: true }, none.Describe());
+            var inert = Row(1, TrapObject, 0, x: 70);
+            var behind = Row(2, TrapObject, 30001, x: 70);
+            var ordinary = Row(3, TrapObject, 709, x: 71);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, inert, behind, ordinary);
+            Assert.IsNull(traps.Step(new(70, 20)), "the first trap object carries no trap (TT9: the first one only)");
+            Assert.IsNull(traps.Step(new(71, 20)), "an ordinary trap script on a step is a later slice");
             Assert.AreEqual(0, effects.Calls.Count);
         });
     }

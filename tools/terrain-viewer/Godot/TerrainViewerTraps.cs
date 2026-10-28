@@ -36,6 +36,8 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not AreaGridSession grid || AreaTrapsNow() is not { } traps) return null;
         var walk = traps.WalkCheck(WorldCellOf(grid, key.To));
+        if (walk.Mark is { Disposition: GameSessionDisposition.Rejected } refused)
+            GD.Print($"ARC-WORLD-110 trap walk-check {key.To.X},{key.To.Y} mark refused failure={refused.Failure}: the step goes");
         if (walk.Spotted is not { } row)
         {
             if (walk.RollsNotReady > 0) GD.Print($"ARC-WORLD-110 trap walk-check {key.To.X},{key.To.Y} rolls-not-ready={walk.RollsNotReady} (spot trap roll: S10)");
@@ -66,12 +68,19 @@ public partial class TerrainViewerApp
         }
     }
 
+    /// <summary>A guarded use site's run: its trap meeting is logged and shown (ARC-WORLD-110).</summary>
+    private AreaScriptedUse Trapped(AreaScriptedUse ran)
+    {
+        if (ran.Trap is { } met) NoteTrapMeeting(met);
+        return ran;
+    }
+
     /// <summary>Logs a trap meeting and shows it on the status line.</summary>
     private void NoteTrapMeeting(AreaTrapMeeting met)
     {
         GD.Print("ARC-WORLD-110 trap " + System.Text.Json.JsonSerializer.Serialize(new { Trap = AreaUseScriptHost.EntityId(met.Row), Cause = met.Cause.ToString(),
             Outcome = met.Outcome.ToString(), Disposition = met.Result.Mutation.Disposition.ToString(), Failure = met.Result.Mutation.Failure.ToString(),
-            met.Result.Run?.Script, Removed = met.Result.State.Removed, met.Result.State.Spotted, Victims = met.Effect?.Victims.Count, met.Effect?.Killer, met.NotReady }));
+            met.Result.Run?.Script, Removed = met.Result.State.Removed, met.Result.State.Spotted, Victims = met.Effect?.Victims.Count, met.Effect?.Killer }));
         if (met.Outcome is SessionTrapOutcome.NoTrap or SessionTrapOutcome.SteppedOver && !met.Rejected) return;
         _areaUseStatus = "trap: " + met.Describe();
         RefreshAreaStatus();

@@ -139,21 +139,26 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   the trap state's removal, so a removed trap's script no longer runs.
 - **Walk.** Before each step the PC's step gate checks the next tile (0x427110, TT10): every
   trap object there the player does not know gets a spot attempt; the first one spotted is
-  marked, the step is refused (`TRAP_SPOTTED`) and the walk ends, as the walk goal's
+  marked, the step is refused (`TRAP_SPOTTED`) and the walk ends (a mark the session refuses
+  lets the step go, so a full budget cannot block the tile for good), as the walk goal's
   next-step check leads to its end node (ledger [EX20](../research/ledger/npc-ai.md)). The
   check comes before the turn-based step charge, as the walk goal's check (0x4270B0) runs
   before its step start (0x42E9B0).
 - **Step.** Each step the PC starts onto a tile meets the first trap object there
   (`TriggerTrap(Step, …)`, 0x4305D0, TT9): the PC's spell flag 0x2 or 0x4 steps over it, a
-  known trap fires too; a trap spotted or fired ends the walk on that tile.
+  known trap fires too; a trap spotted or fired ends the walk on that tile. The original
+  meets it on the arrival; the viewer meets it when the step starts, as it runs tile scripts,
+  so an advance that spans several steps (a very slow frame) may carry the PC past the tile
+  before the route stops. A trap object with an ordinary trap script is not met on a step
+  (its dispatch with the trap as attachee and extra object is a later slice).
 - **Spot.** The spot trap roll is not made (S10): an unknown trap is spotted only when the
   player's spell flags hold 0x100 (TT3, the gate `Detected`); a gate that needs the roll
   spots nothing, and the walk check logs it.
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
   is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
-  step meets nothing), so no trap is consumed without its effect. A 30002 trap fires in the
-  session but its shot is not applied (`NotReady`). The floating line, the eye candy and the
+  step meets nothing), so no trap is consumed without its effect. A 30002 trap is not met
+  either until its shot is applied (the use is then refused as before). The floating line, the eye candy and the
   damage effect are not shown; the status line names the outcome and the
   `mes\trap.mes` line number.
 
@@ -161,7 +166,8 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
 
 - The spot trap and disarm traps rolls, the spot modifier of the item at inventory
   location 1005 and the master's second roll (S10).
-- The route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
+- The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
+  route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   steps of NPCs and companions onto trap objects, the attack's trap trigger in the viewer,
   and the drawing of a spotted trap object (the area data resolves no body for a don't-draw
   object yet).
