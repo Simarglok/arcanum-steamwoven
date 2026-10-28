@@ -69,9 +69,26 @@ public partial class AreaHotkeyBarView : Control
                 MouseFilter = MouseFilterEnum.Stop,
             };
             slot.GuiInput += input => SlotInput(entry, slot, input);
+            // A right press takes the whole hit band (0x57E460, from screen y 440), which reaches 5 rows above the slot.
+            var band = new Control
+            {
+                Name = "Band" + i, Position = new Vector2(HotkeyBarRules.SlotX[i], HotkeyBarRules.BandTop - HotkeyBarRules.StripTop),
+                Size = new Vector2(HotkeyBarRules.HitWidth, HotkeyBarRules.StripTop + HotkeyBarRules.SlotTop - HotkeyBarRules.BandTop), MouseFilter = MouseFilterEnum.Stop,
+            };
+            band.GuiInput += input =>
+            {
+                if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) return;
+                band.AcceptEvent(); SlotRightPressed?.Invoke(entry);
+            };
+            AddChild(band);
             _slots[i] = slot;
             AddChild(slot);
-            _icons[i] = new TextureRect { Name = "Icon" + i, MouseFilter = MouseFilterEnum.Ignore, StretchMode = TextureRect.StretchModeEnum.Keep, ClipContents = true };
+            _icons[i] = new TextureRect
+            {
+                // IgnoreSize before the size is set (ARC-UI-024's lesson), so a larger icon is clipped to its place instead of growing it.
+                Name = "Icon" + i, MouseFilter = MouseFilterEnum.Ignore, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Keep, ClipContents = true,
+            };
             AddChild(_icons[i]);
             _standIns[i] = new Label
             {

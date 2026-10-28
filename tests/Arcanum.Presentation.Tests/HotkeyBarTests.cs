@@ -73,6 +73,7 @@ public sealed class HotkeyBarTests
         Assert.IsTrue(HotkeyBarRules.StartsDrag(false, false, HotkeyDragSourceKind.Spell, true), "the pane's spell (no entry)");
         Assert.IsFalse(HotkeyBarRules.StartsDrag(true, false, HotkeyDragSourceKind.Spell, false), "a drag goes on");
         Assert.IsFalse(HotkeyBarRules.StartsDrag(false, true, HotkeyDragSourceKind.SkillButton, false), "an item is held");
+        Assert.IsFalse(HotkeyBarRules.StartsDrag(false, false, HotkeyDragSourceKind.HeldItem, false), "a held item is dropped by a click, not dragged");
     }
 
     [TestMethod]

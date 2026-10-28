@@ -351,17 +351,17 @@ The bar is drawn on the bottom strip of the [interface bars](../rendering/terrai
    entry its button's art (`SkillIcon`). An item entry prints its count (`QueryHotkeyCount`, the items of its prototype the hero holds) at
    the slot's left + 2 and the strip's top while it lies in 0..9999; its icon (the inventory art up to 32 × 32, else the item's type icon)
    is not ready, so the slot shows the item's name.
-3. **Buttons** (HK13, HK14, HK16). A left click on a slot (press and release over it) activates the entry, or drops the item the inventory
+3. **Buttons** (HK13, HK14, HK16). A left click on a slot (press and release over its 32 × 32 button) activates the entry, or drops the item the inventory
    window holds on it (`ClickEntry`); the activation is [ARC-UI-022's](#the-hotkey-bar-arc-ui-022) without the keys' turn test. The two
    recent-action buttons at (69, 548) and (114, 548) show their action's icon (frame 0, frame 1 while held) and a click on one activates its
-   action, with the bar buttons' sounds 3000 and 3001. The light button (182) at (616, 455) sounds and does nothing, as in the original.
-4. **Drag** (HK15). A right press starts a drag (`StartsDrag`) from a slot that holds an entry, from a spell of the spell pane or from a
+   action, with the bar buttons' sounds 3000 and 3001, whatever is dragged or held (HK13). The light button (182) at (616, 455) sounds and does nothing, as in the original.
+4. **Drag** (HK15). A right press in a slot's hit band (from y 440) starts a drag (`StartsDrag`) from a slot that holds an entry, from a spell of the spell pane or from a
    slot of the weapon's pane (an item and its spell); the icon follows the pointer. The right release decides (`Drop`): on another slot a
    dragged entry trades places with it and anything else is put there (HK5's refusals apply); on its own slot nothing changes; off the bar a
-   dragged entry is emptied (its item back to the grid) and anything else ends with no change. A left release goes on with the drag.
+   dragged entry is emptied (its item back to the grid) and anything else ends with no change. A left release goes on with the drag. While an entry is dragged its key skips it and the stand-in keys leave it alone.
 
 The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ctrl`+`1`..`0` only. The cast smoke checks the bar after the
-hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, a click on slot 2 opening the spell's cursor, a drag
+hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
 from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
 marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
 
@@ -398,6 +398,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A load replays the two recent actions through 0x57EFA0 in saved order, so they trade places on every load; a new action's object goes to the second slot (HK2, HK7). | The bar comes back as saved; recent actions are only spells and skill-bar buttons. | — (technical, fixed in both modes) |
 | An entry dragged off the bar keeps its hidden flag: it stays in the bar's data, undrawn and skipped by its key, until a drop on it or a load brings it back (HK15). | The entry is emptied (an item entry's item back to the grid). | — (technical, a lost state; fixed in both modes) |
 | An item entry dragged off the bar leaves its item on the cursor for the inventory or the map to place (HK15). | The item goes back to the grid at once. | — (not ready: the map's cursor hold) |
+| An item entry's count is set on its drop and on a load and recounted when an item leaves its place (HK6, HK12): an item picked up later shows only after such a change. | The count is read at every redraw, so a pickup shows at once. | — (display only) |
+| The count of an item entry of the prototype 15085 is always 1 (0x462B40, HK12). | Its items are counted like any other's (as the same-kind finder, AM1). | — (not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.

@@ -30,6 +30,9 @@ public partial class TerrainViewerApp
         if (!decision.Pressed || decision.Echo) return true;
         if (!_worldFocused || WorldModal || WorldUiFocus) { _hotkeyNotice = "hotkey ignored: palette, dialog, window or UI focus owns input"; RefreshAreaStatus(); return true; }
         var session = _areaSession!;
+        // ARC-UI-027: the entry a drag holds is skipped by its key (0x57F1D0, HK8, HK15), and the stand-in keys leave it alone.
+        var dragged = entry is { } held && _hotkeyDrag is { Kind: Arcanum.Presentation.Hud.HotkeyDragSourceKind.Entry } drag && drag.Entry == held;
+        if (dragged && (modifiers & WorldKeyModifiers.Ctrl) != 0) { _hotkeyNotice = $"hotkey {KeyName(entry!.Value)}: being dragged"; RefreshAreaStatus(); return true; }
         if (entry is { } slot && (modifiers & WorldKeyModifiers.Ctrl) != 0)
         {
             GameSessionMutationResult? result = (modifiers & WorldKeyModifiers.Shift) != 0 ? session.ClearHotkey(session.Version, slot)
@@ -45,9 +48,9 @@ public partial class TerrainViewerApp
         var round = session.QueryCombatRound();
         var otherActs = entry is not null && InTurnBasedRound && round is not null && !round.Actor.IsHero;
         var target = entry is { } index ? session.QueryHotkeys().Entries[index] : session.QueryHotkeys().Recent[0];
-        if (!HotkeyRules.KeyActivates(true, otherActs, false, target, false))
+        if (!HotkeyRules.KeyActivates(true, otherActs, false, target, dragged))
         {
-            _hotkeyNotice = otherActs ? "hotkey ignored: another critter's turn" : $"hotkey {(entry is { } e ? KeyName(e) : "A")}: empty";
+            _hotkeyNotice = otherActs ? "hotkey ignored: another critter's turn" : dragged ? $"hotkey {KeyName(entry!.Value)}: being dragged" : $"hotkey {(entry is { } e ? KeyName(e) : "A")}: empty";
             RefreshAreaStatus();
             return true;
         }

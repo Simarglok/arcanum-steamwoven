@@ -63,6 +63,14 @@ public partial class TerrainViewerApp
             Require(view.IconForSelfTest(2) is { } icon && icon == SpellArt(spell), "slot 2 shows the spell's icon");
             _spellPane.HidePane();
 
+            // While slot 2 is dragged its key skips it (HK8, HK15); a right release on the slot itself ends the drag with no change.
+            var keyed = _hotkeyActivations;
+            await Button(view.SlotCentreForSelfTest(2), MouseButton.Right, true);
+            HotkeyKey(Key.Key3);
+            Require(_hotkeyDrag is not null && _hotkeyActivations == keyed && _spellTargeting is null, "the key 3 skipped the dragged entry: " + _hotkeyNotice);
+            await Button(view.SlotCentreForSelfTest(2), MouseButton.Right, false);
+            Require(_hotkeyDrag is null && session.QueryHotkeys().Entries[2] == HotkeyEntry.ForSpell(spell), "the drop on its own slot changed nothing");
+
             // A left click on slot 2 activates it.
             var activations = _hotkeyActivations;
             await Click(view.SlotCentreForSelfTest(2));

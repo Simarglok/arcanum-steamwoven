@@ -138,8 +138,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-UI-027: the count item entry <paramref name="slot"/> prints on the bar (0x462B40 as the bar's drop and load call it,
     /// ledger HK12): the items the hero holds with the entry item's prototype, the entry's own included. Null for a slot outside 0..9, an
-    /// entry of another kind or an item the hero no longer holds. (The original counts 1 for the prototype 0x3AD9, which the session's
-    /// same-kind finder does not single out either.)</summary>
+    /// entry of another kind or an item the hero no longer holds. (The original counts 1 for the prototype 15085, which 0x49B290 numbers
+    /// 0x3AD9 and the session's same-kind finder does not single out either.)</summary>
     [Arcanum.Simulation.OriginalFunction(0x462B40, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public int? QueryHotkeyCount(int slot)
     {

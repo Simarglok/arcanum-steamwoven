@@ -19,7 +19,7 @@ public partial class TerrainViewerApp
     private string? _hotkeyBarModule;
     private IReadOnlyDictionary<int, ImageTexture[]> _hotkeyBarArt = new Dictionary<int, ImageTexture[]>();
     private (HotkeyDragSourceKind Kind, int Entry, HotkeyEntry? Payload)? _hotkeyDrag;
-    private (GameSessionOwner Session, GameSessionVersion Version, bool Dragging)? _hotkeyBarShown;
+    private (GameSessionOwner Session, GameSessionVersion Version, bool Dragging, bool Names)? _hotkeyBarShown;
     private int _hotkeyBarClicksForSelfTest;
 
     /// <summary>Per frame while the bars show: the bar's view on the bottom strip, its art read once a module, and its look redrawn when the
@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
                 load => load.Frames.Select(frame => ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba))).ToArray());
             _hotkeyBarShown = null;
         }
-        var shown = (session, session.Version, _hotkeyDrag is not null);
+        var shown = (session, session.Version, _hotkeyDrag is not null, InventoryActive);
         if (_hotkeyBarShown == shown) return;
         _hotkeyBarShown = shown;
         _hotkeyBarView.Bind(HotkeyBarLook(session));
@@ -77,12 +77,14 @@ public partial class TerrainViewerApp
             var entry = bar.Entries[i];
             var hidden = _hotkeyDrag is { Kind: HotkeyDragSourceKind.Entry } drag && drag.Entry == i;
             var count = session.QueryHotkeyCount(i) is { } n ? HotkeyBarRules.CountText(n) : null;
-            return new AreaHotkeySlotLook(HotkeyIcon(entry)?[0], entry is { Kind: HotkeyKind.Item, Item: { } item } ? Name(item) : null, count, hidden);
+            return new AreaHotkeySlotLook(First(HotkeyIcon(entry)), entry is { Kind: HotkeyKind.Item, Item: { } item } ? Name(item) : null, count, hidden);
         }).ToArray();
-        return new(Art(HotkeyBarRules.SlotArt)?[0], slots, [.. bar.Recent.Select(HotkeyIcon)], Art(HotkeyBarRules.LightArt)?[0]);
+        return new(First(Art(HotkeyBarRules.SlotArt)), slots, [.. bar.Recent.Select(HotkeyIcon)], First(Art(HotkeyBarRules.LightArt)));
     }
 
     private ImageTexture[]? Art(int number) => _hotkeyBarArt.GetValueOrDefault(number);
+
+    private static ImageTexture? First(ImageTexture[]? frames) => frames is { Length: > 0 } ? frames[0] : null;
 
     // An entry's icon (HK12): a spell's (also an item's spell), a skill-bar button's; an item's is not ready (null).
     private ImageTexture[]? HotkeyIcon(HotkeyEntry entry) => entry.Kind switch
@@ -104,7 +106,7 @@ public partial class TerrainViewerApp
         if (!HotkeyBarRules.StartsDrag(_hotkeyDrag is not null, HotkeyItemHeld, kind, empty)) return;
         _hotkeyDrag = (kind, entry, payload);
         var shown = kind == HotkeyDragSourceKind.Entry ? session.QueryHotkeys().Entries[entry] : payload!;
-        view.SetDrag(true, HotkeyIcon(shown)?[0]);
+        view.SetDrag(true, First(HotkeyIcon(shown)));
         GD.Print($"ARC-UI-027 hotkey-drag start {kind} entry={entry} {Describe(shown)}");
     }
 
@@ -142,12 +144,13 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>A recent-action button came up: over it, its action activates (0x57DC60 → 0x54FCF0); an empty one does nothing.</summary>
+    /// <summary>A recent-action button came up: over it, its action activates (0x57DC60 → 0x54FCF0), whatever is dragged or held (the original
+    /// tests neither there); an empty one does nothing.</summary>
     private void HotkeyRecentReleased(int index, bool over)
     {
         if (!over) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "recent action");
-        if (!HotkeysActive || _areaSession is not { } session || _hotkeyDrag is not null || HotkeyItemHeld) return;
+        if (!HotkeysActive || _areaSession is not { } session) return;
         _hotkeyBarClicksForSelfTest++;
         var action = session.QueryHotkeys().Recent[index];
         if (action.IsEmpty) { _hotkeyNotice = $"recent action {index + 1}: empty"; RefreshAreaStatus(); return; }
