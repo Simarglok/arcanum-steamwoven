@@ -206,6 +206,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
 | <a id="npc-ai-turn-based-host-tail-arc-world-099"></a>[NPC AI turn-based host tail (ARC-WORLD-099)](ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099) | [NPC AI](ledger/npc-ai.md) | TH7–TH10 |
 | <a id="npc-ai-casting-host-arc-world-102"></a>[NPC AI casting host (ARC-WORLD-102)](ledger/npc-ai.md#npc-ai-casting-host-arc-world-102) | [NPC AI](ledger/npc-ai.md) | AC1–AC4 |
+| <a id="npc-ai-queued-cast-arc-world-104"></a>[NPC AI queued cast (ARC-WORLD-104)](ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104) | [NPC AI](ledger/npc-ai.md) | AC5–AC7 |
 
 ## Decisions to revisit
 
