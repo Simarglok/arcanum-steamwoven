@@ -8,8 +8,10 @@ viewer's F1–F6 presets and follower portrait menu (exterior, cave and map mode
 the order part of [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-004) and the wait and leave orders of
 [FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005).
 
-**NOT READY:** combat orders (attack, back off/stop, curse) are parsed and returned to the NPC AI's combat stage A7 with no
-behaviour; there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
+The combat orders (attack, back off/stop, curse) are the NPC AI's slice I9 (ARC-WORLD-091, [AI followers](ai-followers.md)) through
+the same entry.
+
+**NOT READY:** the viewer gives the attack order no target (it does nothing) and runs no AI pass after an order; there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
 and the follower's AI pass after an order are not run by the viewer; lines are named by their message range, no line text or speech
 is loaded; the spread-out step is a project approximation (below). Owner decisions D1–D4 (2026-10-21): the Steamwoven setting fixes each
 bug, the Original setting keeps it. Parity of the viewer's goals NOT_VERIFIED.
@@ -25,7 +27,7 @@ bug, the Original setting keeps it. Parity of the viewer's goals NOT_VERIFIED.
 | `PortraitReceiver` | Original (D4): the menu sends "name label" (format two strings with a space); the first follower in reach, in array order, whose known name is a case-insensitive prefix of the text takes it and reads the rest after its own name, leading spaces skipped, as its order word (a shorter name sharing the prefix reads no order). Steamwoven: the clicked follower itself, in reach. | OL15 |
 | `Farewell(reaction, profile)` (0x4133B0, partial) | Original: reaction level suspicious or worse (40 or less, 0x4C0FC0) takes 1900–1999, which the line files label friendly, above takes 2000–2099; Steamwoven the other way round (D3). | OL13 |
 | `Lines(line)` | Acknowledgement 2100–2199, "cannot" 2200–2299, farewells 1900–1999 and 2000–2099, in the generated NPC line files by both genders (the host's choice and can-speak test). | OL12 |
-| `IsCombat(type)` | Attack, back off and curse belong to stage A7. | OL10, OL11 |
+| `IsCombat(type)` | Attack, back off and curse belong to stage A7 (slice I9). | OL10, OL11 |
 
 `CompanionOrderRuleProfile` holds the four switches of decisions D1–D4 ([rule modes](rule-modes.md#registry)):
 `FollowOrderNeverUnwaits` (OL6), `PresetSixAddressesNobody` (OL14), `FarewellRangesSwapped` (OL13) and
@@ -51,7 +53,7 @@ fails does not stop the others.
 | move | `MoveRequested`: the host's "please move" goal; it shows the acknowledgement when the goal starts, "cannot" otherwise | host | OL7 |
 | stay close / spread out | the spread flag cleared / set (`SpreadCleared`, `SpreadSet`; follow distances 4/2 or 7/5); `StartSpreadGoal` when spread out set a clear flag | acknowledgement | OL8 |
 | walk here | with a tile: `WalkRequested` (the host runs the follower there and it follows again after); without: `NoTile` | acknowledgement | OL9 |
-| attack, back off, curse | `CombatOrder`: stage A7's frontier, nothing here (A7 adds back off's acknowledgement before "stop attacking", FO5) | none | OL10, OL11 |
+| attack, back off, curse | slice I9 ([AI followers](ai-followers.md)): `NoTarget`, `PartyTarget`, `AttackIgnored`, `AttackLocked`, `Complained`; `Stopped`; `MindControlled`, `LeaveRefused`, `Cursed` | none; acknowledgement for back off; the upset line of a complaint, the insult of a curse | OL10, OL11, FO2–FO5 |
 | none, join, disband, follow other | `NoOrder` (the AI pass only; join and disband act in the multiplayer phase) | none | OL3 |
 
 Whole-order refusals (nothing applied): an undefined type or addressing, an invalid or repeated entity, a missing or empty name
@@ -83,7 +85,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   dead or unconscious, OL1); the HUD shows the pending walk order, and any key other than a bare modifier, a modal window, focus
   loss, another menu choice or a rebuilt group cancels it. A ground press while the world does not own input is ignored as any
   ground press is (the walk stays pending); the press that picks the tile is refused while the hero is dead or unconscious. Attack
-  is sent at once, with no target cursor (it reaches A7's frontier and does nothing yet). The strip is hidden and its menu closed
+  is sent at once, with no target cursor and no target (slice I9 answers `NoTarget`: nothing). The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
@@ -106,7 +108,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   profiles. `CompanionFollowTests`: the ordered walk is not replaced by following and following resumes after it.
 - `tests/Arcanum.Session.Tests/CompanionOrderStateTests.cs`: addressing (array order, reach, waiting and unknown followers excluded),
   leave (forced, farewells, mind control), wait with the ARC-WORLD-045 timer, follow as a no-op versus D1, spread out and stay close,
-  walk, move, combat and no-order outcomes, portrait addressing under both settings, whole-order refusals.
+  walk, move, an attack without a target and no-order outcomes, portrait addressing under both settings, whole-order refusals.
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionOrderTests.cs`: the viewer's facts, the walk and spread goals, wait.
 - Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
   follow stage: F4 through the keyboard path (press and release) spreads Virgil out and steps him away, F3 calls him close again; a

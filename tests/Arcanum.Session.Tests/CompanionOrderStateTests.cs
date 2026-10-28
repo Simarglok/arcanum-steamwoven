@@ -129,7 +129,7 @@ public sealed class CompanionOrderStateTests
     }
 
     [TestMethod]
-    public void Walk_move_combat_and_no_order_are_returned_for_the_host_without_state_changes()
+    public void Walk_move_attack_without_target_and_no_order_are_returned_for_the_host_without_state_changes()
     {
         using var owner = Party("oid:a");
         var walk = All(owner, CompanionOrderType.WalkHere, F("oid:a")).Outcomes.Single();
@@ -137,9 +137,8 @@ public sealed class CompanionOrderStateTests
         var noTile = owner.IssueCompanionOrder(owner.Version, new(CompanionOrderType.WalkHere, CompanionOrderAddressing.All, [F("oid:a")])).Outcomes.Single();
         Assert.AreEqual((CompanionOrderEffect.NoTile, (CompanionOrderLine?)null), (noTile.Effect, noTile.Line));
         Assert.AreEqual(CompanionOrderEffect.MoveRequested, All(owner, CompanionOrderType.Move, F("oid:a")).Outcomes.Single().Effect);
-        foreach (var combat in new[] { CompanionOrderType.Attack, CompanionOrderType.BackOff, CompanionOrderType.Curse })
-            Assert.AreEqual((CompanionOrderEffect.CombatOrder, (CompanionOrderLine?)null), (All(owner, combat, F("oid:a")).Outcomes.Single() is var o ? (o.Effect, o.Line) : default),
-                $"{combat}: stage A7's");
+        Assert.AreEqual(CompanionOrderEffect.NoTarget, All(owner, CompanionOrderType.Attack, F("oid:a")).Outcomes.Single().Effect,
+            "an attack without a target (combat orders: CompanionCombatOrderTests)");
         foreach (var none in new[] { CompanionOrderType.None, CompanionOrderType.Join, CompanionOrderType.Disband, CompanionOrderType.FollowOther })
             Assert.AreEqual(CompanionOrderEffect.NoOrder, All(owner, none, F("oid:a")).Outcomes.Single().Effect);
         Assert.AreEqual(1, owner.Version.Revision, "nothing changed state");
