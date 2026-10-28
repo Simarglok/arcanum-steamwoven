@@ -148,58 +148,58 @@ public static class AiExecutorRules
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (!Enum.IsDefined(action)) throw new ArgumentOutOfRangeException(nameof(action));
-        if (world.InRound && world.RoundActor != npc) return new(AiPerformKind.NotActor);
-        if ((world.DangerBits(npc) & DangerFlags.BackingOff) != 0) return BackOff(world, npc, target);
+        if (world.InRound && world.RoundActor != npc) return new(AiPerformKind.NotActor, current);
+        if ((world.DangerBits(npc) & DangerFlags.BackingOff) != 0) return BackOff(world, npc, target, current);
         switch (action)
         {
-            case AiPassAction.Cast: world.Cast(npc); return new(AiPerformKind.Cast);
-            case AiPassAction.UseItem: world.UseItem(npc); return new(AiPerformKind.UseItem);
-            case AiPassAction.UseSkill: world.UseSkill(npc); return new(AiPerformKind.UseSkill);
+            case AiPassAction.Cast: world.Cast(npc); return new(AiPerformKind.Cast, current);
+            case AiPassAction.UseItem: world.UseItem(npc); return new(AiPerformKind.UseItem, current);
+            case AiPassAction.UseSkill: world.UseSkill(npc); return new(AiPerformKind.UseSkill, current);
         }
         switch (world.ReadDanger(npc))
         {
             case DangerState.None:
                 world.LeaveCombatMode(npc);
-                if (world.Leader(npc) is not { } leader) { world.RunRoutine(npc); return new(AiPerformKind.Routine); }
-                if (world.Waiting(npc)) return new(AiPerformKind.Waiting);
+                if (world.Leader(npc) is not { } leader) { world.RunRoutine(npc); return new(AiPerformKind.Routine, current); }
+                if (world.Waiting(npc)) return new(AiPerformKind.Waiting, current);
                 var follow = StartFollow(world, npc, leader, current);
                 world.LoyaltyCheck(npc);
                 return follow with { Kind = AiPerformKind.Follow };
             case DangerState.CombatFocus:
-                if (world.StartBackOff(npc, target)) return new(AiPerformKind.BackOffStart);
-                if (world.ThrowGrenade(npc, target)) return new(AiPerformKind.Grenade);
+                if (world.StartBackOff(npc, target)) return new(AiPerformKind.BackOffStart, current);
+                if (world.ThrowGrenade(npc, target)) return new(AiPerformKind.Grenade, current);
                 return StartAttack(world, npc, target, sound, current);
             case DangerState.Flee:
                 var fleeing = world.PerformFleeing(npc);
-                if (!fleeing.StartsFleeGoal) return new(AiPerformKind.Flee);
+                if (!fleeing.StartsFleeGoal) return new(AiPerformKind.Flee, current);
                 return StartFlee(world, npc, fleeing.Source, current) with { Kind = AiPerformKind.Flee };
             default:
                 world.PerformSurrender(npc);
-                return new(AiPerformKind.Surrender);
+                return new(AiPerformKind.Surrender, current);
         }
     }
 
     // The back-off (0x4AC7B0): reached or no "away" tile clears the bit (MR15); otherwise the run to the tile (0x433C80, which asks
     // no start gate), running unless encumbered.
-    private static AiPerformResult BackOff(IAiPerformWorld world, string npc, string? target)
+    private static AiPerformResult BackOff(IAiPerformWorld world, string npc, string? target, AiGoalRun? current)
     {
         var step = world.BackOff(npc, target);
         if (step.Step == BackOffRunStep.Runs && world.AwayTile(npc, target, step.Range) is { } tile)
         {
             var run = new AiGoalRun(npc, new AiGoalFrame(AiGoalType.RunToTile, tile: tile), Gait(world, npc, AiRunFlags.Running));
-            return new(AiPerformKind.BackOffRun, run);
+            return new(AiPerformKind.BackOffRun, run) { Started = true };
         }
-        if (step.Step == BackOffRunStep.NotBackingOff) return new(AiPerformKind.BackOffEnded);
-        world.EndBackOff(npc);
-        return new(AiPerformKind.BackOffEnded);
+        if (step.Step != BackOffRunStep.NotBackingOff) world.EndBackOff(npc);
+        return new(AiPerformKind.BackOffEnded, current);
     }
 
     /// <summary>
     /// The attack starter (0x434B00) of <paramref name="attacker"/> on <paramref name="target"/>: an attack on oneself is refused; a
     /// "default throws" weapon that can be unwielded is thrown at the target's tile instead; then the start gate with the weapon's
     /// attack cost, Body of Air without the elemental flag, an attack on the same target already queued, an interrupt of the
-    /// lower-priority animations that fails and a boomerang in flight refuse (asking the critters sharing the tile to step apart).
-    /// An attack run on another target is retargeted (inference: the original updates the running goal). The goal stores the
+    /// lower-priority animations that fails and a boomerang in flight refuse (asking the critters sharing the tile to step apart);
+    /// a run whose attack is already swinging counts as queued too. An attack run approaching another target restarts as an attack
+    /// on the new target (inference: the original updates the running goal). The goal stores the
     /// target and the alerted sound; running is on for an NPC with current fatigue above 8.
     /// </summary>
     [OriginalFunction(0x434B00, OriginalFunctionScope.Partial)]
@@ -209,14 +209,16 @@ public static class AiExecutorRules
         ArgumentNullException.ThrowIfNull(attacker);
         if (target is null) return new(AiPerformKind.Attack, current, AiStartRefusal.NoObject);
         if (target == attacker) return new(AiPerformKind.Attack, current, AiStartRefusal.Self);
-        if (world.ThrowsWieldedWeapon(attacker)) { world.ThrowWeapon(attacker, target); return new(AiPerformKind.ThrowWeapon); }
+        if (world.ThrowsWieldedWeapon(attacker)) { world.ThrowWeapon(attacker, target); return new(AiPerformKind.ThrowWeapon) { Started = true }; }
         if (!StartGate(world, attacker, world.AttackCost(attacker))) return new(AiPerformKind.Attack, current, AiStartRefusal.Gate);
         var facts = world.AttackFacts(attacker, target);
         var refusal = facts.BodyOfAir && !facts.Elemental ? AiStartRefusal.BodyOfAir : AiStartRefusal.None;
-        if (refusal == AiStartRefusal.None && current?.Bottom.Goal == AiGoalType.Attack)
+        if (refusal == AiStartRefusal.None && current?.Bottom.Goal is AiGoalType.Attack or AiGoalType.AttemptAttack)
         {
-            if (current.Bottom.Target == target) refusal = AiStartRefusal.AlreadyQueued;
-            else return new(AiPerformKind.Attack, current with { Frames = current.Frames.SetItem(0, current.Bottom with { Target = target, Node = 1 }) });
+            // An attack on the same target, or a swing already going, is kept; an approach toward another target restarts as an
+            // attack on the new one (inference: the original updates the running attack goal).
+            if (current.Bottom.Target == target || current.Bottom.Goal == AiGoalType.AttemptAttack) refusal = AiStartRefusal.AlreadyQueued;
+            else return new(AiPerformKind.Attack, current with { Frames = [new AiGoalFrame(AiGoalType.Attack, target, sound: sound)] }) { Started = true };
         }
         if (refusal == AiStartRefusal.None && !world.InterruptLowerAnimations(attacker)) refusal = AiStartRefusal.Interrupt;
         if (refusal == AiStartRefusal.None && world.BoomerangInFlight(attacker)) refusal = AiStartRefusal.BoomerangInFlight;
@@ -227,7 +229,7 @@ public static class AiExecutorRules
         }
         var mover = world.Mover(attacker);
         var flags = !mover.Pc && mover.Fatigue > RunFatigue ? AiRunFlags.Running : AiRunFlags.None;
-        return new(AiPerformKind.Attack, new AiGoalRun(attacker, new AiGoalFrame(AiGoalType.Attack, target, sound: sound), flags));
+        return new(AiPerformKind.Attack, new AiGoalRun(attacker, new AiGoalFrame(AiGoalType.Attack, target, sound: sound), flags)) { Started = true };
     }
 
     /// <summary>The flee starter (0x434980) of <paramref name="npc"/> away from <paramref name="source"/>: the start gate with cost 0,
@@ -239,7 +241,7 @@ public static class AiExecutorRules
         ArgumentNullException.ThrowIfNull(npc);
         if (source is null) return new(AiPerformKind.Flee, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Flee, current, AiStartRefusal.Gate);
-        return new(AiPerformKind.Flee, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.Flee, source), AiRunFlags.Flight));
+        return new(AiPerformKind.Flee, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.Flee, source), AiRunFlags.Flight)) { Started = true };
     }
 
     /// <summary>
@@ -260,7 +262,7 @@ public static class AiExecutorRules
         if (current?.Bottom.Goal is AiGoalType.Follow or AiGoalType.MoveNear or AiGoalType.RunNear) return new(AiPerformKind.Follow, current, AiStartRefusal.AlreadyQueued);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Follow, current, AiStartRefusal.Gate);
         if (!world.InterruptLowerAnimations(npc)) return new(AiPerformKind.Follow, current, AiStartRefusal.Interrupt);
-        return new(AiPerformKind.Follow, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.Follow, leader)));
+        return new(AiPerformKind.Follow, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.Follow, leader))) { Started = true };
     }
 
     /// <summary>The spread-out goal's starter (0x436960) of <paramref name="npc"/> toward <paramref name="leader"/>: the start gate with
@@ -272,7 +274,7 @@ public static class AiExecutorRules
         ArgumentNullException.ThrowIfNull(npc);
         ArgumentNullException.ThrowIfNull(leader);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Follow, null, AiStartRefusal.Gate);
-        return new(AiPerformKind.Follow, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.SpreadOut, leader)));
+        return new(AiPerformKind.Follow, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.SpreadOut, leader))) { Started = true };
     }
 
     private static AiRunFlags Gait(IAiGoalWorld world, string id, AiRunFlags flags) =>
@@ -482,11 +484,14 @@ public static class AiExecutorRules
         if (goal.PathIndex >= goal.Path.Length) return new(Move.Pop);
         var next = goal.Path[goal.PathIndex];
         var flight = (flags & AiRunFlags.Flight) != 0;
-        if (world.StepBlocked(owner, next, flight))
+        switch (world.StepBlocked(owner, next, flight))
         {
-            // The step's wait, which ends the step even when it draws 0 (the run goes on in the next frame).
-            var wait = rolls.Roll(AiRollPurpose.BlockedStepWait, 0, BlockedStepWaitMs);
-            return new(Move.Wait, BlockedNode, Delay: wait, Reason: AiExecutorReason.StepBlocked);
+            case AiStepBlock.Occupied:
+                // The step's wait, which ends the step even when it draws 0 (the run goes on in the next frame).
+                var wait = rolls.Roll(AiRollPurpose.BlockedStepWait, 0, BlockedStepWaitMs);
+                return new(Move.Wait, BlockedNode, Delay: wait, Reason: AiExecutorReason.StepBlocked);
+            case AiStepBlock.CannotStart:
+                return new(Move.Next, BlockedNode, Reason: AiExecutorReason.StepBlocked);
         }
         var mover = world.Mover(owner);
         var running = Running(world, owner, flags);

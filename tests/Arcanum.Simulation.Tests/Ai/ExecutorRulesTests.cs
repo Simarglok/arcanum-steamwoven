@@ -81,7 +81,9 @@ public sealed class ExecutorRulesTests
             return new([.. steps], StoppedShort);
         }
 
-        public bool StepBlocked(string id, CellCoord next, bool flight) => Blocked.Contains(next);
+        public readonly HashSet<CellCoord> Stuck = [];
+        public AiStepBlock StepBlocked(string id, CellCoord next, bool flight) =>
+            Blocked.Contains(next) ? AiStepBlock.Occupied : Stuck.Contains(next) ? AiStepBlock.CannotStart : AiStepBlock.Clear;
 
         public int BeginStep(string id, CellCoord next, bool running)
         {
@@ -613,10 +615,10 @@ public sealed class ExecutorRulesTests
         world.Throws = false;
         var running = AttackRun();
         var same = AiExecutorRules.StartAttack(world, Npc, Foe, null, running);
-        Assert.AreEqual((AiStartRefusal.AlreadyQueued, running), (same.Refusal, same.Run));
+        Assert.AreEqual((AiStartRefusal.AlreadyQueued, running, false), (same.Refusal, same.Run, same.Started));
         world.At["oid:other"] = new(9, 10);
         var other = AiExecutorRules.StartAttack(world, Npc, "oid:other", null, running);
-        Assert.AreEqual(("oid:other", AiStartRefusal.None), (other.Run!.Bottom.Target, other.Refusal));
+        Assert.AreEqual(("oid:other", AiStartRefusal.None, true), (other.Run!.Bottom.Target, other.Refusal, other.Started));
         world.InterruptFails = true;
         Assert.AreEqual(AiStartRefusal.Interrupt, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
         world.InterruptFails = false;
@@ -635,14 +637,79 @@ public sealed class ExecutorRulesTests
     }
 
     [TestMethod]
+    public void ARetargetRestartsAnApproachButASwingIsKept()
+    {
+        // The run approaches the PC (attack, combat approach, melee walk); the next pass picks another target.
+        var world = Arena(6);
+        world.At["oid:other"] = new(10, 14);
+        var approach = AiExecutorRules.Step(AttackRun(), world, Rolls, Steamwoven).Run!;
+        Assert.AreEqual(3, approach.Frames.Length);
+        var retarget = AiExecutorRules.StartAttack(world, Npc, "oid:other", null, approach);
+        Assert.IsTrue(retarget.Started);
+        Assert.AreEqual(1, retarget.Run!.Frames.Length, "no frame keeps the old target");
+        Drive(retarget.Run, world, Steamwoven);
+        CollectionAssert.Contains(world.Calls, "hit oid:other");
+
+        world = Arena(1);
+        var swinging = AiExecutorRules.Step(AttackRun(), world, Rolls, Steamwoven).Run!;
+        Assert.AreEqual(AiGoalType.AttemptAttack, swinging.Bottom.Goal);
+        foreach (var target in new[] { Foe, "oid:other" })
+        {
+            world.At["oid:other"] = new(11, 11);
+            var again = AiExecutorRules.StartAttack(world, Npc, target, null, swinging);
+            Assert.AreEqual((AiStartRefusal.AlreadyQueued, swinging, false), (again.Refusal, again.Run, again.Started), target);
+        }
+    }
+
+    [TestMethod]
+    public void AStepThatCannotStartGivesUpWithoutTheWait()
+    {
+        var world = Arena(14);
+        world.Weapon = true;
+        world.Range = 10;
+        world.Stuck.Add(new(12, 10));
+        var draws = Rolls.Draws;
+        var steps = Drive(AttackRun(), world, Steamwoven);
+        Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.StepBlocked), (steps[^1].End, steps[^1].Reason));
+        Assert.AreEqual(draws, Rolls.Draws, "no wait drawn");
+        Assert.AreEqual(new CellCoord(11, 10), world.At[Npc]);
+    }
+
+    [TestMethod]
+    public void TheHundredAndFirstNodeEndsTheSubturnAndKillsTheRun()
+    {
+        // A spread-out follower next to its leader whose step toward the leader is blocked: spread out pushes move away, which pops
+        // at once, again and again within one step.
+        var world = new World();
+        world.At[Npc] = new(5, 5);
+        world.At[Leader] = new(7, 5);
+        world.Blocked.Add(new(6, 5));
+        world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
+        world.Round = true;
+        world.Actor = Npc;
+        var step = AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Leader)), world, Rolls, Steamwoven);
+        Assert.AreEqual((AiRunEnd.NodeLimit, AiExecutorRules.MaxNodes), (step.End, step.Nodes));
+        CollectionAssert.AreEqual(new[] { "end subturn" }, world.Calls);
+    }
+
+    [TestMethod]
+    public void ARunHoldsOneToEightGoals()
+    {
+        var run = AttackRun();
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run with { Frames = [] });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run with { Frames = [.. Enumerable.Repeat(run.Bottom, AiExecutorRules.MaxDepth + 1)] });
+    }
+
+    [TestMethod]
     public void FleePerformStartsTheFlightWithItsFlag()
     {
         var world = Arena(1);
         world.State = DangerState.Flee;
         var flee = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null);
-        Assert.AreEqual((AiPerformKind.Flee, AiGoalType.Flee, AiRunFlags.Flight), (flee.Kind, flee.Run!.Bottom.Goal, flee.Run.Flags));
+        Assert.AreEqual((AiPerformKind.Flee, AiGoalType.Flee, AiRunFlags.Flight, true), (flee.Kind, flee.Run!.Bottom.Goal, flee.Run.Flags, flee.Started));
         world.Fleeing = new(false, Foe);
-        Assert.IsNull(AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Run);
+        var kept = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, flee.Run);
+        Assert.AreEqual((flee.Run, false), (kept.Run, kept.Started), "no goal: the current run is kept");
         world.State = DangerState.Surrender;
         Assert.AreEqual(AiPerformKind.Surrender, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
         CollectionAssert.AreEqual(new[] { "perform fleeing", "perform fleeing", "perform surrender" }, world.Calls);

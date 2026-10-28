@@ -102,8 +102,16 @@ public sealed record AiGoalRun
     }
 
     public string Owner { get; }
-    /// <summary>The goal stack, bottom first; never empty.</summary>
-    public ImmutableArray<AiGoalFrame> Frames { get; init; }
+    /// <summary>The goal stack, bottom first: 1..<see cref="AiExecutorRules.MaxDepth"/> goals.</summary>
+    public ImmutableArray<AiGoalFrame> Frames
+    {
+        get => _frames;
+        init => _frames = value.IsDefaultOrEmpty || value.Length > AiExecutorRules.MaxDepth || value.Any(f => f is null)
+            ? throw new ArgumentOutOfRangeException(nameof(value), "A run holds 1..8 goals.")
+            : value;
+    }
+
+    private readonly ImmutableArray<AiGoalFrame> _frames;
     public AiRunFlags Flags { get; init; }
     public AiExecutorReason Reason { get; init; }
 
@@ -248,6 +256,15 @@ public readonly record struct AiAttackFacts(
 /// </summary>
 public readonly record struct AiReachFacts(int Distance, int WeaponRange, bool Weapon, bool ClearLine);
 
+/// <summary>Whether a walk goal's next step is blocked: an occupied tile waits 0..300 ms before the walk gives up, a step that cannot
+/// start gives up at once (ledger EX20).</summary>
+public enum AiStepBlock
+{
+    Clear,
+    Occupied,
+    CannotStart,
+}
+
 /// <summary>The attack animation's timing: game milliseconds to its action frame, then to its end (with the pause, RT8).</summary>
 public readonly record struct AiAttackSwing(int ActionFrameMs, int RestMs);
 
@@ -276,9 +293,10 @@ public interface IAiGoalWorld
     int AttackCost(string id);
     /// <summary>Plans a path, or null when there is none.</summary>
     AiPath? PlanPath(string id, AiPathRequest request);
-    /// <summary>The next step is blocked (a living critter on it near the path's end, a newly spotted trap, a step that cannot
-    /// start; with <paramref name="flight"/> any blocking tile).</summary>
-    bool StepBlocked(string id, CellCoord next, bool flight);
+    /// <summary>Whether the next step is blocked (0x4270B0 → 0x427110, then 0x42E9B0): by a living critter on it near the path's end,
+    /// a newly spotted trap or, with <paramref name="flight"/>, any blocking tile (<see cref="AiStepBlock.Occupied"/>), or because the
+    /// step cannot start (<see cref="AiStepBlock.CannotStart"/>).</summary>
+    AiStepBlock StepBlocked(string id, CellCoord next, bool flight);
     /// <summary>Starts the step to <paramref name="next"/> (doors, windows and the gait are the walker's): the game milliseconds it
     /// takes, at least 1. The object stands on <paramref name="next"/> when the next step of the run comes.</summary>
     int BeginStep(string id, CellCoord next, bool running);
@@ -290,7 +308,7 @@ public interface IAiGoalWorld
     void Face(string id, string toward);
     /// <summary>Plays the object's sound (the attack's alerted sound).</summary>
     void PlaySound(string id, int sound);
-    /// <summary>Starts the attack animation toward the target (0x432700, after the cost was paid): its timing.</summary>
+    /// <summary>Turns the object to the target and starts the attack animation (0x432700, after the cost was paid): its timing.</summary>
     AiAttackSwing BeginAttack(string id, string target);
     /// <summary>The hit step at the action frame (0x42A630 → 0x4B3BB0 → the attack resolution 0x4B3170): the world resolves the
     /// attack (the resolver, the wear step, the missile, the notification).</summary>
@@ -334,13 +352,10 @@ public enum AiPerformKind
     BackOffRun,
     /// <summary>BACKING_OFF: reached, or no "away" path (MR15): the bit was cleared.</summary>
     BackOffEnded,
-    /// <summary>BACKING_OFF: the run to the tile was refused by its starter.</summary>
-    BackOffRefused,
     Cast,
     UseItem,
     UseSkill,
-    /// <summary>Danger state NONE with a leader that is not waiting: the follow starter was asked (<see cref="AiPerformResult.Run"/>
-    /// is the started run, or null when a run was kept or refused) and the loyalty check ran.</summary>
+    /// <summary>Danger state NONE with a leader that is not waiting: the follow starter was asked and the loyalty check ran.</summary>
     Follow,
     /// <summary>Danger state NONE without a leader: the routine ran.</summary>
     Routine,
@@ -352,7 +367,8 @@ public enum AiPerformKind
     Grenade,
     /// <summary>COMBAT_FOCUS: the attack starter ran (<see cref="AiPerformResult.Run"/> and <see cref="AiPerformResult.Refusal"/>).</summary>
     Attack,
-    /// <summary>COMBAT_FOCUS: a "default throws" weapon was taken off and thrown at the target's tile.</summary>
+    /// <summary>COMBAT_FOCUS: a "default throws" weapon was taken off and thrown at the target's tile; the world's throw goal replaces
+    /// the object's run (<see cref="AiPerformResult.Run"/> null, <see cref="AiPerformResult.Started"/>).</summary>
     ThrowWeapon,
     /// <summary>FLEE: perform fleeing ran; <see cref="AiPerformResult.Run"/> is the flee goal's run when it started.</summary>
     Flee,
@@ -385,8 +401,15 @@ public enum AiStartRefusal
     NoObject,
 }
 
-/// <summary>What one perform did, the run it started or updated (null: none) and a starter's refusal.</summary>
-public sealed record AiPerformResult(AiPerformKind Kind, AiGoalRun? Run = null, AiStartRefusal Refusal = AiStartRefusal.None);
+/// <summary>
+/// What one perform did, the object's run after it and a starter's refusal. <see cref="Run"/> is the run the host keeps: a started
+/// or retargeted run, else the current run it was given (null: none); <see cref="Started"/> says which.
+/// </summary>
+public sealed record AiPerformResult(AiPerformKind Kind, AiGoalRun? Run = null, AiStartRefusal Refusal = AiStartRefusal.None)
+{
+    /// <summary>Perform started or retargeted <see cref="Run"/>, which replaces the object's current run.</summary>
+    public bool Started { get; init; }
+}
 
 /// <summary>Perform fleeing's answer (0x4AC620, the session's <c>PerformFleeing</c>): whether the flee goal starts, and from what.</summary>
 public readonly record struct AiFleeing(bool StartsFleeGoal, string? Source);
