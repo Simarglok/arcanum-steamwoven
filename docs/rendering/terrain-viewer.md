@@ -695,7 +695,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   exterior the amulet: script 1341 prints line 1 of its DLG, shown after the item's name in the
   message and status line, until global flag 1085 is set); without the content, or for a script
   that does more than the item set admits, it stays: "the item runs a script on this transfer
-  that is not supported here". Project
+  that is not supported here". ARC-SCRIPT-041: the get, transfer and remove-item scripts run the
+  same way ([item events](../world/inventory-runtime.md#item-events-arc-script-041)); an item a get
+  or transfer script declines stays, named "the item's get script declined it" or "the PC's
+  transfer script declined it" with any line it printed, and the log lists every run as
+  `scripts=point:script:stop`. Project
   diagnostic window: no inventory grid, equipment, drop, stacks or weight; the insert check
   accepts every item (carry weight, Technophobia and grid room need the created character,
   NOT READY).

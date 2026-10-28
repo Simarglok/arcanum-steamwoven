@@ -222,10 +222,23 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// <summary>ARC-SCRIPT-013: the item's insert-item script run, when one ran (also on a refusal of its effects).</summary>
     public ScrRunResult? InsertScript { get; init; }
     private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+    private readonly IReadOnlyList<SessionItemScriptRun>? _scripts;
 
-    /// <summary>The lines that script printed, in order, for the host to show; empty when none.</summary>
+    /// <summary>The lines the transfer's scripts printed, in order, for the host to show; empty when none.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+
+    /// <summary>ARC-SCRIPT-041: every item script run of the transfer, in order (also on a refusal); empty without a script host.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get => _scripts ?? Array.Empty<SessionItemScriptRun>(); init => _scripts = value; }
+
+    /// <summary>ARC-SCRIPT-041: the point whose script returned skip default (<see cref="SessionScriptPoint.Get"/> or
+    /// <see cref="SessionScriptPoint.Transfer"/>), so the item did not move; <see cref="Item"/> is null then, and the disposition is
+    /// Changed only when that run wrote global flags.</summary>
+    public int? DeclinedBy { get; init; }
 }
+
+/// <summary>ARC-SCRIPT-041: one item script run of a transfer: the attachment point, the attachee's entity (the item, or
+/// <see cref="SessionEventKinds.PlayerEntity"/> for the recipient's transfer script) and the dispatcher's result.</summary>
+public sealed record SessionItemScriptRun(int Point, string Attachee, ScrRunResult Run);
 
 /// <summary>A line a script printed (ARC-SCRIPT-013): the DLG line of <paramref name="Script"/>, the print action's second
 /// number and the text the host built.</summary>
