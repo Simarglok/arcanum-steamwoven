@@ -257,12 +257,13 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-010: the session's actor placement follows the walking actor only at a save or a map change; a drop of the
     /// hero's item starts from it, so the attack places it on the committed cell first (as F7 does).</summary>
-    private void PlaceHeroForDrop()
+    private bool PlaceHeroForDrop()
     {
-        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return;
+        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return false;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placed = owner.PlaceActor(owner.Version, new(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing));
         if (placed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-010 hero-placement refused failure={placed.Failure}");
+        return placed.Disposition != GameSessionDisposition.Rejected;
     }
 
     /// <summary>ARC-COMBAT-010: the shown map as a drop reads it now: the step evidence with the doors' runtime passage, the map's

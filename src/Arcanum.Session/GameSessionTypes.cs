@@ -260,6 +260,8 @@ public enum GameSessionFailure
     WeaponInFlight,
     // Hero inventory grid (ARC-UI-019): the target cells hold another item or leave the grid; a saved grid that disagrees with the lists.
     GridCellsTaken, InvalidGrid,
+    // Hero drop (ARC-UI-025): the item's no-drop flag (item flag 0x20, the remove check 0x466DA0); the hero's tile outside the drop's bounds.
+    ItemNotDroppable, DropTileUnfit,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

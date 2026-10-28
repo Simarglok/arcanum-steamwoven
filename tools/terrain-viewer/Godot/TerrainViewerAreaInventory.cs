@@ -34,6 +34,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionWearableItem?>? _areaKitWear;
     // ARC-UI-019: the kit's facts for a move in the hero's grid.
     private IReadOnlyList<SessionGridMoveItem?>? _areaKitGridMove;
+    // ARC-UI-025: the kit's use facts (the window's use paths).
+    private IReadOnlyList<AreaItemUseFacts?>? _areaKitUse;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -209,7 +211,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
-            _inventoryPanel.UseRequested += HealSelf;
+            _inventoryPanel.UseRequested += UseItemFromWindow;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
             _inventoryPanel.RepairRequested += RepairItem;
@@ -226,12 +228,12 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear);
+    private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear, _areaKitUse);
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
-    /// original's inventory window does). In a turn-based round the use charges its action points (ARC-COMBAT-020; the original goes on
-    /// whatever the charge answers).</summary>
-    private void HealSelf(string item)
+    /// original's inventory window does). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
+    /// the use's action points already, so the heal charges none (<paramref name="charged"/>).</summary>
+    private void HealSelf(string item, bool charged = false)
     {
         if (!InventoryOpen || !InventoryActive) return;
         var holder = _inventoryPanel!.Holder;
@@ -240,7 +242,7 @@ public partial class TerrainViewerApp
         if (healing is null) message = "not used: not a healing item the hero holds";
         else
         {
-            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, CombatWorldOrNull());
+            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, charged ? null : CombatWorldOrNull());
             var life = _areaSession.QueryHeroLife()?.Record.State;
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
                 : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
@@ -382,6 +384,13 @@ public partial class TerrainViewerApp
                 result = session.Equip(session.Version, item, drop.Slot!.Value, wearable, (_, _) => true, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), wearTriggers);
                 message = AreaInventoryHost.WearText(result.Value, name, drop.Slot.Value, false, NameOf);
                 break;
+            case AreaInventoryDropKind.DropToGround:
+                DropToGround(item);
+                return;
+            case AreaInventoryDropKind.UseIcon:
+                // The item goes back to its place and is used: at the hero with a Shift key held, with no target otherwise (IW6).
+                UseHeroItem(item, AreaItemUseSource.UseIcon, Godot.Input.IsKeyPressed(Key.Shift));
+                return;
             default:
                 message = $"{name} went back to its place";
                 break;
@@ -397,8 +406,8 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
-    /// <summary>ARC-MAGIC-020: the item spell executors for a wear move, over the shown map's cast host (none without spell data). The
-    /// viewer's cast host has no item lookup yet, so it supports no item: an item with spells stays refused.</summary>
+    /// <summary>ARC-MAGIC-020: the item spell executors for a wear move, over the shown map's cast host (none without spell data); its item
+    /// lookup is the hero's items (ARC-UI-016). ARC-UI-025: the window's item use casts through it too.</summary>
     private ISessionItemTriggers? ItemTriggersNow() =>
         _combatHost is not null && _worldActor.Session is AreaGridSession && SpellCasterNow() is { } caster ? new SessionItemTriggers(caster, AreaCombatWorldNow()) : null;
 

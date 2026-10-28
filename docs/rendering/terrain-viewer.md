@@ -803,7 +803,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no drop or stacks (ARC-UI-015 added the paper doll and the weight line, ARC-UI-019 the grid and the drag); the
+  diagnostic window: no stacks (ARC-UI-015 added the paper doll and the weight line, ARC-UI-019 the grid and the drag, ARC-UI-025 the drop and the use); the
   host's insert check accepts every item (the room for an item entering from outside is NOT READY; the session answers it for the
   window's moves, ARC-UI-019); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
   and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
@@ -821,8 +821,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): dropping on the ground or the use icon, right-click use, stack
-  splitting and the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Not built yet (follow-up slices): stack splitting and the gold drag. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -841,6 +840,23 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   kit item's no-drop flag and scripts come from the hero load (`AreaHeroLoad.KitGridMove`), a taken item's from its object row; a made
   item has none here (NOT READY). The native smoke drags a grid item to a free cell and back and the first worn item off into a free
   cell and back onto its slot (`ARC-UI-019 native-smoke drag PASS dragged=4`).
+- **Drop and use (ARC-UI-025).** Right of the grid the window draws the original's drop and use icons at their corners (703, 385 and
+  703, 331 on the window; plain 32-pixel squares, the icons' art size is not read; [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025)).
+  A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
+  ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
+  events and the placement into a junk pile or loose with its decay; a stack of more than one unit is refused ("the quantity window is
+  NOT READY", IW7). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
+  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
+  map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
+  (`AiExecutorRules.UseItemNow`) over the window's world: a scroll the hero is not clever enough for stops; an item that needs a target
+  and has none opens the targeting cursor (lockpicks arm the lock pick, as *Pick a lock* does; any other item's cursor is NOT READY);
+  a trap device's use is NOT READY; the item's use script (a taken item's) may stop the use; an item with spell charges or the magical
+  flag casts its slot-0 spell through the map's cast host (`SessionItemTriggers.UseItem`); otherwise a written item opens the reading
+  window, a healing kit heals the hero, food and scrolls are spent; 4 action points on the hero's turn of a round. Log lines
+  `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-presses
+  a worn item (nothing), uses the first usable grid item when the hero holds one, drags a taken item onto *Drop* and takes it back
+  (`ARC-UI-025 native-smoke drop-use PASS`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

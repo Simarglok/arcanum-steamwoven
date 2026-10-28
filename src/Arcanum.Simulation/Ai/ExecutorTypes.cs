@@ -431,11 +431,44 @@ public enum AiItemUseStep
 public sealed record AiItemUseResult(AiItemUseStep Step, bool Charged, bool Spent);
 
 /// <summary>
+/// ARC-UI-025: what the item use (0x462CC0, <see cref="AiExecutorRules.UseItemNow"/>) reads and starts, split from
+/// <see cref="IAiGoalWorld"/> so a host other than the NPC executor (the player's inventory window) can run the same use.
+/// </summary>
+public interface IItemUseWorld
+{
+    /// <summary>The item use's facts of <paramref name="item"/> for <paramref name="user"/> (0x462CC0).</summary>
+    AiUsedItem UsedItem(string user, string item);
+    /// <summary>The use script (0x441980): false when it stopped the use.</summary>
+    bool RunUseScript(string user, string item, string? target);
+    /// <summary>Opens the targeting cursor for an item that needs a target (0x4EE060).</summary>
+    void OpenTargeting(string user, string item);
+    /// <summary>A trap device's use on its target (0x4BC2E0, ledger TP2).</summary>
+    void UseTrapDevice(string user, string item, string? target);
+    /// <summary>Reads a written item (0x4606F0).</summary>
+    void ReadWritten(string user, string item);
+    /// <summary>The target can be locked (0x441CF0).</summary>
+    bool Lockable(string target);
+    /// <summary>Starts a skill use with the item on the target (0x4352C0, goal 40 [ag_use_item_on_object_with_skill]).</summary>
+    void StartSkillWithItem(string user, string item, string target, int skill);
+    /// <summary>The item's slot-0 spell on the target (0x4F2810, 0x4CB7A0, 0x4605E0, 0x4CBF70).</summary>
+    void UseItemMagic(string user, string item, string? target);
+    /// <summary>Spends a used food or scroll: its magic call (0x4574D0), then its destruction (0x43CCA0).</summary>
+    void SpendItem(string item);
+    /// <summary>A turn-based round runs (0x4B6D70).</summary>
+    bool InRound { get; }
+    /// <summary>The critter whose subturn it is (0x4B6D80), or null.</summary>
+    string? RoundActor { get; }
+    /// <summary>The action-point consume for the round's actor (0x4B7CD0; a refusal empties the action points and passes the turn,
+    /// TB9).</summary>
+    void Consume(string id, int cost);
+}
+
+/// <summary>
 /// The world the goals run in: positions, the facts each node tests, the planners, the step walker, the attack animation and
 /// the round's action points. Ids are the host's object ids; <see cref="AiSchedulerRules.Pc"/> names the local PC. Every member is
 /// called at the position of the original's call.
 /// </summary>
-public interface IAiGoalWorld
+public interface IAiGoalWorld : IItemUseWorld
 {
     /// <summary>The object's tile, also for one destroyed or switched off (its location is kept); null when the world does not
     /// know it.</summary>
@@ -513,36 +546,11 @@ public interface IAiGoalWorld
     void PickUp(string id, string item);
     /// <summary>The object whose inventory holds the item (0x4612A0), or null.</summary>
     string? ItemHolder(string item);
-    /// <summary>The item use's facts of <paramref name="item"/> for <paramref name="user"/> (0x462CC0).</summary>
-    AiUsedItem UsedItem(string user, string item);
-    /// <summary>The use script (0x441980): false when it stopped the use.</summary>
-    bool RunUseScript(string user, string item, string? target);
-    /// <summary>Opens the targeting cursor for an item that needs a target (0x4EE060).</summary>
-    void OpenTargeting(string user, string item);
-    /// <summary>A trap device's use on its target (0x4BC2E0, ledger TP2).</summary>
-    void UseTrapDevice(string user, string item, string? target);
-    /// <summary>Reads a written item (0x4606F0).</summary>
-    void ReadWritten(string user, string item);
-    /// <summary>The target can be locked (0x441CF0).</summary>
-    bool Lockable(string target);
-    /// <summary>Starts a skill use with the item on the target (0x4352C0, goal 40 [ag_use_item_on_object_with_skill]).</summary>
-    void StartSkillWithItem(string user, string item, string target, int skill);
-    /// <summary>The item's slot-0 spell on the target (0x4F2810, 0x4CB7A0, 0x4605E0, 0x4CBF70).</summary>
-    void UseItemMagic(string user, string item, string? target);
-    /// <summary>Spends a used food or scroll: its magic call (0x4574D0), then its destruction (0x43CCA0).</summary>
-    void SpendItem(string item);
-    /// <summary>A turn-based round runs (0x4B6D70).</summary>
-    bool InRound { get; }
-    /// <summary>The critter whose subturn it is (0x4B6D80), or null.</summary>
-    string? RoundActor { get; }
     /// <summary>The round actor's action points left.</summary>
     int ActionPoints(string id);
     /// <summary>The round's pending cost (0x5FC244): the value the last action-point check wrote; the host sets it to 0 at each
     /// subturn start (0x4B75D0).</summary>
     int PendingCost { get; set; }
-    /// <summary>The action-point consume for the round's actor (0x4B7CD0; a refusal empties the action points and passes the turn,
-    /// TB9).</summary>
-    void Consume(string id, int cost);
     /// <summary>Ends the critter's subturn (0x4B7C90).</summary>
     void EndSubturn(string id);
 }
