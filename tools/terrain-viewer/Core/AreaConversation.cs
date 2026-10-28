@@ -696,7 +696,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         if (_session.QueryHero() is not null)
             return _session.ChangeHeroAlignment(_session.Version, next).Disposition == GameSessionDisposition.Rejected
                 ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
-        var value = checked((int)next);
+        if (next is < int.MinValue or > int.MaxValue) return DialogCommandResult.Rejected;
+        var value = (int)next;
         if (_session.RecordPcAlignmentChange(_session.Version, Alignment, value).Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
         _diagnosticAlignment = value;
         return DialogCommandResult.Applied;

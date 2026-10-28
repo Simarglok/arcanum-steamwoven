@@ -113,6 +113,17 @@ public sealed class HeroPartySideTests
     }
 
     [TestMethod]
+    public void The_loyalty_steps_warning_reads_the_heros_alignment()
+    {
+        // The hero turns 250 (the gap 300 still admits it, but 250 > 300 − 100 warns too good); the caller's facts say 0.
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, "npc", Diagnostic(), false).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ChangeHeroAlignment(owner.Version, 250).Disposition);
+        var step = owner.RunLoyaltyStep(owner.Version, "npc", Diagnostic() with { PcAlignment = 0 }, false).Step!.Value;
+        Assert.AreEqual((LoyaltyStepKind.Stayed, (FollowConsent?)FollowConsent.Accepted, LeaderWarning.TooGood), (step.Kind, step.Consent, step.Warning));
+    }
+
+    [TestMethod]
     public void An_alignment_change_writes_the_hero_and_arms_its_followers()
     {
         using var owner = Hero(alignment: 100, background: SessionBackgrounds.Technophobia);
