@@ -20,7 +20,7 @@ public static class AreaCompanionLoyalty
     public const long MaxAiTickDelayMs = 5000;
 
     /// <summary>
-    /// The loyalty step's facts for <paramref name="companion"/>: the diagnostic PC against its follow facts, the PC's
+    /// The loyalty step's facts for <paramref name="companion"/>: the PC side (the session hero, else the diagnostic PC) against its follow facts, the PC's
     /// alignment of the conversation state, its effective reaction under that state's facts and its level now
     /// (<see cref="AreaAdvancement.Level"/>). Null when the session cannot answer its reaction.
     /// </summary>
@@ -29,7 +29,7 @@ public static class AreaCompanionLoyalty
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(companion); ArgumentNullException.ThrowIfNull(state);
         if (session.QueryReaction(companion.Entity, state.NpcFacts(), state.PcFacts).View is not { } reaction) return null;
         return AreaCompanionRoster.Facts(companion.Facts, state.Alignment, reaction.Effective,
-            AreaAdvancement.Level(session, companion.Entity, companion.Facts.Level));
+            AreaAdvancement.Level(session, companion.Entity, companion.Facts.Level), session.QueryHeroPartySide());
     }
 
     /// <summary>What a step showed, for the HUD and the log: the refusal line range of a follower that left or the warning line

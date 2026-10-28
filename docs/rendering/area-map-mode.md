@@ -478,10 +478,12 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   from the content stack, the original's aggregation), then the getter's clamp of
   0..51 and −1000..1000 ([ledger AP5](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
   an effect number without a definition changes nothing, as in the original.
-  `AreaCompanionData` opens the tables once per module. The PC side stays the
-  AREA diagnostic profile (charisma 8, level 1), so through a dialog `JO` the
-  level gate refuses most NPCs (most rows have a gate of 2 and about 170 of the
-  NPCs are level 3 or above); the PC side from the session hero is not done. On
+  `AreaCompanionData` opens the tables once per module. The PC side is the
+  session hero with `--hero` (ARC-WORLD-067, [party runtime](../world/party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)):
+  its charisma, level, alignment, Persuasion and max followers; without one the
+  labelled AREA diagnostic profile (charisma 8, level 1), with which a dialog `JO`
+  meets the level gate of most NPCs (most rows have a gate of 2 and about 170 of
+  the NPCs are level 3 or above). On
   the installed original all 185 interior dialog NPCs read, on ten distinct
   follow rows (`AreaMapCompanionOriginalTests`); Virgil's facts read this way
   equal the measured ones.

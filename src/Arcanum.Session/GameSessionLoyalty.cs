@@ -71,8 +71,10 @@ public sealed partial class GameSessionOwner
         if (current.Standing != CompanionStanding.Following) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version);
         var consent = Consent(facts, current.Forced, ignoreLimit: true);
         var (persuasion, charisma) = Leader(facts.PcPersuasion, facts.PcCharisma);
+        // ARC-WORLD-067: the leader check's warning reads the hero's alignment, as the follow check above does.
+        var alignment = HeroPartySide()?.Alignment ?? facts.PcAlignment;
         var step = CompanionLoyaltyRules.Step(actionGoalRunning, consent, FollowConsentRules.MayLeaveUnforced(charisma, facts.MindControlledByPc),
-            new(current.Loyalty, facts.MindControlledByPc, persuasion, current.Forced, facts.Reaction, facts.Thresholds, facts.PcAlignment,
+            new(current.Loyalty, facts.MindControlledByPc, persuasion, current.Forced, facts.Reaction, facts.Thresholds, alignment,
                 facts.NpcAlignment));
         // OL20: the leave clears the array entry, the leader and forced, then marks it jilted; its marks stay (OL22).
         var next = step.Kind == LoyaltyStepKind.Left
@@ -198,8 +200,8 @@ public sealed partial class GameSessionOwner
     }
 
     // The leader's side: the hero's Persuasion training and effective charisma, else the caller's.
-    private (PersuasionTraining Persuasion, int Charisma) Leader(PersuasionTraining persuasion, int charisma) => _hero is { } hero
-        ? (HeroPersuasion(), hero.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.Charisma))
+    private (PersuasionTraining Persuasion, int Charisma) Leader(PersuasionTraining persuasion, int charisma) => HeroPartySide() is { } pc
+        ? (pc.Persuasion, pc.Charisma)
         : (persuasion, charisma);
 
     private SessionLoyaltyResult RejectLoyalty(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, Version);
