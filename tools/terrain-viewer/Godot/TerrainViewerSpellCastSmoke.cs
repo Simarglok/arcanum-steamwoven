@@ -21,7 +21,8 @@ public partial class TerrainViewerApp
     // clock, and an EyeCandy component the run logs is drawn on its target when its entry plays. ARC-MAGIC-018: the goal's start turns the
     // hero toward the NPC; a spell with a missile launches it at the release frame and its BEGIN comes when it arrives on the NPC's
     // tile, after one leg of the line's steps; when the first spell has no missile the hero also casts (learning it if needed) the first
-    // critter spell that has one (its damage, if any, is not asserted). A right click closes the cursor. The NPC and the
+    // critter spell that has one (its damage, if any, is not asserted). ARC-MAGIC-019: a spell without a missile is clicked twice
+    // while its goal plays, the second cast queued beneath the first and played once it ends. A right click closes the cursor. The NPC and the
     // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
@@ -98,8 +99,10 @@ public partial class TerrainViewerApp
 
         // One cast at the NPC through the pane, the cursor and the click, played to its end (and its missile's arrival); the NPC and
         // the hero's fatigue are restored first and the hero turned back, so a second cast finds them as the first did.
+        // ARC-MAGIC-019 (SU13): a spell without a missile is clicked twice, the second cast queued beneath the first.
         async Task<object> CastOnce(SessionSpellRecord spell)
         {
+            var queue = SpellMissileArt(spell.Data.Number) is null;
             if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
                 session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
@@ -136,13 +139,36 @@ public partial class TerrainViewerApp
             var missileArt = SpellMissileArt(spell.Data.Number);
             var missileEnds = _spellMissileEndsForSelfTest.Count;
             _spellMissilesDrawnForSelfTest.Clear();
-            var frames = 0;
-            for (; frames < 400 && _spellGoal is not null; frames++)
+            // ARC-MAGIC-019 (SU13): a second click while the goal plays queues a second cast beneath it, which plays once the first ends.
+            var queuedStarts = _spellQueuedStarts; var failedAtStart = _spellTargetFailedAtStart;
+            int? second = null;
+            if (queue)
             {
+                AreaSmokeClick(point);
+                Require(_spellCasts == casts + 2 && _spellQueue.Count == 1 && _spellGoal?.Run == run, "the second click queued a cast: " + _spellNotice);
+                second = _spellQueue[0].Run;
+            }
+            var frames = 0;
+            var revived = false;
+            for (; frames < 800 && _spellGoal is not null; frames++)
+            {
+                // The first cast may kill the NPC (the one with the fewest hit points): it is raised before the queued goal's first
+                // frame, so the queued cast plays at a living target.
+                if (_spellGoal is { Animation: null } queuedGoal && queuedGoal.Run == second && session.QueryLife(npc).View?.Status is { IsActive: false })
+                {
+                    session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                    PublishWorldSelection();
+                    revived = true;
+                }
                 _areaSmokeTime++;
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            Require(_spellGoal is null, $"the goal ended after {frames} frames");
+            Require(_spellGoal is null && _spellQueue.Count == 0, $"the goals ended after {frames} frames");
+            if (second is { } queued)
+            {
+                Require(_spellQueuedStarts == queuedStarts + 1, "the queued cast's goal started after the first: " + _spellNotice);
+                Require(session.QuerySpellRuns()[queued] is null, "the queued instant run is freed");
+            }
             // ARC-MAGIC-018: a missile flies on after the goal until it arrives.
             var flying = 0;
             for (; flying < 400 && _spellMissiles.Count > 0; flying++)
@@ -166,7 +192,9 @@ public partial class TerrainViewerApp
             else Require(_spellMissileEndsForSelfTest.Count == missileEnds, "a spell without a missile art launches none");
             // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
             var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
-            Require(_castTimingsForSelfTest.Count == Math.Min(timings + 1, 16) && _castTimingsForSelfTest.Count > 0, "the goal recorded its eye-candy timing");
+            var goals = queue ? 2 : 1;
+            var untimed = _spellTargetFailedAtStart - failedAtStart;
+            Require(_castTimingsForSelfTest.Count == Math.Min(timings + goals, 16) && untimed == 0, $"the goals recorded their eye-candy timing ({untimed} ended before it)");
             var timing = _castTimingsForSelfTest[^1];
             var entry = EyeCandyTable?.At(castEntry);
             Require(entry?.Art is { } && !timing.Immediate, $"the spell's cast eye candy plays: {_spellData?.EyeCandyDetail}, entry art {entry?.Art}");
@@ -191,7 +219,8 @@ public partial class TerrainViewerApp
             var heroAfter = session.QueryHeroLife()!.Status;
             var npcAfter = session.QueryLife(npc).View!.Status.HitPoints;
             Require(paid > 0 && heroAfter.Fatigue < heroBefore.Fatigue, $"the cast cost fatigue: paid {paid}, {heroBefore.Fatigue} -> {heroAfter.Fatigue}");
-            Require(!Damaging(spell) || resisted || damaged > 0 && npcAfter == npcBefore - damaged || npcAfter <= 0,
+            Require(log.Count(e => e.Kind == SpellCastEventKind.FatiguePaid) == goals, "each cast paid at its own BEGIN (SU13)");
+            Require(!Damaging(spell) || resisted || damaged > 0 && (revived || npcAfter == npcBefore - damaged) || npcAfter <= 0,
                 $"the NPC resists or takes the damage: damaged {damaged}, resisted {resisted}, hp {npcBefore} -> {npcAfter}");
             Require(session.QuerySpellRuns()[run] is null, "the instant run is freed");
             RefreshAreaStatus();
@@ -203,7 +232,7 @@ public partial class TerrainViewerApp
             Require(_spellPane is { Shown: false }, "M hides the pane");
             HoverReleaseForSelfTest();
             return new {
-                Spell = spell.Data.Number, Cost = spell.Data.Cost, Frames = frames, Paid = paid,
+                Spell = spell.Data.Number, Cost = spell.Data.Cost, Frames = frames, Queued = second, Revived = revived, Paid = paid,
                 Fatigue = $"{heroBefore.Fatigue}->{heroAfter.Fatigue}", HitPoints = $"{npcBefore}->{npcAfter}", Damaged = damaged, Resisted = resisted,
                 Log = string.Join(",", log.Select(e => e.Kind)), Hover = hover.ToString(),
                 EyeCandy = $"release {timing.ReleaseMs} end {timing.EndMs} drawn {string.Join("/", _eyeCandyDrawnForSelfTest.Order())}",

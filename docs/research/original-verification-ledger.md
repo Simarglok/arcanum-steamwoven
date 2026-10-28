@@ -115,9 +115,11 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="cast-host-and-casting-goal-arc-magic-014"></a>[Cast host and casting goal (ARC-MAGIC-014)](ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014) | [Magic: casting and spell runs](ledger/spell-runs.md) | CG1–CG8, MG39–MG41 |
 | <a id="spell-ui-arc-magic-015"></a>[Spell UI (ARC-MAGIC-015)](ledger/spell-runs.md#spell-ui-arc-magic-015) | [Magic: casting and spell runs](ledger/spell-runs.md) | SU1–SU14, MG42 |
 | <a id="spell-eye-candy-arc-magic-017"></a>[Spell eye candy (ARC-MAGIC-017)](ledger/spell-runs.md#spell-eye-candy-arc-magic-017) | [Magic: casting and spell runs](ledger/spell-runs.md) | EC1–EC13 |
+| <a id="queued-cast-arc-magic-019"></a>[Queued cast (ARC-MAGIC-019)](ledger/spell-runs.md#queued-cast-arc-magic-019) | [Magic: casting and spell runs](ledger/spell-runs.md) | QC1–QC6, MG43 |
 | <a id="spell-missile-and-caster-facing-arc-magic-018"></a>[Spell missile and caster facing (ARC-MAGIC-018)](ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018) | [Magic: casting and spell runs](ledger/spell-runs.md) | SM1–SM9, MG44 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
-| <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX20 |
+| <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
+| <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |
 | <a id="dialog-skill-gates-arc-skills-004"></a>[Dialog skill gates (ARC-SKILLS-004)](ledger/skills.md#dialog-skill-gates-arc-skills-004) | [Skills](ledger/skills.md) | DS1–DS5 |
 | <a id="skill-check-arc-skills-003"></a>[Skill check (ARC-SKILLS-003)](ledger/skills.md#skill-check-arc-skills-003) | [Skills](ledger/skills.md) | SC1–SC17 |
 | <a id="fate-points-arc-world-054"></a>[Fate points (ARC-WORLD-054)](ledger/skills.md#fate-points-arc-world-054) | [Skills](ledger/skills.md) | FT1–FT8 |
@@ -167,6 +169,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-gold-and-transfers-arc-world-071"></a>[NPC gold and transfers (ARC-WORLD-071)](ledger/items.md#npc-gold-and-transfers-arc-world-071) | [Items and inventory](ledger/items.md) | NT1–NT4 |
 | <a id="made-item-complexity-arc-world-083"></a>[Made item complexity (ARC-WORLD-083)](ledger/items.md#made-item-complexity-arc-world-083) | [Items and inventory](ledger/items.md) | MC1 |
 | <a id="weight-and-encumbrance-arc-world-085"></a>[Weight and encumbrance (ARC-WORLD-085)](ledger/items.md#weight-and-encumbrance-arc-world-085) | [Items and inventory](ledger/items.md) | WE1–WE9 |
+| <a id="barter-arc-ui-050"></a>[Barter (ARC-UI-050)](ledger/items.md#barter-arc-ui-050) | [Items and inventory](ledger/items.md) | BT1–BT10 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |

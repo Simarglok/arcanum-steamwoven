@@ -17,10 +17,11 @@ areas), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003) (a c
 Two readers read the casting goal in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Cast host and casting
 goal"](../research/ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8). The headless first cast
 runs on the installed original (`AreaSpellCastRealDataTests`). The spell UI is read in [ledger "Spell
-UI"](../research/ledger/spell-runs.md#spell-ui-arc-magic-015) (SU1–SU14, MG42); the viewer's cast is observed by the L2 native smoke
-`ARC-MAGIC-015 native-smoke cast`. The missile and the facing turn (ARC-MAGIC-018) are read in [ledger "Spell missile and caster
-facing"](../research/ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018) (SM1–SM9, MG44); the same smoke casts a
-missile spell.
+UI"](../research/ledger/spell-runs.md#spell-ui-arc-magic-015) (SU1–SU14, MG42) and the queued cast in [ledger "Queued
+cast"](../research/ledger/spell-runs.md#queued-cast-arc-magic-019) (QC1–QC6, MG43); the viewer's cast, with a second cast queued
+behind it, is observed by the L2 native smoke `ARC-MAGIC-015 native-smoke cast`. The missile and the facing turn (ARC-MAGIC-018)
+are read in [ledger "Spell missile and caster facing"](../research/ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018)
+(SM1–SM9, MG44); the same smoke casts a missile spell.
 
 Code:
 - [`SessionSpellRecords`](../../src/Arcanum.Session/SessionSpellRecords.cs) — the spell data in the rules' types;
@@ -172,17 +173,31 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    then the run; its casting goal starts (`StartGoal`; a refusal ends it, `EndGoal(refused: true)`), and its eye candy (below,
    since ARC-MAGIC-017) times the release frame (`Release`: the re-check and BEGIN) and the end (`EndGoal`) on the world clock. While the goal plays, world presses and the stick are ignored (the original queues other goals under it). A goal
    cut short before its release frame (a lost hero, a map change, another actor) ends through its own host and frees its run
-   (0x429CD0); a goal of a session a quick load replaced is dropped with that session.
+   (0x429CD0); a goal of a session a quick load replaced is dropped with that session. Before the cast eye candy is added the
+   target is checked again (0x429F00, QC4): a failure releases at once (nothing begins) and the goal ends through the end step,
+   without playing the cast eye candy (since ARC-MAGIC-019; before, the eye candy played to the release frame's re-check).
 5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
    number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
    that are not ready. Eye candy is drawn ([below](#eye-candy-arc-magic-017)); only an eye candy's callback gets a line.
 6. **Events.** While the session holds a run, or the shown map's host exists, the event pump's passes go through the shown
    map's host (`SessionSpellCaster.ProcessEvents`, only a host of the pump's own session), so a run's later events run with the
    map's magic world and their payments are applied.
+7. **A second cast** (ARC-MAGIC-019, `SessionSpellCaster.Queue`, SU13, QC1–QC6). A cast while a goal plays (from the cursor,
+   which stays open, or from the pane) is checked and started as any cast (600, 604, the run), then queued beneath the playing
+   goal: at most four wait (the playing goal's stack index 4 or more refuses, QC2), and none in a turn-based round; a refused
+   cast's run is freed unpaid and the original shows nothing (the viewer's status line names the refusal, a diagnostic). The queued casts play in the order they were cast (QC1): when the playing
+   goal ends after its cast eye candy (a pop, QC3), the first queued goal starts (`StartGoal`, the same checks as a first goal).
+   A goal without cast eye candy, one whose target failed before it, or a queued goal refused at its start ends through the end
+   step, and a goal cut short — or a hero who cannot act when the goal ends — interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
+   unpaid in Steamwoven (`DropQueued`, MG43). A queued run exists from the click, so a run starting before it can cancel it by
+   its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6); its slot is free again, so the viewer forgets a queued
+   entry whose slot a newer cast takes. F7 stays refused while a goal plays.
 
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
 pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or
-`--area-map`); its fatigue drops and the NPC resists or takes damage.
+`--area-map`); its fatigue drops and the NPC resists or takes damage. A second click while the goal plays queues a second cast
+(ARC-MAGIC-019), which plays after the first and pays at its own release (an NPC the first cast killed is raised before the
+queued goal's first frame); the drops (no eye candy, a target failing first, a refused start, a lost hero) have no smoke.
 
 ## Eye candy (ARC-MAGIC-017)
 
@@ -257,6 +272,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
+| Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | `MagicAnomalyProfile.DroppedQueueKeepsRuns` (pending owner decision; recommended and built: fix) |
+| A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
@@ -266,10 +283,13 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A missile's art with a frame rate of 0 divides by zero at its setup (0x42F2D0). | Its pace is 100 ms, as for an art that does not read. | — |
 | A missile carries its entry's light (0x458C00) and is drawn at its object's scale. | No light; drawn at its art id's draw scale. | — (not ready) |
 | A target object freed while the missile flies has its location read from a freed handle (not read). | A target gone from the map counts as arrived; the re-check then refuses it. | — |
+| Goal 28's first leg builds its line only when the reused run slot's path flag is set; a slot whose last run did not end through the end step flies its stale line, and a never-used one does not advance (SM9; not observed in play). | The first leg always builds its line. | — (latent, no switch) |
+| The missile plays its projectile entry's sound (0x458C00). | No sound. | — (not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
-- **Queued cast.** A queued cast stores its casting animation in another slot than the one goal 83 plays.
+- **Queued cast.** A queued cast stores its casting animation in another slot than the one goal 83 plays (no college spell has a
+  casting animation).
 - **Overlay art.** A refused goal's overlay removal is called with art 0.
 
 ## Not ready
@@ -277,8 +297,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
 - Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
   (EC9, EC11, EC12).
-- A second cast while one plays: the original queues it under the running goal (SU13); the viewer refuses it ("a cast is still
-  playing"), ignores world presses and the stick until the goal ends, and refuses F7 meanwhile (the session saves no goal).
+- Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
+  meanwhile (the session saves no goal or queue).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
   (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
 - A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse

@@ -57,7 +57,7 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_OPTIONS_READY_REQUIRED");
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
-        var before = (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes);
+        var before = (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes, _ruleMode);
         void Letter(char letter)
         {
             var key = (Key)char.ToUpperInvariant(letter);
@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off"]),
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]),
                 "Game page: " + string.Join("|", Controls()));
             Require(panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
                 "hidden page and controls are named: " + panel.NoteForSelfTest);
@@ -92,6 +92,11 @@ public partial class TerrainViewerApp
             panel.ChangeForSelfTest(2, -1);
             panel.ChangeForSelfTest(3, 1);
             Require(!_gameSettings.AutoAttack && _alwaysRunOption && Controls()[2] == "Auto Attack: Off" && Controls()[3] == "Always Run: On", "auto attack off, Always Run on");
+            // ARC-UI-014: the rule mode switches the session in play, both ways.
+            panel.ChangeForSelfTest(4, 1);
+            Require(_ruleMode == RuleMode.Original && _areaSession!.Rules.Mode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original on the session");
+            panel.ChangeForSelfTest(4, 1);
+            Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
 
             // The Sound page: a volume moves its channel; a slider stops at its end.
             Letter('s');
@@ -119,14 +124,14 @@ public partial class TerrainViewerApp
             Require(_mainMenu?.Window == AreaMenuWindow.Options, "the O key does nothing from the main menu");
             Letter('d');
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main, "Done went back to the main menu");
-            return "in-play Options opens window 6 at Game (Video hidden and named), arrows apply difficulty/turn-based/auto attack/Always Run/volume at once, "
+            return "in-play Options opens window 6 at Game (Video hidden and named), arrows apply difficulty/turn-based/auto attack/Always Run/rule mode/volume at once, "
                 + "lists wrap and sliders stop, Escape does nothing, Done and O close the menu from play, Done goes back from the main menu";
         }
         finally
         {
             if (_mainMenu is not null) EndMainMenu("self-test end");
-            (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes) = before;
-            _areaSession?.SelectDifficulty(_gameSettings.SessionDifficulty);
+            (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes, _ruleMode) = before;
+            if (_areaSession is { } current) ApplySessionSettings(current);
             _saveLibraryForSelfTest = null; _quickKeys.Reset(); _heroLoaderForSelfTest = null; _mainMenuExitForSelfTest = null;
             _worldFocusSimulationForSelfTest = simulatedFocus;
             System.IO.Directory.Delete(_mainMenuDirectoryForSelfTest, recursive: true);

@@ -87,7 +87,7 @@ public partial class TerrainViewerApp
                 result.Hero, reputations.Catalog);
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
             AttachAreaEncumbranceEffect();
-            ApplyDifficulty(_areaSession);
+            ApplySessionSettings(_areaSession);
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
@@ -118,6 +118,7 @@ public partial class TerrainViewerApp
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
+        EndBarter(); _barterStatus = null; _barterPending = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
         EndMainMenuForTeardown();

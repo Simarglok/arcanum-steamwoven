@@ -1330,15 +1330,15 @@ in crash-site-area, opened by Options in the main menu and in both in-play windo
 project's.
 
 - **Pages.** The buttons Game, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
-  letters G, S, D); the window opens at the Game page each time. The letters act as in the other menu windows; the
-  original's options window ignores them (an original bug: its hotkey path runs such buttons only in the in-play
-  windows, OP7), so there only a click chooses a page or Done. The original's Video page (Brightness, Text
+  letters G, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
+  rule modes; the original's options window ignores them (an original bug: its hotkey path runs such buttons only in
+  the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The original's Video page (Brightness, Text
   Duration, Floats, Float Speed, Combat Taunts) is hidden with its reason, as Steamwoven has no gamma control,
   floating text or combat taunts; so is its V letter.
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
-  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack and Always
-  Run. Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
+  Run and the project's Rules line (ARC-UI-014, below). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
   slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
@@ -1348,6 +1348,14 @@ project's.
   value and names why, where the original's setting keeps the new value, OP5), without one the setting changes alone;
   a quick load that brings a round turns it on and saves it. Auto Attack is the real-time attack repeat's setting
   (ARC-COMBAT-005). Always Run and the three volumes are the palette's settings (ARC-WORLD-020, ARC-UI-044).
+- **Rules (ARC-UI-014).** A line the original's table does not have, after its eight Game slots, with project texts
+  only (the label and values never come from the game's files): Steamwoven (default) or Original, the two built-in
+  [rule modes](../world/rule-modes.md); custom mixes come after alpha (owner, 2026-10-28). A change switches the
+  session at once (`GameSessionOwner.SelectRules`; the contract makes a switch in play safe), and every session the
+  viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
+  together with the difficulty. The choice lasts the run and is not stored yet: its stored value belongs to the
+  launcher's settings file (`launcher_v1.json`, [launcher research](../research/launcher-settings.md)), which the
+  launcher task's next step writes through the launcher's store; every run starts in Steamwoven until then.
 - **Storage.** User preferences, never part of a save: difficulty, turn-based and auto attack in
   `user://game_settings_v1.json` (`{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}`; a missing or invalid file
   reads as the original's defaults 1, off, on), Always Run and the volumes in their own files. Each change is saved at
@@ -1360,11 +1368,12 @@ Self-test `ARC-UI-013 self-test PASS synthetic options window` (the production a
 launched without the menu, no preference file): in-play Options opening the window at its Game page with the Video
 page hidden and named, each arrow applying the difficulty (on the session), the turn-based setting, auto attack,
 Always Run and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
-from play, Done going back from the main menu. Native smoke on the original data, map mode on the start map with
+from play, Done going back from the main menu, the Rules line switching the session to Original and back. Native smoke on the original data, map mode on the start map with
 `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=options` prints `ARC-UI-013 native-smoke options PASS` (all 27 option
-texts from the game, the original's defaults shown, a music step moving the channel, Done back to the main menu, a new
-game as the first hero, then in play a difficulty step reaching the session and the default combat mode going through
-the hero's turn-based switch and back, the O key closing the menu). Not done: the Video page's settings, Module,
+texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
+Done back to the main menu, a new game as the first hero beginning under the Original rules, then in play a difficulty
+step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
+Steamwoven on the session, the O key closing the menu). Not done: the Video page's settings, Module,
 Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
 button sounds.
 
@@ -1445,6 +1454,28 @@ a detached copy; the reply pick is covered by `AreaSchematicConversationTests`);
 native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematics PASS` (the module's schematic data load; with
 `--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
 holding a learned record's components one assembly makes its product).
+
+### Barter window (ARC-UI-050)
+
+A conversation reply `b:` ends the talk and opens a diagnostic barter window with the speaker as merchant once nothing else owns input
+(crash-site-area: exterior, cave and `--area-map`; it needs `--hero`). Contract: [barter runtime](../world/barter-runtime.md), ledger
+[BT1–BT10](../research/ledger/items.md#barter-arc-ui-050). The header shows the hero's and the merchant's gold, the hero's haggle
+effectiveness and training, the merchant's reaction, price multiplier and buy list (`Listed`, `Everything`, `None`, `Emptied`), a fence and
+a buy-object script; the left column has a `Sell:` button per hero item with its sale quote, the right column a `Buy:` button per
+merchant ware (not worn, not coins) with its buy quote; a quote of 0 shows its reason (`NotDealt`, `WontSell`, `Stolen`, ...) and its
+button is disabled; a follower's window is free. A stack trades whole at the unit price × units. A trade runs through the session,
+prints `sold …`/`bought … for N` with a reaction change, or `not enough money`, `won't buy (…)`, `the merchant cannot pay`, and requests
+the trade sound 8158. Like the schematic window it is modal (gate closed, clock paused, a walk stopped) and owns every key: `Escape`, a
+controller cancel or `Close` closes it. A quick load, a map change or a dead hero closes it. The inventory sources and every item
+prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal.
+
+**Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
+the follower menu and cycling, the substitute container (installed merchants keep their stock there, so they show only their own list),
+the identified flag and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+`ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
+with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
+`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, its quotes, `Escape` closes
+with nothing changed; one sale and one buy on a detached copy).
 
 ### Reading window (ARC-UI-049)
 

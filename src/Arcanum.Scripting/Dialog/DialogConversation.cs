@@ -142,7 +142,7 @@ public sealed class DialogConversation
                 BuildOffers(_step!);
                 return Phase == DialogConversationPhase.AwaitingSelection ? new(DialogConversationSelectStatus.StaleSelection) : Result();
             }
-            var pending = plan.Reply.Action!.Count + (plan.Reply.Insult is null ? 0 : 1);
+            var pending = plan.Reply.Action!.Count + (plan.Reply.Insult is null ? 0 : 1) + (plan.Reply.Barter is null ? 0 : 1);
             if (!Admit(plan.Target, pending))
             {
                 return Result();
@@ -178,6 +178,12 @@ public sealed class DialogConversation
                 return Result();
             case DialogOptionTransition.Schematics:
                 Finish(new DialogConversationEnd(DialogEndKind.SchematicWindow, null));
+                return Result();
+            case DialogOptionTransition.Barter:
+                if (OpenBarter(plan!.Reply.Barter!.Value))
+                {
+                    Finish(new DialogConversationEnd(DialogEndKind.BarterWindow, null));
+                }
                 return Result();
             case DialogOptionTransition.Exit:
                 Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(_request.CallerLine.Value + 1)));
@@ -751,6 +757,31 @@ public sealed class DialogConversation
         return true;
     }
 
+    // ARC-UI-050: the barter open after the reply's action (0x413130 state 3 → 0x567E30 → 0x572240).
+    private bool OpenBarter(DialogOperationSource source)
+    {
+        var command = new OpenBarterCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+        DialogCommandResult result;
+        try
+        {
+            result = _ports.Barter!.Execute(command);
+        }
+        catch (Exception)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Indeterminate);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandIndeterminate, CurrentNode, source));
+            return false;
+        }
+        if (result != DialogCommandResult.Applied)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Rejected);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandRejected, CurrentNode, source));
+            return false;
+        }
+        Record(command, source, DialogCommandAttemptOutcome.Applied);
+        return true;
+    }
+
     private void Record(DialogCommand command, DialogOperationSource source, DialogCommandAttemptOutcome outcome, GlobalFlagWriteReceipt? receipt = null) =>
         _effects.Add(new DialogEffectReceipt(_effects.Count, Turn, command, source, outcome, receipt));
 
@@ -905,6 +936,7 @@ public sealed class DialogConversation
         DialogGeneratedMarker? marker = null;
         DialogOptionBlock? block = null;
         DialogOperationSource? insult = null;
+        DialogOperationSource? barter = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
@@ -926,6 +958,16 @@ public sealed class DialogConversation
             marker = found;
             text = string.Empty;
             insult = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
+                record.Text.PayloadOffset, 0, 2, 0);
+        }
+        else if (found is { Letter: 'b' } && exact && _ports.Barter is not null)
+        {
+            // ARC-UI-050: the original's barter reply (exactly "b:", 0x416C10 → 0x4182D0): a generated phrase (not loaded) whose pick runs
+            // the reply's action and then opens the barter window (state 3, 0x567E30); its response value is not followed.
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            barter = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
                 record.Text.PayloadOffset, 0, 2, 0);
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
@@ -952,6 +994,10 @@ public sealed class DialogConversation
         if (block is not null)
         {
             transition = DialogOptionTransition.Unsupported;
+        }
+        else if (barter is not null)
+        {
+            transition = DialogOptionTransition.Barter;
         }
         else if (value > 0)
         {
@@ -1044,6 +1090,12 @@ public sealed class DialogConversation
                 line = null;
             }
         }
+        if (block is null && barter is not null && action is not null && action.Any(operation => operation is ConversationJoin or ConversationUnwait or
+                ConversationFinalLine or ConversationExpertTeacher or ConversationSchematics))
+        {
+            // A dialog transfer or the schematic window in the same reply is outside this subset.
+            block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, barter);
+        }
         if (block is null && action is not null && action.FirstOrDefault(operation => operation is ConversationSchematics) is { } schematics)
         {
             // SU (0x415BA0) sets the pending window code and every action of the field still runs; the reply's target node is never
@@ -1060,7 +1112,7 @@ public sealed class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null);
+            block is null ? insult : null, block is null ? barter : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1193,7 +1245,8 @@ public sealed class DialogConversation
         DialogScriptLine? ScriptLine,
         IReadOnlyList<ConversationOperation>? Action,
         DialogOptionBlock? Block,
-        DialogOperationSource? Insult);
+        DialogOperationSource? Insult,
+        DialogOperationSource? Barter = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
