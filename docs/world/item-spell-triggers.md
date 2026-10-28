@@ -263,11 +263,10 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 - The item use's other branches (reading, lockpick, healing kit, food and scroll spending without magic) are the host's own calls
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
-- The item events of an NPC's attack (ARC-WORLD-092's `AttackByNpc` fires no damage step events yet). No viewer caller sets the
-  cast host's `ItemTriggers`, fires a life result's item events or asks for the attack start's and the shot ends' events (its cast
-  host has no item lookup), and the viewer does not report the dying animation's end.
-  Since ARC-UI-031 the viewer's cast host has its item lookup and its `ItemTriggers` (below); its attacks, the life results the viewer
-  makes itself (running, overexertion) and the dying animation's end still fire nothing. The 14 thrown items with
+- The item events of an NPC's attack (ARC-WORLD-092's `AttackByNpc` fires no damage step events yet). The viewer's cast host has
+  its item lookup and its `ItemTriggers` since ARC-UI-031 (below), but no viewer caller fires the life results the viewer makes
+  itself (running, overexertion) or asks for the attack start's and the shot ends' events, and the viewer does not report the
+  dying animation's end. The 14 thrown items with
   `Parent_Atks_Location` fire nothing yet: the session throws only a wielded "default throws" weapon (the throwing dagger 6072),
   and the AI's throw goal is not hosted. The projectile ends' script points (7, 8, 0x22, 0x23) run no script. The aims at the
   other's worn weapon or armour stay not ready (no installed record uses them).
@@ -282,6 +281,9 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
   holder through that lookup (`AreaSpellCastMap.Object` answers none for the inventory flag 0x1000). It is built with its
   `ItemTriggers` (one `SessionItemTriggers`, the same the window's moves and item use pass), so its own spell damage steps, payments
   and event passes fire the worn items of the hero and the shown map's NPCs. NOT READY: made items (no row, no prototype facts), a
-  companion visiting from another map (its items stay on its home map's list), a container's items (no executor reaches them). The cast smoke checks it before its first
+  companion visiting from another map (its items stay on its home map's list), a kit item the hero gave or sold to an NPC (no row),
+  a container's items (no executor reaches them). A ground row the hero took and then gave to an NPC still answers as a map object at
+  its old cell (the row's cell is not moved, an older gap). A carried NPC item the session destroyed or a critical hit dropped is no
+  object at all (as the hero's are), so a run aimed at it does not see it gone. The cast smoke checks it before its first
   cast (every item the map's NPCs hold is known as its NPC's and stands at it) and records the first cast's executor calls (every NPC
   item walked known as its holder's): marker `ARC-UI-031 native-smoke item-triggers PASS`.
