@@ -44,6 +44,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
 | Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
+| Weapon spell pane | [Magic](status/magic.md) | ARC-UI-016 |
 | Spell missile and caster facing | [Magic](status/magic.md) | ARC-MAGIC-018 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
@@ -109,6 +110,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Barter window | [Items and inventory](status/items.md) | ARC-UI-050 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
 | Background table | [Game session and character](status/session.md) | ARC-DATA-044 |
+| Portrait catalogue | [Game session and character](status/session.md) | ARC-DATA-045 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |
 | Fate points | [Skills](status/skills.md) | ARC-WORLD-054 |

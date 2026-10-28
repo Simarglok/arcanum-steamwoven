@@ -230,7 +230,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
   and the viewer does not report the dying animation's end; the hero's critical miss fires only the fatigue setter's event, and
   only for a host that fires its result. The global attacker (IC6) needs the run's other object, which
   the invocation does not carry (MT7). The aims at the other's worn weapon or armour stay not ready (no installed record uses them).
-- The item spell pane and hotkeys (0x57C040, 0x57C080, IT9), and spells aimed at an inventory item.
+- Hotkeys (0x57C080, IP7–IP9) and spells aimed at an inventory item; the weapon's spell pane (0x57C040) is in the viewer since
+  ARC-UI-016 ([spell cast host](spell-cast-host.md#the-weapons-spell-pane-arc-ui-016)).
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.
 - A first break of a marked worn item takes it off without its unwear (0x4CBFC0), and its runs keep the item as source.
 - The viewer's inventory window (ARC-UI-015) passes `SessionItemTriggers` over the shown map's cast host to `Equip` and `Unequip`,
