@@ -18,6 +18,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
     private AreaGameBar _bar = new();
     private AreaMessageLogView _messageLog = null!;
+    // ARC-UI-024: the hovered critter's portrait and name in the message window (PA6).
+    private TextureRect _hoverImage = null!;
+    private Label _hoverName = null!;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -41,6 +44,19 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
     internal string HoverTextForSelfTest => _messageLog.HoverTextForSelfTest;
+    /// <summary>The message window's hovered portrait (its texture, null none) and name ("" none).</summary>
+    internal (Texture2D? Image, string Name, Rect2 Rect) HoverPortraitForSelfTest =>
+        (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverName.Visible ? _hoverName.Text : "", _hoverImage.GetGlobalRect());
+
+    /// <summary>The whole factor at which the original's 800 × 600 screen fits a window of <paramref name="size"/> (at least 1).</summary>
+    public static int ScreenFactor(Vector2 size) =>
+        Math.Max(1, (int)Math.Floor(Math.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight)));
+
+    /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
+    public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
+
+    /// <summary>ARC-UI-024: frame <paramref name="frame"/> of an interface art the bars read (the vials' art among them), or null.</summary>
+    public Texture2D? ArtFrame(int number, int frame = 0) => _art.TryGetValue(number, out var frames) && frame >= 0 && frame < frames.Length ? frames[frame] : null;
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
@@ -74,6 +90,21 @@ public partial class AreaGameBarPanel : CanvasLayer
             _buttons[button] = rect;
             _strips[spec.Strip].AddChild(rect);
         }
+        var (ix, iy) = AreaGameBarLayout.HoverImage;
+        _hoverImage = new TextureRect
+        {
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Keep,
+            Name = "HoverPortrait", Position = new Vector2(ix, iy - AreaGameBarLayout.BottomTop), MouseFilter = Control.MouseFilterEnum.Ignore,
+            Size = new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize), Visible = false,
+        };
+        var (nx, ny, nw, nh) = AreaGameBarLayout.HoverNameLine;
+        _hoverName = new Label
+        {
+            Name = "HoverCritterName", Position = new Vector2(nx, ny - AreaGameBarLayout.BottomTop), Size = new Vector2(nw, nh),
+            MouseFilter = Control.MouseFilterEnum.Ignore, ClipText = true, Visible = false, Modulate = new Color(1f, .93f, .75f),
+        };
+        _strips[AreaBarStrip.Bottom].AddChild(_hoverImage);
+        _strips[AreaBarStrip.Bottom].AddChild(_hoverName);
         GetViewport().SizeChanged += Place;
         VisibilityChanged += Place;
         Place();
@@ -87,6 +118,19 @@ public partial class AreaGameBarPanel : CanvasLayer
         _bar = bar ?? throw new ArgumentNullException(nameof(bar));
         _messageLog.Bind(log ?? throw new ArgumentNullException(nameof(log)), art);
         if (IsNodeReady()) Render();
+    }
+
+    /// <summary>ARC-UI-024: shows a hovered critter's portrait (drawn at its own size from the image's top left) and name in the
+    /// message window, as the original's hovered-object panel does for the PC and its followers with a portrait (PA6); null hides
+    /// them.</summary>
+    public void ShowHoverPortrait(Texture2D? portrait, string? name)
+    {
+        _hoverImage.Texture = portrait;
+        _hoverImage.Visible = portrait is not null;
+        _hoverName.Text = portrait is null ? "" : name ?? "";
+        _hoverName.Visible = portrait is not null && !string.IsNullOrEmpty(name);
+        // The original's hovered-object panel takes the message window: the log's texts give way while it is shown.
+        _messageLog.Visible = portrait is null;
     }
 
     /// <summary>ARC-UI-027: puts <paramref name="part"/> on <paramref name="strip"/>, in the strip's own frame (scaled and placed with it),
@@ -138,8 +182,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     private void Place()
     {
         var size = GetViewport().GetVisibleRect().Size;
-        Factor = Math.Max(1, (int)Math.Floor(Math.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight)));
-        var left = MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * Factor) / 2);
+        Factor = ScreenFactor(size);
+        var left = ScreenLeft(size, Factor);
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
         _strips[AreaBarStrip.Bottom].Position = new Vector2(left, size.Y - AreaGameBarLayout.BottomHeight * Factor);
         foreach (var strip in _strips.Values) strip.Scale = new Vector2(Factor, Factor);
