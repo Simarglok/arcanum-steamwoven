@@ -123,8 +123,9 @@ public interface IAreaDeathHost
     void EndSlide();
     /// <summary>The slides end: their music stops and the picture goes.</summary>
     void EndSlides();
-    /// <summary>Ends the game and opens the main menu (PD8); null when that began, else why it could not.</summary>
-    string? Reset();
+    /// <summary>Ends the game and opens the main menu (PD8); null when that began, else why it could not, with
+    /// <paramref name="lasting"/> true when trying again cannot help (no start scene is known).</summary>
+    string? Reset(out bool lasting);
 }
 
 /// <summary>
@@ -148,16 +149,15 @@ public sealed class AreaHeroDeath
     public const int DefaultSlide = 0;
     /// <summary>The original's slide queue holds up to 100 slides.</summary>
     public const int MaxQueued = 100;
-    /// <summary>A reset refused this many times running gives up (the original's reset cannot be refused): the screen fades in
-    /// over the game as it is, with the refusal kept.</summary>
-    public const int MaxResetTries = 20;
-    /// <summary>A reset that began but whose main menu never came gives up after this long (ms).</summary>
+    /// <summary>A reset whose main menu has not come this long after its first try (refused all along, or begun and never
+    /// finished) gives up (ms); a lasting refusal gives up at once. The original's reset cannot be refused: giving up fades the
+    /// screen in over the game as it is, with the refusal kept.</summary>
     public const int ResetTimeout = 120_000;
     private readonly List<int> _queue = [];
     private bool _wasDead;
     private bool _stopShow;
     private AreaSlidePair? _slide;
-    private int _resetTries;
+    private double _resetElapsed;
 
     public AreaDeathStage Stage { get; private set; }
     /// <summary>The time left in a waiting or fading stage (ms).</summary>
@@ -168,8 +168,7 @@ public sealed class AreaHeroDeath
     public AreaSlidePair? Slide => _slide;
     /// <summary>The slides shown so far in this death.</summary>
     public int Shown { get; private set; }
-    /// <summary>Why the reset did not begin (it is tried again 0.3 s later, up to <see cref="MaxResetTries"/> times); null when it
-    /// did.</summary>
+    /// <summary>Why the reset did not begin (it is tried again 0.3 s later, until <see cref="ResetTimeout"/>); null when it did.</summary>
     public string? ResetRefusal { get; private set; }
     /// <summary>True when the reset gave up (refused too often, or no menu came): the game stays as it was.</summary>
     public bool ResetAbandoned { get; private set; }
@@ -221,8 +220,8 @@ public sealed class AreaHeroDeath
                 return;
             case AreaDeathStage.Reset:
                 // Waiting for the main menu (MenuReady), or for the next try of a refused reset; neither waits forever.
-                if ((Remaining -= milliseconds) > 0) return;
-                if (ResetRefusal is null || ++_resetTries >= MaxResetTries) { Abandon(host); return; }
+                if ((_resetElapsed += milliseconds) >= ResetTimeout) { Abandon(host); return; }
+                if (ResetRefusal is null || (Remaining -= milliseconds) > 0) return;
                 BeginReset(host);
                 return;
             case AreaDeathStage.MenuFadeIn:
@@ -259,7 +258,7 @@ public sealed class AreaHeroDeath
         if (!host.HeroDead) { Stage = AreaDeathStage.Watching; _wasDead = false; return; }
         host.CloseWindows();
         if (host.MenuOpen) { host.CloseMenu(); Remaining = MenuRetryDelay; return; }
-        _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetTries = 0;
+        _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetElapsed = 0;
         if (host.Slides.Loaded) _queue.Add(DefaultSlide);
         host.Fade(true, FadeTime);
         Stage = AreaDeathStage.FadeOut; Remaining = FadeTime;
@@ -299,10 +298,11 @@ public sealed class AreaHeroDeath
     private void BeginReset(IAreaDeathHost host)
     {
         Stage = AreaDeathStage.Reset;
-        ResetRefusal = null; Remaining = ResetTimeout;
+        ResetRefusal = null; Remaining = 0;
         // A host whose menu opens at once calls MenuReady from inside Reset.
-        if (host.Reset() is not { } refusal) return;
+        if (host.Reset(out var lasting) is not { } refusal) return;
         ResetRefusal = refusal; Remaining = MenuRetryDelay;
+        if (lasting) Abandon(host);
     }
 
     /// <summary>The reset gave up: the screen fades in over the game as it is (the refusal stays readable).</summary>

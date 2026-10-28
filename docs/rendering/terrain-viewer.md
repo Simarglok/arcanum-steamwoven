@@ -1489,8 +1489,9 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
   arguments with a fresh session and the main menu reopens over it (its root Escape exits), fading in from black (2 s).
   Saves are not touched; a load is the main menu's (Single Player, Load Game or Last Save). There is no window with a
   choice. A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
-  the screen black, up to 20 times; then, or when no menu has come 2 minutes after the reset began, the screen fades in
-  over the game as it is (the original's reset cannot be refused). A start scene that fails shows its failure.
+  the screen black; when no start scene is known (no launch arguments, a start map the shown map does not know), or no
+  menu has come 2 minutes after the first try, the screen fades in over the game as it is (the original's reset cannot
+  be refused). A start scene that fails shows its failure.
 
 Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
 or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over

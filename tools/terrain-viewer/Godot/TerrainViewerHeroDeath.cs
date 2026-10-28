@@ -216,10 +216,13 @@ public partial class TerrainViewerApp
             app.DeathPanel().ShowPicture(null);
         }
 
-        public string? Reset()
+        public string? Reset(out bool lasting)
         {
             // The original prints "DEATH: Resetting game!", resets the game and the interface and starts the main menu (PD8).
             GD.Print("ARC-UI-026 hero death: resetting the game");
+            // No start scene known (no launch arguments, a start map the shown map does not know) never comes right by waiting;
+            // a load or reset in progress does.
+            lasting = app.StartSceneArguments(out _) is null;
             return app.BeginSceneFlow(SceneFlowKind.Menu, -1, "the hero died");
         }
     }

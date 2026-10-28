@@ -154,17 +154,24 @@ public partial class TerrainViewerApp
     {
         var flow = _sceneFlow;
         _arguments = next; _lastPublishedFailure = null;
-        if (_sceneLoadForSelfTest is { } load) await load(next);
-        else await StartLoadAsync(next, false);
-        // The start scene did not publish (a failure stays on screen with its stage): nothing runs on a later scene.
-        if (flow is not null && ReferenceEquals(_sceneFlow, flow))
+        try
         {
-            _sceneFlow = null;
-            GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
+            if (_sceneLoadForSelfTest is { } load) await load(next);
+            else await StartLoadAsync(next, false);
         }
-        // ARC-UI-026: a death's black screen gives way to whatever is shown now (the reopened menu fades in already; a failure, or a
-        // load another one superseded, is not left under black).
-        HeroDeathSceneReady();
+        finally
+        {
+            // The start scene did not publish (a failure stays on screen with its stage, or the load threw): nothing runs on a later
+            // scene, and the next quit, new game or death may load it again.
+            if (flow is not null && ReferenceEquals(_sceneFlow, flow))
+            {
+                _sceneFlow = null;
+                GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
+            }
+            // ARC-UI-026: a death's black screen gives way to whatever is shown now (the reopened menu fades in already; a failure, or
+            // a load another one superseded, is not left under black).
+            HeroDeathSceneReady();
+        }
     }
 
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>

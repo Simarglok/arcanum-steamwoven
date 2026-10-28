@@ -26,7 +26,8 @@ public sealed class AreaHeroDeathTests
         public bool StartVoice(AreaSlidePair slide) { Calls.Add("voice " + slide.Voice); VoicePlaying = VoiceStarts; return VoiceStarts; }
         public void EndSlide() { Calls.Add("end slide"); VoicePlaying = false; }
         public void EndSlides() => Calls.Add("end slides");
-        public string? Reset() { Calls.Add("reset"); return Refusal; }
+        public bool Lasting { get; set; }
+        public string? Reset(out bool lasting) { Calls.Add("reset"); lasting = Lasting; return Refusal; }
     }
 
     private static (AreaHeroDeath Death, Host Host) Died()
@@ -213,19 +214,28 @@ public sealed class AreaHeroDeathTests
     }
 
     [TestMethod]
-    public void A_reset_refused_too_often_or_without_a_menu_gives_up_and_fades_in()
+    public void A_lasting_refusal_or_two_minutes_without_a_menu_gives_up_and_fades_in()
     {
         var (death, host) = Died();
         host.Slides = AreaSlideTable.None("t");
-        host.Refusal = "the launch arguments are not known";
+        host.Refusal = "the launch arguments are not known"; host.Lasting = true;
         death.Tick(AreaHeroDeath.DeathDelay, host); death.Tick(AreaHeroDeath.FadeTime, host);
-        for (var i = 0; i < AreaHeroDeath.MaxResetTries; i++) death.Tick(AreaHeroDeath.MenuRetryDelay, host);
-        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage, "a lasting refusal gives up at once");
         Assert.IsTrue(death.ResetAbandoned);
         Assert.AreEqual("the launch arguments are not known", death.ResetRefusal);
-        Assert.AreEqual(AreaHeroDeath.MaxResetTries, host.Calls.Count(call => call == "reset"));
+        Assert.AreEqual(1, host.Calls.Count(call => call == "reset"));
         death.Tick(AreaHeroDeath.FadeTime, host);
         Assert.AreEqual(AreaDeathStage.Watching, death.Stage, "the dead hero stays: a death starts it again, not this one");
+        // A passing refusal (a map loading) is tried again until two minutes have gone.
+        var (busy, loading) = Died();
+        loading.Slides = AreaSlideTable.None("t");
+        loading.Refusal = "another map is loading";
+        busy.Tick(AreaHeroDeath.DeathDelay, loading); busy.Tick(AreaHeroDeath.FadeTime, loading);
+        for (var i = 0; i < 100; i++) busy.Tick(AreaHeroDeath.MenuRetryDelay, loading);
+        Assert.AreEqual(AreaDeathStage.Reset, busy.Stage, "30 s of a loading map is waited out");
+        busy.Tick(AreaHeroDeath.ResetTimeout, loading);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, busy.Stage);
+        Assert.IsTrue(busy.ResetAbandoned);
         // A reset that began but whose menu never comes gives up too.
         var (waiting, other) = Died();
         other.Slides = AreaSlideTable.None("t");
@@ -268,6 +278,6 @@ public sealed class AreaHeroDeathTests
         public bool StartVoice(AreaSlidePair slide) => inner.StartVoice(slide);
         public void EndSlide() => inner.EndSlide();
         public void EndSlides() => inner.EndSlides();
-        public string? Reset() { death.MenuReady(this); return null; }
+        public string? Reset(out bool lasting) { lasting = false; death.MenuReady(this); return null; }
     }
 }
