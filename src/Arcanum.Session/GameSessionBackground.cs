@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Character;
+
 namespace Arcanum.Session;
 
 /// <summary>
@@ -26,6 +28,54 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         return _hero?.State.Background;
+    }
+
+    /// <summary>The description number stored with the hero's background (0 for none), or null without a hero (the description reader
+    /// 0x4C26D0, field 0x102; ARC-WORLD-097).</summary>
+    [Arcanum.Simulation.OriginalFunction(0x4C26D0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public int? QueryHeroBackgroundDescription()
+    {
+        ThrowIfDisposed();
+        return _hero?.State.BackgroundDescription;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-097: <c>background_set</c> (0x4C25E0, ledger BD5, BD9) for the hero: stores the background and its description number and
+    /// adds one entry of the choice's effect with the background cause, in one revision. It neither clears an earlier background nor
+    /// removes its effect: the creation screen clears first (<see cref="ClearHeroBackground"/>, BD4), and a second set without a clear
+    /// keeps both effects, as in the original. <paramref name="effect"/> is the rule of <see cref="Arcanum.Data.Characters.BackgroundChoice.Effect"/>
+    /// (an effect with no modelled change still enters the list). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>);
+    /// a background outside <see cref="SessionHeroLimits.MinBackground"/>..<see cref="SessionHeroLimits.MaxBackground"/> or an effect rule of
+    /// another number (<see cref="GameSessionFailure.InvalidBackground"/>); then the refusals of <see cref="AddHeroEffect"/>.
+    /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x4C25E0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public SessionEffectResult SetHeroBackground(GameSessionVersion expected, Arcanum.Data.Characters.BackgroundChoice choice,
+        SessionEffectDefinition effect)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(choice);
+        ArgumentNullException.ThrowIfNull(effect);
+        if (_hero is not { } hero) return RejectEffect(GameSessionFailure.InvalidHero);
+        if (choice.Background is < SessionHeroLimits.MinBackground or > SessionHeroLimits.MaxBackground || effect.Number != choice.Effect)
+            return RejectEffect(GameSessionFailure.InvalidBackground);
+        return AddEffects(expected, effect, EffectCause.Background, 1, null,
+            _ => hero.Apply(hero.State.WithBackground(choice.Background, choice.Description)));
+    }
+
+    /// <summary>
+    /// ARC-WORLD-097: the background clear (0x4C2650, ledger BD9) for the hero: zeroes the background and its description number and removes
+    /// the first effect entry with the background cause (0x4EA2E0), whatever its number, in one revision. Other background-caused entries
+    /// stay. No change when both numbers are 0 and no entry has that cause. Refused without a hero
+    /// (<see cref="GameSessionFailure.InvalidHero"/>) and on a stale version.
+    /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x4C2650, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public SessionEffectResult ClearHeroBackground(GameSessionVersion expected)
+    {
+        ThrowIfDisposed();
+        if (_hero is not { } hero) return RejectEffect(GameSessionFailure.InvalidHero);
+        var stored = hero.State.Background != SessionBackgrounds.None || hero.State.BackgroundDescription != 0;
+        return RemoveEffects(expected, null, 1, EffectCause.Background,
+            apply: stored ? _ => hero.Apply(hero.State.WithBackground(SessionBackgrounds.None, 0)) : null);
     }
 
     /// <summary>
