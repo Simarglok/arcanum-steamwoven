@@ -198,7 +198,7 @@ public sealed class NpcInventoryStateTests
         Added(owner, "virgil");
         Added(owner, "virgil", Gear with { Prototype = 2321 });
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"npcs\":[{\"npc\":\"corpse\",\"items\":[{\"entity\":\"" + corpse + "\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6}]}," +
+        StringAssert.Contains(text, ",\"npcs\":[{\"npc\":\"corpse\",\"items\":[{\"entity\":\"" + corpse + "\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}]}," +
             "{\"npc\":\"virgil\",\"items\":[{\"entity\":\"made:2\"");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
@@ -221,8 +221,8 @@ public sealed class NpcInventoryStateTests
         Added(owner, "corpse");
         Added(owner, "virgil");
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string Corpse = "{\"npc\":\"corpse\",\"items\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6}]}";
-        const string Virgil = "{\"npc\":\"virgil\",\"items\":[{\"entity\":\"made:2\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6}]}";
+        const string Corpse = "{\"npc\":\"corpse\",\"items\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}]}";
+        const string Virgil = "{\"npc\":\"virgil\",\"items\":[{\"entity\":\"made:2\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}]}";
         StringAssert.Contains(text, Corpse + "," + Virgil);
         SnapshotDecodeFailure Decoded(string damaged) => GameSessionSnapshotCodec.TryDecode(damaged).Failure;
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, Decoded(text.Replace(Corpse + "," + Virgil, Virgil + "," + Corpse)), "NPC order");

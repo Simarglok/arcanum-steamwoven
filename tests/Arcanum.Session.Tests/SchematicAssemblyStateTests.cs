@@ -137,7 +137,7 @@ public sealed class SchematicAssemblyStateTests
         using var again = Owner();
         again.AssembleSchematic(again.Version, Schematic([2100], [2100]), InBag, Facts, Kinds, Accept);
         var saved = GameSessionSnapshotCodec.Encode(again.Capture());
-        StringAssert.Contains(saved, ",\"made\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6}],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[]},");
+        StringAssert.Contains(saved, ",\"made\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[]},");
         GameSessionFailure Restore(string json) => GameSessionOwner.Restore(Decode(json), RestoreOptions()).Failure;
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restore(saved.Replace("\"made:1\"", "\"made:0\"", StringComparison.Ordinal)));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restore(saved.Replace("\"made:1\"", "\"forged\"", StringComparison.Ordinal)));

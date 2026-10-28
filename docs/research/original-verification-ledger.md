@@ -161,6 +161,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="turn-based-host-arc-combat-020"></a>[Turn-based host (ARC-COMBAT-020)](ledger/combat.md#turn-based-host-arc-combat-020) | [Combat](ledger/combat.md) | CT1–CT6 |
 | <a id="save-list-arc-ui-010"></a>[Save list (ARC-UI-010)](ledger/ui-audio.md#save-list-arc-ui-010) | [Interface windows and audio](ledger/ui-audio.md) | SL1–SL8 |
 | <a id="npc-gold-and-transfers-arc-world-071"></a>[NPC gold and transfers (ARC-WORLD-071)](ledger/items.md#npc-gold-and-transfers-arc-world-071) | [Items and inventory](ledger/items.md) | NT1–NT4 |
+| <a id="made-item-complexity-arc-world-083"></a>[Made item complexity (ARC-WORLD-083)](ledger/items.md#made-item-complexity-arc-world-083) | [Items and inventory](ledger/items.md) | MC1 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 
 ## Decisions to revisit

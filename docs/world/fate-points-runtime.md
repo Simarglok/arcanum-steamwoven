@@ -65,7 +65,7 @@ the revision. Every change is one revision; the full heal writes the points and 
 ## Snapshot schema 26
 
 The hero's object gains `fatePoints` (0..100) and `armedFates` (the bits of kinds 1..11); restore refuses anything else as
-`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-39)).
+`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-41)).
 
 ## Boundaries
 

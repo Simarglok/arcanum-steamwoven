@@ -86,7 +86,8 @@ count on the ground), or the refusal message of the plan's button.
 ## Made items (snapshot schema 24)
 
 `SessionInventoryState.Made` / `QueryMadeItems()`: `"inventory":{…,"made":[{"entity","type","prototype","name","description"}]}`,
-in the order they entered the list. Restore refuses a made item of a type the lists do not admit (`InvalidItem`), and an entity
+in the order they entered the list; since ARC-WORLD-083 (schema 41) each row ends with the product's `"complexity"`
+([made item complexity](inventory-runtime.md#made-item-complexity-arc-world-083)). Restore refuses a made item of a type the lists do not admit (`InvalidItem`), and an entity
 that is not `made:n`, that was deleted or that is held twice (`InvalidSnapshot`). Since ARC-WORLD-055 (schema 29) an NPC can hold
 made items too ([NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055)): the numbers are shared, and a made
 item the PC takes from an NPC joins this list in entry order (so the numbers need not ascend, and a heroless session can hold one). Made items count toward
