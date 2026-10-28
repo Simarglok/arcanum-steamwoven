@@ -35,16 +35,20 @@ public sealed record AreaShopMap(string Name, int RuntimeMap, CellCoord Start, A
     /// <summary>The merchant's object row.</summary>
     public AreaObjectRecord MerchantRow => Inventory.Row(Merchant);
 
-    /// <summary>The merchant of an inventory map (the original's first NPC, OS7): the first NPC holder of the seed whose stored fields read
-    /// and carry neither flag of <see cref="SkippedObjectFlags"/>; null when there is none.</summary>
+    /// <summary>The merchant of an inventory map (the original's first NPC, OS7): the first NPC holder of the seed whose stored fields carry
+    /// neither flag of <see cref="SkippedObjectFlags"/>; null when there is none. An NPC before it whose stored fields do not read stops the
+    /// search (<paramref name="unreadable"/>: the project cannot tell whether the original would take it).</summary>
     /// <param name="read">The stored fields of a row (null: <see cref="CombatFieldReader.Read(AreaObjectRecord)"/>; a test's fields).</param>
-    public static (string Entity, CombatFields Fields)? FirstNpc(AreaInventoryMap inventory, Func<AreaObjectRecord, CombatFields?>? read = null)
+    public static (string Entity, CombatFields Fields)? FirstNpc(AreaInventoryMap inventory, out string? unreadable, Func<AreaObjectRecord, CombatFields?>? read = null)
     {
         ArgumentNullException.ThrowIfNull(inventory);
         read ??= row => CombatFieldReader.Read(row).Fields;
-        foreach (var holder in inventory.Seed.Holders)
-            if (holder.Kind == SessionHolderKind.Npc && read(inventory.Row(holder.Entity)) is { Npc: not null } fields && (fields.Object.Flags & SkippedObjectFlags) == 0)
-                return (holder.Entity, fields);
+        unreadable = null;
+        foreach (var holder in inventory.Seed.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc))
+        {
+            if (read(inventory.Row(holder.Entity)) is not { Npc: not null } fields) { unreadable = holder.Entity; return null; }
+            if ((fields.Object.Flags & SkippedObjectFlags) == 0) return (holder.Entity, fields);
+        }
         return null;
     }
 
@@ -58,7 +62,9 @@ public sealed record AreaShopMap(string Name, int RuntimeMap, CellCoord Start, A
             return new(AreaShopMapStatus.Failed, null, $"the shop map {entry.Name} has no start tile");
         if (entry.Runtime != inventory.RuntimeMap)
             return new(AreaShopMapStatus.Failed, null, $"the shop map {entry.Name} is runtime map {entry.Runtime}, its inventory {inventory.RuntimeMap}");
-        if (FirstNpc(inventory, read) is not { } merchant) return new(AreaShopMapStatus.NoMerchant, null, $"the shop map {entry.Name} has no NPC");
+        if (FirstNpc(inventory, out var unreadable, read) is not { } merchant)
+            return unreadable is not null ? new(AreaShopMapStatus.Failed, null, $"the shop map {entry.Name}: the stored fields of NPC {unreadable} do not read")
+                : new(AreaShopMapStatus.NoMerchant, null, $"the shop map {entry.Name} has no NPC");
         return new(AreaShopMapStatus.Ready, new(entry.Name, entry.Runtime, new((int)start.X, (int)start.Y), inventory, merchant.Entity, merchant.Fields),
             $"{entry.Name} (runtime map {entry.Runtime}) merchant {merchant.Entity}");
     }
@@ -226,7 +232,7 @@ public sealed class AreaShopSession : IDisposable
     /// The game's start on this session (0x5412E0 with the new-game flag, OS5): the best weapon and body armour into empty slots, the
     /// kit's wear facts by kit number and a bought ware's from its shop row (<see cref="AreaNewCharacter.WieldStart"/>), then the PC is
     /// teleported to the start map's tile (<paramref name="startMap"/>, <paramref name="start"/>). Null on success, else why the session
-    /// refused it (nothing is taken then).
+    /// refused it: the session is not taken, but a wield done before a refused teleport stays (the caller drops the shop then).
     /// </summary>
     public string? Start(IReadOnlyList<SessionWearableItem?> kitWear, SessionMapId startMap, CellCoord start)
     {

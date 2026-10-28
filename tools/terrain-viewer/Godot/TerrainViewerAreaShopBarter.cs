@@ -1,5 +1,4 @@
 using Arcanum.Data.Traversal;
-using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 

@@ -1882,7 +1882,7 @@ teleports the PC to the start map.
   New Character opens; its inventory map gives the seed, the rows and the merchant: the first NPC of the seed whose object flags
   have neither destroyed nor off (OS7; installed: one NPC, price multiplier 58, no source of its own, its chest 2 tiles away with
   source 19). A module without a shop map or a shop map without an NPC starts the game at once, as the original (OS2); a map the
-  project cannot load leaves the shop with the kit alone and the reason in the window's note (`AreaMainMenu.ShopUnavailable`); while
+  project cannot load (or whose NPC before the merchant has fields that do not read) leaves the shop with the kit alone and the reason in the window's note (`AreaMainMenu.ShopUnavailable`); while
   it loads the note says so (`AreaMainMenu.ShopLoading`) and Accept starts the game with the kit.
 - **The shop's session** (`AreaShopSession.Open`): when the shop opens with its map and the barter data loaded, the new character's
   session is made as the start makes it (this scene's new-game recipe, the kit's hero, the window's choices and the editor's
@@ -1899,13 +1899,15 @@ teleports the PC to the start map.
 - **Accept** starts the game on the shop's session: the best weapon and body armour into empty slots (a ware bought in the shop
   counts: its wear facts come from its shop row, or for an item the regeneration made from its prototype), then the PC is teleported
   to the start map's tile (`AreaShopSession.Start`, OS5, OS10); the scene's seeds attach and the session is adopted as the start
-  adopts a new one. On a scene that is not the start scene the start scene loads first and the session it carries starts there.
+  adopts a new one. On a scene that is not the start scene the start scene loads first and the session it carries starts there. A
+  refused start drops the shop's session with its trades and the shop opens anew.
 - **Back** drops the shop's session with its trades (the kit goes too): the next opening makes the kit, the merchant's clear and the
   chest anew, as the original's next refresh redoes them; every point bought before the shop is still free (OS6).
 - **Not built.** The bought wares keep their facts only for the start's wield: in play a ware the regeneration made has no wear,
   use or move facts in the viewer (as any made item, NOT READY) and one from a shop row has them only while the shop map's rows are
-  held (not after the start). The restock event the barter open schedules on the shop map postpones while that map is not loaded,
-  as for any merchant left behind. The window's drop on the map outside it, which the original skips while the menu is open
+  held (not after the start). The restock event the barter open schedules on the shop map's chest does nothing when it comes due in play
+  (the start scene's restock host does not hold the shop map); after a load, whose session has no shop map seed, it postpones a
+  game minute at a time, as for any merchant left behind. The window's drop on the map outside it, which the original skips while the menu is open
   (0x574577), does not exist in the viewer's window.
 
 Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: the synthetic menu has no shop map, so the shop names the reason and

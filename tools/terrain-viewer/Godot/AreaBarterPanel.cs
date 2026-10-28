@@ -36,7 +36,8 @@ public partial class AreaBarterPanel : CanvasLayer
     public bool Docked
     {
         get => _docked;
-        set { _docked = value; if (_close is not null) _close.Visible = !value; ResizePanel(); }
+        // Above the menu's backdrop (layer 4), whichever panel the tree made first.
+        set { _docked = value; Layer = value ? 5 : 4; if (_close is not null) _close.Visible = !value; ResizePanel(); }
     }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;

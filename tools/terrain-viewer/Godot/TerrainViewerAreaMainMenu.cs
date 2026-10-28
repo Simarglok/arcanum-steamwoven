@@ -190,7 +190,14 @@ public partial class TerrainViewerApp
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
     private void ContinueSceneFlow(SceneFlowRequest flow)
     {
-        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); HeroDeathSceneReady(); return; }
+        if (!QuickKeysActive || _arguments is null)
+        {
+            GD.Print("ARC-UI-012 scene flow: the start scene has no game session");
+            // ARC-UI-038: the opening shop's session the flow carried goes with it.
+            flow.Creation?.DropShop();
+            HeroDeathSceneReady();
+            return;
+        }
         var texts = MainMenuTexts(_arguments);
         string? refused = null;
         if (flow.Kind == SceneFlowKind.NewGame)
@@ -402,13 +409,22 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) return "new game refused: " + Describe(busy);
         GameSessionOwner owner;
+        var fromShop = false;
+        // ARC-UI-038: a refused start on the shop's session drops it (its trades with it); the shop opens anew on the next frame.
+        string ShopRefused(string why)
+        {
+            creation!.DropShop();
+            if (_mainMenu is { Window: AreaMenuWindow.Shop } shopMenu) shopMenu.ShopNote = AreaMainMenu.ShopLoading;
+            return "new game refused: " + why;
+        }
         // ARC-UI-038: the new character's game goes on with the opening shop's session (its trades kept): the start wields its best items
         // and teleports the PC from the shop map to the start map's tile (0x5412E0, OS5).
         if (creation?.Shop is { Owner: not null } shop)
         {
             if (shop.Start(hero.KitWear ?? [], new(recipe.RuntimeMap), new(checked((int)recipe.Spawn.X), checked((int)recipe.Spawn.Y))) is { } shopRefused)
-                return "new game refused: " + shopRefused;
+                return ShopRefused(shopRefused);
             owner = shop.Take();
+            fromShop = true;
         }
         else
         {
@@ -432,14 +448,15 @@ public partial class TerrainViewerApp
         if (_inventoryHost?.Attach(owner) is { } attached && attached != GameSessionFailure.None)
         {
             owner.Dispose();
-            return $"new game refused: the inventory seeds do not attach ({attached})";
+            var why = $"the inventory seeds do not attach ({attached})";
+            return fromShop ? ShopRefused(why) : "new game refused: " + why;
         }
         AreaConversationHost? talk = null;
         try { talk = _conversationHost?.Rebind(owner); }
         catch (ArgumentException)
         {
             owner.Dispose();
-            return "new game refused: the dialog state is not readable";
+            return fromShop ? ShopRefused("the dialog state is not readable") : "new game refused: the dialog state is not readable";
         }
         AdoptHeroTables(hero);
         AdoptLoadedSession(owner, AreaRuntimes(), talk, "new game");

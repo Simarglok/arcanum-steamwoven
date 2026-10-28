@@ -95,7 +95,9 @@ public sealed class AreaShopMerchantTests
         Assert.AreEqual(AreaShopMapStatus.Ready, shop.Status, shop.Detail);
         Assert.AreEqual(("ShopMap", ShopMap, 31, 29, Entity(0)), (shop.Map!.Name, shop.Map.RuntimeMap, shop.Map.Start.X, shop.Map.Start.Y, shop.Map.Merchant),
             "the NPC switched off before it is left out (0x440B40)");
-        Assert.AreEqual(AreaShopMapStatus.NoMerchant, AreaShopMap.From(entry, Map(), _ => null).Status, "no NPC whose fields read");
+        Assert.AreEqual(AreaShopMapStatus.NoMerchant, AreaShopMap.From(entry, Map(), _ => Npc(flags: 0x1)).Status, "every NPC destroyed");
+        Assert.AreEqual(AreaShopMapStatus.Failed, AreaShopMap.From(entry, Map(), row => row.Key.SourceIndex == 4 ? null : Read(row)).Status,
+            "an NPC before the merchant whose fields do not read: the project cannot tell whether it is the first");
         Assert.AreEqual(AreaShopMapStatus.Failed, AreaShopMap.From(entry with { Start = null }, Map(), Read).Status, "no start tile");
         Assert.AreEqual(AreaShopMapStatus.Failed, AreaShopMap.From(entry, Map(runtime: 3), Read).Status, "another runtime map");
     }
