@@ -34,10 +34,11 @@ public static class AreaInventoryDrag
     public const float GridX = 368, GridY = 8;
     public const float GridRight = GridX + SessionHeroGrid.Columns * CellPixels, GridBottom = GridY + SessionHeroGrid.Rows * CellPixels;
     /// <summary>ARC-UI-025: the icons' top-left corners in the frame (the original's 703, 385 and 703, 331 on the window, 41 lower than the
-    /// frame: IW6, IW14). Their size is the frame size of their interface art (0xE0, 0x156), which the viewer does not read: PROJECT 32.</summary>
-    public const float IconX = 703, DropIconY = 385 - 41, UseIconY = 331 - 41, IconPixels = 32;
-    /// <summary>The frame's size: the icons' right edge and the boots' bottom edge (331 + 64).</summary>
-    public const float FrameWidth = IconX + IconPixels, FrameHeight = 395;
+    /// frame: IW6, IW14). ARC-UI-051: their size is the size of the art the redraw last drew there (0x6813B8, 0x681388), 80 × 43 for every
+    /// state of both boxes (224, 225, 342, 343; IW23).</summary>
+    public const float IconX = 703, DropIconY = 385 - 41, UseIconY = 331 - 41, IconWidth = 80, IconHeight = 43;
+    /// <summary>ARC-UI-051: the frame's size, the window's 800 × 400 (IW20).</summary>
+    public const float FrameWidth = AreaInventoryArtLayout.Width, FrameHeight = AreaInventoryArtLayout.Height;
 
     /// <summary>The wear slots' rectangles (x, y, width, height) in the frame, the original's table 0x5CAC58.</summary>
     public static IReadOnlyDictionary<EquipmentSlot, (float X, float Y, float Width, float Height)> SlotRects { get; } =
@@ -53,10 +54,10 @@ public static class AreaInventoryDrag
     {
         foreach (var (slot, rect) in SlotRects)
             if (x >= rect.X && x < rect.X + rect.Width && y >= rect.Y && y < rect.Y + rect.Height) return new(null, slot);
-        if (x >= IconX && x < IconX + IconPixels)
+        if (x >= IconX && x < IconX + IconWidth)
         {
-            if (y >= DropIconY && y < DropIconY + IconPixels) return new(null, null, AreaInventoryIcon.Drop);
-            if (y >= UseIconY && y < UseIconY + IconPixels) return new(null, null, AreaInventoryIcon.Use);
+            if (y >= DropIconY && y < DropIconY + IconHeight) return new(null, null, AreaInventoryIcon.Drop);
+            if (y >= UseIconY && y < UseIconY + IconHeight) return new(null, null, AreaInventoryIcon.Use);
         }
         if (x < GridX || y < GridY || x >= GridRight || y >= GridBottom) return AreaInventoryHit.None;
         return new((int)((y - GridY) / CellPixels) * SessionHeroGrid.Columns + (int)((x - GridX) / CellPixels), null);

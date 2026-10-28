@@ -234,6 +234,8 @@ public partial class TerrainViewerApp
         QuarantineWorld(); _quickKeys.Reset();
         // ARC-WORLD-063: a junk pile's window closes against the session it was opened on.
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
+        // ARC-UI-051: the player's own window shows the original look when the game's art read.
+        _inventoryPanel.SetArtLook(InventoryArtLook());
         _inventoryPanel.Open(InventoryView(holder));
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");

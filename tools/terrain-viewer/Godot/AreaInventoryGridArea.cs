@@ -12,7 +12,8 @@ namespace Arcanum.TerrainViewer;
 /// press does nothing then. ARC-UI-025: a right click with nothing held asks the app to use the item under the pointer
 /// (<see cref="UseRequested"/>, IW5; on the right release, ARC-UI-032: the original's mouse subtype 3); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
 /// original art. ARC-UI-035: once the pointer rests (the engine's still-pointer message, subtype 7) with nothing held, a new item under it
-/// (or none) is reported (<see cref="PointerStill"/>, 0x573C74), once until another rests there.
+/// (or none) is reported (<see cref="PointerStill"/>, 0x573C74), once until another rests there. ARC-UI-051: with the window's art
+/// (<see cref="Look"/>) the frame draws the original look instead (<see cref="AreaInventoryArtLayout"/>, IW20–IW25).
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -29,6 +30,9 @@ public partial class AreaInventoryGridArea : Control
     private string? _stillItem;
     /// <summary>How long the pointer must rest for the still-pointer message (SG1: 35 ms).</summary>
     internal const ulong StillMilliseconds = 35;
+
+    /// <summary>ARC-UI-051: the original look, or null for the diagnostic shapes.</summary>
+    public AreaInventoryArtLook? Look { get; private set; }
 
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
@@ -48,6 +52,23 @@ public partial class AreaInventoryGridArea : Control
         _scale = scale;
         CustomMinimumSize = new(AreaInventoryDrag.FrameWidth * _scale, AreaInventoryDrag.FrameHeight * _scale);
         QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-051: draws the frame at <paramref name="scale"/> (the original look fills the window's place, no clamp).</summary>
+    public void FitScale(float scale)
+    {
+        if (!(scale > 0)) throw new ArgumentOutOfRangeException(nameof(scale));
+        if (scale == _scale && CustomMinimumSize != Vector2.Zero) return;
+        _scale = scale;
+        CustomMinimumSize = new(AreaInventoryDrag.FrameWidth * _scale, AreaInventoryDrag.FrameHeight * _scale);
+        QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-051: sets the original look (null: the diagnostic shapes).</summary>
+    public void SetLook(AreaInventoryArtLook? look)
+    {
+        if (ReferenceEquals(look, Look)) return;
+        Look = look; QueueRedraw();
     }
 
     public void Render(AreaInventoryView view)
@@ -126,8 +147,8 @@ public partial class AreaInventoryGridArea : Control
     }
 
     /// <summary>The frame point of an icon's centre (for the self-test).</summary>
-    internal static Vector2 IconCentre(AreaInventoryIcon icon) => new(AreaInventoryDrag.IconX + AreaInventoryDrag.IconPixels / 2,
-        (icon == AreaInventoryIcon.Drop ? AreaInventoryDrag.DropIconY : AreaInventoryDrag.UseIconY) + AreaInventoryDrag.IconPixels / 2);
+    internal static Vector2 IconCentre(AreaInventoryIcon icon) => new(AreaInventoryDrag.IconX + AreaInventoryDrag.IconWidth / 2,
+        (icon == AreaInventoryIcon.Drop ? AreaInventoryDrag.DropIconY : AreaInventoryDrag.UseIconY) + AreaInventoryDrag.IconHeight / 2);
 
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
@@ -152,6 +173,7 @@ public partial class AreaInventoryGridArea : Control
 
     public override void _Draw()
     {
+        if (Look is { } look) { DrawOriginal(look); return; }
         var font = GetThemeDefaultFont();
         var size = Math.Max(8, (int)(11 * _scale));
         var line = new Color(.35f, .4f, .45f);
@@ -170,7 +192,7 @@ public partial class AreaInventoryGridArea : Control
         }
         foreach (var (icon, y) in new[] { (AreaInventoryIcon.Drop, AreaInventoryDrag.DropIconY), (AreaInventoryIcon.Use, AreaInventoryDrag.UseIconY) })
         {
-            var rect = Scaled(AreaInventoryDrag.IconX, y, AreaInventoryDrag.IconPixels, AreaInventoryDrag.IconPixels);
+            var rect = Scaled(AreaInventoryDrag.IconX, y, AreaInventoryDrag.IconWidth, AreaInventoryDrag.IconHeight);
             DrawRect(rect, new Color(.16f, .14f, .1f));
             DrawRect(rect, line, false);
             Label(rect, icon.ToString(), new Color(1f, .85f, .55f));
@@ -208,4 +230,73 @@ public partial class AreaInventoryGridArea : Control
         Rect2 Item(AreaGridItem item) => Scaled(AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
             AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels);
     }
+
+    // ARC-UI-051: the redraw's mode-0 order (0x576520): the doll and pack arts, the three lines, the counts, the boxes, the grid items, the
+    // worn items and the empty slots' covers; then the held item on the cursor.
+    private void DrawOriginal(AreaInventoryArtLook look)
+    {
+        Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
+        void Art(int number, float x, float y)
+        {
+            if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
+        }
+        void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, Vector2? origin = null)
+        {
+            if (texture is null) return;
+            var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
+            var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
+            DrawTextureRect(texture, placed, false);
+        }
+        Art(AreaInventoryArtLayout.DollArt, 0, 0);
+        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        var font = GetThemeDefaultFont();
+        var size = Math.Max(6, (int)Math.Round(12 * _scale));
+        void Text((int X, int Y, int Width, int Height) rect, string text)
+        {
+            if (text.Length == 0) return;
+            var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
+            DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
+        }
+        if (_view is null) return;
+        var lines = look.Texts.Lines(_view.Carry, _view.Speed);
+        for (var i = 0; i < lines.Count; i++) Text(AreaInventoryArtLayout.Lines[i], lines[i]);
+        var counts = new[] { _view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < _view.Ammo.Count ? _view.Ammo[type] : 0)).ToArray();
+        for (var i = 0; i < counts.Length; i++) Text(AreaInventoryArtLayout.Counts[i], counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var over = Held is null ? null : AreaInventoryDrag.HitTest(_pointer.X / _scale, _pointer.Y / _scale).Icon;
+        foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
+        {
+            var (x, y) = AreaInventoryArtLayout.Box(icon);
+            Art(AreaInventoryArtLayout.BoxArt(icon, over == icon), x, y);
+        }
+        foreach (var item in _view.Grid)
+        {
+            // The held item stays in its place but is not drawn there (the original's item flag 0x10, IW2).
+            if (item.Entity == Held?.Entity) continue;
+            Item(look.ItemArt(item.Entity), (AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
+                AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels));
+        }
+        foreach (var (slot, rect) in AreaInventoryDrag.SlotRects)
+        {
+            // A held worn item leaves its slot to the cover, as an empty one (0x5772B4 skips it, 0x577851 covers every unmarked slot).
+            var worn = _view.Doll.FirstOrDefault(entry => entry.Slot == slot)?.Entity;
+            if (worn is not null && worn != Held?.Entity && look.ItemArt(worn) is { } texture) Item(texture, rect);
+            else if (worn is null || worn == Held?.Entity) Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
+        }
+        if (Held is { } held)
+        {
+            var placed = _view.Grid.FirstOrDefault(item => item.Entity == held.Entity);
+            var (w, h) = placed is null ? (1, 1) : (placed.Width, placed.Height);
+            var cell = AreaInventoryDrag.CellPixels * _scale;
+            var origin = _pointer - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
+            Item(look.ItemArt(held.Entity), (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin);
+        }
+    }
+}
+
+/// <summary>ARC-UI-051: the inventory window's original look for the frame: the interface arts by number, an item's inventory art by
+/// entity (null when it does not read) and the line texts.</summary>
+public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Art, Func<string, Texture2D?> ItemArt, AreaInventoryTexts Texts)
+{
+    /// <summary>PROJECT: the lines' colour; the original's fonts (0x682C74 for the lines, 0x68345C for the counts) are not read.</summary>
+    public static readonly Color TextColour = new(.92f, .86f, .72f);
 }

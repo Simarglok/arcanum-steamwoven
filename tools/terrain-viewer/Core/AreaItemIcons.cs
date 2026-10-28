@@ -76,6 +76,15 @@ public sealed class AreaItemIcons : IDisposable
             : new(AreaItemIconStatus.NoIcon, null, null, $"no type icon ({detail})");
     }
 
+    /// <summary>ARC-UI-051: the frame of an item's inventory art (field 0x5D) at any size, as the inventory window draws it on the grid and
+    /// the doll (IW25); null with the reason when the fields or the art do not read.</summary>
+    public (AreaInterfaceFrame? Frame, string Detail) InventoryFrame(SessionItemKind kind, CombatFields? rowFields)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if ((rowFields ?? Prototype(kind.Prototype)) is not { Item: { } item }) return (null, $"prototype {kind.Prototype}: no item fields");
+        return InventoryArt(item.InventoryArt);
+    }
+
     /// <summary>ARC-UI-035: an item as the item window names it (0x554F10's first part, HK22): its type icon (0x554C20, always the type
     /// icon there, never the inventory art), its name as 0x441B60 gives it (the description when the item is identified, else its
     /// unknown description; a key its key's name) and the name's colour (an identified hexed item orange, another magickal one blue).
