@@ -28,18 +28,31 @@ public sealed partial class GameSessionOwner
     /// insert-item script (the event the original fires on it first, not run here: <see cref="GameSessionFailure.ItemScriptUnsupported"/>),
     /// a sum past 32 bits or a full record budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. A count of 0 changes
     /// nothing. The caller limits the count: a steal moves at most 100 (PP3), a merchant pays at most what it holds (NT4).
+    /// ARC-WORLD-101: <paramref name="npc"/> may also be a standing container of an attached seed (its loot window), and
+    /// <paramref name="pile"/> names the pile of the holder's current list to take from (the original's 0x464830 with the pile given;
+    /// one the list does not hold is <see cref="GameSessionFailure.ItemNotAvailable"/>); without it the holder's first pile.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x464830, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    public InventoryMutationResult TakeGoldFromNpc(GameSessionVersion expected, string npc, int count)
+    public InventoryMutationResult TakeGoldFromNpc(GameSessionVersion expected, string npc, int count, string? pile = null)
     {
         ThrowIfDisposed();
-        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0)
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0 ||
+            pile is not null && !SessionValidation.Entity(pile))
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        var kind = KnownNpc(npc) ? SessionHolderKind.Npc : KnownContainer(npc) ? SessionHolderKind.Container : (SessionHolderKind?)null;
+        if (kind is not { } holderKind) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        var piles = HolderPiles(npc, holderKind).ToArray();
+        if (pile is not null && !piles.Any(found => found.Entity == pile)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
-        if (NpcPile(npc) is not { } pile || pile.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
+        var chosen = pile is null ? piles.Select(found => ((string Entity, int Quantity, SessionItemFacts? Facts)?)found).FirstOrDefault() : piles.First(found => found.Entity == pile);
+        return TakeGold(chosen, count);
+    }
+
+    private InventoryMutationResult TakeGold((string Entity, int Quantity, SessionItemFacts? Facts)? from, int count)
+    {
+        if (from is not { } pile || pile.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
         if (pile.Facts?.HasScript(SessionScriptPoint.InsertItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         var emptied = pile.Quantity == count;
@@ -235,7 +248,8 @@ public sealed partial class GameSessionOwner
     /// ammunition (<see cref="GameSessionFailure.InvalidAmmo"/>), the version, an NPC the session does not know, a stack not in its current
     /// list (<see cref="GameSessionFailure.ItemNotAvailable"/>), fewer units (<see cref="GameSessionFailure.AmmoShort"/>), a full budget or a
     /// sum past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict. A count of 0 changes nothing.
-    /// The caller limits the count (a steal moves at most 20, PP3).
+    /// The caller limits the count (a steal moves at most 20, PP3). ARC-WORLD-101: <paramref name="npc"/> may also be a standing container
+    /// of an attached seed (its loot window), whose stack is found by entity.
     /// </summary>
     public InventoryMutationResult TakeAmmoFromNpc(GameSessionVersion expected, string npc, string stack, int count, SessionItemKind newStackKind,
         SessionInsertCheck insertCheck)
@@ -246,8 +260,9 @@ public sealed partial class GameSessionOwner
             return RejectItem(GameSessionFailure.InvalidItem);
         if (count < 0 || newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
-        if (NpcStacks(npc).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(pair => pair!.Value.Entity == stack) is not { } source)
+        var npcHolder = KnownNpc(npc);
+        if (!npcHolder && !KnownContainer(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if ((npcHolder ? NpcStacks(npc) : ContainerStacks(npc)).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(pair => pair!.Value.Entity == stack) is not { } source)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
@@ -378,16 +393,21 @@ public sealed partial class GameSessionOwner
 
     // The NPC's first gold pile in its list order: its seed piles still in its list (in every attached seed that lists it), then the
     // piles the session added to it; with the tracked or seed coins and a seed pile's facts.
-    private (string Entity, int Quantity, SessionItemFacts? Facts)? NpcPile(string npc)
+    private (string Entity, int Quantity, SessionItemFacts? Facts)? NpcPile(string npc) =>
+        HolderPiles(npc, SessionHolderKind.Npc).Select(found => ((string Entity, int Quantity, SessionItemFacts? Facts)?)found).FirstOrDefault();
+
+    // The holder's gold piles in its list order (ARC-WORLD-101: a container's too, when it did not spill, with the piles a barter or a
+    // regeneration added to it).
+    private IEnumerable<(string Entity, int Quantity, SessionItemFacts? Facts)> HolderPiles(string holder, SessionHolderKind kind)
     {
-        foreach (var seed in _inventory.Seeds.Values)
-            if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
-                foreach (var entity in holder.Items)
+        foreach (var (map, seed) in _inventory.Seeds)
+            if (seed.Holders.TryGetValue(holder, out var row) && row.Kind == kind && (kind == SessionHolderKind.Npc || SpillCell(map, seed, holder) is null))
+                foreach (var entity in row.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { Kind.Type: SessionItemType.Gold } facts)
-                        return (entity, _inventory.Piles.TryGetValue(entity, out var tracked) ? tracked : facts.Quantity ?? 0, facts);
-        foreach (var item in _inventory.AddedTo(npc))
-            if (item.Kind.Type == SessionItemType.Gold) return (item.Entity, _inventory.Piles[item.Entity], null);
-        return null;
+                        yield return (entity, _inventory.Piles.TryGetValue(entity, out var tracked) ? tracked : facts.Quantity ?? 0, facts);
+        if (kind == SessionHolderKind.Npc || _inventory.Containers.Contains(holder))
+            foreach (var item in _inventory.AddedTo(holder))
+                if (item.Kind.Type == SessionItemType.Gold) yield return (item.Entity, _inventory.Piles[item.Entity], null);
     }
 
     // Whether any attached seed's holder row of the NPC has a script at the point.

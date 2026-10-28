@@ -203,7 +203,8 @@ public sealed class InventoryStateTests
     {
         using var owner = Attached();
         Refused(owner.LootItem(owner.Version, "virgil", "sword", Accept), owner, GameSessionFailure.HolderNotLootable, 0);
-        Refused(owner.LootItem(owner.Version, "chest", "sword", Accept), owner, GameSessionFailure.HolderNotLootable, 0);
+        // ARC-WORLD-101: a container is lootable, but only its own items.
+        Refused(owner.LootItem(owner.Version, "chest", "sword", Accept), owner, GameSessionFailure.ItemNotAvailable, 0);
         Refused(owner.LootItem(owner.Version, "priest", "cup", Accept), owner, GameSessionFailure.HolderScriptUnsupported, 0);
         Refused(owner.LootItem(owner.Version, "ghost", "cup", Accept), owner, GameSessionFailure.UnknownHolder, 0);
         Refused(owner.LootItem(owner.Version, "apple", "apple", Accept), owner, GameSessionFailure.UnknownHolder, 0);

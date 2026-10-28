@@ -62,7 +62,7 @@ public sealed class CrashSiteInventoryTests
         Assert.IsTrue(ground.All(item => viewer.Target(session, map.RuntimeMap, item.Key)?.Kind == AreaInventoryTargetKind.GroundItem));
         Assert.IsTrue(dead.All(index => viewer.Target(session, map.RuntimeMap, Key(index))?.Kind == AreaInventoryTargetKind.DeadNpc));
         Assert.IsNull(viewer.Target(session, map.RuntimeMap, Key(2907)));
-        Assert.IsNull(viewer.Target(session, map.RuntimeMap, Key(4453)));
+        Assert.AreEqual(AreaInventoryTargetKind.Container, viewer.Target(session, map.RuntimeMap, Key(4453))?.Kind, "ARC-WORLD-101: a chest's loot window");
 
         // Virgil's first talk through the viewer's conversation host (ARC-UI-004 wiring): the DLG node 1 entry action
         // IN -2804 hands over the ring through the session inventory port.
@@ -92,7 +92,8 @@ public sealed class CrashSiteInventoryTests
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, viewer.Loot(session, Entity(1201), Entity(2527)).Failure);
         Assert.AreEqual(1, viewer.View(session, null, map.RuntimeMap, Entity(1201)).Loot.Count, "the refused item stays on the body");
         Assert.AreEqual(GameSessionFailure.HolderNotLootable, session.LootItem(session.Version, virgil, Entity(2421), Accept).Failure);
-        Assert.AreEqual(GameSessionFailure.HolderNotLootable, session.LootItem(session.Version, Entity(4453), Entity(2421), Accept).Failure, "chests are generated, not looted");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, session.LootItem(session.Version, Entity(4453), Entity(2421), Accept).Failure,
+            "ARC-WORLD-101: a chest is looted, but only for its own items");
 
         // Pickup: every one of the 37 unscripted core ground items; each is then no longer drawn.
         foreach (var item in ground)

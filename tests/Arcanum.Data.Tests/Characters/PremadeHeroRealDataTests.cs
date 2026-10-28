@@ -47,6 +47,8 @@ public sealed class PremadeHeroRealDataTests
             Assert.AreEqual(64 + expected.Race, hero.RaceEffect.Number);
             Assert.AreEqual(expected.Gender == 0 ? 330 : (int?)null, hero.GenderEffect?.Number);
             Assert.IsTrue(hero.Background is >= 39 and <= 50, "a pre-made background, display data only");
+            // ARC-WORLD-101: every pre-made prototype stores a player name (field 0x10E), which seeds the generated-once containers.
+            Assert.IsTrue(hero.PlayerName.Count > 0 && !hero.PlayerName.Contains((byte)0), $"{expected.Basic} player name");
         }
 
         // SH-09: human none; half-elf dx +1, be +1, cn −1, four tech skills −1, magick points +1, age +15; half-ogre st +4,
