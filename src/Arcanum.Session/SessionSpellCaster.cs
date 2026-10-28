@@ -99,8 +99,7 @@ public enum SpellCastEventKind
     /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
     ChargeNotSaved,
     /// <summary>ARC-MAGIC-024: this many item events were dropped unfired (<see cref="SessionSpellCaster.FireItemEvents"/>): beyond
-    /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing, or refused by the session (the
-    /// <see cref="GameSessionFailure"/> in <see cref="SpellCastEvent.Detail"/>).</summary>
+    /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing.</summary>
     ItemEventsDropped,
 }
 
@@ -689,12 +688,15 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     /// a run step's fatigue, the overexertion, a script's damage or kill) after any this host has not fired yet, through
     /// <see cref="ItemTriggers"/> (<see cref="GameSessionOwner.FireItemEvents"/> with the map's worn items of an NPC), in order; the
     /// events the started runs' life steps call for follow, up to <see cref="MaxItemEventsPerFiring"/> in all (the rest are dropped
-    /// and logged). During a firing the events only join it. Nothing without <see cref="ItemTriggers"/>: the events are dropped.
+    /// and logged). During a firing the events only join it; a call the session refuses (from inside the run rules or an event pass)
+    /// leaves them for the next firing. Nothing without <see cref="ItemTriggers"/>: the events are dropped.
     /// </summary>
     public IReadOnlyList<SessionItemTriggerFiring> FireItemEvents(IEnumerable<SessionItemEvent> events)
     {
         ArgumentNullException.ThrowIfNull(events);
-        _itemEvents.AddRange(events);
+        var list = events.ToArray();
+        if (list.Any(e => e is null)) throw new ArgumentException("Null item event.", nameof(events));
+        _itemEvents.AddRange(list);
         return FirePendingItems();
     }
 
@@ -726,17 +728,19 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                     _itemEvents.Clear();
                     break;
                 }
-                var next = _itemEvents[0];
+                // A call from inside the run rules or an event pass (a host's callback) is refused: the events wait for the outer
+                // action's or pass's firing.
+                var result = _owner.FireItemEvents(triggers, [_itemEvents[0]], WornItemIds);
+                if (result.Failure != GameSessionFailure.None) break;
                 _itemEvents.RemoveAt(0);
-                var result = _owner.FireItemEvents(triggers, [next], WornItemIds);
-                if (result.Failure != GameSessionFailure.None)
-                {
-                    _log.Add(new(SpellCastEventKind.ItemEventsDropped, -1, _itemEvents.Count + 1, null, (int)result.Failure));
-                    _itemEvents.Clear();
-                    break;
-                }
                 fired.AddRange(result.Firings);
             }
+        }
+        catch
+        {
+            // A host's executor that throws ends the firing: nothing left over fires on a later, unrelated action.
+            _itemEvents.Clear();
+            throw;
         }
         finally { _firingItems = false; }
         return fired;

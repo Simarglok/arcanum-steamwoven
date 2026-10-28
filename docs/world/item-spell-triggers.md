@@ -164,7 +164,8 @@ parent, its other object), computed by the rules and fired by the host; the sess
   the spell payment, a run step's fatigue in combat mode, the overexertion, the encumbrance drain, scripts' damage and kills.
 - **`SpellDamageStep`** (DH1, IC8): `ApplyDamage` with `SessionDamageParties` (the attacker, the damage source the kill credits and
   whether an item event started the run) gives a damage step's calls (`DamageStep` with no melee bit and no weapon). The cast host
-  passes the run's parent as the attacker and its other object, else its parent, as the damage source. `ApplyDamage` without
+  passes the run's parent as the attacker and its other object, else its parent, as the damage source (the invocation carries no
+  other object yet, MT7, so it is the parent for now). `ApplyDamage` without
   parties (a script's damage, a critical miss that hurts the hero) gives only the fatigue setter's call, which needs no context.
 - **`DyingEnd`** (0x42FF40, IC5, IC7): `QueryDyingEndItemEvents` gives a dead critter's **dying** with no other object; the host asks
   when the dying animation ends (not for a goal with flag 0x200). A kill with a killer has fired dying with the killer already, so
@@ -177,11 +178,15 @@ step (applied while the run rules act, so its events wait), a payment's fatigue 
 action's or pass's notes are applied (`Act`, `ProcessEvents`); `FireItemEvents` takes a host's own life results and
 `DyingAnimationEnded` a critter's dying animation end. The runs a firing starts play their goals at once, and the events their
 damage calls for join the same firing, in order, up to 64 walks (`MaxItemEventsPerFiring`; the rest are dropped and logged as
-`ItemEventsDropped`). Without `ItemTriggers` nothing fires and the events are dropped.
+`ItemEventsDropped`). A firing the session refuses (a host's callback from inside the run rules or an event pass) leaves the events
+for the action's or pass's own firing. Without `ItemTriggers` nothing fires and the events are dropped.
 
 MG46 (IC9): a run an item event started damages with the item's holder as the attacker, so a `Target_Hit` weapon's spell fires the
 weapon again on its own damage, and two wearers of `Parent_Hit` armour answer each other, until the target dies or the charge runs
-out. Original keeps it (`ItemRunDamageFiresHooks`); Steamwoven leaves the parent hit and the damages opponent out of such a step.
+out. Original keeps it (`ItemRunDamageFiresHooks`); Steamwoven leaves the parent hit and the damages opponent out of such a step,
+so an item spell's damage never answers with another item's hit or damage spell (no item fires on an item's damage), also where the
+original would answer once. The other calls stay: an item run whose damage knocks a critter down still fires the attacker's target
+going unconscious, a chain only the 64-walk bound ends (latent: no installed record uses `Target_Going_Unconscious`).
 
 ## Installed data
 
@@ -209,7 +214,7 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | The attacker's damages opponent walk comes before its weapon wear, so a weapon this attack's wear breaks still fires (IC2). | The hero's walk names the weapon, but the host no longer knows it as held once the wear broke it, so it fires nothing. | — (not visible: no installed weapon carrying combat triggers breaks in one hit) |
 | The kill's dying event waits for the victim's dying script (point 12), which may stop it (IC5). | It always fires: the session runs no dying script. | — (scripts are the host's, not ready) |
 | A firing's runs begin a frame later each (goal 73), so an item chain (MG46) spreads over frames. | The goals play at once and their events join the same firing, at most 64 walks; the rest are dropped and logged. | none (technical bound) |
-| A spell's damage step calls the item wrappers inside the run's processing (IC8). | Its events fire after the run's pass and notes; the payment's after the notes too. | — (order of the cast host: the session refuses a run start while the run rules act) |
+| A spell's damage step calls the item wrappers inside the run's processing (IC8). | Its events fire after the run's pass and notes, in the order queued: the runs' damage steps of an event pass first, then the pass's other life steps (the encumbrance drain), then the payments of its notes. | — (order of the cast host: the session refuses a run start while the run rules act) |
 | A run an item event started fires its parent's items again on its own damage (MG46, IC9). | No parent hit and no damages opponent for such a run's damage step. | `ItemRunDamageFiresHooks` |
 | An item use's empty slot 0 on the spell branch reads a record outside the table (IU6). | Nothing is cast. | none (technical bug, fixed in both modes; owner rule 2026-10-28) |
 | A used scroll whose slot-0 spell targets an inventory item opens the inventory and is cast at the use's target (IU4). | Nothing is cast and the scroll is still spent (one installed scroll). | — (not ready: inventory targets) |
@@ -227,8 +232,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 - The attack start's attacks an opponent and the projectile's attacks a location (IC6), an item-type attacker's own target hit
   (0x4CBE70: a spell run whose parent is an item fires no damages opponent), and NPC attacks (the session has no NPC attack path
   yet). No viewer caller sets the cast host's `ItemTriggers` or fires a life result's item events (its cast host has no item lookup),
-  and the viewer does not report the dying animation's end; the hero's critical miss fires only the fatigue setter's event, and
-  only for a host that fires its result. The global attacker (IC6) needs the run's other object, which
+  and the viewer does not report the dying animation's end. The hero's critical miss on itself and an object's damage to the hero
+  (`AttackCritter`, `AttackObject`) do not return their life step's item events, so its fatigue setter's call fires nothing yet. The global attacker (IC6) needs the run's other object, which
   the invocation does not carry (MT7). The aims at the other's worn weapon or armour stay not ready (no installed record uses them).
 - Hotkeys (0x57C080, IP7–IP9) and spells aimed at an inventory item; the weapon's spell pane (0x57C040) is in the viewer since
   ARC-UI-016 ([spell cast host](spell-cast-host.md#the-weapons-spell-pane-arc-ui-016)).

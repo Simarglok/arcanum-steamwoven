@@ -108,6 +108,9 @@ public sealed class LifeItemTriggerStateTests
             new SessionItemEvent(ItemTriggerEvent.ParentHit, Golem, Hero), new SessionItemEvent(ItemTriggerEvent.ParentDamagesOpponent, Hero, Golem),
         }, cast.ItemEvents.ToArray());
         Assert.AreEqual(0, owner.ApplyDamage(owner.Version, GolemTarget, hit).ItemEvents.Count, "without parties only the fatigue setter's");
+        using (var other = Owner())
+            CollectionAssert.AreEqual(new[] { new SessionItemEvent(ItemTriggerEvent.ParentGoingUnconscious, Golem, null) },
+                other.ApplyDamage(other.Version, GolemTarget, new LifeDamage { Fatigue = 10_000 }).ItemEvents.ToArray(), "the setter's needs no parties");
         Assert.AreEqual(0, owner.ApplyDamage(owner.Version, GolemTarget, hit, new(Hero, Hero, ItemRun: true)).ItemEvents.Count, "MG46 fixed");
         Assert.AreEqual(GameSessionDisposition.Rejected, owner.ApplyDamage(owner.Version, GolemTarget, hit, new("", Hero)).Disposition);
         owner.SelectRules(RuleMode.Original);
@@ -202,5 +205,21 @@ public sealed class LifeItemTriggerStateTests
         // Without executors nothing fires and the events are dropped.
         caster.ItemTriggers = null;
         Assert.AreEqual(0, caster.FireItemEvents([start]).Count);
+    }
+
+    [TestMethod]
+    public void Through_the_cast_host_the_dying_animation_s_end_walks_a_dead_hero_s_items()
+    {
+        using var owner = Owner();
+        var caster = Caster(owner);
+        var host = new Recorder();
+        caster.ItemTriggers = host;
+        Assert.AreEqual(0, caster.DyingAnimationEnded(Hero).Count, "alive");
+        Assert.AreEqual(0, caster.DyingAnimationEnded(Golem).Count, "not a critter of the map");
+        owner.Kill(owner.Version, SessionLifeTarget.Hero);
+        var fired = caster.DyingAnimationEnded(Hero);
+        CollectionAssert.AreEqual(new[] { (ParentDying, Blade, Hero, (string?)null) }, host.Calls.ToArray());
+        Assert.AreEqual(ItemTriggerEvent.ParentDying, fired.Single().Event);
+        Assert.ThrowsExactly<ArgumentException>(() => caster.FireItemEvents([null!]));
     }
 }
