@@ -701,6 +701,46 @@ does what the cursor showed). Not
 verified: original cursor or message-window parity, hover art (the animated underlay), a
 human on a physical mouse and display.
 
+### Health and fatigue bars (ARC-UI-020)
+
+Slice 3 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-002), in `crash-site-area` with plain Godot
+controls (no original interface art). The rules are `LifeBarRules` in `Arcanum.Presentation.Hud`, read in the 1.0.7.4
+executable ([ledger CH7–CH9](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); every percent is current × 100 /
+maximum truncated toward zero.
+
+- **The PC's gauges** (CH7). With a hero, the health and fatigue gauges, each 88 px high and filled from the bottom over
+  the percent of its height (half full at a maximum of 0, the original's guard), with the current value under it as the
+  original prints it (C's `%03d`: `030`, `-05`). While the hero is poisoned the health gauge takes the poisoned colour
+  (green) and the poison level is printed over it. While the [interface bars](#interface-bars-arc-ui-018) are shown the
+  gauges fill the bottom strip's vials at the original's places (gauges at 14, 472 and 754, 473 of the 800 × 600 screen,
+  the numbers at 15, 578 and 755, 578, the poison at 15, 500), scaled with the bars and drawn over them as plain fills
+  (the original's fill art 17–20 is not drawn); they stay while a window the bars reach is open. Without the bars they
+  stand in a small panel at the bottom right, hidden while a window or the palette is open. Without a hero there are
+  none. Automated runs draw them only when their smoke asks or the bars are drawn.
+- **Follower portraits** (CH9). Under each portrait button of the [follower strip](../world/companion-orders-runtime.md#area-viewer)
+  (ARC-WORLD-046) a health bar (green while poisoned) and a fatigue bar, each cropped to the follower's percent
+  (nothing at 0 % or less, capped at 100 %); below 20 % health the button turns red, as the original adds red over the
+  face. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
+  without combat values shows empty bars.
+- **Hovered critter** (CH8). The [tooltip](#hover-tooltip-and-action-cursor-arc-ui-005) of a critter with combat values
+  (an NPC of a covered map or a companion) adds its health and fatigue bars under the name, each filled to the
+  percent clamped to 0–100 plus one pixel unless full (the original's bar), with the text `current/maximum` for the
+  PC's followers and the unclamped percent (`100%`, `-3%`) for anyone else; the health bar is green while it is
+  poisoned. The original draws them side by side on its description line; the tooltip stacks them.
+- **Technical fix.** The original divides by the maximum without a guard in the hovered-critter and portrait paths
+  (a crash at a maximum of 0); the rules read that percent as 0 in both rule modes (no switch).
+
+Checks: `LifeBarsTests` (percent, gauge fill and numbers, hovered fill and text, portrait crop and tint) and the native
+smoke stage `life` (map mode with `--hero`, only when named: `ARC_AREA_MAP_SMOKE_ONLY=life`, observed on `bates mansion
+lev 2`; `ARC_AREA_LIFE_CAPTURE=<ignored path prefix>` saves readbacks): the gauges match the rules before and after a
+poison packet, a speaker that joins shows its portrait bars and turns red after a hit to 15 % of its maximum, hovering it
+reads `current/maximum` (`15/100` on that map), hovering another living NPC reads a percent, with the bars drawn the gauges
+sit in the vials at the original's places and stay there with the inventory open, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
+(the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the original's fill art in the vials, the
+hovered panel's level line and its place on the bars' description line, portrait art, the PC as a hover target (the
+viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4). Original visual parity
+NOT VERIFIED.
+
 ### Inventory window, pickup and loot (ARC-UI-004)
 
 In `crash-site-area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
@@ -1502,7 +1542,8 @@ on the bars. The main menu's, in-play menu's and options window's buttons play 3
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
 the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
-diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. The rest of the bottom strip (message log, hot-key slots, recent actions, health and fatigue vials) and the top
+diagnostic HUD moves below the top strip and the message window, follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
+[gauges](#health-and-fatigue-bars-arc-ui-020). The rest of the bottom strip (message log, hot-key slots, recent actions) and the top
 strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated runs draw no bars
 unless their smoke asks.
 
@@ -1514,7 +1555,7 @@ name and lit frame, its down frame with 3000, the release with 3001 opening the 
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
-message log, hot-key bar, portraits and vials (later slices), the skill pane, fate and sleep windows, the town map, the
+message log, hot-key bar and portraits (later slices; the vials since ARC-UI-020), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
 
 ### Logbook (ARC-UI-008)
