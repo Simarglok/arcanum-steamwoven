@@ -66,6 +66,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionSpellRunFiring> SpellRuns { get; init; } = Array.Empty<SessionSpellRunFiring>();
     /// <summary>The Item Decay events that came due (ARC-WORLD-062), in firing order.</summary>
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
+    /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
+    public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
 }
 
 /// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the rules say the event does.
@@ -121,7 +123,7 @@ public static class SessionEventKinds
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
-    /// <see cref="SpellRun"/> (not saved) and ARC-WORLD-062 <see cref="ItemDecay"/> without a new version:
+    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/> and ARC-WORLD-084 <see cref="AiTick"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -183,9 +185,22 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
-    /// magic-tech events and the Item Decay events.</summary>
+    /// magic-tech events, the Item Decay events and the AI ticks.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks;
+
+    /// <summary>
+    /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
+    /// (<see cref="Arcanum.Simulation.Ai.AiSchedulerRules.Tick"/>). Active map only, one per NPC (a new one replaces it). Saved
+    /// unless the Original setting rebuilds it on load (OQ2: each becomes a wake-up tick 1 ms after the restored clock); a map
+    /// change removes every tick, and the host's sector fold schedules the new map's. Entity: the NPC; values: the game time it was
+    /// scheduled at, its delay (1 ms up to <see cref="MaxAiTickDelayMs"/>) and the wake-up marker (0 or 1).
+    /// </summary>
+    public const string AiTick = "ai.tick";
+    /// <summary>Pending AI ticks a session holds (project policy; one per NPC of the active map).</summary>
+    public const int MaxAiTicks = 8192;
+    /// <summary>The longest AI tick delay: a spawner's, bounded as a deferred call's.</summary>
+    public const long MaxAiTickDelayMs = MaxScriptCallDelayMs;
     /// <summary>Pending Lock events a session holds (project policy; the original has no bound).</summary>
     public const int MaxLockResets = 1024;
 
@@ -250,6 +265,8 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
+            new(AiTick, GameEventDomain.Game, GameEventPersistence.SavedUnlessRebuilt, GameEventUniqueness.Replace, GameEventScopeRule.ActiveMapOnly,
+                1, 3, 1, 0, new AiTickHandler(owner), Validate: AiTickPayload),
             new(SpellRun, GameEventDomain.Game, GameEventPersistence.NotSaved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
                 new SpellRunHandler(owner),
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
@@ -261,6 +278,14 @@ public static class SessionEventKinds
     internal static bool DecayPayload(GameEventPayload payload) =>
         payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Items.ItemDecayRules.DelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
         && payload.Entities[0].Code != AbsentRole;
+
+    // Scheduled at a game time, a delay of 1 ms up to the longest, a wake-up marker, naming an NPC.
+    internal static bool AiTickPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxAiTickDelayMs && payload.Values[2] is 0 or 1 && AiTickNpc(payload.Entities[0].Code);
+
+    // An AI tick names an NPC: a session entity id that is neither the absent role nor the player.
+    internal static bool AiTickNpc(string? entity) =>
+        SessionValidation.Entity(entity) && entity != AbsentRole && entity != PlayerEntity;
 
     /// <summary>The original's wait-event predicate (0x4AAA30): whether the event names the NPC.</summary>
     [Arcanum.Simulation.OriginalFunction(0x4AAA30, Arcanum.Simulation.OriginalFunctionScope.Full)]

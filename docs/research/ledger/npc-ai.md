@@ -63,7 +63,20 @@ target-locked NPC asked to fight still loses FLEEING and SURRENDERED; a fight's 
 "check wield" (the gate's step 14 tests 0x40 and "check weapon" 0x80) and 0x40000000 is "check grenade" (the back-off writes
 0x50000000 with BACKING_OFF 0x10000000); the calm-down sets DEMAINTAIN_SPELLS 0x1000000; rule 8 reads the reaction through
 0x4C0CE0, which is 0x4C0D00 with the hostility flag 1, and adds `parameter 10 − reaction` through 0x4C0DE0. The toggle's exit
-(0x4B4100) clears critter flag bit 18 and then unlocks the target (call 0x4B411C).
+(0x4B4100) clears critter flag bit 18 and then unlocks the target (call 0x4B411C). ARC-WORLD-084 (slice I6) re-read the tick,
+its delay and distance, the near test, the catch-up, the three schedulers, the pass, the gate and the subturn hook on 2026-10-28,
+one reader, agreeing with CL1, CL2, CL5, CL7–CL9 and CL11: the wake-up runs the standpoints only when the waypoints returned 0;
+the delay is `(4750 × d) / 30` through the multiply-high constant 0x88888889 plus 250; the near test and the catch-up count a
+negative distance as near (an unsigned `≤ 30` on the low word after a sign test of the high word); the catch-up tests NPC flag
+0x8 (waiting), critter flag 0x40 (paralysed) and 0x45D790 (active) before it interrupts and moves the follower; a refused spawner
+and an unloaded sector share the encounter test (critter flag 0x20000, outside a round) and schedule nothing; the delayed
+scheduler (0x4AD6E0) passes the delay through 0x4AD700 to the replacing scheduler 0x4AD730 (removal 0x4AD7D0, kind 10, marker 0),
+the immediate one (0x4AD790) inserts with the caller's marker; the gate reads the critter flags (field 0xDA) once before the
+conversation test and tests and writes blindness 0x80, the crippled bits 0x700 and the stun 0x20 on that copy, which it updates
+after each write; it re-reads the NPC flags (field 0x118) for the generator bit 0x80000 and after each re-wield, clearing 0xC0
+(check wield and check weapon 0x80) after the full re-wield and 0x80 after the weapon re-wield, and tests DEMAINTAIN_SPELLS on
+those re-read flags; the hook runs for the current actor that is no PC (0x40DA20) outside a load (0x4038D0), the heartbeat with
+the critter as triggerer and attachee, and ends the subturn when no animation runs (0x423300).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

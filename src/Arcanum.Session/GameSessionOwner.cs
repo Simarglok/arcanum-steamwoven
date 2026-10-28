@@ -54,6 +54,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionWaitFiring>? _passWaits;
     private List<SessionRespawnFiring>? _passRespawns;
     private List<SessionDecayFiring>? _passDecays;
+    private List<SessionAiTickFiring>? _passAiTicks;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -190,7 +191,7 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock.GameTimestampMs, snapshot.Actor.Map.RuntimeMap, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -812,7 +813,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Ground pickup (the pickup goal, then the item transfer 0x4617F0): an item lying on the actor's map goes to the end of
     /// the PC's list. Since ARC-WORLD-059 one of the hero's placed items on the actor's map goes back to the list it came from (a kit
     /// item at its kit number's place, a made item to the made items) after the insert check; it runs no script, and a world item
-    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
+    /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), and a
+    /// thrown item still in flight (ARC-COMBAT-017, hidden until it lands) is <see cref="GameSessionFailure.ItemNotAvailable"/>. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> script and no host (ARC-SCRIPT-041: with one it runs before the insert check and
     /// can decline, <see cref="InventoryMutationResult.DeclinedBy"/>), gold or a key type (gold and key rings are not modelled),
     /// and a refusal of <paramref name="insertCheck"/>, which runs after every other check. Since ARC-WORLD-066 an ammunition item
@@ -827,6 +829,8 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands.
+        if (ItemInFlight(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
         if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return Picked(item, TakePlaced(placed, insertCheck));
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
@@ -1071,7 +1075,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var respawns = new List<SessionRespawnFiring>();
         var spellRuns = new List<SessionSpellRunFiring>();
         var decays = new List<SessionDecayFiring>();
+        var aiTicks = new List<SessionAiTickFiring>();
         _passDecays = decays;
+        _passAiTicks = aiTicks;
         // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
         // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
         var decaying = _events.Any(SessionEventKinds.ItemDecay)
@@ -1112,11 +1118,12 @@ public sealed partial class GameSessionOwner : IDisposable
             _passRespawns = null;
             _passSpellRuns = null;
             _passDecays = null;
+            _passAiTicks = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly() };
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly() };
     }
 
     /// <summary>
@@ -1282,6 +1289,16 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure == GameEventFailure.None)
             failure = _events.RelocateEntities(SessionEventKinds.ScriptCall, _actor.Map.RuntimeMap, to.RuntimeMap,
                 entity => entity.Code == SessionEventKinds.PlayerEntity || followers.Contains(entity.Code)).Failure;
+        // ARC-WORLD-084: the AI ticks of the map left go (the followers' too, which the relocation carried); the host's sector
+        // fold wakes the new map's NPCs. So do the danger records that hold only the gate's check bits: the fold's wake-up sets
+        // "check wield" again, whose full re-wield covers "check weapon" too, so dropping them changes nothing an NPC does and
+        // keeps the danger budget from filling with NPCs woken on earlier maps.
+        if (failure == GameEventFailure.None)
+        {
+            _events.RemoveAll(SessionEventKinds.AiTick, _ => true);
+            foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
+                _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
+        }
         return failure switch
         {
             GameEventFailure.None => GameSessionFailure.None,
@@ -1497,9 +1514,10 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// ARC-WORLD-059: places one of the hero's items (its kit, a taken or a made item) on the ground of the actor's map at
     /// <paramref name="cell"/>: a worn item leaves its slot, the item leaves its list and joins the placed items, and stays taken.
-    /// One revision. The caller checked the item and the cell.
+    /// One revision. The caller checked the item and the cell. ARC-COMBAT-017: a thrown item is laid down without the drop's decay
+    /// (<paramref name="decays"/> false: the throw's plain placement 0x4415C0 schedules none, ledger ID4).
     /// </summary>
-    internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell)
+    internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell, bool decays = true)
     {
         SessionPlacedItem placed;
         if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit)
@@ -1521,7 +1539,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Placed.Add(placed);
         // ARC-WORLD-062: every drop on the ground schedules the item's decay (ledger ID4).
-        ScheduleDecay(entity, placed.Map);
+        if (decays) ScheduleDecay(entity, placed.Map);
         _revision++;
     }
 
@@ -2007,7 +2025,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
     private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, PartyDomain party,
-        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs,
+        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs, int actorMap,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
@@ -2048,6 +2066,17 @@ public sealed partial class GameSessionOwner : IDisposable
                     RecordedIn(mapChanges, new(new(pending.Entities[0].Map), pending.Entities[0].Code)) is null ||
                     pending.Values[0] < 0 || pending.Values[0] > clockMs ||
                     (pending.DeadlineMs - pending.Values[0]) is not (Arcanum.Simulation.Locks.LockRules.UnlockResetDelayMs or Arcanum.Simulation.Locks.LockRules.JamResetDelayMs))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
+            if (pending.Kind == SessionEventKinds.AiTick)
+            {
+                // An AI tick (ARC-WORLD-084): one NPC of the actor's map, set no later than the saved clock, its delay before its
+                // deadline, one per NPC (the queue's key check). Whether the NPC is still there is asked when it fires.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map != actorMap || !SessionValidation.Entity(pending.Entities[0].Code) ||
+                    !SessionEventKinds.AiTickPayload(new(pending.Entities, pending.Values)) || pending.Values[0] > clockMs ||
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1])
                     return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
@@ -2101,8 +2130,8 @@ public sealed partial class GameSessionOwner : IDisposable
             var scope = kind.Scope == GameEventScopeRule.Global || pending.Entities.IsEmpty ? 0 : pending.Entities[0].Map;
             converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, scope, new(pending.Entities, pending.Values)));
         }
-        // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
         if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
+            converted.Count(e => e.Kind == SessionEventKinds.AiTick) > SessionEventKinds.MaxAiTicks ||
             converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects ||
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
@@ -2111,6 +2140,13 @@ public sealed partial class GameSessionOwner : IDisposable
             SessionEventKinds.Limits);
         if (result.Queue is null)
             return result.Failure == GameEventFailure.QueueFull ? GameSessionFailure.EventBudgetExceeded : GameSessionFailure.InvalidEvents;
+        // OQ2's Original setting rebuilds the AI ticks as the original's load does when it folds the sectors in: each NPC's tick
+        // becomes a wake-up tick 1 ms after the restored clock (ARC-WORLD-084), in snapshot order. They only replace what was
+        // dropped, so they fit.
+        foreach (var dropped in result.Rebuild)
+            if (result.Queue.ScheduleAfter(SessionEventKinds.AiTick, GameEventPayload.Of(dropped.Payload.Entities, clockMs, 1, 1), 1,
+                    new(0, clockMs, 0)).Disposition != GameEventScheduleDisposition.Added)
+                return GameSessionFailure.InvalidEvents;
         events = result.Queue;
         return GameSessionFailure.None;
     }

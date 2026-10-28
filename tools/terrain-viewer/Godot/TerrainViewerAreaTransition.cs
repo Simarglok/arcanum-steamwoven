@@ -73,6 +73,7 @@ public partial class TerrainViewerApp
         _areaKitDurability = result.Hero?.KitDurability;
         _areaKitArt = result.Hero?.KitArt;
         _areaKitMissileArt = result.Hero?.KitMissileArt;
+        _areaKitThrowWeight = result.Hero?.KitThrowWeight;
         if (carried is not null) { _areaSession = carried; SyncTurnBasedSetting(carried); }
         else
         {
