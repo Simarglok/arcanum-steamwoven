@@ -158,7 +158,9 @@ public partial class TerrainViewerApp
         var pickup = target.Kind == AreaInventoryTargetKind.GroundItem;
         if (!ChargeHeroAction(pickup ? TurnBasedRules.PickUpCost : TurnBasedRules.UseObjectCost, pickup ? "pickup" : "loot"))
         { _inventoryStatus = _turnBasedNotice; RefreshAreaStatus(); return; }
-        if (!pickup) { OpenInventory(target.Entity); return; }
+        // ARC-WORLD-101: a container's window first passes its admission (lock, scripts) and generates it once.
+        if (target.Kind == AreaInventoryTargetKind.Container) { OpenContainer(target); return; }
+        if (!pickup) { _containerLootSession = null; OpenInventory(target.Entity); return; }
         var result = _inventoryHost!.PickUp(_areaSession!, target.Entity);
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
         _inventoryStatus = AreaInventoryHost.Moved(result)
@@ -201,10 +203,12 @@ public partial class TerrainViewerApp
 
     private GameSessionOwner? _junkPileSession;
 
-    /// <summary>Opens the window on the PC's list, or (with <paramref name="holder"/>) on a dead NPC to loot.</summary>
+    /// <summary>Opens the window on the PC's list, or (with <paramref name="holder"/>) on a dead NPC, junk pile or (ARC-WORLD-101, through
+    /// <c>OpenContainer</c>) container to loot.</summary>
     private void OpenInventory(string? holder = null)
     {
-        if (!InventoryActive || InventoryOpen) return;
+        if (!InventoryActive || InventoryOpen) { _containerLootSession = null; return; }
+        if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
             _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel);
@@ -228,7 +232,7 @@ public partial class TerrainViewerApp
         _inventoryPanel.Open(InventoryView(holder));
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");
-        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
+        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
     }
 
@@ -433,6 +437,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-063 junk-pile close entity={holder} disposition={closed.Disposition} failure={closed.Failure} piles={session.QueryJunkPiles().Count}");
             SyncAreaInventory();
         }
+        CloseContainer(holder);
         QuarantineWorld(); RefreshReadyStatus();
     }
 
@@ -458,9 +463,9 @@ public partial class TerrainViewerApp
         var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {
-            // ARC-UI-029: Take all moves a dead NPC's gold pile whole without asking (the original's flag 0x20, QW1).
+            // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's) gold pile whole without asking (the original's flag 0x20, QW1).
             var result = line.StackKind is { Type: SessionItemType.Gold } && SessionJunkPile.Number(holder) is null
-                ? _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units)
+                ? _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
                 : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.

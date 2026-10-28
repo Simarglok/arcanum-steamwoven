@@ -48,14 +48,14 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | Call | Source path (S) | Admitted here |
 | --- | --- | --- |
 | `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → the item transfer (0x4617F0) of an unparented item: item `SAP_GET`, insert check, the object pickup (0x4417A0), the item insert (0x466640; item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
-| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)) |
+| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)); since ARC-WORLD-101 an item in the current list of a container of the seed that has not spilled (its seed items, the items a barter or a regeneration put into it); the host admits the open first ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)) |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
 
 - pickup: `ItemNotAvailable` (not on that map's ground, or already taken);
-- loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container: chest contents are generated on first open
-  from the created PC and are not modelled), `HolderScriptUnsupported` (a holder `SAP_USE` script), `ItemNotAvailable`
+- loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container that spilled when it broke; before ARC-WORLD-101 every
+  container), `HolderScriptUnsupported` (a body's `SAP_USE` script; a container's ran at its window's admission and refuses nothing), `ItemNotAvailable`
   (not in that holder's current list);
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
@@ -340,8 +340,8 @@ each decay event (one item on a map, set no later than the saved clock, the deca
 event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
 Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
-into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
-counter), so only an open pile delays a decay; the item flag of the hero's kit and made items is not known (no
+into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows the session's junk piles and (ARC-WORLD-101) the map's containers (a dead NPC it loots does not count, as in the original's
+counter), so only an open pile or container delays a decay; the item flag of the hero's kit and made items is not known (no
 installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
 whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
 original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
@@ -400,7 +400,8 @@ chest of 3 (one with the no-decay flag), all 3 in the pile.
 **Not ready.**
 
 - The map data's own junk piles (15 on 10 interiors, census) take nothing: a drop on their tile ignores them (it may make a session
-  pile beside them), and they are not opened as piles (chests are not lootable in the session).
+  pile beside them); since ARC-WORLD-101 they open as containers of the map (the attempt always admits a junk pile, LK8), but they do
+  not dissolve on closing.
 - The tile's list order is the session's ground order (seed items, spilled, dropped, then placed items), not the original's object list
   order, which was not read; it decides only the order in a new pile and its slots.
 - The scripts the original runs on the way: the get script of a swept item and the insert-item event of every insertion. An item whose
@@ -513,7 +514,7 @@ Since ARC-WORLD-063 a junk pile is drawn in place of its items ([junk piles](#ju
   by the viewer's conversation host, runs node 1's `IN -2804` through the session port and the ring (1714) enters the
   PC's list, leaving his weapon and worn armor. Without script content five of the six dead-NPC items loot and 2527 is
   refused for its `SAP_INSERT_ITEM` script; with the content (ARC-SCRIPT-013) it loots too, script 1341 prints line 1 of
-  its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
+  its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil is not lootable; a chest is (since ARC-WORLD-101), but only for its own items. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
 
 ## Ammunition (ARC-WORLD-066)
@@ -571,7 +572,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
 
 - **Gold (NT1).** An NPC's gold is its first gold pile in list order (its seed piles still in its list, then the piles the session added):
   `QueryNpcGold(npc)` gives its coins (the seed's `Quantity`, or the tracked count), 0 without a pile, null for an NPC the session does not
-  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count)` moves coins to the hero's gold: fewer coins refuse with nothing changed (`GoldShort`),
+  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count, pile)` moves coins to the hero's gold (from the named pile of the holder's current list, `ItemNotAvailable` when it holds none such; without one its first pile; since ARC-WORLD-101 the holder may be a standing container, whose loot window takes its coins): fewer coins refuse with nothing changed (`GoldShort`),
   exactly the count destroys the pile (the durability deletion), more leave the rest. `GiveGoldToNpc(expected, npc, count, pileKind,
   insertCheck)` moves the hero's coins to the NPC: its pile grows with no insert check; without one a new `made:n` pile of `pileKind` (the
   gold prototype 9056, the host's) enters the end of its list after the host's insert check. Gold needs a hero (`GoldUnavailable`); a pile
@@ -587,7 +588,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   32) refuses a given item and a new pile or stack moved into it (`HolderScriptUnsupported`; an existing pile or stack grows without it, NT1), as does a taken item whose origin seed shows a remove-item, insert-item or (worn)
   wield-off script (`ItemScriptUnsupported`).
 - **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
-  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
+  one named stack (since ARC-WORLD-101 `TakeAmmoFromNpc` also from a standing container's stack): fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
   script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
   first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
   host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
@@ -787,7 +788,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
   ammunition `InvalidAmmo`), version, a stack the hero holds (`ItemNotAvailable`), a count of 0 (`NoChange`, as the original's request
   returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the durability record of an emptied stack, the ammunition, item and
   made-number budgets (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
-- **Takes from a dead NPC** use `TakeGoldFromNpc` and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
+- **Takes from a dead NPC** (since ARC-WORLD-101 also from a container) use `TakeGoldFromNpc` (the pile given) and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter

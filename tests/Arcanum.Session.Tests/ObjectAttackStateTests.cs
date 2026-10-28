@@ -140,6 +140,8 @@ public sealed class ObjectAttackStateTests
         CollectionAssert.AreEqual(new[] { (0, 1, 1), (1, 1, 1) }, owner.QueryJunkPiles().Single().Items.Select(item => (item.Slot, item.Width, item.Height)).ToArray());
         // ARC-WORLD-062: the spilled items decay; the vase, which lay there at T0, does not.
         CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
+        // ARC-WORLD-101: the broken chest is no loot any more; its items lie on the ground and in the pile.
+        Assert.AreEqual(GameSessionFailure.HolderNotLootable, owner.LootItem(owner.Version, "chest", "cup", Accept).Failure);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItem(owner.Version, "cup", Accept).Failure, "an item in a pile is not on the ground");
         Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:1", "cup", Accept).Failure, "it is looted from the pile");
         Assert.AreEqual("cup", owner.QueryPcInventory().Single().Entity);

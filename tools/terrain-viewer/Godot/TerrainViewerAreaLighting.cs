@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
     private AreaEventWorld? _areaEventWorld;
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost,
-        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
+        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
     private void StartAreaAmbient(AreaLoadResult area)
