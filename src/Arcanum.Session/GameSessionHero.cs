@@ -23,12 +23,12 @@ public static class SessionHeroLimits
     /// prototype's name.</summary>
     public const int MaxPlayerNameBytes = 64;
 
-    /// <summary>The stats the session stores for the hero, in this order: the eight primary stats, then magick and tech
-    /// points. Derived stats are formulas of <see cref="CharacterStatsOwner"/> and are never stored.</summary>
     /// <summary>ARC-UI-033: whether a player name may be stored: at most <see cref="MaxPlayerNameBytes"/> bytes, none of them NUL (the
     /// field is a C string).</summary>
     public static bool ValidPlayerName(IReadOnlyList<byte> name) => name is not null && name.Count <= MaxPlayerNameBytes && !name.Contains((byte)0);
 
+    /// <summary>The stats the session stores for the hero, in this order: the eight primary stats, then magick and tech
+    /// points. Derived stats are formulas of <see cref="CharacterStatsOwner"/> and are never stored.</summary>
     public static ImmutableArray<CharacterStat> StoredStats { get; } =
     [
         CharacterStat.Strength, CharacterStat.Dexterity, CharacterStat.Constitution, CharacterStat.Beauty,

@@ -1661,7 +1661,8 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   (or the controller's confirm on its row) clears it and starts the typing, marked by a caret: typed characters the game's
   encoding (code page 1252) has go to its end up to 22 bytes, Backspace removes the last, Return ends the typing (an empty
   field takes message 500), and a press on any other button ends it first (an empty field takes back its old text). The
-  cursor keys, Delete and Insert of the original's text edit are not offered. While it is typed into, letters go to the
+  cursor keys, Delete and Insert of the original's text edit are not offered, and each opening of the window starts the
+  field with message 500 (the original keeps a name typed before Cancel, NW7). While it is typed into, letters go to the
   field; Escape still leaves the window, as in the original.
 - **Accept** starts a new game as that character, as Start does for a pre-made hero (the same session recipe and scene
   flow): the session's hero is the generic prototype with the chosen race and gender, whose race effect (64 + race) and
