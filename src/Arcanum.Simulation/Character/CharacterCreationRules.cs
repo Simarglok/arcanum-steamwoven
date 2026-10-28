@@ -21,7 +21,7 @@ public readonly record struct CreationPress(CharacterRace Race, CharacterGender 
 /// first (BD10); the original's gender buttons clear it even when the race refuses a woman and nothing else changes, a gameplay bug
 /// the Steamwoven setting does not repeat (<see cref="CharacterCreationRuleProfile.RefusedGenderClearsBackground"/>, NW4).
 /// The setters' effects (race effect 64 + race and the female effect 330 replace the old ones, NW3) are the session's hero
-/// definition; the body type and the art are not drawn yet (N15). Godot-free, stateless.
+/// definition; the body type is drawn by the viewer's hero body (ARC-UI-039, ledger HB1). Godot-free, stateless.
 /// </summary>
 public static class CharacterCreationRules
 {

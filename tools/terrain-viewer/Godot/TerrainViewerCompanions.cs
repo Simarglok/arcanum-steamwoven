@@ -38,7 +38,9 @@ public partial class TerrainViewerApp
         // ARC-WORLD-049: a dead NPC is a corpse where it lies, never a moving companion.
         var templates = _readyMapName is null ? _companionTemplates
             : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
-        _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
+        _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time,
+            // ARC-UI-039: the companions keep the human timing, not the hero body's.
+            grid.Timing is null ? null : GaitTiming.HumanFixed);
         // ARC-WORLD-065: the companions step over what the session destroyed or switched off, as the PC does.
         _areaCompanions.Removed = AreaRemovedObjects;
         // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.

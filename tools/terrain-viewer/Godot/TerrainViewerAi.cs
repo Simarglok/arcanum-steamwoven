@@ -75,7 +75,8 @@ public partial class TerrainViewerApp
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             Parameters = _companionData?.Data?.Table ?? (_arguments is { } arguments ? MapCompanionData(arguments.ModulePath)?.Table : null),
-            Timing = grid.Timing,
+            // ARC-UI-039: NPCs keep the human timing, not the hero body's.
+            Timing = grid.Timing is null ? null : GaitTiming.HumanFixed,
             HeroIdle = HeroIdleForRound,
             // ARC-WORLD-102: the spell answers and the casts go through the map's cast host; its eye candy times an NPC's casting goal.
             Spells = SpellCasterNow,

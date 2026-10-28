@@ -139,8 +139,9 @@ public sealed class AreaGridSession : IGridSession
     /// <summary>ARC-WORLD-051: the runtime passage of the map's doors and windows (read at every assessment); null keeps
     /// their T0 rules.</summary>
     public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Portals { get; set; }
-    /// <summary>ARC-WORLD-020: per-gait step durations. Null keeps the fixed <see cref="Duration"/> for every step.</summary>
-    public GaitTiming? Timing { get; init; }
+    /// <summary>ARC-WORLD-020: per-gait step durations. Null keeps the fixed <see cref="Duration"/> for every step. ARC-UI-039: set again
+    /// when the hero's body changes; a step already admitted keeps its duration.</summary>
+    public GaitTiming? Timing { get; set; }
     /// <summary>ARC-WORLD-020: the gait a step starts with, read when it is admitted; null walks.</summary>
     public Func<MovementGait>? Gait { get; set; }
     /// <summary>ARC-COMBAT-020: asked once when an open step starts, with the gait it starts with (the original charges a step's

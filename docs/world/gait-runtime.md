@@ -95,6 +95,10 @@ nothing; turn-based AP and the combat-mode fatigue counter (L9) wait for the com
 round. No stealth walk, no Speed from the session hero (the profile is fixed at Speed
 8), no Shift-click flag. Parity NOT_VERIFIED.
 
+Since ARC-UI-039 the timing is the hero's body's ([hero body](../rendering/actor-visual-contract.md#hero-body-arc-ui-039)):
+its walk and run strides, and 4 more frames per second for a dwarf or halfling body (ledger HB2, 0x437990 asks the art id's body).
+The walk and run animations play at that gait rate (`GaitTiming.ArtRate`), which equals the human ART's own rate at Speed 8.
+
 ## Checks
 
 - `ActorGaitTests.AWindowStepIsAVaultWithItsOwnTimeArtAndRouteCost` (synthetic
