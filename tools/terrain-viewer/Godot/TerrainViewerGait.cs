@@ -68,7 +68,13 @@ public partial class TerrainViewerApp
     private void PaletteAlwaysRunToggle()
     {
         if (!GaitControlsActive) { BindGaitPalette(); return; }
-        _alwaysRunOption = !_alwaysRunOption;
+        SetAlwaysRun(!_alwaysRunOption);
+    }
+
+    /// <summary>The Always Run option set (the palette's toggle, or the options window, ARC-UI-013) and saved.</summary>
+    private void SetAlwaysRun(bool value)
+    {
+        _alwaysRunOption = value;
         var saved = _alwaysRunStore is not { Persistent: true } store ? "not saved (automated run)" : store.Save(_alwaysRunOption) ? "saved" : "save FAILED, this run only";
         GD.Print($"ARC-WORLD-020 always-run option={_alwaysRunOption} {saved}");
         BindGaitPalette(); RefreshReadyStatus();

@@ -263,6 +263,7 @@ public partial class TerrainViewerApp
         _areaSession = session;
         AttachAreaEncumbranceEffect();
         SyncTurnBasedSetting(session);
+        ApplyDifficulty(session);
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
         if (_conversationHost is not null) _conversationHost = talk!;
         // ARC-WORLD-048: visitor hosts borrow the old session too; they are built again over the new one when asked.

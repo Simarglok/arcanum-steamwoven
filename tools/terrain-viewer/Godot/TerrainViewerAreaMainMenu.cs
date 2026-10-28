@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer;
 // closed, clock paused) and owns the keys: a button's hotkey letter chooses it, Escape goes back (ledger MM1–MM7). It opens once a
 // run; a new game or a load closes it.
 // ARC-UI-012 scene flow (ledger SF1–SF5): in play, Escape opens the same menu at the original's in-play window (Save Game, Load
-// Game, Quit, Continue; Options waits for N9). Quit asks first and then ends the game as the original resets and reloads its module:
+// Game, Options, Quit, Continue; the options window is ARC-UI-013, TerrainViewerAreaOptions.cs). Quit asks first and then ends the game as the original resets and reloads its module:
 // the start scene loads again from the launch arguments (the start map, a fresh session without a hero, no --sector) and the main
 // menu opens over it, its root Escape now exiting the game (MM6). A new game picked on another scene (another map, the cave, a
 // --sector start, a session a transfer or load brought) loads the start scene the same way and starts there. Saves are not touched.
@@ -85,6 +85,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.StartRequested += () => MainMenuCommand(() => _mainMenu!.Start());
             _mainMenuPanel.BackRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.AnswerRequested += yes => MainMenuCommand(() => _mainMenu!.Answer(yes));
+            _mainMenuPanel.OptionChangeRequested += (index, direction) => MainMenuCommand(() => _mainMenu!.Change(index, direction));
         }
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
@@ -184,6 +185,7 @@ public partial class TerrainViewerApp
     private void RenderMainMenu()
     {
         if (_mainMenu is null || _mainMenuPanel is null) return;
+        BindOptionsWindow();
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero) : "");
     }
 
@@ -245,6 +247,11 @@ public partial class TerrainViewerApp
             case AreaMenuCommandKind.Continue:
                 EndMainMenu("continue");
                 return;
+            case AreaMenuCommandKind.ChangeOption:
+                // ARC-UI-013: the setting changes at once (OP3); a refusal keeps it and names why.
+                if (ApplyOptionChange(command.Option, command.Value) is { } optionRefused && _mainMenu is not null) _mainMenu.Notice = optionRefused;
+                if (_mainMenu is null) return;
+                break;
             case AreaMenuCommandKind.QuitToMenu:
                 if (BeginSceneFlow(SceneFlowKind.Menu, -1, "quit to the main menu") is { } quitRefused) _mainMenu.Notice = "quit refused: " + quitRefused;
                 else return;
@@ -363,7 +370,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>While open the menu owns the keys: Escape goes back (or continues play, exits from a reopened main menu, answers
-    /// the quit box no), a typed letter chooses its button (MM6, SF2, SF3).</summary>
+    /// the quit box no), a typed letter chooses its button (MM6, SF2, SF3). ARC-UI-013: in the options window Up and Down move the
+    /// focus, Left and Right change the focused control, and the O key closes the menu from play (OP7).</summary>
     private void HandleMainMenuKey(InputEventKey key)
     {
         if (!key.Pressed || key.Echo || _mainMenu is null) return;
@@ -371,6 +379,19 @@ public partial class TerrainViewerApp
         if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape()); return; }
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
+        if (_mainMenu.Window == AreaMenuWindow.Options && !_mainMenu.QuitPending)
+        {
+            // The original's key table reads the O key's scan code here, not the typed letter.
+            if (key.PhysicalKeycode == Key.O) { MainMenuCommand(() => _mainMenu.OptionsKey()); return; }
+            // The keyboard moves the focus over the controls and buttons as a controller does (the original has no such keys).
+            if (routed is Key.Up or Key.Down) { MainMenuCommand(() => { _mainMenu.Move(routed == Key.Up ? -1 : 1); return AreaMenuCommand.Nothing; }); return; }
+            if (routed is Key.Left or Key.Right)
+            {
+                var direction = routed == Key.Left ? -1 : 1;
+                MainMenuCommand(() => _mainMenu.Change(_mainMenu.OptionsFocus, direction));
+                return;
+            }
+        }
         if (key.Unicode is > 0 and < 0x10000 && !char.IsControl((char)key.Unicode) && _mainMenu.Window != AreaMenuWindow.PickCharacter)
             MainMenuCommand(() => _mainMenu.Type((char)key.Unicode));
     }
