@@ -59,6 +59,8 @@ public partial class TerrainViewerApp
         if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats());
         else _editorPanel.Render(view, skills, spells, editor.Stats());
         if (menu.Notice is { } notice) _editorPanel.ShowSkillMessage(notice);
+        // The controller's rows (Accept, Cancel) as the menu's other windows highlight theirs.
+        _editorPanel.ShowCreationFocus(menu.Focus);
     }
 
     private void CloseCharacterEditor()

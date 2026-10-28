@@ -418,8 +418,11 @@ public sealed class AreaNewCharacterTests
         using var open = Session(hero);
         open.OpenHeroEditor();
         Assert.ThrowsExactly<ArgumentException>(() => new AreaCreationEditor(creation, open), "an open editor has another floor");
+        Assert.ThrowsExactly<ObjectDisposedException>(() => open.QueryHero(), "the refused draft is disposed");
+        var fresh = Session(hero);
         using (var editor = new AreaCreationEditor(creation, Session(hero))) editor.PressStat(2, spend: true);
-        Assert.ThrowsExactly<ArgumentException>(() => new AreaCreationEditor(creation, open), "presses already recorded");
+        Assert.ThrowsExactly<ArgumentException>(() => new AreaCreationEditor(creation, fresh), "presses already recorded");
+        Assert.ThrowsExactly<ObjectDisposedException>(() => fresh.QueryHero());
     }
 
     [TestMethod]

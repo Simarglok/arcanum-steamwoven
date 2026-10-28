@@ -257,6 +257,14 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _spellMinus.TooltipText = spells?.HighestSpell is { } highest ? AreaSpellsPage.Hint(highest) : "";
     }
 
+    /// <summary>ARC-UI-034: the creation mode's controller focus: 0 Accept, 1 Cancel (highlighted as the menu's rows are).</summary>
+    public void ShowCreationFocus(int focus)
+    {
+        if (_accept is null) return;
+        _accept.Modulate = focus == 0 ? new Color(1f, .85f, .6f) : Colors.White;
+        _close.Modulate = focus == 1 ? new Color(1f, .85f, .6f) : Colors.White;
+    }
+
     /// <summary>The message of the last + or − press (empty clears it).</summary>
     public void ShowSkillMessage(string message) => _skillMessage.Text = message;
 

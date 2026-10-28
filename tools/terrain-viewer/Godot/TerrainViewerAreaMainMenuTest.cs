@@ -213,6 +213,10 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && ReferenceEquals(beforeCreation, _areaSession)
                 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 5, EditorOpen: true } && _mainMenu.Editor!.Draft.QueryHero()!.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf,
                 "Accept opened the editor on the dwarf's draft: " + _mainMenu?.Notice);
+            HandleMainMenuPulse(Pad(false, 1));
+            Require(_mainMenu!.Focus == 1 && _editorPanel!.CloseForSelfTest.Modulate != Colors.White && _editorPanel.AcceptForSelfTest!.Modulate == Colors.White,
+                "the controller's focus moved to Cancel and is shown");
+            HandleMainMenuPulse(Pad(false, -1));
             _editorPanel!.StatPlusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 4 } && _editorPanel!.StatTextForSelfTest(2).StartsWith("Strength: 10 (base 9)", StringComparison.Ordinal),
                 "+ bought strength on the draft: " + _editorPanel!.StatTextForSelfTest(2));

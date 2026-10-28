@@ -298,7 +298,11 @@ public partial class TerrainViewerApp
                 var editing = _mainMenu.Creation!;
                 if (MakeCreationDraft(editing, out var draftRefused) is { } draft)
                 {
-                    _mainMenu.OpenCharacterEditor(new AreaCreationEditor(editing, draft));
+                    // The editor disposes the draft when it refuses it (its editor did not open).
+                    AreaCreationEditor opening;
+                    try { opening = new AreaCreationEditor(editing, draft); }
+                    catch (ArgumentException refusedDraft) { _mainMenu.Notice = "the character editor cannot open: " + refusedDraft.Message; break; }
+                    _mainMenu.OpenCharacterEditor(opening);
                     GD.Print($"ARC-UI-034 character editor open race={editing.Race} gender={editing.Gender} background={editing.Background} unspent={draft.QueryHeroExperience()?.UnspentPoints}");
                 }
                 else _mainMenu.Notice = "the character editor cannot open: " + draftRefused;
@@ -652,7 +656,7 @@ public partial class TerrainViewerApp
             var beforeAccept = _areaSession;
             // ARC-UI-034: Accept opens the character editor on her draft; the real stats, skills and spells pages spend her points: willpower
             // (the original's sheet order, row 7), a hit point, the first skill and a college 1 spell (willpower 9 lets rank 1 be learned); a
-            // second willpower − is refused at the opening; Return starts the game with the presses replayed.
+            // second hit-point − is refused at the opening; Return starts the game with the presses replayed.
             _mainMenuPanel!.AcceptForSelfTest();
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && ReferenceEquals(beforeAccept, _areaSession)
                 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 5, EditorOpen: true } && _editorPanel.SkillsForSelfTest is not null,

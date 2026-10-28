@@ -21,7 +21,7 @@ public sealed record AreaStatPress(bool Changed, string Message, SessionPointRes
 
 /// <summary>
 /// ARC-UI-034 (N10b slice 3, FR-CHAR-015): the + and − buttons of the character editor's stats, Godot-free. What the original has
-/// was read in the retail 1.0.7.4 executable (ledger CP3, CP4 and "Character editor in creation mode", CM5): the editor's button
+/// was read in the retail 1.0.7.4 executable (ledger CP3, CP4 and "Character editor in creation mode", CM8): the editor's button
 /// handler (0x55A5C0) knows ten rows, hit points (entry 4) and fatigue (entry 6) and then the eight primary stats in the sheet's
 /// order (strength, constitution, dexterity, beauty, intelligence, willpower, perception, charisma; entries 7, 9, ..., 21, each a
 /// base value), and its − compares the row's stored value with the editor's snapshot. + and − go through the session's point pool

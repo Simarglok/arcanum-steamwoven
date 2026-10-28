@@ -28,15 +28,19 @@ public sealed class AreaCreationEditor : IDisposable
 {
     /// <param name="creation">The new-character window's character, with no presses recorded yet.</param>
     /// <param name="draft">A session made from <see cref="AreaNewCharacter.Hero"/> with <see cref="AreaNewCharacter.ApplyChoices"/>
-    /// applied; the editor owns it from now on.</param>
+    /// applied; the editor owns it from now on (a refused draft is disposed before the constructor throws).</param>
     public AreaCreationEditor(AreaNewCharacter creation, GameSessionOwner draft)
     {
         Creation = creation ?? throw new ArgumentNullException(nameof(creation));
         Draft = draft ?? throw new ArgumentNullException(nameof(draft));
-        if (creation.Presses.Count != 0) throw new ArgumentException("the character already has editor presses", nameof(creation));
+        if (creation.Presses.Count != 0) { draft.Dispose(); throw new ArgumentException("the character already has editor presses", nameof(creation)); }
         // The original's creation-mode open (0x5597C0, mode 0): the snapshot of the new PC, the floor of every refund (CP1, CM3).
         var opened = draft.OpenHeroEditor();
-        if (opened.Disposition != GameSessionDisposition.Changed) throw new ArgumentException("the draft's editor did not open: " + opened.Failure, nameof(draft));
+        if (opened.Disposition != GameSessionDisposition.Changed)
+        {
+            draft.Dispose();
+            throw new ArgumentException("the draft's editor did not open: " + opened.Failure, nameof(draft));
+        }
     }
 
     public AreaNewCharacter Creation { get; }

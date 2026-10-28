@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-034: the stats page of the character editor (ledger CP3, CP4, CM5) over a synthetic half-elf with five unspent
+/// <summary>ARC-UI-034: the stats page of the character editor (ledger CP3, CP4, CM8) over a synthetic half-elf with five unspent
 /// points and every primary stat 8 (invented values).</summary>
 [TestClass]
 public sealed class AreaStatsPageTests
