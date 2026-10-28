@@ -17,7 +17,11 @@ danger update and casts it through the map's cast host ([below](#casting-arc-wor
 [AC1–AC4](../research/ledger/npc-ai.md#npc-ai-casting-host-arc-world-102), one reader, F1); it covers the NPC's casts of
 [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004).
 ARC-WORLD-104 (I10 part 3c) queues a cast while the NPC's casting goal plays, as the hero's ([below](#queued-cast-arc-world-104);
-exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104), one reader, F1).
+exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104), one reader, F1). ARC-WORLD-109 (I10 part 3f)
+hosts the skill goals 33, 34, 86 and 67: the turn, the skill animation and the attempt, whose heal is the session's NPC heal
+([below](#skill-goals-arc-world-109); exe rows [AK1–AK3](../research/ledger/npc-ai.md#npc-ai-skill-goals-host-arc-world-109), one
+reader, F1); it covers the NPC's skill use of [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and
+[FR-CHAR-019](../requirements/characters-skills.md#fr-char-019).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -117,6 +121,24 @@ the launch node has no player test (AC8). The flight is the viewer's, shared wit
 No new state: the missile is the viewer's, not saved (a quick save is refused while any missile flies, as for the hero's); its run
 is the session's.
 
+## Skill goals (ARC-WORLD-109)
+
+The host answers the skill goals' world calls ([action goals](ai-action-goals.md), AG6–AG9, AG12), so a skill run that perform's
+skill starter (0x4350F0, 0x436220) begins plays out: goal 33 walks within range 1, then the attempt goal 34 (any skill but two), 86
+(pickpocket) or 67 (pick locks) replaces it.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Priority | goal table (AK1) | Goals 33, 34, 67 and 86 have priority 3: a skill run holds its NPC busy at the gate, as an attack run does. |
+| Turn | 0x42C0F0, 0x42C390 | `FaceForAction` turns a walked NPC to the target's cell or to the tile; refused for an object the host does not walk, a target without a cell, object flag 0x10000 or a stunned or paralysed critter (critter flags 0x60, or the session's stun). |
+| Animation | 0x42BD40, 0x42CB10, 0x42D300, 0x436220 | `BeginAction` plays the skill animation (12) to its action frame, then its rest; goal 67's pick-locks loops run before its attempt, as many as the starter counts from the art's frames (frames ÷ max(frames − 2, 1) + 1, halved for an apprentice or better in pick locks). NPC ART is not read: the fixed human attack ART's frames (9, action frame 6, 15 per second) stand in, played at their raw rate, so the attempt comes 400 ms after the start and the goal pops 200 ms later (two loops, 1200 ms, for pick locks); `HasSkillArt` answers yes for every walked NPC. An object flag 0x10000 or a stunned or paralysed NPC cannot start; as the turn before it refuses the same NPC, such a run ends at the turn (the end step, no charge). |
+| Attempt | 0x42A2A0 → 0x4C7090, 0x4C7160 (AK2, AK3) | After the attempt's 4 action points (the rules' consume), `AttemptSkill` runs the invocation. The heal skill (10) is the session's `HealByNpc`: the NPC's tool item must be a healing item it holds now (`AreaCombatHost.HeldItemFields`, the session's view of its list), its skills come from its map data's sheet and effects (the scene's `NpcSheet`, the session's saved sheet for a levelled follower); without such an item the heal is impossible and nothing changes. Its answer, the run's flag 0x40000, is the check's success (AK2). A `Skill` notice tells the viewer, which refreshes the bodies, the inventory and the status line after a heal and logs `ARC-WORLD-109 ai-skill`. |
+| Session heal | heal case of 0x4C7160 (AK3, HL1–HL5) | `GameSessionOwner.HealByNpc(SessionNpcHeal)`: the hero's heal check, outcome and item uses with the healer's own heal level and training, extraordinary intelligence and blindness and crippled arms, no local-PC difficulty term, no fate and no action points (the goal paid them). Refused before any roll: a hero, a dead or invalid healer, an item that is no healing item, has a use or destroy script, was destroyed or is the hero's, an invalid target, the version. |
+
+What chooses a skill: only the heal ladder's heal-skill rung (`AiSupportRules.Heal`, out of danger, below 90 % HP, with a healing
+item), which the item half of I10 (ARC-WORLD-108) wires with the NPC's items; until then `AreaAiHost.PerformSkill` (a test and smoke
+seam) starts a skill run as that choice would. No new state, no new switch.
+
 ## Settings
 
 No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
@@ -133,7 +155,10 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   in the Original setting the stalled-actor observation keeps the previous value either way (A11); in Steamwoven it records the new
   participant's own points, as A11's fix does for every check. A round that ends and another that begins between two observations (one frame) skips the round start's interrupt
   of every run. The fidget's animation is not played and its run not held (NPC ART is not read).
-- **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
+- **Skill goals.** An NPC's pickpocket (goal 86) and pick locks (goal 67) reach their attempts, which do nothing (the session's pick
+  pocket and lock picking are the hero's); any skill but heal does nothing either. The skill animation is the fixed stand-in (NPC ART
+  is not read) and is not drawn; the record's flag 0x2 from the goal frame's flag 0x1 is not read (AK2, F0).
+- **Action goals.** Item use, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
   no item spell or AI-action item is chosen;
   an NPC's spell missile still in flight does not hold its subturn in a turn-based round (the NPC's run ends one pace after the
@@ -173,14 +198,20 @@ run, a retired host frees the queue, and a queued goal that ends through the end
 (ARC-WORLD-104); with every spell given a missile, the action frame launches it (no release, the rest one pace longer), the goal's
 end frees nothing, the arrival after it begins the run, a run dropped mid-rest leaves the missile's run, whose loss frees it, and a cast host rebuilt before the
 goal's end neither frees nor charges it (ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
-ARC-WORLD-105). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
+ARC-WORLD-105). `AreaAiSkillTests` (viewer Core, synthetic rows): an NPC's heal skill on itself walks goal 33 into 34 at priority
+3 and at the action frame heals through the session, spending a use of its held item; a heal without a held healing item changes
+nothing; pickpocket and pick locks reach goals 86 and 67, whose attempts are not ready; the stand-in animation's timing, the throw that
+cannot start and the turn (ARC-WORLD-109). `HealStateTests` (Session): an NPC master heals the hero with its own item, charging
+nothing and leaving the hero's heal fate; an NPC heals itself through its life record, its crippled arm making the check harder, and
+its last use destroys its item; the refusals before any roll (ARC-WORLD-109). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
 refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
 the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
 the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
 PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted
 whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_MAP_SMOKE_ONLY=ai` on `crash site cave` with
 `--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the
-marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
+marker; since ARC-WORLD-109 a living animal's pickpocket run on itself, started through `PerformSkill`, walks goal 33 into 86 and its
+not-ready attempt reaches the viewer, `Skills` in the marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
 asked at the NPC's subturn end, `EndCombatScripts`); `ai-cast` on `Arcanum1-024-fixed` with `--hero`, marker
 `ARC-WORLD-102 native-smoke ai-cast PASS` (since ARC-WORLD-105 the NPC then casts the first listed missile spell whose run starts at
 the hero, as its pass record's choice: the missile flies from it, is drawn and arrives; `MissileSpell`, `MissileLegs` and

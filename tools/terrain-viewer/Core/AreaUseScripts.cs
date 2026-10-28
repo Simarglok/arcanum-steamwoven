@@ -28,7 +28,13 @@ public enum AreaScriptedUseOutcome { Teleport, NoTeleport, Refused, EffectsRejec
 
 /// <summary>A scripted use: the outcome, the first teleport of the player the run asked for, the printed lines the viewer
 /// shows, the dispatcher's result and a detail (identifiers and statuses only).</summary>
-public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport? Teleport, IReadOnlyList<string> Lines, ScrRunResult? Run, string Detail);
+public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport? Teleport, IReadOnlyList<string> Lines, ScrRunResult? Run, string Detail)
+{
+    /// <summary>ARC-WORLD-110: the trap meeting before the use script (null when the object carries no trap or no trap host is set).
+    /// When it cancels the use (<see cref="AreaTrapMeeting.Cancels"/>) the script did not run: the outcome is
+    /// <see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run.</summary>
+    public AreaTrapMeeting? Trap { get; init; }
+}
 
 /// <summary>
 /// ARC-SCRIPT-015 (plan slice S4, viewer part): the AREA viewer's SCR host for a use click on an object whose use script can
@@ -200,33 +206,87 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
 
+    /// <summary>The slot of the object at the point. The use slot is the loaded one under the session's map changes, and since
+    /// ARC-WORLD-110 its script is 0 once the trap state removed the trap it names (docs/world/trap-state-runtime.md).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
         if (point != ScrPoint.Use && point != CatchingThiefPoint) return loaded;
         long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
-        return new(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
+        var slot = new ScrSlot(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
             Read(SlotProperty(point, LocalFlagsPart)) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(SlotProperty(point, CountersPart)) is { } counters ? checked((uint)counters) : loaded.Counters);
+        return point == ScrPoint.Use && TrapStateOf(row, attachee.Code, slot) is { Removed: true } ? slot with { Script = 0 } : slot;
     }
+
+    // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
+    // script number outside the catalogue's range (it names no script the content holds).
+    private ScrSlot? TrapSlot(AreaObjectRecord row, string entity)
+    {
+        if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return null;
+        long? Read(string part) => _session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(entity, SlotProperty(ScrPoint.Use, part)));
+        var script = Read(ScriptPart) ?? loaded.Script;
+        if (script is < 0 or > ScrCatalogue.MaxScriptNumber) return null;
+        return new((int)script, loaded.LocalFlags, Read(CountersPart) is { } counters ? unchecked((uint)counters) : loaded.Counters);
+    }
+
+    /// <summary>ARC-WORLD-110: a trap's session object: the row's map and its entity (<see cref="EntityId"/>).</summary>
+    public static SessionTrapped Trapped(AreaObjectRecord row) => new(new SessionMapId((row ?? throw new ArgumentNullException(nameof(row))).Key.RuntimeMap), EntityId(row));
+
+    /// <summary>
+    /// ARC-WORLD-110: the trap baseline of a row (<see cref="SessionTrapBaseline"/>): a trap object (type 17) or another object, its use
+    /// slot as the session's map changes hold it (the script a use wrote back, before the trap state's removal), the script file's header
+    /// flags (0 for a script the content does not hold) and the row's object flags (slot 18). Null without script content, without a
+    /// use slot, or for a stored number outside the catalogue's range.
+    /// </summary>
+    public SessionTrapBaseline? TrapBaseline(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return TrapSlot(row, EntityId(row)) is { } slot ? Baseline(row, slot) : null;
+    }
+
+    private SessionTrapBaseline? Baseline(AreaObjectRecord row, ScrSlot slot)
+    {
+        if (_content is null || slot.Script is < 0 or > ScrCatalogue.MaxScriptNumber) return null;
+        var header = slot.Script != 0 && Script(slot.Script) is { Status: ScrScriptStatus.Found, Program: { } program } ? program.FileFlags : 0;
+        return new(row.Type == TrapObjectType ? Arcanum.Simulation.Traps.TrapCarrier.TrapObject : Arcanum.Simulation.Traps.TrapCarrier.TrappedObject,
+            slot.Script, header, unchecked((int)slot.Counters), unchecked((int)(Number(row, ObjectFlagsSlot) ?? 0)));
+    }
+
+    /// <summary>ARC-WORLD-110: the row's trap state now (<see cref="GameSessionOwner.QueryTrap"/> over <see cref="TrapBaseline"/>), or
+    /// null without a baseline.</summary>
+    public SessionTrapState? TrapState(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var entity = EntityId(row);
+        return TrapSlot(row, entity) is { } slot ? TrapStateOf(row, entity, slot) : null;
+    }
+
+    // The trap state over the written slot; without a recorded trap state the baseline alone (no session call).
+    private SessionTrapState? TrapStateOf(AreaObjectRecord row, string entity, ScrSlot slot)
+    {
+        if (Baseline(row, slot) is not { } baseline) return null;
+        var map = new SessionMapId(row.Key.RuntimeMap);
+        if (_session.QueryMapChange(map, MapChangeKey.ForEntity(entity, GameSessionOwner.TrapStateProperty)) is null)
+            return new(Arcanum.Simulation.Traps.TrapRules.Classify(baseline.Script, baseline.HeaderFlags), baseline.Script, baseline.ObjectFlags, false);
+        return _session.QueryTrap(new(map, entity), baseline);
+    }
+
+    private const int TrapObjectType = 17, ObjectFlagsSlot = 18;
 
     /// <summary>
     /// ARC-COMBAT-011: whether the object's use script is a trap (0x4BBDD0, ledger OD6): the script of its point-1 slot as the
     /// session holds it, when it is not 0 and its file's header flags carry 0x1 (non-magical) or 0x2 (magical); a script the
-    /// content does not hold or cannot read is none, as the original's header read fails. Null without script content (unknown).
+    /// content does not hold or cannot read is none, as the original's header read fails. Since ARC-WORLD-110 a trap the trap state
+    /// removed is none. Null without script content (unknown).
     /// </summary>
     public bool? IsTrap(AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(row);
         if (_content is null) return null;
-        if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return false;
-        // Only the script number is read (a use writes it back under the row's entity); a stored number outside the catalogue's
-        // range names no script the content holds, so it is no trap, like a script the original cannot load.
-        var written = _session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(EntityId(row), ScriptProperty));
-        var script = written is { } number ? (number is >= 0 and <= ScrCatalogue.MaxScriptNumber ? (int)number : 0) : loaded.Script;
-        if (script == 0) return false;
-        return Script(script) is { Status: ScrScriptStatus.Found, Program: { } program } &&
-            (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
+        // A stored number outside the catalogue's range names no script the content holds, so it is no trap, like a script the
+        // original cannot load.
+        return TrapState(row) is { Trapped: true };
     }
 
     public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(_content, number);
@@ -308,11 +368,28 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public AreaScriptedUse Run(AreaObjectRecord row, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
     {
+        var used = RunUse(row, rules, teleportRefusal, out var trap);
+        return trap is null ? used : used with { Trap = trap };
+    }
+
+    /// <summary>
+    /// ARC-WORLD-110: the trap meeting of a use (<see cref="AreaTraps.Use"/>), asked by <see cref="Run"/> before the use script: null
+    /// lets the use go on as before (the object carries no trap, or no trap host is set).
+    /// </summary>
+    public Func<AreaObjectRecord, AreaTrapMeeting?>? Traps { get; set; }
+
+    private AreaScriptedUse RunUse(AreaObjectRecord row, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal, out AreaTrapMeeting? trap)
+    {
+        trap = null;
         ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var entity = EntityId(row);
         if (row.Key.RuntimeMap != _shownMap) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the object is not on the shown map");
+        // The object entry point's spot and trap run (E2, E4) come first; a trap spotted now or a native run fired ends the use (skip
+        // default), and an ordinary trap script runs below with the spot decided.
+        trap = Traps?.Invoke(row);
+        if (trap is { Cancels: true }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "trap: " + trap.Describe());
         // The clicked row answers for its entity during this run, whichever copy of a repeated id the index kept.
         _clicked = (entity, row);
         try
