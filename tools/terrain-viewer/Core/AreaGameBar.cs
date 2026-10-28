@@ -182,19 +182,31 @@ public sealed class AreaGameBar
 }
 
 /// <summary>The hover names of the bar buttons: the installed <c>mes\intgame.mes</c> 1000–1009 when it reads, otherwise the project's
-/// English text with the reason in <see cref="Detail"/>. Godot-free.</summary>
+/// English text with the reason in <see cref="Detail"/>. ARC-UI-035: also a spell hint's labels (intgame.mes 59 the cost, 73 the
+/// minimum willpower, 74 and 75 the maintenance's "second" and "seconds", HK20) and the skill-bar buttons' names (<c>mes\skill_ui.mes</c>
+/// 100–103, 0x57A700, which a hover in a pane mode writes). Godot-free.</summary>
 public sealed class AreaGameBarTexts
 {
-    public const string IntgamePath = "mes/intgame.mes";
+    public const string IntgamePath = "mes/intgame.mes", SkillUiPath = "mes/skill_ui.mes";
+    /// <summary>The spell hint's labels in <c>intgame.mes</c>.</summary>
+    public const int CostLabel = 59, WillpowerLabel = 73, SecondLabel = 74, SecondsLabel = 75;
+    /// <summary>The first skill-bar button name in <c>skill_ui.mes</c> (0x579F01: 100 + button).</summary>
+    public const int FirstSkillButtonName = 100;
     private const int MaxText = 64;
     private static readonly IReadOnlyDictionary<int, string> ProjectText = new Dictionary<int, string>
     {
         [1000] = "Spells", [1001] = "Skills", [1002] = "Combat Toggle", [1003] = "Schematics", [1004] = "Log Book",
         [1005] = "Character Editor", [1006] = "Inventory", [1007] = "Maps", [1008] = "Fate Points", [1009] = "Sleep",
+        [CostLabel] = "Fatigue cost", [WillpowerLabel] = "Minimum willpower", [SecondLabel] = "second", [SecondsLabel] = "seconds",
     };
+    private static readonly IReadOnlyList<string> ProjectSkillButtonNames = ["Prowling", "Pick Pocket", "Disarm Traps", "Repair"];
     private readonly IReadOnlyDictionary<int, string> _game;
+    private readonly IReadOnlyDictionary<int, string> _skillButtons;
 
-    private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail) { _game = game; FromGame = fromGame; Detail = detail; }
+    private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail, IReadOnlyDictionary<int, string>? skillButtons = null)
+    {
+        _game = game; FromGame = fromGame; Detail = detail; _skillButtons = skillButtons ?? new Dictionary<int, string>();
+    }
 
     /// <summary>True when the file read and gave at least one name; <see cref="GameCount"/> says how many.</summary>
     public bool FromGame { get; }
@@ -213,12 +225,32 @@ public sealed class AreaGameBarTexts
             return Project($"{IntgamePath} not read ({detail})");
         var kept = new Dictionary<int, string>();
         foreach (var number in ProjectText.Keys)
-            if (table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 and <= MaxText } text })
-                kept[number] = text;
-        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts");
+            if (Decoded(table, number) is { } text) kept[number] = text;
+        // skill_ui.mes is the skill bar's own file (read at its init, 0x579ED5): a failure keeps the project's names.
+        var buttons = new Dictionary<int, string>();
+        var skillDetail = "";
+        if (AreaStartingHero.Table(stack, SkillUiPath, ContentLoadPhase.GameStart, required: true, out var skillRead) is { } skillUi)
+        {
+            for (var button = 0; button < ProjectSkillButtonNames.Count; button++)
+                if (Decoded(skillUi, FirstSkillButtonName + button) is { } name) buttons[button] = name;
+            skillDetail = $"; {SkillUiPath}: {buttons.Count} of {ProjectSkillButtonNames.Count} names";
+        }
+        else skillDetail = $"; {SkillUiPath} not read ({skillRead})";
+        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts{skillDetail}", buttons);
     }
 
+    private static string? Decoded(MesFile table, int number) =>
+        table.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 and <= MaxText } text }
+            ? text : null;
+
     public string Text(int message) => _game.GetValueOrDefault(message) ?? ProjectText.GetValueOrDefault(message, $"[{message}]");
+
+    /// <summary>ARC-UI-035: a skill-bar button's name (<c>skill_ui.mes</c> 100 + button, 0x57A700), else the project's.</summary>
+    public string SkillButtonName(int button) =>
+        _skillButtons.GetValueOrDefault(button) ?? (button is >= 0 and < 4 ? ProjectSkillButtonNames[button] : $"[skill button {button}]");
+
+    /// <summary>How many skill-bar button names the game's file gave.</summary>
+    public int GameSkillButtonCount => _skillButtons.Count;
 }
 
 public enum AreaInterfaceArtStatus { Ready, Unnamed, MissingFile, Unreadable, LimitExceeded }

@@ -212,6 +212,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
             _inventoryPanel.UseRequested += UseItemFromWindow;
+            _inventoryPanel.PointerStill += InventoryPointerStill;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
             _inventoryPanel.RepairRequested += RepairItem;
