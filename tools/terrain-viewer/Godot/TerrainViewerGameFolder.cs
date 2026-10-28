@@ -1,4 +1,5 @@
 using Arcanum.Data.Content;
+using Arcanum.Session;
 using Arcanum.Session.Launcher;
 using Arcanum.TerrainViewer.Core;
 using Godot;
@@ -7,39 +8,168 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-046: a start without command-line inputs (a player's build) reads the game folder from the launcher settings
 // (user://launcher_v1.json), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
-// folder (for this start only: the launcher confirms a detected folder), adds the identity of a stored folder that had none, and opens
-// map mode on the main map with the main menu, as ./arcanum area does. The launcher screen (ARC-RES-074 task 2) is not built yet: where it would show, the start only says so. The developer
-// launcher always passes its inputs, so its runs never come here.
+// folder (for this start only), adds the identity of a stored folder that had none, and opens map mode on the main map with the main
+// menu, as ./arcanum area does. The developer launcher always passes its inputs, so its runs never come here.
+// ARC-UI-014: the launcher screen shows first on the first run, when the stored folder is gone, when the installation changed, with
+// "show at start", and on request (--launcher, or Shift held while the start waits for it); its Play stores the folder it opens with
+// the rule mode and "show at start". Every ordinary run, with inputs or without, takes its rule mode from the same file, and the
+// options window's Rules line writes it there.
 public partial class TerrainViewerApp
 {
     /// <summary>Isolates a test's launcher settings file; an automated run without it has no file at all.</summary>
     public const string LauncherSettingsTestVariable = "LAUNCHER_SETTINGS_TEST_PATH";
     public const string LauncherSettingsUserPath = "user://" + LauncherSettingsFile.FileName;
+    /// <summary>ARC-UI-014: how long a start that would skip the launcher screen waits for Shift (an ordinary run only).</summary>
+    private const ulong LauncherShiftWaitMsec = 750;
 
-    /// <summary>The arguments of the game folder found, or null after showing why none was found.</summary>
-    private TerrainViewerArguments? GameFolderArguments()
+    private bool _launcherPathResolved;
+    private string? _launcherPath;
+    private LauncherSettingsRead? _launcherRead;
+    private LauncherSettings _launcherSettings = LauncherSettings.Defaults;
+    private LauncherPanel? _launcherPanel;
+    private LauncherScreen? _launcher;
+    private Task? _gameFolderStart;
+    /// <summary>The self-test's stand-in for the start Play begins (a synthetic folder cannot load).</summary>
+    private Action<TerrainViewerArguments>? _launcherStartForSelfTest;
+    /// <summary>The self-test's platform (synthetic candidate folders) instead of this machine's.</summary>
+    private GameFolderPlatform? _launcherPlatformForSelfTest;
+
+    /// <summary>The launcher settings file of this run: the test path, none for an automated run without one, else the user's.</summary>
+    private string? LauncherSettingsPath()
     {
+        if (_launcherPathResolved) return _launcherPath;
         var test = OS.GetEnvironment(LauncherSettingsTestVariable);
-        var path = !string.IsNullOrWhiteSpace(test) ? test : ViewerAutomatedStorage.Automated ? null : ProjectSettings.GlobalizePath(LauncherSettingsUserPath);
-        var read = path is null ? LauncherSettingsCodec.Deserialize(null) : LauncherSettingsFile.Load(path);
+        _launcherPath = !string.IsNullOrWhiteSpace(test) ? test : ViewerAutomatedStorage.Automated ? null : ProjectSettings.GlobalizePath(LauncherSettingsUserPath);
+        _launcherPathResolved = true;
+        return _launcherPath;
+    }
+
+    /// <summary>The launcher settings, read once a run (<see cref="_launcherSettings"/> then follows Play, Reset and the Rules line).</summary>
+    private LauncherSettingsRead LauncherSettingsRead()
+    {
+        if (_launcherRead is { } read) return read;
+        var path = LauncherSettingsPath();
+        read = path is null ? LauncherSettingsCodec.Deserialize(null) : LauncherSettingsFile.Load(path);
         GD.Print($"ARC-DEV-046 launcher settings status={read.Status} file={path ?? "none (automated run)"} defaulted=[{string.Join(',', read.Defaulted)}] unknown=[{string.Join(',', read.UnknownKeys)}]");
-        var startup = GameFolderStartup.Resolve(read.Settings, GameFolderPlatform.Current());
+        _launcherSettings = read.Settings;
+        return _launcherRead = read;
+    }
+
+    /// <summary>A start without inputs: the stored or detected folder, through the launcher screen when it shows.</summary>
+    private async Task StartFromGameFolderAsync(bool requested)
+    {
+        var read = LauncherSettingsRead();
+        var startup = GameFolderStartup.Resolve(read.Settings, _launcherPlatformForSelfTest ?? GameFolderPlatform.Current());
         if (startup.StoredCheck is { } stored) PrintGameFolder("stored", stored);
         foreach (var check in startup.Detection?.Checked ?? []) PrintGameFolder("candidate", check);
-        if (!startup.Ready)
-        {
-            GD.Print("ARC-DEV-046 game folder not found: the launcher screen (ARC-RES-074 task 2) is not built yet; store a folder in "
-                     + LauncherSettingsFile.FileName + " or install the game at a GOG default folder");
-            ShowStatus("Diagnostic mode unresolved | failure stage=GameFolder code=NotFound | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
-            return null;
-        }
-        var folder = startup.Folder!;
         if (startup.SettingsChanged)
+        {
+            var path = LauncherSettingsPath();
             GD.Print($"ARC-DEV-046 launcher settings save={(path is null ? "skipped (automated run)" : LauncherSettingsFile.Save(path, startup.Settings).ToString())}");
-        GD.Print($"ARC-DEV-046 game folder ready source={startup.Source} origin={folder.Origin} gog={folder.Identity!.GogMarker} "
-                 + $"verifiedRelease={folder.Identity.VerifiedRelease} version={folder.Identity.Version ?? "none"} identityChanged={startup.IdentityChanged} "
-                 + $"showLauncher={startup.ShowLauncher}{(startup.ShowLauncher ? " (launcher screen not built yet)" : "")}");
-        return TerrainViewerArguments.ForGameFolder(folder.Inputs!);
+            _launcherSettings = startup.Settings;
+            read = read with { Settings = startup.Settings };
+        }
+        if (startup.Folder is { } folder)
+            GD.Print($"ARC-DEV-046 game folder ready source={startup.Source} origin={folder.Origin} gog={folder.Identity!.GogMarker} "
+                     + $"verifiedRelease={folder.Identity.VerifiedRelease} version={folder.Identity.Version ?? "none"} identityChanged={startup.IdentityChanged} "
+                     + $"showLauncher={startup.ShowLauncher}");
+        else GD.Print("ARC-DEV-046 game folder not found");
+        var reason = LauncherScreen.Decide(read.Settings, startup, requested);
+        if (reason == LauncherShowReason.None && !ViewerAutomatedStorage.Automated && await ShiftDuringStart()) reason = LauncherShowReason.Requested;
+        GD.Print($"ARC-UI-014 launcher reason={reason}");
+        if (reason == LauncherShowReason.None) { StartFromLauncher(startup.Folder!); return; }
+        OpenLauncher(new LauncherScreen(read, startup, reason));
+        if (_nativeSmoke) await RunLauncherSmokeAsync();
+    }
+
+    /// <summary>Shift pressed at the start or while the start waits <see cref="LauncherShiftWaitMsec"/> for it.</summary>
+    private async Task<bool> ShiftDuringStart()
+    {
+        ShowStatus("Diagnostic mode unresolved | loading stage=GameFolder | hold Shift to open the launcher");
+        var end = Time.GetTicksMsec() + LauncherShiftWaitMsec;
+        while (!global::Godot.Input.IsPhysicalKeyPressed(Key.Shift) && !global::Godot.Input.IsKeyPressed(Key.Shift))
+        {
+            if (Time.GetTicksMsec() >= end || _exiting) return false;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        return true;
+    }
+
+    private void OpenLauncher(LauncherScreen screen)
+    {
+        _launcher = screen;
+        if (_launcherPanel is null)
+        {
+            _launcherPanel = new LauncherPanel(); AddChild(_launcherPanel);
+            _launcherPanel.CandidateRequested += index => LauncherChange(launcher => launcher.UseCandidate(index));
+            _launcherPanel.FolderChosen += path => LauncherChange(launcher =>
+            {
+                var check = GameFolderLocator.Choose(path);
+                PrintGameFolder("chosen", check);
+                launcher.UseFolder(check);
+            });
+            _launcherPanel.RulesRequested += mode => LauncherChange(launcher => launcher.SelectRules(mode));
+            _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
+            _launcherPanel.PlayRequested += LauncherPlay;
+            _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
+            _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); GetTree().Quit(); };
+        }
+        _launcherPanel.Render(screen);
+        GD.Print($"ARC-UI-014 launcher open reason={screen.Reason} file={screen.FileStatus} folder={screen.Folder?.Status.ToString() ?? "none"} canPlay={screen.CanPlay}");
+    }
+
+    private void LauncherChange(Action<LauncherScreen> change)
+    {
+        if (_launcher is not { } launcher) return;
+        change(launcher);
+        _launcherPanel?.Render(launcher);
+    }
+
+    private void LauncherReset(LauncherScreen launcher)
+    {
+        var defaults = launcher.Reset();
+        var path = LauncherSettingsPath();
+        var status = path is null ? (LauncherSettingsSaveStatus?)null : LauncherSettingsFile.Reset(path);
+        launcher.ResetDone(status == LauncherSettingsSaveStatus.Saved);
+        if (status == LauncherSettingsSaveStatus.Saved || path is null) _launcherSettings = defaults;
+        GD.Print($"ARC-UI-014 launcher reset save={status?.ToString() ?? "skipped (automated run)"}");
+    }
+
+    private void LauncherPlay()
+    {
+        if (_launcher is not { } launcher) return;
+        if (launcher.Play() is not { } settings) { _launcherPanel?.Render(launcher); return; }
+        var path = LauncherSettingsPath();
+        var saved = path is null ? null : (LauncherSettingsSaveStatus?)LauncherSettingsFile.Save(path, settings);
+        // A refused or failed save does not stop the start: the chosen folder and rules apply to it.
+        GD.Print($"ARC-UI-014 launcher play folder={settings.GameRoot} rules={RuleModeNames.Name(settings.Rules)} showAtStart={settings.ShowAtStart} "
+                 + $"save={saved?.ToString() ?? "skipped (automated run)"}");
+        _launcherSettings = settings;
+        var folder = launcher.Folder!;
+        _launcher = null;
+        _launcherPanel?.CloseView();
+        StartFromLauncher(folder);
+    }
+
+    /// <summary>The map-mode start over a ready folder (the launcher's Play, or a start the screen does not show for).</summary>
+    private void StartFromLauncher(GameFolderCheck folder)
+    {
+        var arguments = TerrainViewerArguments.ForGameFolder(folder.Inputs!);
+        if (_launcherStartForSelfTest is { } stand) { stand(arguments); return; }
+        try { StartWithArguments(arguments); }
+        catch (ArgumentException)
+        {
+            ShowStatus("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+        }
+    }
+
+    /// <summary>ARC-UI-014: the options window's Rules line, stored in the launcher settings (one owner per file: this store).</summary>
+    private void SaveLauncherRules()
+    {
+        if (_launcherSettings.Rules == _ruleMode) return;
+        _launcherSettings = _launcherSettings with { Rules = _ruleMode };
+        var path = LauncherSettingsPath();
+        GD.Print($"ARC-UI-014 launcher settings rules={RuleModeNames.Name(_ruleMode)} save={(path is null ? "skipped (automated run)" : LauncherSettingsFile.Save(path, _launcherSettings).ToString())}");
     }
 
     private static void PrintGameFolder(string kind, GameFolderCheck check)
