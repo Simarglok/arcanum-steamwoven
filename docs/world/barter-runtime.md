@@ -29,7 +29,7 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 | Rule | Behaviour (original) | API |
 | --- | --- | --- |
 | Sale price (BT1) | Coins have no price. From the worth W (300 unidentified, else the stored worth, at least 2): when the merchant's multiplier m is above 100, `W × (100 + trunc(3 × (100 − m) / 8)) / 100`; then the PC's haggle share `× (trunc(H / 2) + 50) / 100` (at most 97 %); a damaged item `× current / maximum`; a negative price is 0 and 1 is 2. 32-bit products, truncating divisions. | `TradeRules.Price` |
-| Buy price (BT1) | `W + (100 − H) × m × W / 10000` with the triple product in 32 bits, then the reaction scale, at least `W + 1` (1 or 2 become 3, reached only after a wrap). No damage scaling. | `TradeRules.Price` |
+| Buy price (BT1) | `W + (100 − H) × m × W / 10000` with the triple product in 32 bits, then the reaction scale, at least `W + 1` (1 or 2 become 3, dead for every worth the original produces). No damage scaling. | `TradeRules.Price` |
 | Reaction scale (BT2) | A reaction above 100 counts as 100; × 200 % below 0, `(200 − 2r) %` below 50, else `(120 − trunc(2r / 5)) %` (100 % at 50, 80 % at 100). Only the buy price reads it. | `TradeRules.ReactionScale` |
 | Sale check (BT3) | In order: a stored worth of 0; a broken item; below Expert haggle the merchant's buy-object script (point 17, on the merchant, the item as triggerer) and then its buy list; a stolen item (flag 0x8000) unless the merchant is a fence (NPC flag 0x4000), at every training. Worn, no-drop and quest items are not tested. | `TradeRules.SaleCheck` |
 | Buy check (BT3) | A Master of haggle buys anything; else a "won't sell" item (flag 0x2), then a worn one (location 1000..1008), is refused. | `TradeRules.BuyCheck` |
@@ -41,15 +41,17 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 
 ## Session
 
-`BarterBuy(expected, npc, item, count, unitPrice, newStackKind, pileKind, heroInsert, npcInsert)` moves a whole item (count 1) through
+`BarterBuy(expected, npc, item, count, unitPrice, newStackKind, pileKind, heroInsert, npcInsert, scripts)` moves a whole item (count 1) through
 `TakeItemFromNpc`, or units of an ammunition stack through `TakeAmmoFromNpc`, then pays `count × unitPrice` through `GiveGoldToNpc`.
 `BarterSell(expected, npc, item, count, unitPrice, newStackKind, npcInsert)` moves the hero's item through `GiveItemToNpc` or
 `GiveAmmoToNpc`, then takes the coins through `TakeGoldFromNpc`. Before any effect each refuses a negative price, a count other than 1
 for an item, a total past 32 bits, a payer with fewer coins than the total (`GoldShort`: the original's "not enough money" before the
 move, and its rolled-back stack payment after it), and the payment refusals that do not depend on the move (a pile past 32 bits, a full
-record budget, a transfer script or insert-item script on the pile). A payment refused after the move (the host's insert check of a new
-pile for the merchant) leaves the item moved and reports the payment's failure, as the original leaves a moved item whose payment
-failed. `QueryHeroHaggle()` gives the hero's haggle effectiveness and training. Tests:
+record budget, a full NPC item budget or list, a transfer script or insert-item script on the pile); the buy's item move runs the
+item's insert-item script through the host, as a loot does. A payment refused after the move (the host's insert check of a new pile for
+the merchant, an exhausted made number, or coins an insert-item script spent) leaves the item moved and reports the payment's failure,
+as the original leaves a moved item whose payment failed. The NPC list and budget checks for a new pile run before the move, so a
+merchant at exactly its list limit is refused one item early. `QueryHeroHaggle()` gives the hero's haggle effectiveness and training. Tests:
 [`BarterStateTests`](../../tests/Arcanum.Session.Tests/BarterStateTests.cs), [`TradeRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/TradeRulesTests.cs),
 [`TradeOriginalExeTests`](../../tests/Arcanum.Simulation.Tests/Items/TradeOriginalExeTests.cs) (oracle),
 [`InventorySourceBuyRulesTests`](../../tests/Arcanum.Data.Tests/Characters/InventorySourceBuyRulesTests.cs),
@@ -66,6 +68,8 @@ failed. `QueryHeroHaggle()` gives the hero's haggle effectiveness and training. 
 - **Restock**: the open (re)schedules the shown inventory's regeneration 12–24 game hours later (BT4); FR-ITEM-014.
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
+- The starting-hero loot reader (`InventorySourceRules`, ARC-WORLD-015) keeps its earlier reading: it treats the last set as out of
+  reach and refuses any set with a buy line; BT9 corrects the range (follow-up for that reader, not changed here).
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
   `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): the window has no gamble slot.
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and

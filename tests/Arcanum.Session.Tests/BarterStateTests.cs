@@ -13,9 +13,9 @@ public sealed class BarterStateTests
     private static readonly SessionItemKind GoldPile = new(SessionItemType.Gold, 9056, 3200, 33200);
     private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, 7059, 3301, 33301);
 
-    private static GameSessionOwner Hero()
+    private static GameSessionOwner Hero(GameSessionLimits? limits = null)
     {
-        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), limits);
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
         return owner;
     }
@@ -89,6 +89,21 @@ public sealed class BarterStateTests
         Refused(owner.BarterSell(owner.Version, "virgil", "kit:1", 1, 1, Bullets, Accept), GameSessionFailure.GoldShort);
         Refused(owner.BarterSell(owner.Version, "merchant", "ring", 1, 1, Bullets, Accept), GameSessionFailure.ItemNotAvailable);
         Refused(owner.BarterSell(owner.Version, "merchant", "kit:1", 1, 1, Bullets, _ => SessionInsertVerdict.NoRoom), GameSessionFailure.InsertRefused);
+    }
+
+    [TestMethod]
+    public void A_new_pile_over_the_npc_item_budget_is_refused_before_the_move()
+    {
+        using var owner = Hero(new GameSessionLimits(maxNpcItems: 1));
+        Changed(owner.GiveItemToNpc(owner.Version, "merchant", "kit:1", Accept));
+        var revision = owner.Version.Revision;
+        var result = owner.BarterBuy(owner.Version, "virgil", "sword", 1, 10, Bullets, GoldPile, Accept, Accept);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (result.Disposition, result.Failure));
+        Assert.AreEqual((revision, 385), (owner.Version.Revision, owner.QueryGold()));
+        CollectionAssert.AreEqual(new[] { "ring", "sword", "vest", "ring-copy" }, List(owner, "virgil"), "virgil keeps the sword");
+        // The merchant has a pile: its coins grow with no new item.
+        Changed(owner.BarterBuy(owner.Version, "merchant", "kit:1", 1, 10, Bullets, GoldPile, Accept, Accept), "kit:1");
+        Assert.AreEqual((375, 15), (owner.QueryGold(), owner.QueryNpcGold("merchant")));
     }
 
     [TestMethod]

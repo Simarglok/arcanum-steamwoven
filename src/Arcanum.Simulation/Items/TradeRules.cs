@@ -51,7 +51,7 @@ public readonly record struct TradeQuote(int Price, TradeRefusal Refusal);
 
 /// <summary>
 /// ARC-UI-050: the barter rules of the original's item price (0x461F80), sale check (0x462170), buy check (0x462230), the reaction
-/// price scale (0x4C1150) and the reaction to a generous trade (0x4C11D0), read in the executable by two readers (ledger BT1–BT9). All
+/// price scale (0x4C1150) and the reaction to a generous trade (0x4C11D0), read in the executable by two readers (ledger BT1–BT10). All
 /// arithmetic is the original's signed 32 bits: products wrap and divisions truncate toward zero. Contract: docs/world/barter-runtime.md.
 /// </summary>
 public static class TradeRules
@@ -98,7 +98,7 @@ public static class TradeRules
     /// the merchant's multiplier m is above 100, <c>W × (100 + trunc(3 × (100 − m) / 8)) / 100</c>; the PC's haggle share
     /// <c>× (trunc(H / 2) + 50) / 100</c>; a damaged item <c>× current / maximum</c>; a negative price is 0 and 1 is 2. The PC buys: the
     /// buy check, then <c>W + (100 − H) × m × W / 10000</c> (the triple product in 32 bits), the reaction scale (<see cref="ReactionScale"/>),
-    /// at least <c>W + 1</c>, and 1 or 2 become 3 (reached only after a wrap). No damage scaling when buying.
+    /// at least <c>W + 1</c>, and 1 or 2 become 3 (dead for every worth the original produces, which is at least 2). No damage scaling when buying.
     /// </summary>
     [OriginalFunction(0x461F80, OriginalFunctionScope.Partial)]
     public static TradeQuote Price(TradeDirection direction, TradeItem item, TradeParties parties)

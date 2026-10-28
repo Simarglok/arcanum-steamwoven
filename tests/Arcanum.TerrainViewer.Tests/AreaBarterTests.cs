@@ -85,6 +85,16 @@ public sealed class AreaBarterTests
     }
 
     [TestMethod]
+    public void A_sale_pays_at_most_the_merchants_coins()
+    {
+        using var session = Session();
+        Assert.AreEqual(GameSessionFailure.None, session.TakeGoldFromNpc(session.Version, "merchant", 70).Failure);
+        var sold = Barter(session, Data(), []).Sell("kit:1");
+        Assert.AreEqual((true, 30, "sold kit:1 for 30"), (sold.Moved, sold.Total, sold.Text), "the quote 55 capped at 30 coins");
+        Assert.AreEqual((1100, 0), (session.QueryGold(), session.QueryNpcGold("merchant")));
+    }
+
+    [TestMethod]
     public void Refusals_and_a_loving_merchants_reaction()
     {
         using var session = Session();
@@ -116,7 +126,9 @@ public sealed class AreaBarterTests
         var data = loaded.Data!;
         var statuses = Enumerable.Range(1, data.Sources.Count).GroupBy(set => data.BuyList(set).Status).ToDictionary(g => g.Key, g => g.Count());
         Console.WriteLine($"data: {loaded.Detail}; buy lists: {string.Join(", ", statuses.OrderBy(p => p.Key).Select(p => $"{p.Key} {p.Value}"))}");
-        Assert.IsTrue(statuses.GetValueOrDefault(InventorySourceBuyStatus.Listed) > 0 && statuses.GetValueOrDefault(InventorySourceBuyStatus.Everything) > 0);
+        // First observation 2026-10-28 (the loot lines of 1..123 parse; 35 sets have a buy line that buys something).
+        Assert.AreEqual((2, 33, 0), (statuses.GetValueOrDefault(InventorySourceBuyStatus.Everything), statuses.GetValueOrDefault(InventorySourceBuyStatus.Listed),
+            statuses.GetValueOrDefault(InventorySourceBuyStatus.Emptied)), "the census changed: update the barter contract");
         using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
         // A merchant buys through its own source or, failing that, its substitute container's (0x464200); its wares are the container's
         // list when it has one within reach (not modelled by the window yet).

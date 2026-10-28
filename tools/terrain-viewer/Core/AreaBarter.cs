@@ -19,7 +19,7 @@ public enum AreaBarterDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, St
 public sealed class AreaBarterData
 {
     public const int GoldPrototype = 9076;
-    private const int PrototypeOffset = 20, FirstItemBasic = 6029, EndItemBasic = 15213;
+    private const int PrototypeOffset = 20, FirstItemBasic = 6029, EndItemBasic = 15213, FirstBasic = 1000, EndBasic = 28472;
     private readonly Dictionary<int, CombatFields?> _prototypes;
 
     private AreaBarterData(MesFile sources, MesFile? buy, Dictionary<int, CombatFields?> prototypes, HashSet<int> existing)
@@ -43,8 +43,9 @@ public sealed class AreaBarterData
         new(sources, buy, prototypes.ToDictionary(pair => pair.Key, pair => (CombatFields?)pair.Value),
             prototypes.Keys.Select(number => number - PrototypeOffset).ToHashSet());
 
-    /// <summary>Loads the data through the game folder's content stack: the two inventory-source files and the stored fields of every
-    /// item prototype (the basic ranges of weapons to generic items, 6029..15212), so kit, made and given items find theirs.</summary>
+    /// <summary>Loads the data through the game folder's content stack: the two inventory-source files, which basic prototype numbers
+    /// have a prototype (the loot and buy lines' check), and the stored fields of every item prototype (the basic ranges of weapons to
+    /// generic items, 6029..15212), so kit, made and given items find theirs.</summary>
     public static (AreaBarterDataStatus Status, AreaBarterData? Data, string Detail) Load(string modulePath)
     {
         var found = AreaContentRoot.Discover(modulePath);
@@ -59,20 +60,13 @@ public sealed class AreaBarterData
         var reader = ContentPrototypes.Open(stack);
         var fields = new Dictionary<int, CombatFields?>();
         var existing = new HashSet<int>();
-        for (var basic = FirstItemBasic; basic < EndItemBasic; basic++)
+        // Every basic number of the original's ranges whose prototype exists: a loot or buy line may name any of them (0x4685A0).
+        for (var basic = FirstBasic; basic < EndBasic; basic++)
             if (InventorySourceBuyRules.InBasicRange(basic) && CombatFieldReader.ReadPrototype(reader.Read, basic + PrototypeOffset).Fields is { } read)
             {
-                fields[basic + PrototypeOffset] = read;
                 existing.Add(basic);
+                if (basic is >= FirstItemBasic and < EndItemBasic) fields[basic + PrototypeOffset] = read;
             }
-        // A buy line may also list a basic number outside the item ranges; each such one's prototype is looked up once.
-        if (buy is not null)
-            foreach (var message in buy.Messages)
-                foreach (var token in System.Text.Encoding.Latin1.GetString(message.Bytes.Span).Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                    if (int.TryParse(token, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var basic) &&
-                        InventorySourceBuyRules.InBasicRange(basic) && basic is < FirstItemBasic or >= EndItemBasic && !existing.Contains(basic) &&
-                        CombatFieldReader.ReadPrototype(reader.Read, basic + PrototypeOffset).Fields is not null)
-                        existing.Add(basic);
         return (AreaBarterDataStatus.Ready, new(sources, buy, fields, existing),
             $"sets {sources.Count}, buy lines {buy?.Count ?? 0}, item prototypes {fields.Count}, known basic numbers {existing.Count}");
     }
@@ -192,7 +186,7 @@ public sealed class AreaBarter
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't sell ({line.Quote.Refusal})");
         if (_session.QueryGold() < line.Quote.Price) return Refused("not enough money");
         var result = _session.BarterBuy(_session.Version, Merchant.Entity, entity, line.Count, Merchant.Follower ? 0 : line.Quote.Price, line.Kind,
-            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck);
+            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
         return Settle(TradeDirection.PcBuys, line, result);
     }
 
@@ -234,7 +228,8 @@ public sealed class AreaBarter
     {
         var fields = Fields(entity, kind);
         var item = fields?.Item;
-        // The merchant's goods are all identified when the window opens (0x572640), a follower's are not.
+        // The identified test of 0x464370 (EquipmentChoice.Identified); the merchant's goods are all identified when the window opens
+        // (0x572640), a follower's are not.
         var identified = item is not null && (item.MagickTechComplexity <= 0 || (item.Flags & 0x1) != 0 ||
             direction == TradeDirection.PcBuys && !Merchant.Follower);
         var stored = item?.Worth ?? 0;

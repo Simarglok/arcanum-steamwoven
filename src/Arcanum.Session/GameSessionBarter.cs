@@ -31,8 +31,9 @@ public sealed partial class GameSessionOwner
     /// negative price or a count below 1 or above 1 for an item (<see cref="GameSessionFailure.InvalidItem"/>), a total past 32 bits
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), a hero with fewer coins than the total (<see cref="GameSessionFailure.GoldShort"/>,
     /// the original's "not enough money": its unit test before the move, its rolled-back stack payment after), and the payment's own
-    /// refusals that do not depend on the move (an NPC pile past 32 bits, a full pile budget, a transfer script on an NPC without a pile).
-    /// A payment refused after the move (the host's insert check for a new pile) leaves the item with the hero and reports the payment's
+    /// refusals that do not depend on the move (an NPC pile past 32 bits, a full pile budget, and for an NPC without a pile a transfer
+    /// script or a full NPC item budget or list, checked before the move). A payment refused after the move (the host's insert check for a
+    /// new pile, an exhausted made number, coins an insert-item script spent) leaves the item with the hero and reports the payment's
     /// failure with <see cref="InventoryMutationResult.Item"/> set, as the original leaves a moved item that its payment failed.
     /// </summary>
     public InventoryMutationResult BarterBuy(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
@@ -62,6 +63,8 @@ public sealed partial class GameSessionOwner
             {
                 if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
                 if (NpcHasScript(npc, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+                if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+                    return RejectItem(GameSessionFailure.BudgetExceeded);
             }
         }
         var moved = stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert) : TakeItemFromNpc(Version, npc, item, heroInsert, scripts);
