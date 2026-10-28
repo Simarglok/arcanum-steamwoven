@@ -243,3 +243,32 @@ counts per race and gender).
 Project admission policy (not a rule mode): a block whose description, effect, money or item message is absent, or whose number
 or item token is not a plain digit run, is refused (`MissingMessage`, `Malformed`, `InvalidText`) instead of read through `atoi`;
 a text without a line feed in its first 32 bytes is `NoName`. No installed block or PC-visible text is refused.
+
+## Portrait catalogue (ARC-DATA-045)
+
+Source: the reader [`PortraitCatalogue`](../../../src/Arcanum.Data/Characters/PortraitCatalogue.cs) (N10a, FR-CHAR-004), on top of
+[ARC-RES-025](../character-creation-evidence.md#new-character) (CC-08 checked only that the pre-made portrait ids exist). Question:
+how the original loads `portrait\gameport.mes` and `portrait\userport.mes`, how an id becomes an image path, which race and
+gender may take a portrait, how the searches and the creation buttons step, and which portrait an NPC shows. Read on 2026-10-28
+with `llvm-objdump` (first by ARC-DATA-044, then re-read by the implementing task, not independently: F1); the installed counts
+are checked by the opt-in real-data test (78 portraits 1000..1077 and no user file; four with a large image for each of the
+twelve player race and gender pairs; 30 NPC portraits with a small image only; the twelve pre-made portraits allowed for their
+heroes).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| PO1 | `portrait_init` (0x4CE350), gamelib table entry "Portrait"; exit (0x4CE390) | Loads `portrait\gameport.mes` at game start (an init function, so the base sources); without it the init fails. Then loads `portrait\userport.mes` and keeps only whether it loaded; the exit unloads both. | Original |
+| PO2 | path (0x4CE3C0) | An id from 1000 is looked up in the game file, 1..999 in the user file (an empty path when the user file is not loaded), 0 as 1000 in the game file; a negative id passes the output buffer as the message-file handle. An absent message gives an empty path; the text is formatted into `portrait\%s.bmp` when the size is under 128, else `portrait\%s_b.bmp`. | Original, except the negative id: technical bug of the original (owner rule 2026-10-28: both modes refuse it as `NegativeId`, no switch). Latent: the stored id is never negative in the installed data |
+| PO3 | draw (0x4CE4A0) and its callers (0x4CE470 size 0, 0x4CE640 size 128, 0x4CE680 size 32) | A multiplayer PC (object type 15 with PC flag 0x4 of field 0xFD) takes its path from 0x4A4C40; anyone else from PO2. When the image does not load and the path ends, ignoring case, with `_b.bmp`, that ending is replaced by `.bmp` and the load retried; when that fails too nothing is drawn. | Original |
+| PO4 | compatible (0x4CEAC0) | No text: not compatible. Otherwise the code `%s%c` of the race code (table 0x5B7C0C, eleven entries: HU, DW, EL, HE, GN, HA, HO, HG, then EL, HG, HO for races 8..10) and `FM`[gender] (stats 27 and 26) is compared with the text's first three letters by `_strnicmp`, then `ANY`, then, for an NPC (object type 16) only, `NPC`. | Original |
+| PO5 | first (0x4CE6B0) | Clears the result to 0, then fails for a multiplayer PC; otherwise the first compatible id among the game ids from 1000 while present, then the user ids from 1 while present (below 1000). | Original |
+| PO6 | last (0x4CE7A0) | The last compatible id among the game ids from the start while present (the start included); when there is none, the last compatible user id from 1 while present; the result is written only when one is found. Multiplayer PC: fails. | Original |
+| PO7 | next (0x4CE8B0) | From the current id plus one: when that is 1000 or more, the game ids while present, then the user ids from 1; otherwise the user ids from there; no wrap. Multiplayer PC: fails. | Original |
+| PO8 | previous (0x4CE9B0) | Fails at 1000. From the current id minus one: under 1000, the user ids downward while present (down to 1), then the game ids downward from the game file's message count plus 999 while present (down to 1000); from 1000 up, the game ids downward. No wrap. Multiplayer PC: fails. | Original |
+| PO9 | creation handler (0x544FF0), gender (0x5453A0) and race (0x545550) changes | Previous: previous, else last from the current id (the current id kept when both fail); next: next, else first (0 when both fail, since first clears its result); the result is stored in field 0xE7 either way. A gender or race change sets the stat and stores the first compatible portrait only when one is found. | Original (next storing 0 shows portrait 1000 through PO2; latent: every player pair has four portraits) |
+| PO10 | portrait get (0x4CEB80) | Field 0xE7; for an NPC whose non-zero portrait equals the player's (0x4CEB80 of 0x40DA50), the next portrait, else the previous one, else 0, by the NPC's own race, gender and NPC rule. | Original |
+
+Project admission policy (not a rule mode): a stem that is empty, holds a byte outside printable ASCII or a path separator is
+refused (`InvalidStem`) instead of formatted into a path. A present `userport.mes` that cannot be read or that the MES reader
+refuses leaves the catalogue without a user file, as a failed load does in the original, and the load reports it. No installed
+portrait is refused.

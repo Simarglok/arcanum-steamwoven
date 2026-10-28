@@ -103,12 +103,24 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     internal void SetNotice(string? notice) { _notice = notice; ComposeSticky(); }
     private void ComposeSticky() { if (_sticky is not null) _sticky.Text = _notice is null ? _stickyBase : $"{_stickyBase}\n{_notice}"; }
 
+    // ARC-UI-018: the height the interface bars' top strip takes at the top of the window (0 without the bars).
+    private float _topInset;
+
+    /// <summary>ARC-UI-018: moves the panel below the interface bars' top strip, whose buttons it would otherwise cover.</summary>
+    internal void SetTopInset(float inset)
+    {
+        if (_topInset == inset) return;
+        _topInset = inset;
+        ResizeForViewport();
+    }
+
     private void ResizeForViewport()
     {
         if (_panel is null) return;
-        var viewportHeight = GetViewport().GetVisibleRect().Size.Y;
+        var viewportHeight = GetViewport().GetVisibleRect().Size.Y - _topInset;
         var boundedHeight = Math.Min(Math.Max(1, viewportHeight - 32), Mathf.Clamp(viewportHeight * 0.35f, 110f, 360f));
-        _panel.OffsetBottom = 16 + boundedHeight;
+        _panel.OffsetTop = 16 + _topInset;
+        _panel.OffsetBottom = 16 + _topInset + boundedHeight;
     }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizeForViewport;
 }

@@ -297,7 +297,8 @@ Agreed through the coordinator on 2026-10-20:
   ARC-MAGIC-020 ([ledger IT1–IT10](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)), which runs the wear and unwear
   through the cast host and lifts the equipment's refusal where a trigger host is given ([contract](../world/item-spell-triggers.md)).
   Left as slices of their own: pickup, drop and item use with saved charges; the combat and life events; the item spell
-  pane, inventory-target spells and hotkeys (0x57C040, 0x57C080).
+  pane (done by ARC-UI-016, [IP rows](ledger/spell-runs.md#item-spell-pane-arc-ui-016)), inventory-target spells and hotkeys
+  (0x57C080, IP7–IP9).
 - **Technology runtime**: the technology lane above.
 - **Spell visuals**: `SpellEyeCandy.mes`, the cast, release and component eye candy and the cast's timing are done
   ([ARC-MAGIC-017](../world/spell-cast-host.md#eye-candy-arc-magic-017)); the missile's art and flight (goals 28 and 78) and the

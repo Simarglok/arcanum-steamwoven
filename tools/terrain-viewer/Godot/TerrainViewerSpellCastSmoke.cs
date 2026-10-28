@@ -23,8 +23,13 @@ public partial class TerrainViewerApp
     // tile, after one leg of the line's steps; when the first spell has no missile the hero also casts (learning it if needed) the first
     // critter spell that has one (its damage, if any, is not asserted). ARC-MAGIC-019: a spell without a missile is clicked twice
     // while its goal plays, the second cast queued beneath the first and played once it ends. A right click closes the cursor. The NPC and the
-    // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
+    // hero's fatigue are restored for the later stages; the learned spell, the experience, the level and (ARC-UI-016) the kit weapon's spent spell charge stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
+    // ARC-UI-016: then the weapon's spell pane. No kit weapon carries castable spells, so the stage lends the hero's wielded kit weapon
+    // the spell facts of the first weapon prototype (in number order, from the data) that has a castable critter spell needing a
+    // target that need not be damaged, marked identified (the session does not model identification yet): M shows the weapon button, it opens the weapon's pane,
+    // the slot opens the cursor with the weapon as the source, a click casts at the NPC and the weapon pays a charge instead of the
+    // hero's fatigue; unwielding the weapon returns the pane to the spell list. A hero without a weapon reports that and skips it.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
@@ -240,6 +245,92 @@ public partial class TerrainViewerApp
                 Turn = rotation, Missile = missileNote };
         }
 
+        // ARC-UI-016: the weapon's spell pane, cast at the NPC through it with the weapon as the source.
+        async Task<object?> WeaponPaneCastAsync()
+        {
+            if (session.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon) is not { Item.Weapon: not null } wielded
+                || session.QueryHeroKit().Where(k => k.Entity == wielded.Entity).Select(k => (SessionKitItem?)k).FirstOrDefault() is not { } kit)
+            { GD.Print("ARC-UI-016 native-smoke item-pane SKIP (the hero wields no kit weapon)"); return null; }
+            bool Castable(int value) => value is >= 0 and < SpellRecord.Count && records[value] is { } r && !r.Data.IsTechnology && r.Data.ItemTriggers == 0
+                && r.Data.Enabled && r.Areas.Length > 0 && (r.Areas[0].Targets & 0x40) != 0 && !SpellUiRules.CastsAtOnce(r.Areas[0].Targets)
+                && !SpellUiRules.TargetsInventory(r.Areas[0].Targets) && (r.Areas[0].Targets & SpellUiRules.DamagedBit) == 0;
+            var lent = LentWeaponSpells(wielded.Entity, Castable);
+            Require(lent is not null, "a weapon prototype with a castable critter spell: " + _lentItemSpellsDetail);
+            _lentItemSpellsForSelfTest = lent; _weaponPaneCache = null;
+            try
+            {
+                var slot = Enumerable.Range(0, lent!.Spells.Count).First(i => Castable(lent.Spells[i]));
+                var spellNumber = lent.Spells[slot];
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+                if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
+                    session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                var fatigue = session.QueryHeroLife()!.Status.Fatigue;
+                var charges = SpellCasterNow()!.Item(wielded.Entity)!.Charges;
+                InventoryKey(Key.M);
+                Require(_spellPane?.WeaponShownForSelfTest is { ButtonShown: true, Open: false } shut && shut.Item == wielded.Entity,
+                    "M shows the weapon button: " + _spellPane?.WeaponShownForSelfTest);
+                _spellPane!.PressWeaponForSelfTest();
+                var pane = _spellPane.WeaponShownForSelfTest;
+                Require(pane is { Open: true } && pane.Buttons.Any(b => b.Slot == slot && b.Spell == spellNumber && b.Activates),
+                    $"the weapon button opens the weapon's pane with slot {slot}: {pane?.Gauge} [{string.Join(",", pane?.Buttons.Select(b => $"{b.Slot}:{b.Spell}:{b.Activates}") ?? [])}]");
+                _spellPane.PressItemForSelfTest(slot);
+                Require(_spellTargeting is { Item: { } source } && source == wielded.Entity && _spellTargeting.Spell == spellNumber,
+                    "the slot opened the cursor with the weapon as the source: " + _spellNotice);
+                var point = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-UI-016 smoke: target not visible");
+                HoverAtForSelfTest(point);
+                var logStart = _spellCaster!.Log.Count;
+                var casts = _spellCasts;
+                AreaSmokeClick(point);
+                Require(_spellCasts == casts + 1 && _spellGoal is not null, "the click cast from the weapon: " + _spellNotice);
+                var frames = 0;
+                for (; frames < 800 && (_spellGoal is not null || _spellMissiles.Count > 0); frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_spellGoal is null && _spellMissiles.Count == 0, $"the weapon's cast ended after {frames} frames");
+                var log = _spellCaster!.Log.Skip(logStart).ToArray();
+                var left = SpellCasterNow()!.Item(wielded.Entity)!.Charges;
+                Require(charges < 0 ? left == charges : left == charges - 1, $"the weapon paid a charge: {charges} -> {left}");
+                Require(charges < 0 || log.Any(e => e.Kind == SpellCastEventKind.ChargeSpent && e.Object == wielded.Entity), "the log shows the weapon's charge");
+                Require(log.All(e => e.Kind != SpellCastEventKind.FatiguePaid) && session.QueryHeroLife()!.Status.Fatigue == fatigue,
+                    "the hero paid no fatigue for the weapon's spell");
+                _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = point });
+                Require(_spellTargeting is null, "a right click closes the weapon's cursor");
+                // Unwielding the weapon returns the bar to the spell list (0x5570D0), wielding it again shows the button (0x556EF0).
+                // The weapon's run still has it as the source (a run with a duration): its moves need the trigger host (ARC-MAGIC-020).
+                var host = new SessionItemTriggers(SpellCasterNow()!, CombatWorldOrNull() ?? NoSpellCombat.Instance);
+                var off = session.Unequip(session.Version, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted, triggers: host);
+                Require(off.Disposition == GameSessionDisposition.Changed, $"the weapon is taken off: {off.Failure} {off.Refusal}");
+                ProcessAreaSpells();
+                Require(_itemPaneItem is null && _spellPane.WeaponShownForSelfTest is null, "the pane left the weapon's spells when it was taken off");
+                Require(session.Equip(session.Version, wielded.Entity, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item),
+                    (_, _) => true, _ => SessionInsertVerdict.Accepted, triggers: host).Disposition == GameSessionDisposition.Changed, "the weapon is wielded again");
+                ProcessAreaSpells();
+                Require(_spellPane.WeaponShownForSelfTest is { ButtonShown: true, Open: false }, "the weapon button is back, the pane on the spell list");
+                InventoryKey(Key.M);
+                Require(_spellPane is { Shown: false }, "M hides the pane");
+                HoverReleaseForSelfTest();
+                GD.Print($"ARC-UI-016 native-smoke item-pane PASS weapon={wielded.Entity} lent={_lentItemSpellsDetail} slot={slot} spell={spellNumber} "
+                    + $"charges={charges}->{left} frames={frames} log={string.Join(",", log.Select(e => e.Kind))}");
+                return new { Lent = _lentItemSpellsDetail, Slot = slot, Spell = spellNumber, Charges = $"{charges}->{left}", Frames = frames };
+            }
+            finally
+            {
+                // The later stages wear and take off the kit weapon without a trigger host: no run keeps it as its source (its saved
+                // spent charge stays, and without the lent facts it shows no weapon button).
+                if (SpellCasterNow() is { } caster)
+                    foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Source?.Id == wielded.Entity).Select(r => r.Id).ToArray())
+                    {
+                        caster.Act(new(SessionSpellRunActionKind.Free, run));
+                        // Its component eye candy (drawn on the NPC until the run ends) goes with it.
+                        _eyeCandies.RemoveAll(e => e.Run == run);
+                    }
+                Require(session.QuerySpellRuns().Runs.All(r => r.Source?.Id != wielded.Entity), "no run keeps the weapon as its source");
+                _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;
+            }
+        }
+
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -269,13 +360,14 @@ public partial class TerrainViewerApp
                 Require(missile is not null, "the hero knows a critter spell with a missile");
                 second = await CastOnce(missile!);
             }
+            var weaponCast = await WeaponPaneCastAsync();
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second,
+                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
         }
         finally
         {
-            CancelSpellCast(null); _spellPane?.HidePane();
+            CancelSpellCast(null); _spellPane?.HidePane(); _lentItemSpellsForSelfTest = null; _itemPaneItem = null;
             // ARC-MAGIC-018: a missile still flying is lost; the later stages see the hero unturned.
             ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
             // The later stages see the map and the hero as they were (the learned spells and the experience stay).
@@ -288,5 +380,33 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-UI-016 smoke: spell facts lent to the hero's wielded weapon (see the cast smoke) and where they came from.
+    private SessionItemSpells? _lentItemSpellsForSelfTest;
+    private string _lentItemSpellsDetail = "none";
+
+    /// <summary>The spell facts of the first weapon prototype (in number order) with a positive complexity, charges and a slot
+    /// <paramref name="castable"/> accepts, under <paramref name="entity"/> and marked identified; null when none reads.</summary>
+    private SessionItemSpells? LentWeaponSpells(string entity, Func<int, bool> castable)
+    {
+        if (_arguments?.ModulePath is not { } module) { _lentItemSpellsDetail = "no module"; return null; }
+        var found = AreaContentRoot.Discover(module);
+        if (found.Status != AreaContentRootStatus.Ready) { _lentItemSpellsDetail = "content root " + found.Status; return null; }
+        var opened = Arcanum.Data.Content.ContentStack.Open(found.Plan!);
+        if (opened.Stack is not { } stack) { _lentItemSpellsDetail = "stack " + opened.Status; return null; }
+        using (stack)
+        {
+            var prototypes = Arcanum.Data.Content.ContentPrototypes.Open(stack);
+            foreach (var number in prototypes.Numbers.Order())
+            {
+                if (Arcanum.Data.Combat.CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is not { Item: { } item, Weapon: not null } fields
+                    || item.MagickTechComplexity <= 0 || item.SpellManaStore == 0 || !item.Spells.Any(castable)) continue;
+                _lentItemSpellsDetail = $"prototype {number}";
+                return SessionItemSpells.FromCombatFields(entity, SessionSpellCaster.Hero, fields)! with { Flags = item.Flags | ItemSpellPaneRules.IdentifiedFlag };
+            }
+        }
+        _lentItemSpellsDetail = "no weapon prototype";
+        return null;
     }
 }

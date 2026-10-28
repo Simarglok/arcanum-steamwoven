@@ -346,6 +346,21 @@ inside `.text`.
 | AG15 | item use (0x462CC0) | Single player: a scroll (type 10) whose spell's minimum intelligence (0x4B1750) is above the user's stat 4 stops (a PC gets message 13); no target and item flag 0x100 opens the targeting cursor (0x4EE060); a trap device (0x4BCA60) goes to 0x4BC2E0; the use script (0x441980) answering 0 charges 4 and stops; with spell charges (field 0x69) and the magical flag (0x57 & 0x4) both absent: 4 points, then a written item is read (0x4606F0), a generic item with flag 0x2 starts pick locks with the item on a lockable target (0x441CF0, 0x4352C0 skill 14) or with flag 0x8 the heal skill (skill 10), food (a PC is told 201) and scrolls are spent, anything else stops; otherwise the slot-0 spell (0x4F2810, 0x4CB7A0, 0x4605E0, 0x4CBF70) without a charge, then food and scrolls spent (0x4574D0, 0x43CCA0). Agrees with TP1 and EX4. | Original |
 | AG16 | move-near goal 8 (0x425130, 0x426F10, 0x426E80, 0x425740, 0x427990, 0x4246D0) | No node sets or clears running: the walk near keeps the run's gait, so an item-use or pickup approach of a running run runs. The slice I7 code cleared it; it now keeps it. | Original |
 
+## NPC AI viewer host (ARC-WORLD-092)
+
+Source: the [AI viewer host](../../world/ai-host.md) contract (slice I10, first fight). Question: what an NPC attacker strikes
+with, who enters combat mode when an attack starts, and which goals keep an NPC's AI pass busy. Read on 2026-10-28 by one reader
+(F1) with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`): the weapon damage range 0x465F70, the goal
+table 0x5B03D0's headers and nodes, the node function 0x42B9C0 and the PC victim's response 0x4A9AD0. Rows C18 (combat core),
+EX1 and CL9 agree with this reading and are narrowed by it. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| AH1 | weapon damage range (0x465F70) | For skill 2 (melee) without a weapon the item at location 1007 (gauntlets, 0x4649C0) gives the unarmed bonus (field 0x9E); then, without a weapon, a monstrous critter (0x45F730) takes its NPC damage table (field 0x12F, minimum at index 2 × type, maximum at 2 × type + 1) in place of it, any other critter the unarmed range for normal and fatigue only and 0 for the other types; with a weapon its fields 0x74/0x75. Nothing tests whether the critter is a PC. | Original |
+| AH2 | attempt-attack goal 19 node 5 (0x42B9C0) | Before the attack animation (node 6, 0x432700) the run's object enters combat mode (0x4B3F50, only when not in it); a PC target (0x40DA20) enters it too, and for any other target its PC leader (0x45DDA0) when that leader is not dead (0x45D8D0, hit points 0 or less). | Original |
+| AH3 | goal table headers (0x5B03D0) | Word 0 of a goal's table is its node count, word 1 its priority (0x423F3B counts the goals of priority 2 and above; 0x424070 takes priorities 0..6): run to tile, the walks, the pause, walk near, follow, move away, run near, spread out and the approaches 2; pickups, attack, attempt attack, flight, casting goals 26 and 82, throw and item use 3; the casts' attempt goals 27 and 83 4. The AI gate's busy test (priority above 2) therefore holds an NPC that swings, flees or uses an item, not one that walks. The host reads the run's top goal as the running animation (inference). | Original |
+| AH4 | PC victim's response (0x4A9AD0) | Unless the PC attacked itself: the host's callback, then a PC not in combat mode (0x4B3D50) enters it (0x4B3F50) and, in a round (0x4B6D70), the attacker joins the round (0x4B6E70). | Original |
+
 ## NPC AI followers in combat (ARC-RES-067)
 
 Source: [NPC AI followers in combat and orders](../npc-ai-followers.md) (plan stage A7, source unit S20). Question: what the

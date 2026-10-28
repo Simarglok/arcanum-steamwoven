@@ -185,7 +185,8 @@ public partial class TerrainViewerApp
             {
                 if (holder.Kind != SessionHolderKind.Npc || cells.ContainsKey(holder.Entity) || !map.TryGetRow(holder.Entity, out var row)
                     || removed.Contains(row.Key) || group?.Absent.Contains(row.Key) == true || row.WorldX is not { } x || row.WorldY is not { } y) continue;
-                cells[holder.Entity] = new(checked((int)x), checked((int)y));
+                // ARC-WORLD-092: an NPC the AI walked stands where it is now.
+                cells[holder.Entity] = _aiHost?.Movers.CellOf(holder.Entity, new(checked((int)x), checked((int)y))) ?? new(checked((int)x), checked((int)y));
                 npcs.Add((holder.Entity, row.Key));
             }
         return AreaCombatScan.Critters(npcs, new(checked((int)hero.X), checked((int)hero.Y)), entity => cells.TryGetValue(entity, out var cell) ? cell : null, _sectorEntries);
