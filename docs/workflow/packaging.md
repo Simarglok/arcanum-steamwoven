@@ -1,0 +1,72 @@
+# Packaged builds (ARC-DEV-047)
+
+A packaged build is the game for a player: the terrain viewer project exported with its own player name and user
+folder, started without inputs, so it opens the launcher ([ARC-UI-014](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014))
+and the original main menu. It is separate from the developer builds of the export endpoints (`artifacts/world-builds`,
+the build registry, `./arcanum area`/`map`), which it neither reads nor changes. The player instruction is
+[docs/player/alpha-build.md](../player/alpha-build.md). Scope today: **macOS only**; the Windows 11 x64 build is a
+follow-up task.
+
+## Command
+
+    ./arcanum package mac                 # fetch origin main, build that commit, smoke it, install it
+    ./arcanum package mac --ref COMMIT    # another commit (still fetched first unless --no-fetch)
+    ./arcanum package mac --verbose       # the step lines here instead of the quiet run log
+
+It runs as an `export` in the [launch queue](toolchain.md#launch-queue-arc-dev-033) (quiet by default: the run log holds
+every line, stdout keeps PASS or FAIL). The builder is `tools/local_dev/package.py` (tests
+`tools/local_dev/test_package.py`). Steps, each with its log in `artifacts/packages/logs/<platform>/`:
+
+1. `git fetch origin main` in the main checkout, then the commit of `--ref` and its commit date.
+2. `git archive` of that commit into a fresh temporary folder: only the commit's tracked files, never the working
+   tree, so uncommitted or untracked files cannot enter a package and the checkout is not touched.
+3. `restore` (the viewer solution, `--locked-mode`), `build`, `import` (Godot `--headless --import`), `export`
+   (`--export-release "macOS package"`), with the canonical toolchain of [toolchain.md](toolchain.md) (the pinned SDK first
+   on `PATH`, the Godot shell sentinel). The export log must show the pinned SDK, as for the export endpoints.
+4. The bundle has its executable, `codesign --verify --deep --strict` passes and the signature is ad-hoc.
+5. Smoke, when the game is in `/Applications/Arcanum` or `~/Applications/Arcanum`: the exported app is started with
+   `-- --native-smoke`, `ARC_AREA_MAP_SMOKE_ONLY=menu` and a fresh `LAUNCHER_SETTINGS_TEST_PATH` (a player's first
+   start): it must print `ARC-DEV-047 build Arcanum Steamwoven alpha · main <commit>` with its user folder
+   `Arcanum Steamwoven Game`, then `ARC-UI-014 native-smoke launcher PASS` and `ARC-UI-011 native-smoke main menu PASS`.
+   Without the game the smoke is skipped and the run says so; `--no-smoke` skips it on purpose.
+6. Only then the build is installed (below). A failed step installs nothing and prints the step, its exit code, its log
+   and the log's last 20 lines. The temporary folder is removed (`--keep-work` keeps it).
+
+## Where the build lands
+
+In the **main checkout** (also when the command runs from a worktree):
+
+    artifacts/packages/macos/Arcanum Steamwoven.app
+    artifacts/packages/macos/BUILD.txt            commit, date, product
+    artifacts/packages/macos/README.md            the player instruction of that commit
+    artifacts/packages/macos/previous/            the build before, with its BUILD.txt
+    artifacts/packages/logs/macos/                the last run's step logs
+
+The next successful package replaces the current build and moves it to `previous/` (the older `previous/` goes). Nothing
+else removes them; `./arcanum clean` lists `artifacts/packages` as kept ([build retention](build-retention.md)). Packages
+are local: they are never committed, uploaded or published.
+
+## What makes the package different from a developer build
+
+- **Preset** `macOS package` in `tools/terrain-viewer/Godot/export_presets.cfg`: bundle id `org.arcanumsteamwoven.game`,
+  custom feature `steamwoven_package`, Godot's default universal binary and built-in ad-hoc signature.
+- **Feature overrides** in `project.godot`, active only in a build with that feature: `config/name` "Arcanum Steamwoven"
+  (the app and its window), and a custom user folder "Arcanum Steamwoven Game", so `user://` is
+  `~/Library/Application Support/Arcanum Steamwoven Game/` (on Windows it will be `%APPDATA%\Arcanum Steamwoven Game\`).
+  It is not the developer launcher's home `~/Library/Application Support/Arcanum Steamwoven`
+  ([launcher research](../research/launcher-settings.md)), and source runs and the endpoint exports keep Godot's
+  default `app_userdata/Arcanum Terrain Viewer`.
+- **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
+  environment variables); the viewer project turns them into assembly metadata, and `ViewerBuildInfo` shows
+  `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of the launcher and the main
+  menu (a source run or an endpoint export shows `source run (not a packaged build)`). Every run prints
+  `ARC-DEV-047 build <that line> user=<user folder>` at start.
+
+## Not done
+
+- Windows 11 x64 (`.exe` folder, unsigned or self-signed, SmartScreen "More info → Run anyway"), and its smoke on a
+  Windows machine.
+- An app icon of the project's own (Godot's default icon is used), notarization (needs a paid Apple Developer ID),
+  automatic updates.
+- Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's
+  documentation.

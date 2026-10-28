@@ -15,7 +15,7 @@ internal static class ViewerBuild
     public static Label MakeLabel()
     {
         var label = new Label { Name = "BuildInfo", Text = Current.Text, Modulate = new Color(.62f, .56f, .46f), MouseFilter = Control.MouseFilterEnum.Ignore };
-        label.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight, Control.LayoutPresetMode.MinSize, 8);
+        label.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight, Control.LayoutPresetMode.Minsize, 8);
         label.GrowHorizontal = Control.GrowDirection.Begin; label.GrowVertical = Control.GrowDirection.Begin;
         return label;
     }
