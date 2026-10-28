@@ -324,7 +324,18 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
         var width = Math.Max(1, Math.Min(560, size.X - 48));
         _panel.Size = new(width, 0);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - _panel.GetCombinedMinimumSize().Y) / 2));
+        var height = _panel.GetCombinedMinimumSize().Y;
+        _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
+    }
+
+    private bool _dockedBelow;
+
+    /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>
+    public void SetDockedBelow(bool docked)
+    {
+        _dockedBelow = docked;
+        if (_shopText is not null) _shopText.CustomMinimumSize = new Vector2(320, docked ? 0 : 120);
+        ResizePanel();
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
