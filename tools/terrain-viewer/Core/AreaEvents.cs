@@ -184,19 +184,26 @@ public interface IAreaEventObjects
 /// viewer's current hosts. ARC-WORLD-045: a wait timeout's reaction change reads the shown area's conversation state (its
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
     private readonly Func<bool>? _lootShowsContainer;
+    private readonly Func<ISessionAiWorld?>? _ai;
+    private readonly Func<ISessionCombatWorld?>? _round;
 
     /// <param name="callHost">ARC-WORLD-048: the host of a call's attachee when it is not the map's own (a companion visiting the
     /// shown map talks and runs its calls through its own host); null or a null answer: <paramref name="talk"/>.</param>
     /// <param name="lootShowsContainer">ARC-WORLD-063: whether the viewer's loot window shows a container (a junk pile); an item's
     /// decay then waits a minute (ledger ID3, ID6). Null: never.</param>
+    /// <param name="ai">ARC-WORLD-092: the shown map's AI host, which an AI tick of the pass runs through; null or a null answer: no AI
+    /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
+    /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null,
-        Func<bool>? lootShowsContainer = null)
+        Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null)
     {
+        _ai = ai;
+        _round = round;
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
         _talk = talk ?? throw new ArgumentNullException(nameof(talk));
         _callHost = callHost;
@@ -240,4 +247,43 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         LastCallRefusal = detail;
         CallRefusals++;
     }
+
+    // ---- ARC-WORLD-092: the AI tick's host, forwarded to the shown map's AI host ----
+
+    private ISessionAiWorld? Ai => _ai?.Invoke();
+
+    public SessionLifeTarget? AiLifeTarget(string entity) => Ai?.AiLifeTarget(entity);
+    public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => _round?.Invoke()?.ScanCombatants(map) ?? [];
+    public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => _round?.Invoke()?.CombatantFacts(map, entity);
+    public long DistanceToPc(string npc) => Ai?.DistanceToPc(npc) ?? -1;
+    public bool RunScript(Arcanum.Simulation.Ai.AiScriptPoint point, string npc, string? triggerer) => Ai?.RunScript(point, npc, triggerer) ?? true;
+    public bool RunWaypoints(string npc) => Ai?.RunWaypoints(npc) ?? false;
+    public void RunStandpoints(string npc) => Ai?.RunStandpoints(npc);
+    public bool IsGenerator(string npc) => Ai?.IsGenerator(npc) ?? false;
+    public long? Spawn(string npc) => Ai?.Spawn(npc);
+    public bool IsEncounterCreature(string npc) => Ai?.IsEncounterCreature(npc) ?? false;
+    public void Destroy(string npc) => Ai?.Destroy(npc);
+    public void InterruptAnimations(string npc) => Ai?.InterruptAnimations(npc);
+    // Without a host the tick is not rescheduled (its NPC counts as gone and its sector as not loaded), as another host consumes it.
+    public bool SectorLoaded(string npc) => Ai?.SectorLoaded(npc) ?? false;
+    public Arcanum.Simulation.Ai.AiCatchUpFacts CatchUp(string npc) => Ai?.CatchUp(npc) ?? new();
+    public void MoveToLeader(string npc) => Ai?.MoveToLeader(npc);
+    public bool MapClearing => Ai?.MapClearing ?? false;
+    public bool Sleeping(string npc) => Ai?.Sleeping(npc) ?? false;
+    public bool Hidden(string npc) => Ai?.Hidden(npc) ?? false;
+    public bool PcHidden => Ai?.PcHidden ?? false;
+    public Arcanum.Simulation.Ai.AiConversation Conversation(string npc) => Ai?.Conversation(npc) ?? Arcanum.Simulation.Ai.AiConversation.None;
+    public bool ConversationCallback => Ai?.ConversationCallback ?? false;
+    public void EndConversation(string npc) => Ai?.EndConversation(npc);
+    public int AnimationPriority(string npc) => Ai?.AnimationPriority(npc) ?? 0;
+    public bool StunAnimationRunning(string npc) => Ai?.StunAnimationRunning(npc) ?? false;
+    public bool AnimationRunning(string npc) => Ai?.AnimationRunning(npc) ?? false;
+    public void ReWield(string npc, bool allSlots) => Ai?.ReWield(npc, allSlots);
+    public string? Leader(string npc) => Ai?.Leader(npc);
+    public void EndMaintainedSpells(string npc) => Ai?.EndMaintainedSpells(npc);
+    public bool Heal(string npc) => Ai?.Heal(npc) ?? false;
+    public bool SearchItems(string npc) => Ai?.SearchItems(npc) ?? false;
+    public void UpdateDanger(string npc) => Ai?.UpdateDanger(npc);
+    public void Perform(string npc) => Ai?.Perform(npc);
+    public bool Loading => Ai?.Loading ?? false;
 }
