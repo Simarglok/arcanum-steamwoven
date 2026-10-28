@@ -96,6 +96,30 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
+    public void Eye_candy_components_are_logged_for_the_host_on_their_target_with_their_entry_and_play_flags()
+    {
+        // ARC-MAGIC-017: Add of number 2 (the destination) with the callback flag, then Remove of number 3 with no_id, on the self target.
+        var record = SessionSpellRecords.Translate(Record(number: 90, beginTargets: 0x1, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.EyeCandy, new(0x1, 0, 0, 0, -1), 0, 0, new EyeCandyData(2, true, 0x8)),
+                new(SpellAction.Begin, SpellComponentType.EyeCandy, new(0x1, 0, 0, 0, -1), 0, 0, new EyeCandyData(3, false, 0x100))])
+            with { Cost = 7, Range = 99, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+        Assert.AreEqual(new SpellEyeCandyComponent(2, true, 0x8), record.Components[0].EyeCandy);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        caster.StartGoal(run, new NoCombat());
+        caster.Release(run);
+        var eye = caster.Log.Where(e => e.Kind is SpellCastEventKind.EyeCandyAdded or SpellCastEventKind.EyeCandyRemoved).ToArray();
+        CollectionAssert.AreEqual(new[]
+        {
+            new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, run, 90 * 6 + 2, SessionSpellCaster.Hero, 0x8),
+            new SpellCastEvent(SpellCastEventKind.EyeCandyRemoved, run, 90 * 6 + 3, SessionSpellCaster.Hero, 0x100),
+        }, eye);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), "an eye candy is no component left undone");
+    }
+
+    [TestMethod]
     public void Mg39_a_goal_refused_at_its_start_frees_the_run_charged_in_the_original_and_unpaid_in_Steamwoven()
     {
         foreach (var (mode, paid) in new[] { (RuleMode.Original, 7), (RuleMode.Steamwoven, 0) })

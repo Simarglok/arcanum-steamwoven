@@ -492,6 +492,7 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-016: projectiles fly and strike after the attack's frame.
         ProcessAreaProjectiles();
         ProcessAreaSpells();
+        ProcessAreaEyeCandy();
         // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
         ProcessTurnBasedRound();
         var time = WorldTime;

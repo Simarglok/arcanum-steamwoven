@@ -65,6 +65,16 @@ internal sealed class NamedKeyCursor(string text)
         return PairValue(out token);
     }
 
+    /// <summary>ARC-MAGIC-017: a named triple <c>(a@b@c)</c>: the key, white space, then <see cref="TripleValue"/>.</summary>
+    [OriginalFunction(0x532800, OriginalFunctionScope.Full)]
+    public (int First, int Second, int Third)? NamedTriple(string key, out string token)
+    {
+        token = "";
+        if (!Key(key)) return null;
+        SkipSpace();
+        return TripleValue(out token);
+    }
+
     /// <summary>A named pair <c>(name@b)</c> whose name is looked up in <paramref name="names"/>.</summary>
     [OriginalFunction(0x5328F0, OriginalFunctionScope.Full)]
     public (int First, int Second)? NamedNamePair(string key, IReadOnlyList<string?> names, out string token)
@@ -168,6 +178,27 @@ internal sealed class NamedKeyCursor(string text)
         var at = inner.IndexOf(PairSeparator);
         var first = SoundSchemeParser.Atoi(at < 0 ? inner : inner[..at]);
         return (first, at < 0 ? first : SoundSchemeParser.Atoi(inner[(at + 1)..]));
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-017: <c>(a@b@c)</c> up to the delimiter, as <see cref="PairValue"/>: a missing <c>(</c> is a fault; a, b and c are
+    /// the <c>atoi</c> of the texts after <c>(</c>, after the first <c>@</c> and after the second; without a second <c>@</c> c is a,
+    /// without any b and c are a. The closing parenthesis is never checked.
+    /// </summary>
+    [OriginalFunction(0x531C60, OriginalFunctionScope.Full)]
+    public (int First, int Second, int Third)? TripleValue(out string token)
+    {
+        SkipSpace();
+        if (!Open(out token)) return null;
+        token = Take(out var next);
+        _at = next;
+        var inner = token.AsSpan(1);
+        var at = inner.IndexOf(PairSeparator);
+        var first = SoundSchemeParser.Atoi(at < 0 ? inner : inner[..at]);
+        if (at < 0) return (first, first, first);
+        var rest = inner[(at + 1)..];
+        var second = rest.IndexOf(PairSeparator);
+        return (first, SoundSchemeParser.Atoi(second < 0 ? rest : rest[..second]), second < 0 ? first : SoundSchemeParser.Atoi(rest[(second + 1)..]));
     }
 
     /// <summary>

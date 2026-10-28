@@ -157,15 +157,13 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    after a cast, as in the original, until a right press, another activation, a window (inventory, sheet, logbook, dialog …) or a
    map change.
 4. **The cast** (`SessionSpellCaster.CastAt`, SU8): spell.mes 600 when the hero cannot afford the spell, 604 without a line of fire,
-   then the run; its casting goal starts (`StartGoal`; a refusal ends it, `EndGoal(refused: true)`), the release frame comes
-   `TerrainViewerApp.SpellReleaseMs` (500 ms of world time) later (`Release`: the re-check and BEGIN), the end 400 ms after it
-   (`EndGoal`). While the goal plays, world presses and the stick are ignored (the original queues other goals under it). A goal
+   then the run; its casting goal starts (`StartGoal`; a refusal ends it, `EndGoal(refused: true)`), and its eye candy (below,
+   since ARC-MAGIC-017) times the release frame (`Release`: the re-check and BEGIN) and the end (`EndGoal`) on the world clock. While the goal plays, world presses and the stick are ignored (the original queues other goals under it). A goal
    cut short before its release frame (a lost hero, a map change, another actor) ends through its own host and frees its run
    (0x429CD0); a goal of a session a quick load replaced is dropped with that session.
 5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
    number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
-   that are not ready. Eye candy is a presentation event only: the log lines `eye-candy=6·spell` at the goal's start and
-   `6·spell+4` at the release (SU12, CG8); no art is drawn.
+   that are not ready. Eye candy is drawn ([below](#eye-candy-arc-magic-017)); only an eye candy's callback gets a line.
 6. **Events.** While the session holds a run, or the shown map's host exists, the event pump's passes go through the shown
    map's host (`SessionSpellCaster.ProcessEvents`, only a host of the pump's own session), so a run's later events run with the
    map's magic world and their payments are applied.
@@ -173,6 +171,36 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
 pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or
 `--area-map`); its fatigue drops and the NPC resists or takes damage.
+
+## Eye candy (ARC-MAGIC-017)
+
+The eye-candy table ([format](../formats/spell-eye-candy.md), `SpellEyeCandyTable`) is loaded with the spell data. The rules are
+Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../research/ledger/spell-runs.md#spell-eye-candy-arc-magic-017)):
+
+1. **The cast (`CastEyeCandyAnimation`, goal 27, EC7–EC8).** The cast entry (6·spell) is placed on the caster at frame 0. Its timing
+   part is the underlay, else the foreground, else the background; the pace is 1000 / the frame rate of the part the play built
+   last (the underlay, else the background, else the foreground). Each step moves the
+   animated parts one frame (with an underlay only the underlay, else the foreground and the background), the first at once and
+   the others one pace apart. The timing part's new frame equal to its action frame (a foreground or underlay only) fires the
+   release frame once: a passed release steps again at once, a failed one ends the goal at once. A step that finds a part at its
+   last frame ends the goal one pace later. So frame k shows at (k − 1)·pace before the release and (k − 2)·pace after it; an
+   action frame of 0 or past the last frame never releases, and the end frees the run (CG7). Without a cast eye candy (no art, no
+   part, an ART that does not read, a rate of 0, no table) the release runs at once and the goal ends.
+2. **Its own goal (`EyeCandyAnimation`, goal 45, EC9–EC10).** The release's secondary cast entry (6·spell + 4, on the caster, after
+   a passed re-check) and an EyeCandy component's entry play only when the entry animates and has a foreground or underlay part:
+   frame k at k·pace, the parts removed at frames·pace; an `anim_forever` entry's parts loop from frame 0 every frames·pace
+   until a Remove.
+3. **The component (`SessionSpellCaster`, EC11).** An EyeCandy component of a run's pass logs `EyeCandyAdded` (skipped for a run forced
+   to end) or `EyeCandyRemoved` with its target object, the entry (6·spell + its number) and its play flags; no target object,
+   nothing. A Remove takes only this run's entry unless `no_id`.
+4. **The draw (the AREA viewer, EC12).** Each placed part is an extra-art body (`AreaExtraArt`, class 14 through
+   `art\eye_candy\eye_candy.mes`) at its object's tile (the hero's committed cell, an NPC's live cell): the underlay and the
+   background ordered right before the object, the foreground right after it; the foreground and background at the art id's draw
+   scale, the underlay unscaled; a translucent part additive and unlit. The order is the object's own place (an NPC's T0 body with
+   its offset ranks; the standing hero's cell), one rank below or above. A play needs a free slot of each list it places in (7
+   foreground, 7 background, 4 underlay per object, EC9), else nothing is shown. A map change or a quick load clears them; the
+   goal's end removes the cast entry. Each frame of a part is one art id of the viewer's extra art (at most 4,096 art ids and
+   64 MiB of pixels per run, shared with the ground items); past it a frame is not drawn and said once.
 
 ## Differences from the original
 
@@ -186,7 +214,10 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
-| The cast is timed by the caster eye-candy overlay's action frame and frame rate; the body art does not change (SU12). | No eye-candy art is drawn: the release frame comes 500 ms of world time after the goal's start, the end 400 ms later. | — (stand-in, not ready) |
+| An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
+| A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
+| A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
+| An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -195,8 +226,9 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 
 ## Not ready
 
-- Eye-candy art (caster overlay, missile, target), its timing and the missile's flight (goal 28); the facing turn of goal 26
-  (0x42C850).
+- The missile's art and flight (goal 28, the projectile entry 6·spell + 1); the facing turn of goal 26 (0x42C850).
+- Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
+  (EC9, EC11, EC12).
 - A second cast while one plays: the original queues it under the running goal (SU13); the viewer refuses it ("a cast is still
   playing"), ignores world presses and the stick until the goal ends, and refuses F7 meanwhile (the session saves no goal).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation

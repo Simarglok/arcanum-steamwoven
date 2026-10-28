@@ -8,8 +8,13 @@ namespace Arcanum.TerrainViewer.Core;
 
 public enum AreaSpellDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, DataFailed }
 
-/// <summary>The spell data (texts and records) for the area's game folder, or why none was loaded.</summary>
-public sealed record AreaSpellDataLoad(AreaSpellDataStatus Status, SpellData? Data, string? Detail);
+/// <summary>The spell data (texts and records) for the area's game folder, or why none was loaded; since ARC-MAGIC-017 also the
+/// spells' eye-candy table (null when it does not read: the casts then play without eye candy, <see cref="EyeCandyDetail"/>).</summary>
+public sealed record AreaSpellDataLoad(AreaSpellDataStatus Status, SpellData? Data, string? Detail)
+{
+    public SpellEyeCandyTable? EyeCandy { get; init; }
+    public string? EyeCandyDetail { get; init; }
+}
 
 /// <summary>How a rank of the shown college looks: known (full colour), the next to learn, or above it (greyed).</summary>
 public enum AreaSpellState { Known, Next, Locked }
@@ -76,9 +81,14 @@ public static class AreaSpellsPage
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSpellDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
-        return loaded.Status != SpellDataStatus.Read
-            ? new(AreaSpellDataStatus.DataFailed, null, $"{loaded.Status} {loaded.Refusal}")
-            : new(AreaSpellDataStatus.Ready, loaded.Data, "spell data loaded");
+        if (loaded.Status != SpellDataStatus.Read) return new(AreaSpellDataStatus.DataFailed, null, $"{loaded.Status} {loaded.Refusal}");
+        // ARC-MAGIC-017: rules\SpellEyeCandy.mes, read by the same init (0x44F07C).
+        var eyeCandy = SpellEyeCandyTable.Open(stack);
+        return new(AreaSpellDataStatus.Ready, loaded.Data, "spell data loaded")
+        {
+            EyeCandy = eyeCandy.Table,
+            EyeCandyDetail = eyeCandy.Table is { } table ? $"eye candy {table.Entries.Count} entries" : $"eye candy {eyeCandy.Status} {eyeCandy.Refusal}",
+        };
     }
 
     /// <summary>The page of the session's hero showing <paramref name="college"/> (0..15), or null without a hero.</summary>

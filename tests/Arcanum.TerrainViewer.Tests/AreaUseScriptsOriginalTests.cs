@@ -145,13 +145,16 @@ public sealed class AreaUseScriptsOriginalTests
         // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): since
         // ARC-SCRIPT-018 (call script, assign object, get object type) 644 tile scripts run, since ARC-SCRIPT-019 (story state and
         // story actions) 684; the 6 that teleport are the exit tiles
-        // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call).
+        // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call). Since ARC-WORLD-081 (set
+        // S15) the 15 own sector files with the plant generator 30285 run (here with no marker near the session's actor), and the 130 tiles of
+        // script 1629 on the start map run to their create object of prototype 28464 (eight critters next to the PC), which the viewer does
+        // not create, so their effects are refused.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 678), ((tile, AreaScriptedUseOutcome.Refused), 2328),
-            ((sector, AreaScriptedUseOutcome.NoTeleport), 1), ((sector, AreaScriptedUseOutcome.Refused), 19),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 678), ((tile, AreaScriptedUseOutcome.Refused), 2198),
+            ((tile, AreaScriptedUseOutcome.EffectsRejected), 130), ((sector, AreaScriptedUseOutcome.NoTeleport), 16), ((sector, AreaScriptedUseOutcome.Refused), 4),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
 
