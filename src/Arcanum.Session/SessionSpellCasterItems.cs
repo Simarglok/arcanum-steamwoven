@@ -39,6 +39,10 @@ public sealed record SessionItemSpells(string Entity, string Holder, int Type, I
     }
 }
 
+/// <summary>ARC-UI-016: an item's spell pane (<see cref="SessionSpellCaster.ItemPane"/>): the item, whether the bar's weapon button
+/// shows for it, the pane's buttons and its gauge.</summary>
+public sealed record SessionItemSpellPane(string Item, bool WeaponButton, IReadOnlyList<ItemSpellButton> Buttons, ItemSpellGauge Gauge);
+
 /// <summary>What became of one item spell an event fired (<see cref="SessionSpellCaster.StartItemSpells"/>): its run started, its
 /// aim found no target (no run, as in the original), its aim needs what this slice does not model (an attacker's worn items), or the
 /// run start was refused (<see cref="SessionItemSpellStart.Result"/>).</summary>
@@ -107,6 +111,24 @@ public sealed partial class SessionSpellCaster
         if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
+
+    /// <summary>
+    /// ARC-UI-016: the item spell pane for an item the hero holds (interface bar mode 8, ledger IP rows): whether the bar's weapon
+    /// button shows for it (<see cref="ItemSpellPaneRules.WeaponButtonShown"/>, read for the wielded weapon), the pane's buttons
+    /// (<see cref="ItemSpellPaneRules.PaneButtons"/>, technological and item-trigger tests from the spell records) and its gauge, from
+    /// the item's current charges and flags (<see cref="Item"/>). Null for an item the host does not know as the hero's.
+    /// </summary>
+    public SessionItemSpellPane? ItemPane(string item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (Item(item) is not { Holder: Hero } spells) return null;
+        return new(item, ItemSpellPaneRules.WeaponButtonShown(spells.Charges, spells.Flags, spells.Complexity),
+            ItemSpellPaneRules.PaneButtons(spells.Spells, spells.Flags, spells.Complexity, spell => SpellRecord(spell)?.Data.IsTechnology,
+                ItemTriggered), ItemSpellPaneRules.Gauge(spells.Charges, spells.Flags));
+    }
+
+    /// <summary>Whether a spell's record has item triggers (0x45A030), null for a value outside the record table.</summary>
+    public bool? ItemTriggered(int spell) => SpellRecord(spell) is { } record ? record.Data.ItemTriggers != 0 : null;
 
     /// <summary>
     /// The executor (0x4CB830, ARC-MAGIC-020) for <paramref name="item"/> and an event: the spells <see cref="ItemSpellTriggerRules.Fire"/>
