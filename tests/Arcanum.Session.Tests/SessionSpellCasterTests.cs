@@ -406,6 +406,25 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
+    public void The_cursor_picks_in_the_original_order()
+    {
+        // ARC-MAGIC-021 (SU15–SU19): the object under the point, else (here no tile lists an object) the tile; a tile spell clicked
+        // on the box casts at the box's own tile, not at the clicked one.
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record, boxDestroyed: false);
+        using var _ = owner;
+        var clicked = new SpellLocation(7, 7);
+        var box = caster.PickTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "box", clicked);
+        Assert.AreEqual(("box", SpellLocation.None, true), (box.Object?.Id, box.Tile, box.Found));
+        var tile = caster.PickTarget(SessionSpellCaster.Hero, record.Data.Number, 0x8000UL << 32, "box", clicked);
+        Assert.AreEqual(((string?)null, BoxTile, true), (tile.Object?.Id, tile.Tile, tile.Found));
+        Assert.IsFalse(caster.PickTarget(SessionSpellCaster.Hero, record.Data.Number, 0x44, "box", null).Found, "no critter, no tile");
+        Assert.IsTrue(caster.PickSpared(SessionSpellCaster.Hero, 0x10000004)(SessionSpellCaster.Hero), "no-self spares the hero");
+        Assert.IsFalse(caster.PickSpared(SessionSpellCaster.Hero, 0x4)(SessionSpellCaster.Hero));
+        Assert.IsFalse(caster.PickSpared(SessionSpellCaster.Hero, 0x10000004)("box"));
+    }
+
+    [TestMethod]
     public void The_ui_cast_checks_the_cost_before_the_line_of_fire_and_refuses_a_missing_target_or_an_out_of_range_run()
     {
         var dear = SelfBolt(beginTargets: 0x4, cost: 100000);

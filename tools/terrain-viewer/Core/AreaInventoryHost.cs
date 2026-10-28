@@ -13,6 +13,10 @@ namespace Arcanum.TerrainViewer.Core;
 
 public enum AreaInventoryMapStatus { Ready, InventoryRefused, PcRecordPresent }
 
+/// <summary>ARC-WORLD-090: the substitute container of an NPC without a leader at T0 (NPC field 0x126, a container holder of the same
+/// area): its entity, its inventory source (container field 0x3D, whose buy line the dealer test retries, BT8) and its cell.</summary>
+public sealed record AreaSubstituteContainer(string Entity, int InventorySource, CellCoord Cell);
+
 /// <summary>
 /// The session inventory seed of one loaded area map (ARC-WORLD-014) with the object rows the AREA viewer needs to
 /// find, place and name its items and holders (ARC-UI-004). <see cref="Build"/> uses the conversation host's entity ids
@@ -23,12 +27,19 @@ public sealed class AreaInventoryMap
     private readonly Dictionary<string, AreaObjectRecord> _rows;
     private readonly Dictionary<AreaObjectKey, string> _entities;
 
+    private readonly Dictionary<string, AreaSubstituteContainer> _substitutes;
+
     /// <param name="rows">The object row of every seed entity (exactly those); one row per entity.</param>
+    /// <param name="substitutes">ARC-WORLD-090: the substitute container of each NPC entity that has one, a container of the seed.</param>
     public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0,
-        int npcsWithoutEvidence = 0)
+        int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null)
     {
         ArgumentNullException.ThrowIfNull(seed);
         ArgumentNullException.ThrowIfNull(rows);
+        _substitutes = new(substitutes ?? new Dictionary<string, AreaSubstituteContainer>(), StringComparer.Ordinal);
+        if (_substitutes.Any(pair => !seed.Holders.Any(holder => holder.Entity == pair.Key && holder.Kind == SessionHolderKind.Npc) ||
+                !seed.Holders.Any(holder => holder.Entity == pair.Value.Entity && holder.Kind == SessionHolderKind.Container)))
+            throw new ArgumentException("AREA_INVENTORY_SUBSTITUTE_NOT_IN_SEED", nameof(substitutes));
         if (runtimeMap < 1) throw new ArgumentOutOfRangeException(nameof(runtimeMap));
         RuntimeMap = runtimeMap; Seed = seed; DeadNpcs = deadNpcs; NpcsWithoutEvidence = npcsWithoutEvidence;
         var wanted = seed.Items.Select(item => item.Entity).Concat(seed.Holders.Select(holder => holder.Entity)).ToHashSet(StringComparer.Ordinal);
@@ -45,6 +56,10 @@ public sealed class AreaInventoryMap
     /// <summary>NPC holders on an admitted cell whose step evidence names no life fact (counted as alive).</summary>
     public int NpcsWithoutEvidence { get; }
     public AreaObjectRecord Row(string entity) => _rows[entity];
+    /// <summary>ARC-WORLD-090: the NPC's substitute container, or null.</summary>
+    public AreaSubstituteContainer? Substitute(string npc) => _substitutes.GetValueOrDefault(npc);
+    /// <summary>ARC-WORLD-090: the NPCs with a substitute container.</summary>
+    public int Substitutes => _substitutes.Count;
     public bool TryGetRow(string entity, out AreaObjectRecord row) => _rows.TryGetValue(entity, out row!);
     public bool TryGetEntity(AreaObjectKey key, out string entity) => _entities.TryGetValue(key, out entity!);
 
@@ -87,7 +102,13 @@ public sealed class AreaInventoryMap
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
-        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown),
+        // ARC-WORLD-090: an NPC's substitute container (0x45F650 asks for no leader first) that is a container of this area.
+        var substitutes = new Dictionary<string, AreaSubstituteContainer>(StringComparer.Ordinal);
+        foreach (var npc in inventory.Holders.Where(holder => holder.Type == AreaInventoryHolderType.Npc && holder.Leader is null))
+            if (npc.SubstituteInventory?.SourceIndex is { } index && inventory.TryGetHolder(index, out var box) && box.Type == AreaInventoryHolderType.Container &&
+                box.WorldX is { } x && box.WorldY is { } y)
+                substitutes[Id(npc.Key)] = new(Id(box.Key), box.InventorySource, new(checked((int)x), checked((int)y)));
+        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes),
             $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence");
     }
 

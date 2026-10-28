@@ -89,9 +89,10 @@ public partial class AreaBarterPanel : CanvasLayer
         var merchant = view.Merchant;
         _header.Text = $"Barter with {merchant.Name}{(merchant.Follower ? " (follower: no prices)" : "")} | hero gold {view.HeroGold} | merchant gold {view.MerchantGold}"
             + $" | haggle {view.Haggle} ({view.Training}) | reaction {view.Reaction} | price multiplier {merchant.Multiplier}"
-            + $" | buys {merchant.BuyList.Status}{(merchant.Fence ? " | fence" : "")}{(merchant.BuyScript ? " | buy script (not run)" : "")}";
+            + $" | buys {merchant.BuyList.Status}{(merchant.ContainerBuyList is { } box ? $" (container {box.Status})" : "")}"
+            + $"{(merchant.Fence ? " | fence" : "")}{(merchant.BuyScript ? " | buy script (not run)" : "")}";
         _heroHeader.Text = $"Hero: {(view.Hero.Count == 0 ? "nothing to sell" : $"{view.Hero.Count} items")}";
-        _waresHeader.Text = $"{merchant.Name}: {(view.Wares.Count == 0 ? "nothing to sell" : $"{view.Wares.Count} wares")}";
+        _waresHeader.Text = $"{merchant.Name}{(merchant.Container is null ? "" : " (stock chest)")}: {(view.Wares.Count == 0 ? "nothing to sell" : $"{view.Wares.Count} wares")}";
         foreach (var line in view.Hero) _sellButtons.Add(Add(_hero, $"Sell{_sellButtons.Count + 1}", "Sell", line, view, SellRequested));
         foreach (var line in view.Wares) _buyButtons.Add(Add(_wares, $"Buy{_buyButtons.Count + 1}", "Buy", line, view, BuyRequested));
         _message.Text = message ?? string.Empty;

@@ -231,6 +231,8 @@ public sealed partial class GameSessionOwner
         _inventory.Ammo.Remove(entity);
         _inventory.Piles.Remove(entity);
         _inventory.Given.Remove(entity);
+        // ARC-WORLD-090: and its identified flag.
+        _inventory.Identified.Remove(entity);
         // ARC-SCRIPT-042: its kept script slots go with it.
         foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
         // ARC-WORLD-085: its weight facts go with it.

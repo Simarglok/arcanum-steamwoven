@@ -260,6 +260,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG42 | original bug (ARC-MAGIC-015, ledger MG42) | fix without a switch (owner decision 2026-10-27, presentation only): the cursor's "not damaged" message only for the current pick's reason | MT20a-2 |
 | MG43 | original bug (ARC-MAGIC-019, ledger MG43) | fix in both modes without a switch (owner decision 2026-10-28): queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
 | MG44 | original bug (ARC-MAGIC-018, ledger MG44) | fix in both modes (owner decision 2026-10-28: fixed in both rule modes, no switch): a run whose missile is lost before it arrives (a leg's line refused, the goal stopped) is freed unpaid | MT20a-2 leftover |
+| MG45 | original bug (ARC-MAGIC-021, ledger MG45) | technical bug (owner rule 2026-10-28): fixed in both modes without a switch — no flag is written (latent: only an object whose data carries `OF_CLICK_THROUGH` could lose it) | MT20a-2 leftover |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |
@@ -304,6 +305,8 @@ Agreed through the coordinator on 2026-10-20:
   sound remain.
 - **Queued cast**: a second cast while one plays is queued beneath it and plays in turn
   ([ARC-MAGIC-019](../world/spell-cast-host.md#the-viewer-arc-magic-015), SU13, QC1–QC6, MG43).
+- **Cursor pick**: the targeting cursor picks its target in the original's order (0x4F28A0: the object under the point, the
+  tile's objects, the tile; [ARC-MAGIC-021](../world/spell-cast-host.md#the-viewer-arc-magic-015), SU15–SU19, MG45).
 - **Line of fire**: the AI awareness lane (combat open question O4).
 - **Fate state**: slice S7 of the [skills plan](skills-plan.md).
 
