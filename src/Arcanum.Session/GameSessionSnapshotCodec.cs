@@ -71,7 +71,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
     // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
-    // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero\'s inventory grid.
+    // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
         "identified", "lastDiscardedMade", "grid"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];

@@ -255,9 +255,13 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.WearRefused"/>); the item's and the current occupant's no-drop flag (WearRefused,
     /// <see cref="EquipmentRefusal.NotDroppable"/>); last the insert check of the occupant going back to the inventory
     /// (<see cref="GameSessionFailure.InsertRefused"/>; for a Technophobia hero a technological occupant is
-    /// <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069). The host answers that check as the source asks it: with
-    /// both the item and the occupant already out of the grid (the room the item leaves counts, the occupant's weight once). The facts
-    /// it gets are the occupant's saved kind and its complexity; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
+    /// <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069). The check runs as the source asks it, with both the item and
+    /// the occupant already out (ARC-UI-019, ledger IW11, IW12): the hero's load without the item above its carry weight is
+    /// <see cref="SessionInsertVerdict.TooHeavy"/>, then Technophobia, then the host's answer (it gets the occupant's saved kind and its
+    /// complexity), and the session's grid must have a free place for the occupant with the item's cells free
+    /// (<see cref="SessionInsertVerdict.NoRoom"/>); the occupant takes that place. Into an empty slot the item's own move runs the check too:
+    /// a load above the carry weight or a Technophobia refusal is InsertRefused, and under the Original setting a worn item moved to another
+    /// slot (a ring) needs a free grid place (IW13, IWA1). An item worn in another slot (a ring) leaves it.
     /// One revision.
     /// ARC-SCRIPT-042: with <paramref name="scripts"/>, the item events of the move run in the original's order (ledger IE6, WE7): the
     /// item's removal (wield off 25 when it was worn, then remove item 28), for an occupied slot the occupant's removal (25, 28) and then
