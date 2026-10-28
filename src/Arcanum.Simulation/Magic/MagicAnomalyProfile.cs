@@ -141,6 +141,15 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ItemRunDamageFiresHooks { get; init; }
 
+    /// <summary>
+    /// MG47 (ARC-WORLD-108, the owner's standing rule for gameplay slips: fix in Steamwoven): perform's cast with an item (0x4AC250)
+    /// clears the source of every run whose source or parent is the item (0x4574D0) for any item, outside its food-or-scroll test, right
+    /// after the run starts and before its casting goal plays: the run then has no source to pay from, so an NPC casting from a wand or
+    /// another item with charges spends none. The hero's item use clears the sources only of the food or scroll it destroys. Steamwoven
+    /// clears them only for a food or scroll, so the item pays its charge as the hero's does.
+    /// </summary>
+    public bool AiItemCastClearsAnySource { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -151,7 +160,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true, ItemRunDamageFiresHooks = true,
+        ReleaseRefusalKeepsRun = true, ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true,
     };
 
     /// <summary>Both settings, default first.</summary>

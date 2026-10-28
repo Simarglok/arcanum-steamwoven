@@ -16,8 +16,9 @@ namespace Arcanum.TerrainViewer;
 // off unless their stage turns it on, so the other stages stay as they were. In a turn-based round (ARC-WORLD-095) the round host
 // runs the NPCs' subturn hooks with this host and their runs pay action points. ARC-WORLD-102: an NPC that knows a spell may choose it
 // at its danger update and cast it through the map's cast host (the hero's); its casting goal is timed by its cast eye candy (not
-// drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. NOT READY: queued casts, spell
-// missiles' flights (released at once), items, throws, pickups, followers in combat, NPC ranged attacks, saved NPC positions.
+// drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. ARC-WORLD-108: an NPC heals
+// and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item. NOT
+// READY: throws, pickups, skills, followers in combat, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
@@ -28,6 +29,8 @@ public partial class TerrainViewerApp
     private int _aiFidgets;
     // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
     private int _aiCasts, _aiCastReleases, _aiMissiles, _aiMissileArrivals;
+    // ARC-WORLD-108: the NPC item uses whose magic branch ran (smoke stage ai-cast).
+    private int _aiItemUses;
     private string? _aiNotice;
     // The line of fire the AI reads, rebuilt once per frame.
     private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
@@ -148,6 +151,15 @@ public partial class TerrainViewerApp
                     break;
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
+                    break;
+                case AreaAiNoticeKind.ItemUse:
+                    // ARC-WORLD-108: an NPC used an item (goal 39 or the chooser's use at once): its spells ran through the cast host.
+                    _aiItemUses++;
+                    _aiNotice = $"{AiName(notice.Npc)} uses an item";
+                    GD.Print($"ARC-WORLD-108 ai-item-use npc={notice.Npc} item={notice.Item} target={notice.Target} outcome={notice.ItemUse?.Outcome}"
+                        + $" cast={notice.ItemUse?.Cast} fired={notice.ItemUse?.ItemUsed?.Spells.Count ?? 0} spent={notice.ItemUse?.Spent}");
+                    SyncAreaInventory();
+                    redraw = true;
                     break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.

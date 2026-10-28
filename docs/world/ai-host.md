@@ -17,7 +17,9 @@ danger update and casts it through the map's cast host ([below](#casting-arc-wor
 [AC1–AC4](../research/ledger/npc-ai.md#npc-ai-casting-host-arc-world-102), one reader, F1); it covers the NPC's casts of
 [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004).
 ARC-WORLD-104 (I10 part 3c) queues a cast while the NPC's casting goal plays, as the hero's ([below](#queued-cast-arc-world-104);
-exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104), one reader, F1).
+exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104), one reader, F1). ARC-WORLD-108 (I10 part 3e)
+gives the NPCs their items: the heal step, the item lists, perform's cast from an item and goal 39's item use
+([below](#item-use-arc-world-108); exe rows [NU1–NU4](../research/ledger/npc-ai.md#npc-ai-item-use-arc-world-108), one reader, F1).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -117,9 +119,26 @@ the launch node has no player test (AC8). The flight is the viewer's, shared wit
 No new state: the missile is the viewer's, not saved (a quick save is refused while any missile flies, as for the hero's); its run
 is the session's.
 
+## Item use (ARC-WORLD-108)
+
+The support rules' item half and the item-use goal get their host: an NPC lists the items it holds, heals with them at the pass's heal
+step, casts from them and uses them, through the map's cast host (whose item lookup knows the NPCs' items since ARC-UI-031).
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Items in the lists | 0x4CC810, 0x4CC930, 0x4CCA30, 0x456A10, 0x453CC0 (SP10) | `Inventory` is the NPC's list as the session shows it, worn items included (`AreaCombatHost.NpcItems`: seed items still held, items given or made for it, never the taken, dropped or destroyed ones; an item without fields is left out); `HexedWeapon` the wielded weapon (slot 1004 of the session's wear) with item flag 0x40; `Item` reads its fields (spell slots, 10000 as −1; identified flag 0x1 or the session's identification; food or scroll exempt; valid-AI-action flag 0x200000 and AI action field 0x6A) with the spell charges as the cast host gives them (the session's spent charges); `CanUseItem` and `ItemFailChance` are the cast host's (`AiCanUseItem`, `AiItemFailChance`). |
+| Heal step | 0x4A8940, 0x4A8AA0 | The pass's first step runs `AiSupportRules.Heal`: a choice becomes the pass record's for this pass's perform (the pass then skips the item search and the danger update); an AI-action item is used at once. The heal skill's rung finds no healing item (`HealingItem` null: NOT READY, below). |
+| Use at once | 0x4ABF10 → 0x462CC0 | An AI-action item entry the chooser meets (at the heal step or the danger update's spell choice) is used at once through the item use below, unchecked, with the entry's target; the pass record keeps no choice. |
+| Cast from an item | 0x4AC250 (NU1, NU4; MG47) | A choice with an item and pass action 1 (a scroll, a wand: an item whose first spell has no item triggers) is `SessionSpellCaster.CastByAi` with the item as source and the NPC as parent (the power it draws from the item); after a passed check the item's runs' sources are cleared and a food or scroll is destroyed out of the NPC's list (`RemoveItemFromNpc`), whether a run started or not. The Original setting clears the sources for any item, so a wand's run pays no charge (MG47); Steamwoven only for the food or scroll it destroys. The casting goal is the NPC's own (above). |
+| Goal 39 | 0x435450, 0x428CD0, 0x462CC0 (AG15, NU2) | A choice with pass action 2 (an item whose first spell has item triggers, an empty first slot or the valid-AI-action flag: a potion) starts goal 39 at the choice's target; on the target's tile or next to it, with the item still the NPC's (`ItemHolder`), the item use runs with the NPC's world: `UsedItem` from the item's fields and the cast host's charges (a scroll needs intelligence 5), the magic branch through `SessionItemTriggers.UseItem` (for an NPC holder the slot-0 activation casts nothing, NU2; the item used executor's spells start at the target and play at once; a food or scroll is spent out of the NPC's list), 4 action points in a turn-based round through the round's consume. Each use logs `ARC-WORLD-108 ai-item-use` in the viewer and refreshes the inventory. |
+
+No new state: the pass record's choice is the host's; the spent item and the spells' runs are the session's (the deletion and the
+spent charges are saved as the hero's are).
+
 ## Settings
 
-No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
+One new switch, MG47 (`MagicAnomalyProfile.AiItemCastClearsAnySource`, [rule modes](rule-modes.md)): above. EX6, EX9, EX12,
+CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
 
 ## Not ready
 
@@ -133,9 +152,12 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   in the Original setting the stalled-actor observation keeps the previous value either way (A11); in Steamwoven it records the new
   participant's own points, as A11's fix does for every check. A round that ends and another that begins between two observations (one frame) skips the round start's interrupt
   of every run. The fidget's animation is not played and its run not held (NPC ART is not read).
-- **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
-  heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
-  no item spell or AI-action item is chosen;
+- **Action goals.** Skills, throws and pickups (I8b's goals), grenades and goal 40 (the heal skill or pick locks with an item,
+  0x4352C0): the host's calls refuse or do nothing; the item search chooses nothing. ARC-WORLD-108: the heal skill's rung of the heal
+  step finds no healing item (it needs the NPC's skill goal 33 and the session's heal step for an NPC); an NPC's item use runs no use
+  script (an item with one goes on as if the script let it, which the trace notes), and a trap device's use, reading a written item
+  and a lockpick do nothing; the cancel after an NPC's item use, which in the original returns the player's interface to its normal
+  mode and closes an open targeting cursor (NU3), does not touch the viewer's cursor;
   an NPC's spell missile still in flight does not hold its subturn in a turn-based round (the NPC's run ends one pace after the
   launch; the hero's missile is the same): whether the round's "a run runs" test counts the missile's goal 28 (0x423300) is not
   read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
@@ -176,7 +198,12 @@ goal's end neither frees nor charges it (ARC-WORLD-105). `AreaAiHostTests` also:
 ARC-WORLD-105). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
 refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
 the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
-the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
+the fail-chance predictor (ARC-WORLD-102). `AreaAiItemTests` (viewer Core, the opt-in data of `AreaAiCastTests`): the college NPC
+given an installed healing potion and hurt to 60 % lists it on its light-healing list, its heal step chooses it, goal 39 uses it on
+itself (the `Item_Used` spell heals it) and the potion leaves its list (ARC-WORLD-108). `NpcItemUseTests` (Session): an NPC's potion
+fires `Item_Used` and is spent out of its list, its wand casts nothing from slot 0 (NU2), the AI's cast from a scroll destroys it and
+clears the run's source, from a wand pays its charge in Steamwoven and none in the Original setting (MG47), the refusals and the item
+answers. `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
 PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted
 whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_MAP_SMOKE_ONLY=ai` on `crash site cave` with
 `--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the

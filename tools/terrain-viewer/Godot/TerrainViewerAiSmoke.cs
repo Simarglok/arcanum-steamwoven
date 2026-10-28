@@ -282,7 +282,8 @@ public partial class TerrainViewerApp
     // magick college level: the Crash Site window of Arcanum1-024-fixed): the AI on, the hero a few cells from the highest-level such
     // NPC, which is told of the hero's attack. Its AI pass chooses one of its spells at the danger update (0x4ABC20), perform casts it
     // through the map's cast host (0x4AC250), and its casting goal plays: the start, the play timed by its cast eye candy, the release's
-    // BEGIN and the goal's end. The NPC, the hero and the casts' runs are restored for the later stages.
+    // BEGIN and the goal's end. ARC-WORLD-105: a missile spell's flight. ARC-WORLD-108: the NPC, given a healing potion and hurt, drinks it
+    // at its heal step (marker `ai-item`). The NPC, the hero and the casts' runs are restored for the later stages.
     private async Task RunAreaAiCastSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
@@ -311,6 +312,7 @@ public partial class TerrainViewerApp
         var npcLife = target.Build.Combat!.Target;
         var npcBefore = session.QueryLife(npcLife).View?.Status.HitPoints;
         var heroBefore = session.QueryHeroLife()!.Record.State;
+        string? potion = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -417,9 +419,53 @@ public partial class TerrainViewerApp
                 MissileSpell = missileSpell, MissileFrames = missileFrames, MissileLegs = missileEnd.Legs, MissileSteps = missileEnd.Steps,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroBefore.HitPointDamage,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+
+            // ARC-WORLD-108: the NPC, given an installed healing potion (food whose slot-0 spell is on the light-healing list) and hurt
+            // to a quarter of its hit points, lists it at its heal step (0x4A8940), which the pass runs first, and perform's item-use goal
+            // 39 drinks it: the slot-0 record fires on Item_Used at the NPC, which heals, and the potion leaves its list.
+            for (var wait = 0; wait < 600 && _barterData is null; wait++) { AdoptBarterData(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            var barter = _barterData?.Data;
+            Require(barter is not null, "the item prototypes loaded (" + _barterData?.Status + ")");
+            var light = caster!.AiLists[AiActionList.HealingLight];
+            var potionNumber = Enumerable.Range(6049, 15213 - 6029).FirstOrDefault(n => barter!.Prototype(n) is
+                { Object.Type: SessionItemSpells.FoodType, Item: { SpellManaStore: not 0 } item } && light.Contains(item.Spells[0]));
+            Require(potionNumber != 0, "an installed healing potion");
+            var potionFields = barter!.Prototype(potionNumber)!;
+            var given = session.AddItemToNpc(session.Version, entity,
+                new SessionItemKind(SessionItemType.Food, potionNumber, potionFields.Object.Name, potionFields.Object.Description), _ => SessionInsertVerdict.Accepted);
+            Require(given.Failure == GameSessionFailure.None && given.Item is not null, $"the NPC took the potion: {given.Failure}");
+            potion = given.Item;
+            var max = session.QueryLife(npcLife).View?.Status.MaxHitPoints ?? 0;
+            if (session.QueryLife(npcLife).View?.Status is { } full && full.HitPoints > max / 4)
+                session.ApplyDamage(session.Version, npcLife, new LifeDamage { HitPoints = full.HitPoints - max / 4 });
+            var hurt = session.QueryLife(npcLife).View?.Status.HitPoints ?? 0;
+            Require(host.Inventory(entity).Contains(potion!) && host.List(entity, AiActionList.HealingLight).Any(e => e.Item == potion),
+                "the potion is on the NPC's light-healing list");
+            var uses = _aiItemUses;
+            // The pass's heal step and its perform, as the AI pass runs them (heal first; a choice skips the danger update).
+            Require(host.Heal(entity), $"the heal step chose: {host.TraceOf(entity)?.Item}");
+            host.Perform(entity);
+            var itemFrames = 0;
+            for (; itemFrames < 2000 && !session.IsItemDestroyed(potion!); itemFrames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            var itemTrace = host.TraceOf(entity)?.Item;
+            var healed = session.QueryLife(npcLife).View?.Status.HitPoints ?? 0;
+            GD.Print($"ARC-WORLD-108 ai-item potion={potionNumber} item={potion} frames={itemFrames} hp={hurt}->{healed}/{max} trace={itemTrace} perform={host.TraceOf(entity)?.Perform}");
+            Require(session.IsItemDestroyed(potion!), $"the NPC drank the potion: {itemTrace}");
+            Require(_aiItemUses > uses, "the item use reached the viewer");
+            Require(healed > hurt, "the potion healed the NPC");
+            GD.Print("ARC-WORLD-108 native-smoke ai-item PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                map.RuntimeMap, Npc = target.Row.PrototypeNumber, Potion = potionNumber, Frames = itemFrames, Hurt = hurt, Healed = healed, Max = max,
+                Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
+            // ARC-WORLD-108: a potion the NPC did not drink leaves it again.
+            if (potion is not null && !session.IsItemDestroyed(potion)) session.RemoveItemFromNpc(session.Version, entity, potion);
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);
             ClearSpellMissiles("the smoke ended");
