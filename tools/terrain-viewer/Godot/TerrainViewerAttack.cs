@@ -78,7 +78,14 @@ public partial class TerrainViewerApp
 
     private void BindAreaCombat(AreaInventoryHost host)
     {
-        CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
+        CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host, CombatPrototype, () => _areaSession); _attackNotice = null; _spellCasterStamp = null;
+    }
+
+    // ARC-WORLD-106: a made item's prototype fields for the NPC combat host, from the barter data (null while it loads).
+    private Arcanum.Data.Combat.CombatFields? CombatPrototype(int prototype)
+    {
+        AdoptBarterData();
+        return _barterData?.Data?.Prototype(prototype);
     }
 
     private void UnbindAreaCombat() { RetireAiHost(); _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
@@ -851,7 +858,7 @@ public partial class TerrainViewerApp
         foreach (var holder in map.Seed.Holders)
         {
             if (holder.Kind != SessionHolderKind.Npc || holder.Dead || session.QueryLifeRecord(holder.Entity) is null) continue;
-            if (_combatHost.Build(map.RuntimeMap, holder.Entity).Combat is not { } combat || session.QueryLife(combat.Target).View is not { } life) continue;
+            if (_combatHost.Build(session, map.RuntimeMap, holder.Entity).Combat is not { } combat || session.QueryLife(combat.Target).View is not { } life) continue;
             int? animation = life.Status.IsDead ? _deathAnimations.GetValueOrDefault((map.RuntimeMap, holder.Entity), AreaFallenPoses.FallDown)
                 : life.Status.IsUnconscious ? AreaFallenPoses.FallDown : null;
             var row = map.Row(holder.Entity);

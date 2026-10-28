@@ -129,7 +129,7 @@ public partial class TerrainViewerApp
             }
             var start = CompanionLife(companion!)!.Value;
             CheckPortrait("joined", LifeBarRules.PortraitTinted(start.Health, start.MaxHealth));
-            var target = host.Build(CurrentAreaMap, companion!.Entity).Combat!.Target;
+            var target = host.Build(session, CurrentAreaMap, companion!.Entity).Combat!.Target;
             var low = Math.Max(1, start.MaxHealth * 15 / 100);
             Require(LifeBarRules.PortraitTinted(low, start.MaxHealth) && start.Health > low, $"the follower can be hit to {low} of {start.MaxHealth} ({start.Health} now)");
             var hit = session.ApplyDamage(session.Version, target, new LifeDamage { HitPoints = start.Health - low });

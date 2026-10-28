@@ -103,9 +103,10 @@ longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and 
 is `InvalidAttack`, both before any roll.
 
 **Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
-critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and an NPC's ammunition. An NPC's
-armour class, resistances and light still come from its map data's worn items, so a dropped or destroyed piece keeps counting
-there (the critical tables read the host's `TargetWorn`).
+critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and an NPC's ammunition. Since
+ARC-WORLD-106 an NPC's armour class, resistances and light come from the items the session's NPC wears
+([NPC wear in combat](equipment-runtime.md#npc-wear-in-combat-arc-world-106)), so a dropped, destroyed or broken piece no longer
+counts.
 
 ## Reach and line of fire (ARC-COMBAT-012)
 

@@ -200,7 +200,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         if (entity == SessionSpellCaster.Hero || !_rows.TryGetValue(entity, out var row) || row.Type != NpcType) return null;
         // ARC-MAGIC-021: a companion on another map is not on this one.
         if (Cell(row, _placed()) is null) return null;
-        if (_combat.Build(_map, entity).Combat is not { } combat || Fields(entity, row) is not { } fields) return null;
+        if (_combat.Build(_session, _map, entity).Combat is not { } combat || Fields(entity, row) is not { } fields) return null;
         var resistances = fields.Object.Resistances;
         return new(combat, resistances.Count > 4 ? resistances[4] : 0, unchecked((int)fields.Object.Flags), unchecked((int)fields.Object.SpellFlags),
             unchecked((int)(fields.Critter?.Flags ?? 0)), unchecked((int)(fields.Critter?.Flags2 ?? 0)))
