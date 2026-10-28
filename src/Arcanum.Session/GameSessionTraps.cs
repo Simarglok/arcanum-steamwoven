@@ -49,12 +49,15 @@ public enum SessionTrapOutcome
     Fired,
 }
 
-/// <summary>One trap meeting: the session's mutation, the outcome, the native run (null for an ordinary trap script), and
-/// the trap's state after it.</summary>
-public sealed record SessionTrapResult(GameSessionMutationResult Mutation, SessionTrapOutcome Outcome, NativeTrapRun? Run, SessionTrapState State);
+/// <summary>One trap meeting: the session's mutation, the outcome, the native run (null for an ordinary trap script), the
+/// trap's state after it, and whether the player gets the spotted line (<c>mes\trap.mes</c> line 0, ledger TT4). A rejected
+/// mutation carries outcome NoTrap and no run: nothing happened.</summary>
+public sealed record SessionTrapResult(GameSessionMutationResult Mutation, SessionTrapOutcome Outcome, NativeTrapRun? Run, SessionTrapState State,
+    bool PlayerLine = false);
 
 /// <summary>One disarm attempt: the session's mutation, the outcome, the device prototype it yields (0: none; the item is
-/// the caller's to create in the disarmer's inventory), the run of a sprung trap and the trap's state after it.</summary>
+/// the caller's to create in the disarmer's inventory), the run of a sprung trap and the trap's state after it. A rejected
+/// mutation carries outcome NotTrapped, no device and no run: nothing happened.</summary>
 public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation, TrapDisarm Outcome, int DevicePrototype, NativeTrapRun? Run,
     SessionTrapState State);
 
@@ -62,8 +65,10 @@ public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation,
 /// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot and
 /// disarm skills (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
 /// its T0 baseline until a spot mark or a removal; each write records the object's trap state as one map change of its
-/// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed), which the snapshot already carries, so the domain
-/// adds no schema. A removed trap object is also recorded destroyed (<see cref="ObjectConditionProperty"/>). The rolls are
+/// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed, and above bit 8 the script number the removal
+/// cleared), which the snapshot already carries, so the domain adds no schema. A removal holds only while the baseline still
+/// names that script, so a trap armed again later (a trap device, TP2) is seen; the spotted bit stays, as the original keeps
+/// object flag 0x2000000 through a removal (TT5). A removed trap object is also recorded destroyed (<see cref="ObjectConditionProperty"/>). The rolls are
 /// the caller's (the spot trap and disarm traps skills); the native runs' effects (spell and attacks, 0x4BCDC0) are a later
 /// slice: the session returns the run.
 /// </summary>
@@ -71,6 +76,7 @@ public sealed partial class GameSessionOwner
 {
     public const string TrapStateProperty = "trap.state";
     private const long TrapSpottedBit = 1, TrapRemovedBit = 2;
+    private const int TrapScriptShift = 8;
 
     /// <summary>The object's current trap state: its recorded changes over its baseline.</summary>
     public SessionTrapState QueryTrap(SessionTrapped trapped, SessionTrapBaseline baseline)
@@ -100,13 +106,13 @@ public sealed partial class GameSessionOwner
         TrapObserver observer)
     {
         ThrowIfDisposed();
-        if (!ValidTrapped(trapped, baseline)) return Reject(GameSessionFailure.InvalidTrap);
+        if (!ValidTrapped(trapped, baseline) || !Enum.IsDefined(observer)) return Reject(GameSessionFailure.InvalidTrap);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var state = TrapState(trapped, baseline);
         if (!state.Trapped) return NoChange();
         var mark = TrapRules.MarkSpotted(observer, baseline.Carrier, state.ObjectFlags);
         if (!mark.Marked || state.Spotted) return NoChange();
-        return ApplyChanges(expected, null, TrapEdits(trapped, baseline, RecordedTrap(trapped) | TrapSpottedBit));
+        return ApplyChanges(expected, null, TrapEdits(trapped, baseline, RecordedTrap(trapped, baseline) | TrapSpottedBit));
     }
 
     /// <summary>
@@ -114,21 +120,27 @@ public sealed partial class GameSessionOwner
     /// trap the triggerer does not know (the gate of <see cref="TrapSpotGate"/> and the spot trap roll); it is read only for a
     /// use or step. A use or step whose triggerer spots the trap now marks it (on the PC's side) and is cancelled; otherwise the
     /// trap fires: a native script's run, whose auto-removal clears the trap (a trap object is destroyed), or an ordinary trap
-    /// script the host runs. An attack fires the trap and never removes it. One revision when the state changes.
+    /// script the host runs. An attack fires the trap and never removes it. A step must name a trap object; a non-critter
+    /// spots nothing (TT3). One revision when the state changes; a rejected write reports nothing done.
     /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x4BCB00, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionTrapResult TriggerTrap(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline,
         TrapObserver triggerer, SessionTrapCause cause, bool spottedNow, int moverSpellFlags = 0)
     {
         ThrowIfDisposed();
-        if (!ValidTrapped(trapped, baseline) || !Enum.IsDefined(cause)) return TrapRejected(GameSessionFailure.InvalidTrap);
+        if (!ValidTrapped(trapped, baseline) || !Enum.IsDefined(cause) || !Enum.IsDefined(triggerer) ||
+            cause == SessionTrapCause.Step && baseline.Carrier != TrapCarrier.TrapObject)
+            return TrapRejected(GameSessionFailure.InvalidTrap);
         if (!IsCurrent(expected)) return TrapRejected(GameSessionFailure.StaleVersion);
         var state = TrapState(trapped, baseline);
         if (cause == SessionTrapCause.Step && !TrapRules.StepTriggers(moverSpellFlags)) return new(NoChange(), SessionTrapOutcome.SteppedOver, null, state);
         if (!state.Trapped) return new(NoChange(), SessionTrapOutcome.NoTrap, null, state);
-        if (cause != SessionTrapCause.Attack && spottedNow && !TrapRules.Known(triggerer, state.ObjectFlags))
+        if (cause != SessionTrapCause.Attack && spottedNow && triggerer != TrapObserver.NotCritter && !TrapRules.Known(triggerer, state.ObjectFlags))
         {
             var marked = MarkTrapSpotted(expected, trapped, baseline, triggerer);
-            return new(marked, SessionTrapOutcome.Spotted, null, TrapState(trapped, baseline));
+            if (marked.Disposition == GameSessionDisposition.Rejected) return TrapRejected(marked);
+            return new(marked, SessionTrapOutcome.Spotted, null, TrapState(trapped, baseline),
+                TrapRules.MarkSpotted(triggerer, baseline.Carrier, state.ObjectFlags).PlayerMessage);
         }
         return Fire(expected, trapped, baseline, state, cause);
     }
@@ -137,13 +149,15 @@ public sealed partial class GameSessionOwner
     /// A disarm attempt on the object (ledger TT5, TT6) from the caller's disarm traps result (<paramref name="success"/>,
     /// <paramref name="critical"/>) and the disarmer's training in it. Success removes the trap (a trap object is destroyed);
     /// an expert's critical success also returns its device prototype; a critical failure sets it off as a use would (the
-    /// trap is known, so no spot). One revision when the state changes.
+    /// trap is known, so no spot). Training is 0..3 (none to master). One revision when the state changes; a rejected write
+    /// reports nothing done.
     /// </summary>
     public SessionTrapDisarmResult DisarmTrap(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline,
         TrapObserver disarmer, bool success, bool critical, int disarmTraining)
     {
         ThrowIfDisposed();
-        if (!ValidTrapped(trapped, baseline)) return new(Reject(GameSessionFailure.InvalidTrap), TrapDisarm.NotTrapped, 0, null, default);
+        if (!ValidTrapped(trapped, baseline) || !Enum.IsDefined(disarmer) || disarmTraining is < 0 or > 3)
+            return new(Reject(GameSessionFailure.InvalidTrap), TrapDisarm.NotTrapped, 0, null, default);
         if (!IsCurrent(expected)) return new(Reject(GameSessionFailure.StaleVersion), TrapDisarm.NotTrapped, 0, null, default);
         var state = TrapState(trapped, baseline);
         var device = TrapRules.DevicePrototype(state.Script, state.ObjectFlags, baseline.Counters);
@@ -152,10 +166,12 @@ public sealed partial class GameSessionOwner
         switch (outcome)
         {
             case TrapDisarm.Removed or TrapDisarm.RemovedWithDevice:
-                var removed = ApplyChanges(expected, null, TrapEdits(trapped, baseline, RecordedTrap(trapped) | TrapRemovedBit));
+                var removed = Remove(expected, trapped, baseline, state);
+                if (removed.Disposition == GameSessionDisposition.Rejected) return new(removed, TrapDisarm.NotTrapped, 0, null, default);
                 return new(removed, outcome, outcome == TrapDisarm.RemovedWithDevice ? device : 0, null, TrapState(trapped, baseline));
             case TrapDisarm.Sprung:
                 var fired = Fire(expected, trapped, baseline, state, SessionTrapCause.Use);
+                if (fired.Mutation.Disposition == GameSessionDisposition.Rejected) return new(fired.Mutation, TrapDisarm.NotTrapped, 0, null, default);
                 return new(fired.Mutation, outcome, 0, fired.Run, fired.State);
             default:
                 return new(NoChange(), outcome, 0, null, state);
@@ -168,25 +184,43 @@ public sealed partial class GameSessionOwner
         var run = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
         // The object entry point writes the cleared number back (E3); the attack's direct trigger (0x4BCB00) loses it (OD6).
         if (run is not { AutoRemoves: true } || cause == SessionTrapCause.Attack) return new(NoChange(), SessionTrapOutcome.Fired, run, state);
-        var removed = ApplyChanges(expected, null, TrapEdits(trapped, baseline, RecordedTrap(trapped) | TrapRemovedBit));
+        var removed = Remove(expected, trapped, baseline, state);
+        if (removed.Disposition == GameSessionDisposition.Rejected) return TrapRejected(removed);
         return new(removed, SessionTrapOutcome.Fired, run, TrapState(trapped, baseline));
     }
 
-    private SessionTrapResult TrapRejected(GameSessionFailure failure) => new(Reject(failure), SessionTrapOutcome.NoTrap, null, default);
+    // The removal (0x4BC220, and the entry point's write-back of a cleared number, E3): the removed bit with the script it
+    // cleared; a trap object is destroyed. The spotted bit stays.
+    [Arcanum.Simulation.OriginalFunction(0x4BC220, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    private GameSessionMutationResult Remove(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SessionTrapState state) =>
+        ApplyChanges(expected, null, TrapEdits(trapped, baseline,
+            (state.Spotted ? TrapSpottedBit : 0) | TrapRemovedBit | (long)baseline.Script << TrapScriptShift));
+
+    private SessionTrapResult TrapRejected(GameSessionFailure failure) => TrapRejected(Reject(failure));
+
+    private static SessionTrapResult TrapRejected(GameSessionMutationResult rejected) => new(rejected, SessionTrapOutcome.NoTrap, null, default);
 
     private SessionTrapState TrapState(SessionTrapped trapped, SessionTrapBaseline baseline)
     {
-        var recorded = RecordedTrap(trapped);
-        if ((recorded & TrapRemovedBit) != 0) return new(TrapClass.None, 0, baseline.ObjectFlags | ((recorded & TrapSpottedBit) != 0 ? TrapRules.SpottedFlag : 0), true);
-        var flags = baseline.ObjectFlags;
-        if ((recorded & TrapSpottedBit) != 0) flags = TrapRules.MarkSpotted(TrapObserver.Player, baseline.Carrier, flags).ObjectFlags;
-        return new(TrapRules.Classify(baseline.Script, baseline.HeaderFlags), baseline.Script, flags, false);
+        var recorded = RecordedTrap(trapped, baseline);
+        var flags = (recorded & TrapSpottedBit) != 0 ? TrapRules.MarkSpotted(TrapObserver.Player, baseline.Carrier, baseline.ObjectFlags).ObjectFlags
+            : baseline.ObjectFlags;
+        return (recorded & TrapRemovedBit) != 0 ? new(TrapClass.None, 0, flags, true)
+            : new(TrapRules.Classify(baseline.Script, baseline.HeaderFlags), baseline.Script, flags, false);
     }
 
-    // The recorded trap bits (0 when none, or when a crafted save holds a value outside them).
-    private long RecordedTrap(SessionTrapped trapped) =>
-        _maps.TryGetValue(trapped.Map, out var changes) && changes.TryGetValue(MapChangeKey.ForEntity(trapped.Entity, TrapStateProperty), out var value) &&
-        value is >= 0 and <= (TrapSpottedBit | TrapRemovedBit) ? value : 0;
+    // The recorded trap bits: 0 when none or when a crafted save holds a value outside them; a removal of another script than
+    // the baseline's no longer counts (the object was armed again), its spotted bit does.
+    private long RecordedTrap(SessionTrapped trapped, SessionTrapBaseline baseline)
+    {
+        if (!_maps.TryGetValue(trapped.Map, out var changes) ||
+            !changes.TryGetValue(MapChangeKey.ForEntity(trapped.Entity, TrapStateProperty), out var value) || value < 0) return 0;
+        var bits = value & ((1L << TrapScriptShift) - 1);
+        var script = value >> TrapScriptShift;
+        if (bits > (TrapSpottedBit | TrapRemovedBit) || script > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber ||
+            (bits & TrapRemovedBit) == 0 && script != 0) return 0;
+        return (bits & TrapRemovedBit) != 0 && script != baseline.Script ? bits & TrapSpottedBit : bits;
+    }
 
     private static MapChangeEdit[] TrapEdits(SessionTrapped trapped, SessionTrapBaseline baseline, long bits) =>
         baseline.Carrier == TrapCarrier.TrapObject && (bits & TrapRemovedBit) != 0

@@ -178,5 +178,6 @@ public static class TrapRules
 
     /// <summary>Whether a mover that arrives on a tile sets off the trap object there (ledger TT9): not with spell flag 0x2 or
     /// 0x4 (field 0x14); the trap's use script then runs through the object entry point and the walk stops.</summary>
+    [OriginalFunction(0x4305D0, OriginalFunctionScope.Partial)]
     public static bool StepTriggers(int moverSpellFlags) => (moverSpellFlags & StepImmuneSpellFlags) == 0;
 }

@@ -152,4 +152,72 @@ public sealed class TrapStateTests
         Rejected(owner.TriggerTrap(stale, Plate, TrapPlate, TrapObserver.Player, SessionTrapCause.Use, false).Mutation, owner, GameSessionFailure.StaleVersion, 2);
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryTrap(new(Exterior, ""), TrapPlate));
     }
+
+    [TestMethod]
+    public void The_player_line_comes_with_the_players_spot_and_a_non_critter_spots_nothing()
+    {
+        using var owner = Create();
+        var mine = owner.TriggerTrap(owner.Version, Chest, TrappedChest, TrapObserver.Player, SessionTrapCause.Use, spottedNow: true);
+        Assert.IsTrue(mine.PlayerLine);
+        using var other = Create();
+        var led = other.TriggerTrap(other.Version, Chest, TrappedChest, TrapObserver.LedNpc, SessionTrapCause.Use, spottedNow: true);
+        Assert.AreEqual((SessionTrapOutcome.Spotted, false), (led.Outcome, led.PlayerLine));
+        using var third = Create();
+        var thing = third.TriggerTrap(third.Version, Chest, TrappedChest, TrapObserver.NotCritter, SessionTrapCause.Use, spottedNow: true);
+        Assert.AreEqual(SessionTrapOutcome.Fired, thing.Outcome);
+        // The player's Detect Traps flag needs no roll: the caller passes spotted.
+        Assert.AreEqual(TrapSpotGate.Detected, third.TrapSpotGate(Plate, TrapPlate, TrapObserver.Player, TrapRules.DetectTrapsSpellFlag));
+    }
+
+    [TestMethod]
+    public void An_attack_never_destroys_a_trap_object_and_a_step_names_a_trap_object_only()
+    {
+        using var owner = Create();
+        var fired = owner.TriggerTrap(owner.Version, Plate, TrapPlate, TrapObserver.Player, SessionTrapCause.Attack, false);
+        Assert.AreEqual((SessionTrapOutcome.Fired, GameSessionDisposition.NoChange), (fired.Outcome, fired.Mutation.Disposition));
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObjectCondition(Exterior, Plate.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Trap));
+        Rejected(owner.TriggerTrap(owner.Version, Chest, TrappedChest, TrapObserver.Player, SessionTrapCause.Step, false).Mutation, owner,
+            GameSessionFailure.InvalidTrap, 0);
+        Rejected(owner.TriggerTrap(owner.Version, Plate, TrapPlate, (TrapObserver)9, SessionTrapCause.Use, false).Mutation, owner,
+            GameSessionFailure.InvalidTrap, 0);
+        Rejected(owner.DisarmTrap(owner.Version, Plate, TrapPlate, TrapObserver.Player, true, false, 4).Mutation, owner, GameSessionFailure.InvalidTrap, 0);
+    }
+
+    [TestMethod]
+    public void Disarming_a_trap_object_destroys_it_and_a_non_expert_critical_success_yields_nothing()
+    {
+        using var owner = Create();
+        Changed(owner.MarkTrapSpotted(owner.Version, Plate, TrapPlate, TrapObserver.Player), owner, 1);
+        var removed = owner.DisarmTrap(owner.Version, Plate, TrapPlate with { Script = 30002 }, TrapObserver.Player, true, true, 1);
+        Assert.AreEqual((TrapDisarm.Removed, 0), (removed.Outcome, removed.DevicePrototype));
+        Changed(removed.Mutation, owner, 2);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObjectCondition(Exterior, Plate.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Trap));
+        // The spotted flag stays through the removal (TT5); a trap object stays drawn.
+        Assert.AreEqual(new SessionTrapState(TrapClass.None, 0, TrapRules.SpottedFlag, true), removed.State);
+    }
+
+    [TestMethod]
+    public void A_trap_armed_again_after_a_removal_is_seen_and_keeps_the_spotted_mark()
+    {
+        using var owner = Create();
+        Changed(owner.MarkTrapSpotted(owner.Version, Chest, TrappedChest, TrapObserver.Player), owner, 1);
+        Changed(owner.DisarmTrap(owner.Version, Chest, TrappedChest, TrapObserver.Player, true, false, 3).Mutation, owner, 2);
+        Assert.IsTrue(owner.QueryTrap(Chest, TrappedChest).Removed);
+        // The host's baseline now names another trap script (a trap device armed on the emptied slot).
+        var armed = TrappedChest with { Script = 30003 };
+        Assert.AreEqual(new SessionTrapState(TrapClass.Nonmagical, 30003, TrapRules.SpottedFlag, false), owner.QueryTrap(Chest, armed));
+        Assert.AreEqual(SessionTrapOutcome.Fired, owner.TriggerTrap(owner.Version, Chest, armed, TrapObserver.Player, SessionTrapCause.Use, false).Outcome);
+    }
+
+    [TestMethod]
+    public void A_refused_write_reports_nothing_done()
+    {
+        using var owner = Create(new GameSessionLimits(maxChangesPerMap: 1));
+        var disarm = owner.DisarmTrap(owner.Version, Plate, TrapPlate with { ObjectFlags = TrapRules.SpottedFlag }, TrapObserver.Player, true, true, 3);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (disarm.Mutation.Disposition, disarm.Mutation.Failure));
+        Assert.AreEqual((TrapDisarm.NotTrapped, 0, (NativeTrapRun?)null), (disarm.Outcome, disarm.DevicePrototype, disarm.Run));
+        var step = owner.TriggerTrap(owner.Version, Plate, TrapPlate, TrapObserver.Player, SessionTrapCause.Step, false);
+        Assert.AreEqual((GameSessionDisposition.Rejected, SessionTrapOutcome.NoTrap, (NativeTrapRun?)null), (step.Mutation.Disposition, step.Outcome, step.Run));
+        Assert.IsTrue(owner.QueryTrap(Plate, TrapPlate).Trapped);
+    }
 }
