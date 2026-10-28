@@ -42,9 +42,8 @@ slices (see [Not ready](#not-ready)).
   knows the item and its charges need no saved state: unlimited or none), `Fire`, `Withdraw`. It plays each started run's goal at
   once: the goal's start (`StartGoal`, 4 action points in a turn-based round), then the release (`Release`, its BEGIN). No eye-candy
   art paces it. A withdrawal's recast ends its goal (`EndGoal`). A fired run's goal 73 has no end node: when its start refuses, the
-  original leaves the run in its slot, never begun (IT10); Steamwoven frees it unpaid as MG41 does for a run that fails its release
-  re-check (`MagicAnomalyProfile.ReleaseRefusalKeepsRun`, owner decision 2026-10-27 for MG41; its use here awaits the owner's
-  confirmation).
+  original leaves the run in its slot, never begun (IT10); both rule modes free it unpaid (owner decision 2026-10-28: a slot leak,
+  fixed without a switch).
 - **Equipment.** `Equip` and `Unequip` take an optional `ISessionItemTriggers` of the same session. Without one, as before
   ARC-MAGIC-020, an item with item spells is refused (`ItemEffectUnsupported`), and so is a move of an item that is the source of a
   run in the table. The session does not record which worn items carry spells (the worn item's saved state is unchanged), so an item
@@ -70,7 +69,7 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | Original | Steamwoven | Switch |
 | --- | --- | --- |
 | The wear and unwear executors run inside the wield and unwield (0x4677B0, 0x467CB0), before the light recalculation and script points 24/25 (IT8). | They run after the move and its scripts. No installed wear item has a move script. | — (order of the session's move) |
-| A fired run whose goal 73 refuses at its start stays in its slot, never begun (IT10). | Freed unpaid. | MG41's switch (`ReleaseRefusalKeepsRun`), awaiting the owner's confirmation |
+| A fired run whose goal 73 refuses at its start stays in its slot, never begun (IT10). | Freed unpaid in both modes. | none (owner decision 2026-10-28: fixed in both modes) |
 | The casting goal's release waits for the caster's eye candy (EC7). | The goals of item spells are released at once. | — (presentation, not ready) |
 
 ## Not ready

@@ -155,18 +155,18 @@ public sealed class SessionItemSpellTests
     }
 
     [TestMethod]
-    public void It10_a_fired_run_whose_goal_start_refuses_stays_in_the_original_and_is_freed_unpaid_in_Steamwoven()
+    public void It10_a_fired_run_whose_goal_start_refuses_is_freed_unpaid_in_both_modes()
     {
-        // No charges left: the pre-animation check refuses the goal (an item source pays a charge); goal 73 has no end node.
-        foreach (var (mode, stays) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        // No charges left: the pre-animation check refuses the goal (an item source pays a charge); goal 73 has no end node, so the
+        // original keeps the run in its slot forever; the owner fixed that leak in both modes (2026-10-28).
+        foreach (var mode in new[] { RuleMode.Original, RuleMode.Steamwoven })
         {
             var (owner, _, triggers) = Session(mode, charges: 0, record: Record150(technology: false, cost: 5));
             using var _ = owner;
             var worn = owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept, triggers: triggers);
             Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"{mode} {worn.Failure}");
             Assert.AreEqual(SpellCastGoalOutcome.CannotAfford, worn.ItemSpells.Single().Goals.Single()!.Outcome, $"{mode}");
-            Assert.AreEqual(stays, Runs(owner).Length == 1, $"{mode}");
-            if (stays) Assert.AreEqual(SpellRunAction.Begin, Runs(owner).Single().Action, "it never begins");
+            Assert.AreEqual(0, Runs(owner).Length, $"{mode}: freed");
         }
     }
 
