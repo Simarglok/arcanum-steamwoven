@@ -58,6 +58,9 @@ One line per component; the full row (merged scope, implementation and contract 
 | Inventory window, pickup and loot | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-014, ARC-SCRIPT-013, ARC-UI-004 |
 | Character sheet | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-009, ARC-MAGIC-008, ARC-UI-007 |
 | Logbook | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-008 |
+| Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
+| Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
+| Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |
@@ -96,6 +99,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
 | NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
+| Weight and encumbrance | [Items and inventory](status/items.md) | ARC-WORLD-085 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |
@@ -157,6 +161,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | SCR teleports and guards | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-014, ARC-SCRIPT-015, ARC-UI-049 |
 | SCR deferred calls | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-010, ARC-WORLD-039 |
 | SCR print line and item insert scripts | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-013 |
+| SCR wield events and item effects | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-042 |
 | SCR dialogue through the dispatcher | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-009 |
 | SCR dispatcher core | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-008, ARC-RES-048, ARC-SCRIPT-040 |
 | SCR program and admission | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-007, ARC-RES-045, ARC-SCRIPT-008 |

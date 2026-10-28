@@ -25,7 +25,7 @@ public sealed class AreaWearHostTests
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             new AreaFieldValue(30, AreaPresence.Array, AreaValueOrigin.Instance, null, [], null),
             new AreaFieldValue(31, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null),
-            Field(36, 0x1), Field(38, 1), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, 0x60000000), Field(45, 0),
+            Field(36, 0x1), Field(38, 1), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, 0x60000000), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
             Field(59, 0x1), Field(60, 0), Field(61, 0),
         ], true, true, true);

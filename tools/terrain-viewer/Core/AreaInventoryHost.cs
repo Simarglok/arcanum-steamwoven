@@ -83,7 +83,7 @@ public sealed class AreaInventoryMap
             inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
                     item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray())
-                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0 },
+                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0, MagicWeight = item.MagicWeight },
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
@@ -389,6 +389,7 @@ public sealed class AreaInventoryHost
     public static string Refusal(GameSessionFailure failure, SessionInsertVerdict? verdict = null) => failure switch
     {
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
+        GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TooHeavy => "the PC cannot carry that much weight",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",

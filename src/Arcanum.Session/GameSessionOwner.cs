@@ -113,7 +113,9 @@ public sealed partial class GameSessionOwner : IDisposable
             {
                 if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type))
                     return Rejected(GameSessionFailure.InvalidHero);
+                if (!item.Weight.IsValid) return Rejected(GameSessionFailure.InvalidHero);
                 inventory.Add(new SessionKitItem(HeroDomain.KitEntity(index), item.Kind));
+                inventory.SetWeight(HeroDomain.KitEntity(index), item.Weight);
             }
             inventory.Gold = definition.Gold;
         }
@@ -1494,8 +1496,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; ARC-WORLD-083: a made item the one it was
         // placed with (the original's drop and pickup leave field 0x60 alone, ledger MC1); a kit item has none in the session (0).
         var complexity = _inventory.PlacedComplexity(placed);
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity)))),
-            complexity);
+        var placedFacts = _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity));
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1585,7 +1587,7 @@ public sealed partial class GameSessionOwner : IDisposable
         bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
             !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
 
-        var runs = scripts is null ? null : new ItemScriptRuns(this, scripts, map.RuntimeMap);
+        var runs = scripts is null ? null : new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item.Entity] = facts.Complexity });
         if (runs is not null)
         {
             // The gate: the item's get script, or the recipient's transfer script (the PC's slot is the host's to answer). The
@@ -1600,7 +1602,8 @@ public sealed partial class GameSessionOwner : IDisposable
             if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(gatePoint, runs);
         }
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
-        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity);
+        // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
+        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
@@ -1618,7 +1621,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
-            if (runs.Failure == GameSessionFailure.None) runs.CheckFlagRevisions();
+            runs.Prepare();
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
         if (into is { } stack)
@@ -1634,104 +1637,17 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.RemoveFromNpc(item.Entity);
             _inventory.ReturnGiven(item.Entity, facts.Kind, facts.Complexity);
         }
-        else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        else
+        {
+            _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+            // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
+            _inventory.SetWeight(item.Entity, facts.WeightFacts);
+        }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
-        runs?.ApplyFlags();
+        runs?.Commit();
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
-    }
-
-    // ARC-SCRIPT-041: a gate script returned skip default, so the item stays where it is. What the run did still happens, as in the
-    // original: its global flag writes (one revision when there are any) and its printed lines.
-    private InventoryMutationResult Declined(int point, ItemScriptRuns runs)
-    {
-        runs.CheckFlagRevisions();
-        if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
-        var changed = runs.HasFlagWrites;
-        if (changed)
-        {
-            runs.ApplyFlags();
-            _revision++;
-        }
-        return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision))
-            { DeclinedBy = point, Scripts = runs.Runs, Messages = runs.Messages };
-    }
-
-    /// <summary>
-    /// ARC-SCRIPT-041: the item script runs of one transfer, in order, under <see cref="SessionItemScripts.Admission"/>. Each run reads
-    /// the global flags the earlier runs of the transfer wrote (the original applies a run's writes before the next event); nothing is
-    /// applied before <see cref="ApplyFlags"/>. The first run whose effects the session cannot apply sets <see cref="Failure"/>, and
-    /// later runs are not made.
-    /// </summary>
-    private sealed class ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map)
-    {
-        private readonly SessionFlagReads _reads = new(owner, host);
-        private readonly List<SessionItemScriptRun> _runs = [];
-        private readonly List<SessionScriptMessage> _messages = [];
-        private readonly List<ScrFlagWrite> _writes = [];
-
-        internal GameSessionFailure Failure { get; private set; }
-        internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
-        internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
-        internal bool HasFlagWrites => _writes.Count > 0;
-
-        internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
-        {
-            if (Failure != GameSessionFailure.None) return null;
-            var run = ScrDispatcher.RunObject(new(point, new ScrObjectRef(map, attachee), new ScrObjectRef(map, triggerer),
-                extra is null ? null : new ScrObjectRef(map, extra)), _reads, new() { Rules = owner._rules.Scripts, Admission = SessionItemScripts.Admission });
-            owner.ThrowIfDisposed();
-            _runs.Add(new(point, attachee, run));
-            Failure = _reads.UnknownFlag ? GameSessionFailure.ItemScriptUnsupported : owner.ItemScriptEffects(run, host, _messages);
-            if (Failure == GameSessionFailure.None)
-                foreach (var write in run.Effects.GlobalFlags)
-                {
-                    _writes.Add(write);
-                    _reads.Pending[write.Index] = write.Value;
-                }
-            return run;
-        }
-
-        internal void CheckFlagRevisions()
-        {
-            if (_writes.Count > 0 && owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) Failure = GameSessionFailure.RevisionExhausted;
-        }
-
-        internal void ApplyFlags()
-        {
-            foreach (var write in _writes)
-            {
-                var receipt = owner._flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), owner._flags.Version, new FlagId(write.Index), write.Value));
-                // Checked before the commit; a refusal here would be a broken invariant of the flag owner.
-                if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
-                    throw new InvalidOperationException("ITEM_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
-            }
-        }
-    }
-
-    // What the session applies from an item script run: global flags and printed lines. A script outside the admitted set,
-    // a changed attachment (its flags, counters or number would need a home on the moved item or on the PC) and anything else refuse
-    // the transfer; a flag outside the session's domain and a line the host cannot show do too. Host reads only.
-    private GameSessionFailure ItemScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages)
-    {
-        // A script file that exists but cannot be read is not the original's missing file: refused, not skipped.
-        if (run.Outcome == ScrOutcome.Refused || run.Stop == ScrStop.UnreadableScript) return GameSessionFailure.ItemScriptUnsupported;
-        var effects = run.Effects;
-        if (effects.Writeback is not null || effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.Calls.Count > 0)
-            return GameSessionFailure.ItemScriptUnsupported;
-        foreach (var write in effects.GlobalFlags)
-        {
-            var read = _flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), _flags.Version, new FlagId(write.Index)));
-            if (read.Status != GlobalFlagReadStatus.Known) return GameSessionFailure.ItemScriptUnsupported;
-        }
-        foreach (var line in effects.Lines)
-        {
-            var printed = scripts.PrintedLine(line.Script, line.Line) ?? throw new InvalidOperationException("ITEM_SCRIPT_LINE_NULL");
-            if (printed.Status == SessionPrintedLineStatus.Unsupported) return GameSessionFailure.ItemScriptUnsupported;
-            if (printed.Status == SessionPrintedLineStatus.Shown) messages.Add(new(line.Script, line.Line, line.Kind, printed.Text ?? string.Empty));
-        }
-        return GameSessionFailure.None;
     }
 
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
@@ -1871,6 +1787,19 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
+        // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
+        // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
+        if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;
+        SessionItemScriptSlot? lastSlot = null;
+        foreach (var slot in saved.ScriptSlots)
+        {
+            if (slot is null || !SessionValidation.Entity(slot.Entity) || slot.Point is < 0 or >= ScrPoint.Count || slot.Point == ScrPoint.DialogOverride ||
+                slot.Script is < 0 or > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber || destroyed.Contains(slot.Entity) || lastSlot is not null &&
+                (string.CompareOrdinal(lastSlot.Entity, slot.Entity) is var order && (order > 0 || order == 0 && lastSlot.Point >= slot.Point)))
+                return GameSessionFailure.InvalidSnapshot;
+            lastSlot = slot;
+            inventory.ScriptSlots[(slot.Entity, slot.Point)] = new(slot.Script, slot.LocalFlags, slot.Counters);
+        }
         // ARC-WORLD-066: the ammunition stacks by entity in ordinal order, within the budget, each of a type 0..3 with 0 or more units and
         // not deleted; every ammunition item the hero holds or placed, and every one added to an NPC, has its stack; a stack of the
         // hero's, the NPC store's or a placed item is of an ammunition item.
@@ -1889,6 +1818,19 @@ public sealed partial class GameSessionOwner : IDisposable
             .Concat(inventory.Npcs.Values.SelectMany(list => list).Select(item => (item.Entity, item.Kind)));
         foreach (var (entity, kind) in tracked)
             if ((kind.Type == SessionItemType.Ammo) != inventory.Ammo.ContainsKey(entity)) return GameSessionFailure.InvalidSnapshot;
+        // ARC-WORLD-085: the weight rows by entity in ordinal order, each of an object the inventory holds (the hero's, a placed one or
+        // one in an NPC's added list) with valid facts and a non-zero weight or adjustment.
+        string? lastWeight = null;
+        foreach (var row in saved.Weights)
+        {
+            if (!SessionValidation.Entity(row.Entity) || lastWeight is not null && string.CompareOrdinal(lastWeight, row.Entity) >= 0 || !row.Facts.IsValid ||
+                row.Facts.Weight == 0 && row.Facts.MagicWeight == 0 || destroyed.Contains(row.Entity) || !inventory.Kit.Exists(item => item.Entity == row.Entity) &&
+                !inventory.Pc.Exists(item => item.Entity == row.Entity) && !inventory.Made.Exists(item => item.Entity == row.Entity) &&
+                inventory.PlacedItem(row.Entity) is null && inventory.NpcOf(row.Entity) is null)
+                return GameSessionFailure.InvalidSnapshot;
+            lastWeight = row.Entity;
+            inventory.Weights[row.Entity] = row.Facts;
+        }
         return GameSessionFailure.None;
     }
 
@@ -2199,39 +2141,6 @@ public sealed partial class GameSessionOwner : IDisposable
     private static GameSessionCreationResult Rejected(GameSessionFailure failure,
         ClockFailure clockFailure = ClockFailure.None, GlobalFlagReason flagReason = GlobalFlagReason.None) =>
         new(null, failure, clockFailure, flagReason);
-}
-
-/// <summary>ARC-SCRIPT-013: the item script host with global flags read from the session; an unknown flag answers false and
-/// is recorded, and the session then refuses the transfer.</summary>
-internal sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host) : IScrHost
-{
-    internal bool UnknownFlag { get; private set; }
-
-    /// <summary>ARC-SCRIPT-041: writes of earlier runs of the same transfer, not applied yet; a read sees them first.</summary>
-    internal Dictionary<int, bool> Pending { get; } = [];
-
-    public bool GlobalFlag(int index)
-    {
-        if (Pending.TryGetValue(index, out var pending)) return pending;
-        var flags = session.Flags;
-        var read = flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(index)));
-        if (read.Status == GlobalFlagReadStatus.Known && read.Value is { } value) return value;
-        UnknownFlag = true;
-        return false;
-    }
-
-    public ScrSlot? Slot(ScrObjectRef attachee, int point) => host.Slot(attachee, point);
-    public ScrScriptLookup Script(int number) => host.Script(number);
-    public int StoryState() => host.StoryState();
-    public bool IsMonsterGenerator(ScrObjectRef attachee) => host.IsMonsterGenerator(attachee);
-    public ScrDialogState DialogState(ScrObjectRef attachee) => host.DialogState(attachee);
-    public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) =>
-        host.CheckTrapBeforeUse(triggerer, attachee);
-    public bool IsTrapObject(ScrObjectRef attachee) => host.IsTrapObject(attachee);
-    public ScrObjectRef? Player() => host.Player();
-    public ScrObjectRef? Leader(ScrObjectRef critter) => host.Leader(critter);
-    public bool IsJilted(ScrObjectRef critter) => host.IsJilted(critter);
-    public bool IsPc(ScrObjectRef critter) => host.IsPc(critter);
 }
 
 /// <summary>Forwarding view, so callers cannot reach the owner's Dispose or MarkFailed.</summary>

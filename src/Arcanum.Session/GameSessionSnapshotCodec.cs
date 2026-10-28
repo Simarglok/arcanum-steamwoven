@@ -69,7 +69,10 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles"];
+    // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows.
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights"];
+    private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
+    private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
     private static readonly string[] GivenFields = ["entity", "origin"];
     private static readonly string[] PileFields = ["entity", "coins"];
@@ -79,7 +82,7 @@ public static class GameSessionSnapshotCodec
     // ARC-WORLD-083 (schema 41): a made item's complexity.
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
-    private static readonly string[] WornFields = ["slot", "entity", "item"];
+    private static readonly string[] WornFields = ["slot", "entity", "item", "scripts"];
     private static readonly string[] DurabilityFields = ["items", "destroyed", "uses"];
     private static readonly string[] ItemUseFields = ["entity", "uses"];
     private static readonly string[] SchematicsFields = ["found"];
@@ -407,6 +410,31 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", pile.Entity);
                 w.WriteNumber("coins", pile.Quantity);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-SCRIPT-042: by entity in ordinal order, then by point.
+            w.WriteStartArray("scriptSlots");
+            foreach (var slot in snapshot.Inventory.ScriptSlots)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", slot.Entity);
+                w.WriteNumber("point", slot.Point);
+                w.WriteNumber("script", slot.Script);
+                w.WriteNumber("localFlags", slot.LocalFlags);
+                w.WriteNumber("counters", slot.Counters);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-085: the weight rows by entity in ordinal order.
+            w.WriteStartArray("weights");
+            foreach (var row in snapshot.Inventory.Weights)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", row.Entity);
+                w.WriteNumber("weight", row.Facts.Weight);
+                w.WriteNumber("magicWeight", row.Facts.MagicWeight);
+                w.WriteNumber("complexity", row.Facts.Complexity);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1487,7 +1515,36 @@ public static class GameSessionSnapshotCodec
             lastPile = entity;
             piles[i] = new(entity, Int(row["coins"], path + ".coins", 0, int.MaxValue));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles);
+        // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order, then by strictly ascending point.
+        var slotRows = Array(f["scriptSlots"], p + ".scriptSlots", SessionItemScripts.MaxStoredSlots);
+        var scriptSlots = new SessionItemScriptSlot[slotRows.Length];
+        for (var i = 0; i < slotRows.Length; i++)
+        {
+            var path = $"{p}.scriptSlots[{i}]";
+            var row = Fields(slotRows[i], path, ScriptSlotFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            var point = Int(row["point"], path + ".point", 0, Arcanum.Scripting.Scr.ScrPoint.Count - 1);
+            if (i > 0 && (string.CompareOrdinal(scriptSlots[i - 1].Entity, entity) is var order && (order > 0 || order == 0 && scriptSlots[i - 1].Point >= point)))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".point");
+            scriptSlots[i] = new(entity, point, Int(row["script"], path + ".script", 0, Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber),
+                UInt(row["localFlags"], path + ".localFlags"), UInt(row["counters"], path + ".counters"));
+        }
+        // ARC-WORLD-085: the weight rows by entity in strictly ascending ordinal order, at most one an object the inventory can hold.
+        var weightRows = Array(f["weights"], p + ".weights", GameSessionLimits.PolicyMaxPcItems + GameSessionLimits.PolicyMaxNpcItems);
+        var weights = new SessionItemWeightRecord[weightRows.Length];
+        string? lastWeight = null;
+        for (var i = 0; i < weightRows.Length; i++)
+        {
+            var path = $"{p}.weights[{i}]";
+            var row = Fields(weightRows[i], path, WeightFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (lastWeight is not null && string.CompareOrdinal(lastWeight, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastWeight = entity;
+            weights[i] = new(entity, new(Int(row["weight"], path + ".weight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
+                Int(row["magicWeight"], path + ".magicWeight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
+                Complexity(row, path)));
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights);
     }
 
     // ARC-WORLD-083: a made or placed item's magick/tech complexity, any 32-bit value (the original's field 0x60 is one).
@@ -1596,6 +1653,10 @@ public static class GameSessionSnapshotCodec
         }
         else w.WriteNull("armor");
         w.WriteEndObject();
+        // ARC-SCRIPT-042: the item event points, ascending.
+        w.WriteStartArray("scripts");
+        foreach (var point in worn.ScriptPoints) w.WriteNumberValue(point);
+        w.WriteEndArray();
         w.WriteEndObject();
     }
 
@@ -1622,7 +1683,16 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && slot <= worn[i - 1].Slot) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".slot");
             var entity = Entity(f["entity"], path + ".entity");
             if (!entities.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
-            worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"));
+            // ARC-SCRIPT-042: the item event points (21, 24, 25, 28) strictly ascending.
+            var points = Array(f["scripts"], path + ".scripts", EquipmentDomain.MoveScripts.Length);
+            var scripts = new int[points.Length];
+            for (var j = 0; j < points.Length; j++)
+            {
+                scripts[j] = Int(points[j], $"{path}.scripts[{j}]", SessionScriptPoint.InsertItem, SessionScriptPoint.RemoveItem);
+                if (!EquipmentDomain.MoveScripts.Contains(scripts[j]) || j > 0 && scripts[j] <= scripts[j - 1])
+                    throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{path}.scripts[{j}]");
+            }
+            worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item")) { ScriptPoints = EquipmentDomain.MovePoints(scripts) };
         }
         return new(worn);
     }
@@ -1922,6 +1992,8 @@ public static class GameSessionSnapshotCodec
     }
 
     private static int Int(JsonElement element, string path, int min, int max) => (int)Long(element, path, min, max);
+
+    private static uint UInt(JsonElement element, string path) => (uint)Long(element, path, 0, uint.MaxValue);
 
     private static bool IsIntegerLiteral(string raw)
     {

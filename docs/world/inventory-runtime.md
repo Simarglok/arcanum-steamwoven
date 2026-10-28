@@ -134,7 +134,10 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
   remove-item or insert-item point is refused as before, and nothing runs.
 - Every run uses `SessionItemScripts.Admission` (S6 without the dialog action, story state and deferred calls) and the effect rules
   of the insert-item script above (global flags and printed lines only; a changed attachment, a dialog, story state, a deferred call
-  or a trap destruction refuses the transfer). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
+  or a trap destruction refuses the transfer). Since ARC-SCRIPT-042 the set also holds the item-effect commands, and a transfer
+  applies what an equipment move applies ([wield events](equipment-runtime.md#wield-events-arc-script-042)): the hero's effect
+  changes and the moved item's changed slots, which the session keeps (also on a declined gate: the item's slot stays changed where it
+  lies). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
   original; nothing is applied before the commit, and the first refused run ends the transfer (`ItemScriptUnsupported`, no effect,
   no later run).
 - **Skip default of a gate** (get or transfer): the item stays where it is and the insert check is not asked, as in the original. The
@@ -152,10 +155,11 @@ get (4), drop (5) or buy (17) script; insert-item 74 + 12 slots, 41 scripts, 7 a
 get object type, toggle state); remove-item 6 + 8 slots on generic items, 3 scripts, none admitted; transfer 16 slots, all on
 containers (the recipient when the PC puts an item in), 14 scripts, 1 admitted; wield on 309 + 61 slots, 56 scripts, none admitted;
 wield off 299 + 59 slots, 52 scripts, 1 admitted. The wield pair needs add and remove effect (77, 78), magic-tech adjustment (91),
-call-ex (81) and the conditions identified (47) and items being rewielded (50).
+call-ex (81) and the conditions identified (47) and items being rewielded (50); with them (ARC-SCRIPT-042) 43 wield-on and 50
+wield-off scripts are admitted, the other counts stay.
 
-**Not ready.** The wield-on and wield-off events of `Equip`, `Unequip` and `EquipBest` (the order is read, IE5–IE7; the session
-still refuses to wield an item with a move script, [equipment](equipment-runtime.md)); the drop event (no drop command and no
+**Not ready.** The wield-on and wield-off events of `EquipBest` and the rewield (`Equip` and `Unequip` run them since
+ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event (no drop command and no
 installed drop script; the critical drops of [placed items](#placed-items-arc-world-059) run no script); the buy event (no barter);
 the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 
@@ -535,8 +539,47 @@ the check refused once is refused again when picked up. Tests [`MadeItemComplexi
   any 32-bit value; a missing one is `MissingField`, a non-zero one on a placed kit or taken item `NotCanonical`; restore refuses a
   non-zero one on a given item or a gold pile in an NPC's list (`InvalidSnapshot`). Schemas 1..40 are refused, not migrated.
 
+## Weight and encumbrance (ARC-WORLD-085)
+
+Alpha-gap item N5. The hero's carried weight, carry weight and encumbrance level, and the insert check's weight part, read in the
+executable ([ledger WE1–WE9](../research/ledger/items.md#weight-and-encumbrance-arc-world-085), F2). Requirements:
+[FR-ITEM-002](../requirements/items-economy.md#fr-item-002), the weight of stacks of
+[FR-ITEM-003](../requirements/items-economy.md#fr-item-003) and the level of
+[FR-CHAR-025](../requirements/characters-skills.md#fr-char-025). Tests:
+[`CarryRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/CarryRulesTests.cs),
+[`CarryStateTests`](../../tests/Arcanum.Session.Tests/CarryStateTests.cs), real data in `StartingHeroTests`.
+
+**Rules (`Arcanum.Simulation.Items.CarryRules`).** `ItemWeight(item, holder, aptitude)`: gold 0; any other item its stored weight
+plus, with a holder, its magic weight adjustment as the holder gets it (a critter by its power, EQ9; a container keeps a magickal
+item's whole adjustment and none of a technological one's); ammunition that times its units / 4. `TotalWeight` sums a list with
+the holder; `Fits(total, item, carryWeight)` is `total + item ≤ carryWeight`; `Level(total, carryWeight)` is the first of the
+thresholds 15, 30, 45, 60, 75, 90 % above the load, else 6. The numbers of the level's consequences are rules too, used by no caller
+yet: `EffectEntries` (effect 158, one a level, eight at level 6), `DrainIntervalMs` (600 s, 60 s, 5 s at levels 4..6) and
+`Drain(currentFatigue, steps)`. All arithmetic is the original's 32-bit arithmetic.
+
+**Session.**
+
+| Entry | Contract |
+| --- | --- |
+| `QueryHeroCarry()` | `SessionHeroCarry(Weight, CarryWeight, Level)`: the hero's list (kit, taken and made items, worn ones included; its coins weigh nothing) weighed with the hero, its effective carry weight (stat 8, `500 × ST`, under its poison) and the level. The aptitude is the hero's effective one without a sector adjustment (the session does not know the sector), clamped to ±100. Null without a hero. |
+| The insert check's weight | For an item entering the hero's list from outside it (pickup, loot, `IN`, scripts, a placed item, taking from an NPC, a new ammunition stack, assembly products), the session refuses it with `TooHeavy` when `Fits` fails, before the Technophobia refusal; a host's `TooHeavy` counts as well, and the host still answers the room. Assembly products are weighed after the components are gone (TC3) and each accepted unit counts for the next. Units moved into a stack the hero already holds (`TakeAmmoFromNpc`) run no insert check, as the original's unit move grows a destination stack without one (AM4), so they are not weighed. The NPC's own weight stays the host's insert check (the session keeps no NPC stats); since this task the facts the host sees for a created object or an item the hero gives carry its weight. |
+| Weight facts | `SessionItemWeight(Weight, MagicWeight, Complexity)` of each object the session tracks, kept as it entered: a seed item's from its seed facts (`SessionItemFacts.MagicWeight` is new), a kit item's from `SessionHeroKitItem.Weight` (the viewer reads the kit prototypes' fields 0x59, 0x5A and 0x60), an object the session creates (assembly unit, new stack, an NPC's added item) from the host's `AttachItemWeights(prototype → facts)`, which is not saved and is attached again after a restore; an assembly unit weighs with the product complexity the session keeps for it, any other created object with the prototype's complexity (which its made record does not keep, ARC-WORLD-083). Without it, or for facts the rules refuse, a created object weighs 0. The facts move with the object (placed, given, taken back) and go with its deletion. `QueryItemWeight(entity)`. |
+| Snapshot schema 44 | `inventory.weights`: `{entity, weight, magicWeight, complexity}` rows by entity in ordinal order, only for a non-zero weight or adjustment (±1 000 000, `OutOfRange` beyond); restore refuses a row of an object the inventory does not hold or an all-zero row (`InvalidSnapshot`). Schemas 1..43 are refused, not migrated. |
+
+Stacks (FR-ITEM-003): gold and ammunition already merge by prototype and move in part (ARC-WORLD-066, ARC-WORLD-071); this task
+weighs them. The hero's coins are a counter, not an item: they weigh nothing, as the original's gold does.
+
+**Viewer.** The AREA viewer's starting hero brings its kit weights, a seed item its magic weight adjustment, and the schematics window
+attaches its products' weights before an assembly; a refused pickup or loot reads "the PC cannot carry that much weight". The window
+shows no weight yet (the inventory window is alpha-gap N6).
+
+**Not ready.** The level's consequences: effect 158 entries and their recalculation at every insertion, removal, strength change and
+strength-changing effect (WE5, WE7, with the proposed WEA1 switch), the mode-1 fatigue timer (WE8, WEA2), the level message, the run
+gate below level 4 (WE9); the weight test of a wear move (the session does not weigh an item taken off or swapped: the original's
+unwield runs the insert check, which was not read for an item already in the list, so a hero above its carry weight can still take
+an item off); the key-ring exception (the session admits no keys); an NPC's weight and level; a sector's aptitude adjustment.
+
 ## Next steps
 
-The AREA viewer is wired (ARC-UI-004). Next: the insert check from the [session hero](starting-hero-runtime.md)'s carry
-weight (the viewer accepts every item and starts no hero yet), and the remaining source
-paths (drop and junk piles, stacks, chests) after their own research.
+The AREA viewer is wired (ARC-UI-004) and the hero's weight is checked (ARC-WORLD-085). Next: the encumbrance consequences, and the
+remaining source paths (drop and junk piles, chests) after their own research.

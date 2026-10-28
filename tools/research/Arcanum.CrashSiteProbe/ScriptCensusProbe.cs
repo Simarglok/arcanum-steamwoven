@@ -66,20 +66,22 @@ internal static partial class Program
     }
 
     // ARC-SCRIPT-041: the item events (get, drop, buy, insert-item, wield on and off, remove-item, transfer) and a copy of the
-    // session's item set (SessionItemScripts.Admission: S6 without dialog, story state and deferred calls; focus triggerer,
-    // attachee, extra object and player).
+    // session's item set (SessionItemScripts.Admission: S6 without dialog, story state and deferred calls, and since ARC-SCRIPT-042 the
+    // identified (47) and rewielding (50) conditions and add and remove effect (77, 78), call-ex (81), the magick-tech adjustment (91),
+    // play script eye candy (120) and play sound (82); focus triggerer, attachee, extra object and player).
     private static readonly int[] CsItemPoints = [4, 5, 17, 21, 24, 25, 28, 32];
-    private static readonly int[] CsItemConditions = [0, 3, 4, 5, 43, 18, 39];
-    private static readonly int[] CsItemActions = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 24, 100, 101];
+    private static readonly int[] CsItemConditions = [0, 3, 4, 5, 43, 18, 39, 47, 50];
+    private static readonly int[] CsItemActions = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 24, 100, 101, 77, 78, 81, 82, 91, 120];
     private static readonly int[] CsItemFocusKinds = [0, 1, 12, 21];
 
-    /// <summary>The first clause a run of <paramref name="number"/> from line 0 reaches outside the item set (that script only;
-    /// the set has no call), "missing" without a file, or null when the whole reach is inside.</summary>
-    internal static string? CsItemRefusal(IReadOnlyDictionary<int, WorldScript> scripts, int number)
+    /// <summary>The first clause a run of <paramref name="number"/> from <paramref name="entry"/> reaches outside the item set (that
+    /// script only; a call-ex target is checked by the wield pairs), "missing" without a file, or null when the whole reach is inside.</summary>
+    internal static string? CsItemRefusal(IReadOnlyDictionary<int, WorldScript> scripts, int number, int entry = 0)
     {
         if (!scripts.TryGetValue(number, out var script)) return "missing";
         if (script.Lines.Count == 0) return null;
-        var flow = AnalyseWorldFlow(script, 0);
+        if (entry < 0 || entry >= script.Lines.Count) return "entry_line";
+        var flow = AnalyseWorldFlow(script, entry);
         if (flow.UnresolvedLines.Count > 0) return "computed_step";
         for (var line = 0; line < script.Lines.Count; line++)
         {
@@ -93,6 +95,18 @@ internal static partial class Program
             if (refusal is not null) return refusal;
         }
         return null;
+    }
+
+    /// <summary>ARC-SCRIPT-042: the call-ex clauses a run of <paramref name="number"/> from line 0 reaches.</summary>
+    internal static IEnumerable<WorldClause> CsReachedCallEx(IReadOnlyDictionary<int, WorldScript> scripts, int number)
+    {
+        if (!scripts.TryGetValue(number, out var script) || script.Lines.Count == 0) yield break;
+        var flow = AnalyseWorldFlow(script, 0);
+        for (var line = 0; line < script.Lines.Count; line++)
+        {
+            if (flow.True[line] != WorldReach.Unreached && script.Lines[line].True.Type == SatCallEx) yield return script.Lines[line].True;
+            if (flow.False[line] != WorldReach.Unreached && script.Lines[line].False.Type == SatCallEx) yield return script.Lines[line].False;
+        }
     }
 
     /// <summary>Rule P6: a literal goto inside the script or to exactly its end; nothing computed.</summary>
@@ -308,11 +322,55 @@ internal static partial class Program
             var refusal = numbers.ToDictionary(n => n, n => CsItemRefusal(scripts, n));
             var firstRefusals = new CensusTally();
             foreach (var reason in refusal.Values) if (reason is not null) firstRefusals.Add(reason);
+            // ARC-SCRIPT-042: the condition and action types a run of these scripts can reach (calls followed), by the number of
+            // scripts (attached or called) that reach each.
+            var reached = CsLiveSet(scripts, numbers);
+            Dictionary<int, int> LiveTypes(bool condition)
+            {
+                var users = new SortedDictionary<int, HashSet<int>>();
+                foreach (var (number, (reachTrue, reachFalse)) in reached.Reach)
+                    for (var line = 0; line < scripts[number].Lines.Count; line++)
+                    {
+                        if (!reachTrue[line] && !reachFalse[line]) continue;
+                        var row = scripts[number].Lines[line];
+                        var clauses = condition ? [row.Condition] : new List<WorldClause>();
+                        if (!condition && reachTrue[line]) clauses.Add(row.True);
+                        if (!condition && reachFalse[line]) clauses.Add(row.False);
+                        foreach (var clause in clauses)
+                        {
+                            if (!users.TryGetValue(clause.Type, out var set)) users[clause.Type] = set = [];
+                            set.Add(number);
+                        }
+                    }
+                return users.ToDictionary(p => p.Key, p => p.Value.Count);
+            }
             // Counted as the attachment table counts: aggregates repeat the mobiles, prototypes are inherited defaults.
-            return new { sap, object_slots = hits.Count(h => h.Kind is not "aggregate" and not "prototype"), prototype_defaults = hits.Count(h => h.Kind == "prototype"),
+            return new { sap, reached_scripts = reached.Reach.Count, live_conditions = LiveTypes(true), live_actions = LiveTypes(false), object_slots = hits.Count(h => h.Kind is not "aggregate" and not "prototype"), prototype_defaults = hits.Count(h => h.Kind == "prototype"),
                 scripts = numbers.Length, object_types = hits.Select(h => h.Type ?? -1).Distinct().Order().ToArray(),
                 admitted_from_line_0 = numbers.Where(n => refusal[n] is null).ToArray(), first_refusal = firstRefusals.Snapshot() };
         }).ToArray();
+
+        // ARC-SCRIPT-042: each object's wield pair (an object, an aggregate repeats a mobile's), admitted when its wield-on script runs
+        // from line 0 inside the item set and its wield-off script does too, with every call-ex it reaches naming the attachee's wield-on
+        // slot (point 24, literal line) whose script runs from that line inside the set.
+        var pairs = walk.Hits.Where(h => h.Sap is 24 or 25 && h.Kind != "aggregate").GroupBy(h => (h.Map, h.Kind, h.File, h.SourceIndex, h.Prototype))
+            .Select(g => (On: g.FirstOrDefault(h => h.Sap == 24)?.Script, Off: g.FirstOrDefault(h => h.Sap == 25)?.Script)).Distinct().ToArray();
+        string? PairRefusal((int? On, int? Off) pair)
+        {
+            if (pair.On is { } on && CsItemRefusal(scripts, on) is { } onRefusal) return "on:" + onRefusal;
+            if (pair.Off is not { } off) return null;
+            if (CsItemRefusal(scripts, off) is { } offRefusal) return "off:" + offRefusal;
+            foreach (var call in CsReachedCallEx(scripts, off))
+            {
+                if (call.Kinds[0] != 1 || !call.Literal(1) || call.Values[1] != 24 || !call.Literal(2)) return "off:call_ex_target";
+                if (pair.On is not { } target) return "off:call_ex_no_wield_on";
+                if (CsItemRefusal(scripts, target, call.Values[2]) is { } targetRefusal) return "off:call_ex:" + targetRefusal;
+            }
+            return null;
+        }
+        var pairRefusals = new CensusTally();
+        foreach (var pair in pairs) if (PairRefusal(pair) is { } reason) pairRefusals.Add(reason);
+        var wieldPairs = new { pairs = pairs.Length, admitted = pairs.Count(pair => PairRefusal(pair) is null), first_refusal = pairRefusals.Snapshot() };
 
         var report = new
         {
@@ -348,7 +406,7 @@ internal static partial class Program
                 live_scripts = live.Reach.Count, admitted_live_scripts = admitted.Count, admitted_whole_scripts = wholeAdmitted.Count, admitted_whole_live_scripts = wholeAdmitted.Count(live.Reach.ContainsKey), first_refusal = firstRefusal.Snapshot().OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal).Take(40).ToDictionary(p => p.Key, p => p.Value),
                 by_point = admittedBySap, placed = new { attached = placedScripts.Length, admitted = placedScripts.Count(admitted.Contains) },
             },
-            item_points = itemPoints,
+            item_points = itemPoints, wield_pairs = wieldPairs,
             refusals = refusals.Snapshot(),
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));

@@ -143,12 +143,12 @@ public sealed class InsertItemScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "glove", Accept, host).Disposition);
         Assert.AreEqual((true, 1L), (ReadFlag(owner, 3), owner.Version.Revision));
 
-        // Refused with no effect: a flag of unknown value, a changed attachment, a dialog action (not admitted) and a line
-        // the host cannot show.
+        // Refused with no effect: a flag of unknown value, an effect the host has no rule for (ARC-SCRIPT-042; a changed attachment of
+        // the moved item is kept since), a dialog action (not admitted) and a line the host cannot show.
         foreach (var (program, line) in new (ScrProgram, SessionPrintedLine?)[]
         {
             (Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 9)), C(ScrCatalogue.Action.ReturnSkipDefault)), null),
-            (Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 2)), C(ScrCatalogue.Action.ReturnSkipDefault)), null),
+            (Program(C(ScrCatalogue.Action.AddEffect, ((byte)0, 0), (Number, 50), (Number, 5)), C(ScrCatalogue.Action.ReturnSkipDefault)), null),
             (Program(C(ScrCatalogue.Action.Dialog, (Number, 10))), null),
             (Program(C(ScrCatalogue.Action.Assign, (Flag, 7), (Number, 0)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6))),
                 new SessionPrintedLine(SessionPrintedLineStatus.Unsupported, string.Empty, "action field")),

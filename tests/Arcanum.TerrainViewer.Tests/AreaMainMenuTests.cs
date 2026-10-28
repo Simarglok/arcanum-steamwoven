@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-011 main menu state (ledger MM1–MM7).</summary>
+/// <summary>ARC-UI-011 main menu state (ledger MM1–MM7); ARC-UI-012 in-play windows, quit box and reopened root (SF1–SF3, MM6).</summary>
 [TestClass]
 public sealed class AreaMainMenuTests
 {
@@ -156,5 +156,58 @@ public sealed class AreaMainMenuTests
         Assert.Throws<ArgumentException>(() => TerrainViewerArguments.Parse(Area("--main-menu", "true", "--hero", "elf-male")), "the menu picks the hero");
         Assert.Throws<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "world-diagnostic", "--module", "m", "--resource", "r",
             "--source-id", "s", "--prototypes", "p", "--actor-resource", "a", "--main-menu", "true"]), "AREA only");
+    }
+
+    [TestMethod]
+    public void The_in_play_windows_list_the_originals_buttons_and_hide_options()
+    {
+        var menu = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlay);
+        Assert.AreEqual(AreaMenuWindow.InPlay, menu.Window);
+        CollectionAssert.AreEqual(new[] { 30, 31, 32, 33, 34 }, menu.Buttons.Select(button => button.Message).ToArray(), "SF1 window 3");
+        CollectionAssert.AreEqual(new[] { "Save Game", "Load Game", "Quit", "Continue" }, Labels(menu));
+        CollectionAssert.AreEqual(new[] { "Options: " + AreaMainMenu.NoOptions }, menu.HiddenNotes.ToArray());
+        Assert.AreEqual(AreaMenuCommandKind.SaveGame, menu.Type('s').Kind);
+        Assert.AreEqual(AreaMenuCommandKind.LoadGame, menu.Type('L').Kind);
+        Assert.AreEqual(AreaMenuCommandKind.Continue, menu.Type('c').Kind);
+        var limited = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlayLimited);
+        CollectionAssert.AreEqual(new[] { 70, 71, 72 }, limited.Buttons.Select(button => button.Message).ToArray(), "SF1 window 4");
+        CollectionAssert.AreEqual(new[] { "Quit", "Continue" }, Labels(limited));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.SinglePlayer));
+    }
+
+    [TestMethod]
+    public void Quit_asks_first_and_only_yes_quits_to_the_main_menu()
+    {
+        var menu = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlay);
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('q'));
+        Assert.IsTrue(menu.QuitPending, "SF3: the quit box asks (message 5100)");
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('s'), "the box owns the letters");
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Activate(0), "and the buttons");
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('n'));
+        Assert.IsFalse(menu.QuitPending, "N answers no and the window stays");
+        menu.Type('Q');
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Escape(), "Escape answers no");
+        Assert.IsFalse(menu.QuitPending);
+        Assert.AreEqual(AreaMenuWindow.InPlay, menu.Window);
+        menu.Type('q');
+        Assert.AreEqual(AreaMenuCommandKind.QuitToMenu, menu.Type('y').Kind);
+        menu.Type('q');
+        Assert.AreEqual(AreaMenuCommandKind.QuitToMenu, menu.Confirm().Kind, "a controller's confirm answers yes");
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Answer(true), "no box, no answer");
+        Assert.AreEqual("Quit the current game?", menu.Texts.Text(AreaMainMenuTexts.QuitQuestion));
+    }
+
+    [TestMethod]
+    public void Escape_continues_play_in_play_and_exits_from_a_reopened_main_menu()
+    {
+        Assert.AreEqual(AreaMenuCommandKind.Continue, new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlay).Escape().Kind, "SF2");
+        Assert.AreEqual(AreaMenuCommandKind.Continue, new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlayLimited).Escape().Kind);
+        var first = Menu();
+        Assert.AreEqual(AreaMenuCommand.Nothing, first.Escape(), "MM6: the first opening ignores Escape at the root");
+        var again = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, reopened: true);
+        again.Type('s');
+        Assert.AreEqual(AreaMenuCommand.Nothing, again.Escape(), "a window goes back first");
+        Assert.AreEqual(AreaMenuWindow.Main, again.Window);
+        Assert.AreEqual(AreaMenuCommandKind.Exit, again.Escape().Kind, "MM6: the reopened root exits the game");
     }
 }

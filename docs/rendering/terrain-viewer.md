@@ -700,9 +700,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the insert check
-  accepts every item (carry weight, Technophobia and grid room need the created character,
-  NOT READY).
+  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the host's insert check
+  accepts every item (grid room is NOT READY); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
+  and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1218,7 +1218,7 @@ original window art, sorting or paging options, a text cursor of the original's 
 
 ### Main menu (ARC-UI-011)
 
-With `--main-menu true` (launcher: `./arcanum area --main-menu` or `./arcanum map NAME --main-menu`; refused with
+With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
 does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
@@ -1243,8 +1243,8 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
   come with it, and the scene's arguments name the hero from then on, so a map transfer reads the hero again with the
   map (as `--hero` does). A new game needs the start map at the map list's start, as the original's new game puts the
   PC there: the AREA exterior, or map mode on runtime map 1 (`./arcanum area`'s `Arcanum1-024-fixed`) opened without
-  `--sector`; on another map, in the cave, with `--sector` or with a session a transfer carried, Pick Character is
-  hidden with the reason (scene flow is the next task, N8). The original's start movies, fade, newspaper event and
+  `--sector`; on another map, in the cave, with `--sector` or with a session a transfer carried, Start first loads the
+  start scene ([scene flow](#scene-flow-arc-ui-012), ARC-UI-012). The original's start movies, fade, newspaper event and
   random-encounter schedule are not modelled.
 - **Last Save.** Loads the newest save of the [save list](#save-list-arc-ui-010) (F8's choice) through the load path
   and closes the menu; with no save the window stays (the original says nothing; here the window says "no save to
@@ -1258,7 +1258,8 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
 - **Load Game.** Opens the save list's load window with the menu waiting under it: a load closes both; closing the
   window unused brings the Single Player window back.
 - **Exit Game** quits the viewer. The menu is modal like the logbook (the gate closes, the clock pauses) and owns
-  every key; F7, F8 and the window letters do nothing under it.
+  every key; F7, F8 and the window letters do nothing under it. Escape on the main window does nothing the first time it
+  opens and exits the game once it opens again after a quit ([scene flow](#scene-flow-arc-ui-012)).
 
 Self-test `ARC-UI-011 self-test PASS synthetic main menu` (the production app over the synthetic area owner with
 `--main-menu true`, a temporary save folder and synthetic heroes): opened modal with the offered buttons, letters and
@@ -1268,9 +1269,51 @@ when closed unused, ending the menu on a load), a controller's Exit. Native smok
 the start map: `ARC_AREA_MAP_SMOKE_ONLY=menu` with `--main-menu true` prints `ARC-UI-011 native-smoke main menu PASS`
 (the game's texts, Last Save with no save, the real first hero read and started at the map list's start
 (92958, 82592) with its prototype, gold and flag, then F7 and Last Save loading it); the `menu` stage runs only when
-named, as the open menu blocks the other stages. Not done: the scene flow between the menu and play (back to the
-menu from the game, a new game from another map; N8), the in-game menu and options (N9), the character editor,
-credits, movies and network play, the original menu art and button sounds.
+named, as the open menu blocks the other stages. Not done: the options window (N9), the character editor,
+credits, movies and network play, the original menu art and button sounds; the scene flow is
+[ARC-UI-012](#scene-flow-arc-ui-012).
+
+### Scene flow (ARC-UI-012)
+
+The way between the main menu and play in crash-site-area (exterior, cave and map mode), as the original's
+([ledger SF1–SF5](../research/ledger/ui-audio.md#scene-flow-arc-ui-012)); the art and layout are the project's.
+
+- **In-play menu.** In play, Escape (no palette, dialog or window open, the window focused, no load in progress)
+  opens the same menu at the original's in-play window: Save Game, Load Game, Quit and Continue, with the game's
+  `MainMenu.mes` labels and letters (messages 30–34); Options is hidden until the options window (N9). In a
+  turn-based round on another combatant's turn it opens the original's short window (Quit and Continue, messages
+  70–72; the original also opens it over its dialog and world map, which here are modal windows that take Escape). Escape or Continue closes it and play goes on; the menu is modal like the main menu.
+- **Save Game and Load Game** open the save list's windows over the waiting menu (the save window once the game is
+  drawn without the menu, for its preview). A save closes both, as the original's; a load closes both and keeps the
+  running session's hero tables, as F8; closing the window unused brings the menu back.
+- **Quit** asks first with the original's question (message 5100; Y, Return or Yes quits, N, No or Escape keeps playing). On
+  yes the game ends as the original resets its game and loads its module again: the start scene loads from the
+  launch arguments (the exterior, or in map mode the map list's runtime map 1, at its map-list start, without
+  `--sector`, a hero or a carried session) with a fresh session as a launch makes it, and the main menu opens over
+  it again. Saves are not touched and nothing is saved. Escape on that main window now exits the game (MM6).
+- **New game from anywhere.** Start in the pre-made browser on a scene that is not the start scene (another map, the
+  cave, a `--sector` start, a session a transfer or a load brought) loads the start scene the same way and starts the
+  new game there with the picked hero; the menu closes as the load begins. When the start map is not known on the
+  shown map (map mode without the map list's runtime map 1 among its destinations) Pick Character is hidden with that
+  reason.
+- **A failed start scene.** When the start scene does not load, its failure stays on screen with its stage and
+  nothing runs on a later scene (the original stops with a fatal error when it cannot load its module again). A
+  palette Reload or Reset started while the start scene loads supersedes it: that scene then opens with its fresh
+  session and no menu, and the quit or new game is dropped (logged).
+
+Self-test `ARC-UI-012 self-test PASS synthetic scene flow` (the production app over the synthetic area owner
+launched without the menu, a temporary save folder and synthetic heroes; the start scene is the synthetic scene
+published again): Escape opening the in-play window, Escape and Continue closing it, Save Game saving and ending it,
+Load Game coming back unused, Quit's box (N and Escape keeping play, Y loading the start scene with a fresh session
+and the main menu reopened, the save kept), a new game off the start scene (a `--sector` start) loading the start
+scene and starting there, the reopened root's Escape exiting. Native smoke on the original data, map mode on another
+map than the start map with `--main-menu true` (for example `crematorium-lev 1`): `ARC_AREA_MAP_SMOKE_ONLY=scene`
+prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
+map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
+window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
+kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
+turn in the self-test or the smoke). Not done: the options window (N9), the start movies, the menu after the hero's death
+or the game's end (the original restarts it there), the original menu art and button sounds.
 
 ### Logbook (ARC-UI-008)
 
