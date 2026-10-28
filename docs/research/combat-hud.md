@@ -60,7 +60,8 @@ Each slice is its own task code, thread and pull request (owner rule 2026-10-28)
 2. **Action points and turn cue**: the 20-cell panel with the three shares and the cost preview, the running light on other
    subturns, the turn-order list (Steamwoven mode only); FR-COMBAT-011.
 3. **Health and fatigue bars**: the hero's gauges with numbers and poison, the follower portraits' bars and red tint, the
-   hovered critter's bars; FR-UI-002. Done in ARC-UI-020 ([viewer](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)).
+   hovered critter's bars; FR-UI-002. Done in ARC-UI-020 ([viewer](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)),
+   the original's art since ARC-UI-024 ([panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)).
 4. **Floating text**: the layer, its motion and colours, the damage, poison and message lines, the two settings in the
    options window; FR-UI-005. Done in ARC-UI-021 ([viewer](../rendering/terrain-viewer.md#floating-text-arc-ui-021)).
 

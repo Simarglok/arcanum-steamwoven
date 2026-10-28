@@ -195,6 +195,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="inventory-window-arc-ui-015"></a>[Inventory window (ARC-UI-015)](ledger/ui-audio.md#inventory-window-arc-ui-015) | [Interface windows and audio](ledger/ui-audio.md) | IW1–IW9 |
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |
+| <a id="quantity-window-arc-ui-029"></a>[Quantity window (ARC-UI-029)](ledger/ui-audio.md#quantity-window-arc-ui-029) | [Interface windows and audio](ledger/ui-audio.md) | QW1–QW6 |
 | <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
 | <a id="message-log-arc-ui-023"></a>[Message log (ARC-UI-023)](ledger/ui-audio.md#message-log-arc-ui-023) | [Interface windows and audio](ledger/ui-audio.md) | ML1–ML8 |
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
