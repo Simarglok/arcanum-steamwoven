@@ -400,8 +400,7 @@ rejection leaves the admitted count/set unchanged. Repeated scheme IDs consume
 no additional slot, including at the cap.
 
 Read-only handles remain bound to path device/inode, size, modification/change
-identity and streamed SHA-256 before/after use (supported macOS/Linux .NET 8 ABI;
-on Windows the share mode plus size and last write time, ARC-DEV-049).
+identity and streamed SHA-256 before/after use (supported macOS/Linux .NET 8 ABI).
 Selected entry/record/prototype digests are retained. Replacement with the same
 content is not accepted as unchanged input. Output contains role/IDs/counts/
 fingerprints/status only; all original colors/text/pixels remain transient.

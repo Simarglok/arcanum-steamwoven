@@ -69,9 +69,11 @@ public static class AreaOriginalValidator
 /// <summary>How <see cref="AreaPathStream"/> binds its open handle to its path (ARC-DEV-049). <see cref="Unix"/> (macOS, Linux)
 /// compares the device, inode, size and modified/changed times of the handle and of the path, through the normalized .NET 8
 /// System.Native file-status ABI, not platform guesses about libc stat layouts. <see cref="Windows"/> has no System.Native: the
-/// handle's share mode (read only) makes the system refuse every other writer, rename and delete of the file while the stream is
-/// open, so the path keeps naming the opened file; the size and last write time of the handle and of the path are compared as
-/// well, with managed calls only.</summary>
+/// handle's share mode (read only) makes the system refuse every other writer, rename and delete of the file itself while the
+/// stream is open, and the size and last write time of the handle and of the path are compared, with managed calls only (the
+/// handle's length is cached by .NET for such a handle, so the path's is the live one). A path that later resolves elsewhere
+/// (a retargeted junction, drive mapping or remount) is bound only by that size and write time; the bytes are still
+/// authenticated through the handle.</summary>
 internal enum AreaPathBinding { Unix, Windows }
 
 /// <summary>Read-only file adapter with a handle/path binding (<see cref="AreaPathBinding"/>). Public errors never include
@@ -88,7 +90,13 @@ internal sealed class AreaPathStream : Stream
     internal AreaPathStream(string path, AreaPathBinding binding)
     {
         _path = path;
-        _binding = binding;
+        _binding = binding switch
+        {
+            AreaPathBinding.Unix when OperatingSystem.IsMacOS() || OperatingSystem.IsLinux() => binding,
+            AreaPathBinding.Windows => binding,
+            AreaPathBinding.Unix => throw new PlatformNotSupportedException("The Unix path binding requires macOS or Linux."),
+            _ => throw new ArgumentOutOfRangeException(nameof(binding)),
+        };
         try
         {
             _file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.RandomAccess);

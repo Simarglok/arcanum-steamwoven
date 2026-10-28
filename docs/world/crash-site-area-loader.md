@@ -116,9 +116,13 @@ opt-in test). Neither is executed by Data.
   and Linux it binds handle/path device, inode, size and modification/change times
   using the .NET 8 `System.Native` file-status ABI. On Windows (ARC-DEV-049), where
   that ABI does not exist, the handle's read-only share mode makes the system refuse
-  every other writer, rename and delete of the file while it is open, so the path
-  keeps naming the opened file; the adapter also compares the handle's and the
-  path's size and last write time, with managed calls only. Another system is
+  every other writer, rename and delete of the file itself while it is open, and the
+  adapter compares the handle's and the path's size and last write time, with
+  managed calls only. A path that resolves elsewhere later (a retargeted junction
+  or link in a parent folder, a changed drive mapping, a remount) is bound only by
+  that size and write time; the bytes are still read and authenticated through the
+  handle. A timestamp change by another program fails the load conservatively
+  (`InputChangedDuringRead`). Another system is
   refused (`PlatformNotSupportedException`). Stream-only inputs bind bytes, not a
   filesystem path. The Windows binding is tested on macOS (its managed calls are
   the same there) and has not yet run on Windows.

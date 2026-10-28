@@ -184,6 +184,7 @@ public sealed class AreaResourceBoundaryTests
     [TestMethod]
     public void Path_replacement_after_open_fails_before_publication_and_disposes_handles()
     {
+        if (OperatingSystem.IsWindows()) Assert.Inconclusive("Windows refuses the rename of an open file (see the Windows binding tests).");
         var directory = Path.Combine(Environment.GetEnvironmentVariable("TMPDIR") ?? AppContext.BaseDirectory, "area-path-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory); var path = Path.Combine(directory,"module.dat");
         var bytes = Dat(("maps/test/67108865.sec",Sector())); File.WriteAllBytes(path,bytes);
@@ -199,8 +200,9 @@ public sealed class AreaResourceBoundaryTests
         finally { File.Delete(path); File.Delete(path+".old"); Directory.Delete(directory); }
     }
 
-    // ARC-DEV-049: the Windows binding uses managed calls only, so it runs on this machine too. On Windows the read-only share
-    // mode refuses the rename and rewrite these tests do; here they show the size/write-time comparison catches them anyway.
+    // ARC-DEV-049: the Windows binding uses managed calls only, so it runs on macOS and Linux too. On Windows the read-only share
+    // mode refuses the rename and rewrite these tests do (asserted there instead); elsewhere they show the size/write-time
+    // comparison catches them anyway.
     [TestMethod]
     public void Path_binding_is_unix_on_macos_and_linux_and_windows_on_windows()
     {
@@ -208,6 +210,9 @@ public sealed class AreaResourceBoundaryTests
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
         { Throws<PlatformNotSupportedException>(() => AreaPathStream.CurrentBinding()); return; }
         Assert.AreEqual(expected, AreaPathStream.CurrentBinding());
+        Throws<ArgumentOutOfRangeException>(() => new AreaPathStream(Path.Combine(Path.GetTempPath(), "absent.dat"), (AreaPathBinding)7));
+        if (OperatingSystem.IsWindows())
+            Throws<PlatformNotSupportedException>(() => new AreaPathStream(Path.Combine(Path.GetTempPath(), "absent.dat"), AreaPathBinding.Unix));
     }
 
     [TestMethod]
@@ -236,6 +241,21 @@ public sealed class AreaResourceBoundaryTests
     {
         var directory = TemporaryDirectory("area-windows-change-"); var path = Path.Combine(directory,"module.dat");
         var bytes = Dat(("maps/test/67108865.sec",Sector()));
+        if (OperatingSystem.IsWindows())
+        {
+            // The share mode itself: no rename, delete or write of the open file.
+            try
+            {
+                File.WriteAllBytes(path,bytes);
+                using var open = new AreaPathStream(path,AreaPathBinding.Windows);
+                Throws<IOException>(() => File.Move(path,path+".old"));
+                Throws<IOException>(() => File.Delete(path));
+                Throws<IOException>(() => File.OpenWrite(path).Dispose());
+                open.Check();
+            }
+            finally { File.Delete(path); File.Delete(path+".old"); Directory.Delete(directory); }
+            return;
+        }
         try
         {
             File.WriteAllBytes(path,bytes);
