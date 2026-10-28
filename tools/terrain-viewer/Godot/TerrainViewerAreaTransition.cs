@@ -118,6 +118,7 @@ public partial class TerrainViewerApp
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
+        EndBarter(); _barterStatus = null; _barterPending = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
         EndMainMenuForTeardown();
