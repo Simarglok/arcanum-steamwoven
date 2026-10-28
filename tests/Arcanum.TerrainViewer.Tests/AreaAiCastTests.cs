@@ -27,7 +27,7 @@ public sealed class AreaAiCastTests
     }
 
     // The exterior's highest-level NPC whose fields store a college level (the monster; Virgil is the other), the hero a few tiles away.
-    private static Crash Open()
+    private static Crash Open(Func<string, int, CastEyeCandyAnimation?>? eyeCandy = null)
     {
         var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
         var mobile = Environment.GetEnvironmentVariable("ARC_AREA_MOBILE");
@@ -87,7 +87,7 @@ public sealed class AreaAiCastTests
         var scene = new AreaAiScene
         {
             RuntimeMap = map, Chart = AreaChart.For(snapshot), Steps = steps, Npcs = npcs, Combat = combat, HeroCell = () => hero, Parameters = table,
-            LineOfFire = lineOfFire, Spells = () => caster,
+            LineOfFire = lineOfFire, Spells = () => caster, CastEyeCandy = eyeCandy,
         };
         host = new AreaAiHost(session, scene, events, round);
         Assert.AreEqual(0, host.ScheduleTicks());
@@ -165,6 +165,57 @@ public sealed class AreaAiCastTests
         Assert.IsNotNull(play, "the caster casts in the round");
         Assert.IsFalse(offTurn, "in its own subturn");
         Assert.AreEqual(TurnBasedRules.CastSpellCost, paid, "the casting goal's start paid the round's 4 action points");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_cast_eye_candy_times_the_goal_and_a_host_retired_mid_play_frees_the_run()
+    {
+        // An invented cast eye candy: 8 frames at 10 fps (a 100 ms pace), action frame 4. Frame k shows at (k − 1)·100 ms up to the
+        // release, so the release is at 300 ms; after it frames 5..7 come at once and one pace apart, the last frame ends the goal one
+        // pace later: at 700 ms, a rest of 400 ms.
+        using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(8, 4, 10), null, timesRelease: true, 0));
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        AreaAiNotice? play = null;
+        for (var frame = 0; frame < 4000 && play is null; frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            play = host.DrainNotices().FirstOrDefault(n => n.Npc == npc && n.Kind == AreaAiNoticeKind.Cast);
+        }
+        Assert.IsNotNull(play, "a casting goal played");
+        Assert.AreEqual(new AiCastSwing(true, 300, 400), play.CastSwing, "the release frame and the rest of the play");
+        Assert.AreEqual(AiGoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play holds the attempt goal until its action frame");
+        Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for its release");
+        // The viewer drops the host mid-play (a follower joins, the AI is turned off): its runs end through their end nodes, so the
+        // attempt goal's end (0x429CD0) frees the run with its BEGIN charged (MG39) and no slot is left behind (AC4).
+        host.Retire();
+        Assert.IsNull(host.RunOf(npc));
+        Assert.IsNull(session.QuerySpellRuns()[play.Run], "the retired host's casting goal freed its run");
+        Assert.IsFalse(caster.AiUnderInfluence(AiSchedulerRules.Pc, play.Spell), "nothing keeps the hero under the spell's influence");
+        Trace($"retired mid-play: run {play.Run} freed");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_play_that_never_reaches_its_action_frame_releases_nothing_and_its_end_frees_the_run()
+    {
+        // Action frame 0 is never reached (EC7): the play runs its 3 frames and the goal ends without a release.
+        using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(3, 0, 10), null, timesRelease: true, 0));
+        var (session, host, caster, npc, _, _, events) = crash;
+        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var notices = new List<AreaAiNotice>();
+        for (var frame = 0; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd); frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
+        }
+        var play = notices.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) ?? throw new AssertFailedException("no casting goal played");
+        Assert.IsTrue(play.CastSwing.Plays);
+        Assert.IsFalse(notices.Any(n => n.Kind == AreaAiNoticeKind.Release && n.Run == play.Run), "no release frame");
+        var end = notices.First(n => n.Kind == AreaAiNoticeKind.CastEnd && n.Run == play.Run);
+        Assert.IsNotNull(end.SpellRun, "the goal's end before a release frees the run (0x429CD0, its BEGIN charged)");
+        Assert.IsNull(session.QuerySpellRuns()[play.Run]);
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-102 " + line);

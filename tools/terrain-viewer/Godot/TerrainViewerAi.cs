@@ -43,12 +43,13 @@ public partial class TerrainViewerApp
         if (!AiEnabled || _areaSession is not { } session || session.QueryHero() is null || _combatHost is not { } combat || _readyArea is not { } area
             || _worldActor.Session is not AreaGridSession grid || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map)
         {
-            if (_aiHost is not null) { _aiHost = null; _aiHostStamp = null; _aiPcOccupancy = null; }
+            if (_aiHost is not null) { RetireAiHost(); _aiHostStamp = null; _aiPcOccupancy = null; }
             return null;
         }
         // A follower joining or leaving changes who the host runs.
         var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
+        RetireAiHost();
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
         var npcs = new List<AreaAiNpc>();
         foreach (var holder in map.Seed.Holders)
@@ -86,6 +87,14 @@ public partial class TerrainViewerApp
         return host;
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a
+    /// casting goal's magic run does not outlive it.</summary>
+    private void RetireAiHost()
+    {
+        if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
+        _aiHost = null;
     }
 
     // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame.

@@ -97,9 +97,10 @@ an object may hold several runs at once (inference: the call stands in for that)
 
 ## Not ready
 
-- **Host (slice I10).** No host implements the new world members (the animations and their timing, the cast host's
-  `StartGoal`/`Release`/`EndGoal` behind `StartCast`/`ReleaseCast`/`EndCast`, the skill invocation, the throw and the pickup), keeps
-  the runs or calls `UseItemNow` for the chooser's AI-action item; the item search's `StartPickup` is the host's call of
+- **Host (slice I10).** The viewer's AI host implements perform's cast and the cast host's `StartGoal`/`Release`/`EndGoal` behind
+  `StartCast`/`ReleaseCast`/`EndCast` (ARC-WORLD-102, [casting](ai-host.md#casting-arc-world-102)); no host implements the other new
+  world members (the other animations and their timing, the skill invocation, the throw and the pickup) or calls `UseItemNow` for the
+  chooser's AI-action item; the item search's `StartPickup` is the host's call of
   `AiExecutorRules.StartPickup`.
 - **Queued cast.** A cast the magic domain queues under the caster's running cast (SU13) is kept by the host, not by the run; the
   viewer's queue for the hero ([queued cast](spell-cast-host.md), ARC-MAGIC-019, QC1–QC6) starts the next cast after a pop and drops

@@ -369,7 +369,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
     }
 
-    /// <summary>Drops every run and mover (a map change, a load).</summary>
+    /// <summary>
+    /// ARC-WORLD-102: ends every run as a dropped one (its end nodes, <see cref="EndDroppedRun"/>: a casting goal's magic run is freed,
+    /// so no NPC's spell run outlives its goal), then <see cref="Reset"/>. The viewer calls it before it drops or replaces the host of
+    /// the same session (a follower joining or leaving, a map change, the AI turned off).
+    /// </summary>
+    public void Retire()
+    {
+        foreach (var npc in _runs.Keys.ToArray()) DropRun(npc);
+        Reset();
+    }
+
+    /// <summary>Drops every run and mover without their end nodes (a load: the runs belong to the replaced session).</summary>
     public void Reset()
     {
         _runs.Clear();

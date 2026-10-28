@@ -135,7 +135,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            _aiForSmoke = false; _aiHost = null; _aiHostStamp = null;
+            _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
@@ -269,7 +269,7 @@ public partial class TerrainViewerApp
             var heroNow = session.QueryHeroLife()!.Record.State;
             if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
-            _aiForSmoke = false; _aiHost = null; _aiHostStamp = null;
+            _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
@@ -388,7 +388,7 @@ public partial class TerrainViewerApp
             var heroNow = session.QueryHeroLife()!.Record.State;
             if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
-            _aiForSmoke = false; _aiHost = null; _aiHostStamp = null;
+            _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);

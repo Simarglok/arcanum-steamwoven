@@ -104,7 +104,7 @@ public sealed class SessionSpellCasterAiTests
         Assert.AreEqual(new AiSpellFacts(true, SpellBookRules.MinimumIntelligence, 8, true), caster.AiSpell(15));
         Assert.AreEqual(new AiSpellFacts(false, SpellBookRules.MinimumIntelligence, 8, false), caster.AiSpell(16));
         Assert.AreEqual(default, caster.AiSpell(99));
-        // The offensive global list: both records, equal values, in the runtime sort's order.
+        // The offensive global list: both records (equal values: their order is the runtime sort's, AiActionListsTests' concern).
         CollectionAssert.AreEquivalent(new[] { 15, 16 }, caster.AiLists[AiActionList.Offensive].ToArray());
         Assert.AreEqual(0, caster.AiLists[AiActionList.Defensive].Length);
         // Intelligence 12: 3 slots, none used; the hero's from its own intelligence; anything else none.
@@ -152,7 +152,7 @@ public sealed class SessionSpellCasterAiTests
         var (owner, caster) = Session(Bolt());
         using var _ = owner;
         // Resist stat 6 (willpower) with modifier −2: the caster itself is R = 0; the hero, storing no resistance, R = 0 too unless its
-        // save is made, which a non-damaging record answers 100 for and a damaging one at least 50.
+        // save (its own d20) is made, which this damaging record answers with at least 50. Without a record: 0.
         Assert.AreEqual(0, caster.AiFailChance(Mage, Mage, 15));
         var chance = caster.AiFailChance(Mage, Hero, 15);
         Assert.IsTrue(chance is 0 or >= 50, $"the predictor's answer {chance}");
