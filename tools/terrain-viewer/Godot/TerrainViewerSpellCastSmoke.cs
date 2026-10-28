@@ -321,7 +321,11 @@ public partial class TerrainViewerApp
                 // spent charge stays, and without the lent facts it shows no weapon button).
                 if (SpellCasterNow() is { } caster)
                     foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Source?.Id == wielded.Entity).Select(r => r.Id).ToArray())
+                    {
                         caster.Act(new(SessionSpellRunActionKind.Free, run));
+                        // Its component eye candy (drawn on the NPC until the run ends) goes with it.
+                        _eyeCandies.RemoveAll(e => e.Run == run);
+                    }
                 Require(session.QuerySpellRuns().Runs.All(r => r.Source?.Id != wielded.Entity), "no run keeps the weapon as its source");
                 _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;
             }
