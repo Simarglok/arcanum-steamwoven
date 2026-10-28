@@ -919,7 +919,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
   body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
   scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
-  lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
+  lookup knows the hero's kit and taken items (ARC-UI-016) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
+  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
   "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); not built yet: the gold drag. NOT READY with a worn taken

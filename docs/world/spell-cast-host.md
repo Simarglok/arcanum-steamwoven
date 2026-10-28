@@ -279,6 +279,10 @@ item facts come from the cast host (`SessionSpellCaster.ItemPane`), the viewer d
    from the hero load, a taken item's from its object row, listed or worn; made items are not covered yet), so an item can be the
    source of a cast (`CastAt(..., item)`, ARC-MAGIC-022) and the item executors find it. A row of the shown map whose item the hero
    holds is no map object then (`AreaSpellCastMap`'s `held`): the item stands in the hero's inventory at the hero's location.
+   Since ARC-UI-031 the lookup also knows the items the shown map's NPCs hold now, with the NPC as holder
+   (`AreaCombatHost.NpcItemSpells`); a carried row (object flag 0x1000) is no map object, so it stands at its holder, and the host is
+   built with its `ItemTriggers`, so the life steps of its own runs fire the worn items' spells
+   ([item spell triggers](item-spell-triggers.md#not-ready)).
 2. **The weapon button** (`WeaponButtonShown`, IP1). It shows in the pane's header while the wielded weapon (slot 1004) has charges
    (not 0, unlimited included) or the magical flag and a complexity above 0; technological weapons never show it. A press opens the
    weapon's spell pane in place of the spell list (IP2, the bar's mode 8), a second press returns to the list.
