@@ -163,6 +163,24 @@ public static class HotkeyBarRules
     [OriginalFunction(0x579F70, OriginalFunctionScope.Full)]
     public static int SkillIcon(int button) => button is >= 0 and < 4 ? SkillArts[button] : SkillArts[0];
 
+    private const int FirstCollegeIcon = 446, Colleges = 16;
+
+    /// <summary>ARC-UI-035: a college's icon (0x4B1A90, table 0x5B55F0), which a spell hint draws: arts 446..461 for the colleges
+    /// 0..15; a college outside them gets college 0's.</summary>
+    [OriginalFunction(0x4B1A90, OriginalFunctionScope.Full)]
+    public static int CollegeIcon(int college) => FirstCollegeIcon + (college is >= 0 and < Colleges ? college : 0);
+
+    /// <summary>The sixteen colleges' icons.</summary>
+    public static IReadOnlyList<int> CollegeIcons { get; } = [.. Enumerable.Range(FirstCollegeIcon, Colleges)];
+
+    // The skill each skill-bar button uses (table 0x5CB240): 6 prowling, 5 pick pocket, tech 3 disarm traps (15), tech 0 repair (12).
+    private static readonly int[] ButtonSkills = [6, 5, 15, 12];
+
+    /// <summary>ARC-UI-035: the skill a skill-bar button uses (0x57A6A0, table 0x5CB240), numbered as the skill texts number them (basic
+    /// 0..11, then tech 12..15); null outside buttons 0..3 (the original reads past the table there).</summary>
+    [OriginalFunction(0x57A6A0, OriginalFunctionScope.Partial)]
+    public static int? ButtonSkill(int button) => button is >= 0 and < 4 ? ButtonSkills[button] : null;
+
     /// <summary>The entry under the screen point (0x57E460): inside the band from 5 pixels left of the first slot, at y 440..476,
     /// the slot whose 32 pixels hold x; null between slots and outside the band. (The band's right edge, the last slot's left plus
     /// the band's left plus 32, reaches past the last slot; only an entry is ever acted on.)</summary>

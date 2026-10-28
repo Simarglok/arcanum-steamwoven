@@ -187,6 +187,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai") == true) await RunAreaAiSmokeAsync(result);
                                 // ARC-WORLD-095: only when named, the fight in a turn-based round (the NPC acts in its own subturns).
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
+                                // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
+                                if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
                             }
                         }
                         else await RunAreaSmokeAsync(result);

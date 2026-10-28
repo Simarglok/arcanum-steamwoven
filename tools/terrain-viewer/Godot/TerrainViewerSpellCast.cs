@@ -129,10 +129,13 @@ public partial class TerrainViewerApp
         _lentItemSpellsForSelfTest is { } lent && lent.Entity == id ? lent
         : _areaSession is { } owner && _inventoryHost is { } host ? host.ItemSpells(owner, id, _areaKitItemSpells) : null;
 
-    // ARC-MAGIC-021: the companions' rows where they stand now (the committed cell), none while on another map.
+    // ARC-MAGIC-021: the companions' rows where they stand now (the committed cell), none while on another map. ARC-WORLD-102: the NPCs
+    // the AI walked stand on their cells too (a caster's range and line of fire, a target's tile).
     private IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> SpellPlacedCompanions()
     {
         var placed = new Dictionary<AreaObjectKey, (long X, long Y)?>();
+        if (_aiHost is { } ai && _readyArea is { } shown && ai.Scene.RuntimeMap == shown.Snapshot.RuntimeMap)
+            foreach (var mover in ai.Movers.All) placed[mover.Key] = (mover.Cell.X, mover.Cell.Y);
         if (_areaCompanions is not { } group || _readyArea is not { } area || group.Map.RuntimeMap != area.Snapshot.RuntimeMap) return placed;
         foreach (var key in group.Absent) placed[key] = null;
         foreach (var companion in group.Companions) placed[companion.Key] = group.WorldCell(companion.Speaker);
@@ -325,6 +328,7 @@ public partial class TerrainViewerApp
         {
             GD.Print($"ARC-UI-016 item-pane-close item={_itemPaneItem} weapon={weapon ?? "none"}");
             _itemPaneItem = null;
+            ClearMessagePaneName();
         }
         if (weapon is null || _areaSession is not { } owner || SpellCasterNow() is not { } caster) return null;
         var stamp = (owner, owner.Version.Revision, weapon, _itemPaneItem == weapon, (object?)_spellData?.Data);
@@ -339,6 +343,7 @@ public partial class TerrainViewerApp
     {
         if (_itemPaneItem is not null) _itemPaneItem = null;
         else if (WeaponPaneNow() is { ButtonShown: true } pane) _itemPaneItem = pane.Item;
+        ClearMessagePaneName();
         GD.Print($"ARC-UI-016 item-pane open={_itemPaneItem ?? "no"}");
         if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), WeaponPaneNow());
         RefreshAreaStatus();

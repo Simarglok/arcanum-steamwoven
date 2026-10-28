@@ -11,7 +11,8 @@ namespace Arcanum.TerrainViewer;
 /// unless the app puts a swapped occupant on it (<see cref="Hold"/>). A press while an item is held only waits for its release; a right
 /// press does nothing then. ARC-UI-025: a right click with nothing held asks the app to use the item under the pointer
 /// (<see cref="UseRequested"/>, IW5; on the right release, ARC-UI-032: the original's mouse subtype 3); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
-/// original art.
+/// original art. ARC-UI-035: once the pointer rests (the engine's still-pointer message, subtype 7) with nothing held, a new item under it
+/// (or none) is reported (<see cref="PointerStill"/>, 0x573C74), once until another rests there.
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -21,6 +22,13 @@ public partial class AreaInventoryGridArea : Control
     public event Action<AreaInventoryDrop>? DropRequested;
     /// <summary>ARC-UI-025: a right release with nothing held on an item of the doll or the grid (ARC-UI-032: the release, IW5).</summary>
     public event Action<AreaInventoryHeld>? UseRequested;
+    /// <summary>ARC-UI-035: the pointer rested with nothing held over another item than the last report (its entity) or over none (null).</summary>
+    public event Action<string?>? PointerStill;
+    private ulong _movedAt;
+    private bool _stillReported = true;
+    private string? _stillItem;
+    /// <summary>How long the pointer must rest for the still-pointer message (SG1: 35 ms).</summary>
+    internal const ulong StillMilliseconds = 35;
 
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
@@ -59,7 +67,12 @@ public partial class AreaInventoryGridArea : Control
 
     public override void _GuiInput(InputEvent @event)
     {
-        if (@event is InputEventMouseMotion motion) { _pointer = motion.Position; if (Held is not null) QueueRedraw(); return; }
+        if (@event is InputEventMouseMotion motion)
+        {
+            _pointer = motion.Position; _movedAt = Time.GetTicksMsec(); _stillReported = false;
+            if (Held is not null) QueueRedraw();
+            return;
+        }
         if (Blocked && @event is InputEventMouseButton) { AcceptEvent(); return; }
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } right)
         {
@@ -75,6 +88,27 @@ public partial class AreaInventoryGridArea : Control
         else ReleaseAt(button.Position / _scale);
         AcceptEvent();
     }
+
+    public override void _Process(double delta)
+    {
+        if (_stillReported || Time.GetTicksMsec() - _movedAt < StillMilliseconds) return;
+        _stillReported = true;
+        StillAt(_pointer / _scale);
+    }
+
+    /// <summary>ARC-UI-035: a still pointer at a point of the frame (0x573C74): with nothing held, the item under it is reported when it is
+    /// not the last one reported (the self-test drives it too).</summary>
+    internal void StillAt(Vector2 frame)
+    {
+        if (Held is not null || Blocked || _view is null) return;
+        var item = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y))?.Entity;
+        if (item == _stillItem) return;
+        _stillItem = item;
+        PointerStill?.Invoke(item);
+    }
+
+    /// <summary>The window opened or closed: the still pointer forgets the last item it reported and waits for a move.</summary>
+    internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)

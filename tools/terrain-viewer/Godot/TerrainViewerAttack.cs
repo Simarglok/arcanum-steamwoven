@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
     }
 
-    private void UnbindAreaCombat() { _aiHost = null; _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
+    private void UnbindAreaCombat() { RetireAiHost(); _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 

@@ -385,6 +385,34 @@ An item entry shows its item's inventory art when the art fits a slot, else its 
    (`TypeIconNumbers`). An inventory art that does not read also takes the type icon; only when neither reads does the slot show the item's
    name. Log line `ARC-UI-032 hotkey item-icon item=… InventoryArt|TypeIcon|NoIcon …`, once per item (again when it is identified).
 
+## The hotkey bar's hover descriptions (ARC-UI-035)
+
+The pointer entering a slot or a recent-action button shows its entry's description in the bottom strip's message window (ledger
+[HK19–HK23](../research/ledger/spell-runs.md#hotkey-bar-hover-descriptions-arc-ui-035)); `AreaHoverDescriptions` (Core) composes it,
+`TerrainViewerHotkeyHover.cs` wires it.
+
+1. **Dispatch** (HK19). An entry being dragged or empty shows nothing; an item entry shows its item window, a skill-bar button entry its
+   skill's hint, a spell or an item's spell entry the spell's hint. A recent action dispatches the same way.
+2. **Hints** (HK20). A skill hint (message-log type 7) draws icon 444, the button's skill's name and description from `skill.mes`
+   (`HotkeyBarRules.ButtonSkill`, 0x57A6A0); a spell hint (type 8) the college's icon (`HotkeyBarRules.CollegeIcon`), the name, the
+   minimum willpower, right of it the fatigue cost the hero pays with the maintenance (intgame.mes 59, 73, 74, 75; the spells page's row),
+   and the description. Both are hover entries: never stored, drawn only in the message mode and more than 3 s after the last stored
+   entry; a right-aligned text uses the text draw's flag 2.
+3. **Pane names** (HK21). While the spells (mode 1), skills (2) or weapon's spells (8) pane holds the window, a hover writes only the name
+   (a skill-bar button's from `skill_ui.mes` 100 + button, a spell's, an item's) centred on a black fill of the mode's text area; leaving
+   keeps it, as the original's leave acts in the message mode only; the pane's change takes it away.
+4. **Item window** (HK22). The item's type icon (always the type icon, `HotkeyBarRules.ItemTypeIcon`) and its name as the original's
+   0x441B60 gives it (`AreaItemIcons.Describe`: the description when identified, else the unknown description; a key its key's name) in
+   the font's colour: orange for an identified hexed item, blue for another magickal one, white otherwise. It is drawn at once in the
+   message mode (no time test) and never stored. Leaving the slot takes it away and, as for every hover, the window shows the viewed
+   entry again (ML7's fix).
+5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
+   that item's window the same way; resting on no item keeps the last description.
+6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
+   only its name in the pane's text area), the item entry (its window) and the recent-action button (its spell's hint), and leaves each
+   (marker `ARC-UI-035 native-smoke hotkey-hover PASS`); the inventory smoke rests the pointer on a grid item (marker
+   `ARC-UI-035 native-smoke inventory-still PASS`).
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -435,8 +463,10 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
-- The hotkey bar (ARC-UI-027, ARC-UI-032): a spell's icon beyond spell 79, the descriptions shown when the pointer enters a slot or a
-  recent-action button (0x550150, read as HK19: the next slice),
+- The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79, the item window's lines after the name (a
+  weapon's value, the effects, weapon, armour, quantity and usage lines, the magick or tech aptitude, the mana store, uses or ammunition
+  per shot, the weight and the hit points, HK22), the item's examine script run by its description, the turn-based action-point preview
+  (0x557370), the inventory window modes' extras of the still pointer (HK23),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
