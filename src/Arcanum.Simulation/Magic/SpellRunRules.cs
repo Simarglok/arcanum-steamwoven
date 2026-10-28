@@ -25,7 +25,7 @@ public sealed record SpellRunObject(string Id, int Type, int Aptitude = 0)
 /// <summary>
 /// One run (a 0x158-byte slot of the original's run table): its id (the slot), spell, current action; the source (the object
 /// whose spell it is) and the parent (the caster, or an item's holder), the source's location at the start (+0x50), the target
-/// object and tile, the other object (not carried by MT7's invocation yet: null), each captured at creation; the flags; the item triggers it was cast with
+/// object and tile, the other object (the invocation's, ARC-MAGIC-025: set only by an item executor's attacker global), each captured at creation; the flags; the item triggers it was cast with
 /// (+0x140); the resistance margin (+0x144, written by the per-target stage); the trigger count left (+0x150,
 /// <c>DurationTriggerCount:</c>).
 /// </summary>
@@ -199,7 +199,7 @@ public static class SpellRunRules
     /// <summary>
     /// Creates a run (0x455C30, from 0x455AC0): nothing while magic is switched off; the invocation check (MT7) first — a refusal
     /// creates nothing; then the first free slot; the run captures the source, parent, the source's location, target object and
-    /// tile with their types and the critters' aptitudes (the other object is not carried by MT7's invocation yet), the spell, action BEGIN, the request's triggers and the
+    /// tile and the other object (ARC-MAGIC-025) with their types and the critters' aptitudes, the spell, action BEGIN, the request's triggers and the
     /// record's trigger count; its flags are active, free (the request), unresistable (the request or <c>No_Resist:</c>; with the
     /// final END too in the Original setting, MG19).
     /// </summary>
@@ -223,7 +223,7 @@ public static class SpellRunRules
         var target = check.ReplacedTile.IsNone ? invocation.TargetObject : null;
         var tile = check.ReplacedTile.IsNone ? invocation.TargetTile : check.ReplacedTile;
         var run = new SpellRun(id, invocation.Spell, SpellRunAction.Begin, Capture(invocation.Source), Capture(invocation.Parent),
-            invocation.Source?.Location ?? SpellLocation.None, Capture(target), tile, null, flags, request.Triggers, 0, record.TriggerCount);
+            invocation.Source?.Location ?? SpellLocation.None, Capture(target), tile, Capture(invocation.Other), flags, request.Triggers, 0, record.TriggerCount);
         var goal = run.Parent is null ? 0 : request.SkipCastGoal ? GoalCastWithoutGoal : record.CastAnimation == -1 ? GoalCast : GoalCastAnimation;
         return new(SpellRunCreationStatus.Created, table.With(run), run, check, goal, run.Parent is null);
     }
