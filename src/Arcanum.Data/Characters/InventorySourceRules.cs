@@ -14,8 +14,9 @@ public enum InventorySourceStatus
     /// <summary>A byte outside printable ASCII (space included): the source splits only on commas and spaces, so a tab or
     /// line feed would glue a pair to the next one and empty the set.</summary>
     InvalidText,
-    /// <summary>ARC-WORLD-093: the source empties the set (loot too) because its <c>rules\InvenSourceBuy.mes</c> line or its loot line
-    /// fails (<see cref="InventorySourceBuyStatus.Emptied"/>, BT8, BT9). A set with a buy line that parses is read.</summary>
+    /// <summary>ARC-WORLD-093: the source empties the set's items and buy list because its <c>rules\InvenSourceBuy.mes</c> line or its
+    /// loot line fails (<see cref="InventorySourceBuyStatus.Emptied"/>, BT8, BT9); the coin pair the loot line read before the failure
+    /// stays (uninitialised when it failed first, RK6). A set with a buy line that parses is read.</summary>
     Emptied,
 }
 
@@ -33,7 +34,8 @@ public sealed record InventorySourceRead(InventorySourceStatus Status, Inventory
 /// "below the count", ledger BT9, LM13). An entry is the set name, a colon,
 /// then space-separated <c>a,b</c> pairs: the first is the coin range, each further one an item's rate and basic
 /// prototype. Project admission policy: a shape the source would empty, truncate or read partially is a typed refusal.
-/// Whether a listed prototype exists is the caller's check.
+/// A loot or buy number without a prototype (<c>prototypeExists</c>) empties the set (<see cref="InventorySourceStatus.Emptied"/>);
+/// the prototype's own shape is the caller's check.
 /// </summary>
 public static class InventorySourceRules
 {
@@ -45,10 +47,11 @@ public static class InventorySourceRules
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(prototypeExists);
+        // The set loop's reach, as InventorySourceBuyRules reads it (BT8): message n must be the n-th message.
         if (set < 1 || set > sources.Count) return new(InventorySourceStatus.Unreachable, null);
         for (var number = 1; number <= set; number++)
-            if (sources.Find(number) is null) return new(InventorySourceStatus.Unreachable, null);
-        var text = sources.Find(set)!.Bytes.Span;
+            if (sources.Messages[number - 1].Number != number) return new(InventorySourceStatus.Unreachable, null);
+        var text = sources.Messages[set - 1].Bytes.Span;
         foreach (var b in text)
             if (b is < 0x20 or > 0x7e) return new(InventorySourceStatus.InvalidText, null);
         // A failing buy line or loot line empties the whole set in the source (BT8, BT9).

@@ -74,6 +74,8 @@ public static class RestockRules
     public const uint GeneratedOnceFlag = 0x200;
     /// <summary>The percent roll's range.</summary>
     public const int MinPercent = 1, MaxPercent = 100;
+    /// <summary>The most item lines a set holds (0x4BF7B0).</summary>
+    public const int MaxLines = 300;
 
     /// <summary>The object's inventory source (0x4641A0): an NPC's or a container's; 0 for any other object.</summary>
     [OriginalFunction(0x4641A0, OriginalFunctionScope.Full)]
@@ -108,8 +110,8 @@ public static class RestockRules
             return new(holder.Dead || holder.PcLeader ? RestockStep.None : RestockStep.Regenerate, false);
         if ((holder.ContainerFlags & RegeneratesAloneFlag) != 0) return new(RestockStep.Regenerate, false);
         if (holder.OnScreen) return new(RestockStep.Reschedule, false);
+        if (merchant is { Kind: not RestockHolderKind.Npc }) throw new ArgumentException("The merchant is an NPC.", nameof(merchant));
         if (merchant is not { } user || user.Dead || user.PcLeader) return new(RestockStep.None, false);
-        if (user.Kind != RestockHolderKind.Npc) throw new ArgumentException("The merchant is an NPC.", nameof(merchant));
         return new(RestockStep.RegenerateMerchantAndContainer, InventorySource(user) != 0);
     }
 
@@ -130,6 +132,7 @@ public static class RestockRules
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(set.Lines);
         ArgumentNullException.ThrowIfNull(rolls);
+        if (set.Lines.Count > MaxLines) throw new ArgumentException("A set holds at most 300 lines.", nameof(set));
         var (low, high) = set.MinCoins <= set.MaxCoins ? (set.MinCoins, set.MaxCoins) : (set.MaxCoins, set.MinCoins);
         var coins = rolls.Roll(RestockRoll.Coins, low, high);
         if (coins < low || coins > high) throw new InvalidOperationException("The coin draw left its range.");

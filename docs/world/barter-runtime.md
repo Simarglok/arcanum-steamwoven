@@ -94,7 +94,7 @@ later slices.
 | `Keeps(itemFlags)` | 0x463B30 (keep 1) | Only an item with the persistent flag 0x2000 stays; every other entry, worn and gold included, is destroyed. |
 | `Generate(set, rolls)` | 0x463E20 | `RestockLoot`: one coin draw in the set's range (reversed bounds swapped; a new pile only above 0), then one 1..100 draw per line in order, creating the line's item when the draw is at most its rate. Creation, insert (a refused item is destroyed) and an NPC's best-items wield are the caller's. |
 
-The four installed merchants have no source of their own and their containers neither restock flag, so they restock only off screen
+The four installed merchants (none trades from its own source, `AreaBarterTests`) have no source of their own and their containers neither restock flag, so they restock only off screen
 through their living merchant (census in the ledger). `InventorySourceRules` (the loot reader) now takes sets 1..count (BT9) and reads a
 set with a buy line unless the buy or loot line fails, which empties the set in the source (`Emptied`; BT8, BT9). Tests:
 [`RestockRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/RestockRulesTests.cs),
@@ -106,7 +106,9 @@ set with a buy line unless the buy or loot line fails, which empties the set in 
   inventory's regeneration (RK2) and nothing regenerates. Next slices: a saved session event (schema main+1) with the clearing and the
   generation into the holder's list (labelled session rolls, `made:n` items, RK7 fixed), then the viewer's schedule at every window
   open and its world port (screen test, merchant search). The first-open generation of containers with flag 0x200 (RK4, RK8; 116
-  installed) and an NPC's best-items wield after a regeneration are not modelled.
+  installed) and an NPC's best-items wield after a regeneration are not modelled. Open for the session slice: the project refuses 39
+  of the 123 installed sets by their shape (`Malformed`, census), and an `Emptied` set still generates its coins in the original (RK6);
+  which of them a regeneration reads must be decided there.
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
   0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container

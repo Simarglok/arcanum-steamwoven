@@ -110,10 +110,14 @@ public sealed class PremadeHeroTests
             (6, InventorySourceStatus.Emptied), (7, InventorySourceStatus.Malformed), (8, InventorySourceStatus.Emptied),
             (9, InventorySourceStatus.Malformed), (10, InventorySourceStatus.Emptied), (12, InventorySourceStatus.Emptied),
         })
+            // Set 12 fails on its first item number (1 is outside the basic ranges): 301 in-range items cannot fit the 2000-character
+            // line, so the source's 301st-item failure and the project's item cap never decide a set.
             Assert.AreEqual(new InventorySourceRead(status, null), InventorySourceRules.Read(Sources, null, set, Any), set.ToString());
         // ARC-WORLD-093: the lookup takes 1..count (0x4BF5D0, BT9), so the last of two entries is reachable.
         Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Mes("{1}{a: 1,1}{2}{b: 1,1}"), null, 2, Any).Status);
         Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, null, 14, Any).Status, "the last set before the gap");
+        Assert.AreEqual(InventorySourceStatus.Unreachable, InventorySourceRules.Read(Mes("{0}{z: 1,1}{1}{a: 1,1}"), null, 1, Any).Status,
+            "message 1 must be the first message, as the buy rules' set loop reads it (BT8)");
         // A buy line that parses is read; a failing one empties the whole set (BT8).
         Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, Mes("{13}{ALL}"), 13, Any).Status);
         Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Sources, Mes("{2}{6029 8168}"), 2, Any).Status);

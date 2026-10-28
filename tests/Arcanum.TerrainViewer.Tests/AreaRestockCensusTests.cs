@@ -19,12 +19,17 @@ public sealed class AreaRestockCensusTests
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
         var module = Path.Combine(root, "modules", "Arcanum.dat");
-        var data = AreaBarterData.Load(module).Data!;
+        var loaded = AreaBarterData.Load(module);
+        Assert.AreEqual(AreaBarterDataStatus.Ready, loaded.Status, loaded.Detail);
+        var data = loaded.Data!;
         using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
         // ARC-WORLD-093: every set as the fixed reader admits it (1..count reachable, a parsing buy line allowed).
         var sets = Enumerable.Range(1, data.Sources.Count).GroupBy(set => InventorySourceRules.Read(data.Sources, data.Buy, set, data.Existing.Contains).Status)
             .ToDictionary(g => g.Key, g => g.Count());
         Console.WriteLine("sets: " + string.Join(", ", sets.OrderBy(p => p.Key).Select(p => $"{p.Key} {p.Value}")));
+        // First observation 2026-10-28: 84 of 123 sets read; the project's shape admission refuses 39 (Malformed).
+        Assert.AreEqual((84, 39, 123), (sets.GetValueOrDefault(InventorySourceStatus.Parsed), sets.GetValueOrDefault(InventorySourceStatus.Malformed),
+            sets.Values.Sum()), "the census changed: update the restock contract");
         foreach (var set in new[] { 5, 7, 19, 105 })
             Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(data.Sources, data.Buy, set, data.Existing.Contains).Status, $"merchant set {set}");
         var merchants = new List<string>();

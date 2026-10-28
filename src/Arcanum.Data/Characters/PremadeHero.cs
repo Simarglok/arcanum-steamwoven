@@ -36,6 +36,8 @@ public enum PremadeHeroFailure
     /// <summary>A coin range (minimum ≠ maximum) or an item rate other than 100. A range or a rate 1..99 needs gameplay
     /// randomness, which is not modelled (FR-CONTENT-007); rate 0 never creates the item and is refused with them.</summary>
     RandomInventorySource,
+    /// <summary>Kept for compatibility: since ARC-WORLD-093 a kit item without a prototype file empties the set
+    /// (<see cref="InventorySourceRefused"/> with <see cref="InventorySourceStatus.Emptied"/>), so this is not reached.</summary>
     ItemPrototypeMissing,
     ItemPrototypeAmbiguous,
     ItemPrototypeInvalid,
@@ -147,7 +149,7 @@ public static class PremadeHeroReader
         if (setNumber != 0)
         {
             // ARC-WORLD-093: a loot or buy number without a prototype file empties the set in the source (BT8, BT9); an ambiguous or
-            // invalid file keeps its own refusal below.
+            // invalid file counts as existing here, so a kit item keeps its own refusal below and a buy number passes.
             var set = InventorySourceRules.Read(sources.InventorySources, sources.InventorySourcesBuy, setNumber,
                 basic => basic is > 0 and <= 999_999 - PrototypeOffset && Prototype(sources, basic + PrototypeOffset, out _) != PrototypeFileStatus.Missing);
             if (set.Set is null) return new(PremadeHeroFailure.InventorySourceRefused, null, setNumber, SourceStatus: set.Status);

@@ -36,6 +36,8 @@ public sealed class RestockRulesTests
     {
         Assert.AreEqual((RestockRules.MinDelayMs, RestockRules.MaxDelayMs), (43_200_000L, 86_400_000L));
         Assert.AreEqual(50_000_001L, RestockRules.Delay(50_000_001, false));
+        Assert.AreEqual(RestockRules.MinDelayMs, RestockRules.Delay(RestockRules.MinDelayMs, false), "the bounds are inclusive");
+        Assert.AreEqual(21_600_000L, RestockRules.Delay(RestockRules.MaxDelayMs, true));
         Assert.AreEqual(12_500_000L, RestockRules.Delay(50_000_001, true), "shifted right twice");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RestockRules.Delay(RestockRules.MinDelayMs - 1, false));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RestockRules.Delay(RestockRules.MaxDelayMs + 1, false));
@@ -68,6 +70,7 @@ public sealed class RestockRulesTests
         Assert.AreEqual(RestockStep.RegenerateMerchantAndContainer, RestockRules.Fire(Chest(flags: RestockRules.GeneratedOnceFlag | 0x9), Npc(source: 0)).Step,
             "other container flags do not matter");
         Assert.ThrowsExactly<ArgumentException>(() => RestockRules.Fire(Chest(), Chest()));
+        Assert.ThrowsExactly<ArgumentException>(() => RestockRules.Fire(Chest(), Chest() with { Dead = true }), "checked before the life test");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RestockRules.Fire(new((RestockHolderKind)9, 5, false, false, 0, false), null));
     }
 
@@ -102,5 +105,9 @@ public sealed class RestockRulesTests
         Assert.AreEqual(0, RestockRules.Generate(new RestockSet(-10, -5, []), new Rolls(-7)).Coins, "negative coins are kept by the loot line and give nothing");
         Assert.ThrowsExactly<InvalidOperationException>(() => RestockRules.Generate(new RestockSet(1, 2, []), new Rolls(3)));
         Assert.ThrowsExactly<InvalidOperationException>(() => RestockRules.Generate(new RestockSet(1, 1, [new(50, 6029)]), new Rolls(1, 0)));
+        Assert.AreEqual(300, RestockRules.Generate(new RestockSet(0, 0, Enumerable.Repeat(new RestockLine(100, 6029), 300).ToArray()),
+            new Rolls([0, .. Enumerable.Repeat(1, 300)])).BasicPrototypes.Count);
+        Assert.ThrowsExactly<ArgumentException>(() => RestockRules.Generate(new RestockSet(0, 0, Enumerable.Repeat(new RestockLine(100, 6029), 301).ToArray()),
+            new Rolls([0, .. Enumerable.Repeat(1, 301)])));
     }
 }

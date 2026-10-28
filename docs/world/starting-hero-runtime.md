@@ -64,7 +64,8 @@ set N is message N, numbered from 1 without gaps, reachable when `0 < N ≤ entr
 `name: min,max rate,proto …`; here the entry must be printable ASCII (the source splits on commas and spaces only, so a
 tab or line feed would empty the set), the name 1..69 characters before the first colon and every space-separated token
 a pair of digit runs, at most 300 items. A set whose buy line or loot line fails in the source (`InventorySourceBuyRules`: a bad
-buy number, a loot item outside the basic ranges or without a prototype file, …) is `Emptied`, as the source empties it; a buy line
+buy number, a loot item outside the basic ranges or without a prototype file, …) is `Emptied`, as the source empties its items and buy
+list (the coins read before the failure stay there, RK6); message n must be the n-th message, as the buy rules read it; a buy line
 that parses is allowed (ARC-WORLD-093; it was refused as `BuyListUnsupported` before).
 
 ## Session hero
