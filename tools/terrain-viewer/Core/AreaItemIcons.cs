@@ -1,7 +1,9 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Audio;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
+using Arcanum.Data.Messages;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 
@@ -33,6 +35,7 @@ public sealed class AreaItemIcons : IDisposable
     private readonly ContentPrototypes _prototypes;
     private readonly AreaItemIconLimits _limits;
     private readonly Dictionary<int, CombatFields?> _prototypeFields = [];
+    private readonly Dictionary<int, int?> _unknownDescriptions = [];
     private readonly Dictionary<uint, (AreaInterfaceFrame? Frame, string Detail)> _arts = [];
     private IReadOnlyDictionary<int, string>? _table;
     private bool _tableRead, _disposed;
@@ -73,6 +76,58 @@ public sealed class AreaItemIcons : IDisposable
             : new(AreaItemIconStatus.NoIcon, null, null, $"no type icon ({detail})");
     }
 
+    /// <summary>ARC-UI-035: an item as the item window names it (0x554F10's first part, HK22): its type icon (0x554C20, always the type
+    /// icon there, never the inventory art), its name as 0x441B60 gives it (the description when the item is identified, else its
+    /// unknown description; a key its key's name) and the name's colour (an identified hexed item orange, another magickal one blue).
+    /// <paramref name="row"/> is the item's object row when a map holds it, else its prototype is read. A name that does not resolve
+    /// falls back to <paramref name="fallbackName"/>.</summary>
+    public AreaItemDescription Describe(SessionItemKind kind, AreaObjectRecord? row, bool identifiedMark, ObjectDescriptionCatalog? catalog, string fallbackName)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(fallbackName);
+        var fields = row is not null ? CombatFieldReader.Read(row).Fields : Prototype(kind.Prototype);
+        if (fields is not { Item: { } item }) return new(null, fallbackName, AreaMessageColour.White);
+        var facts = Facts(fields, identifiedMark);
+        var colour = NameColour(facts);
+        string? name = null;
+        if (catalog is not null)
+        {
+            // The session's identification mark counts as the item flag 0x1 the name reads (0x464370).
+            ObjectFieldReader read = row is not null ? slot => Int32(row, slot)
+                : slot => slot switch
+                {
+                    ObjectDisplayName.ItemFlagsSlot => unchecked((int)item.Flags),
+                    ObjectDisplayName.ItemComplexitySlot => item.MagickTechComplexity,
+                    ObjectDisplayName.DescriptionSlot => kind.Description,
+                    ObjectDisplayName.ItemUnknownDescriptionSlot => UnknownDescription(kind.Prototype),
+                    _ => null,
+                };
+            ObjectFieldReader marked = slot => slot == ObjectDisplayName.ItemFlagsSlot && identifiedMark && read(slot) is { } flags
+                ? flags | (int)ObjectDisplayName.IdentifiedItemFlag : read(slot);
+            var resolved = ObjectDisplayName.Resolve(fields.Object.Type, marked, catalog, CritterRecognition.Recognized);
+            if (resolved.Message is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } text })
+                name = text;
+        }
+        return new(HotkeyBarRules.ItemTypeIcon(facts), name ?? fallbackName, colour);
+    }
+
+    /// <summary>The item window's name font (0x554F10): orange (0x64C538) for an identified item with item flag 0x40 (hexed), else blue
+    /// (0x64C470) for a positive complexity (magickal), else white (0x739F88).</summary>
+    public static AreaMessageColour NameColour(HotkeyItemIconFacts facts) =>
+        facts.Identified && facts.Hexed ? AreaMessageColour.Hexed : facts.Complexity > 0 ? AreaMessageColour.Magick : AreaMessageColour.White;
+
+    private static int? Int32(AreaObjectRecord record, int slot)
+    {
+        AreaFieldValue? found = null;
+        foreach (var field in record.EffectiveFields)
+        {
+            if (field.Slot != slot) continue;
+            if (found is not null) return null;
+            found = field;
+        }
+        return found is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= int.MaxValue ? (int)n : null;
+    }
+
     /// <summary>The fields 0x554C20 reads, from an item's stored fields and the session's identification mark.</summary>
     public static HotkeyItemIconFacts Facts(CombatFields fields, bool identifiedMark)
     {
@@ -82,6 +137,16 @@ public sealed class AreaItemIcons : IDisposable
             item.MagickTechComplexity <= 0 || (item.Flags & IdentifiedFlag) != 0 || identifiedMark, (item.Flags & HexedFlag) != 0,
             CombatItemArt.Subtype(item.UseArtFragment), CombatItemArt.Coverage(item.InventoryArt), fields.Ammo?.AmmoType ?? 0,
             fields.Written?.Subtype ?? 0, item.Discipline);
+    }
+
+    // A prototype's unknown description (field 0x62), read once, within the same prototype limit.
+    private int? UnknownDescription(int prototype)
+    {
+        if (_unknownDescriptions.TryGetValue(prototype, out var known)) return known;
+        if (_unknownDescriptions.Count >= _limits.MaxPrototypes) return null;
+        var number = ObjectSoundReader.ReadPrototype(_prototypes.Read, prototype).Fields?.Item?.UnknownDescription;
+        _unknownDescriptions[prototype] = number;
+        return number;
     }
 
     private CombatFields? Prototype(int prototype)

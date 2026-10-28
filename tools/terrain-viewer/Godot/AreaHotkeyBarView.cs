@@ -17,7 +17,9 @@ public sealed record AreaHotkeyBarLook(ImageTexture? Slot, IReadOnlyList<AreaHot
 /// scaled with it): the ten slots of the top row with their art, icons and counts (0x57E140), the two recent-action buttons and the light
 /// button. It raises what the pointer does on them; the app decides with <see cref="HotkeyBarRules"/>. A left press and release over the
 /// same slot or button is its click (the button library's release, GB3); a right press on a slot starts a drag; while the app drags, every
-/// release anywhere is reported with its point on the original's screen, and the dragged icon follows the pointer.
+/// release anywhere is reported with its point on the original's screen, and the dragged icon follows the pointer. ARC-UI-035: the pointer
+/// entering or leaving a slot or a recent-action button is reported (the buttons' enter and leave messages, which show and take away
+/// its description, 0x550150 and 0x550720).
 /// </summary>
 public partial class AreaHotkeyBarView : Control
 {
@@ -43,6 +45,8 @@ public partial class AreaHotkeyBarView : Control
     /// <summary>The light button went down or came up (and whether over it).</summary>
     public event Action? LightPressed;
     public event Action<bool>? LightReleased;
+    /// <summary>ARC-UI-035: the pointer entered or left slot <c>entry</c> or recent-action button <c>index</c>.</summary>
+    public event Action<int>? SlotEntered, SlotLeft, RecentEntered, RecentLeft;
     /// <summary>While dragging: a mouse button was released at a point of the original's 800 × 600 screen.</summary>
     public event Action<MouseButton, Vector2I>? DragReleased;
 
@@ -69,6 +73,8 @@ public partial class AreaHotkeyBarView : Control
                 MouseFilter = MouseFilterEnum.Stop,
             };
             slot.GuiInput += input => SlotInput(entry, slot, input);
+            slot.MouseEntered += () => SlotEntered?.Invoke(entry);
+            slot.MouseExited += () => SlotLeft?.Invoke(entry);
             // A right press takes the whole hit band (0x57E460, from screen y 440), which reaches 5 rows above the slot.
             var band = new Control
             {
@@ -108,6 +114,8 @@ public partial class AreaHotkeyBarView : Control
             var (x, y) = HotkeyBarRules.RecentButtons[i];
             var rect = new TextureRect { Name = "Recent" + i, Position = new Vector2(x, y - HotkeyBarRules.StripTop), Size = new Vector2(32, 32), MouseFilter = MouseFilterEnum.Stop };
             rect.GuiInput += input => ButtonInput(rect, input, () => { _recentHeld = index; RecentPressed?.Invoke(index); }, over => { _recentHeld = null; RecentReleased?.Invoke(index, over); });
+            rect.MouseEntered += () => RecentEntered?.Invoke(index);
+            rect.MouseExited += () => RecentLeft?.Invoke(index);
             _recent[i] = rect;
             AddChild(rect);
         }

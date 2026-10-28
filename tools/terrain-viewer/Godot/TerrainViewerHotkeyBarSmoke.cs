@@ -41,6 +41,18 @@ public partial class TerrainViewerApp
             }
             async Task Drag(Vector2 from, Vector2 to) { await Button(from, MouseButton.Right, true); await Button(to, MouseButton.Right, false); }
             async Task Click(Vector2 at) { await Button(at, MouseButton.Left, true); await Button(at, MouseButton.Left, false); }
+            // ARC-UI-035: a pointer move onto a slot or button (its enter message: from off the bar first, as the pointer may rest on it
+            // already) after the log's quiet time, and one away from the bar.
+            var away = new Vector2(40, 120);
+            async Task Hover(Vector2 at, Vector2? from = null)
+            {
+                var start = from ?? away;
+                GetViewport().PushInput(new InputEventMouseMotion { Position = start, GlobalPosition = start });
+                await Frames(1);
+                _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
+                if (at != away) { GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }); await Frames(2); }
+            }
+            var hovers = new List<string>();
             Texture2D? SpellArt(int number) => HotkeyBarRules.SpellIcon(number) is { } art ? Art(art)?[0] : null;
 
             CancelSpellTargeting(null);
@@ -49,6 +61,8 @@ public partial class TerrainViewerApp
             Require(_gameBarPanel is { Visible: true } && _hotkeyBarView is { } && _hotkeyBarContent is { } content && content.ReadyCount == HotkeyBarRules.ArtNumbers.Count,
                 "the bar shows with its art: " + _hotkeyBarContent?.Detail);
             var view = _hotkeyBarView!;
+            // The bars exist only from here in an automated run (they show because this smoke asks).
+            var log = _gameBarPanel!.MessageLog;
             Require(Enumerable.Range(0, HotkeyBarRules.Entries).All(i => view.SlotArtForSelfTest(i) == Art(HotkeyBarRules.SlotArt)![0]), "every slot draws HKSlt1");
 
             // A right drag from the spell pane onto slot 2.
@@ -63,6 +77,41 @@ public partial class TerrainViewerApp
             await Frames(1);
             Require(view.IconForSelfTest(2) is { } icon && icon == SpellArt(spell), "slot 2 shows the spell's icon");
             _spellPane.HidePane();
+            await Frames(2);
+
+            // ARC-UI-035: entering slot 2 shows the spell's hint (college icon, name, willpower and cost lines, description); leaving takes it away.
+            await Hover(view.SlotCentreForSelfTest(2));
+            Require(!_messageLog.PaneMode && log.ShownKindForSelfTest == AreaMessageKind.SpellHint && log.IconForSelfTest == Arcanum.Presentation.Hud.HotkeyBarRules.CollegeIcon(spell / 5)
+                && log.DrawnTextsForSelfTest >= 3, $"entering slot 2 shows the spell's hint: {log.ShownKindForSelfTest} texts={log.DrawnTextsForSelfTest}");
+            hovers.Add($"spell texts={log.DrawnTextsForSelfTest}");
+            await Hover(away);
+            Require(log.ShownKindForSelfTest != AreaMessageKind.SpellHint, "leaving slot 2 takes the hint away");
+            // A skill-bar button's entry: its skill's hint; in the spells pane's mode only its name, in the pane's text area.
+            Require(session.AssignHotkey(session.Version, 4, HotkeyEntry.ForSkill(SkillBarButton.Prowling)).Disposition == GameSessionDisposition.Changed, "prowling goes on entry 4");
+            await Frames(2);
+            await Hover(view.SlotCentreForSelfTest(4));
+            Require(log.ShownKindForSelfTest == AreaMessageKind.SkillHint && log.DrawnTextsForSelfTest >= 1 && log.IconForSelfTest == 444,
+                $"entering slot 4 shows the skill's hint: {log.ShownKindForSelfTest} texts={log.DrawnTextsForSelfTest}");
+            hovers.Add($"skill texts={log.DrawnTextsForSelfTest}");
+            await Hover(away);
+            ShowSpellPane();
+            await Frames(3);
+            Require(_messageLog.PaneMode, "the spell pane holds the window");
+            // From the gap between slots 4 and 5: a move above the strip would give the window back to the log (ML8).
+            await Hover(view.SlotCentreForSelfTest(4), (view.SlotCentreForSelfTest(4) + view.SlotCentreForSelfTest(5)) / 2);
+            Require(_messageLog.PaneMode, "the pane still holds the window");
+            Require(log.PaneNameForSelfTest == _gameBarContent!.Texts.SkillButtonName(0) && log.ShownKindForSelfTest is null,
+                $"in the spells mode only the name is written: '{log.PaneNameForSelfTest}'");
+            // Leaving to the gap (inside the strip) keeps the name (0x550720 acts in the message mode only); hiding the pane takes it.
+            var gap = (view.SlotCentreForSelfTest(4) + view.SlotCentreForSelfTest(5)) / 2;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = gap, GlobalPosition = gap });
+            await Frames(2);
+            Require(_messageLog.PaneMode && log.PaneNameForSelfTest.Length > 0, "leaving the slot in the pane mode keeps the name");
+            _spellPane.HidePane();
+            await Frames(3);
+            Require(!_messageLog.PaneMode && log.PaneNameForSelfTest.Length == 0, "the pane's name goes with the pane");
+            await Hover(away);
+            session.ClearHotkey(session.Version, 4);
 
             // While slot 2 is dragged its key skips it (HK8, HK15); a right release on the slot itself ends the drag with no change.
             var keyed = _hotkeyActivations;
@@ -120,6 +169,13 @@ public partial class TerrainViewerApp
                 Require(slotIcon!.GetWidth() <= HotkeyBarRules.IconSize && slotIcon.GetHeight() <= HotkeyBarRules.IconSize || shown.Detail.StartsWith("type icon", StringComparison.Ordinal),
                     $"an icon larger than a slot is a type icon: {slotIcon.GetWidth()}×{slotIcon.GetHeight()} {shown.Detail}");
                 itemIcon = shown.Detail;
+                // ARC-UI-035: entering the item's slot draws its item window (its type icon and its name).
+                await Hover(view.SlotCentreForSelfTest(3));
+                Require(log.ShownKindForSelfTest == AreaMessageKind.Item && log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == 1,
+                    $"entering slot 3 draws the item window: {log.ShownKindForSelfTest} icon={log.IconForSelfTest is not null} texts={log.DrawnTextsForSelfTest}");
+                hovers.Add($"item colour={log.FirstTextColourForSelfTest.ToHtml(false)}");
+                await Hover(away);
+                Require(log.ShownKindForSelfTest != AreaMessageKind.Item, "leaving slot 3 takes the item window away");
                 session.ClearHotkey(session.Version, 3);
                 if (lent is { } slot) Require(WearFromHotkey(session, item, slot) is null, $"{item} worn again");
             }
@@ -130,6 +186,11 @@ public partial class TerrainViewerApp
             Require(latest.Kind == HotkeyKind.Spell, "the latest recent action is a spell: " + latest);
             await Frames(1);
             Require(view.RecentArtForSelfTest(0) == SpellArt(latest.Index), "the recent-action button shows the spell's icon");
+            // ARC-UI-035: entering the recent-action button shows its spell's hint.
+            await Hover(view.RecentCentreForSelfTest(0));
+            Require(log.ShownKindForSelfTest == AreaMessageKind.SpellHint, "entering the recent action shows its hint: " + log.ShownKindForSelfTest);
+            hovers.Add("recent spell");
+            await Hover(away);
             _gameBarSoundsForSelfTest.Clear();
             activations = _hotkeyActivations;
             await Click(view.RecentCentreForSelfTest(0));
@@ -138,12 +199,13 @@ public partial class TerrainViewerApp
                 "the button played 3000 then 3001: " + string.Join(",", _gameBarSoundsForSelfTest.Select(s => s.Id)));
             CancelSpellTargeting(null);
             GD.Print($"ARC-UI-027 native-smoke hotkey-bar PASS spell={spell} item={item ?? "-"} count={itemCount ?? "-"} recent={latest.Index} art={_hotkeyBarContent!.ReadyCount}");
+            GD.Print($"ARC-UI-035 native-smoke hotkey-hover PASS {string.Join("; ", hovers)} described={_hotkeyDescriptionsForSelfTest}");
             GD.Print($"ARC-UI-032 native-smoke hotkey-item-icons PASS items={icons.Length} inventory-art={inventoryArts} type-icon={icons.Length - inventoryArts} slot3={itemIcon ?? "-"}");
         }
         finally
         {
             HideHotkeyBar(); _spellPane?.HidePane();
-            _gameBarForSelfTest = barForSelfTest;
+            _gameBarForSelfTest = barForSelfTest; _messageClockShiftForSelfTest = 0;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
     }
