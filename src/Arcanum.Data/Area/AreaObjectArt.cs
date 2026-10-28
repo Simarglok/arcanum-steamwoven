@@ -25,6 +25,7 @@ public static class AreaObjectArt
         AreaMappingRole.Container => "art/container/container.mes",
         AreaMappingRole.ItemGround => "art/item/item_ground.mes",
         AreaMappingRole.EyeCandy => Arcanum.Data.Magic.EyeCandyArt.NamesPath,
+        AreaMappingRole.ItemInventory => "art/item/item_inven.mes",
         _ => throw new ArgumentOutOfRangeException(nameof(role)),
     };
 
@@ -56,6 +57,27 @@ public static class AreaObjectArt
         if (name(role, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{role} {key}");
         if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{role} {key}");
         return new(AreaObjectArtStatus.Resolved, new(folder + entry, lookup, nominal, nominal, frame, palette), $"{role} {key}");
+    }
+
+    /// <summary>
+    /// ARC-UI-032: the ART an item's inventory art id names (class 6 with the art's place bits 12..13 equal to 1; the item art name 0x4EC290):
+    /// the same number as a ground art id's (bits 17..27 + 20 × (subtype bits 6..9 + 50 × type bits 0..3), an armour's coverage bits 14..16
+    /// adding 20 × (5 × coverage + 10)) looked up in <c>art\item\item_inven.mes</c>; place 0 names <c>item_ground.mes</c>, 2
+    /// <c>item_paper.mes</c> and 3 <c>item_schematic.mes</c>, which this method leaves out (<see cref="AreaObjectArtStatus.Unsupported"/>).
+    /// The frame, group and rotation are 0 and the palette is bits 4..5. The area owner's <see cref="Resolve"/> keeps refusing inventory
+    /// art ids.
+    /// </summary>
+    [OriginalFunction(0x4EC290, OriginalFunctionScope.Partial)]
+    public static AreaObjectArtResolution ResolveItemInventory(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (aid >> 28 != 6) return new(AreaObjectArtStatus.OtherClass, null, $"class {aid >> 28}");
+        if (((aid >> 12) & 3) != 1) return new(AreaObjectArtStatus.Unsupported, null, $"item art place {(aid >> 12) & 3}");
+        var type = aid & 15; var subtype = (aid >> 6) & 15; var number = (aid >> 17) & 2047; var coverage = (aid >> 14) & 7;
+        var key = checked((int)(number + 20 * (subtype + 50 * type) + (type == 2 && coverage != 0 ? 20 * (5 * coverage + 10) : 0)));
+        if (name(AreaMappingRole.ItemInventory, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.ItemInventory} {key}");
+        if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.ItemInventory} {key}");
+        return new(AreaObjectArtStatus.Resolved, new("art/item/" + entry, aid & ~0x30U, 0, 0, 0, (int)((aid >> 4) & 3)), $"{AreaMappingRole.ItemInventory} {key}");
     }
 
     // ARC-MAGIC-017: an eye-candy art id (class 14, ledger EC rows) names art\eye_candy\<name>_<F|B|U>.art by its number in

@@ -121,6 +121,18 @@ public sealed class AreaRestockHost
         return (corners.Min(cell => cell.X), corners.Min(cell => cell.Y), corners.Max(cell => cell.X), corners.Max(cell => cell.Y));
     }
 
+    /// <summary>
+    /// ARC-WORLD-101: the host's part of a generated-once container's seed (0x463E20 with flag 0x200, RK10): the container's T0 tile x (the
+    /// low 32 bits of its location) and the session hero's player name bytes (0x441B60 on field 0x10E: <see cref="SessionHeroState.PlayerName"/>,
+    /// empty when unset). A session without a hero seeds from the tile x alone, so its name is empty. Null for an object that is no container
+    /// of that map's seed or a tile outside 32 bits.
+    /// </summary>
+    public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container)
+    {
+        if (Holder(map.RuntimeMap, container) is not { Holder.Kind: SessionHolderKind.Container } found || Cell(found.Map, container) is not { } at) return null;
+        return new(at.X, _session.QueryHero() is { } hero ? hero.PlayerName : []);
+    }
+
     /// <summary>Whether a seed item carries the persistent flag 0x2000 (RK5); an item the session made carries none.</summary>
     public bool Persistent(SessionMapId map, string item) =>
         _inventory.Maps.FirstOrDefault(found => found.RuntimeMap == map.RuntimeMap)?.Persistent(item) == true;

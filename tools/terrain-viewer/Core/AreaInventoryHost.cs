@@ -167,10 +167,10 @@ public sealed class AreaInventoryMap
 
 public sealed record AreaInventoryMapBuild(AreaInventoryMapStatus Status, AreaInventoryMap? Map, string Detail);
 
-public enum AreaInventoryTargetKind { GroundItem, DeadNpc, JunkPile }
+public enum AreaInventoryTargetKind { GroundItem, DeadNpc, JunkPile, Container }
 
-/// <summary>A clickable inventory object of the current map: an item on its ground, a dead NPC to loot, or (ARC-WORLD-063) a junk
-/// pile the session made, opened as a container.</summary>
+/// <summary>A clickable inventory object of the current map: an item on its ground, a dead NPC to loot, (ARC-WORLD-063) a junk
+/// pile the session made, opened as a container, or (ARC-WORLD-101) a container of the map that has not broken.</summary>
 public sealed record AreaInventoryTarget(AreaInventoryTargetKind Kind, string Entity, AreaObjectRecord Row);
 
 public sealed record AreaInventoryLine(string Entity, string Text)
@@ -183,7 +183,7 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Lockpick { get; init; }
     /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
     public bool Repairable { get; init; }
-    /// <summary>ARC-UI-025: a right press on the item would use it: a held item, not worn and without a wear location, with
+    /// <summary>ARC-UI-025: a right click on the item would use it: a held item, not worn and without a wear location, with
     /// <c>OIF_CAN_USE_BOX</c> (IW5); the turn rule is the app's.</summary>
     public bool Usable { get; init; }
     /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item
@@ -257,6 +257,8 @@ public sealed class AreaInventoryHost
     public IReadOnlyCollection<AreaInventoryMap> Maps => _maps.Values;
     public SessionInsertCheck InsertCheck { get; }
     public bool Covers(int runtimeMap) => _maps.ContainsKey(runtimeMap);
+    /// <summary>ARC-WORLD-101: the inventory map of a runtime map, or null.</summary>
+    public AreaInventoryMap? Map(int runtimeMap) => _maps.GetValueOrDefault(runtimeMap);
 
     /// <summary>Attaches every map's seed; the first refusal is returned (a restored save that disagrees with these maps
     /// is <see cref="GameSessionFailure.InventoryMismatch"/>).</summary>
@@ -271,17 +273,22 @@ public sealed class AreaInventoryHost
         return GameSessionFailure.None;
     }
 
-    /// <summary>The ground item or dead NPC a press on <paramref name="key"/> acts on; null for anything else (a taken
-    /// item, a living NPC, a container, an object of a map without a seed). A ground item the session will refuse (gold,
-    /// ammunition, a key, a pickup or insert script) is still a target: the click reports the refusal.</summary>
+    /// <summary>The ground item, dead NPC or (ARC-WORLD-101) standing container a press on <paramref name="key"/> acts on; null for
+    /// anything else (a taken item, a living NPC, a broken container, an object of a map without a seed). A ground item the session will
+    /// refuse (gold, ammunition, a key, a pickup or insert script) is still a target: the click reports the refusal, as a locked container's
+    /// open does.</summary>
     public AreaInventoryTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
             || session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
         if (current.Ground.Any(ground => ground.Item.Entity == entity)) return new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
-        return current.Holders.FirstOrDefault(holder => holder.Entity == entity) is { Kind: SessionHolderKind.Npc, Dead: true }
-            ? new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)) : null;
+        return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
+        {
+            { Kind: SessionHolderKind.Npc, Dead: true } => new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)),
+            { Kind: SessionHolderKind.Container } when AreaContainerLoot.Lootable(session, map, entity) => new(AreaInventoryTargetKind.Container, entity, map.Row(entity)),
+            _ => null,
+        };
     }
 
     /// <summary>The drawn objects of this map the PC has taken: they are neither drawn nor picked any more.</summary>
@@ -671,7 +678,7 @@ public sealed class AreaInventoryHost
         GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",
         GameSessionFailure.WornItemUnsupported => "worn items are not modelled",
         GameSessionFailure.ItemNotAvailable => "the item is no longer there",
-        GameSessionFailure.HolderNotLootable => "only a dead NPC can be looted",
+        GameSessionFailure.HolderNotLootable => "only a dead NPC or a standing container can be looted",
         GameSessionFailure.InsertRefused => "the PC cannot take it",
         GameSessionFailure.BudgetExceeded => "the PC's list is full",
         GameSessionFailure.InventoryUnavailable => "no inventory on this map",

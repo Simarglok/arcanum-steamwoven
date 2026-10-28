@@ -70,8 +70,8 @@ internal static class ObjectWireReader
                 if (length < 0 || length > limits.MaxStringBytes) throw Error(StaticObjectErrorCode.LimitExceeded);
                 var text = cursor.Take(checked(length + 1));
                 if (text[^1] != 0) throw Error(StaticObjectErrorCode.InvalidRecord);
-                reserve?.Invoke(768); // text is a span; only its fingerprint escapes
-                value = new(ObjectWirePresence.Value, length, [], Hash(text));
+                reserve?.Invoke(checked(768L + length)); // the fingerprint and (ARC-WORLD-101) the bytes before the terminating zero
+                value = new(ObjectWirePresence.Value, length, [], Hash(text)) { Text = text[..^1].ToArray() };
             }
             else
             {
@@ -183,7 +183,12 @@ internal static class ObjectWireReader
 
 internal enum ObjectWirePresence { Null, Value, Empty, Array }
 internal sealed record ObjectWireElement(int Key, IReadOnlyList<long> Words);
-internal sealed record ObjectWireValue(ObjectWirePresence Presence, long? Number, IReadOnlyList<ObjectWireElement> Elements, string? Fingerprint = null);
+internal sealed record ObjectWireValue(ObjectWirePresence Presence, long? Number, IReadOnlyList<ObjectWireElement> Elements, string? Fingerprint = null)
+{
+    /// <summary>ARC-WORLD-101: a present string field's bytes up to its terminating zero (the stored length; an inner zero is kept); null
+    /// for every other field.</summary>
+    public IReadOnlyList<byte>? Text { get; init; }
+}
 internal readonly record struct ObjectEntityId(short Kind, long First, long Second, int Third);
 internal sealed record ObjectWireId(short Kind, int? Number, string Sha256, ObjectEntityId? Entity);
 internal sealed record ObjectWireRecord(int Type, ObjectWireId Parent, ObjectWireId Own, int Length, string Sha256, string SemanticSha256, IReadOnlyDictionary<int, ObjectWireValue> Fields);

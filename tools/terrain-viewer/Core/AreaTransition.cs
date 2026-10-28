@@ -179,7 +179,8 @@ public sealed class AreaTransitionCoordinator
     /// (docs/research/cave-transition-evidence.md T9). ARC-WORLD-027: with a ready pre-made <paramref name="hero"/> the
     /// session's player character is that hero and its main-menu flag starts true. ARC-UI-007: the hero's load also brings the
     /// experience data, so the session awards experience (ARC-WORLD-030) and knows the next level. ARC-WORLD-044: the module's
-/// <paramref name="reputations"/> table, when the host read one (<see cref="AreaReputations.Load"/>).</summary>
+/// <paramref name="reputations"/> table, when the host read one (<see cref="AreaReputations.Load"/>). ARC-WORLD-101: a pre-made hero's
+/// prototype player name becomes the session hero's (<see cref="GameSessionOwner.SetHeroPlayerName"/>; a refusal fails the start).</summary>
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
         AreaHeroLoad? hero = null, ReputationCatalog? reputations = null)
     {
@@ -191,6 +192,13 @@ public sealed class AreaTransitionCoordinator
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
             Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel, Reputations: reputations));
+        // ARC-WORLD-101: a pre-made hero keeps its prototype's player name (field 0x10E; the new character's is typed on its screen).
+        if (created.Owner is { } named && hero is { Hero.BasicPrototype: not AreaStartingHero.GenericPrototype, Read.Hero.PlayerName: { Count: > 0 } name }
+            && named.SetHeroPlayerName(named.Version, name) is { Disposition: GameSessionDisposition.Rejected } refused)
+        {
+            named.Dispose();
+            return new(null, refused.Failure, ClockFailure.None, GlobalFlagReason.None);
+        }
         if (hero?.KitWear is not { } wear || created.Owner is not { } owner) return created;
         // ARC-WORLD-034: the pre-made start wields the hero's best items before the game begins (the original's best-items call,
         // 0x4654F0, from the pre-made menu step 0x545B60). The viewer has one diagnostic body art and no inventory grid, so it answers

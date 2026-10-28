@@ -6,7 +6,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-UI-029: the quantity window (the original's interface mode 13, ledger QW1–QW6) in the inventory window. A gold pile or an
-// ammunition stack of more than one unit taken from a dead NPC, and an ammunition stack the hero drops on its tile, first ask how
+// ammunition stack of more than one unit taken from a dead NPC (ARC-WORLD-101: or a container), and an ammunition stack the hero drops on its tile, first ask how
 // many units move (QuantityBar.Ask; one unit moves at once by the same stack path); the window starts at 0, Accept moves the count shown (0 moves nothing), Cancel nothing. Take all
 // moves whole stacks without asking (the original's flag 0x20). A junk pile's stacks still move whole (its partial take is not
 // modelled). The moves are the session's: TakeGoldFromNpc, TakeAmmoFromNpc and DropHeroAmmo. No action points (IW8).
@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
         _quantityMove = move;
         _inventoryStatus = $"how many of {move.Name}? (0..{move.Units})";
         _inventoryPanel!.AskQuantity(move.Name, move.Units, _inventoryStatus);
-        GD.Print($"ARC-UI-029 quantity-ask item={move.Item} kind={move.Kind.Type} units={move.Units} from={(move.Holder is null ? "hero" : "dead-npc")}");
+        GD.Print($"ARC-UI-029 quantity-ask item={move.Item} kind={move.Kind.Type} units={move.Units} from={(move.Holder is null ? "hero" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : "dead-npc")}");
         RefreshReadyStatus();
     }
 
@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         string message;
         if (move.Holder is { } npc)
         {
-            result = move.Kind.Type == SessionItemType.Gold ? session.TakeGoldFromNpc(session.Version, npc, count)
+            result = move.Kind.Type == SessionItemType.Gold ? session.TakeGoldFromNpc(session.Version, npc, count, move.Item)
                 : session.TakeAmmoFromNpc(session.Version, npc, move.Item, count, move.Kind, _inventoryHost!.InsertCheck);
             message = result.Value.Disposition switch
             {
@@ -106,7 +106,7 @@ public partial class TerrainViewerApp
             };
         }
         _lastQuantityMove = result;
-        GD.Print($"ARC-UI-029 quantity-move item={move.Item} kind={move.Kind.Type} count={count} of={move.Units} from={(move.Holder is null ? "hero" : "dead-npc")} " +
+        GD.Print($"ARC-UI-029 quantity-move item={move.Item} kind={move.Kind.Type} count={count} of={move.Units} from={(move.Holder is null ? "hero" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : "dead-npc")} " +
             $"disposition={result?.Disposition.ToString() ?? "-"} failure={result?.Failure.ToString() ?? "-"} new={result?.Item ?? "-"} gold={session.QueryGold()}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
