@@ -159,7 +159,7 @@ taken), each to be checked against the requirements and read in the executable w
 | --- | --- |
 | ARC-COMBAT-016 Projectiles in flight | Done ([below](#projectiles-in-flight-arc-combat-016)): the projectile of 0x4B39B0 (field 127, −1 none), its flight, the hit on arrival (0x4B2870), its drawing in the viewer and a miss's stray strike (ledger PF1–PF14). |
 | ARC-COMBAT-017 Thrown weapons | Done ([below](#thrown-weapons-arc-combat-017)): the "default throws" weapon (the throwing dagger 6072) leaves the hand at the attack, is checked with the throwing skill and its thrown range, flies hidden and lands where its projectile ends (ledger TW1–TW7); the original wields nothing again afterwards (TW3). |
-| ARC-COMBAT-018 Second projectile and scatter | The second projectile of a bow from expert and the scatter of a missed throw (RH2, RH3), and their ammunition. |
+| ARC-COMBAT-018 Second projectile and scatter | Done ([below](#second-projectile-and-scatter-arc-combat-018)): a bow shot from expert training flies as two projectiles for one arrow, and a missed throw scatters from its target location (ledger PS1–PS6). |
 | ARC-COMBAT-019 Returning weapons | Boomerangs (weapon flag 0x40, the throwing skill): the shot's thrown range (0x4622A0, RH4: strength and the item's weight, which the hero's equipment facts do not hold yet), the projectile's return and the "weapon away" bit (RH3), and their catch. |
 
 ## Ranged hero attack (ARC-COMBAT-015)
@@ -195,7 +195,7 @@ native observation: the goal's reach test admits only a clear line, so the viewe
 after it; the session tests cover the wall's shot.
 
 Not ready: boomerangs (RH3, RH4,
-ARC-COMBAT-019), a bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
+ARC-COMBAT-019), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
 bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
 
 ## Projectiles in flight (ARC-COMBAT-016)
@@ -228,7 +228,7 @@ with the lent bow and scenery art 0 as its projectile art): from the first cell 
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
 afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
 
-Not ready: the second projectile of a bow (ARC-COMBAT-018), the scale arc of a thrown non-weapon item (PF11),
+Not ready: the scale arc of a thrown non-weapon item (PF11),
 boomerangs (ARC-COMBAT-019; thrown weapons since [ARC-COMBAT-017](#thrown-weapons-arc-combat-017)), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
 0x800000 (PF9, PF10), a closed portal stopping a free flight (PF7), the eye-candy speed column, the additive draw of weapon flag 0x20,
 and a projectile across a save.
@@ -263,7 +263,37 @@ heroes barely train throwing, and the session's tests strike with one).
 Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
 the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
 throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
-and the item event 0x800000 at the landing (PF10), boomerangs (ARC-COMBAT-019) and a missed throw's scatter (ARC-COMBAT-018).
+and the item event 0x800000 at the landing (PF10) and boomerangs (ARC-COMBAT-019); a missed throw's scatter is in since
+[ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018).
+
+## Second projectile and scatter (ARC-COMBAT-018)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (projectiles and throws resolved by weapon type,
+partly). Read in the retail 1.0.7.4 executable by two readers ([ledger PS1–PS6](../research/ledger/combat.md#second-projectile-and-scatter-arc-combat-018),
+refining PF2, PF5 and RH2). No rule-mode switch; no snapshot change (shots are not saved).
+
+| Rule | Value |
+| --- | --- |
+| Projectiles of a shot (PS1, PS2) | `ProjectileRules.Projectiles(skill, training)` (0x4B39B0): 2 when the attack's skill is the bow and the hero's bow training is expert or master, else 1 (firearms, a throw, a lower bow). A shot that flies (`Flight`) is launched as that many session shots (`SessionAttackResult.Shots`, `SessionObjectAttackResult.Shots`, launch order; `Shot` stays the first): each carries the same decided check (hit, location, critical, weapon) and strikes on its own through `LandShot` or `LandShotOnObject`, which rolls its own damage, wear, experience and criticals. The ammunition goes once, at the shot. Both fly the same line (the original passes offsets 0 and 10 that nothing reads, PS2; no fix is recorded, so both rule modes draw them on one line). |
+| Second arrow on a corpse | A hit's first arrow may kill the target; the second still strikes its tile (the original tests no death on the way, PF5), and the session answers NoChange with `AttackRefusal.TargetDead`: a corpse takes no damage (the damage step leaves for a dead critter, CW8), and that shot is gone. |
+| Shot limit | `MaxShotsInFlight` (16) must hold every projectile of the shot: an expert bow shot needs two free places, else `BudgetExceeded` before any roll. |
+| Scatter (PS3, PS4) | A throw (`SessionThrow`) that does not hit (a miss, dodge or critical miss) draws a rotation 0..7 from the session's sequence (`CombatRollPurpose.ThrowScatter`, right after the resolver's draws, so a critical miss's later drop draws follow it where the original draws them first; the generator is the session's, not the original's) and walks `ThrowRules.ScatterTiles(level, distance)` = `min((20 − throwing level) / 5 + 1, distance)` tiles (toward zero; 1..5 for levels 20..0) from the throw's target location in it (`ThrowRules.Scatter`, 0x4B90D0): the step is `SessionAttack.DropMap.Step` (the shown map; a step off it stops the walk), or without a map any cell in 0 .. 2^24 − 1. The distance is the hero's cell to the target location. `SessionAttackResult.Scatter` names the tile; the shot keeps no target, so a stray strike may hit the critter it missed. |
+| Target location | `SessionThrow.Target`: the throw goal's location (the clicked target's tile, also after a line-of-fire redirect, TW1, PF2); without it the attack's `TargetCell`. A throw at a critter with neither, or with one outside 0 .. 2^24 − 1, is refused (`InvalidAttack`) before any roll. A throw at an object or a wall never misses (RH5), so it never scatters. |
+| Flight without a target (PS5) | `ProjectileRules.Cross` with no target: the shot flies free from the start (obstructions and the 1-in-3 stray strike), and leaving its destination ends it (`ProjectileStrikeKind.DestinationEnd`) before that tile's tests and before its range end, so the thrown item lands on the scattered tile unless it struck on the way or flew beyond its thrown range first. |
+
+Viewer (AREA): every shot of `Shots` is launched as its own projectile (`ARC-COMBAT-016 projectile-launch`, the same line and
+destination), each ending on its own; a missed throw is launched to its scattered tile without a target, free from the start
+(`… scattered`), and its end at the destination lands the dagger there (`projectile-end … strike=DestinationEnd`, notice "the throw
+missed and fell aside"). A scatter back onto the hero's own cell has no line to fly: the dagger lands there at once. The throw passes
+the goal target's tile as `SessionThrow.Target`. Native smoke in the ranged stage: `ARC-COMBAT-018 native-smoke scatter PASS` (every
+missed throw of the dagger check scatters and lands on its scattered tile unless it strikes first) and `ARC-COMBAT-018 native-smoke
+expert-bow` (the hero's bow trained to expert, its level raised with unspent points in the character editor when it must, then
+restored: each shot flies as two projectiles on one line, both strike a hit's target and neither strikes a miss's); the pre-made
+heroes have a bow level of 4 and no unspent points, below expert's 9, so that check reports NONE and the two projectiles rest on
+the session's tests.
+
+Not ready: the hit script and item event of a scattered throw's end (PS5, as PF9 and PF10), and what the original's flight does
+when a scatter walks back onto the thrower's own tile (not read; Steamwoven lands the item there at once).
 
 ## Viewer (AREA)
 
@@ -301,9 +331,10 @@ and the item event 0x800000 at the landing (PF10), boomerangs (ARC-COMBAT-019) a
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Returning weapons and a bow's second projectile (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
+- Returning weapons (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
   melee-skill weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots
-  since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016, the "default throws" weapon since ARC-COMBAT-017), backstab (needs facing and
+  since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016, the "default throws" weapon since ARC-COMBAT-017, a bow's second projectile and a
+  missed throw's scatter since ARC-COMBAT-018), backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
@@ -333,7 +364,11 @@ experience-free sessions), `tests/Arcanum.Simulation.Tests/Combat/LineOfFireRule
 `tests/Arcanum.TerrainViewer.Tests/AreaLineOfFireTests.cs` (ARC-COMBAT-012: the geometry, samples, cover, walls, portals, the
 corner switch), `tests/Arcanum.Simulation.Tests/Combat/ProjectileRulesTests.cs` and `tests/Arcanum.Session.Tests/ProjectileStateTests.cs`
 (ARC-COMBAT-016: the direction and faced art, the flight along the line of fire's tiles and past it, the strike, stray, obstruction
-and range end; the shot decided at once and struck on arrival, the forced hit, the end, the limit, no shot after a restore), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
+and range end; the shot decided at once and struck on arrival, the forced hit, the end, the limit, no shot after a restore; since
+ARC-COMBAT-018 the bow's projectile count, the end of a shot without a target, an expert bow's two shots for one arrow, the second on
+a corpse and the limit for two), `tests/Arcanum.Simulation.Tests/Combat/ThrowRulesTests.cs` and
+`tests/Arcanum.Session.Tests/ThrowStateTests.cs` (ARC-COMBAT-017 and ARC-COMBAT-018's scatter tiles, walk, map edge and target
+location), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
 an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,

@@ -88,6 +88,8 @@ public partial class TerrainViewerApp
             _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap);
             // ARC-COMBAT-008: the objects an attack destroyed or switched off are not drawn either.
             if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
+            // ARC-WORLD-063: a map item swept into a junk pile is drawn as the pile, not where it lay.
+            if (_inventoryHost.Piled(_areaSession, CurrentAreaMap) is { Count: > 0 } piled) _inventoryHidden = _inventoryHidden.Concat(piled).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
         // ARC-RENDER-033: an item picked up or dropped leaves or joins the drawn ground at once.
@@ -136,7 +138,7 @@ public partial class TerrainViewerApp
     private void ActOnInventoryTarget(AreaInventoryTarget target)
     {
         // ARC-COMBAT-020: in a turn-based round a pickup costs 1 action point and a body's loot (an object's use) 2 (ledger CT3).
-        var pickup = target.Kind != AreaInventoryTargetKind.DeadNpc;
+        var pickup = target.Kind == AreaInventoryTargetKind.GroundItem;
         if (!ChargeHeroAction(pickup ? TurnBasedRules.PickUpCost : TurnBasedRules.UseObjectCost, pickup ? "pickup" : "loot"))
         { _inventoryStatus = _turnBasedNotice; RefreshAreaStatus(); return; }
         if (!pickup) { OpenInventory(target.Entity); return; }
@@ -180,6 +182,8 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    private GameSessionOwner? _junkPileSession;
+
     /// <summary>Opens the window on the PC's list, or (with <paramref name="holder"/>) on a dead NPC to loot.</summary>
     private void OpenInventory(string? holder = null)
     {
@@ -197,8 +201,10 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
+        // ARC-WORLD-063: a junk pile's window closes against the session it was opened on.
+        _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         _inventoryPanel.Open(InventoryView(holder));
-        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
+        GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
     }
 
@@ -280,7 +286,17 @@ public partial class TerrainViewerApp
     {
         if (_inventoryPanel is null || !_inventoryPanel.IsOpen) return;
         GD.Print($"ARC-UI-004 inventory closed pc={_areaSession?.QueryPcInventory().Count}");
+        var holder = _inventoryPanel.Holder;
         _inventoryPanel.CloseView();
+        // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
+        var pileSession = _junkPileSession;
+        _junkPileSession = null;
+        if (SessionJunkPile.Number(holder) is not null && _areaSession is { } session && ReferenceEquals(session, pileSession))
+        {
+            var closed = session.CloseJunkPile(session.Version, holder!);
+            GD.Print($"ARC-WORLD-063 junk-pile close entity={holder} disposition={closed.Disposition} failure={closed.Failure} piles={session.QueryJunkPiles().Count}");
+            SyncAreaInventory();
+        }
         QuarantineWorld(); RefreshReadyStatus();
     }
 

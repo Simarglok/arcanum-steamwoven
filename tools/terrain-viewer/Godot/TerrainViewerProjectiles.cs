@@ -29,6 +29,8 @@ public partial class TerrainViewerApp
         public required ProjectileShot State { get; set; }
         // ARC-COMBAT-017: the thrown item the projectile carries, which lands where it ends; null for a weapon kept in the hand.
         public SessionThrownShot? Thrown { get; init; }
+        // ARC-COMBAT-018: a missed throw's scatter cleared its target: it flies free to its scattered tile and ends leaving it.
+        public bool Targetless { get; init; }
         public long Ticks { get; set; }
         public int Frames { get; set; } = 1;
     }
@@ -55,12 +57,15 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-017: the throw of the wielded weapon when it "default throws" (weapon flag 0x200, ledger RH2), with its stored
     /// weight: the smoke's lent one, else the wielded kit item's; null for a weapon that stays in the hand.</summary>
-    private SessionThrow? HeroThrow()
+    private SessionThrow? HeroThrow(AttackGoal goal)
     {
-        if (_lentThrowWeightForSelfTest is { } lent) return new(lent);
-        if (WieldedKitNumber() is not { } number || _areaKitThrowWeight is not { } kit || number > kit.Count) return null;
-        return kit[number - 1] is { } weight ? new(weight) : null;
+        var weight = _lentThrowWeightForSelfTest ?? (WieldedKitNumber() is { } number && _areaKitThrowWeight is { } kit && number <= kit.Count ? kit[number - 1] : null);
+        // ARC-COMBAT-018: the throw's target location is the goal target's tile, from which a missed throw scatters (TW1, RH2).
+        return weight is { } w ? new(w) { Target = GoalTile(goal) } : null;
     }
+
+    // The goal target's tile (its map data's cell; NPCs do not move here).
+    private static CellCoord GoalTile(AttackGoal goal) => new(checked((int)goal.Row.WorldX!.Value), checked((int)goal.Row.WorldY!.Value));
 
     // The wielded kit item's number (1-based), or null when the hero wields nothing from its kit.
     private int? WieldedKitNumber() =>
@@ -79,22 +84,31 @@ public partial class TerrainViewerApp
     /// ARC-COMBAT-016: the session's shot leaves the hero's tile for the goal target's tile (the destination stays the target's tile
     /// after a line-of-fire redirect, ledger PF2) with the art faced in its screen direction (0x4B6A00, 0x4B6B10); a shot that cannot
     /// fly (no line between the tiles) ends at once. ARC-COMBAT-017: a thrown item flies to its thrown range (PF9) and lands where the
-    /// projectile ends.
+    /// projectile ends. ARC-COMBAT-018: a missed throw flies to its <paramref name="scatter"/> tile without a target, free from the
+    /// start, and lands where it ends.
     /// </summary>
     private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
         var hero = session.Chart.ToWorld(session.State.CommittedCell);
         var start = new CellCoord(checked((int)hero.X), checked((int)hero.Y));
-        var destination = new CellCoord(checked((int)goal.Row.WorldX!.Value), checked((int)goal.Row.WorldY!.Value));
+        var destination = scatter ?? GoalTile(goal);
         var thrown = owner.QueryThrownShot(shot);
         if (ProjectileRules.Launch(start, destination) is not { } flight)
         {
-            // A thrown item lands where it lies, on the hero's cell.
-            if (thrown is not null) owner.LandThrownItem(owner.Version, shot, start);
+            // A thrown item lands where it lies, on the hero's cell (a missed throw may scatter back onto it, ARC-COMBAT-018; the
+            // original's flight of a line without a step was not read).
+            if (thrown is { } item)
+            {
+                var landed = owner.LandThrownItem(owner.Version, shot, start);
+                _thrownLandingsForSelfTest.Add((item.Item, start, landed.Disposition));
+                _groundStamp = null;
+                SyncAreaInventory();
+            }
             else owner.EndShot(shot);
+            _projectileEndsForSelfTest.Add((shot, scatter is null ? ProjectileStrikeKind.None : ProjectileStrikeKind.DestinationEnd, null));
             GD.Print($"ARC-COMBAT-016 projectile-unlaunched shot={shot.Id} from={start} to={destination}");
             return;
         }
@@ -104,12 +118,13 @@ public partial class TerrainViewerApp
         _projectiles.Add(new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = art,
-            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, false, thrown?.Range ?? weapon.Range), Thrown = thrown,
+            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, scatter is not null, thrown?.Range ?? weapon.Range), Thrown = thrown,
+            Targetless = scatter is not null,
         });
-        _attackNotice = $"the shot flies ({(hit ? "it will hit" : "it missed")})";
+        _attackNotice = $"the shot flies ({(hit ? "it will hit" : scatter is null ? "it missed" : "it missed and scatters")})";
         GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
             + $" to={destination.X},{destination.Y} direction={direction} art={(art is { } a ? $"0x{a:X8}" : "none")}"
-            + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : ""));
+            + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (scatter is null ? "" : " scattered"));
         SyncAreaProjectileBodies();
     }
 
@@ -153,11 +168,13 @@ public partial class TerrainViewerApp
     private void CrossTile(AreaProjectile projectile, ProjectileCrossing crossing, GameSessionOwner owner, AreaLineOfFire lineMap)
     {
         var map = new ProjectileMap(this, owner, projectile, lineMap);
-        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Target, HeroRow, map,
+        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
         if (!crossed.Ends) return;
         if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range", land: true); return; }
+        // ARC-COMBAT-018: a shot without a target ends on leaving its destination (a missed throw lands on its scattered tile).
+        if (crossed.Strike == ProjectileStrikeKind.DestinationEnd) { EndProjectile(projectile, crossed.Strike, null, "at its destination", land: true); return; }
         Strike(projectile, crossed.Strike, crossed.Struck!);
     }
 
@@ -238,6 +255,7 @@ public partial class TerrainViewerApp
         else projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
+        else if (kind == ProjectileStrikeKind.DestinationEnd) { _attackNotice = "the throw missed and fell aside"; RefreshAreaStatus(); }
     }
 
     private void Ended(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string detail)

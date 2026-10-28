@@ -361,8 +361,17 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     public SessionAttackWearResult? Wear { get; init; }
     /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
     public SessionAmmoUse? Ammunition { get; init; }
-    /// <summary>ARC-COMBAT-016: the shot now in flight (<see cref="SessionAttack.Flight"/>, not refused); a hit has no damage yet.</summary>
-    public SessionShot? Shot { get; init; }
+    /// <summary>ARC-COMBAT-016: the shot now in flight (<see cref="SessionAttack.Flight"/>, not refused); a hit has no damage yet. The
+    /// first of <see cref="Shots"/>.</summary>
+    public SessionShot? Shot => Shots.Count > 0 ? Shots[0] : null;
+    private readonly IReadOnlyList<SessionShot>? _shots;
+    /// <summary>ARC-COMBAT-018: every projectile of the shot now in flight, in launch order: one, or two for a bow at expert training
+    /// (0x4B39B0), each striking on its own with the same decided outcome; empty when nothing flies.</summary>
+    public IReadOnlyList<SessionShot> Shots { get => _shots ?? Array.Empty<SessionShot>(); init => _shots = value; }
+    /// <summary>ARC-COMBAT-018: a missed throw's scattered destination (0x4B39B0, ledger RH2): its shot has no target, flies free from
+    /// the start and ends on leaving this tile (<see cref="ProjectileStrikeKind.DestinationEnd"/>) unless it strikes on the way; null
+    /// for any other shot.</summary>
+    public Arcanum.Simulation.Movement.CellCoord? Scatter { get; init; }
     private readonly IReadOnlyList<SessionCriticalStep>? _criticals;
 
     /// <summary>The critical item steps (ARC-COMBAT-009) of whoever took the damage, in the original's order: the arm-hit drops, the
@@ -497,7 +506,10 @@ public sealed partial class GameSessionOwner
         if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
             return RejectAttack(throwFailure);
         if (pending is null && !hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
-        if (pending is null && attack.Flight && _shots.Count >= MaxShotsInFlight) return RejectAttack(GameSessionFailure.BudgetExceeded);
+        // ARC-COMBAT-018: a missed throw scatters from its target location (RH2).
+        var scatterFrom = thrown is null ? null : attack.Throw!.Target ?? attack.TargetCell;
+        if (thrown is not null && (scatterFrom is not { } from || !DropCellFits(from))) return RejectAttack(GameSessionFailure.InvalidAttack);
+        if (pending is null && attack.Flight && _shots.Count > MaxShotsInFlight - ShotProjectiles(hero)) return RejectAttack(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
         // A throw may take three revisions before the damage (the fate, the concealment, the item leaving the hand).
         if (_revision >= long.MaxValue - (thrown is null ? 0 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);
@@ -529,11 +541,15 @@ public sealed partial class GameSessionOwner
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
+        int? scatterRotation = null;
         try
         {
             resolution = pending is null ? AttackResolver.Resolve(request, rolls, OriginalCriticalEffects.Instance, _rules.Combat)
                 : AttackResolver.LandHit(request, pending.Hit && pending.Entity == target.Entity ? pending.Check : AttackResolver.ForcedHit(pending.Check.WeaponMagicCancelled),
                     rolls, OriginalCriticalEffects.Instance, _rules.Combat);
+            // ARC-COMBAT-018: the ranged path draws a missed throw's direction after the dispatcher's decisions (0x4B39B0, 0x4CEF00(0, 7)).
+            if (thrown is not null && resolution.Refusal == AttackRefusal.None && resolution.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit))
+                scatterRotation = rolls.Roll(CombatRollPurpose.ThrowScatter, 0, ThrowRules.ScatterDirections - 1);
         }
         catch (TrialCombatRolls.ExhaustedException) { return RejectAttack(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
@@ -557,19 +573,21 @@ public sealed partial class GameSessionOwner
         if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend };
         var spent = ammunition is { Disposition: GameSessionDisposition.Changed };
-        // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already).
+        // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already);
+        // ARC-COMBAT-018: as two projectiles for a bow at expert, and a missed throw without its target, toward its scattered tile.
+        var scatter = scatterRotation is { } rotation ? ScatterThrow(scatterFrom!.Value, hero.SkillLevel, rotation, attack.DropMap) : (Arcanum.Simulation.Movement.CellCoord?)null;
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
-            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target.Entity, null)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null }) : (SessionShot?)null;
+            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null }, ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
-                GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shot = flying };
+                GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };
 
         var recipient = resolution.Damage!.Recipient;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
-            { Ammunition = ammunition, Shot = flying };
+            { Ammunition = ammunition, Shots = flying, Scatter = scatter };
         var outcome = applied.Outcome!;
         SessionExperienceAward? hitAward = null, killAward = null;
         var stepFailure = GameSessionFailure.None;
@@ -599,7 +617,8 @@ public sealed partial class GameSessionOwner
             Wear = wear,
             Criticals = criticals,
             Ammunition = ammunition,
-            Shot = flying,
+            Shots = flying,
+            Scatter = scatter,
         };
     }
 

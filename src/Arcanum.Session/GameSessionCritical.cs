@@ -198,7 +198,8 @@ public sealed partial class GameSessionOwner
             if (NpcItemSeed(side.Life.Entity!, item.Entity) is null) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
             var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
-            // ARC-WORLD-062: the dropped item decays (ledger ID4).
+            // ARC-WORLD-063: the placement may put it into a junk pile; ARC-WORLD-062: the dropped item decays (ledger ID4).
+            SettleDrop(item.Entity, _actor.Map, landed);
             ScheduleDecay(item.Entity, _actor.Map);
         }
         steps.Add(new(kind, whose, slot, item.Entity, SessionCriticalStepOutcome.Dropped, landed));

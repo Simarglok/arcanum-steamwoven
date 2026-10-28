@@ -127,6 +127,7 @@ nothing spent); the ground units count toward the hero's `MaxPcItems`.
 
 - NPC crafters are done by ARC-TECHNOLOGY-006 (above); the "expertise in discipline" effects of an NPC are not modelled.
 - Gold and key products and components (the hero's lists hold neither); ammunition is done by ARC-WORLD-066.
-- Junk piles and the player's drop (WORLD-063, WORLD-064); not a gap: a refused product gets no decay event, as in the original
+- The player's drop (WORLD-064); junk piles are done by ARC-WORLD-063 (a refused product is created on the tile and makes no pile,
+  as in the original; a later drop there sweeps it into one); not a gap: a refused product gets no decay event, as in the original
   ([ARC-WORLD-062](inventory-runtime.md#item-decay-arc-world-062), ledger ID9); the AREA viewer passes no NPC crafter tile (its
   insert check for an NPC accepts, so it never needs one).

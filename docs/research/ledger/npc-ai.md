@@ -274,6 +274,10 @@ spread-out order runs the move-away goal without flag 0x400, so its NO_FLEE bran
 corrected rows below. Both readers read the ranged approach's test (EX9), the end step's charge (EX6) and the spread-out
 NO_FLEE (EX12) as unintended, by inference. Every direct branch stays inside `.text`.
 
+ARC-WORLD-086 (slice I7, 2026-10-28) re-read the stepper (0x423560) and its pop (0x423D10), the start gate (0x4348E0), the
+action-point check (0x4B7790), the start of the escape path (0x426A80) and the back-off run's starter (0x433C80) with
+`llvm-objdump` (one reader) and agrees with EX3, EX5, EX6 and EX12; the three facts it adds are EX21–EX23.
+
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
 | EX1 | perform (0x4AC180) | In a round nothing unless it is the NPC's turn; BACKING_OFF → back off; action 1 → cast (0x4AC250), 2 → item (0x4AC320 → 0x435450), 3 → skill (0x4AC350 → 0x4350F0; skill 14 → 0x436220); else by state through a four-entry table: non-combat 0x4AC380, combat 0x4AC6E0, fleeing 0x4AC620, surrender 0x4AC660. | Original (confirms MR8) |
@@ -296,6 +300,9 @@ NO_FLEE (EX12) as unintended, by inference. Every direct branch stays inside `.t
 | EX18 | runtime sort (0x58A548), comparator (0x4CC2D0), list set-up (0x4CC380) | Quicksort with the middle element as pivot and a selection sort (first maximum moved to the end) for parts of eight or fewer; the comparator orders by value, highest first; input spells 0..222 by number; not stable. | Original (answers support U1 for the algorithm) |
 | EX19 | casting goal (26/82) node 0x429B50, throw goal (37), node helper (0x433270), attack start (0x432700) | Casting: 4 at its start (else the goal ends), no approach; throw: no approach, 2 at its end; the node helper charges 2 to anyone but the local PC; the attack start charges the weapon's cost. | Original |
 | EX20 | walk goals 5, 61, 80: next step blocked (0x4270B0 → 0x427110), step start (0x42E9B0), node 10 (0x433270) | A living critter on the next tile within the last two path steps, a newly spotted trap or (with run flag 0x400) a blocking tile, after a random 0..300 ms wait, or a step that cannot start, leads to node 10: 2 action points (anyone but the local PC); then goals 5 and 80 end the whole run and goal 61 pops to its parent, which re-plans. | Original |
+| EX21 | goal stepper (0x423560), pop (0x423D10), check (0x4B7790) | A push and a pop go on in the same step; a restart ends it; the random delay (0x4CEF00, 0..300) ends the step even when it draws 0. Popping the bottom goal marks the run done without the end step, so a finished attack charges no pending cost (only the end step's 0x90000000 path calls 0x4B7CD0). The check passes outside a round and for any critter but the current one; for the current one it writes the pending cost and passes when the action points cover the cost, or for the local PC with action points left and fatigue above 1; an NPC gets no fatigue allowance there (unlike the start gate). | Original |
+| EX22 | back-off run starter (0x433C80) | Its single-player path calls no start gate (no call of 0x4348E0), so the back-off run is not gated in a round. | Original |
+| EX23 | escape path (0x426A80), rotation (0x4B8D50), neighbour (0x4B8FF0) | The direction is the rotation from the source's location to the NPC's; the destination is range + 1 neighbour steps in it, and a neighbour off the map ends the request without a path. | Original |
 
 ## NPC AI followers in combat (ARC-RES-067)
 

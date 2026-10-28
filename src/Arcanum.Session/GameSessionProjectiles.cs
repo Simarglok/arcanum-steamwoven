@@ -11,7 +11,13 @@ public readonly record struct SessionShot(long Id);
 /// its effective weight (0x461370: the stored weight plus its magic adjustment), which sets the thrown range (<see cref="ThrowRules.Range"/>,
 /// RH4). The session keeps no item weights (the inventory weight is ARC-WORLD-085's), so the host reads it from the item's data.
 /// </summary>
-public sealed record SessionThrow(int Weight);
+public sealed record SessionThrow(int Weight)
+{
+    /// <summary>ARC-COMBAT-018: the throw's target location (the throw goal's, TW1: the clicked target's tile at the shot, which a
+    /// line-of-fire redirect does not change, PF2), from which a missed throw scatters (RH2); null: the attack's
+    /// <see cref="SessionAttack.TargetCell"/>.</summary>
+    public Arcanum.Simulation.Movement.CellCoord? Target { get; init; }
+}
 
 /// <summary>ARC-COMBAT-017: the thrown item of a shot in flight (<see cref="Item"/>, its entity) and the thrown range at which its
 /// flight ends (<see cref="Range"/>, ledger PF9).</summary>
@@ -30,7 +36,7 @@ public readonly record struct SessionThrownShot(string Item, int Range);
 /// </summary>
 public sealed partial class GameSessionOwner
 {
-    /// <summary>The most shots in flight at once (one hero shoots one projectile per shot; a bow at expert two, ARC-COMBAT-018).</summary>
+    /// <summary>The most shots in flight at once (a shot flies as one projectile, a bow's at expert training as two, ARC-COMBAT-018).</summary>
     public const int MaxShotsInFlight = 16;
 
     /// <summary>A shot in flight: the hero's weapon and skill at the shot (the projectile's parent weapon, field 0x50), the decided
@@ -155,11 +161,34 @@ public sealed partial class GameSessionOwner
         else _shots[shot] = pending with { Struck = true };
     }
 
-    private SessionShot Launch(PendingShot pending)
+    /// <summary>ARC-COMBAT-018: the shot's projectiles in flight, each a shot of its own with the same decided outcome (0x4B39B0: a bow
+    /// at expert training shoots two, each striking on its own).</summary>
+    private IReadOnlyList<SessionShot> Launch(PendingShot pending, int projectiles)
     {
-        var shot = new SessionShot(++_nextShot);
-        _shots.Add(shot, pending);
-        return shot;
+        var shots = new SessionShot[projectiles];
+        for (var i = 0; i < projectiles; i++)
+        {
+            shots[i] = new SessionShot(++_nextShot);
+            _shots.Add(shots[i], pending);
+        }
+        return shots;
+    }
+
+    /// <summary>ARC-COMBAT-018: the projectiles a shot of <paramref name="hero"/> flies as (<see cref="ProjectileRules.Projectiles"/>).</summary>
+    private static int ShotProjectiles(SessionHeroAttack hero) => ProjectileRules.Projectiles(hero.Skill, hero.Training);
+
+    /// <summary>
+    /// ARC-COMBAT-018 (0x4B39B0, ledger RH2 and PS rows): where a missed throw flies: from its target location
+    /// <paramref name="origin"/>, <see cref="ThrowRules.ScatterTiles"/> tiles (the thrower's throwing level, at most its distance from
+    /// the hero's cell) in <paramref name="rotation"/>, each step the map's (<paramref name="map"/>; without one any cell in
+    /// 0 .. 2^24 − 1). The shot loses its target and flies free from the start.
+    /// </summary>
+    private Arcanum.Simulation.Movement.CellCoord ScatterThrow(Arcanum.Simulation.Movement.CellCoord origin, int throwingLevel, int rotation,
+        Arcanum.Simulation.Items.IDropMap? map)
+    {
+        var tiles = ThrowRules.ScatterTiles(throwingLevel, ProjectileRules.Distance(_actor.Cell, origin));
+        return ThrowRules.Scatter(origin, rotation, tiles, map is not null ? map.Step
+            : (cell, r) => Arcanum.Simulation.Navigation.OriginalPathRequest.Neighbor(cell, r) is var next && DropCellFits(next) ? next : null);
     }
 
     /// <summary>The identity of an object attack's struck object, to match a strike against the shot's own target.</summary>

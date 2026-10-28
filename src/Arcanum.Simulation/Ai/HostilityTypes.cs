@@ -124,6 +124,9 @@ public enum AiRollPurpose
     GateBlindRecovery,
     /// <summary>The gate clears every crippled condition on 1 of 1..8000 (0x4A8570, slice I6).</summary>
     GateCrippleRecovery,
+    /// <summary>A walk goal whose next step is blocked waits 0..300 game milliseconds before it gives up (the stepper's random delay,
+    /// 0x423560 → 0x4CEF00; slice I7).</summary>
+    BlockedStepWait,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds
