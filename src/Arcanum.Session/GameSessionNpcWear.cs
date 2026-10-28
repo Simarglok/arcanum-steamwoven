@@ -38,12 +38,13 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-WORLD-103: the worn items of an NPC the session dressed (a regeneration's best-items wield) that are still in its list, in slot
     /// order; null when the session never dressed it, so the inventory locations of its map data stand. The session's lists of the NPC
-    /// (<see cref="QueryMapInventory"/>) already show these locations.
+    /// (<see cref="QueryMapInventory"/>) already show these locations. Throws for an invalid entity id.
     /// </summary>
     public SessionNpcWear? QueryNpcWorn(string npc)
     {
         ThrowIfDisposed();
-        if (npc is null || !_inventory.NpcWorn.TryGetValue(npc, out var worn)) return null;
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        if (!_inventory.NpcWorn.TryGetValue(npc, out var worn)) return null;
         return new(npc, Array.AsReadOnly(worn.Where(pair => _inventory.NpcOf(pair.Value) == npc || SeedListing(npc, pair.Value) is not null)
             .Select(pair => new SessionNpcWornItem(pair.Key, pair.Value)).ToArray()));
     }

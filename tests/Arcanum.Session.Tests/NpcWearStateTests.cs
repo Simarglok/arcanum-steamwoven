@@ -166,6 +166,26 @@ public sealed class NpcWearStateTests
     }
 
     [TestMethod]
+    public void The_heros_take_and_the_crafters_components_see_the_worn_view()
+    {
+        using var owner = Owner();
+        var world = new World();
+        // The persistent club stays through the clear; the weapon slot starts empty (WB1), so the sword replaces it and it goes to the pack.
+        world.Kept.Add("club");
+        var done = Fire(owner, world).Regenerations.Single();
+        Assert.AreEqual(GameSessionFailure.None, done.Wield!.Failure);
+        Assert.AreEqual((EquipmentSlot.Weapon, "made:2"), Worn(owner).Single(worn => worn.Item1 == EquipmentSlot.Weapon));
+        CollectionAssert.Contains(Locations(owner), ("club", -1));
+        Assert.AreEqual(GameSessionFailure.WornItemUnsupported,
+            owner.TakeItemFromNpc(owner.Version, "guard", "made:2", _ => SessionInsertVerdict.Accepted).Failure, "a wielded made item is worn");
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.TakeItemFromNpc(owner.Version, "guard", "club", _ => SessionInsertVerdict.Accepted).Disposition, "the map data's worn club is in the pack now");
+        Assert.IsFalse(Locations(owner).Any(item => item.Item1 == "club"));
+        // Back in the NPC's list later it is not worn (its record entry left with it).
+        Assert.IsFalse(owner.QueryNpcWorn("guard")!.Worn.Any(worn => worn.Item == "club"));
+    }
+
+    [TestMethod]
     public void Without_the_hosts_wield_facts_the_npc_keeps_what_the_clear_left_it()
     {
         using var owner = Owner();

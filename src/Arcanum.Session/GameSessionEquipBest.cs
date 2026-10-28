@@ -122,6 +122,8 @@ public sealed partial class GameSessionOwner
         EquipmentChooser wielder, SessionWearArtCheck artCheck, Func<SessionWornItem, SessionInsertVerdict> insert)
     {
         private readonly long _revision = owner._revision;
+        // ARC-WORLD-103: a seed attached from a callback changes the lists the plan read without a revision.
+        private readonly long _seeds = owner._inventory.SeedGeneration;
 
         internal SortedDictionary<EquipmentSlot, SessionWornItem> Worn { get; } = worn;
         internal Dictionary<string, SessionWearableItem> Facts { get; } = new(StringComparer.Ordinal);
@@ -240,7 +242,7 @@ public sealed partial class GameSessionOwner
         internal void Fresh()
         {
             owner.ThrowIfDisposed();
-            if (owner._revision != _revision) throw new Refused(GameSessionFailure.StaleVersion);
+            if (owner._revision != _revision || owner._inventory.SeedGeneration != _seeds) throw new Refused(GameSessionFailure.StaleVersion);
         }
     }
 
