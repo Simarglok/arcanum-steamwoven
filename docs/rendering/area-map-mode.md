@@ -478,10 +478,12 @@ travels with the player. Nothing is pinned to Virgil or to a location.
   from the content stack, the original's aggregation), then the getter's clamp of
   0..51 and −1000..1000 ([ledger AP5](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
   an effect number without a definition changes nothing, as in the original.
-  `AreaCompanionData` opens the tables once per module. The PC side stays the
-  AREA diagnostic profile (charisma 8, level 1), so through a dialog `JO` the
-  level gate refuses most NPCs (most rows have a gate of 2 and about 170 of the
-  NPCs are level 3 or above); the PC side from the session hero is not done. On
+  `AreaCompanionData` opens the tables once per module. The PC side is the
+  session hero with `--hero` (ARC-WORLD-067, [party runtime](../world/party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)):
+  its charisma, level, alignment, Persuasion and max followers; without one the
+  labelled AREA diagnostic profile (charisma 8, level 1), with which a dialog `JO`
+  meets the level gate of most NPCs (most rows have a gate of 2 and about 170 of
+  the NPCs are level 3 or above). On
   the installed original all 185 interior dialog NPCs read, on ten distinct
   follow rows (`AreaMapCompanionOriginalTests`); Virgil's facts read this way
   equal the measured ones.
@@ -666,8 +668,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based`
-  narrows a run to those stages; without it all but `walk` and `census` run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based,ranged`
+  narrows a run to those stages; without it all but `walk` and `census` run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves; `ranged` alone runs the battery's last combat stages, object attack, critical, line of fire and ARC-COMBAT-015's [ranged shot](../world/hero-attack-runtime.md#ranged-hero-attack-arc-combat-015)) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the

@@ -150,7 +150,9 @@ public sealed class CompanionLoyaltyStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, leaver.AdjustReaction(leaver.Version, Npc, Human50, Pc, -5).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, leaver.StopAttacking(leaver.Version, new() { Combatant = SessionCombatant.Hero }).Disposition);
         Assert.IsTrue(leaver.QueryDanger(Npc).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.NoAttack));
-        Assert.AreEqual(LoyaltyStepKind.Left, leaver.RunLoyaltyStep(leaver.Version, Npc, Facts(pcAlignment: 301), false).Step!.Value.Kind);
+        // ARC-WORLD-067: with a hero the loyalty step reads the hero's alignment, so the hero turns too good for the follower.
+        Assert.AreEqual(GameSessionDisposition.Changed, leaver.ChangeHeroAlignment(leaver.Version, 301).Disposition);
+        Assert.AreEqual(LoyaltyStepKind.Left, leaver.RunLoyaltyStep(leaver.Version, Npc, Facts(), false).Step!.Value.Kind);
         Assert.IsFalse(leaver.IsConcealed(SessionCombatant.Critter(Npc)));
         Assert.IsFalse(leaver.QueryDanger(Npc).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.NoAttack));
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(leaver.Capture())), RestoreOptions()).Failure);

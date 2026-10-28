@@ -60,8 +60,9 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
   dodge); the map path reads poison.
 - The character sheet's max followers is the character-stats value (charisma / 4 with effects), without the expert
   persuasion bonus the follow check adds (AP4); the sheet does not read the session's value yet.
-- Backstab and ranged attacks of the hero are not modelled (the hero attacks in melee only), so their skills are read but
-  unused; NPCs read map skills except a levelled follower's.
+- Backstab and thrown attacks of the hero are not modelled (since ARC-COMBAT-015 the hero attacks in melee and with bows and
+  firearms, [ranged hero attack](hero-attack-runtime.md#ranged-hero-attack-arc-combat-015)), so the backstab and throwing skills are
+  read but unused; NPCs read map skills except a levelled follower's.
 
 ## Checks
 

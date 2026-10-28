@@ -718,7 +718,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
         if (current.Standing == CompanionStanding.Free) return NoChange();
-        if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(leave.LeaderCharisma, leave.MindControlled))
+        // ARC-WORLD-067: with a hero the leader's charisma is the hero's effective charisma.
+        if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(HeroPartySide()?.Charisma ?? leave.LeaderCharisma, leave.MindControlled))
             return Reject(GameSessionFailure.LeaveRefused);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
@@ -1388,24 +1389,15 @@ public sealed partial class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    // With a hero the session owns the PC's side of the check (ARC-SKILLS-002): its persuasion training, effective charisma and
-    // level, and the max followers they give with the hero's effects on that stat (ledger AP4: charisma / 4, +1 from expert
-    // persuasion, then the effects, clamped to 1..7); the caller's values stand in only without a hero. The alignment stays the
-    // caller's: the conversation host tracks the alignment its dialog actions change.
+    // With a hero the session owns the PC's side of the check (ARC-SKILLS-002, ARC-WORLD-067, HeroPartySide): its persuasion training,
+    // effective charisma, level and alignment (dialog alignment changes write it, ChangeHeroAlignment), and the max followers they
+    // give; the caller's values stand in only without a hero.
     private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit)
     {
-        var (persuasion, charisma, level, maxFollowers) = (facts.PcPersuasion, facts.PcCharisma, facts.PcLevel, facts.MaxFollowers);
-        if (_hero is { } hero)
-        {
-            persuasion = HeroPersuasion();
-            var snapshot = hero.Stats.Query(new(0)).Snapshot!;
-            charisma = snapshot.GetEffective(CharacterStat.Charisma);
-            level = hero.State.Level;
-            var unclamped = charisma / 4 + (persuasion >= PersuasionTraining.Expert ? 1 : 0);
-            maxFollowers = Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
-                FollowConsentRules.MinMaxFollowers, FollowConsentRules.MaxMaxFollowers);
-        }
-        return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, facts.PcAlignment, level,
+        var (persuasion, charisma, alignment, level, maxFollowers) = HeroPartySide() is { } pc
+            ? (pc.Persuasion, pc.Charisma, pc.Alignment, pc.Level, pc.MaxFollowers)
+            : (facts.PcPersuasion, facts.PcCharisma, facts.PcAlignment, facts.PcLevel, facts.MaxFollowers);
+        return FollowConsentRules.Evaluate(new(facts.MindControlledByPc, persuasion, charisma, alignment, level,
             facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment, facts.NpcLevel, maxFollowers,
             _party.NonForcedFollowers, ignoreLimit));
     }
