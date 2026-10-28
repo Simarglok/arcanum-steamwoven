@@ -61,10 +61,11 @@ retry changes nothing, so the back-off simply ends without a clear line.
 - **Callers.** The AI pass (I6) runs the danger update and perform (0x4AC180) only as host stages, so nothing runs their FLEE and SURRENDER paths or combat perform yet; no
   combat path reports a kill; no host implements `IMoraleWorld`. The fear effect and the dialog start (flee 0x4AF130 = the
   setter's FLEE), the fear effect's end and resurrection (stop fleeing) are their domains' callers.
-- **Execution.** The flee goal (type 25), the "away" path and the run to its end are the executor's (I7, stage A6); the
-  flee-spell list chooser is I8's.
-- **Set no-flee** (0x4AF1D0): NO_FLEE stays the caller's fact. Its writers are the "move away from object" goal (I7, EX12) and
-  the start of mind control, whose end (MR13 `MindControlLeavesNoFlee`, one remembered bit) belongs to the magic slice that
+- **Execution.** The flee goal (type 25) and the run to the back-off's tile are the executor's ([AI executor](ai-executor.md),
+  ARC-WORLD-086), which calls perform fleeing, the back-off step and the back-off start through its world; the "away" path's
+  tile is the host's; the flee-spell list chooser is I8's.
+- **Set no-flee** (0x4AF1D0): the move-away goal's NO_FLEE is the session's `SetNoFlee` (ARC-WORLD-086, EX12); the NO_FLEE of the
+  critter's data stays the caller's fact. The other writer is the start of mind control, whose end (MR13 `MindControlLeavesNoFlee`, one remembered bit) belongs to the magic slice that
   implements mind control.
 - **Stop waiting** (0x4AA8C0) of the kill notification's victim is the party owner's; the dialog port applies the surrendered
   NPC's greeting, script flag and "flee from the source's party" rule of the study's section 3; the follower rule (I9) and the

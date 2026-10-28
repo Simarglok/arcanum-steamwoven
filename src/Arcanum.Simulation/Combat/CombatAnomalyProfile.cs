@@ -134,6 +134,20 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool RangedApproachSkipsClearShot { get; init; }
 
+    /// <summary>
+    /// EX6 (owner decision 2026-10-21; ARC-WORLD-086): a goal run that ends through an end step in a round charges an NPC the
+    /// round's pending cost, the last action-point check's value, so a throw, an item use or an aborted action after a walk pays its
+    /// last step again (see <see cref="Ai.AiExecutorRules.Step"/>). Steamwoven charges nothing at the end step.
+    /// </summary>
+    public bool EndStepRechargesPendingCost { get; init; }
+
+    /// <summary>
+    /// EX12 (owner decision 2026-10-21; ARC-WORLD-086): the move-away goal that the spread-out goal pushes sets NO_FLEE for good when
+    /// its escape line bends after a partial straight line or fails, as a flight's does (see <see cref="Ai.AiExecutorRules.Step"/>).
+    /// Steamwoven sets no NO_FLEE from a spread-out move-away; flights keep it.
+    /// </summary>
+    public bool SpreadOutSetsNoFlee { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -161,6 +175,8 @@ public sealed record CombatAnomalyProfile
         StaleSpellFleeSkipsFleeSpell = true,
         FleeGoalAfterRefusedSurrender = true,
         GateRecoveryWritesStaleFlags = true,
+        EndStepRechargesPendingCost = true,
+        SpreadOutSetsNoFlee = true,
     };
 
     /// <summary>Both settings, default first.</summary>
