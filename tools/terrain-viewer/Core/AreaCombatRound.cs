@@ -188,8 +188,10 @@ public static class AreaTurnBased
     /// attack through the round's check and consume). When the run has ended, the hook runs again (the goal stepper's end of a done run,
     /// 0x423B8D); when no other run goes on and the hero is idle, the run's end was the last animation's, so the completion check
     /// (<see cref="GameSessionOwner.CompleteCombatActions"/>, 0x4B7080 through the animation system's callback, with its 2 ms turn event)
-    /// follows: an NPC without action points passes on, one checked twice with unchanged action points spends the rest. Without
-    /// <paramref name="ai"/> an NPC's subturn ends at once.
+    /// follows: an NPC without action points passes on, one checked twice with unchanged action points spends the rest. ARC-WORLD-099:
+    /// each NPC subturn end among the calls' events asks the NPC's end-combat script (<see cref="AreaAiHost.SubturnsEnded"/>), and the
+    /// observation's own completion check (a turn set's interrupt freeing the last run) comes first. Without <paramref name="ai"/> an
+    /// NPC's subturn ends at once.
     /// </summary>
     public static AreaTurnBasedStep Step(GameSessionOwner owner, ISessionCombatWorld world, bool heroIdle, AreaAiHost? ai, int maxSubturns = MaxSubturnsPerFrame)
     {
@@ -199,9 +201,16 @@ public static class AreaTurnBased
         var events = new List<SessionCombatEvent>();
         var calls = 0;
         var writeFailure = GameSessionFailure.None;
-        for (var i = 0; i < maxSubturns && owner.QueryCombatRound() is { } round; i++)
+        for (var i = 0; i < maxSubturns && owner.QueryCombatRound() is not null; i++)
         {
             ai?.ObserveRound();
+            // The observation's completion check (a turn set's interrupt freeing the last run) may have passed the turn on: the new
+            // subturn is observed first.
+            var observed = ai?.DrainRoundEvents() ?? [];
+            events.AddRange(observed);
+            if (owner.QueryCombatRound() is not { } round) break;
+            if (observed.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
+            if (observed.Any(e => e.Kind == SessionCombatEventKind.SubturnStarted)) continue;
             if (round.Actor.IsHero && !heroIdle) break;
             SessionCombatResult result;
             if (round.Actor.IsHero) result = owner.CompleteCombatActions(owner.Version, world);
@@ -220,10 +229,13 @@ public static class AreaTurnBased
                 if (hook.Failure != GameSessionFailure.None) return new(events, calls, hook.Failure) { WriteFailure = writeFailure };
                 if (writeFailure == GameSessionFailure.None) writeFailure = hook.WriteFailure;
                 events.AddRange(ai.DrainRoundEvents());
+                // The stepper's fidget call for the done run's owner follows its hook (ARC-WORLD-099, TH8).
+                ai.FidgetAfterHook(npc);
                 if (hook.Round is { } ended)
                 {
                     if (ended.Disposition == GameSessionDisposition.Rejected) return new(events, calls, ended.Failure) { WriteFailure = writeFailure };
                     events.AddRange(ended.Events);
+                    ai.SubturnsEnded(ended.Events);
                     if (ended.Disposition != GameSessionDisposition.Changed || ended.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
                     continue;
                 }
@@ -234,6 +246,7 @@ public static class AreaTurnBased
             calls++;
             if (result.Disposition == GameSessionDisposition.Rejected) return new(events, calls, result.Failure) { WriteFailure = writeFailure };
             events.AddRange(result.Events);
+            ai?.SubturnsEnded(result.Events);
             if (result.Disposition != GameSessionDisposition.Changed || result.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
         }
         return new(events, calls, GameSessionFailure.None) { WriteFailure = writeFailure };

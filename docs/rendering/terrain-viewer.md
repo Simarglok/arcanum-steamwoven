@@ -1697,8 +1697,9 @@ schematics) lay themselves out in the part the bars leave free; while a conversa
 the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
-[message log](#message-log-arc-ui-023), where the button names appear. The rest of the bottom strip (hot-key slots, recent
-actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+[message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
+the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
+right-button drag). The top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the
@@ -1761,11 +1762,13 @@ long text drawn wide).
 
 With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries (on the press, not during another critter's turn of a turn-based round) and `A` the latest
 recent action ([contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
-ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). The bar's hot-key slots and recent-action buttons are not
-drawn as working yet, so keys stand in for its drag and drop: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
-spell pane, or the palette's Prowl action) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
+ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). Since ARC-UI-027 the bar's slots and recent-action buttons
+are drawn on the bottom strip and work with the mouse ([hotkey bar art and drag](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027)):
+a left click on a slot activates it, a right drag from a slot or the spell pane puts its entry on another slot or off the bar, and a
+recent-action button activates its action. Keys stay as stand-ins: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
+spell pane, or the palette's Prowl action; the only way to a skill-bar button, as the skill bar is not drawn) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
 inventory window holds an item drops the item on the entry (it leaves the grid). The status line lists the entries and the latest
-action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`.
+action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS` and then `ARC-UI-027 native-smoke hotkey-bar PASS`.
 
 ### Logbook (ARC-UI-008)
 

@@ -9,7 +9,10 @@ hit step. Exe facts read by this task: ledger [AH1–AH4](../research/ledger/npc
 F1). It covers the first NPC fights of [FR-AI-001](../requirements/story-social-ai.md#fr-ai-001) and
 [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002). ARC-WORLD-095 (the next part of I10) lets the NPCs fight in their own
 subturns of a turn-based round ([below](#turn-based-round-arc-world-095); exe rows
-[TH1–TH6](../research/ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095), one reader, F1).
+[TH1–TH6](../research/ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095), one reader, F1). ARC-WORLD-099 (the first part of
+I10's third step) adds the round's tail: the end-combat script at an NPC's subturn end, the completion check of a turn set's
+interrupt and the fidget after a done run (exe rows [TH7–TH10](../research/ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099),
+one reader, F1).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -51,7 +54,9 @@ subturn still ends at once.
 | Subturn start | turn set 0x4B6E70, hook 0x4B7010 (TH1, TH3) | The session grants the action points (`max(5, Speed)`); the round host then runs the session's subturn hook (`RunAiSubturnHook`): the heartbeat (no SCR yet: it continues) and one AI pass (gate, danger update, perform). A pass that starts no run ends the subturn (`EndCombatTurn`); a started run holds it. |
 | The run | stepper 0x423560 | The run steps on the world clock as in real time; each step and the attack check and pay the round's action points through the session (`ConsumeActionPoints`): a walk 2, a run 1 with fatigue, the attack its weapon's cost (EX6, EX21). A step it cannot pay kills the run. |
 | The run's end | stepper's end 0x423B8D, completion check 0x4B7080 (TH4, TH5) | The NPC's next frame without a run runs the hook again (its next action), then, when no other run goes on and the hero is idle, the completion check (`CompleteCombatActions`, with its 2 ms turn event as one step): 0 action points pass the turn on, an actor checked twice with unchanged action points spends the rest. So an NPC whose start gate lets it begin an attack its points do not cover (fatigue above 35 %) passes on after at most two tries. |
-| Interrupts | round start 0x4B71E0, turn set 0x4B6E70 (TH1, TH6) | `ObserveRound` (before each pump step, after the last, and on each subturn of a round frame) compares the session's subturn starts (`QueryCombatSubturnStarts`) with the last seen: a round that began interrupts every run, a new subturn the runs of the previous turn set's critter when it is an NPC, at priority 3 (walks, attacks and flights end with their end nodes; an attempted cast goes on). An attack that puts the hero into combat mode with the turn-based setting on starts a round and so ends its own swing. |
+| Interrupts | round start 0x4B71E0, turn set 0x4B6E70 (TH1, TH6, TH10) | `ObserveRound` (before each pump step, after the last, and on each subturn of a round frame) compares the session's subturn starts (`QueryCombatSubturnStarts`) with the last seen: a round that began interrupts every run, a new subturn the runs of the previous turn set's critter when it is an NPC, at priority 3 (walks, attacks and flights end with their end nodes; an attempted cast goes on). An attack that puts the hero into combat mode with the turn-based setting on starts a round and so ends its own swing. ARC-WORLD-099: a turn set's interrupt that frees the last run while the hero runs no animation (the scene's `HeroIdle`) runs the completion check (`CompleteCombatActions`, counted in `CompletionChecks`, a refusal in `CheckFailure`) for the new participant before its hook, as the free's callback does; a round's start runs none (its interrupts precede the callback's registration and the round flag), while a next round's first subturn is a turn set like any other (TH10). A check that passes the turn on is observed as the next turn set before the round host hooks anyone. |
+| Subturn end | subturn end 0x4B7630 (TH7) | ARC-WORLD-099: every NPC `SubturnEnded` among the events of a round call (the executor's consumes and subturn ends, the host's check, the round host's hook, check and end calls) asks the NPC's end-combat script (point 16, the NPC as attachee and triggerer: `SubturnsEnded`, counted in the trace's `EndCombatScripts`); this host runs no SCR at the AI points, so the point continues. The PC's subturn end is the interface's. |
+| Fidget | stepper end 0x423B95–0x423BA0, 0x4B4320, 0x435BD0 (TH8, TH9) | ARC-WORLD-099: after a done run (finished, end step, killed in its step; not the node limit or an overflow), after the owner's subturn hook (the round actor's: the round host's `FidgetAfterHook` right after the hook it runs next; anyone else's at once), `AiExecutorRules.FidgetAfterRun` decides the fidget: an NPC in combat mode outside a round or with critter flags 2 bit 0x2 (auto-animates), passing the start gate with cost 0, without a run; in a round only while the current participant has action points (in practice never: see TH9). The host reports it (`AreaAiNoticeKind.Fidget`, the viewer's log line `ARC-WORLD-099 ai-fidget`); its art test allows it and its goal-2 run (priority 1) is not held, since NPC ART is not read and nothing the host runs reads a priority-1 run. |
 | Pending cost | 0x4B75D0, check 0x4B7790 (TH2) | The host's `PendingCost` reads 0 once a subturn started after it was written, whichever call started it (the subturn start's check of cost 0). EX6's end-step charge reads it. |
 | Ticks | 0x4AD420 | In a round the AI ticks only reschedule (CL7: the near test needs no round), so NPCs think only in their own subturns; an attack still makes its victim react (the setter), not act. |
 | Viewer | | The round log and the status line take the charges and subturn ends of the runs (`DrainRoundEvents`). Smoke stage `ai-turn-based` (only when named, map mode with `--hero`, `crash site cave`): the AI and the setting on, the NPC told of the hero's attack four cells away, R begins round 1; in its own subturns its run walks it up paying action points and bites, it never moves on the hero's subturn, which E ends; marker `ARC-WORLD-095 native-smoke ai-turn-based PASS`. |
@@ -66,13 +71,16 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
 
 ## Not ready
 
-- **Turn-based rounds.** The end-of-combat script at an NPC's subturn end (point 16) and 0x4B4320 after a run's end (TH4) do not
-  run; a run killed from outside its step gets the hook on the NPC's next frame too (the original runs none; nothing in this host
-  does that to the actor's run); followers stand in their subturns (I9's host part). The completion check runs only after the
-  actor's own run ended, not when an interrupt frees the last run (TH5 calls it at any such free), so a stalled-actor observation can
-  come one check later; it runs after the hook where the original runs it at the free, before the hook (the action points are the
-  same: the pass charges nothing). A round that ends and another that begins between two observations (one frame) skips the round
-  start's interrupt of every run.
+- **Turn-based rounds.** The end-combat script at an NPC's subturn end is asked, but no SCR runs at the AI points (below). A run
+  killed from outside its step gets the hook on the NPC's next frame too (the original runs none; nothing in this host does that to
+  the actor's run); followers stand in their subturns (I9's host part). The completion check of a free runs after the actor's own run
+  ended (after the hook, where the original runs it at the free, before the hook: the action points are the same, the pass charges
+  nothing) and at a turn set's interrupt of the last run; a run killed in its step by a refused charge is freed by the original after
+  the new participant's hook and checked then, which this host does not do (the check then only records the stalled-actor
+  observation). The turn set's check runs after the session granted the new participant's action points (the original's before them):
+  in the Original setting the stalled-actor observation keeps the previous value either way (A11); in Steamwoven it records the new
+  participant's own points, as A11's fix does for every check. A round that ends and another that begins between two observations (one frame) skips the round start's interrupt
+  of every run. The fidget's animation is not played and its run not held (NPC ART is not read).
 - **Action goals.** Casting, item use, skills, throws and pickups (I8b's goals), grenades, NPC queued casts and spell missiles and
   goal 40: the host's calls refuse or do nothing; heal and item search choose nothing.
 - **Followers in combat.** Companions keep their follow goal; the follower rule, the attack order's target and pass, the comment
@@ -94,6 +102,11 @@ paying nothing; an NPC victim's pool and the kill award for a PC-led killer only
 `ARC_CAVE_MOBILE`) an animal of the Crash Site cave that the hero hits reacts, focuses the hero through its tick's danger update,
 starts its attack run (adjacent, and from 4 tiles after walking up) and bites through the session; in a turn-based round it walks up
 and bites in its own subturns, its run holding its subturn and paying action points, never moving on another participant's subturn,
-and the pending cost reads 0 after a subturn start (ARC-WORLD-095). `CombatRoundTests` (Session): the subturn starts are counted
+and the pending cost reads 0 after a subturn start (ARC-WORLD-095); the done attack run's fidget in real time, the end-combat script
+asked at its subturn ends and no fidget in a round, and a turn set's interrupt of its last run running the completion check once
+(ARC-WORLD-099). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
+PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted
 whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_MAP_SMOKE_ONLY=ai` on `crash site cave` with
-`--hero`, marker `ARC-WORLD-092 native-smoke ai PASS`; `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS`.
+`--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the
+marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
+asked at the NPC's subturn end, `EndCombatScripts`).
