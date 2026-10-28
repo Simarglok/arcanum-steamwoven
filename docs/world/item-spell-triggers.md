@@ -70,7 +70,7 @@ and saves the charges the spells spend. The other events are later slices (see [
 - **Batches.** The notes of an event pass are applied after the pass, so two charge payments of one pass are both made against the
   count before it; one that then finds no charge left spends nothing, where the original would refuse it. A spend the session
   refuses (a full record budget) is logged as `ChargeNotSaved`.
-- Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-50)): `durability.charges` (`entity`,
+- Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-51)): `durability.charges` (`entity`,
   `charges` 0..1,000,000, ordinal order, within the durability budget) and each worn item's `itemSpells`.
 
 ## Item use (ARC-MAGIC-022)

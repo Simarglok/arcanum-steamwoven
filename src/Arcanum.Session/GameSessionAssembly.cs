@@ -270,7 +270,8 @@ public sealed partial class GameSessionOwner
         var numbers = _inventory.Made.Select(item => item.Entity).Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
             .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
             .Select(entity => (long)(SessionMadeItem.Number(entity) ?? 0));
-        return numbers.DefaultIfEmpty(0).Max() + 1;
+        // ARC-WORLD-094: and never a number a regeneration discarded.
+        return Math.Max(numbers.DefaultIfEmpty(0).Max(), _inventory.LastDiscardedMade) + 1;
     }
 
     private SessionAssemblyResult RejectAssembly(GameSessionFailure failure, AssemblyPlan? plan = null) =>

@@ -183,9 +183,10 @@ public sealed class SessionInventoryState
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
         SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
-        string[]? identified = null)
+        string[]? identified = null, int lastDiscardedMade = 0)
     {
         Identified = Array.AsReadOnly(identified ?? []);
+        LastDiscardedMade = lastDiscardedMade;
         ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
@@ -221,6 +222,9 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1, a barter window's open and sale), by entity in
     /// ordinal order.</summary>
     public IReadOnlyList<string> Identified { get; }
+    /// <summary>ARC-WORLD-094: the highest made number of a made item a regeneration discarded without a deleted-item record (0 when
+    /// none), so a new made item never takes a discarded one's number.</summary>
+    public int LastDiscardedMade { get; }
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -406,6 +410,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1).</summary>
     internal SortedSet<string> Identified { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
+    internal int LastDiscardedMade { get; set; }
+
     /// <summary>The made items added to NPCs and containers (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
     internal int NpcHeld => Npcs.Values.Sum(list => list.Count);
 
@@ -523,7 +530,8 @@ internal sealed class InventoryDomain
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray())) { Container = Containers.Contains(pair.Key) }).ToArray(),
         Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
-        CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray());
+        CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
+        LastDiscardedMade);
 
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
     internal List<SessionJunkPile> JunkPiles { get; } = [];

@@ -432,8 +432,9 @@ public sealed class GameSessionSnapshot
     /// LookForAmmo, LookForWeapon and LookForArmor danger bits (ARC-WORLD-088); schema 48 adds the items scripts created on the ground to
     /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081); schema 49 adds the items' spent spell charges to
     /// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022); schema 50 adds the identified items and the
-    /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090). Schemas 1..49 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 50;
+    /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
+    /// <see cref="Inventory"/> (ARC-WORLD-094). Schemas 1..50 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 51;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

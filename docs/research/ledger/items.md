@@ -250,6 +250,10 @@ Census of the installed data (`AreaRestockCensusTests`, opt-in, 2026-10-28): 423
 merchants (wheel clan 3, shopmap 1) have no source of their own; their containers (sources 5, 7, 105, 19) have neither 0x200 nor 0x400,
 so in the original they regenerate only off screen through their living merchant (RK3), and every one of their sets reads.
 
+ARC-WORLD-094 runs these rows in the session (no new reading): the event `inventory.restock`, the clear and the generation are
+described in [barter runtime](../../world/barter-runtime.md#restock-event-arc-world-094); RK7's fix covers a set emptied before its
+coin pair too (its coins are just as undefined).
+
 ## Made item complexity (ARC-WORLD-083)
 
 Source: [inventory runtime](../../world/inventory-runtime.md#made-item-complexity-arc-world-083). Question: does an item's magick/tech
