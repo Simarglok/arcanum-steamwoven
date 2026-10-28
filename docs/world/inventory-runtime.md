@@ -127,6 +127,8 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
 | Pickup from the ground (0x461810) | item `SAP_GET` (4), then the insert check, then the insertion's `SAP_INSERT_ITEM` (21) | PC / item / —; PC / item / — | get gates: skip default leaves the item; insert-item ignored |
 | Loot, negative `IN` and taking from an NPC (0x461CA0) | recipient's `SAP_TRANSFER` (32), then the insert check, then the removal's `SAP_REMOVE_ITEM` (28), then `SAP_INSERT_ITEM` (21) | holder / PC / item; holder / item / —; PC / item / — | transfer gates; remove-item and insert-item ignored |
 
+- The runs come after the session's own refusals of the item (type, worn, budgets, revision) and before the insert check; the
+  original runs the gate first, so the order differs only for items the session refuses anyway.
 - An item point runs only when the item's facts list it (the seed's script points); the PC's transfer point always runs, and the
   host's `Slot` answers it (the AREA viewer's PC has no slot, so it ends `NoScript`). Without a host, an item that lists its get,
   remove-item or insert-item point is refused as before, and nothing runs.
@@ -137,7 +139,7 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
   no later run).
 - **Skip default of a gate** (get or transfer): the item stays where it is and the insert check is not asked, as in the original. The
   run's global flag writes and printed lines still happen: `InventoryMutationResult.DeclinedBy` names the point, `Item` is null, the
-  disposition is Changed (one revision) when the run wrote flags and NoChange otherwise. The dialog port reports a declined `IN` as
+  disposition is Changed (one revision) when the run wrote flags and NoChange otherwise; an item's decay event stays. The dialog port reports a declined `IN` as
   applied. The AREA viewer names the declining script in the status line and the loot window.
 - **Session policy:** a transfer that is refused after a gate ran (by the insert check or a later run) drops the gate's writes too
   (the original keeps them; no installed item or PC carries a gate script, below).
@@ -398,7 +400,9 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 - Synthetic (ARC-SCRIPT-041): [ItemEventScriptTests](../../tests/Arcanum.Session.Tests/ItemEventScriptTests.cs) (the get script
   before the insert check, its decline with and without effects, the transfer, remove-item and insert-item order of a loot with
   each run reading the earlier writes, the PC's declining transfer script on loot and `IN`, a refused later run or insert check
-  dropping every write). Native smoke: the exterior loot logs `scripts=32::NoScript,21:1341:ReturnSkipDefault` for the amulet.
+  dropping every write, a get read by insert-item, taking from an NPC with a host, a call back during a gate, a declined pickup
+  keeping the item's decay event) and the viewer's `Moved`/`NotMoved` in
+  [AreaInventoryHostTests](../../tests/Arcanum.TerrainViewer.Tests/AreaInventoryHostTests.cs). Native smoke: the exterior loot logs `scripts=32::NoScript,21:1341:ReturnSkipDefault` for the amulet.
 
 - Synthetic (ARC-COMBAT-010): [DropPlacementRulesTests](../../tests/Arcanum.Simulation.Tests/Items/DropPlacementRulesTests.cs)
   (the distance, the critter test of the walk, no path, a long path, the direct attempt's partial count, tries off the map,

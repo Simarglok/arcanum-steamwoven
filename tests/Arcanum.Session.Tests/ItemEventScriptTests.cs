@@ -21,10 +21,12 @@ public sealed class ItemEventScriptTests
         public Dictionary<(string, int), int> Slots { get; } = [];
         public Dictionary<int, ScrProgram> Programs { get; } = [];
         public List<string> Asked { get; } = [];
+        public Action? DuringSlot { get; set; }
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point)
         {
             Asked.Add($"slot {attachee.Code} {point}");
+            DuringSlot?.Invoke();
             return Slots.TryGetValue((attachee.Code, point), out var script) ? new ScrSlot(script, 0, 0) : null;
         }
 
@@ -50,13 +52,18 @@ public sealed class ItemEventScriptTests
     private static string[] Pc(GameSessionOwner owner) => owner.QueryPcInventory().Select(item => item.Entity).ToArray();
     private static (int, string)[] Runs(InventoryMutationResult result) => result.Scripts.Select(run => (run.Point, run.Attachee)).ToArray();
 
-    // "torn" also carries an insert-item script here, so one loot runs the transfer, remove-item and insert-item events.
+    // "torn" also carries an insert-item script here, so one loot runs the transfer, remove-item and insert-item events; "charm" carries
+    // get and insert-item.
     private static GameSessionOwner Seeded()
     {
         var owner = Create();
         var seed = InventoryStateTests.Seed();
-        var items = seed.Items.Select(item => item.Entity == "torn"
-            ? item with { Facts = item.Facts with { ScriptPoints = [SessionScriptPoint.RemoveItem, SessionScriptPoint.InsertItem] } } : item).ToArray();
+        var items = seed.Items.Select(item => item.Entity switch
+        {
+            "torn" => item with { Facts = item.Facts with { ScriptPoints = [SessionScriptPoint.RemoveItem, SessionScriptPoint.InsertItem] } },
+            "charm" => item with { Facts = item.Facts with { ScriptPoints = [SessionScriptPoint.Get, SessionScriptPoint.InsertItem] } },
+            _ => item,
+        }).ToArray();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed with { Items = items }).Disposition);
         return owner;
     }
@@ -71,11 +78,15 @@ public sealed class ItemEventScriptTests
         host.Slots[("charm", SessionScriptPoint.Get)] = GetScript;
         host.Programs[GetScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
         var checks = new List<string>();
+        // The insert-item script copies flag 3 into flag 7: it sees the get script's write before either is applied.
+        Assert.AreEqual(Arcanum.Scripting.GlobalFlags.GlobalFlagWriteDisposition.Applied, WriteFlag(owner, 7, false).Disposition);
+        host.Slots[("charm", SessionScriptPoint.InsertItem)] = InsertScript;
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.Assign, (Flag, 7), (Flag, 3)), C(ScrCatalogue.Action.ReturnSkipDefault));
         var picked = owner.PickUpItem(owner.Version, "charm", item => { checks.Add(string.Join(",", host.Asked)); return SessionInsertVerdict.Accepted; }, host);
         Assert.AreEqual((GameSessionDisposition.Changed, "charm", (int?)null, 1L), (picked.Disposition, picked.Item, picked.DeclinedBy, owner.Version.Revision));
         CollectionAssert.AreEqual(new[] { $"slot charm {SessionScriptPoint.Get}" }, checks, "the get script ran before the insert check");
-        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "charm") }, Runs(picked));
-        Assert.AreEqual(true, ReadFlag(owner, 3));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Get, "charm"), (SessionScriptPoint.InsertItem, "charm") }, Runs(picked));
+        Assert.AreEqual((true, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)));
         CollectionAssert.AreEqual(new[] { "charm" }, Pc(owner));
     }
 
@@ -87,6 +98,9 @@ public sealed class ItemEventScriptTests
         host.Slots[("charm", SessionScriptPoint.Get)] = GetScript;
         var checks = 0;
         SessionInsertVerdict Counted(SessionInventoryItem item) { checks++; return SessionInsertVerdict.Accepted; }
+
+        // A dropped or spilled item lies there with a decay event; a declined pickup keeps it (IE1 returns before anything else).
+        owner.ScheduleDecay("charm", Exterior);
 
         // No effect: nothing changes, not even the revision.
         host.Programs[GetScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
@@ -102,6 +116,7 @@ public sealed class ItemEventScriptTests
         CollectionAssert.AreEqual(new[] { new SessionScriptMessage(GetScript, 2, 0, "line 2 of 600") }, declined.Messages.ToArray());
         Assert.AreEqual((true, 0, 0), (ReadFlag(owner, 3), checks, Pc(owner).Length));
         Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(ground => ground.Item.Entity == "charm"), "the item stays on the ground");
+        Assert.AreEqual("charm", owner.QueryItemDecays().Single().Entity, "a declined pickup keeps the decay event");
 
         // A declining run whose effects the session cannot apply refuses with no effect.
         host.Programs[GetScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
@@ -174,5 +189,45 @@ public sealed class ItemEventScriptTests
         var heavy = owner.LootItem(owner.Version, "corpse", "boots", _ => SessionInsertVerdict.TooHeavy, host);
         Assert.AreEqual((GameSessionFailure.InsertRefused, 1, false), (heavy.Failure, heavy.Scripts.Count, ReadFlag(owner, 3)));
         Assert.AreEqual(0L, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void Taking_from_a_living_npc_runs_the_same_events_and_an_added_item_only_the_pc_gate()
+    {
+        using var owner = Seeded();
+        var host = new Host();
+        host.Slots[("torn", SessionScriptPoint.RemoveItem)] = RemoveScript;
+        host.Slots[("torn", SessionScriptPoint.InsertItem)] = InsertScript;
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        var taken = owner.TakeItemFromNpc(owner.Version, "corpse", "torn", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, "torn"), (taken.Disposition, taken.Item));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Transfer, SessionEventKinds.PlayerEntity), (SessionScriptPoint.RemoveItem, "torn"),
+            (SessionScriptPoint.InsertItem, "torn") }, Runs(taken));
+
+        // An item the hero gave the NPC carries no script points in the session: only the PC's transfer gate runs, and it can decline.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "virgil", "apple", _ => SessionInsertVerdict.Accepted).Disposition);
+        host.Slots[(SessionEventKinds.PlayerEntity, SessionScriptPoint.Transfer)] = TransferScript;
+        host.Programs[TransferScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        var declined = owner.TakeItemFromNpc(owner.Version, "virgil", "apple", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.NoChange, (int?)SessionScriptPoint.Transfer), (declined.Disposition, declined.DeclinedBy));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Transfer, SessionEventKinds.PlayerEntity) }, Runs(declined));
+        host.Programs[TransferScript] = Program(C(ScrCatalogue.Action.ReturnRunDefault));
+        var back = owner.TakeItemFromNpc(owner.Version, "virgil", "apple", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1), (back.Disposition, back.Scripts.Count));
+    }
+
+    [TestMethod]
+    public void A_call_back_into_the_session_during_a_gate_makes_the_transfer_stale()
+    {
+        using var owner = Seeded();
+        var host = new Host();
+        host.Slots[("charm", SessionScriptPoint.Get)] = GetScript;
+        host.Programs[GetScript] = Program(C(ScrCatalogue.Action.ReturnRunDefault));
+        host.DuringSlot = () => owner.PickUpItem(owner.Version, "apple", _ => SessionInsertVerdict.Accepted);
+        var stale = owner.PickUpItem(owner.Version, "charm", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, 1), (stale.Disposition, stale.Failure, stale.Scripts.Count));
+        CollectionAssert.AreEqual(new[] { "apple" }, Pc(owner));
     }
 }
