@@ -180,7 +180,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.Render(new AreaInventoryView([], null, null, []) { Doll = [new(EquipmentSlot.Shield, "syn:torch", "torch")] }, null);
             _inventoryPanel.TakeOffButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(InventoryOpen && _inventoryStatus == "not taken off: no hero to wear it", "the take-off button ran the app's take-off: " + _inventoryStatus);
+            Require(InventoryOpen && _inventoryStatus == "not taken off: no hero", "the take-off button ran the app's take-off: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
             return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button, repair button, wear and take-off buttons";
@@ -295,7 +295,9 @@ public partial class TerrainViewerApp
                     button.EmitSignal(BaseButton.SignalName.Pressed);
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     Require(_areaSession.QueryEquipment().Worn.All(w => w.Slot != slot.Slot) && _inventoryStatus.StartsWith("took off ", StringComparison.Ordinal), "take off: " + _inventoryStatus);
-                    var wear = _inventoryPanel.WearButtonsForSelfTest[_inventoryPanel.WearTargetsForSelfTest.ToList().IndexOf((slot.Entity!, slot.Slot))];
+                    var target = _inventoryPanel.WearTargetsForSelfTest.ToList().IndexOf((slot.Entity!, slot.Slot));
+                    Require(target >= 0, $"a wear button for {slot.Entity} in {slot.Slot}");
+                    var wear = _inventoryPanel.WearButtonsForSelfTest[target];
                     wear.EmitSignal(BaseButton.SignalName.Pressed);
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     Require(_areaSession.QueryEquipment().Worn.Any(w => w.Slot == slot.Slot && w.Entity == slot.Entity) && _inventoryStatus.StartsWith("wore ", StringComparison.Ordinal), "wear: " + _inventoryStatus);

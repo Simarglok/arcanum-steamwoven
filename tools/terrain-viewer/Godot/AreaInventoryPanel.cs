@@ -235,8 +235,10 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     private List<Button> Focusable()
     {
-        var list = _takeOffButtons.Concat(_wearButtons).Concat(_useButtons).Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
+        var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
+        // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
+        list.AddRange(_takeOffButtons.Concat(_wearButtons));
         list.Add(_close);
         return list;
     }

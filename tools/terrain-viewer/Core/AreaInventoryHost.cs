@@ -389,7 +389,7 @@ public sealed class AreaInventoryHost
             EquipmentRefusal.NotDroppable => "the item cannot be moved (no-drop)",
             var other => other.ToString(),
         },
-        GameSessionFailure.EquipmentUnavailable => "no hero to wear it",
+        GameSessionFailure.EquipmentUnavailable => "no hero",
         GameSessionFailure.ItemEffectUnsupported => "the item carries item spells (not supported here)",
         GameSessionFailure.InvalidItem => "the item's wear values are not readable",
         var failure => Refusal(failure, result.Verdict),

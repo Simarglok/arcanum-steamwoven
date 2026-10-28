@@ -773,15 +773,17 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   grid ([ledger IW1–IW9](../research/ledger/ui-audio.md#inventory-window-arc-ui-015)): *Wear* runs the session's `Equip`
   ([equipment](../world/equipment-runtime.md)) with the wear check, the occupant's no-drop and insert checks, and an occupant goes
   back to the pack (in the original it lands in the grid and is then held on the cursor, IW3); *Take off* runs `Unequip`. A refusal
-  is named in the message line (the wear rule, the weight or Technophobia of the insert check, an item script or item spell that
-  cannot run). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
+  is named in the message line (the wear rule, the no-drop flag, a Technophobia hero's technological occupant, an item script or
+  item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
   body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
   scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
   lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): the grid, drag and drop, dropping on the ground or the use icon,
-  right-click use, stack splitting and the gold drag.
+  "no hero: nothing can be worn". Not built yet (follow-up slices): the grid, drag and drop, moving a worn ring to the other ring
+  slot, dropping on the ground or the use icon, right-click use, stack splitting and the gold drag. NOT READY with a worn taken
+  (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
+  taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

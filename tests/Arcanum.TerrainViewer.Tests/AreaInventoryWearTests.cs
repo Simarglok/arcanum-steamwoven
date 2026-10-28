@@ -106,5 +106,8 @@ public sealed class AreaInventoryWearTests
         Assert.AreEqual(0, AreaInventoryHost.WearSlots(null).Count);
         CollectionAssert.AreEqual(new[] { EquipmentSlot.Shield }, AreaInventoryHost.WearSlots(KitWear[0]).ToArray());
         Assert.AreEqual("ring 2", AreaInventoryHost.SlotName(EquipmentSlot.Ring2));
+        var ring = new SessionWearableItem(new(SessionItemType.Armor, 15000, 6100, 6101), [], false,
+            new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring }, HitPoints = 1, MaxHitPoints = 1 });
+        CollectionAssert.AreEqual(new[] { EquipmentSlot.Ring1, EquipmentSlot.Ring2 }, AreaInventoryHost.WearSlots(ring).ToArray(), "a ring offers both ring slots");
     }
 }

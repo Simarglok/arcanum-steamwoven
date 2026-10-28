@@ -289,7 +289,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-015: puts a PC item into a wear slot through the session (the original's drop of a held item on a doll slot, ledger IW3):
-    /// the wear check and the occupant's insert check refuse with a message, an occupant goes back to the pack. The viewer has one
+    /// the wear check and the occupant's no-drop flag and insert check refuse with a message, an occupant goes back to the pack. The viewer has one
     /// diagnostic body art, so it answers the art lookup with yes (as the best-items start does). Moving, wearing and taking off cost
     /// no action points, in a turn-based round too (IW8). The item's scripts run through the item script host; its item spells through
     /// the cast host's triggers when the map has one.
@@ -304,7 +304,9 @@ public partial class TerrainViewerApp
         if (_inventoryHost.Wearable(session, item, _areaKitWear) is not { } wearable) message = $"not worn: {name} has no wear values here";
         else
         {
-            var result = session.Equip(session.Version, item, slot, wearable, (_, _) => true, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), ItemTriggersNow());
+            // The triggers first: building them may rebuild the cast host, which can end a spell goal and change the session.
+            var triggers = ItemTriggersNow();
+            var result = session.Equip(session.Version, item, slot, wearable, (_, _) => true, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), triggers);
             message = AreaInventoryHost.WearText(result, name, slot, false, entity => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog));
             GD.Print($"ARC-UI-015 wear item={item} slot={slot} disposition={result.Disposition} failure={result.Failure} refusal={result.Refusal} " +
                 $"displaced={result.Displaced ?? "-"} rolled-back={result.RolledBack} scripts={result.Scripts.Count} spells={result.ItemSpells.Count} worn={session.QueryEquipment().Worn.Count}");
@@ -315,7 +317,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-015: takes a worn item off into the pack (the original's drop of a worn item on the grid, ledger IW4); the insert
-    /// check (weight, Technophobia) and the item's no-drop flag refuse with a message.</summary>
+    /// check (a Technophobia hero's technological item) and the item's no-drop flag refuse with a message.</summary>
     private void TakeOffItem(EquipmentSlot slot)
     {
         if (!InventoryOpen || !InventoryActive) return;
@@ -323,7 +325,8 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var worn = session.QueryEquipment().Worn.FirstOrDefault(item => item.Slot == slot);
         var name = worn is null ? AreaInventoryHost.SlotName(slot) : _inventoryHost!.ItemName(session, worn.Entity, _hoverNames?.Catalog);
-        var result = session.Unequip(session.Version, slot, _inventoryHost!.InsertCheck, _inventoryHost.ItemScripts(session), ItemTriggersNow());
+        var triggers = ItemTriggersNow();
+        var result = session.Unequip(session.Version, slot, _inventoryHost!.InsertCheck, _inventoryHost.ItemScripts(session), triggers);
         var message = AreaInventoryHost.WearText(result, name, slot, true, entity => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog));
         GD.Print($"ARC-UI-015 take-off slot={slot} disposition={result.Disposition} failure={result.Failure} refusal={result.Refusal} " +
             $"scripts={result.Scripts.Count} spells={result.ItemSpells.Count} worn={session.QueryEquipment().Worn.Count}");
