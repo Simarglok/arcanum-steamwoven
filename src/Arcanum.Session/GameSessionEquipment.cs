@@ -355,6 +355,7 @@ public sealed partial class GameSessionOwner
         }
         if (_equipment.SlotOf(entity) is { } previous) _equipment.Worn.Remove(previous);
         _equipment.Worn[slot] = new(slot, entity, item.Item) { ItemSpells = item.HasItemSpells && triggers is not null };
+        if (current is not null) PlaceInGrid(current.Entity, entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current?.Entity, verdict, Version);
     }
@@ -413,6 +414,7 @@ public sealed partial class GameSessionOwner
         {
             if (previous is { } worn) _equipment.Worn.Remove(worn);
             _equipment.Worn[slot] = new(slot, entity, item.Item) { ScriptPoints = points, ItemSpells = itemSpells };
+            if (current is not null) PlaceInGrid(current.Entity, entity);
         }
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, rolledBack ? null : current?.Entity, verdict, Version)
@@ -439,7 +441,9 @@ public sealed partial class GameSessionOwner
     /// empty slot; refused for an item with the no-drop flag (<see cref="GameSessionFailure.WearRefused"/>,
     /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>; a
     /// technological item for a Technophobia hero is <see cref="SessionInsertVerdict.TechnologyRefused"/>, ARC-WORLD-069), which
-    /// the source asks with the item still worn (its weight counts twice near the carry limit). One revision.
+    /// the source asks with the item out (ARC-UI-019, IW12): the hero's whole load above its carry weight is
+    /// <see cref="SessionInsertVerdict.TooHeavy"/>, and without <paramref name="gridSlot"/> the grid needs a free place for it
+    /// (<see cref="SessionInsertVerdict.NoRoom"/>), which it takes. One revision.
     /// ARC-SCRIPT-042: with <paramref name="scripts"/>, an item with item event scripts runs them after the insert check accepts, as the
     /// original's removal and insertion do (wield off 25, remove item 28, insert item 21; ledger IE6, WE7); without a host such an item is
     /// refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
@@ -499,12 +503,14 @@ public sealed partial class GameSessionOwner
             runs.Commit();
             _equipment.Worn.Remove(slot);
             if (gridSlot is { } into) _inventory.Grid[current.Entity] = new(current.Entity, into, width, height);
+            else PlaceInGrid(current.Entity, null);
             Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version)
                 { Scripts = runs.Runs, Messages = runs.Messages };
         }
         _equipment.Worn.Remove(slot);
         if (gridSlot is { } target) _inventory.Grid[current.Entity] = new(current.Entity, target, width, height);
+        else PlaceInGrid(current.Entity, null);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version);
     }

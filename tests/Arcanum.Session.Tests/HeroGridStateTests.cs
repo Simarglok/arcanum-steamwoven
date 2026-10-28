@@ -27,6 +27,9 @@ public sealed class HeroGridStateTests
         new("bar", Item(5006, 7, 1), new CellCoord(106, 200)),
         new("anvil", Item(5007) with { Weight = 3_990 }, new CellCoord(107, 200)),
         new("pebble", Item(5009), new CellCoord(109, 200)),
+        new("torch", Item(5010), new CellCoord(110, 200)),
+        new("torch2", Item(5011), new CellCoord(111, 200)),
+        new("bar6", Item(5012, 6, 1), new CellCoord(112, 200)),
     ]);
 
     private static GameSessionOwner Hero(RuleMode rules = RuleMode.Steamwoven)
@@ -38,9 +41,9 @@ public sealed class HeroGridStateTests
         return owner;
     }
 
-    private static SessionGridMoveItem Facts(GameSessionOwner owner, string entity, bool noDrop = false) =>
+    private static SessionGridMoveItem Facts(GameSessionOwner owner, string entity) =>
         new(owner.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(owner.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
-            .First(pair => pair.Entity == entity).Kind, noDrop, []);
+            .First(pair => pair.Entity == entity).Kind, false, []);
 
     private static string Layout(GameSessionOwner owner) =>
         string.Join(" ", owner.QueryHeroGrid().Items.Select(item => $"{item.Entity}@{item.Slot}:{item.Width}x{item.Height}"));
@@ -183,6 +186,24 @@ public sealed class HeroGridStateTests
 
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, heavy.MoveHeroItem(heavy.Version, "crate", 70,
             Facts(heavy, "crate") with { ScriptPoints = [SessionScriptPoint.InsertItem] }, Accept).Failure, "its insert-item event needs a script host");
+    }
+
+    [TestMethod]
+    public void An_occupant_takes_the_place_its_check_found_before_an_item_waiting_outside_the_grid()
+    {
+        using var owner = Hero();
+        foreach (var item in new[] { "torch2", "bar6", "slab", "apple", "torch" })
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+        CollectionAssert.AreEqual(new[] { "apple", "torch" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the grid is full");
+        var torch = new EquipmentItem { Kind = EquipmentItemKind.Generic, UsesShieldLocation = true };
+        SessionWearableItem Torch(string entity) => new(Facts(owner, entity).Kind, [], false, torch);
+        Ok(owner.Equip(owner.Version, "torch", EquipmentSlot.Shield, Torch("torch"), Drawn, Accept), owner);
+        var swap = owner.Equip(owner.Version, "torch2", EquipmentSlot.Shield, Torch("torch2"), Drawn, Accept);
+        Assert.AreEqual("torch", swap.Displaced);
+        Assert.AreEqual(3, owner.QueryHeroGrid().Items.Single(item => item.Entity == "torch").Slot, "the cell torch2 left, not the waiting apple");
+        CollectionAssert.AreEqual(new[] { "apple" }, owner.QueryHeroGrid().Unplaced.ToArray());
+        var off = owner.Unequip(owner.Version, EquipmentSlot.Shield, Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom), (off.Failure, off.Verdict), "the grid is full again");
     }
 
     private static (GameSessionFailure, EquipmentRefusal) Refusal(EquipmentMutationResult result) => (result.Failure, result.Refusal);

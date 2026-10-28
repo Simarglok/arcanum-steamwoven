@@ -108,6 +108,9 @@ public sealed partial class GameSessionOwner
         if (!accepted && !runs.Changes)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, verdict, Version)
                 { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = true };
+        if (accepted && current?.Slot == slot && !runs.Changes)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, verdict, Version)
+                { Scripts = runs.Runs, Messages = runs.Messages };
         runs.Commit();
         if (accepted) _inventory.Grid[entity] = new(entity, slot, width, height);
         Revise();
@@ -128,12 +131,23 @@ public sealed partial class GameSessionOwner
 
     // Whether the grid has a free slot for the item (0x4664C0 → 0x4675A0) with its own cells and those of leaving, an item that left
     // too, counted free (the insert check of a move runs with the moved items out, IW3, IW11).
-    private bool HeroGridRoom(string entity, string? leaving)
+    private bool HeroGridRoom(string entity, string? leaving) => FreeGridSlot(entity, leaving).Slot >= 0;
+
+    private (int Slot, int Width, int Height) FreeGridSlot(string entity, string? leaving)
     {
         var occupied = InventoryGridRules.Occupied(_inventory.Grid.Values.Where(item => item.Entity != entity && item.Entity != leaving).Select(item => item.Cells),
             SessionHeroGrid.Rows);
         var (width, height) = _inventory.Grid.TryGetValue(entity, out var placed) ? (placed.Width, placed.Height) : GridSize(entity);
-        return InventoryGridRules.FindSlot(occupied, width, height) >= 0;
+        return (InventoryGridRules.FindSlot(occupied, width, height), width, height);
+    }
+
+    // The item a wear move puts back takes the place its insert check found (IW11), before items waiting outside the grid are placed;
+    // leaving is the item that leaves the grid for the slot.
+    private void PlaceInGrid(string entity, string? leaving)
+    {
+        var (slot, width, height) = FreeGridSlot(entity, leaving);
+        if (leaving is not null) _inventory.Grid.Remove(leaving);
+        if (slot >= 0) _inventory.Grid[entity] = new(entity, slot, width, height);
     }
 
     // The insert check's weight test for an item the hero holds (ledger WE4, IW12): a move removes it first, so its own weight counts once,

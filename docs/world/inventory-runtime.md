@@ -720,7 +720,8 @@ a kit or made item's 1 × 1; the inventory art's size is not read yet, so every 
 
 - **Placement.** After every change (`Revise`) an item that left the PC's list or was put on loses its slot first, then each held item
   without one takes the first top-left free place for its size, row by row, in list order (kit, taken, made); a new session's kit
-  does so in kit order. An occupant a wear move puts back therefore lands where the worn item's cells count as free (IW11). An item
+  does so in kit order. An occupant a wear move puts back (and an item taken off without a cell) takes the place its insert check found, with the worn
+  item's cells free, before any waiting item is placed (IW11). An item
   without room keeps no slot (`SessionHeroGrid.Unplaced`) and takes the first that frees: the original's insert check refuses it
   before it enters, but the room of an item entering from outside (pickup, loot, IN, barter, assembly) stays the host's answer (NOT
   READY), so the session lets it wait outside the grid.
@@ -736,13 +737,16 @@ a kit or made item's 1 × 1; the inventory art's size is not read yet, so every 
   the hero's load above its carry weight refuses (`TooHeavy`; the load counts the moved item once, the occupant without the item that
   replaces it), then Technophobia, then the room (`NoRoom`: no free place for the item going to the grid, the moved item's cells
   free). Under the Original setting a worn ring moved to the other ring slot needs a free place too (IW13); Steamwoven moves it
-  without the room test (switch `ItemRuleProfile.WornMoveNeedsRoom`, IWA1). The best-items start answers no room (its occupants left
-  the grid a moment before).
+  without the room test (switch `ItemRuleProfile.WornMoveNeedsRoom`, IWA1). The best-items start tests neither the load nor the room
+  (not read for that caller).
 - **Snapshot schema 52.** `inventory.grid` lists the slotted items in strictly ascending slot order (`entity`, `slot`, `width` 1..10,
   `height` 1..12); a restore refuses (`InvalidGrid`) an item the PC does not hold or wears, one listed twice, a rectangle outside the grid
   or two that share a cell. A restore places nothing: the next change does. Schemas 1..51 are refused.
 
-**Not ready.** The inventory art's size of an item; the room of items entering from outside; the drop to the ground and the use icon;
+**Not ready.** The inventory art's size of an item (a size is taken when the item takes a slot; a worn or waiting item whose seed is
+not attached then counts as 1 × 1); the room of items entering from outside; a restore accepts a grid that leaves out held items
+there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
+that its insert check refuses (IW15); the drop to the ground and the use icon;
 the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
 
 ## Next steps

@@ -41,8 +41,9 @@ public partial class AreaInventoryGridArea : Control
     public void Render(AreaInventoryView view)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
-        // A held item the lists no longer show cannot be dropped any more.
-        if (Held is { } held && !view.Grid.Any(item => item.Entity == held.Entity) && !view.Doll.Any(slot => slot.Entity == held.Entity)) Held = null;
+        // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
+        if (Held is { } held && (held.Worn is { } worn ? view.Doll.FirstOrDefault(slot => slot.Slot == worn)?.Entity != held.Entity
+                : !view.Grid.Any(item => item.Entity == held.Entity))) Held = null;
         QueueRedraw();
     }
 
