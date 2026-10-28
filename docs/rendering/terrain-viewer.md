@@ -132,6 +132,12 @@ ready, an empty folder refused, Original chosen, Play storing it and starting un
 `launcher reason=None` and the menu smoke runs at once. Not done: applying the display at start, keyboard and
 controller use of the screen (mouse only), the candidate paths and the folder dialog on Windows and with wrappers (F0).
 
+ARC-DEV-047: the launcher and the main menu show the build in their bottom right corner (`ViewerBuildInfo`):
+`Arcanum Steamwoven alpha · main <commit> · <date>` in a package of `./arcanum package`, `source run (not a packaged
+build)` otherwise; every run prints `ARC-DEV-047 build <line> user=<user folder>` at start. A package runs under the
+`steamwoven_package` feature: player name `Arcanum Steamwoven` and its own user folder `Arcanum Steamwoven Game`
+([packaging](../workflow/packaging.md)).
+
 ## Diagnostic rendering contract
 
 Core is Godot-independent. Each coordinator request creates one caller-owned,

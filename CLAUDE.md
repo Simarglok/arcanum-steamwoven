@@ -85,7 +85,8 @@ yet. Current state: the component catalogue
   terrain viewer (AREA and WORLD modes), `terrain-inspect`, research probes and
   the local export/lease/retention authority (`arcanum-local`, `local_dev`);
   labs live in `experiments/`.
-- Launcher: `./arcanum` wraps `tools/arcanum-local`. Never delete `artifacts/`
+- Launcher: `./arcanum` wraps `tools/arcanum-local`; `./arcanum package mac` builds the player's
+  alpha from a fresh `origin/main` into `artifacts/packages/macos` ([packaging](docs/workflow/packaging.md)). Never delete `artifacts/`
   or a build in it by hand, and never advise it: `./arcanum clean` and
   [build retention](docs/workflow/build-retention.md) say what may go. When a
   viewer mode gains or changes an argument or input, update
