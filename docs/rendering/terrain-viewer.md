@@ -761,7 +761,9 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   while poisoned) and the fatigue column (blue), each filled from row d + 1 to row 100 where d is the damage percent
   (damage × 100 / maximum, so 2 of 3 hit points fill from row 34, not by the life percent), and each current value
   printed `%02d` in white at the fill's top, the poison level 40 rows lower; nothing filled at 100 % damage. The original
-  divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes. The original's font (art
+  divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes; and it shifts a poisoned
+  PC's health number off centre by reusing the poison text's rectangle, which the viewer centres in both modes (both
+  technical). The original's font (art
   229) is not drawn; Godot's default font stands in.
 - **Follower frames** (CH9, PA6). The [follower portraits](../world/companion-orders-runtime.md#area-viewer) are the
   original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
@@ -770,8 +772,8 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   (504) at 3, 44, cropped to the percent, and pure red added over the portrait below 20 % health. A follower's portrait
   is its stored field 0xE7 (critter slot 49 of its map record), its image the portrait catalogue's small `.bmp`
   (ARC-DATA-045), read when a follower first needs it. A press on a frame opens the order menu as before; the name is
-  the frame's tooltip. Without the art (no game folder) a frame is a dark rectangle with the name's first letters and
-  plain bars.
+  the frame's tooltip. The diagnostic HUD starts right of the frames while any is shown. Without the art (no game
+  folder) a frame is a dark rectangle with the name's first letters and plain bars.
 - **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
   in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
   and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered

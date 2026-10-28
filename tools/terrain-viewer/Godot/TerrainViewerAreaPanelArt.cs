@@ -13,19 +13,22 @@ public partial class TerrainViewerApp
     private string? _portraitModule;
     private readonly Dictionary<int, Texture2D?> _portraitTextures = [];
 
-    /// <summary>Reads the frame art and the portraits <paramref name="followers"/> need that are not read yet, and binds the art.</summary>
+    /// <summary>Reads the frame art and the portraits <paramref name="followers"/> need that are not read yet (one content stack
+    /// opening for both), and binds the art.</summary>
     private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers)
     {
         var module = _arguments?.ModulePath;
+        var ids = followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray();
         if (_portraitContent is null || module != _portraitModule)
         {
             _portraitModule = module; _portraitTextures.Clear();
-            _portraitContent = SelfTestBootstrap || module is null ? AreaPortraitContent.Empty("self-test: no game folder") : AreaPortraitContent.Load(module, []);
+            _portraitContent = SelfTestBootstrap || module is null ? AreaPortraitContent.Empty("self-test: no game folder") : AreaPortraitContent.Load(module, ids);
             _followerPortraits?.Bind(InterfaceTextures(_portraitContent.Art));
             GD.Print($"ARC-UI-024 follower frames art ready={_portraitContent.ArtReady} {_portraitContent.Detail}");
+            return;
         }
         if (SelfTestBootstrap || module is null) return;
-        var wanted = followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Where(id => !_portraitContent.Portraits.ContainsKey(id)).ToArray();
+        var wanted = ids.Where(id => !_portraitContent.Portraits.ContainsKey(id)).ToArray();
         if (wanted.Length == 0) return;
         _portraitContent = AreaPortraitContent.Load(module, wanted, _portraitContent);
         GD.Print($"ARC-UI-024 portraits {string.Join(",", wanted)}: {string.Join("; ", wanted.Select(id => _portraitContent.Portraits.TryGetValue(id, out var file) ? file.Status + " " + file.Detail : "not read"))}");

@@ -98,6 +98,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
     internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
         _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
 
+    /// <summary>The window x of the frames' right edge while any is shown, else 0: the diagnostic HUD starts right of it.</summary>
+    public float RightEdge => Visible && _entries.Count > 0
+        ? _root.Position.X + (AreaFollowerFrameLayout.X + AreaFollowerFrameLayout.Width) * _root.Scale.X : 0;
+    /// <summary>Raised when <see cref="RightEdge"/> may have changed (frames shown, hidden or scaled).</summary>
+    public event Action? EdgeChanged;
+
     /// <summary>Whether the order menu is shown.</summary>
     public bool MenuShown => _menu.Visible;
 
@@ -122,13 +128,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
         Hide();
     }
 
-    private void Resized() { CloseMenu(); Place(); }
+    private void Resized() { CloseMenu(); Place(); EdgeChanged?.Invoke(); }
 
     /// <summary>Gives the frames their interface art (frame 0 of 503, 504, 505 and 616 by number); missing numbers draw the fallback.</summary>
     public void Bind(IReadOnlyDictionary<int, Texture2D> art)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        _signature = "";
+        // No list matches it: the next Show rebuilds the frames with the new art, an empty list included.
+        _signature = "\0";
     }
 
     /// <summary>Shows one frame per follower (entity, label, life, portrait) in array order, at most six, with its bars; hidden when
@@ -183,6 +190,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             }
             Visible = shown.Length > 0;
             Place();
+            EdgeChanged?.Invoke();
         }
         foreach (var (entity, _, life, _) in shown)
         {

@@ -123,9 +123,9 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
         var wanted = ids.Where(id => known?.Portraits.ContainsKey(id) != true).Distinct().ToArray();
         if (known is not null && wanted.Length == 0) return known;
         var found = AreaContentRoot.Discover(modulePath);
-        if (found.Status != AreaContentRootStatus.Ready) return known ?? Empty($"not read ({found.Status} {found.Detail})");
+        if (found.Status != AreaContentRootStatus.Ready) return Failed(known, wanted, $"not read ({found.Status} {found.Detail})");
         var opened = ContentStack.Open(found.Plan!);
-        if (opened.Status != ContentStackStatus.Ready) return known ?? Empty($"not read (content stack {opened.Status})");
+        if (opened.Status != ContentStackStatus.Ready) return Failed(known, wanted, $"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         var art = known?.Art ?? AreaInterfaceArt.Load(stack, AreaFollowerFrameLayout.ArtNumbers);
         PortraitCatalogue? catalogue = known?.Catalogue;
@@ -141,5 +141,14 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
         var failed = art.Values.Count(load => load.Status != AreaInterfaceArtStatus.Ready);
         return new(art, catalogue, portraits,
             $"art {art.Count - failed}/{art.Count} read; {catalogueDetail}; portraits {portraits.Values.Count(p => p.Status == AreaPortraitStatus.Ready)}/{portraits.Count} read");
+    }
+
+    // The game folder did not open: the wanted ids are recorded as unread, so a later load does not try them again.
+    private static AreaPortraitContent Failed(AreaPortraitContent? known, IEnumerable<int> wanted, string reason)
+    {
+        var content = known ?? Empty(reason);
+        var portraits = new Dictionary<int, AreaPortraitFile>(content.Portraits);
+        foreach (var id in wanted) portraits[id] = new(id, AreaPortraitStatus.CatalogueMissing, null, null, reason);
+        return content with { Portraits = portraits };
     }
 }

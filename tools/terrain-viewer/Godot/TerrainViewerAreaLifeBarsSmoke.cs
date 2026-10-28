@@ -119,8 +119,10 @@ public partial class TerrainViewerApp
                 var view = GetViewport().GetVisibleRect().Size; var factor = AreaGameBarPanel.ScreenFactor(view);
                 Require(frame!.Value.Rect.Position.IsEqualApprox(new Vector2(AreaGameBarPanel.ScreenLeft(view, factor) + AreaFollowerFrameLayout.X * factor, AreaFollowerFrameLayout.FirstY * factor))
                     && frame.Value.Rect.Size.IsEqualApprox(new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height) * factor), $"{when}: frame place {frame.Value.Rect} at factor {factor}");
+                // The stage's follower (on bates mansion lev 2) has a portrait: it must read and be drawn.
                 var file = storedPortrait is { } id ? _portraitContent?.Portraits.GetValueOrDefault(id) : null;
-                Require((frame.Value.Portrait is not null) == (file is { Status: AreaPortraitStatus.Ready }), $"{when}: portrait {storedPortrait} drawn={frame.Value.Portrait is not null} file={file?.Status} {file?.Detail}");
+                Require(frame.Value.Portrait is not null && file is { Status: AreaPortraitStatus.Ready }, $"{when}: portrait {storedPortrait} drawn={frame.Value.Portrait is not null} file={file?.Status} {file?.Detail}");
+                Require(_hud is null || !_hud.Rect.Intersects(frame.Value.Rect), $"{when}: the diagnostic HUD {_hud?.Rect} starts right of the frame {frame.Value.Rect}");
                 Require(frame.Value.PortraitRect.Position.IsEqualApprox(frame.Value.Rect.Position + new Vector2(AreaFollowerFrameLayout.ImageX, AreaFollowerFrameLayout.ImageY) * factor)
                     && frame.Value.PortraitRect.Size.IsEqualApprox(new Vector2(AreaFollowerFrameLayout.PortraitSize, AreaFollowerFrameLayout.PortraitSize) * factor),
                     $"{when}: the portrait is drawn at 4, 4 at 32 × 32: {frame.Value.PortraitRect}");
@@ -208,7 +210,7 @@ public partial class TerrainViewerApp
             HoverAtForSelfTest(barsPoint);
             var messagePortrait = _gameBarPanel.HoverPortraitForSelfTest;
             var portraitShown = FollowerPortrait(companion) is not null;
-            Require((messagePortrait.Image is not null) == portraitShown && (!portraitShown || messagePortrait.Name == CompanionName(companion)),
+            Require(portraitShown && messagePortrait.Image is not null && messagePortrait.Name == CompanionName(companion),
                 $"the message window shows the follower's portrait ({portraitShown}): {messagePortrait}");
             if (portraitShown)
                 Require(messagePortrait.Rect.Position.IsEqualApprox(origin + new Vector2(AreaGameBarLayout.HoverImage.X, AreaGameBarLayout.HoverImage.Y) * factor)
