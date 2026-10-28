@@ -78,7 +78,9 @@ public sealed class NpcTransferStateTests
         Refused(owner.TakeGoldFromNpc(owner.Version, "merchant", -1), GameSessionFailure.InvalidItem);
         Refused(owner.TakeGoldFromNpc(owner.Version, "made:1", 1), GameSessionFailure.InvalidItem);
         Refused(owner.TakeGoldFromNpc(new(owner.Identity, 7), "merchant", 1), GameSessionFailure.StaleVersion);
-        Refused(owner.TakeGoldFromNpc(owner.Version, "chest", 1), GameSessionFailure.UnknownHolder);
+        // ARC-WORLD-101: a standing container is a holder too (its loot window); this one holds no coins.
+        Refused(owner.TakeGoldFromNpc(owner.Version, "chest", 1), GameSessionFailure.GoldShort);
+        Refused(owner.TakeGoldFromNpc(owner.Version, "ghost", 1), GameSessionFailure.UnknownHolder);
         Refused(owner.GiveGoldToNpc(owner.Version, "merchant", 1, GoldPile with { Type = SessionItemType.Generic }, Accept), GameSessionFailure.InvalidItem);
         Refused(owner.GiveGoldToNpc(owner.Version, "merchant", 386, GoldPile, Accept), GameSessionFailure.GoldShort);
         Refused(owner.GiveGoldToNpc(owner.Version, "virgil", 1, GoldPile, _ => SessionInsertVerdict.NoRoom), GameSessionFailure.InsertRefused);
