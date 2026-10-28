@@ -1,12 +1,14 @@
 # Trap state (ARC-WORLD-076)
 
-Status: **Implemented** (Godot-free rules and session owner), slice 1 of the trap domain
+Status: **Implemented** (Godot-free rules and session owner), slices 1 and 2 of the trap domain
 ([FR-NAV-006](../requirements/world-travel-runtime.md#fr-nav-006)). No caller yet: the
 viewer's container window still refuses a trapped container, the walk does not look for
-traps, and the spot and disarm rolls (skills plan S10), the effects of the native trap
-scripts and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. The rules follow
-the retail 1.0.7.4 executable as read in
-[ledger TT1–TT10](../research/ledger/technology.md#trap-state-arc-world-076).
+traps, and the spot and disarm rolls (skills plan S10), the shot of script 30002 and the
+trap devices (ARC-TECHNOLOGY-011/012) are later slices. The effects of the other native
+trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-world-107)). The rules
+follow the retail 1.0.7.4 executable as read in
+[ledger TT1–TT10](../research/ledger/technology.md#trap-state-arc-world-076) and
+[TT11–TT16](../research/ledger/technology.md#trap-effects-arc-world-107).
 
 ## What a trap is
 
@@ -32,7 +34,7 @@ script, which the interpreter runs.
 | `MarkSpotted(observer, carrier, objectFlags, quiet)` | 0x4BC090 | Only the player or an NPC led by a PC sets the spotted flag; a trap object also loses don't-draw. The player gets line 0 of `mes\trap.mes` unless the caller is quiet. |
 | `Disarm(trap, known, success, critical, training, device)` | 0x4BC7B0 | Nothing without a trap or when the disarmer does not know it; success removes it, an expert's (training ≥ 2) critical success also yields the device; a critical failure sets it off; any other failure does nothing. |
 | `DevicePrototype(script, objectFlags, counters)` | 0x4BC9C0 | A native script only. A PC-placed trap gives 6047, or 15101 when the counters' top byte is set; otherwise the table 0, 6047, 7038, 7039, 7041, 7040, 10065, 0 for 30000..30007. |
-| `NativeRun(script, headerFlags)` | 0x4BCB70 (frame) | Null when the trap code does not take the script. 30007 is taken and does nothing. Classifies the effect only (30000 a spell, 30001..30006 an attack; decoding the counters is 0x4BCDC0's, a later slice); the victims are every PC and NPC in the square of half side 4, 2 or 1 (file flag 0x80, 0x40, 0x20) around the trapped object, or the triggerer alone; header flag 0x4 clears the script's own number. Also the eye candy lines of `Rules\TrapEyeCandy.mes` (3k played on the triggerer, 3k + 1 on each victim, 3k + 2 the spotted mark stopped on the trapped object, k = script − 30000; a spot mark plays 3k + 2 on a trapped object with a native script and a removal stops it). |
+| `NativeRun(script, headerFlags)` | 0x4BCB70 (frame) | Null when the trap code does not take the script. 30007 is taken and does nothing. Classifies the effect only (30000 a spell, 30001..30006 an attack; decoding the counters is 0x4BCDC0's, `TrapEffectRules.Of`); the victims are every PC and NPC in the square of half side 4, 2 or 1 (file flag 0x80, 0x40, 0x20) around the trapped object, or the triggerer alone; header flag 0x4 clears the script's own number. Also the eye candy lines of `Rules\TrapEyeCandy.mes` (3k played on the triggerer, 3k + 1 on each victim, 3k + 2 the spotted mark stopped on the trapped object, k = script − 30000; a spot mark plays 3k + 2 on a trapped object with a native script and a removal stops it). |
 | `StepTriggers(moverSpellFlags)` | 0x4305D0 (trap gate only) | A mover with spell flag 0x2 or 0x4 (field 0x14) sets off no trap object. |
 
 ## Session owner (`GameSessionOwner`)
@@ -70,7 +72,7 @@ The session decides the spot and the trap's own run; the dispatcher runs scripts
 
 - A use of a trapped object: the host calls `TriggerTrap(Use, …)` first, with its spot roll.
   `Spotted` cancels the use; `NoTrap` lets the use go on as an ordinary dispatch; `Fired`
-  with a native run is the trap code's run (its effects are a later slice), and with a null
+  with a native run is the trap code's run (its effects: `SessionSpellCaster.ApplyTrapEffect`), and with a null
   run the host dispatches the ordinary trap script at the use point, its
   `CheckTrapBeforeUse` answering `NotSpotted` (the spot is decided), so E2 rolls only once.
 - A step: the same with `Step` on the trap object of the destination tile.
@@ -78,14 +80,55 @@ The session decides the spot and the trap's own run; the dispatcher runs scripts
   slot write-back (TT7), which the dispatcher's object entry point does not offer yet: such a
   host stops at the session's answer.
 
+## Effects (ARC-WORLD-107)
+
+A fired native run (`Fired` with a run) is applied by the cast host,
+`SessionSpellCaster.ApplyTrapEffect(SessionTrapFiring)`, with the trapped object, the
+triggerer, the run, the use script's counters and the trapped object's object flags (the
+trap state's), and for script 30002 the shooter candidates the host lists. The rules are
+`Arcanum.Simulation.Traps.TrapEffectRules` (ledger TT11–TT16):
+
+| Method | Original | What it does |
+| --- | --- | --- |
+| `Of(script, counters)` | 0x4BCDC0 (cases) | 30000 a spell (top byte, cast even when 0); 30001 and 30003 normal damage, 30004 fire, 30005 electrical, 30006 poison, in the range of the low byte and the second byte; 30002 a shot of normal damage whose shooter's tag is the third byte; after a damage or a shot the top byte's spell when it is not 0. Null for any other number. |
+| `Shooter(candidates, tag)` | 0x4BD150 | The first candidate whose use script is 30007 and whose counters' third byte is the tag, or none. |
+| `CreditsPlayer(objectFlags)` | 0x4BD950 | A PC-placed trap (object flag 0x1000000) makes the player the damage source. |
+| `Amount(effect, rolls)` | 0x4CEF00 | The range drawn once per victim (labelled `combat.Damage<type>`): no draw for an empty range, a reversed one swapped. |
+
+For each victim, in order (every PC and NPC of the map's square around the trapped object,
+or the triggerer alone for radius 0, none without a triggerer):
+
+- **Damage** (30001, 30003..30006): the amount in the type's slot through the damage step
+  (`AttackResolver.DamageStep`, the same as a spell's) with the trapped object as a non-PC
+  attacker and no weapon flag (TT13); a critter's life takes it through
+  `GameSessionOwner.ApplyDamage` with the trapped object as attacker and the player (for a
+  PC-placed trap) as the source, which fires the life item events; an object takes it
+  through the map (`ISpellCastMap.DamageObject`). The item events the step calls for fire
+  before the victim's spell and the next victim, as inside the original's call. The hit's
+  damage effect (TT14) is the host's to show.
+- **Shot** (30002): no shooter, no effect at all (no spell either); with a shooter the
+  result is `ShotNotReady` and nothing is applied yet: the shot (the dispatcher 0x4B3170
+  with a non-critter attacker, TT15), its draw and its spell are a later slice together. The
+  host lists the shooter candidates around the triggerer; without a triggerer it lists none.
+- **Spell**: 30000, and any damage with a top byte (a shot's comes with the shot slice), starts the spell at the victim
+  with no parent and no source (TT16); its BEGIN comes as an event of the host's pass. An
+  unknown spell number casts nothing.
+
+The result (`SessionTrapEffectResult`) names the effect, the damage source and each victim's
+outcome, amount, damage step, hit points taken, shooter and spell run. The floating line
+`mes\trap.mes` 1 over the triggerer (`TrapEffectRules.FiredLine`) and the eye candy lines of
+the run are the host's. The effects add no session state of their own: the life, object and
+spell run owners record them.
+
 ## Not modelled here
 
 - The spot trap and disarm traps rolls, the spot modifier of the item at inventory
   location 1005 and the master's second roll (S10).
 - The walk's spot before each step (0x427110, ledger TT10) and the route cost of a known
   trap (DC8): the walk is the host's.
-- The effects of the native trap scripts (0x4BCDC0: the spell and the attacks), their
-  messages and eye candy.
+- The shot of script 30002 (TT15) with its draw and its spell (a found shooter applies
+  nothing yet), and the shooter list's rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
+  are the host's presentation.
 - Trap devices placed by the player (ARC-TECHNOLOGY-011/012, ledger TP1–TP8) and the
   multiplayer per-player lists.
 
@@ -95,3 +138,8 @@ The session decides the spot and the trap's own run; the dispatcher runs scripts
 - `tests/Arcanum.Session.Tests/TrapStateTests.cs`: baseline, spot marks, use, step, attack
   and ordinary script triggers, disarm outcomes on trapped and trap objects, a trap armed
   again after a removal, a full change budget, snapshot round trip and refusals.
+- `tests/Arcanum.Simulation.Tests/Traps/TrapEffectRulesTests.cs`: the decoding, the shooter
+  search, the damage source and the amount draw.
+- `tests/Arcanum.Session.Tests/TrapEffectTests.cs`: victims (square and triggerer), one draw
+  per victim, each damage type's slot, the damage source, an object victim, the spell with no
+  caster, a damage's spell, the shot with and without a shooter, and 30007.
