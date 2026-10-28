@@ -436,27 +436,41 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).
+        // An item a script creates has its prototype's weight (not saved, so attached before the creations).
+        if (effects.Creations.Count > 0) _session.AttachItemWeights(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Weight);
         foreach (var request in effects.Creations)
         {
             var item = _world!.Item(request.Prototype)!;
-            var result = _session.CreateGroundItem(_session.Version, item.Kind, new SessionMapId(_shownMap), Place(request.Near)!.Value, _world.DropMap()!);
+            var result = _session.CreateGroundItem(_session.Version, item.Kind, new SessionMapId(_shownMap), Place(request.Near)!.Value, _world.DropMap()!,
+                OwnerOf(request.Near));
             _created.Add(new(request.Prototype, request.Near, result));
             if (result.Disposition == GameSessionDisposition.Rejected) return false;
         }
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 
-    // The first create object of the run the viewer cannot apply, named; null when every one can be.
+    // The first create object of the run the viewer or the session cannot apply, named; null when every one can be, so a run is never left
+    // half applied by a creation.
     private string? Creatable(ScrEffects effects)
     {
         if (effects.Creations.Count == 0) return null;
         if (_world is null || _world.DropMap() is null) return "needs the shown map";
         foreach (var request in effects.Creations)
         {
-            if (_world.Item(request.Prototype) is null) return $"{request.Prototype}: no item prototype";
-            if (request.Near.Map != _shownMap || Place(request.Near) is null) return $"{request.Prototype}: {request.Near.Code} has no place on the shown map";
+            if (_world.Item(request.Prototype) is not { } item) return $"{request.Prototype}: no item prototype";
+            if (request.Near.Map != _shownMap || Place(request.Near) is not { } near) return $"{request.Prototype}: {request.Near.Code} has no place on the shown map";
+            if (_session.QueryCreateGroundItemRefusal(item.Kind, new SessionMapId(_shownMap), near, effects.Creations.Count) is { } refused)
+                return $"{request.Prototype}: the session would refuse it ({refused})";
         }
         return null;
+    }
+
+    // The walk's owner beside the object a creation names (PG2): the PC and its companions are the PC's side, another NPC an NPC, any other
+    // object an object.
+    private DropOwner OwnerOf(ScrObjectRef near)
+    {
+        if (IsPc(near) || Leader(near) is not null) return DropOwner.PcSide;
+        return Row(near) is { Type: 15 or 16 } ? DropOwner.Npc : DropOwner.Object;
     }
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)

@@ -96,14 +96,9 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
         _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
-        // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way. ARC-WORLD-081: an item a script
-        // creates has its prototype's weight (not saved, so attached before each run).
-        _mapTransfers.PlacedRunner = (placed, refusal) =>
-        {
-            if (UseScriptHost(area.Snapshot) is not { } host) return new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
-            _areaSession!.AttachItemWeights(prototype => PrototypeItems()?.Item(prototype)?.Weight);
-            return Awarded(host, host.RunPlaced(placed, _areaSession.Rules.Scripts, refusal));
-        };
+        // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
+        _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
+            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";

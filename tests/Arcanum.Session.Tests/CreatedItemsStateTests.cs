@@ -112,4 +112,40 @@ public sealed class CreatedItemsStateTests
         Create(owner);
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.CreateGroundItem(stale, Herb, Exterior, Marker, new OpenMap()).Failure);
     }
+    [TestMethod]
+    public void Next_to_a_critter_nothing_is_capped_and_the_refusal_check_matches_the_creation()
+    {
+        using var owner = Owner();
+        for (var i = 0; i < CreatedItemRules.Limit + 2; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.CreateGroundItem(owner.Version, Herb, Exterior, Marker, new OpenMap(), DropOwner.PcSide).Disposition);
+        Assert.AreEqual(0, owner.QueryCreatedItemRoom(Exterior, Marker), "the object's patch is full, but beside a critter nothing is held back");
+        Assert.IsNull(owner.QueryCreateGroundItemRefusal(Herb, Exterior, Marker));
+        Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.QueryCreateGroundItemRefusal(Herb with { Type = SessionItemType.Ammo }, Exterior, Marker));
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.QueryCreateGroundItemRefusal(Herb, Exterior, new(-1, 0)));
+        using var small = Owner(limits: new GameSessionLimits(maxCreatedItems: 3));
+        Assert.IsNull(small.QueryCreateGroundItemRefusal(Herb, Exterior, Marker, 3));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, small.QueryCreateGroundItemRefusal(Herb, Exterior, Marker, 4));
+    }
+
+    [TestMethod]
+    public void Created_rows_decode_with_their_own_budget_and_restore_refuses_what_a_script_cannot_create()
+    {
+        using var owner = Owner();
+        owner.AttachItemWeights(_ => new SessionItemWeight(1, 0, -7));
+        Create(owner);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"complexity\":-7");
+        // A created ammunition row, or one with an origin, is refused; a created row needs no hero.
+        Assert.AreEqual(GameSessionFailure.InvalidItem, RestoreFailure(text.Replace("\"type\":\"Food\",\"prototype\":10081", "\"type\":\"Gold\",\"prototype\":10081")));
+        Assert.AreEqual(SnapshotDecodeFailure.NotCanonical,
+            GameSessionSnapshotCodec.TryDecode(text.Replace("\"source\":\"created\",\"origin\":0", "\"source\":\"created\",\"origin\":79")).Failure);
+        // Over the policy's created budget the decoder refuses before restore.
+        var row = text[(text.IndexOf("{\"entity\":\"made:1\"", StringComparison.Ordinal))..];
+        row = row[..(row.IndexOf('}') + 1)];
+        var many = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxCreatedItems + 1).Select(n => row.Replace("made:1", $"made:{n}")));
+        Assert.AreEqual(SnapshotDecodeFailure.BudgetExceeded, GameSessionSnapshotCodec.TryDecode(text.Replace(row, many)).Failure);
+    }
+
+    private static GameSessionFailure RestoreFailure(string text) => GameSessionOwner.Restore(Decode(text), RestoreOptions()).Failure;
 }
+

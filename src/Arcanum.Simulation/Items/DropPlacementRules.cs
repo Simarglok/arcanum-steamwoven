@@ -91,16 +91,18 @@ public static class DropPlacementRules
     /// ARC-WORLD-081: the tile a script's create object (action 52, 0x447220) puts the new object on next to <paramref name="near"/>'s tile
     /// (ledger PG1, PG2): up to <see cref="Tries"/> tries, each drawing a distance 1..3 and then the placement's direction, the placement
     /// failing only when a step leaves the map; after the last failure the object's own tile. The object it is created next to is no
-    /// critter owner for the walk (the plant generator's marker is scenery), so a try's path decides as for an object's drop.
+    /// critter owner for the walk when it is an object (the plant generator's marker is scenery); next to a critter <paramref name="owner"/>
+    /// names its side, and the walk stops on the first tile with no PC or NPC (PG2).
     /// </summary>
-    public static CellCoord PlaceCreated(CellCoord near, IDropMap map, IDropRolls rolls)
+    public static CellCoord PlaceCreated(CellCoord near, IDropMap map, IDropRolls rolls, DropOwner owner = DropOwner.Object)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(rolls);
+        if (!Enum.IsDefined(owner)) throw new ArgumentOutOfRangeException(nameof(owner));
         for (var attempt = 0; attempt < Tries; attempt++)
         {
             var distance = Checked(rolls.Roll(DropRoll.Distance, MinCreateDistance, MaxCreateDistance), MinCreateDistance, MaxCreateDistance);
-            if (Try(near, distance, DropOwner.Object, map, rolls) is { } landed) return landed;
+            if (Try(near, distance, owner, map, rolls) is { } landed) return landed;
         }
         return near;
     }

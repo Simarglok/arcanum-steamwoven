@@ -51,8 +51,9 @@ world commands of `ScrAdmissionSet.S15`:
   walking actor's committed cell. As a single object it names the list's first object.
 - **Create object** (52, PG1, PG8, PG12): the prototype number as named and the first object of operand 1; an absent object creates
   nothing. The viewer adds 20 to find the prototype file and reads its type, name, description, art and weight
-  (`AreaPrototypeItems`); a prototype that is no item the session knows (or anything else the viewer cannot apply: no shown map, an
-  object without a place) leaves the whole run unapplied (`EffectsRejected`).
+  (`AreaPrototypeItems`); before anything of the run applies, every creation is checked (a prototype that is no item the session
+  creates — no ammunition, gold or key —, no shown map, an object without a place, the created items' budget), and one that fails leaves the
+  whole run unapplied (`EffectsRejected`), so a creation never leaves a run half applied.
 - **Counters with any index** (PG6): a counter operand is admitted with any index and reads or writes counter (index mod 4), as the
   original's shift keeps five bits; the generator's index 2,012,780,696 reads counter 0.
 
@@ -61,7 +62,9 @@ world commands of `ScrAdmissionSet.S15`:
 `GameSessionOwner.CreateGroundItem` places it: up to ten tries, each drawing a distance 1..3 and then the placement's direction 0..8
 (8 stays) from the session's generator (`DropPlacementRules.PlaceCreated` over the viewer's `AreaDropMap`, the same placement 0x4F4E40
 a drop uses); a try fails only when a step leaves the map, and a path that is missing or longer than the distance + 1 keeps the
-object's own tile; after ten failures the object's own tile (PG1, PG2). The object is the marker (scenery), so no critter test applies.
+object's own tile; after ten failures the object's own tile (PG1, PG2). Next to the marker (scenery) no critter test applies; next to a
+critter (another script's create next to the PC or an NPC) the walk stops on the first tile with no PC or NPC (PG2), as the PC's side or
+an NPC.
 
 The item is a placed item of source `created` (snapshot schema 47): a new `made:n` entity numbered with the made items, the
 prototype's kind, weight facts and complexity, on the shown map at that cell. It needs no hero, schedules no decay (the creation never
@@ -81,8 +84,9 @@ Why these values: the vicinity reach is the original's own play view (the viewer
 the owner asked for is that view's 10 tiles; the 3-tile reach is the farthest a created object can land (distance at most 3, PG1, PG2);
 the limit 6 is the most one run of the installed generator can create next to one marker (two draws in each of R rounds, R at most 3 in
 the plains variants 1 and 67108865), so a patch never holds more than one lucky crossing makes. The limit counts created items lying near
-the object (not seed or dropped items), and is read from the session's rule mode at the moment of each create, so the switch takes
-effect at once.
+the object (not seed or dropped items), applies to creations next to an object that stays (not next to a critter, which moves on, so an
+item a script hands over beside the PC is never held back), and is read from the session's rule mode at the moment of each create, so the
+switch takes effect at once (the vicinity's list cap follows the run's script rules, which the viewer takes from the same session).
 
 ## Not ready
 
@@ -93,4 +97,8 @@ effect at once.
 - The 15 own sector files that attach 30285 now run too; other use, tile and sector scripts that were refused only for random, loops,
   the vicinity or a counter index above 3 run as well (the real-data recount is in the [area map mode](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017)).
 - How the original saves created objects for a template sector (its sector differences) is not modelled; the session keeps them.
+- Only a window lists template sectors: a map loaded whole loads its own sector files only (K'na Tha's 548 generated sectors are not
+  loaded, so nobody can enter them yet).
+- Region admission follows a loop end back to every loop for of the script, reachable or not (on the safe side: it may refuse, never
+  admit wrongly).
 - Tile scripts still run for the player only.
