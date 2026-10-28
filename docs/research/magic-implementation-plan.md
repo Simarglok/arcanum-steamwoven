@@ -261,6 +261,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG43 | original bug (ARC-MAGIC-019, ledger MG43) | fix in both modes without a switch (owner decision 2026-10-28): queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
 | MG44 | original bug (ARC-MAGIC-018, ledger MG44) | fix in both modes (owner decision 2026-10-28: fixed in both rule modes, no switch): a run whose missile is lost before it arrives (a leg's line refused, the goal stopped) is freed unpaid | MT20a-2 leftover |
 | MG45 | original bug (ARC-MAGIC-021, ledger MG45) | technical bug (owner rule 2026-10-28): fixed in both modes without a switch — no flag is written (latent: only an object whose data carries `OF_CLICK_THROUGH` could lose it) | MT20a-2 leftover |
+| MG46 | original bug (ARC-MAGIC-024, ledger MG46, IC9) | gameplay bug (owner's bug rule 2026-10-28): the original behind the Original switch `ItemRunDamageFiresHooks`; Steamwoven fires no parent hit and no damages opponent for the damage step of a run an item event started | FR-MAGIC-011 |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |

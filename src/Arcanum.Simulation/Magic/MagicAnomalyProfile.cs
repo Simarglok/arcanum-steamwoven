@@ -129,6 +129,15 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ReleaseRefusalKeepsRun { get; init; }
 
+    /// <summary>
+    /// MG46 (ARC-MAGIC-024, the owner's bug rule of 2026-10-28: a gameplay bug keeps the original here): a run an item event started
+    /// takes its parent, the item's holder, as the attacker of its damage step (DH1), whose parent hit and damages opponent walk the
+    /// worn items again (IC2), so a weapon whose <c>Target_Hit</c> spell damages the opponent fires it once more on its own damage,
+    /// and two wearers of <c>Parent_Hit</c> armour answer each other, until the target dies or the charge runs out (installed:
+    /// weapon 6130, armour 8215). Steamwoven fires no parent hit and no damages opponent for such a run's damage step.
+    /// </summary>
+    public bool ItemRunDamageFiresHooks { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -139,7 +148,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true,
+        ReleaseRefusalKeepsRun = true, ItemRunDamageFiresHooks = true,
     };
 
     /// <summary>Both settings, default first.</summary>
