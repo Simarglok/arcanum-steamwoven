@@ -249,10 +249,9 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
    A missile already on its destination at the launch (a cast at the caster's own tile) arrives at once.
 4. **The arrival (`ArriveMissile`, SM6).** The release: the target re-check and the BEGIN, as the casting goal's (`Release`); a
    failed re-check keeps the run in the original and frees it unpaid in Steamwoven (MG41's switch). The missile is destroyed.
-5. **A lost missile (`LoseMissile`, SM7, MG44).** A leg whose line is refused (more than 100 steps), a point off the map, another
+5. **A lost missile (`LoseMissile`, MG44).** A leg whose line is refused (more than 100 steps), a point off the map, another
    map or session ends the missile's goal without its release: the original destroys the missile and frees nothing, so the run
-   keeps its slot, never begun; Steamwoven frees it unpaid (`MagicAnomalyProfile.MissileLossKeepsRun`, proposed fix awaiting the
-   owner's decision).
+   keeps its slot, never begun; both rule modes free it unpaid (owner decision 2026-10-28: fixed without a switch).
 6. **The viewer** (`TerrainViewerSpellMissiles.cs`). The hero's missile is drawn as the combat projectiles are (the faced art at its
    step's frame, moved by its pixel offset, additive when translucent, at the art id's draw scale); the cast's log line follows the
    arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 is refused while a missile flies (the
@@ -278,7 +277,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
 | An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
-| A spell missile whose goal ends before it arrives (its next leg's line refused, the goal stopped) frees nothing: its run keeps its slot, never begun (MG44). | The run is freed unpaid. | `MagicAnomalyProfile.MissileLossKeepsRun` (proposed fix, awaiting the owner's decision) |
+| A spell missile whose goal ends before it arrives (its next leg's line refused, the goal stopped) frees nothing: its run keeps its slot, never begun (MG44). | The run is freed unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A missile's point off the map stops the game with an error (0x42F390). | The missile is lost (MG44's path). | — |
 | A missile's art with a frame rate of 0 divides by zero at its setup (0x42F2D0). | Its pace is 100 ms, as for an art that does not read. | — |
 | A missile carries its entry's light (0x458C00) and is drawn at its object's scale. | No light; drawn at its art id's draw scale. | — (not ready) |
@@ -300,7 +299,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
-  (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
+  (0x57C040, 0x57C080, read as IT9). The host runs an item's own spells with the item as source since ARC-MAGIC-020
+  ([item spell triggers](item-spell-triggers.md)); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
 - A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse
   them.
 - In a turn-based round (ARC-COMBAT-020) the casting goal's start charges its 4 action points through the round's world; outside

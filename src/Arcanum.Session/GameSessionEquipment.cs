@@ -2,6 +2,7 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
@@ -68,6 +69,12 @@ public readonly record struct EquipmentMutationResult(GameSessionDisposition Dis
     /// <summary>ARC-SCRIPT-042: every item script run of the move, in order (also on a refusal); empty without a script host or
     /// without item event scripts. Their eye candy (<see cref="Arcanum.Scripting.Scr.ScrEffects.EyeCandies"/>) is the host's to show.</summary>
     public IReadOnlyList<SessionItemScriptRun> Scripts { get => _scripts ?? Array.Empty<SessionItemScriptRun>(); init => _scripts = value; }
+
+    private readonly IReadOnlyList<SessionItemTriggerResult>? _itemSpells;
+
+    /// <summary>ARC-MAGIC-020: what the move's item spell executors did, in order (the item's unwear when it left another slot, the
+    /// occupant's unwear, the item's wear); empty without an item trigger host or when nothing moved.</summary>
+    public IReadOnlyList<SessionItemTriggerResult> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerResult>(); init => _itemSpells = value; }
 
     /// <summary>ARC-SCRIPT-042: the insert check refused the occupant after the scripts of both removals ran, so both items went back
     /// where they were, running the scripts of those insertions too (ledger IE6); what the runs changed is applied
@@ -254,10 +261,29 @@ public sealed partial class GameSessionOwner
     /// When the check refuses, both go back where they were with those insertions' scripts, and what the runs changed is applied
     /// (<see cref="EquipmentMutationResult.RolledBack"/>). Without a host, an item or occupant with item event scripts is refused
     /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). A run the session cannot apply refuses the move with nothing changed.
+    /// ARC-MAGIC-020: an item with item spells needs <paramref name="triggers"/> that support it, and an occupant whose spells run (a
+    /// run with it as source) needs a host, else <see cref="GameSessionFailure.ItemEffectUnsupported"/>. After the move the host's
+    /// executors run (<see cref="EquipmentMutationResult.ItemSpells"/>): the unwear (0x4CBFC0) of the item when it left another slot and
+    /// of the occupant, then the item's wear (0x4CB7D0), the hero as holder. In the original they run inside the wield and unwield
+    /// (0x4677B0, 0x467CB0), before the light recalculation and the wield scripts; here they follow the move and its scripts.
     /// </summary>
     [OriginalFunction(0x464AE0, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Equip(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
-        SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
+        SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null)
+    {
+        ThrowIfDisposed();
+        var wasWorn = entity is not null && _equipment.SlotOf(entity) is not null;
+        var result = EquipMove(expected, entity!, slot, item, artCheck, insertCheck, scripts, triggers);
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.RolledBack) return result;
+        var spells = new List<SessionItemTriggerResult>();
+        if (wasWorn) spells.Add(triggers.Withdraw(ItemSpellTriggerRules.Unwear, entity!, SessionEventKinds.PlayerEntity));
+        if (result.Displaced is { } displaced) spells.Add(triggers.Withdraw(ItemSpellTriggerRules.Unwear, displaced, SessionEventKinds.PlayerEntity));
+        spells.Add(triggers.Fire(ItemSpellTriggerRules.Wear, entity!, SessionEventKinds.PlayerEntity));
+        return result with { ItemSpells = spells.AsReadOnly(), Version = Version };
+    }
+
+    private EquipmentMutationResult EquipMove(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
+        SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts, ISessionItemTriggers? triggers)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(artCheck);
@@ -273,7 +299,14 @@ public sealed partial class GameSessionOwner
         if (current?.Entity == entity) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
         var points = EquipmentDomain.MovePoints(item.ScriptPoints);
         if (scripts is null && (points.Count > 0 || current?.ScriptPoints.Count > 0)) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
-        if (item.HasItemSpells) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
+        if (item.HasItemSpells)
+        {
+            var supported = triggers?.Supports(entity) == true;
+            ThrowIfDisposed();
+            if (!supported) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
+        }
+        if (triggers is null && (HasItemRuns(entity) || current is not null && HasItemRuns(current.Entity)))
+            return RejectWear(GameSessionFailure.ItemEffectUnsupported);
 
         var worn = _equipment.Items();
         var refusal = EquipmentRules.CheckWear(item.Item, slot, HeroWearer(), worn);
@@ -389,9 +422,21 @@ public sealed partial class GameSessionOwner
     /// ARC-SCRIPT-042: with <paramref name="scripts"/>, an item with item event scripts runs them after the insert check accepts, as the
     /// original's removal and insertion do (wield off 25, remove item 28, insert item 21; ledger IE6, WE7); without a host such an item is
     /// refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
+    /// ARC-MAGIC-020: an item whose spells run (a run with it as source) needs <paramref name="triggers"/>, else
+    /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>; after the move the host's unwear executor runs (0x4CBFC0,
+    /// <see cref="EquipmentMutationResult.ItemSpells"/>), in the original inside the unwield before its light and scripts.
     /// </summary>
     [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
-    public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
+    public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
+        ISessionItemTriggers? triggers = null)
+    {
+        var result = UnequipMove(expected, slot, insertCheck, scripts, triggers);
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Displaced is not { } item) return result;
+        return result with { ItemSpells = [triggers.Withdraw(ItemSpellTriggerRules.Unwear, item, SessionEventKinds.PlayerEntity)], Version = Version };
+    }
+
+    private EquipmentMutationResult UnequipMove(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
+        ISessionItemTriggers? triggers)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -401,6 +446,7 @@ public sealed partial class GameSessionOwner
         if (!_equipment.Worn.TryGetValue(slot, out var current))
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
         if (scripts is null && current.ScriptPoints.Count > 0) return RejectWear(GameSessionFailure.ItemScriptUnsupported);
+        if (triggers is null && HasItemRuns(current.Entity)) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
         var refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
@@ -432,6 +478,9 @@ public sealed partial class GameSessionOwner
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version);
     }
+
+    // ARC-MAGIC-020: whether a spell run has the item as its source (its wear spell runs, or ran and is still in the table).
+    private bool HasItemRuns(string entity) => _spellRuns.Runs.Any(run => run.Source?.Id == entity);
 
     private EquipmentMutationResult RejectWear(GameSessionFailure failure, EquipmentRefusal refusal = EquipmentRefusal.None,
         SessionInsertVerdict? verdict = null) => new(GameSessionDisposition.Rejected, failure, refusal, null, verdict, Version);

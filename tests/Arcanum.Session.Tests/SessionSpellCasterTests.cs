@@ -587,9 +587,10 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg44_a_lost_missile_keeps_the_run_in_the_original_and_frees_it_unpaid_in_Steamwoven()
+    public void Mg44_a_lost_missile_frees_its_run_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        // Owner decision 2026-10-28: the original's slot leak is fixed in both rule modes.
+        foreach (var mode in new[] { RuleMode.Original, RuleMode.Steamwoven })
         {
             var record = SelfBolt(beginTargets: 0x4);
             var (owner, caster, _) = MissileSession(mode, record);
@@ -600,7 +601,7 @@ public sealed class SessionSpellCasterTests
             caster.LaunchMissile(run);
             var before = Hero(owner).Fatigue;
             var lost = caster.LoseMissile(run);
-            Assert.AreEqual((kept, before, kept), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue, lost is null), $"{mode}");
+            Assert.AreEqual((false, before, false), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue, lost is null), $"{mode}");
             Assert.IsFalse(caster.MissileFlies(run));
             Assert.IsNull(caster.ArriveMissile(run), "a lost missile never arrives");
             Assert.IsNull(caster.EndGoal(run), "the casting goal's end still frees nothing");

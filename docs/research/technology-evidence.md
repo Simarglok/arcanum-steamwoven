@@ -580,8 +580,9 @@ button state.
   derives aptitude from tech points; the character sheet shows tech aptitude
   (ARC-UI-007).
 - [`EquipmentRules`](../world/equipment-runtime.md) already has item power and
-  the magic adjustment (EQ9) and refuses broken items (EQ1); it currently
-  refuses items with item spells on wear.
+  the magic adjustment (EQ9) and refuses broken items (EQ1); it refuses items
+  with item spells on wear without an item trigger host (ARC-MAGIC-020 runs
+  them through one, [item spell triggers](../world/item-spell-triggers.md)).
 - The attack resolver has the technology failure and magick cancel rolls
   ([attack resolver](../world/attack-resolver-runtime.md)).
 - [`EffectRules`](../../src/Arcanum.Data/Characters/EffectRules.cs) parses
