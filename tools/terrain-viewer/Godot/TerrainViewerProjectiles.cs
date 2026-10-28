@@ -355,6 +355,8 @@ public partial class TerrainViewerApp
     {
         foreach (var projectile in _projectiles.ToArray()) EndProjectile(projectile, ProjectileStrikeKind.None, null, why);
         _projectileBodies = [];
+        // ARC-MAGIC-018: the spell missiles go the same way (a map change, a quick load, a replaced session).
+        ClearSpellMissiles(why);
     }
 
     // The projectiles' draw commands, keyed by shot.

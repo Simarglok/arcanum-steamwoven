@@ -104,6 +104,8 @@ public partial class TerrainViewerApp
         if (busy != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
         // ARC-MAGIC-015: a casting goal is not saved (no goal state in the session); its run would wait for a release that never comes.
         if (_spellGoal is not null) { SetQuickStatus(prefix + "save refused: a cast is playing"); return null; }
+        // ARC-MAGIC-018: a missile's run waits for its arrival, which the session does not save.
+        if (_spellMissiles.Count > 0) { SetQuickStatus(prefix + "save refused: a spell missile is flying"); return null; }
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
