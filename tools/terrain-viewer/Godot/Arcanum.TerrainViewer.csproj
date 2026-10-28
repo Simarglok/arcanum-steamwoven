@@ -14,4 +14,10 @@
     <ProjectReference Include="../Core/Arcanum.TerrainViewer.Core.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
   </ItemGroup>
+  <!-- ARC-DEV-047: ./arcanum package sets these (as environment variables, which MSBuild reads as properties) to stamp the
+       packaged commit and its date; a source run or a developer export has neither (ViewerBuildInfo). -->
+  <ItemGroup Condition="'$(ArcanumPackageCommit)' != ''">
+    <AssemblyMetadata Include="ArcanumPackageCommit" Value="$(ArcanumPackageCommit)" />
+    <AssemblyMetadata Include="ArcanumPackageDate" Value="$(ArcanumPackageDate)" />
+  </ItemGroup>
 </Project>
