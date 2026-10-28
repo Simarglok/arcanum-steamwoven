@@ -34,7 +34,11 @@ public static class SessionHeroLimits
 /// number). Only types a transfer admits are kit items (weapon, armour, food, scroll, written, generic); gold is
 /// <see cref="SessionHeroDefinition.Gold"/>, not an item.
 /// </summary>
-public sealed record SessionHeroKitItem(SessionItemKind Kind);
+public sealed record SessionHeroKitItem(SessionItemKind Kind)
+{
+    /// <summary>ARC-WORLD-085: the item's weight facts (its prototype's in a pre-made hero's kit); none weighs 0.</summary>
+    public SessionItemWeight Weight { get; init; }
+}
 
 /// <summary>
 /// New-game input for the player character (ARC-WORLD-015), built by the host from its data: for a pre-made hero the PC

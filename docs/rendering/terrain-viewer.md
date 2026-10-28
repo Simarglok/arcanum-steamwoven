@@ -700,9 +700,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the insert check
-  accepts every item (carry weight, Technophobia and grid room need the created character,
-  NOT READY).
+  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the host's insert check
+  accepts every item (grid room is NOT READY); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
+  and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

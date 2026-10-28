@@ -127,13 +127,23 @@ public sealed partial class GameSessionOwner
         // a technological product); a product the host gives no facts for counts as neutral (0).
         var complexity = facts(prototype)?.Complexity ?? 0;
         ThrowIfDisposed();
+        // ARC-WORLD-085: each new unit has the product prototype's weight.
+        var weight = CreatedWeight(prototype, complexity);
         if (_revision != revision) return RejectAssembly(GameSessionFailure.StaleVersion);
+        // ARC-WORLD-085: the components are gone (a stack one unit lighter) before the products are weighed (TC3), and each accepted unit
+        // adds its weight for the next one, as the original inserts them one by one (WE4).
+        var carry = HeroCarryFacts(spent.ToDictionary(c => c.Entity, c => c.Stack is { Units: > 1 } s ? s.Units - 1 : (int?)null, StringComparer.Ordinal));
+        var pending = 0;
         // ARC-WORLD-070: the host answers one insert check a product unit, for the object it is (the stack it merges into); a refused
         // unit lies on the hero's tile.
         var units = PlanUnits(quantity, ammo is not null, into?.Entity, unitEntity =>
         {
-            var unitFacts = new SessionItemFacts(kind, 0, complexity, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType };
-            return HeroInsertVerdict(insertCheck(new SessionInventoryItem(unitEntity, unitFacts)), complexity);
+            var unitFacts = new SessionItemFacts(kind, weight.Weight, complexity, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType, MagicWeight = weight.MagicWeight };
+            var unit = new Arcanum.Simulation.Items.CarriedItem((int)kind.Type, weight.Weight, weight.MagicWeight, complexity, ammo?.Units ?? 0);
+            var heavy = carry is { } c && !HeroFits(c, unit, pending);
+            var verdict = HeroInsertVerdict(heavy ? SessionInsertVerdict.TooHeavy : insertCheck(new SessionInventoryItem(unitEntity, unitFacts)), complexity);
+            if (verdict == SessionInsertVerdict.Accepted && carry is { } accepted) pending = unchecked(pending + HeroItemWeight(accepted, unit));
+            return verdict;
         }, () => _revision != revision, out var firstRefusal, out var unitFailure);
         if (units is null) return unitFailure == GameSessionFailure.StaleVersion ? RejectAssembly(unitFailure) : RejectAssembly(unitFailure, plan);
         var (map, cell) = (_actor.Map, _actor.Cell);
@@ -161,6 +171,7 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-083: each new unit keeps the product's complexity, in the list and on the ground.
             if (unit.Ground) PlaceMade(unit.Entity, kind, complexity, map, cell);
             else if (unit.NewObject) _inventory.Add(new SessionMadeItem(unit.Entity, kind, complexity));
+            if (unit.NewObject || unit.Ground) _inventory.SetWeight(unit.Entity, weight);
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         _revision++;

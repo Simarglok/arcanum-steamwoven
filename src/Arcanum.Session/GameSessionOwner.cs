@@ -113,7 +113,9 @@ public sealed partial class GameSessionOwner : IDisposable
             {
                 if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type))
                     return Rejected(GameSessionFailure.InvalidHero);
+                if (!item.Weight.IsValid) return Rejected(GameSessionFailure.InvalidHero);
                 inventory.Add(new SessionKitItem(HeroDomain.KitEntity(index), item.Kind));
+                inventory.SetWeight(HeroDomain.KitEntity(index), item.Weight);
             }
             inventory.Gold = definition.Gold;
         }
@@ -1494,8 +1496,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; ARC-WORLD-083: a made item the one it was
         // placed with (the original's drop and pickup leave field 0x60 alone, ledger MC1); a kit item has none in the session (0).
         var complexity = _inventory.PlacedComplexity(placed);
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity)))),
-            complexity);
+        var placedFacts = _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity));
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1600,7 +1602,8 @@ public sealed partial class GameSessionOwner : IDisposable
             if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(gatePoint, runs);
         }
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
-        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity);
+        // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
+        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
@@ -1634,7 +1637,12 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.RemoveFromNpc(item.Entity);
             _inventory.ReturnGiven(item.Entity, facts.Kind, facts.Complexity);
         }
-        else _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+        else
+        {
+            _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+            // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
+            _inventory.SetWeight(item.Entity, facts.WeightFacts);
+        }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
         runs?.Commit();
         _revision++;
@@ -1810,6 +1818,19 @@ public sealed partial class GameSessionOwner : IDisposable
             .Concat(inventory.Npcs.Values.SelectMany(list => list).Select(item => (item.Entity, item.Kind)));
         foreach (var (entity, kind) in tracked)
             if ((kind.Type == SessionItemType.Ammo) != inventory.Ammo.ContainsKey(entity)) return GameSessionFailure.InvalidSnapshot;
+        // ARC-WORLD-085: the weight rows by entity in ordinal order, each of an object the inventory holds (the hero's, a placed one or
+        // one in an NPC's added list) with valid facts and a non-zero weight or adjustment.
+        string? lastWeight = null;
+        foreach (var row in saved.Weights)
+        {
+            if (!SessionValidation.Entity(row.Entity) || lastWeight is not null && string.CompareOrdinal(lastWeight, row.Entity) >= 0 || !row.Facts.IsValid ||
+                row.Facts.Weight == 0 && row.Facts.MagicWeight == 0 || destroyed.Contains(row.Entity) || !inventory.Kit.Exists(item => item.Entity == row.Entity) &&
+                !inventory.Pc.Exists(item => item.Entity == row.Entity) && !inventory.Made.Exists(item => item.Entity == row.Entity) &&
+                inventory.PlacedItem(row.Entity) is null && inventory.NpcOf(row.Entity) is null)
+                return GameSessionFailure.InvalidSnapshot;
+            lastWeight = row.Entity;
+            inventory.Weights[row.Entity] = row.Facts;
+        }
         return GameSessionFailure.None;
     }
 

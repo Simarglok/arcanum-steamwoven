@@ -117,6 +117,39 @@ public sealed class StartingHeroTests
         Assert.AreEqual(AreaHeroStatus.ModuleOutsideGameRoot, AreaStartingHero.Load(Path.Combine(root, "arcanum1.dat"), halfOgre.Hero).Status);
     }
 
+    /// <summary>ARC-WORLD-085: every pre-made hero's kit keeps its prototypes' weight facts, and the hero starts with its carried weight,
+    /// carry weight and encumbrance level (prints them per hero; no original text).</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Every_premade_hero_carries_its_kits_weight()
+    {
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
+        if (string.IsNullOrEmpty(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
+        var module = Path.Combine(root, "modules", "Arcanum.dat");
+        var carried = new List<string>();
+        foreach (var premade in AreaStartingHero.Premade)
+        {
+            var load = AreaStartingHero.Load(module, premade);
+            Assert.AreEqual(AreaHeroStatus.Ready, load.Status, $"{premade.Name} {load.Detail}");
+            Assert.IsTrue(load.Definition!.Kit.All(item => item.Weight.Weight > 0), premade.Name + ": every kit item weighs something");
+            var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+                AreaGridSession.Cell(AreaGridSession.Spawn), 1, load);
+            Assert.AreEqual(GameSessionFailure.None, created.Failure, premade.Name);
+            using var session = created.Owner!;
+            var carry = session.QueryHeroCarry()!;
+            Assert.AreEqual(load.Definition.Kit.Sum(item => item.Weight.Weight + (item.Weight.Complexity == 0 ? item.Weight.MagicWeight : 0)), carry.Weight,
+                premade.Name + ": the kit's weights (no adjusted magickal item)");
+            carried.Add($"{premade.Name}: {carry.Weight}/{carry.CarryWeight} level {carry.Level}");
+        }
+        Console.WriteLine(string.Join(Environment.NewLine, carried));
+        // First observation 2026-10-28: every kit is light (level 0); the carry weight is 500 × the effective strength.
+        CollectionAssert.AreEqual(new[]
+        {
+            "halfling-male: 80/2500 level 0", "gnome-male: 70/4000 level 0", "half-elf-male: 70/4000 level 0", "half-ogre-male: 70/6500 level 0",
+            "elf-male: 70/3500 level 0", "human-male: 140/4000 level 0", "half-orc-male: 70/5000 level 0", "dwarf-male: 70/4500 level 0",
+            "human-female: 80/3500 level 0", "elf-female: 140/3500 level 0", "half-orc-female: 70/4000 level 0", "half-elf-female: 70/3500 level 0",
+        }, carried);
+    }
+
     /// <summary>ARC-WORLD-034: every pre-made hero starts with its best kit items worn (prints slot and prototype per hero; no
     /// original text).</summary>
     [TestMethod, TestCategory("RealData")]

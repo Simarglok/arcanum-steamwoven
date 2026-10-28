@@ -15,7 +15,7 @@ public sealed class AmmoStateTests
     private const int CellPrototype = 7060, BulletPrototype = 7059;
 
     private static SessionItemFacts Ammo(int prototype, int type, int units) =>
-        new(new(SessionItemType.Ammo, prototype, 100, 200), 1, 0, 0, units, []) { AmmoType = type };
+        new(new(SessionItemType.Ammo, prototype, 100, 200), 0, 0, 0, units, []) { AmmoType = type };
 
     private static SessionMapInventorySeed Seed(int groundUnits = 10) => new(
         [
