@@ -85,6 +85,9 @@ the NPC's gender then the PC's, raw and without voice. No candidate, a missing o
 **Rolls.** The port's rolls (`DialogGreetingRoll.Line`, `ReputationChance`, `ReputationPick`); a value outside its bounds or
 a refused roll fails the conversation (`InvalidQueryResult`). The viewer rolls the session's labelled generator
 (`dialog.greeting.line`, `dialog.greeting.reputation`, `dialog.greeting.pick`), so a restore replays the same greetings.
+Since ARC-SCRIPT-043 the same port also gives the phrases of generated Player options
+([generated phrases](dialog-conversation-runtime.md#generated-phrases-arc-script-043)): their roll is `DialogGreetingRoll.Phrase`
+(`dialog.phrase.line`), and `DialogGreetingFacts.NpcLedByPc` (the viewer: the speaker follows the PC) chooses the barter phrase.
 
 ## AREA viewer
 

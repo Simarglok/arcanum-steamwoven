@@ -14,7 +14,7 @@ data side of FR-UI-003/005. The AREA viewer adds the first real use: talking to 
 Site NPC whose effective SAP_DIALOG attachment names a script (only Virgil in the core).
 
 It is **not** a SCR VM, generic expression evaluator, generated-dialog (`gd_*`) text
-loader (the [greeting](dialog-greeting.md) reads the loaded files through its port), inventory/party/map/AI simulation, save service, voice/media, or original-runtime
+loader (the [greeting](dialog-greeting.md) and the [generated phrases](#generated-phrases-arc-script-043) read the loaded files through its port), inventory/party/map/AI simulation, save service, voice/media, or original-runtime
 parity claim. The older [one-edge transition runtime](dialog-transition-runtime.md) is
 unchanged and still rejects GF; the two runtimes do not share admission tables.
 
@@ -98,8 +98,7 @@ undefined 1252 bytes and texts over 4096 bytes fail closed.
 
 Generated markers (one ASCII letter and `:`; NPC markers are read from the record text
 whatever the PC gender, as in the source): Player `a e f k n s w y` (exact) are offered as
-`Generated` with their normal transition (phrase text lives in generic resources not loaded
-here); exact `i:` (ARC-WORLD-043) is the original's **insult**: offered as `Generated` with its normal transition, and
+`Generated` with their normal transition (their text is a generated phrase, [below](#generated-phrases-arc-script-043)); exact `i:` (ARC-WORLD-043) is the original's **insult**: offered as `Generated` with its normal transition, and
 picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogConversation.InsultReaction`) through the world
 port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
 continuation (the NPC's generated reply is not loaded), above 20 its transition follows (0x4191E0). Without a world port, or
@@ -186,10 +185,36 @@ insult in the same reply (offered blocked, `UnsupportedInteraction`) and `SU` in
 frontier; the source also sets its window code there, NC8, one reader). The AREA viewer's port records the speaker for the window
 ([schematic window](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)).
 
+## Generated phrases (ARC-SCRIPT-043)
+
+With a greeting port (`DialogConversationPorts.Greeting`, the [greeting seam](dialog-greeting.md)) a Player reply whose whole text
+is one of the markers below (case-insensitive) shows a generated phrase as its text, and so does the farewell offered when no reply
+qualifies; `DialogOption.TextOrigin` names its file and number. The phrase is picked as the reply is offered, in offer order, with the
+port's facts, files, rules and a `DialogGreetingRoll.Phrase` roll (the AREA host's `dialog.phrase.line`), by the same pick as a
+greeting line (GD5, the [GD-A1](../formats/generated-dialog-files.md#api) gap switch, the missing-line text, `@pcname@`/`@npcname@`).
+A rebuild of the same node's offers (`RefreshOptions`, a stale selection) keeps the phrases already shown in the turn (only a reply
+that became eligible since rolls its own): the original rebuilds its options with the random state it saved (ledger [GP6](../research/ledger/social.md#generated-player-phrases-arc-script-043)).
+
+| Marker | Phrase (0x416C10) |
+| --- | --- |
+| `y:` `n:` `s:` `e:` `f:` | PC lines 1–99, 100–199, 200–299, 400–499, 800–899 |
+| `b:` | PC lines 300–399, or 1600–1699 when the PC leads the NPC (`DialogGreetingFacts.NpcLedByPc`) |
+| `h:` `k:` `w:` `p:` `l:` | PC lines 700–799, 1500–1599, 1800–1899, 1900–1999, 2300–2399 |
+| `a:` `i:` | PC class lines from 1000 and 3000 (the insult, 0x419190) + 50 × the NPC's social class, 50 entries |
+| no reply qualifies | PC lines 400–499 (0x414E60) |
+
+A PC line (0x4182D0) reads `gd_pc2m` or `gd_pc2f` by the NPC's gender, a PC class line (0x418390) `gd_cls_pc2m` or `gd_cls_pc2f`;
+a dumb PC (its intelligence as the reply gates read it at most 4, the original's 0x45FC00) reads their dumb variants, the class
+offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
+roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
+phrase changes only the text: the transitions and blocks above stay. Not built: the phrases of the prefix markers (`c d q r t u x z`;
+`d r t x` append the reply's text after a phrase), the healer menu behind `h:` (ARC-SCRIPT-044) and the NPC's generated line after
+an insult (group 1000).
+
 ## Barter reply (ARC-UI-050)
 
 With the optional `IDialogBarterPort` (`DialogConversationPorts.Barter`) a Player reply whose text is exactly `b:` (the generated barter
-phrase, its text not loaded) is offered with the transition `DialogOptionTransition.Barter` and no target node; without the port it stays
+phrase, [below](#generated-phrases-arc-script-043)) is offered with the transition `DialogOptionTransition.Barter` and no target node; without the port it stays
 blocked as before (`UnsupportedInteraction`). Picking it runs the reply's action in field order, then the port's `OpenBarterCommand` (the
 NPC as merchant, the PC as buyer, recorded after the action), and ends the conversation with `DialogEndKind.BarterWindow`: no further NPC
 line, no SCR continuation, and the talk does not resume (the original's mode change ends the dialog, ledger
@@ -313,9 +338,9 @@ evidence level F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
 gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1), actions (0x415BA0), the
 insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), NPC line, markers and
-names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
+names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590; their phrases checked in the executable, ledger GP1–GP6), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the
-diagnostic profile are project policy. Unknown: original parser edge cases, generated
-phrases, all other operations, reaction/alignment modifiers, item transfer outcomes,
+diagnostic profile are project policy. Unknown: original parser edge cases, the
+prefix markers' phrases, all other operations, reaction/alignment modifiers, item transfer outcomes,
 follower rules and the SCR continuation after the dialog.
 
