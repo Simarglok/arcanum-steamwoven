@@ -1691,7 +1691,7 @@ public sealed partial class GameSessionOwner : IDisposable
             inventory.Add(item);
         }
         // ARC-WORLD-071: the given items by entity: a kit item only with a hero and within the kit's numbers (checked below), a taken item
-        // with a valid origin map; the gold piles by entity, 0 or more coins, not deleted.
+        // with a valid origin map; the gold piles by entity, 1 or more coins, not deleted.
         if (saved.Given.Count > limits.MaxNpcItems || saved.Piles.Count > limits.MaxGoldRecords) return GameSessionFailure.BudgetExceeded;
         string? lastGiven = null;
         foreach (var item in saved.Given)
