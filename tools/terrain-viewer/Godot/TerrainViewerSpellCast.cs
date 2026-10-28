@@ -305,30 +305,26 @@ public partial class TerrainViewerApp
     // A key-up lost to a focus change cannot leave an Alt held: some Alt must still be down (as the attack's left Alt).
     private bool SpellAltHeld => (_spellAltLeft || _spellAltRight) && Godot.Input.IsKeyPressed(Key.Alt);
 
-    /// <summary>What the cursor would cast at under the screen point: the object under it, else the hero when its tile is under it,
-    /// else the tile; null when the point is off the map. The answer carries the area test.</summary>
+    /// <summary>What the cursor would cast at under the screen point (ARC-MAGIC-021: the pick 0x4F28A0's order, SU15–SU19): the object
+    /// the screen pick finds there (seeing through what the mask spares), else the objects on the tile under the point (the hero
+    /// first, then the map's rows), else the tile; an object that fails stands for its own tile once more. Null when the cursor is
+    /// closed or the point is off the canvas; with no tile under the point only the object is tried.</summary>
     private (string? Object, SpellLocation Tile, SpellTargetTest Test)? SpellTargetAt(Vector2 screen)
     {
         if (_spellTargeting is not { } targeting || SpellCasterNow() is not { } caster || _spellCastMap is not { } map || _canvas is null
             || _worldActor.Session is not AreaGridSession grid) return null;
-        SpellTargetTest last = new(false);
-        if (AreaObjectAtScreen(screen) is { } key && _hoverIndex is { } index && index.Contains(key))
-        {
-            var id = map.Id(index.Row(key));
-            last = caster.TestTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, id, SpellLocation.None);
-            if (last.Passes) return (id, SpellLocation.None, last);
-        }
+        var spared = caster.PickSpared(SessionSpellCaster.Hero, targeting.Mask);
+        string? IdOf(AreaObjectKey key) => _hoverIndex is { } index && index.Contains(key) ? map.Id(index.Row(key)) : null;
+        var at = AreaObjectAtScreen(screen, spared: key => IdOf(key) is { } id && spared(id)) is { } found ? IdOf(found) : null;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
-        if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return (null, SpellLocation.None, last);
-        var world = grid.Chart.ToWorld(cell);
-        var tile = new SpellLocation(checked((uint)world.X), checked((uint)world.Y));
-        if (cell == grid.State.CommittedCell)
+        SpellLocation? tile = null;
+        if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is { } cell)
         {
-            var hero = caster.TestTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, SessionSpellCaster.Hero, SpellLocation.None);
-            if (hero.Passes) return (SessionSpellCaster.Hero, SpellLocation.None, hero);
+            var world = grid.Chart.ToWorld(cell);
+            tile = new SpellLocation(checked((uint)world.X), checked((uint)world.Y));
         }
-        var test = caster.TestTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, null, tile);
-        return (null, tile, test.Passes || last.Reason == 0 ? test : last);
+        var pick = caster.PickTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, at, tile);
+        return (pick.Object?.Id, pick.Tile, pick.Test);
     }
 
     /// <summary>A left press while the cursor is open (the mode-1 branch of 0x54DE50): a target that passes is cast at; otherwise the

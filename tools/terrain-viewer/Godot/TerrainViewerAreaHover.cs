@@ -94,7 +94,8 @@ public partial class TerrainViewerApp
     /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point. A wall drawn faded
     /// (ARC-RENDER-011) is see-through for the pick, as the original skips walls with OWAF_TRANS_LEFT/RIGHT.</summary>
     /// <param name="roofs">False only for the roof smoke, to find a body under a roof.</param>
-    private AreaObjectKey? AreaObjectAtScreen(Vector2 screen, bool roofs = true)
+    /// <param name="spared">Objects the pick sees through besides the click-through ones (the spell cursor's, ARC-MAGIC-021).</param>
+    private AreaObjectKey? AreaObjectAtScreen(Vector2 screen, bool roofs = true, Func<AreaObjectKey, bool>? spared = null)
     {
         if (_readyArea is not { } area || HoverIndex() is not { } index) return null;
         // ARC-RENDER-022: a drawn roof pixel picks nothing (RF10's hit test); the pick does not test the roof cover.
@@ -106,7 +107,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-017: a companion standing on another map is not picked on its T0 cell here.
         return index.Pick(command => !AreaTakenByPc(command) && _areaCompanions?.Absent.Contains(command.Identity!.Value) != true
             && AreaAlphaAt(command, AreaFrames(), transform, sx, sy) != 0
-            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None, AreaMovingCommands());
+            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None
+            && spared?.Invoke(command.Identity!.Value) != true, AreaMovingCommands());
     }
 
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>

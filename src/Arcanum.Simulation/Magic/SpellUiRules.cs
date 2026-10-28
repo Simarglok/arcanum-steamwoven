@@ -21,6 +21,13 @@ public enum SpellActivationKind
 /// <summary>The activation's answer and the targeting cursor's mask.</summary>
 public readonly record struct SpellActivation(SpellActivationKind Kind, ulong Mask = 0);
 
+/// <summary>ARC-MAGIC-021: what the targeting cursor's pick (0x4F28A0) found: an object (its tile none) or a tile (no object), with
+/// the area test that passed; with none, the failed answer, whose reason is the last one a test of this pick left (MG42).</summary>
+public readonly record struct SpellPick(SpellTargetObject? Object, SpellLocation Tile, SpellTargetTest Test)
+{
+    public bool Found => Test.Passes;
+}
+
 /// <summary>
 /// ARC-MAGIC-015 (magic plan MT20a-2): the spell UI's rules as the 1.0.7.4 executable has them (ledger "Spell UI", SU rows): the
 /// activation of a spell from the spell pane (0x57BC70), the targeting cursor's mask and its Alt toggle (0x57C0B0, 0x57C0E0), and
@@ -82,6 +89,97 @@ public static class SpellUiRules
     /// shows nothing, and the cursor stays.</summary>
     [OriginalFunction(0x57BC30, OriginalFunctionScope.Partial)]
     public static int? NoTargetMessage(ulong reason) => reason == DamagedBit ? NotDamagedMessage : null;
+
+    /// <summary><c>Tgt_Obj_No_ST_Critter_Dead</c>'s own bit (its value 0x80000004 less the object bit, MG18).</summary>
+    public const ulong NotDeadBit = 0x80000000;
+
+    /// <summary>The object types the pick asks the tile under the point for (0x4407C0's mask 0x3FFEF): every type but projectiles.</summary>
+    public const int PickTileTypes = 0x3FFEF;
+
+    /// <summary>
+    /// ARC-MAGIC-021 (SU15): whether the pick (0x4F28A0) makes an object click-through (object flag 0x800, 0x43D0E0) while it looks:
+    /// the local PC (<paramref name="localPc"/>) for a mask with the no-self bit, the PC's followers (0x441260) for one with the
+    /// non-party bit, a dead PC or NPC (0x45D8D0) for one with the not-dead bit. The screen pick sees through such an object, and the
+    /// picker's wrapper (0x4F2680) refuses it as a target. The multiplayer party list (0x441310, network on) is not modelled.
+    /// </summary>
+    public static bool PickSpares(ulong mask, SpellTargetObject candidate, string localPc, IReadOnlyCollection<string> followers)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(localPc);
+        ArgumentNullException.ThrowIfNull(followers);
+        return (mask & NoSelfBit) != 0 && candidate.Id == localPc
+            || (mask & NonPartyBit) != 0 && followers.Contains(candidate.Id)
+            || (mask & NotDeadBit) != 0 && candidate.IsCritter && candidate.IsDead;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-021 (SU15–SU19): the targeting cursor's pick at a screen point (0x4F28A0), in the original's order: the object the
+    /// screen pick found under the point (<paramref name="atPoint"/>, which already sees through the spared objects); else, on the
+    /// tile under the point, every object the tile lists (types <see cref="PickTileTypes"/>, without destroyed or switched-off ones,
+    /// FC2) in the world's order; else the tile itself. Without a tile under the point (<paramref name="tile"/> null) no tile is
+    /// tried. Each object stands for its occupant first (a scenery object's, 0x4F2C60) and goes through the picker's wrapper
+    /// (<see cref="PickTest"/>); the first that passes is the target. A pick that finds nothing answers the last non-zero reason a
+    /// test of this pick left (the failure global, 0x603D40, without an earlier pick's: MG42).
+    /// </summary>
+    /// <param name="test">The area test (0x4F2D20) with the cursor's mask, the caster as self and source, and the candidate object
+    /// and tile as candidate and target (either may be absent).</param>
+    [OriginalFunction(0x4F28A0, OriginalFunctionScope.Partial)]
+    public static SpellPick Pick(ulong mask, string localPc, IReadOnlyCollection<string> followers, SpellTargetObject? atPoint, SpellLocation? tile,
+        ISpellTargetWorld world, Func<SpellTargetObject?, SpellLocation, SpellTargetTest> test)
+    {
+        ArgumentNullException.ThrowIfNull(localPc);
+        ArgumentNullException.ThrowIfNull(followers);
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(test);
+        ulong reason = 0;
+        SpellTargetTest Noted(SpellTargetObject? o, SpellLocation at)
+        {
+            var answer = test(o, at);
+            if (answer.Reason != 0) reason = answer.Reason;
+            return answer;
+        }
+        SpellPick? Try(SpellTargetObject candidate)
+        {
+            var (target, _) = SpellTargetRules.Visible(candidate, world);
+            if (PickSpares(mask, target, localPc, followers)) return null;
+            var pick = PickTest(mask, target, SpellLocation.None, Noted);
+            return pick.Found ? pick : null;
+        }
+        if (atPoint is not null && Try(atPoint) is { } hit) return hit;
+        if (tile is { } at)
+        {
+            foreach (var listed in world.ObjectsAt(at, PickTileTypes))
+                if ((listed.ObjectFlags & (SpellTargetObject.Destroyed | SpellTargetObject.Off)) == 0 && Try(listed) is { } found) return found;
+            if (PickTest(mask, null, at, Noted) is { Found: true } onTile) return onTile;
+        }
+        return new(null, SpellLocation.None, new(false, reason));
+    }
+
+    /// <summary>The object flag the picker's wrapper refuses an object for (<c>OF_CLICK_THROUGH</c>, 0x4F2680); the pick sets it on
+    /// the spared objects for its duration.</summary>
+    public const int ClickThrough = 0x800;
+
+    /// <summary>
+    /// ARC-MAGIC-021 (SU17): the picker's wrapper (0x4F2680) for one candidate, an object or (without one) a tile. An object with
+    /// <see cref="ClickThrough"/> is refused untested. The area test (<paramref name="test"/>) runs with the candidate as candidate and
+    /// target; an object that fails is tested once more with its own location as candidate and target tile, and when that passes the
+    /// target is that tile, not the object. A mask of 0 is refused whatever the test says (no cursor opens with one: SU3).
+    /// </summary>
+    [OriginalFunction(0x4F2680, OriginalFunctionScope.Partial)]
+    public static SpellPick PickTest(ulong mask, SpellTargetObject? candidate, SpellLocation tile, Func<SpellTargetObject?, SpellLocation, SpellTargetTest> test)
+    {
+        ArgumentNullException.ThrowIfNull(test);
+        if (candidate is null)
+        {
+            var onTile = test(null, tile);
+            return new(null, onTile.Passes && mask != 0 ? tile : SpellLocation.None, onTile with { Passes = onTile.Passes && mask != 0 });
+        }
+        if ((candidate.ObjectFlags & ClickThrough) != 0) return new(null, SpellLocation.None, new(false));
+        var answer = test(candidate, SpellLocation.None);
+        if (answer.Passes) return mask != 0 ? new(candidate, SpellLocation.None, answer) : new(null, SpellLocation.None, answer with { Passes = false });
+        var under = test(candidate, candidate.Location);
+        return under.Passes && mask != 0 ? new(null, candidate.Location, under) : new(null, SpellLocation.None, under with { Passes = false });
+    }
 
     /// <summary>ARC-MAGIC-019 (SU13): a cast while the caster's casting goal (26 or 27) plays is queued beneath it unless the playing
     /// goal's stack index (the goals beneath it, the queued casts, plus its own subgoals) is this or more (0x455C30 through 0x4373A0).
