@@ -262,6 +262,8 @@ public enum GameSessionFailure
     GridCellsTaken, InvalidGrid,
     // Hotkey bar (ARC-UI-022): a slot, entry or saved bar that does not fit; no hero to own a bar.
     InvalidHotkey, HotkeysUnavailable,
+    // Hero drop (ARC-UI-025): the item's no-drop flag (item flag 0x20, the remove check 0x466DA0); the hero's tile outside the drop's bounds.
+    ItemNotDroppable, DropTileUnfit,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
