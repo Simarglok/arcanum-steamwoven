@@ -133,6 +133,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // executor calls start add theirs to the end).
     private readonly List<SessionItemEvent> _itemEvents = [];
     private bool _firingItems;
+    // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
+    // chain it was started in with its source (a slot reused by any other run is dropped); not saved, as runs are not.
+    private IReadOnlyCollection<string>? _firingChain;
+    private readonly Dictionary<int, (string? Source, IReadOnlyCollection<string> Chain)> _itemChains = [];
 
     /// <summary>A host over <paramref name="map"/>; with <paramref name="items"/> (ARC-MAGIC-020) the items a critter of the map holds
     /// are objects too (<see cref="Item"/>), so their spells can run with the item as source.</summary>
@@ -596,9 +600,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var world = InvocationWorld();
         if (!SpellInvocationRules.HasLineOfFire(invocation, world)) return Refused(SpellCastAttemptOutcome.NoLineOfFire, SpellUiRules.NoLineOfFireMessage);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
-        return started.Disposition == GameSessionDisposition.Changed && started.Creation?.Run is { } run
-            ? new(SpellCastAttemptOutcome.Started, null, started, run.Id)
-            : new(SpellCastAttemptOutcome.Refused, null, started);
+        if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
+            return new(SpellCastAttemptOutcome.Refused, null, started);
+        _itemChains.Remove(run.Id);
+        return new(SpellCastAttemptOutcome.Started, null, started, run.Id);
     }
 
     private SpellCastAttempt Refused(SpellCastAttemptOutcome outcome, int message)
@@ -737,7 +742,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 }
                 // A call from inside the run rules or an event pass (a host's callback) is refused: the events wait for the outer
                 // action's or pass's firing.
-                var result = _owner.FireItemEvents(triggers, [_itemEvents[0]], WornItemIds);
+                _firingChain = _itemEvents[0].Chain;
+                var result = _owner.FireItemEvents(triggers, [_itemEvents[0]], WornItemIds, IsItem);
+                _firingChain = null;
                 if (result.Failure != GameSessionFailure.None) break;
                 _itemEvents.RemoveAt(0);
                 fired.AddRange(result.Firings);
@@ -749,8 +756,27 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             _itemEvents.Clear();
             throw;
         }
-        finally { _firingItems = false; }
+        finally
+        {
+            _firingItems = false;
+            _firingChain = null;
+        }
         return fired;
+    }
+
+    // ARC-MAGIC-025: an object of the map (or an item a critter holds) of an item type, 5..14 (0x4CBE70's item branch).
+    private bool IsItem(string id) => _map.Object(id) is { Type: >= SpellObjectFacts.FirstItemType and <= SpellObjectFacts.LastItemType };
+
+    // MG46: a run an item event started remembers the chain of that event (none outside a firing).
+    private void Chained(int run, IReadOnlyCollection<string>? chain) => _itemChains[run] = (_owner.QuerySpellRuns()[run]?.Source?.Id, chain ?? []);
+
+    // MG46: the chain of the events a run's damage step calls for: for a run an item event started, the chain it was started in and its
+    // own source; null for any other run.
+    private IReadOnlyCollection<string>? ChainOf(SpellRun run)
+    {
+        if (run.Triggers == 0) return null;
+        var known = _itemChains.TryGetValue(run.Id, out var entry) && entry.Source == run.Source?.Id ? entry.Chain : [];
+        return run.Source?.Id is { } source && !known.Contains(source) ? [.. known, source] : known;
     }
 
     // An NPC's worn items in slot order (the map's), or null for an entity that is no NPC of the map.
@@ -878,9 +904,11 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
                 // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
-                var applied = _owner.ApplyDamage(_owner.Version, who, life, new(run.Parent?.Id, (run.Other ?? run.Parent)?.Id, run.Triggers != 0));
+                var applied = _owner.ApplyDamage(_owner.Version, who, life, new(run.Parent?.Id, (run.Other ?? run.Parent)?.Id));
                 if (applied.Outcome is { } outcome) _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
-                _itemEvents.AddRange(applied.ItemEvents);
+                // MG46: the damage step of a run an item event started carries its chain.
+                var chain = ChainOf(run);
+                _itemEvents.AddRange(chain is null ? applied.ItemEvents : applied.ItemEvents.Select(e => e with { Chain = chain }));
             }
             else if (step.Life is null && step.Damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, step.Damage))
                 _log.Add(new(SpellCastEventKind.Damaged, run.Id, step.Damage.HitPointDamage, step.Object));

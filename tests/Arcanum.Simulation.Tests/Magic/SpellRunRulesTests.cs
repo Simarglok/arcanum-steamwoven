@@ -61,6 +61,8 @@ public sealed class SpellRunRulesTests
         var wand = new SpellObjectFacts("wand", 5, new(3, 4));
         Assert.AreEqual(new SpellLocation(3, 4), Create(new(AtOrc with { Source = wand })).Run!.StartLocation, "the source's location, not the holder's");
         Assert.AreEqual(SpellRunCreationStatus.Refused, Create(new(AtOrc with { Spell = 300 })).Status, "the invocation check first");
+        Assert.IsNull(run.Other, "no other object without one");
+        Assert.AreEqual(new SpellRunObject("orc", 16, 20), Create(new(AtOrc with { Other = Orc })).Run!.Other, "ARC-MAGIC-025: the invocation's other object");
         Assert.AreEqual(SpellRunCreationStatus.Disabled, SpellRunRules.Create(SpellRunTable.Empty, new(AtOrc), Bolt, new World(), new NoRolls(),
             MagicAnomalyProfile.Steamwoven, magicDisabled: true).Status);
     }

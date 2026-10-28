@@ -48,7 +48,13 @@ public readonly record struct SpellInvocationRecord(bool Technology, int Range, 
 /// </summary>
 public sealed record SpellInvocation(int Spell, SpellObjectFacts? Parent, SpellObjectFacts? Source, SpellObjectFacts? TargetObject,
     SpellLocation TargetTile, int? SourceItemPower = null, bool TeleportAllowed = true, bool ParentIsLocalPlayer = false,
-    bool TurnBased = false, string? TurnBasedActor = null);
+    bool TurnBased = false, string? TurnBasedActor = null)
+{
+    /// <summary>ARC-MAGIC-025: the invocation's other object (+0xA0, copied to the run's +0x108): the attacker an item executor copies
+    /// from the global 0x5FF618 that the attacks an opponent and attacks a location wrappers set (IC6, IC10); null for any other
+    /// invocation. The check does not read it.</summary>
+    public SpellObjectFacts? Other { get; init; }
+}
 
 /// <summary>A line-of-fire answer (0x4ADE00): the score (100 or more: no line of fire) and the first blocker on the line, if any.</summary>
 public readonly record struct SpellLineOfFire(int Score, SpellObjectFacts? Blocker);
