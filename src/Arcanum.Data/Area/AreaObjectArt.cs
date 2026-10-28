@@ -2,7 +2,7 @@ namespace Arcanum.Data.Area;
 
 /// <summary>The ART file and frame selection an art id of a scenery (class 4), item (class 6), container (class 7) or eye candy
 /// (class 14, ARC-MAGIC-017) names.</summary>
-/// <param name="Path">The content path, under <c>art/scenery/</c>, <c>art/item/</c> or <c>art/container/</c>.</param>
+/// <param name="Path">The content path, under <c>art/scenery/</c>, <c>art/item/</c>, <c>art/container/</c> or <c>art/eye_candy/</c>.</param>
 /// <param name="Lookup">The art id the selection is keyed by (an item's without its two palette-free bits).</param>
 public sealed record AreaObjectArtPath(string Path, uint Lookup, int Nominal, int Group, int Frame, int Palette);
 

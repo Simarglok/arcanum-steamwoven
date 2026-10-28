@@ -196,8 +196,11 @@ Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../r
 4. **The draw (the AREA viewer, EC12).** Each placed part is an extra-art body (`AreaExtraArt`, class 14 through
    `art\eye_candy\eye_candy.mes`) at its object's tile (the hero's committed cell, an NPC's live cell): the underlay and the
    background ordered right before the object, the foreground right after it; the foreground and background at the art id's draw
-   scale, the underlay unscaled; a translucent part additive and unlit. A map change or a quick load clears them; the goal's end
-   removes the cast entry.
+   scale, the underlay unscaled; a translucent part additive and unlit. The order is the object's own place (an NPC's T0 body with
+   its offset ranks; the standing hero's cell), one rank below or above. A play needs a free slot of each list it places in (7
+   foreground, 7 background, 4 underlay per object, EC9), else nothing is shown. A map change or a quick load clears them; the
+   goal's end removes the cast entry. Each frame of a part is one art id of the viewer's extra art (at most 4,096 art ids and
+   64 MiB of pixels per run, shared with the ground items); past it a frame is not drawn and said once.
 
 ## Differences from the original
 
@@ -213,6 +216,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
+| A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
+| An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -222,7 +227,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 ## Not ready
 
 - The missile's art and flight (goal 28, the projectile entry 6·spell + 1); the facing turn of goal 26 (0x42C850).
-- Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, object offsets and the eye-candy callbacks (EC9, EC11).
+- Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
+  (EC9, EC11, EC12).
 - A second cast while one plays: the original queues it under the running goal (SU13); the viewer refuses it ("a cast is still
   playing"), ignores world presses and the stick until the goal ends, and refuses F7 meanwhile (the session saves no goal).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation

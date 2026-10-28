@@ -214,6 +214,7 @@ public sealed class SpellEyeCandyTable
             if (shared != 0) flags |= SpellEyeCandyFlags.Translucent;
             var variant = (flags & (SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Background)) != 0 ? 0 : 2;
             art = EyeCandyArt.Make(number, 0, 0, (flags & SpellEyeCandyFlags.Translucent) != 0, variant, palette, scale);
+            // A failed build (error 12, 0x4CE028) and a part that does not load (0x4CE1A0) both leave no art and no flags.
             if (art is not { } built || !PartsLoad(built, flags, artExists)) { art = null; flags = SpellEyeCandyFlags.None; }
         }
         else if (cursor.NamedInt("Sound:", out _) is { } named) sound = named;
@@ -247,7 +248,9 @@ public sealed class SpellEyeCandyTable
         && ((flags & SpellEyeCandyFlags.Background) == 0 || artExists(EyeCandyArt.WithVariant(aid, EyeCandyVariant.Background)))
         && ((flags & SpellEyeCandyFlags.Underlay) == 0 || artExists(EyeCandyArt.WithVariant(aid, EyeCandyVariant.Underlay)));
 
-    /// <summary>The <c>eye_candy.mes</c> names (number to name); empty when the file is missing or does not parse.</summary>
+    /// <summary>The <c>eye_candy.mes</c> names (number to name) as the area owner reads every art name table
+    /// (<see cref="Arcanum.Data.Area.AreaObjectArt.ReadNameTable"/>, the draw's reader too); empty when the file is missing or does
+    /// not parse.</summary>
     public static IReadOnlyDictionary<int, string> ReadNames(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -255,12 +258,7 @@ public sealed class SpellEyeCandyTable
         var found = stack.Resolve(EyeCandyArt.NamesPath);
         if (found.Winner is not { } winner || winner.Length > options.MaxBytes || stack.Read(winner) is not { Status: ContentReadStatus.Read, Bytes: { } bytes })
             return new Dictionary<int, string>();
-        var parsed = MesFile.Parse(bytes, options);
-        if (parsed.Status != MesParseStatus.Parsed) return new Dictionary<int, string>();
-        var names = new Dictionary<int, string>();
-        foreach (var message in parsed.File!.Messages)
-            if (SpellTexts.Text(parsed.File, message.Number) is { } name && name.Length > 0) names[message.Number] = name;
-        return names;
+        return Arcanum.Data.Area.AreaObjectArt.ReadNameTable(bytes) ?? new Dictionary<int, string>();
     }
 
     /// <summary>Whether the ART file of an eye-candy art id's variant is in the stack.</summary>

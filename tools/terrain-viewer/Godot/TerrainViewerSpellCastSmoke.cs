@@ -133,7 +133,7 @@ public partial class TerrainViewerApp
             Require(_spellGoal is null, $"the goal ended after {frames} frames");
             // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
             var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
-            Require(_castTimingsForSelfTest.Count == timings + 1, "the goal recorded its eye-candy timing");
+            Require(_castTimingsForSelfTest.Count == Math.Min(timings + 1, 16) && _castTimingsForSelfTest.Count > 0, "the goal recorded its eye-candy timing");
             var timing = _castTimingsForSelfTest[^1];
             var entry = EyeCandyTable?.At(castEntry);
             Require(entry?.Art is { } && !timing.Immediate, $"the spell's cast eye candy plays: {_spellData?.EyeCandyDetail}, entry art {entry?.Art}");

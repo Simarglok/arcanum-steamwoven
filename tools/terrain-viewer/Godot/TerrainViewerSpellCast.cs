@@ -148,6 +148,7 @@ public partial class TerrainViewerApp
         if (animation.Ended)
         {
             _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), (goal.ReleasedMs ?? now) - started, now - started, animation.Immediate));
+            if (_castTimingsForSelfTest.Count > 16) _castTimingsForSelfTest.RemoveAt(0);
             EndSpellGoal(caster, goal, null);
         }
     }
