@@ -153,11 +153,12 @@ snapshot schema 54; 0 for none and for a pre-made hero, whose field is not read 
 - **`SetHeroBackground(expected, choice, effect)`** (`background_set` 0x4C25E0): stores `choice.Background` and `choice.Description`
   (a `BackgroundChoice` of the [background table](../requirements/characters-skills.md#fr-char-005)) and adds one entry of `effect`,
   the rule of `choice.Effect`, with the background cause, in one revision. It clears nothing first: two sets keep two entries, as in
-  the original. Refused: no hero (`InvalidHero`); a background outside 0..999 or a rule of another number (`InvalidBackground`); then
-  every refusal of `AddHeroEffect` (an innate number, a rule that differs from the one in use, the capacity, the version).
+  the original. Refused, in order: no hero (`InvalidHero`); a background outside 0..999 or a rule of another number (`InvalidBackground`);
+  then the refusals of `AddHeroEffect` (a rule it does not admit, an innate number, a rule that differs from the one in use, the
+  version, the capacity, the bounds, the revision).
 - **`ClearHeroBackground(expected)`** (0x4C2650): zeroes both numbers and removes the first entry with the background cause, whatever
   its number (0x4EA2E0), in one revision; `NoChange` when both numbers are 0 and no entry has that cause. Refused without a hero
-  (`InvalidHero`) and on a stale version.
+  (`InvalidHero`), on a stale version and with the other refusals of an effect change (the revision).
 
 The creation screen (N10b, not built) clears and then sets on each background button, and clears on a race or gender change (BD10),
 so a choice pressed again keeps one entry. The background's effect line enters the effect list like any other entry; only the changes

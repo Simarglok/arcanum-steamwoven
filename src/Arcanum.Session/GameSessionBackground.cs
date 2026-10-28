@@ -66,7 +66,7 @@ public sealed partial class GameSessionOwner
     /// ARC-WORLD-097: the background clear (0x4C2650, ledger BD9) for the hero: zeroes the background and its description number and removes
     /// the first effect entry with the background cause (0x4EA2E0), whatever its number, in one revision. Other background-caused entries
     /// stay. No change when both numbers are 0 and no entry has that cause. Refused without a hero
-    /// (<see cref="GameSessionFailure.InvalidHero"/>) and on a stale version.
+    /// (<see cref="GameSessionFailure.InvalidHero"/>), on a stale version and with the other refusals of an effect change (the revision).
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x4C2650, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionEffectResult ClearHeroBackground(GameSessionVersion expected)

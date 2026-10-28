@@ -36,11 +36,14 @@ public sealed class HeroBackgroundChoiceTests
         Assert.AreEqual((revision, owner.Version), (owner.Version.Revision, result.Version), "one revision");
     }
 
-    private static void Refused(SessionEffectResult result, GameSessionOwner owner, GameSessionFailure failure)
+    // The revision, both numbers and the effect list are taken before the call, so a refusal that wrote anything fails.
+    private static void Refused(GameSessionOwner owner, Func<SessionEffectResult> call, GameSessionFailure failure)
     {
-        var revision = owner.Version.Revision;
+        var (revision, stored, effects) = (owner.Version.Revision, Stored(owner), owner.QueryHeroEffects()?.Effects.ToArray() ?? []);
+        var result = call();
         Assert.AreEqual((GameSessionDisposition.Rejected, failure, 0), (result.Disposition, result.Failure, result.Entries));
-        Assert.AreEqual(revision, result.Version.Revision);
+        Assert.AreEqual((revision, revision, stored), (result.Version.Revision, owner.Version.Revision, Stored(owner)));
+        CollectionAssert.AreEqual(effects, owner.QueryHeroEffects()?.Effects.ToArray() ?? []);
     }
 
     [TestMethod]
@@ -107,17 +110,23 @@ public sealed class HeroBackgroundChoiceTests
     public void Refusals_change_nothing()
     {
         using var owner = Owner();
-        Refused(owner.SetHeroBackground(owner.Version, new(1000, 1, 86), Strong), owner, GameSessionFailure.InvalidBackground);
-        Refused(owner.SetHeroBackground(owner.Version, new(-1, 1, 86), Strong), owner, GameSessionFailure.InvalidBackground);
-        Refused(owner.SetHeroBackground(owner.Version, new(7, 1007, 87), Strong), owner, GameSessionFailure.InvalidBackground);
-        Refused(owner.SetHeroBackground(owner.Version, new(7, 1007, 67), new(67, [])), owner, GameSessionFailure.InnateEffect);
-        Refused(owner.SetHeroBackground(new(owner.Identity, 5), new(7, 1007, 86), Strong), owner, GameSessionFailure.StaleVersion);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(1000, 1, 86), Strong), GameSessionFailure.InvalidBackground);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(-1, 1, 86), Strong), GameSessionFailure.InvalidBackground);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(7, 1007, 87), Strong), GameSessionFailure.InvalidBackground);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(400, 1400, 400), new(400, [])), GameSessionFailure.InvalidEffect);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(7, 1007, 67), new(67, [])), GameSessionFailure.InnateEffect);
+        Refused(owner, () => owner.SetHeroBackground(new(owner.Identity, 5), new(7, 1007, 86), Strong), GameSessionFailure.StaleVersion);
         owner.SetHeroBackground(owner.Version, new(7, 1007, 86), Strong);
-        Refused(owner.ClearHeroBackground(new(owner.Identity, 0)), owner, GameSessionFailure.StaleVersion);
+        // A rule of the same number with other changes is refused while the first is in use.
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(8, 1008, 86), new(86, [])), GameSessionFailure.EffectMismatch);
+        Refused(owner, () => owner.ClearHeroBackground(new(owner.Identity, 0)), GameSessionFailure.StaleVersion);
         Assert.AreEqual(((int?)7, (int?)1007), Stored(owner));
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.AddHeroEffect(owner.Version, Nimble, EffectCause.Item, SessionEffectLimits.MaxHeroEffects - 1).Disposition);
+        Refused(owner, () => owner.SetHeroBackground(owner.Version, new(8, 1008, 87), Nimble), GameSessionFailure.EffectCapacityExceeded);
         using var heroless = Create();
-        Refused(heroless.SetHeroBackground(heroless.Version, new(7, 1007, 86), Strong), heroless, GameSessionFailure.InvalidHero);
-        Refused(heroless.ClearHeroBackground(heroless.Version), heroless, GameSessionFailure.InvalidHero);
+        Refused(heroless, () => heroless.SetHeroBackground(heroless.Version, new(7, 1007, 86), Strong), GameSessionFailure.InvalidHero);
+        Refused(heroless, () => heroless.ClearHeroBackground(heroless.Version), GameSessionFailure.InvalidHero);
         Assert.AreEqual(((int?)null, (int?)null), Stored(heroless));
     }
 
