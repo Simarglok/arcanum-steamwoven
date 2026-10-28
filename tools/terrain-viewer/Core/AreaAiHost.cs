@@ -63,14 +63,15 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-102: the cast entry's eye candy of a spell on the NPC (goal 27's play, 0x429F00), started at 0 ms, or null
     /// when none plays (no table, art, part or free slot, an ART that does not read).</summary>
     public Func<string, int, CastEyeCandyAnimation?>? CastEyeCandy { get; init; }
-    /// <summary>ARC-WORLD-102: whether a spell's projectile eye candy has art (0x458B70), so its release launches a missile.</summary>
+    /// <summary>ARC-WORLD-102: whether a spell's projectile eye candy has art (0x458B70), so its release launches a missile
+    /// (ARC-WORLD-105: <see cref="AreaAiNoticeKind.Missile"/>, flown by the viewer).</summary>
     public Func<int, bool>? MissileArt { get; init; }
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
-/// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), and (ARC-WORLD-102) a
-/// cast's play, its release and its goal's end.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd }
+/// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), (ARC-WORLD-102) a
+/// cast's play, its release and its goal's end, and (ARC-WORLD-105) a missile launched at the play's action frame.</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -80,12 +81,15 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public AiAttackSwing Swing { get; init; }
     /// <summary>ARC-WORLD-102: the cast's spell and magic run, its play's timing (<see cref="AreaAiNoticeKind.Cast"/>; none plays: the
     /// release came at once), whether the release began the run (<see cref="AreaAiNoticeKind.Release"/>) and the goal end's free
-    /// (<see cref="AreaAiNoticeKind.CastEnd"/>).</summary>
+    /// (<see cref="AreaAiNoticeKind.CastEnd"/>); ARC-WORLD-105: the launched missile's spell and run, its target object in
+    /// <see cref="Target"/> (<see cref="AreaAiNoticeKind.Missile"/>).</summary>
     public int Spell { get; init; } = -1;
     public int Run { get; init; } = -1;
     public AiCastSwing CastSwing { get; init; }
     public bool Released { get; init; }
     public SessionSpellRunResult? SpellRun { get; init; }
+    /// <summary>ARC-WORLD-105: the cast host that launched the missile (its arrival and loss go through it).</summary>
+    public SessionSpellCaster? Caster { get; init; }
 }
 
 /// <summary>
@@ -465,8 +469,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool ConversationCallback => false;
     public void EndConversation(string npc) { }
 
-    /// <summary>The priority of the goal the NPC's run is at now (its stack's top), 0 without a run.</summary>
-    public int AnimationPriority(string npc) => RunOf(npc) is { } run ? Priorities.GetValueOrDefault(run.Top.Goal, 2) : 0;
+    /// <summary>The gate's animation priority (0x4233D0, AC6): that of the bottom goal (stack slot 0) of the NPC's run, 0 without a
+    /// run. ARC-WORLD-105: the top goal was read before; for a run whose goals differ, such as an attack under its approach, the gate
+    /// then let the pass run mid-approach (a technical slip of the host, fixed in both modes).</summary>
+    public int AnimationPriority(string npc) => RunOf(npc) is { } run ? Priorities.GetValueOrDefault(run.Bottom.Goal, 2) : 0;
     public bool StunAnimationRunning(string npc) => false;
     public bool AnimationRunning(string npc) => _runs.ContainsKey(npc);
     public void ReWield(string npc, bool allSlots) { }
@@ -518,6 +524,16 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (current is not null && !ReferenceEquals(current, run)) EndDroppedRun(current);
         // Started inside the event pass: it steps at the next pump.
         _runs[npc] = (run, _nowMs);
+    }
+
+    /// <summary>ARC-WORLD-105 smoke seam: perform with <paramref name="choice"/> as the pass record's choice, as a danger update that
+    /// chose it would (the native ai-cast smoke's missile spell).</summary>
+    public void PerformChoice(string npc, AiPassChoice choice)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        _passChoices[npc] = choice;
+        Perform(npc);
+        _passChoices.Remove(npc);
     }
 
     // An NPC that joined the hero since the host was built is the companions' (it counts as gone here).
@@ -800,6 +816,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             _notices.Add(new(AreaAiNoticeKind.Cast, id, r.Target?.Id) { Spell = r.Spell, Run = run, CastSwing = new(false) });
             return new(false);
         }
+        // ARC-WORLD-105: a release that launches a missile restarts the goal one pace later (0x4246E0, SM1), as the hero's does.
+        play.PaceAfterRelease = _scene.MissileArt?.Invoke(r.Spell) == true;
         long? release = null;
         var end = play.StartMs;
         foreach (var step in play.Advance(long.MaxValue, () => true))
@@ -816,13 +834,24 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The play's action frame (0x429C40): a play that never reaches it releases nothing; a spell whose projectile eye candy has
-    /// art launches its missile (goal 28), whose flight is not ready, so it is released here as if it arrived at once (a stand-in);
-    /// any other is released (<see cref="ReleaseCast"/>).</summary>
+    /// art launches its missile (<see cref="LaunchCast"/>); any other is released (<see cref="ReleaseCast"/>).</summary>
     public bool CastActionFrame(string id, int run)
     {
         if (_noRelease.Remove(run)) return false;
-        if (_session.QuerySpellRuns()[run] is { } r && _scene.MissileArt?.Invoke(r.Spell) == true) Trace(id).Cast = $"missile run={run} released at once";
-        return ReleaseCast(id, run);
+        return _session.QuerySpellRuns()[run] is { } r && _scene.MissileArt?.Invoke(r.Spell) == true ? LaunchCast(id, run, r) : ReleaseCast(id, run);
+    }
+
+    /// <summary>ARC-WORLD-105: the launch (0x429C40, AC8, <see cref="SessionSpellCaster.LaunchMissile"/>): the release gate marks the
+    /// frame handled, so the goal's end frees nothing, and no re-check or BEGIN runs now; the viewer flies the missile from the NPC's
+    /// tile (<see cref="AreaAiNoticeKind.Missile"/>, goal 28), whose arrival begins the run and whose loss frees it. False when the run
+    /// was released or begun before: the goal then ends.</summary>
+    private bool LaunchCast(string id, int run, SpellRun r)
+    {
+        if (_scene.Spells?.Invoke() is not { } caster) return false;
+        var launched = caster.LaunchMissile(run);
+        Trace(id).Cast = $"missile run={run} {(launched ? "launched" : "not launched")}";
+        if (launched) _notices.Add(new(AreaAiNoticeKind.Missile, id, r.Target?.Id) { Spell = r.Spell, Run = run, Caster = caster });
+        return launched;
     }
 
     /// <summary>The release (0x429C80, <see cref="SessionSpellCaster.Release"/>): the target re-check and the run's BEGIN; false when the

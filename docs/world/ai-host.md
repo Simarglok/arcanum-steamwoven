@@ -99,9 +99,23 @@ is queued as the hero's is ([queued cast](spell-cast-host.md), ARC-MAGIC-019, QC
 | Queue | 0x44E830, 0x4373A0, 0x4B6D70, 0x44DBE0 (AC5, QC1, QC2) | `Cast` runs `CastByAi` first (the run exists from the cast); when the NPC's run has goal 26 or 27 at its bottom (82 and 83 are not found) `SessionSpellCaster.Queue` takes it with the run's current index as the depth: the new goal (26, or 82 for a record with a casting animation) is inserted at the bottom of the run, so the playing goal stays current and the queued goals play in the order they were cast; a depth of 4 or more or a turn-based round refuses and frees the run, silently. Either way no run starts: perform keeps the NPC's run (`AiCastStart.Queued`). Without a casting run the cast starts its own run, replacing the NPC's, as before; with goal 82 or 83 at the bottom (not found) the original starts a second run beside it, which this host, holding one run per NPC, does not: nothing starts (not ready; no college spell has a casting animation). |
 | Play | goal 27's pop (QC3), the stepper | The attempt goal's pop restarts the goal beneath at its first node in the same step: the queued goal's start, turn, play and release are the NPC's casting goal's (above). A queued goal whose run is no longer the NPC's (cancelled before it, QC6, its slot perhaps another caster's) starts without one and ends (QC4). An older queued goal whose freed slot the new cast reuses is dropped when the new one is inserted (the original's stale goal would start the new run early or, without it, take the end step and drop the casts beneath), so the new cast plays in its turn. |
 | Dropped queue | end step, kill (QC5, AC7; MG43) | A run that ends through the end step (a queued goal refused at its start, a play with no eye candy) or is dropped (an interrupt, a replacement, a kill, `Retire`) leaves the casts queued beneath unplayed: the host frees their runs, still waiting for their BEGIN, unpaid, in both settings (the owner's MG43 decision). |
-| Reach | gate 0x4A8570, 0x4233D0 (AC6) | Perform is called only from the pass after the gate, whose busy test reads the bottom goal of the NPC's run: a casting run's (26, 27, 82, 83: priority 3 or 4) holds the NPC busy, so its own AI pass never meets a queue; the branch takes an NPC's cast from another starter of a spell run (the script commands', not run by this host). The host's busy test reads the run's top goal, which gives the same answer for a casting run (busy), queued casts or not. |
+| Reach | gate 0x4A8570, 0x4233D0 (AC6) | Perform is called only from the pass after the gate, whose busy test reads the bottom goal of the NPC's run: a casting run's (26, 27, 82, 83: priority 3 or 4) holds the NPC busy, so its own AI pass never meets a queue; the branch takes an NPC's cast from another starter of a spell run (the script commands', not run by this host). Since ARC-WORLD-105 the host's busy test reads the bottom goal too (`AnimationPriority`; it read the top goal, which let an attack run's pass go on mid-approach: fixed in both settings as a technical slip). |
 
 No new state: the queue is the NPC's goal run, the host's and not saved; the queued runs are the session's spell runs.
+
+## Spell missile (ARC-WORLD-105)
+
+An NPC's casting goal launches its spell's missile as the hero's does ([spell missile](spell-cast-host.md), ARC-MAGIC-018, SM1–SM9):
+the launch node has no player test (AC8). The flight is the viewer's, shared with the hero's missiles.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Launch | 0x429C40, 0x42CAA0, 0x4246E0 (AC8, SM1) | At the play's action frame a spell whose projectile eye candy has art (the scene's `MissileArt`) launches instead of releasing: `CastActionFrame` runs `SessionSpellCaster.LaunchMissile` (the release gate marks the frame handled, no re-check or BEGIN now) and posts a `Missile` notice with the spell, the run, its target object and the cast host. The goal restarts one pace after the launch (`PaceAfterRelease` in `BeginCast`'s timing), so the rest is one pace longer than a release's. A run released or begun before launches nothing and the goal ends. |
+| Goal's end | 0x429CD0 | The attempt goal's end after the launch frees nothing (`EndGoal` sees the handled frame): the run waits for its missile, whatever becomes of the NPC's goal run afterwards (an end, an interrupt, a replacement, `Retire`). |
+| Flight | goals 28 and 78, 0x4248A0, 0x424D90, 0x429C80, 0x429E70 (SM2–SM9, MG44) | The viewer flies the missile from the NPC's live tile to its target's (a tile for a tile target): the secondary cast eye candy plays on the NPC, the missile is drawn and steps, follows a moved target on a new leg, and arrives (`ArriveMissile`: the re-check and BEGIN, whose damage reaches the bodies, the inventory, the status line and a downed hero's walk and attack as a release's does) or is lost (`LoseMissile`: the run freed unpaid, MG44 in both settings). A missile that cannot fly from the NPC (no cell, no art, a run gone, another session) is lost at once. Logs: `ARC-MAGIC-018 missile-launch` with `caster=`, `missile-end`. |
+
+No new state: the missile is the viewer's, not saved (a quick save is refused while any missile flies, as for the hero's); its run
+is the session's.
 
 ## Settings
 
@@ -122,8 +136,7 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
 - **Action goals.** Item use, skills, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
   no item spell or AI-action item is chosen;
-  a spell whose projectile eye candy has art is released at its action frame as if its missile arrived at once (the flight is not
-  run); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
+  goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release: in the Original setting a run kept by a refused re-check (MG41) is then
   freed charged by the goal's end; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
@@ -155,7 +168,10 @@ pays 4 action points; an invented cast eye candy times the release frame and the
 play that never reaches its action frame releases nothing and its end frees the run (ARC-WORLD-102); a cast while the casting goal
 plays is queued beneath it and the queue plays in the order cast, the queue refuses at depth 4 and in a turn-based round, freeing the
 run, a retired host frees the queue, and a queued goal that ends through the end step frees the run of the cast beneath it
-(ARC-WORLD-104). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
+(ARC-WORLD-104); with every spell given a missile, the action frame launches it (no release, the rest one pace longer), the goal's
+end frees nothing, the arrival after it begins the run, and a run dropped mid-rest leaves the missile's run, whose loss frees it
+(ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
+ARC-WORLD-105). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
 refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
 the cost, the record facts, the global lists, the free maintenance count, perform's cast and under the influence, a refused check,
 the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `FidgetAfterRun`'s combat mode, auto-animate flag, running animation, art test,
@@ -164,4 +180,6 @@ whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_M
 `--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the
 marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
 asked at the NPC's subturn end, `EndCombatScripts`); `ai-cast` on `Arcanum1-024-fixed` with `--hero`, marker
-`ARC-WORLD-102 native-smoke ai-cast PASS`.
+`ARC-WORLD-102 native-smoke ai-cast PASS` (since ARC-WORLD-105 the NPC then casts the first listed missile spell whose run starts at
+the hero, as its pass record's choice: the missile flies from it, is drawn and arrives; `MissileSpell`, `MissileLegs` and
+`MissileSteps` in the marker).
