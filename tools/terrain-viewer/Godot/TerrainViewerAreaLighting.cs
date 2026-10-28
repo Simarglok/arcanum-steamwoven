@@ -197,6 +197,9 @@ public partial class TerrainViewerApp
     private void LogAreaEvents(AreaAmbientDriver driver)
     {
         if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        // ARC-DEV-051: the session events that came due, for the bug report's log.
+        BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"
+            + $" waits={last.Waits.Count} decays={last.Decays.Count} restocks={last.Restocks.Count}");
         ReportCompanionWaits(last.Waits);
         // ARC-WORLD-062: a decayed item leaves the ground (the map's inventory and its drawn body).
         if (last.Decays.Count > 0)
