@@ -90,6 +90,13 @@ public interface ISessionLootWindowWorld : ISessionEventWorld
     bool LootWindowShowsContainer { get; }
 }
 
+/// <summary>ARC-WORLD-096: a pass world that wraps a host's event world (a spell host's, <see cref="SessionSpellCaster.ProcessEvents"/>):
+/// the questions it does not answer itself (the loot window, the restock host) go to the wrapped world.</summary>
+internal interface ISessionWrappingEventWorld : ISessionEventWorld
+{
+    ISessionEventWorld Wrapped { get; }
+}
+
 /// <summary>A respawn event that came due (ARC-COMBAT-008, ledger OD10): the scenery switched on again.</summary>
 public sealed record SessionRespawnFiring(GameEvent Event, SessionMapId Map, string Entity);
 

@@ -119,6 +119,7 @@ public partial class TerrainViewerApp
         var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(CurrentAreaMap, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         GD.Print($"ARC-WORLD-092 ai-hit npc={notice.Npc} target={notice.Target} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} recipient={result.Recipient} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");

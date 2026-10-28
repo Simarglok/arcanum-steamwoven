@@ -18,6 +18,10 @@ public enum AreaInventoryMapStatus { Ready, InventoryRefused, PcRecordPresent }
 /// area): its entity, its inventory source (container field 0x3D, whose buy line the dealer test retries, BT8) and its cell.</summary>
 public sealed record AreaSubstituteContainer(string Entity, int InventorySource, CellCoord Cell);
 
+/// <summary>ARC-WORLD-096: a holder's restock fields at T0: its inventory source (NPC field 0xEF, container field 0x3D; 0 is none) and a
+/// container's flags (field 0x38; 0 for an NPC).</summary>
+public readonly record struct AreaRestockSeed(int InventorySource, uint ContainerFlags);
+
 /// <summary>
 /// The session inventory seed of one loaded area map (ARC-WORLD-014) with the object rows the AREA viewer needs to
 /// find, place and name its items and holders (ARC-UI-004). <see cref="Build"/> uses the conversation host's entity ids
@@ -29,15 +33,26 @@ public sealed class AreaInventoryMap
     private readonly Dictionary<AreaObjectKey, string> _entities;
 
     private readonly Dictionary<string, AreaSubstituteContainer> _substitutes;
+    private readonly Dictionary<string, AreaRestockSeed> _restock;
+    private readonly HashSet<string> _persistent;
 
     /// <param name="rows">The object row of every seed entity (exactly those); one row per entity.</param>
     /// <param name="substitutes">ARC-WORLD-090: the substitute container of each NPC entity that has one, a container of the seed.</param>
+    /// <param name="restock">ARC-WORLD-096: the restock fields of seed holders (a holder left out has no source and no flags).</param>
+    /// <param name="persistent">ARC-WORLD-096: the seed items whose item flags carry the persistent flag 0x2000.</param>
     public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0,
-        int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null)
+        int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null,
+        IReadOnlyDictionary<string, AreaRestockSeed>? restock = null, IEnumerable<string>? persistent = null)
     {
         ArgumentNullException.ThrowIfNull(seed);
         ArgumentNullException.ThrowIfNull(rows);
         _substitutes = new(substitutes ?? new Dictionary<string, AreaSubstituteContainer>(), StringComparer.Ordinal);
+        _restock = new(restock ?? new Dictionary<string, AreaRestockSeed>(), StringComparer.Ordinal);
+        _persistent = new(persistent ?? [], StringComparer.Ordinal);
+        if (!_restock.Keys.ToHashSet(StringComparer.Ordinal).IsSubsetOf(seed.Holders.Select(holder => holder.Entity)))
+            throw new ArgumentException("AREA_INVENTORY_RESTOCK_NOT_IN_SEED", nameof(restock));
+        if (!_persistent.IsSubsetOf(seed.Items.Select(item => item.Entity)))
+            throw new ArgumentException("AREA_INVENTORY_PERSISTENT_NOT_IN_SEED", nameof(persistent));
         if (_substitutes.Any(pair => !seed.Holders.Any(holder => holder.Entity == pair.Key && holder.Kind == SessionHolderKind.Npc) ||
                 !seed.Holders.Any(holder => holder.Entity == pair.Value.Entity && holder.Kind == SessionHolderKind.Container)))
             throw new ArgumentException("AREA_INVENTORY_SUBSTITUTE_NOT_IN_SEED", nameof(substitutes));
@@ -61,6 +76,11 @@ public sealed class AreaInventoryMap
     public AreaSubstituteContainer? Substitute(string npc) => _substitutes.GetValueOrDefault(npc);
     /// <summary>ARC-WORLD-090: the NPCs with a substitute container.</summary>
     public int Substitutes => _substitutes.Count;
+    /// <summary>ARC-WORLD-096: the restock fields of a seed holder (none: no source, no flags).</summary>
+    public AreaRestockSeed RestockSeed(string holder) => _restock.GetValueOrDefault(holder);
+    /// <summary>ARC-WORLD-096: whether a seed item carries the persistent item flag 0x2000 (field 0x57).</summary>
+    public bool Persistent(string item) => _persistent.Contains(item);
+
     public bool TryGetRow(string entity, out AreaObjectRecord row) => _rows.TryGetValue(entity, out row!);
     public bool TryGetEntity(AreaObjectKey key, out string entity) => _entities.TryGetValue(key, out entity!);
 
@@ -109,7 +129,11 @@ public sealed class AreaInventoryMap
             if (npc.SubstituteInventory?.SourceIndex is { } index && inventory.TryGetHolder(index, out var box) && box.Type == AreaInventoryHolderType.Container &&
                 box.WorldX is { } x && box.WorldY is { } y)
                 substitutes[Id(npc.Key)] = new(Id(box.Key), box.InventorySource, new(checked((int)x), checked((int)y)));
-        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes),
+        // ARC-WORLD-096: the restock fields and the persistent items (RK1, RK5).
+        var restock = inventory.Holders.Where(holder => holder.InventorySource != 0 || holder.ContainerFlags is > 0)
+            .ToDictionary(holder => Id(holder.Key), holder => new AreaRestockSeed(holder.InventorySource, holder.ContainerFlags ?? 0), StringComparer.Ordinal);
+        var persistent = inventory.Items.Where(item => RestockRules.Keeps(item.ItemFlags)).Select(item => Id(item.Key));
+        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes, restock, persistent),
             $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence");
     }
 

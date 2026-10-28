@@ -37,6 +37,9 @@ public sealed record AreaEventReport(int Steps, int Passes, int Fired, int Dropp
     /// <summary>ARC-WORLD-062: the Item Decay events that came due, in firing order.</summary>
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = [];
 
+    /// <summary>ARC-WORLD-096: the restock events that came due, in firing order.</summary>
+    public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = [];
+
     /// <summary>The diagnostic status line (FR-RUNTIME-001 trace).</summary>
     public string Status(long nowMs) =>
         $"events pending {Pending}, next {(NextDeadlineMs is { } next ? $"in {(next - nowMs) / 1000.0:0.###} s" : "none")}, last pass fired {Fired} dropped {Dropped}"
@@ -149,6 +152,7 @@ public sealed class AreaEventPump
             tally.Calls += result.ScriptCalls.Count; tally.CallsRun += result.ScriptCalls.Count(c => c.Ran);
             tally.Waits.AddRange(result.Waits);
             tally.Decays.AddRange(result.Decays);
+            tally.Restocks.AddRange(result.Restocks);
             tally.BudgetLeft = outcome.BudgetExhausted;
             if (!outcome.BudgetExhausted) return;
         }
@@ -160,9 +164,10 @@ public sealed class AreaEventPump
         public bool Coalesced, BudgetLeft;
         public List<SessionWaitFiring> Waits { get; } = [];
         public List<SessionDecayFiring> Decays { get; } = [];
+        public List<SessionRestockFiring> Restocks { get; } = [];
 
         public AreaEventReport Report(AreaEventPump pump) => new(Steps, Passes, Fired, Dropped, Calls, CallsRun, Coalesced, BudgetLeft,
-            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs)) { Waits = Waits.ToArray(), Decays = Decays.ToArray() };
+            pump._session.QueryEvents().Count, pump.NextDeadline(pump._session.QueryClockSnapshot().GameTimestampMs)) { Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray() };
     }
 }
 
@@ -182,9 +187,10 @@ public interface IAreaEventObjects
 /// answered from the map whose data holds it, so its events are not dropped as missing. A call runs through the shown area's conversation host and its SCR dispatcher
 /// (<see cref="AreaConversationHost.RunCall"/>). The providers are read at each question, so the world follows the
 /// viewer's current hosts. ARC-WORLD-045: a wait timeout's reaction change reads the shown area's conversation state (its
-/// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none.
+/// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
+/// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -199,9 +205,12 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <param name="ai">ARC-WORLD-092: the shown map's AI host, which an AI tick of the pass runs through; null or a null answer: no AI
     /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
     /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
+    /// <param name="restock">ARC-WORLD-096: the restock host of the pass's session; null or a null answer: a restock event waits.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null,
-        Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null)
+        Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null,
+        Func<AreaRestockHost?>? restock = null)
     {
+        _restock = restock;
         _ai = ai;
         _round = round;
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
@@ -211,6 +220,20 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     }
 
     public bool LootWindowShowsContainer => _lootShowsContainer?.Invoke() == true;
+
+    // ---- ARC-WORLD-096: the restock event's host, forwarded to the viewer's restock host ----
+
+    private readonly Func<AreaRestockHost?>? _restock;
+    private AreaRestockHost? Restock => _restock?.Invoke();
+    public bool RestockReady => Restock is not null;
+    public Arcanum.Simulation.Items.RestockHolder? RestockFacts(SessionMapId map, string entity) => Restock?.Facts(map, entity);
+    public string? RestockMerchant(SessionMapId map, string container) => Restock?.Merchant(map, container);
+    public bool Persistent(SessionMapId map, string item) => Restock?.Persistent(map, item) == true;
+    public SessionRestockSet RestockSet(int source) => Restock?.Set(source) ?? new(SessionRestockSetStatus.Unsupported, null);
+    public SessionRestockItem? RestockItem(int basicPrototype) => Restock?.Item(basicPrototype);
+    public SessionItemKind RestockPileKind => Restock?.PileKind ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
+    // The viewer's insert check: every item fits (carry weight and room need the created character, NOT READY).
+    public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) => AreaInventoryHost.DiagnosticInsertCheck;
 
     private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 

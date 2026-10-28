@@ -1,6 +1,8 @@
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -53,6 +55,8 @@ public sealed class RestockStateTests
         };
         public SessionItemKind RestockPileKind => GoldPile;
         public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) { Checks.Add((map, holder)); return Insert; }
+        public bool Ready { get; set; } = true;
+        public bool RestockReady => Ready;
     }
 
     private static SessionMapInventorySeed Seed() => new(
@@ -343,6 +347,56 @@ public sealed class RestockStateTests
     private sealed class NoHost : ISessionEventWorld
     {
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    // ARC-WORLD-096: a host whose data has not loaded yet answers nothing; the event waits a minute as without a host.
+    [TestMethod]
+    public void A_host_that_is_not_ready_yet_makes_the_event_wait_a_minute()
+    {
+        using var owner = Owner();
+        Schedule(owner, "smith");
+        var world = new World { Ready = false };
+        Assert.IsTrue(Fire(owner, world).Restocks.Single() is { Postponed: true, Regenerations.Count: 0 });
+        Assert.AreEqual(0, world.Checks.Count);
+        CollectionAssert.AreEqual(new[] { "purse", "hammer", "ring" }, List(owner, "smith"), "nothing is cleared");
+        world.Ready = true;
+        Assert.IsTrue(Fire(owner, world, SessionEventKinds.RestockRetryDelayMs).Restocks.Single() is { Postponed: false, Decision.Step: RestockStep.Regenerate });
+    }
+
+    private sealed class NoMap : ISpellCastMap
+    {
+        public SpellTargetObject? Object(string id) => null;
+        public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
+        public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask) => [];
+        public bool TileBlocked(SpellLocation tile) => false;
+        public bool PathExists(SpellTargetObject source, SpellLocation tile) => true;
+        public int SectorKind(SpellLocation location) => 0;
+        public int Direction(SpellLocation from, SpellLocation to) => 0;
+        public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
+        public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
+        public SpellCastCritter? Critter(string entity) => null;
+        public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
+        public IReadOnlyList<SpellAcidItem> WornItems(string entity) => [];
+        public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;
+        public bool DamageObject(string id, AttackDamage damage) => false;
+    }
+
+    // ARC-WORLD-096: a pass through a cast host (the viewer's, while it has one) wraps the host's event world; the restock event still
+    // reaches the restock host behind it, for a plain and for a script world.
+    [TestMethod]
+    public void A_pass_through_a_cast_host_reaches_the_restock_host_behind_it()
+    {
+        foreach (var world in new World[] { new(), new ScriptWorld("smith") })
+        {
+            using var owner = Owner();
+            Schedule(owner, "smith");
+            var caster = new SessionSpellCaster(owner, _ => null, new NoMap(), world);
+            Assert.AreEqual(ClockMutationDisposition.Changed,
+                owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, RestockRules.MaxDelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+            var fired = caster.ProcessEvents().Restocks.Single();
+            Assert.AreEqual((false, RestockStep.Regenerate), (fired.Postponed, fired.Decision.Step), world.GetType().Name);
+            Assert.IsTrue(world.Checks.Count > 0, "the regeneration asked the wrapped host's insert check");
+        }
     }
 
     [TestMethod]

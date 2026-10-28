@@ -295,7 +295,11 @@ public partial class TerrainViewerApp
                 new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
             StruckEnd(projectile);
-            if (result.Disposition != GameSessionDisposition.Rejected) _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
+            if (result.Disposition != GameSessionDisposition.Rejected)
+            {
+                _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
+                FloatObjectAttack(result, $"wall:{struck.Key.SourceIndex}", null);
+            }
             RefreshAreaStatus();
             return;
         }
