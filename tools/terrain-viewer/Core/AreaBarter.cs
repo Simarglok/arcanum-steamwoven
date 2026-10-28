@@ -174,6 +174,10 @@ public sealed class AreaBarter
 
     public AreaBarterMerchant Merchant { get; }
 
+    /// <summary>ARC-WORLD-090: the same window for the merchant's own list (its substitute container gone).</summary>
+    public AreaBarter WithoutContainer() => new(_session, _inventory, _data, Merchant with { Container = null, ContainerBuyList = null }, _reaction,
+        _adjustReaction, _name);
+
     /// <summary>Whether the window opens: a hero that is alive (the original's open refuses only a dead or missing PC, 0x572370).</summary>
     public static bool HeroCanTrade(GameSessionOwner session) =>
         session.QueryHero() is not null && session.QueryHeroLife() is { Status.IsDead: false };

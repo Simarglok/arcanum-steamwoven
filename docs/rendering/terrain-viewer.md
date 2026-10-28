@@ -1532,7 +1532,8 @@ controller cancel or `Close` closes it. A quick load, a map change or a dead her
 prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal. ARC-WORLD-090: a
 merchant with a substitute container within 20 tiles of where it talked (no leader) shows the container's items (`(stock chest)` in
 the right header, the container's buy list in brackets after the merchant's); the open moves the container's coins onto the merchant
-and identifies the goods (log line `ARC-WORLD-090 barter stock`), and a refused open shows no window.
+and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken container leaves the merchant's own list, another refused
+open shows no window.
 
 **Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
 the follower menu and cycling and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test

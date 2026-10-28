@@ -94,8 +94,14 @@ public partial class TerrainViewerApp
     private void OpenBarterWindow(AreaBarter barter)
     {
         var session = _areaSession!;
-        var merchant = barter.Merchant;
         var opened = barter.Open();
+        // ARC-WORLD-090: a substitute container an attack broke is gone (0x45F650 finds no object): the merchant trades from its own list.
+        if (opened is { Disposition: GameSessionDisposition.Rejected, Failure: GameSessionFailure.UnknownHolder } && barter.Merchant.Container is not null)
+        {
+            barter = barter.WithoutContainer();
+            opened = barter.Open();
+        }
+        var merchant = barter.Merchant;
         if (opened.Disposition == GameSessionDisposition.Rejected)
         {
             _barterStatus = "open refused: " + opened.Failure;

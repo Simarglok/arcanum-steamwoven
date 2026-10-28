@@ -183,7 +183,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-TECHNOLOGY-009: a container's first stack of an ammunition type in its list order (its seed items still in it, with their
-    /// tracked or seed units), or null. The original's lookup by type (0x465870, its container branch; marked on
+    /// tracked or seed units, then since ARC-WORLD-090 the stacks a barter window sold into it), or null. The original's lookup by type (0x465870, its container branch; marked on
     /// <see cref="HeroStackOfType"/>) passes the raw prototype number where a handle is compared and never finds one (ledger AM6); under
     /// <see cref="Arcanum.Simulation.Items.ItemRuleProfile.ContainerStackLookupFails"/> this answers null as there (AMA5).
     /// </summary>

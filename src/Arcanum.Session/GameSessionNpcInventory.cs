@@ -11,11 +11,12 @@ namespace Arcanum.Session;
 public sealed partial class GameSessionOwner
 {
     /// <summary>Detached copy of the made items the session added to an NPC, in the order they entered its list (empty when none).
-    /// Throws for an invalid entity id.</summary>
+    /// Throws for an invalid entity id. ARC-WORLD-090: a container's list (a barter window's sales) is not an NPC's: empty.</summary>
     public IReadOnlyList<SessionMadeItem> QueryNpcInventory(string npc)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        if (_inventory.Containers.Contains(npc)) return [];
         // ARC-WORLD-071: the kit and taken items the hero gave the NPC are its list's too, but not made items (QueryGivenItems).
         return Array.AsReadOnly(_inventory.AddedTo(npc).Where(item => !_inventory.Given.ContainsKey(item.Entity)).ToArray());
     }

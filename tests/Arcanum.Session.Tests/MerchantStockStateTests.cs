@@ -200,6 +200,13 @@ public sealed class MerchantStockStateTests
         CollectionAssert.AreEqual(new[] { "gold-zero", "amulet", "axe", "bullets", "kit:1" }, List(restored, "chest"));
         Assert.IsTrue(restored.QueryItemIdentified("kit:1"));
         Assert.IsNull(restored.QueryNpcGold("chest"), "a container is not an NPC");
+        Assert.AreEqual(0, restored.QueryNpcInventory("chest").Count);
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, restored.GiveItemToNpc(restored.Version, "chest", "kit:2", Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, restored.AddItemToNpc(restored.Version, "chest", Bullets, Accept).Failure);
+        // A deleted item loses its flag: buying every unit of the container's stack deletes it (0x4658E0).
+        Assert.IsTrue(restored.QueryItemIdentified("bullets"));
+        Changed(restored.BarterBuy(restored.Version, "smith", "bullets", 20, 0, Bullets, GoldPile, Accept, Accept, container: "chest"));
+        Assert.IsTrue(restored.IsItemDestroyed("bullets") && !restored.QueryItemIdentified("bullets"), "the emptied stack is deleted with its flag");
         // A seed that lists the filled container as an NPC is another map's data.
         var swapped = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "chest" ? h with { Kind = SessionHolderKind.Npc } : h)] };
         using var other = Restore(Decode(text));

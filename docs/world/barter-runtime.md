@@ -46,7 +46,7 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 | Follower (BT6) | A follower's window (the NPC's leader is the PC) has no prices: items move both ways for nothing, with no reaction change. | `AreaBarterMerchant.Follower` |
 | Substitute container (BT4, BT11) | An NPC with no leader whose field 0x126 names a container within 20 tiles (Chebyshev) shows and fills that container instead of its own list; a follower or a leader-led NPC has none. | `AreaInventoryMap.Substitute`, `AreaBarterMerchant.WithSubstitute` |
 | Open stock (BT11) | At every open the container's gold piles move onto the merchant in list order (each destroyed, the merchant's first pile grows; a merchant without one gets a new pile), then, without a PC leader, every entry of the merchant's and the container's lists gets the identified flag 0x1 (worn and gold included). | `GameSessionOwner.OpenBarter`, `AreaBarter.Open` |
-| Container trades (BT5) | A bought item comes out of the container, a sold item goes into it (ammunition joins its first stack of the type, which Original never finds: a new stack, AMA5); the coins are paid to and by the merchant, never the container. A sale outside a follower's window marks the sold item identified. | `BarterBuy`/`BarterSell` with `container`, `identify` |
+| Container trades (BT5) | A bought item comes out of the container, a sold item goes into it (ammunition joins its first stack of the type, which Original never finds: a new stack, AMA5); the coins are paid to and by the merchant, never the container. A sale of a whole item outside a follower's window marks it identified (units of ammunition are not marked: no complexity, no effect). | `BarterBuy`/`BarterSell` with `container`, `identify` |
 | Dealer test (BT8) | The merchant's own buy list, else its substitute container's (the container's inventory source, field 0x3D). | `AreaBarterMerchant.Deals` |
 | Identified (BT4, WB7) | The identified test (0x464370) reads the stored flag or the session's; the worth of an unidentified magickal item is 300. | `QueryItemIdentified`, `AreaBarter` lines |
 | Dialog (BT7) | A `b:` reply runs its action, then ends the dialog (not suspends it) and opens the window with the speaker; its response value is not followed. The open refuses only a dead or missing PC; nothing checks the merchant. | `DialogOptionTransition.Barter`, `DialogEndKind.BarterWindow` |
@@ -85,10 +85,14 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
 - **Restock**: the open (re)schedules the shown inventory's regeneration 12–24 game hours later (BT4, BT10); the next slice of
   FR-ITEM-014, with the loot-set generation and the `InventorySourceRules` correction (BT9).
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
-  0x126) and measures the 20 tiles from where the merchant talked; a leader the session gave the NPC other than the hero is not seen. A
-  container's coins move only at a barter open (no other container gold move is modelled). The items sales put into a container are not
-  part of its spill when an attack breaks it (they stay listed, hidden). A container gold pile of 0 coins stays in the container: the
-  original's open loops on it for ever (BT11, a hang; crash class, the same in both settings).
+  0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
+  a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container
+  gold move is modelled). The items sales put into a container are not part of its spill when an attack breaks it: they stay in the
+  session's store, shown nowhere (not modelled). A broken container is no substitute: the open refuses it and the viewer opens the
+  merchant's own list instead, as the original finds no container object. Other refused opens (a container pile with an insert-item
+  script, a merchant without a pile that has a transfer script, a full budget) show no window. A container gold pile of 0 coins stays in the container: the
+  original's open loops on it for ever (BT11, a hang: a technical bug, fixed in both modes without a switch by the owner rule of
+  2026-10-28, [rule modes](rule-modes.md)).
 - **Identified readers**: only the barter window reads the session's identified flag; the best-items choice, the AI item lists and the
   script condition `is identified` still read the stored flag.
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at

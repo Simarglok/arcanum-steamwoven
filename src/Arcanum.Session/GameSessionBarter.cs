@@ -38,7 +38,7 @@ public sealed partial class GameSessionOwner
     /// <paramref name="npcInsert"/>, which sees the first pile's coins); then, when <paramref name="identify"/> (the host's: no PC at the top
     /// of the NPC's leader chain, 0x45DDA0), every item of the NPC's list and of the container's is marked identified (0x4643D0: item flag
     /// 0x1 on each list entry, worn and gold included). A pile of 0 coins stays in the container: the original's loop finds it again for
-    /// ever (BT11, a hang: crash class, kept out in both settings). Refused before any effect: an invalid input
+    /// ever (BT11, a hang: a technical bug, fixed in both modes without a switch). Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>),
     /// an NPC or a container (not spilled) its seed does not list (<see cref="GameSessionFailure.UnknownHolder"/>), a pile with an
     /// insert-item script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full record, list or identified
@@ -172,7 +172,7 @@ public sealed partial class GameSessionOwner
     /// a pile with an insert-item script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a hero sum past 32 bits or a full record
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>). ARC-WORLD-090: with a <paramref name="container"/> the item goes into the
     /// container's list (0x578EA0 moves a sold item into the shown object: <see cref="GiveItemToNpc"/>'s rules with the container as
-    /// holder; ammunition joins its first stack of the prototype, which the original's lookup never finds, AMA5); the coins still come
+    /// holder; units of ammunition join its first stack of the type, which the original's lookup never finds, AMA5); the coins still come
     /// from the NPC. With <paramref name="identify"/> (a merchant that is not a follower, BT5) a whole item that moved is marked identified
     /// in the move's revision; a full identified budget refuses before any effect.
     /// </summary>

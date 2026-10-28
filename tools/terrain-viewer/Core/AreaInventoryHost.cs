@@ -34,12 +34,12 @@ public sealed class AreaInventoryMap
     public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0,
         int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null)
     {
+        ArgumentNullException.ThrowIfNull(seed);
+        ArgumentNullException.ThrowIfNull(rows);
         _substitutes = new(substitutes ?? new Dictionary<string, AreaSubstituteContainer>(), StringComparer.Ordinal);
         if (_substitutes.Any(pair => !seed.Holders.Any(holder => holder.Entity == pair.Key && holder.Kind == SessionHolderKind.Npc) ||
                 !seed.Holders.Any(holder => holder.Entity == pair.Value.Entity && holder.Kind == SessionHolderKind.Container)))
             throw new ArgumentException("AREA_INVENTORY_SUBSTITUTE_NOT_IN_SEED", nameof(substitutes));
-        ArgumentNullException.ThrowIfNull(seed);
-        ArgumentNullException.ThrowIfNull(rows);
         if (runtimeMap < 1) throw new ArgumentOutOfRangeException(nameof(runtimeMap));
         RuntimeMap = runtimeMap; Seed = seed; DeadNpcs = deadNpcs; NpcsWithoutEvidence = npcsWithoutEvidence;
         var wanted = seed.Items.Select(item => item.Entity).Concat(seed.Holders.Select(holder => holder.Entity)).ToHashSet(StringComparer.Ordinal);
