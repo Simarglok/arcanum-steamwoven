@@ -403,6 +403,7 @@ public partial class TerrainViewerApp
                 using var image = GetViewport().GetTexture().GetImage();
                 if (image.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_INVENTORY_CAPTURE_FAILED");
             }
+            var artShown = _inventoryPanel?.ArtMode ?? false;
             InventoryKey(Key.I);
             Require(!InventoryOpen, "I closed the window");
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -410,7 +411,7 @@ public partial class TerrainViewerApp
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
                 PrintedLines = printed, WornCycled = wornCycled, Dragged = dragged, Grid = _areaSession.QueryHeroGrid().Items.Count,
                 Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count,
-                Parity = _inventoryPanel.ArtMode ? "original art and layout (ARC-UI-051); fonts, item sizes and paper-doll art NOT_VERIFIED" : "NOT_VERIFIED (diagnostic window, no original art)" }));
+                Parity = artShown ? "original art and layout (ARC-UI-051); fonts, item sizes and paper-doll art NOT_VERIFIED" : "NOT_VERIFIED (diagnostic window, no original art)" }));
         }
         finally
         {
