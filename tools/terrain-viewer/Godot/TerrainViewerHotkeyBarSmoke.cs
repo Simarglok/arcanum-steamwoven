@@ -52,7 +52,6 @@ public partial class TerrainViewerApp
                 _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
                 if (at != away) { GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }); await Frames(2); }
             }
-            var log = _gameBarPanel!.MessageLog;
             var hovers = new List<string>();
             Texture2D? SpellArt(int number) => HotkeyBarRules.SpellIcon(number) is { } art ? Art(art)?[0] : null;
 
@@ -62,6 +61,8 @@ public partial class TerrainViewerApp
             Require(_gameBarPanel is { Visible: true } && _hotkeyBarView is { } && _hotkeyBarContent is { } content && content.ReadyCount == HotkeyBarRules.ArtNumbers.Count,
                 "the bar shows with its art: " + _hotkeyBarContent?.Detail);
             var view = _hotkeyBarView!;
+            // The bars exist only from here in an automated run (they show because this smoke asks).
+            var log = _gameBarPanel!.MessageLog;
             Require(Enumerable.Range(0, HotkeyBarRules.Entries).All(i => view.SlotArtForSelfTest(i) == Art(HotkeyBarRules.SlotArt)![0]), "every slot draws HKSlt1");
 
             // A right drag from the spell pane onto slot 2.
@@ -101,10 +102,15 @@ public partial class TerrainViewerApp
             Require(_messageLog.PaneMode, "the pane still holds the window");
             Require(log.PaneNameForSelfTest == _gameBarContent!.Texts.SkillButtonName(0) && log.ShownKindForSelfTest is null,
                 $"in the spells mode only the name is written: '{log.PaneNameForSelfTest}'");
-            await Hover(away);
+            // Leaving to the gap (inside the strip) keeps the name (0x550720 acts in the message mode only); hiding the pane takes it.
+            var gap = (view.SlotCentreForSelfTest(4) + view.SlotCentreForSelfTest(5)) / 2;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = gap, GlobalPosition = gap });
+            await Frames(2);
+            Require(_messageLog.PaneMode && log.PaneNameForSelfTest.Length > 0, "leaving the slot in the pane mode keeps the name");
             _spellPane.HidePane();
             await Frames(3);
             Require(!_messageLog.PaneMode && log.PaneNameForSelfTest.Length == 0, "the pane's name goes with the pane");
+            await Hover(away);
             session.ClearHotkey(session.Version, 4);
 
             // While slot 2 is dragged its key skips it (HK8, HK15); a right release on the slot itself ends the drag with no change.

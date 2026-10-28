@@ -57,7 +57,8 @@ public static class AreaHoverDescriptions
     /// <summary>A spell's hint (0x5529C0 case 8, SG2): the college's icon, the name, the minimum willpower ("%s: %d" with intgame.mes 73),
     /// right of it the cast cost as the hero pays it with the maintenance ("%s: %d  (%d / %s)" with 74 for a period of one second,
     /// "%s: %d  (%d / %d %s)" with 75 for a longer one, "%s: %d" without), then the description. <paramref name="row"/> is the spell's
-    /// row of the spells page (null without a hero: no willpower or cost line).</summary>
+    /// row of the spells page (null without a hero: no willpower or cost line; the original reads the willpower from the spell's data,
+    /// but the bar's hovers need a hero, so the case does not arise).</summary>
     public static AreaMessageEntry SpellHint(int spell, AreaSpellRow? row, SpellData? data, AreaGameBarTexts labels)
     {
         ArgumentNullException.ThrowIfNull(labels);

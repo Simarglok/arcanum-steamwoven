@@ -100,12 +100,15 @@ public partial class AreaInventoryGridArea : Control
     /// not the last one reported (the self-test drives it too).</summary>
     internal void StillAt(Vector2 frame)
     {
-        if (Held is not null || _view is null) return;
+        if (Held is not null || Blocked || _view is null) return;
         var item = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y))?.Entity;
         if (item == _stillItem) return;
         _stillItem = item;
         PointerStill?.Invoke(item);
     }
+
+    /// <summary>The window opened or closed: the still pointer forgets the last item it reported and waits for a move.</summary>
+    internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)

@@ -60,6 +60,14 @@ public partial class TerrainViewerApp
         PostMessage(hint, hover.Kind == AreaHotkeyHoverKind.Skill ? "skill hint" : "spell hint");
     }
 
+    /// <summary>The weapon's spells replaced the spells or the other way round: the old mode's name goes (0x5506C0's mode build).</summary>
+    private void ClearMessagePaneName()
+    {
+        if (_messageLog.PaneName is null) return;
+        _messageLog.ClearPaneName();
+        _gameBarPanel?.MessageLog.Render();
+    }
+
     /// <summary>The bar mode a pane holds the window in: 8 the weapon's spells, 1 the spells, 2 the skills (ML8).</summary>
     private int MessagePaneMode => _itemPaneItem is not null ? 8 : _gameBar.IsOn(AreaBarButton.Spells) ? 1 : 2;
 

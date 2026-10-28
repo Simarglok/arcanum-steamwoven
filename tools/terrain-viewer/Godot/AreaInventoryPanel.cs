@@ -153,7 +153,7 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     public void Open(AreaInventoryView view, string? message = null)
     {
-        Show(); Render(view, message);
+        _area.ResetStill(); Show(); Render(view, message);
     }
 
     /// <summary>ARC-UI-019: puts an item on the cursor (a wear move's occupant).</summary>

@@ -35,6 +35,7 @@ public sealed class AreaItemIcons : IDisposable
     private readonly ContentPrototypes _prototypes;
     private readonly AreaItemIconLimits _limits;
     private readonly Dictionary<int, CombatFields?> _prototypeFields = [];
+    private readonly Dictionary<int, int?> _unknownDescriptions = [];
     private readonly Dictionary<uint, (AreaInterfaceFrame? Frame, string Detail)> _arts = [];
     private IReadOnlyDictionary<int, string>? _table;
     private bool _tableRead, _disposed;
@@ -98,7 +99,7 @@ public sealed class AreaItemIcons : IDisposable
                     ObjectDisplayName.ItemFlagsSlot => unchecked((int)item.Flags),
                     ObjectDisplayName.ItemComplexitySlot => item.MagickTechComplexity,
                     ObjectDisplayName.DescriptionSlot => kind.Description,
-                    ObjectDisplayName.ItemUnknownDescriptionSlot => ObjectSoundReader.ReadPrototype(_prototypes.Read, kind.Prototype).Fields?.Item?.UnknownDescription,
+                    ObjectDisplayName.ItemUnknownDescriptionSlot => UnknownDescription(kind.Prototype),
                     _ => null,
                 };
             ObjectFieldReader marked = slot => slot == ObjectDisplayName.ItemFlagsSlot && identifiedMark && read(slot) is { } flags
@@ -136,6 +137,16 @@ public sealed class AreaItemIcons : IDisposable
             item.MagickTechComplexity <= 0 || (item.Flags & IdentifiedFlag) != 0 || identifiedMark, (item.Flags & HexedFlag) != 0,
             CombatItemArt.Subtype(item.UseArtFragment), CombatItemArt.Coverage(item.InventoryArt), fields.Ammo?.AmmoType ?? 0,
             fields.Written?.Subtype ?? 0, item.Discipline);
+    }
+
+    // A prototype's unknown description (field 0x62), read once, within the same prototype limit.
+    private int? UnknownDescription(int prototype)
+    {
+        if (_unknownDescriptions.TryGetValue(prototype, out var known)) return known;
+        if (_unknownDescriptions.Count >= _limits.MaxPrototypes) return null;
+        var number = ObjectSoundReader.ReadPrototype(_prototypes.Read, prototype).Fields?.Item?.UnknownDescription;
+        _unknownDescriptions[prototype] = number;
+        return number;
     }
 
     private CombatFields? Prototype(int prototype)

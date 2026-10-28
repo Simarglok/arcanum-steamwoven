@@ -137,6 +137,10 @@ public sealed class AreaMessageLog
         return true;
     }
 
+    /// <summary>ARC-UI-035: the pane changed its bar mode (the spells and the weapon's spells, 0x5506C0): the mode's build redraws its text
+    /// area, so a name a hover wrote into the old mode's area goes.</summary>
+    public void ClearPaneName() => PaneName = null;
+
     /// <summary>The upper half of the window was clicked (0x5528E0): the next older entry, at most as far back as the log holds.</summary>
     public bool Older()
     {

@@ -190,7 +190,7 @@ public sealed class AreaGameBarTexts
     public const string IntgamePath = "mes/intgame.mes", SkillUiPath = "mes/skill_ui.mes";
     /// <summary>The spell hint's labels in <c>intgame.mes</c>.</summary>
     public const int CostLabel = 59, WillpowerLabel = 73, SecondLabel = 74, SecondsLabel = 75;
-    /// <summary>The first skill-bar button name in <c>skill_ui.mes</c> (0x579F01: 100 + button).</summary>
+    /// <summary>The first skill-bar button name in <c>skill_ui.mes</c> (the skill bar init 0x579ED5..0x579F1C: 100 + button).</summary>
     public const int FirstSkillButtonName = 100;
     private const int MaxText = 64;
     private static readonly IReadOnlyDictionary<int, string> ProjectText = new Dictionary<int, string>
