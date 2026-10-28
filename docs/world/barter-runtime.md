@@ -80,10 +80,35 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
 [`InventorySourceBuyRulesTests`](../../tests/Arcanum.Data.Tests/Characters/InventorySourceBuyRulesTests.cs),
 [`DialogBarterTests`](../../tests/Arcanum.Scripting.Tests/Dialog/DialogBarterTests.cs), [`AreaBarterTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaBarterTests.cs).
 
+## Restock rules (ARC-WORLD-093)
+
+`Arcanum.Simulation.Items.RestockRules` holds the original's restock event as pure rules (ledger
+[RK1–RK8](../research/ledger/items.md#merchant-restock-arc-world-093), one reading, F1); the session event and the viewer come in
+later slices.
+
+| API | Original | Rule |
+| --- | --- | --- |
+| `InventorySource(holder)` | 0x4641A0 | An NPC's or a container's source; 0 for any other object (a PC included). |
+| `Delay(draw, multiplayer)` | 0x4640C0 | The draw of 43,200,000..86,400,000 game ms (12–24 hours), a quarter in multiplayer. Only an object with a source is scheduled; the new event replaces its pending one (the caller's). The window open schedules the shown object in every mode (RK2). |
+| `Fire(holder, merchant)` | 0x464180 → 0x463C60 | `RestockDecision`: nothing without a source; an NPC regenerates unless dead or with a PC leader; a container with flag 0x400 regenerates; on screen it is `Reschedule`d; off screen its merchant (the host's: the first NPC of the game-window-sized area whose substitute it is) decides: dead, PC leader or none is nothing, else `RegenerateMerchantAndContainer` (the merchant only with a source of its own). |
+| `Keeps(itemFlags)` | 0x463B30 (keep 1) | Only an item with the persistent flag 0x2000 stays; every other entry, worn and gold included, is destroyed. |
+| `Generate(set, rolls)` | 0x463E20 | `RestockLoot`: one coin draw in the set's range (reversed bounds swapped; a new pile only above 0), then one 1..100 draw per line in order, creating the line's item when the draw is at most its rate. Creation, insert (a refused item is destroyed) and an NPC's best-items wield are the caller's. |
+
+The four installed merchants (none trades from its own source, `AreaBarterTests`) have no source of their own and their containers neither restock flag, so they restock only off screen
+through their living merchant (census in the ledger). `InventorySourceRules` (the loot reader) now takes sets 1..count (BT9) and reads a
+set with a buy line unless the buy or loot line fails, which empties the set in the source (`Emptied`; BT8, BT9). Tests:
+[`RestockRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/RestockRulesTests.cs),
+[`AreaRestockCensusTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaRestockCensusTests.cs) (opt-in census).
+
 ## Not modelled (NOT READY)
 
-- **Restock**: the open (re)schedules the shown inventory's regeneration 12–24 game hours later (BT4, BT10); the next slice of
-  FR-ITEM-014, with the loot-set generation and the `InventorySourceRules` correction (BT9).
+- **Restock in play**: the rules are above (ARC-WORLD-093), but no session event exists yet: the open does not schedule the shown
+  inventory's regeneration (RK2) and nothing regenerates. Next slices: a saved session event (schema main+1) with the clearing and the
+  generation into the holder's list (labelled session rolls, `made:n` items, RK7 fixed), then the viewer's schedule at every window
+  open and its world port (screen test, merchant search). The first-open generation of containers with flag 0x200 (RK4, RK8; 116
+  installed) and an NPC's best-items wield after a regeneration are not modelled. Open for the session slice: the project refuses 39
+  of the 123 installed sets by their shape (`Malformed`, census), and an `Emptied` set still generates its coins in the original (RK6);
+  which of them a regeneration reads must be decided there.
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
   0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container
@@ -97,8 +122,6 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
   script condition `is identified` still read the stored flag.
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
-- The starting-hero loot reader (`InventorySourceRules`, ARC-WORLD-015) keeps its earlier reading: it treats the last set as out of
-  reach and refuses any set with a buy line; BT9 corrects the range (follow-up for that reader, not changed here).
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
   `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): the window has no gamble slot.
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and
