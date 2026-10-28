@@ -116,6 +116,7 @@ public partial class TerrainViewerApp
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
+        EndMainMenuForTeardown();
         EndSaveList();
         UnbindAreaInventory();
         UnbindAreaCompanions();

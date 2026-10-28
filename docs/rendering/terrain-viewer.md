@@ -1216,7 +1216,8 @@ original window art, sorting or paging options, a text cursor of the original's 
 
 With `--main-menu true` (launcher: `./arcanum area --main-menu` or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
-the first time in a run. The scene's session is the placeholder the original also has before its menu; the menu
+the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
+does not open and the status line says so). The scene's session is the placeholder the original also has before its menu; the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
 
@@ -1226,22 +1227,30 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
   tasks, credits, movies, the character editor); each window names its hidden buttons and why. A button opens its
   window over the current one; Cancel and Escape go back; Escape on the main window does nothing (as at the
   original's first opening; when the original's menu opens again later, Escape there exits the game).
-- **Texts and keys.** The labels and hotkey letters are the game's `mes\MainMenu.mes` (the label's message + 10 is
-  its letter, upper-cased), read through the game folder's content stack in the game-start phase; without it the
+- **Texts and keys.** The labels and hotkey letters are the game's `mes\MainMenu.mes` (the first character of the
+  label's message + 10, upper-cased), read through the game folder's content stack in the game-start phase; without it the
   project's English text is used and the window says why. A typed letter chooses its button (Shift does not
   matter); a click does too. A controller moves over the buttons, confirms and goes back.
 - **New game.** Pick Character opens the pre-made browser: the twelve heroes in main-menu order from the first,
   Previous and Next cycling, each shown with its prototype, race, gender, level, gold and kit as read (each hero is
   read once a run, as `--hero` reads it). **Start** makes a new session as the scene's launch made its own (the
   module's clock, the map's start cell, its reputations) with that hero (its stats, gold, kit, best items worn,
-  main-menu flag) and adopts it as a load adopts its session; the menu closes. A new game needs the start map, as
-  the original's new game puts the PC there: the AREA exterior, or map mode on runtime map 1 (`./arcanum area`'s
-  `Arcanum1-024-fixed`); on another map, in the cave or with a session a transfer carried, Pick Character is hidden
-  with the reason (scene flow is the next task, N8). The original's start movies, fade, newspaper event and
+  main-menu flag) and adopts it as a load adopts its session; the menu closes. The hero's effect rules and kit facts
+  come with it, and the scene's arguments name the hero from then on, so a map transfer reads the hero again with the
+  map (as `--hero` does). A new game needs the start map at the map list's start, as the original's new game puts the
+  PC there: the AREA exterior, or map mode on runtime map 1 (`./arcanum area`'s `Arcanum1-024-fixed`) opened without
+  `--sector`; on another map, in the cave, with `--sector` or with a session a transfer carried, Pick Character is
+  hidden with the reason (scene flow is the next task, N8). The original's start movies, fade, newspaper event and
   random-encounter schedule are not modelled.
 - **Last Save.** Loads the newest save of the [save list](#save-list-arc-ui-010) (F8's choice) through the load path
   and closes the menu; with no save the window stays (the original says nothing; here the window says "no save to
-  continue from"); a failed load keeps the menu and names the reason.
+  continue from"); a load refused before anything changes keeps the menu and names the reason. A save of another map
+  (map mode) loads that map: the menu ends as the scene is taken down, and if that map's load then fails the shown map
+  comes back without the menu.
+- **Hero tables of a load.** The placeholder session has no hero, so a hero save loaded from the menu (Last Save or
+  Load Game) takes the game-wide experience and auto-level data from the pre-made heroes' tables, and the loaded
+  pre-made hero's effect rules and kit facts are adopted with it (the scene's arguments name that hero). F8 and the
+  palette's load window keep the running session's tables, as before.
 - **Load Game.** Opens the save list's load window with the menu waiting under it: a load closes both; closing the
   window unused brings the Single Player window back.
 - **Exit Game** quits the viewer. The menu is modal like the logbook (the gate closes, the clock pauses) and owns

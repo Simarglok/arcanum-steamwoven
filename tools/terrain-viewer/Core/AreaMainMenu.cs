@@ -106,12 +106,12 @@ public sealed class AreaMainMenuTexts
     /// <summary>The text of a message: the game's when it has it, else the project's.</summary>
     public string Text(int message) => _original(message) is { Length: > 0 } text ? text : ProjectText.GetValueOrDefault(message, $"[{message}]");
 
-    /// <summary>The hotkey letter of a button (upper case), or null when its message is not one letter.</summary>
+    /// <summary>The hotkey of a button: the first character of its hotkey message, upper-cased (MM3); null when the message is empty.</summary>
     public char? Hotkey(AreaMenuButton button)
     {
         ArgumentNullException.ThrowIfNull(button);
-        var text = Text(button.HotkeyMessage).Trim();
-        return text.Length == 1 && char.IsLetterOrDigit(text[0]) ? char.ToUpperInvariant(text[0]) : null;
+        var text = Text(button.HotkeyMessage);
+        return text.Length > 0 && !char.IsControl(text[0]) ? char.ToUpperInvariant(text[0]) : null;
     }
 }
 

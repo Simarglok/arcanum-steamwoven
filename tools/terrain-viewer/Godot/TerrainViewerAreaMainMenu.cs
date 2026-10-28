@@ -28,13 +28,18 @@ public partial class TerrainViewerApp
     private readonly Dictionary<int, AreaHeroLoad> _mainMenuHeroes = [];
     private Func<AreaPremadeHero, AreaHeroLoad>? _heroLoaderForSelfTest;
     private Action? _mainMenuExitForSelfTest;
+    /// <summary>The pre-made hero whose tables the menu adopted last (null: none).</summary>
+    private AreaPremadeHero? _menuTablesHero;
     private bool MainMenuOpen => _mainMenuPanel?.IsOpen == true;
 
     /// <summary>After a scene is published: opens the menu the first time, when asked for and the scene has a session.</summary>
     private void MaybeOpenMainMenu(TerrainViewerArguments arguments)
     {
-        if (!arguments.MainMenu || _mainMenuShown || !QuickKeysActive) return;
+        if (!arguments.MainMenu || _mainMenuShown) return;
+        // Only the first published scene: a map without a session (unlit without a clock, or not in the map list) shows no menu,
+        // and a later transfer does not open it in the middle of play.
         _mainMenuShown = true;
+        if (!QuickKeysActive) { _mainMenuStatus = "not opened: the first scene has no game session"; GD.Print("ARC-UI-011 main menu not opened: no game session"); return; }
         var texts = SelfTestBootstrap ? AreaMainMenuTexts.Project("self-test: no game folder") : AreaMainMenuTexts.Load(arguments.ModulePath);
         GD.Print($"ARC-UI-011 main menu texts fromGame={texts.FromGame} detail={texts.Detail}");
         OpenMainMenu(texts);
@@ -70,6 +75,8 @@ public partial class TerrainViewerApp
         if (InCave) return "a new game starts on the start map; the shown map is the Crash Site cave (scene flow N8)";
         if (_readyMapName is { } map && CurrentAreaMap != 1) return $"a new game starts on the start map; the shown map is {map} (scene flow N8)";
         if (_newGameRecipe is null) return "this scene's session came from a transfer or a load, not from its start";
+        // --sector opens the map around another sector, so the scene's start cell is not the map list's start.
+        if (_arguments?.AreaMapSector is not null) return "--sector moved the scene's start away from the map list's start";
         return null;
     }
 
@@ -121,7 +128,7 @@ public partial class TerrainViewerApp
                     GD.Print("ARC-UI-011 main menu last save: none");
                     break;
                 }
-                if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ")) { EndMainMenu("last save " + latest.Name); return; }
+                if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables())) { EndMainMenu("last save " + latest.Name); return; }
                 _mainMenu.Notice = _quickSaveStatus;
                 break;
             case AreaMenuCommandKind.StartNewGame:
@@ -162,16 +169,48 @@ public partial class TerrainViewerApp
             owner.Dispose();
             return "new game refused: the dialog state is not readable";
         }
-        _areaEffectRules = hero.Effects;
-        _areaKitHealing = hero.KitHealing;
-        _areaKitLockpicks = hero.KitLockpicks;
-        _areaKitDurability = hero.KitDurability;
-        _areaKitArt = hero.KitArt;
+        AdoptHeroTables(hero);
         AdoptLoadedSession(owner, AreaRuntimes(), talk, "new game");
         SetQuickStatus("new game as " + hero.Hero.Name);
         GD.Print("ARC-UI-011 new game " + System.Text.Json.JsonSerializer.Serialize(new {
             hero.Hero.Name, hero.Definition!.Prototype, hero.Flag, Map = recipe.RuntimeMap, Cell = recipe.Spawn, Revision = owner.Version.Revision }));
         return null;
+    }
+
+    /// <summary>The hero tables of a session the menu brings: its effect rules and kit facts. The scene's arguments name the hero
+    /// too, so a map transfer reads it again with the map (as with --hero) instead of losing them.</summary>
+    private void AdoptHeroTables(AreaHeroLoad? hero)
+    {
+        _areaEffectRules = hero?.Effects;
+        _areaKitHealing = hero?.KitHealing;
+        _areaKitLockpicks = hero?.KitLockpicks;
+        _areaKitDurability = hero?.KitDurability;
+        _areaKitArt = hero?.KitArt;
+        _menuTablesHero = hero?.Hero;
+        if (_arguments is not null) _arguments = _arguments with { Hero = hero?.Hero };
+    }
+
+    /// <summary>The game-wide tables a hero save loaded from the menu takes (the experience and auto-level data are the same for
+    /// every pre-made hero): the first hero's read, or null when it does not read.</summary>
+    private AreaHeroLoad? MainMenuTables() => MainMenuHero(0) is { Status: AreaHeroStatus.Ready } ready ? ready : null;
+
+    /// <summary>The pre-made hero a loaded session holds (by its prototype), read as the browser reads it; null for none or another PC.</summary>
+    private AreaHeroLoad? LoadedMenuHero(GameSessionOwner loaded)
+    {
+        if (loaded.QueryHero() is not { } hero) return null;
+        for (var i = 0; i < AreaStartingHero.Premade.Count; i++)
+            if (AreaStartingHero.Premade[i].BasicPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset == hero.Prototype)
+                return MainMenuHero(i) is { Status: AreaHeroStatus.Ready } ready ? ready : null;
+        return null;
+    }
+
+    /// <summary>The scene ends under the menu (a load of a save on another map tears it down): the menu ends with it, so the save
+    /// list closing in the teardown does not bring it back.</summary>
+    private void EndMainMenuForTeardown()
+    {
+        if (_mainMenu is null) return;
+        GD.Print("ARC-UI-011 main menu closed: the scene ended (another map loads)");
+        _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = "closed: another map loads";
     }
 
     private void EndMainMenu(string reason)
@@ -283,6 +322,8 @@ public partial class TerrainViewerApp
             Choose(10); Choose(52);
             Require(!MainMenuOpen && !ReferenceEquals(session, _areaSession) && _areaSession!.QueryHero()?.Prototype == definition.Prototype
                 && _quickSaveStatus?.StartsWith("Last save quick loaded", StringComparison.Ordinal) == true, "Last Save loaded the auto-save: " + _quickSaveStatus);
+            Require(_areaSession!.Experience is not null && _areaSession.AutoLevel is not null && _areaEffectRules is not null && _areaKitHealing is not null
+                && _arguments!.Hero?.Name == "halfling-male", "the hero's tables came with the new game and the load");
             for (var i = 0; i < 3; i++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

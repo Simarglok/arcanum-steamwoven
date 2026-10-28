@@ -127,9 +127,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, menu)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk and census run.
+                        // walk, census and menu run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)

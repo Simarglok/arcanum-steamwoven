@@ -130,6 +130,7 @@ public partial class TerrainViewerApp
                 && _areaSession!.QueryHero()?.Prototype == 16069 + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryGold() == 385 && _quickSaveStatus == "new game as half-elf-male", "Start began a new game as the third hero: " + _quickSaveStatus);
             Require(GetSelfTestSnapshot().Hud.Contains(" | main menu: new game as half-elf-male", StringComparison.Ordinal), "HUD closed status");
+            Require(_menuTablesHero?.Name == "half-elf-male", "the picked hero's tables were adopted");
 
             // "Last Save" loads the newest save and ends the menu.
             QuickKey(Key.F7);
@@ -139,6 +140,7 @@ public partial class TerrainViewerApp
             Letter('s'); Letter('s');
             Require(!MainMenuOpen && !ReferenceEquals(beforeLast, _areaSession) && _areaSession!.QueryHero()?.Prototype == heroPrototype
                 && _quickSaveStatus?.StartsWith("Last save quick loaded", StringComparison.Ordinal) == true, "Last Save loaded the auto-save: " + _quickSaveStatus);
+            Require(_menuTablesHero?.Name == "half-elf-male", "the loaded hero's tables are adopted with it");
 
             // "Load Game": the load window opens over the waiting menu; Escape brings the menu back; Return loads and ends it.
             OpenMainMenu(AreaMainMenuTexts.Project("self-test"));

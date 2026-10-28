@@ -139,7 +139,9 @@ public partial class TerrainViewerApp
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
     /// session and scene are unchanged and the HUD says why.</summary>
-    private bool LoadGame(GameSessionSaveSlot slot, string prefix)
+    /// <param name="heroTables">ARC-UI-011: a load from the main menu, whose placeholder session has no hero: the game-wide hero
+    /// tables a hero save takes (<see cref="AreaQuickSave.Load"/>), and the loaded hero's own tables are adopted with it.</param>
+    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null)
     {
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
@@ -153,7 +155,7 @@ public partial class TerrainViewerApp
             if (_mapTransfers?.Destinations.TryGetValue(placement.Map.RuntimeMap, out var destination) != true) return "map mode cannot open that map";
             elsewhere = destination; return null;
         }
-        var result = AreaQuickSave.Load(slot, _areaSession!, Refusal, MapSoundDefault);
+        var result = AreaQuickSave.Load(slot, _areaSession!, Refusal, MapSoundDefault, heroTables);
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
             Slot = System.IO.Path.GetFileName(slot.Path), Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
@@ -178,6 +180,7 @@ public partial class TerrainViewerApp
         }
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
         var from = " from " + System.IO.Path.GetFileNameWithoutExtension(slot.Path);
+        if (heroTables is not null) AdoptHeroTables(LoadedMenuHero(result.Owner));
         if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus(prefix + result.Status + from);

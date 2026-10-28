@@ -60,7 +60,7 @@ public sealed class AreaMainMenuTests
         Assert.AreEqual('О', texts.Hotkey(menu.Shown[0]));
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('о'));
         Assert.AreEqual(AreaMenuWindow.SinglePlayer, menu.Window);
-        Assert.IsNull(AreaMainMenuTexts.From(number => number == 60 ? "No" : null, "test").Hotkey(new(50, AreaMenuRole.Open)), "not one letter: no hotkey");
+        Assert.AreEqual('N', AreaMainMenuTexts.From(number => number == 60 ? "no" : null, "test").Hotkey(new(50, AreaMenuRole.Open)), "the first character (MM3)");
         Assert.IsFalse(AreaMainMenuTexts.Project("why").FromGame);
         Assert.AreEqual("why", AreaMainMenuTexts.Project("why").Detail);
     }

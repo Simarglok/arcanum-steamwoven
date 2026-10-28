@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
             case AreaSaveCommandKind.Load:
                 // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
-                if (LoadGame(slot, "Load ")) { EndSaveList(loaded: true); return; }
+                if (LoadGame(slot, "Load ", _mainMenu is null ? null : MainMenuTables())) { EndSaveList(loaded: true); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Delete:
