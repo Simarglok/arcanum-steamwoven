@@ -258,6 +258,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG40 | original bug (ARC-MAGIC-014, ledger MG40) | fix (owner decision 2026-10-27), switch `GoalEndChargesAnyRun`: a run freed before its BEGIN is charged only when its BEGIN would have paid | MT20a-1 |
 | MG41 | original bug (ARC-MAGIC-014, ledger MG41) | fix (owner decision 2026-10-27), switch `ReleaseRefusalKeepsRun`: a run whose target fails the release re-check is freed unpaid | MT20a-1 |
 | MG42 | original bug (ARC-MAGIC-015, ledger MG42) | fix without a switch (owner decision 2026-10-27, presentation only): the cursor's "not damaged" message only for the current pick's reason | MT20a-2 |
+| MG43 | original bug (ARC-MAGIC-019, ledger MG43) | pending owner decision; recommended and built: fix, switch `DroppedQueueKeepsRuns`: queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
 | Charm asymmetry | reconstruction change confirmed | the original (+30 and −30 both through the reaction effects) | MT14 |
@@ -298,6 +299,8 @@ Agreed through the coordinator on 2026-10-20:
 - **Technology runtime**: the technology lane above.
 - **Spell visuals**: `SpellEyeCandy.mes`, the cast, release and component eye candy and the cast's timing are done
   ([ARC-MAGIC-017](../world/spell-cast-host.md#eye-candy-arc-magic-017)); the missile's art and flight (goal 28) remain.
+- **Queued cast**: a second cast while one plays is queued beneath it and plays in turn
+  ([ARC-MAGIC-019](../world/spell-cast-host.md#the-viewer-arc-magic-015), SU13, QC1–QC6, MG43).
 - **Line of fire**: the AI awareness lane (combat open question O4).
 - **Fate state**: slice S7 of the [skills plan](skills-plan.md).
 
