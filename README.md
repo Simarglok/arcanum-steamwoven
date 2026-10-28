@@ -5,7 +5,7 @@ Research-first, independent reimplementation of **Arcanum: Of Steamworks and Mag
 **Status (merged main `894b944`, 2026-10-16, through PR #157).** Not a playable game yet: every component is deliberately bounded and original-runtime parity is unverified. The [component catalogue](docs/project/status.md) lists implemented scope, evidence and source links.
 
 - **Original data.** DAT and resource precedence over the original mount order, MES text and object names, ART, DLG (all 709 installed files), a universal map catalogue of all 81 maps, whole-map plans that open every interior through the area owner (52 of 80 publish a complete snapshot, with T0 step evidence), T0 inventory and the stored combat fields of weapons, ammunition, armour and critters.
-- **Crash Site area viewer** (`./arcanum area`, since ARC-RENDER-028 the main world map's map mode at the Crash Site; the list below was written for the pinned exterior profile, see the [map mode](docs/rendering/area-map-mode.md) for what map mode draws). The Crash Site exterior and the cave with return: click-to-move, hover names and action cursor, inventory window with pickup and loot, multi-turn NPC conversation, Virgil joining the party and following the PC, day/night and cave lighting on the session clock, one quick-save slot (F7/F8), the diagnostic palette (Ctrl+Shift+F9 or gamepad Start) and an optional local HD pack for characters and objects.
+- **Crash Site area viewer** (`./arcanum area`, since ARC-RENDER-028 the main world map's map mode at the Crash Site; the list below was written for the pinned exterior profile, see the [map mode](docs/rendering/area-map-mode.md) for what map mode draws). The Crash Site exterior and the cave with return: click-to-move, hover names and action cursor, inventory window with pickup and loot, multi-turn NPC conversation, Virgil joining the party and following the PC, day/night and cave lighting on the session clock, one quick-save slot (F7/F8), the diagnostic palette (Ctrl+Shift+F9 or gamepad Start; every key: [Hotkeys](#hotkeys)) and an optional local HD pack for characters and objects.
 - **Headless rules** (Godot-free). One game-session owner (clock, global flags, story state, party, inventory, starting hero, seeded randomness, life state, snapshot schema), character stats, the starting hero from a pre-made PC, a pure attack resolver for one attack and the life rules (hit points, fatigue, poison, injuries, knockout, death).
 - **Research** (merged, not runtime). Combat core, magic, skills, NPC reaction, the NPC combat AI plan, the SCR event dispatcher and opcode census, character creation, map transitions and HD upscale methods.
 
@@ -75,6 +75,112 @@ Which commit a build is from: `BUILD.txt` beside it, and the line
 `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of its launcher and main menu.
 Do not delete these folders by hand ([build retention](docs/workflow/build-retention.md)). Players install and start a
 build with [the player instruction](docs/player/alpha-build.md) (macOS "Open Anyway", Windows SmartScreen, GOG detection).
+
+## Hotkeys
+
+The keyboard and mouse controls of the packaged alpha and of the map mode (`./arcanum area`, `./arcanum map`), as the
+code on `main` routes them (ARC-DEV-053). Keys follow the original game where it has them; the rows marked *Steamwoven*
+are this project's own.
+
+- **Mac:** on a keyboard whose F keys control brightness or volume, hold **fn** with every F key (**fn+F7**,
+  **fn+Ctrl+Shift+F10**). **Ctrl** is the Control key on a Mac too, never Command.
+- A, C, F, I, L, R, S, T and W with Ctrl, Alt or Command held do nothing in play, as in the original.
+- An open window, conversation, menu or the diagnostic palette takes the keys first: the *In play* keys act only while
+  none is open.
+
+**In play**
+
+| Key | Action |
+| --- | --- |
+| Escape | In-play menu (save, load, options, quit) |
+| F7 / F8 | Quick save / quick load (one slot) |
+| I | Inventory |
+| C | Character sheet |
+| L | Logbook |
+| T | Technological schematics |
+| M | Spell pane, shown or hidden (on the key's release, while the hero can cast) |
+| W | World map; in the [debug mode](docs/player/alpha-build.md#7-debug-mode) it also lists every area with **Teleport** |
+| Num Lock | Run by default on or off (the original's Num Lock lock; on a keyboard that has the key) |
+| Arrow keys | Pan the camera |
+| H | Legacy or HD graphics (needs a local [HD pack](docs/formats/hd-pack.md)); *Steamwoven* |
+| F11 | Fullscreen on or off; *Steamwoven* |
+
+**Combat**
+
+| Key | Action |
+| --- | --- |
+| R | Combat mode (ready / unready) |
+| Space | Turn-based on or off (also the default combat mode of the options) |
+| E | End the hero's turn in a turn-based round (on the key's release) |
+| `,` `.` `/` held while clicking a foe | Called shot at the head, the arms, the legs |
+| Alt + left click (combat mode) | Attack an object (a door, a window, a container, scenery) or loot a corpse |
+
+**Quick bar**
+
+| Key | Action |
+| --- | --- |
+| 1 … 9, 0 | Use quick slot 1 … 10 |
+| A | Repeat the last action |
+| Ctrl+1 … Ctrl+0 | Put the last action on that slot |
+| Ctrl+Shift+1 … Ctrl+Shift+0 | Clear that slot |
+| 1 … 0 with an item held in the inventory | Put the held item on that slot |
+
+**Orders to companions** (on the key's release, to every follower within 10 tiles)
+
+| Key | Order |
+| --- | --- |
+| F1 | Walk to the tile under the pointer |
+| F2 | Attack |
+| F3 | Stay close |
+| F4 | Spread out |
+| F5 | Back off (stop attacking) |
+| F6 | Follow in the *Steamwoven* rules; nothing in the *Original* rules (the original's preset names nobody) |
+
+**Mouse**
+
+| Input | Action |
+| --- | --- |
+| Left click | Walk there, or use, talk to, pick up or attack (combat mode) what is under the pointer |
+| Ctrl + left click on the ground | Run there; walk there instead while the Always run setting is on. On a Mac, Ctrl+click works the same |
+| Shift while using an item or casting a spell | Use it on the hero, cast it at the hero |
+| Alt held at a spell's target cursor | Let an aggressive spell pick the hero's party too |
+| Right click | Cancel a spell's target cursor |
+| Left click on a quick bar slot or recent-action button | Use it (with an item held in the inventory: put the item on the slot) |
+| Right press and drag from a quick bar slot, a spell of the spell pane or a slot of the weapon pane | Move it on the bar, put it on a slot, or drag it off the bar to empty the slot |
+| Click on a follower's portrait | That follower's order menu (a walk order takes the next left click as its tile) |
+
+**Inside windows** (the open window takes every key)
+
+| Window | Keys |
+| --- | --- |
+| Inventory | I or Escape closes; 1 … 0 puts the held item on a quick slot |
+| Quantity box | keypad digits type (the main-row digits do not), Backspace or Delete erases, Enter accepts, Escape or I cancels |
+| Character sheet | C or Escape closes |
+| Logbook | L or Escape closes; Tab switches the tab |
+| Technological schematics | T or Escape closes; Tab assembles |
+| World map | W or Escape closes (or ends the journey); Enter travels |
+| Book or note | Escape closes; Left or Page Up, Right or Page Down turns a page |
+| Barter | Escape closes |
+| Conversation | click a reply; keys do nothing |
+| Save and load windows | Up / Down select; Enter saves or loads; Delete or Backspace deletes (while no description is typed); Escape closes; typing writes the save's description |
+| Main menu and in-play menu | the letter of a button presses it; Escape goes back; Enter answers yes in the quit box and accepts the character editor and the opening shop |
+| Options | Up / Down move the focus, Left / Right change the focused control; O closes the menu opened in play |
+| Death screen | a key or a click ends a slide, Escape skips the rest; then, in the *Steamwoven* rules with a save there, Enter or Y loads the last save and Escape or N declines (the *Original* rules return to the main menu) |
+
+**Tools** (*Steamwoven*, not part of the original game)
+
+| Key | Action |
+| --- | --- |
+| Ctrl+B | [Bug report](docs/player/alpha-build.md#9-reporting-a-bug-ctrlb) over anything: Ctrl+Enter (or Command+Enter) sends, Escape cancels |
+| Ctrl+Shift+F9 | Diagnostic palette |
+| Ctrl+Shift+F10 | [Diagnostic panel](docs/player/alpha-build.md#8-showing-and-hiding-the-diagnostic-panel) shown or hidden |
+| Shift held while the packaged game starts | Opens the launcher (debug mode, settings) |
+
+**Not there yet.** These original keys do nothing yet (the diagnostic panel, when shown, names them
+`Reserved: … (NOT IMPLEMENTED)`): F (fate points), S (sleep or wait), K (skills pane), O (options; Escape opens them),
+V (version), Home (centre on the hero), Enter (message), F10 (compact interface), F12 (screenshot). Attacking a follower
+(left Alt + click in combat mode) is refused as not ready yet. `,` `.` `/` pressed alone also show the reserved notice;
+held during an attack click they aim as listed under *Combat*.
 
 ## Start here
 

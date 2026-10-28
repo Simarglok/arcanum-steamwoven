@@ -8,6 +8,10 @@ reimplementation: it opens the launcher and the original main menu, and much of 
 Platforms: **macOS** (Apple silicon and Intel, one universal `.app`) and **Windows 11 x64** (a folder with
 `Arcanum Steamwoven.exe`, delivered as one zip).
 
+Every key and mouse control of the game, grouped by purpose, is in the repository README:
+[Hotkeys](https://github.com/Simarglok/arcanum-steamwoven#hotkeys) (a web link, as this instruction is also copied
+beside the build). The sections below name only the keys of their own steps.
+
 ## 1. Get the build
 
 Both builds are made on the developer's Mac, `./arcanum package mac` and `./arcanum package win`
