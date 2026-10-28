@@ -330,11 +330,40 @@ carries out the activations with the session and the cast host.
    armour is worn into its slot (0x550000; the entry's own item, the occupant goes back to the pack), ammunition and gold do nothing and
    any other item is held on the cursor.
 
-The viewer stands in for the bar's art and its drag and drop (a later thread draws them): `Ctrl`+`1`..`0` puts the latest recent action
-on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
+The bar's art and its drag and drop are [ARC-UI-027](#the-hotkey-bars-art-and-drag-arc-ui-027); the viewer keeps stand-in keys:
+`Ctrl`+`1`..`0` puts the latest recent action on that entry (the way to put a skill-bar button on the bar while the viewer draws no skill
+bar; the original drags from the bars, not from the recent-action buttons, HK13), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
 palette's Prowl action is the skill bar's prowling button, and the status line lists the entries. The cast smoke checks the latest recent
 action after its pane presses, `Ctrl`+`1`, the keys `1` and `A` (each opens the spell's cursor), `Ctrl`+`Shift`+`1` and an empty key, and
 the weapon's spell on entry 1 opening the weapon's cursor; marker `ARC-UI-022 native-smoke hotkeys PASS`.
+
+## The hotkey bar's art and drag (ARC-UI-027)
+
+The bar is drawn on the bottom strip of the [interface bars](../rendering/terrain-viewer.md#interface-bars-arc-ui-018) with the game's art
+(ledger [HK10–HK16](../research/ledger/spell-runs.md#hotkey-bar-art-and-drag-arc-ui-027)). The rules are Godot-free (`HotkeyBarRules`,
+`Arcanum.Presentation.Hud`), the view is `AreaHotkeyBarView` (a part of the bottom strip, scaled with it) and the host
+`TerrainViewerHotkeyBar.cs`, which carries the drops out with the session's `AssignHotkey`, `MoveHotkey` and `ClearHotkey`.
+
+1. **Slots** (HK10, HK11). The ten slots at the strip's top row, each with `HKSlt1.ART` (173, the art the original draws for every slot)
+   and the entry's icon centred or clipped in it (`IconPlace`); a dragged entry's icon hides. The pointer's slot is `EntryAt` (32 columns
+   per slot inside the band at y 440..476).
+2. **Icons and counts** (HK12). A spell entry and an item-and-spell entry show the spell's icon (`SpellIcon`, spells 0..79), a skill-bar
+   entry its button's art (`SkillIcon`). An item entry prints its count (`QueryHotkeyCount`, the items of its prototype the hero holds) at
+   the slot's left + 2 and the strip's top while it lies in 0..9999; its icon (the inventory art up to 32 × 32, else the item's type icon)
+   is not ready, so the slot shows the item's name.
+3. **Buttons** (HK13, HK14, HK16). A left click on a slot (press and release over its 32 × 32 button) activates the entry, or drops the item the inventory
+   window holds on it (`ClickEntry`); the activation is [ARC-UI-022's](#the-hotkey-bar-arc-ui-022) without the keys' turn test. The two
+   recent-action buttons at (69, 548) and (114, 548) show their action's icon (frame 0, frame 1 while held) and a click on one activates its
+   action, with the bar buttons' sounds 3000 and 3001, whatever is dragged or held (HK13). The light button (182) at (616, 455) sounds and does nothing, as in the original.
+4. **Drag** (HK15). A right press in a slot's hit band (from y 440) starts a drag (`StartsDrag`) from a slot that holds an entry, from a spell of the spell pane or from a
+   slot of the weapon's pane (an item and its spell); the icon follows the pointer. The right release decides (`Drop`): on another slot a
+   dragged entry trades places with it and anything else is put there (HK5's refusals apply); on its own slot nothing changes; off the bar a
+   dragged entry is emptied (its item back to the grid) and anything else ends with no change. A left release goes on with the drag. While an entry is dragged its key skips it and the stand-in keys leave it alone.
+
+The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ctrl`+`1`..`0` only. The cast smoke checks the bar after the
+hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
+from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
+marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
 
 ## Differences from the original
 
@@ -367,6 +396,10 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | That wield takes the old weapon off first and leaves it off when the wield is refused (HK3). | The session's wear swaps in one step; a refusal changes nothing. | — (technical, fixed in both modes) |
 | A drag between entries leaves the source an entry without its object and puts a target item back into the inventory (HK5). | The two entries trade places. | — (technical, fixed in both modes) |
 | A load replays the two recent actions through 0x57EFA0 in saved order, so they trade places on every load; a new action's object goes to the second slot (HK2, HK7). | The bar comes back as saved; recent actions are only spells and skill-bar buttons. | — (technical, fixed in both modes) |
+| An entry dragged off the bar keeps its hidden flag: it stays in the bar's data, undrawn and skipped by its key, until a drop on it or a load brings it back (HK15). | The entry is emptied (an item entry's item back to the grid). | — (technical, a lost state; fixed in both modes) |
+| An item entry dragged off the bar leaves its item on the cursor for the inventory or the map to place (HK15). | The item goes back to the grid at once. | — (not ready: the map's cursor hold) |
+| An item entry's count is set on its drop and on a load and recounted when an item leaves its place (HK6, HK12): an item picked up later shows only after such a change. | The count is read at every redraw, so a pickup shows at once. | — (display only) |
+| The count of an item entry of the prototype 15085 is always 1 (0x462B40, HK12). | Its items are counted like any other's (as the same-kind finder, AM1). | — (not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -377,9 +410,12 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 ## Not ready
 
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
-  the hotkey bar's art, its buttons and drag and drop, the sounds (sound 0, SN31), the item use and the cursor hold of an item entry,
-  the pick-pocket and disarm-traps buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and
-  0x541680 (ARC-UI-022).
+  the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
+  buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
+- The hotkey bar (ARC-UI-027): an item entry's icon (the inventory art up to 32 × 32 or the type icon 0x554C20; the slot shows the
+  item's name), a spell's icon beyond spell 79, the descriptions shown when the pointer enters a slot or a recent-action button (0x550150),
+  the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
+  the compact interface's bar, and the count's font.
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
 - Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
   (EC9, EC11, EC12).

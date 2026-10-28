@@ -8,8 +8,8 @@ namespace Arcanum.TerrainViewer;
 /// Inventory, Fate Points, Sleep) at the top of the window and the bottom strip (Combat, Skills, Spells, Schematics) at its bottom,
 /// each centred and scaled by the largest whole factor at which the original's 800×600 screen fits the window. A strip takes every
 /// press on it (the original's world view never reaches under the bars); its buttons follow <see cref="AreaGameBar"/>. The bottom
-/// strip holds the message window (<see cref="AreaMessageLogView"/>, ARC-UI-023), where the host writes the hover name; its other
-/// parts (hot keys, recent actions) are drawn as the art shows them and do nothing yet.
+/// strip holds the message window (<see cref="AreaMessageLogView"/>, ARC-UI-023), where the host writes the hover name, and the hotkey
+/// bar (ARC-UI-027, a part the host adds with <see cref="AddPart"/>).
 /// </summary>
 public partial class AreaGameBarPanel : CanvasLayer
 {
@@ -132,6 +132,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         // The original's hovered-object panel takes the message window: the log's texts give way while it is shown.
         _messageLog.Visible = portrait is null;
     }
+
+    /// <summary>ARC-UI-027: puts <paramref name="part"/> on <paramref name="strip"/>, in the strip's own frame (scaled and placed with it),
+    /// above the strip's art and buttons.</summary>
+    public void AddPart(AreaBarStrip strip, Control part) => _strips[strip].AddChild(part ?? throw new ArgumentNullException(nameof(part)));
 
     public override void _Input(InputEvent input)
     {

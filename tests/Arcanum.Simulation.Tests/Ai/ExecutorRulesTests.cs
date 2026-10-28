@@ -236,6 +236,30 @@ public sealed class ExecutorRulesTests
         Assert.IsTrue(AiExecutorRules.StartGate(world, Npc, 4), "40 % fatigue");
     }
 
+    [TestMethod]
+    public void AFidgetFollowsADoneRunOfAnNpcInCombatModeOrAutoAnimating()
+    {
+        var world = Arena(3);
+        // Outside a round: combat mode or the auto-animate flag, no animation running, an art that allows it; never the PC.
+        Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: false, artAllows: true));
+        Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: true, animating: false, artAllows: true));
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: false, animating: false, artAllows: true), "neither");
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: true, artAllows: true), "an animation runs");
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: false, artAllows: false), "the art test");
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Foe, combatMode: true, autoAnimates: true, animating: false, artAllows: true), "a PC");
+        // In a round combat mode no longer counts; the auto-animating NPC needs the current participant's action points and the gate.
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 4;
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: false, artAllows: true), "combat mode in a round");
+        Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: true, animating: false, artAllows: true));
+        world.Points[Npc] = 0;
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: true, animating: false, artAllows: true), "no action points left");
+        world.Actor = Foe;
+        world.Points[Foe] = 5;
+        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: true, animating: false, artAllows: true), "another critter's turn");
+    }
+
     // ---- the attack ----
 
     [TestMethod]

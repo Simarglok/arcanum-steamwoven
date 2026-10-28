@@ -31,6 +31,11 @@ public partial class AreaSpellPane : CanvasLayer
     /// <summary>ARC-UI-016: the weapon button was pressed.</summary>
     public event Action? WeaponToggled;
 
+    /// <summary>ARC-UI-027: a right press on a spell button (the spell's number) or on a slot of the weapon's pane (the slot): the
+    /// original starts a drag onto the hotkey bar there (0x57E5D0).</summary>
+    public event Action<int>? SpellDragStarted;
+    public event Action<int>? ItemDragStarted;
+
     public bool Shown => _panel.Visible;
 
     internal IReadOnlyList<AreaSpellChoice> ShownForSelfTest => _shown;
@@ -88,6 +93,7 @@ public partial class AreaSpellPane : CanvasLayer
                 TooltipText = choice.College,
             };
             button.Pressed += () => Activated?.Invoke(spell);
+            button.GuiInput += input => RightPress(button, input, () => SpellDragStarted?.Invoke(spell));
             _buttons.AddChild(button);
         }
     }
@@ -104,11 +110,26 @@ public partial class AreaSpellPane : CanvasLayer
                 TooltipText = choice.Activates ? $"slot {slot + 1}" : $"slot {slot + 1}: cast by the item's own events, not from the pane",
             };
             button.Pressed += () => ItemActivated?.Invoke(slot);
+            button.GuiInput += input => RightPress(button, input, () => ItemDragStarted?.Invoke(slot));
             _buttons.AddChild(button);
         }
     }
 
     public void HidePane() => _panel.Hide();
+
+    private static void RightPress(Control button, InputEvent input, Action started)
+    {
+        if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) return;
+        button.AcceptEvent();
+        started();
+    }
+
+    /// <summary>ARC-UI-027 smoke: the centre of the shown button of <paramref name="spell"/> (null when none shows).</summary>
+    internal Vector2? SpellButtonCentreForSelfTest(int spell)
+    {
+        var index = _shown.Select((choice, i) => (choice, i)).FirstOrDefault(pair => pair.choice.Spell == spell, (null!, -1)).Item2;
+        return _weaponShown is { Open: true } || index < 0 || index >= _buttons.GetChildCount() ? null : ((Control)_buttons.GetChild(index)).GetGlobalRect().GetCenter();
+    }
 
     internal void PressForSelfTest(int spell) => Activated?.Invoke(spell);
 
