@@ -588,25 +588,53 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// The targeting cursor's test of a candidate (0x4F2830's area test, ARC-MAGIC-015): the BEGIN area with <paramref name="mask"/>
-    /// (the cursor's) for <paramref name="caster"/> as self and source, the candidate object as candidate and target, or with none the
-    /// tile as both tiles. The answer carries the area test's failure reason for the cursor's message.
+    /// (the cursor's) for <paramref name="caster"/> as self and source, the candidate object (if any) as candidate and target and the
+    /// tile (none with an object, except for the picker's second test, ARC-MAGIC-021) as both tiles. The answer carries the area
+    /// test's failure reason for the cursor's message.
     /// </summary>
     public SpellTargetTest TestTarget(string caster, int spell, ulong mask, string? candidate, SpellLocation tile)
     {
         ArgumentNullException.ThrowIfNull(caster);
         if (_records(spell) is not { } record || record.Areas.Length == 0 || _map.Object(caster) is not { } self) return new(false);
-        var basis = new SpellTargetContext(record.Areas[0] with { Targets = mask }, self, self, self.Location);
+        var basis = new SpellTargetContext(record.Areas[0] with { Targets = mask }, self, self, self.Location, CandidateTile: tile, TargetTile: tile);
         if (candidate is not null)
             return _map.Object(candidate) is { } o && (o.ObjectFlags & PickerRefused) == 0
                 ? SpellTargetRules.Test(basis with { Candidate = o, Target = o }, _map, Profile) : new(false);
-        return SpellTargetRules.Test(basis with { CandidateTile = tile, TargetTile = tile }, _map, Profile);
+        return SpellTargetRules.Test(basis, _map, Profile);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-021: the targeting cursor's pick (0x4F28A0, <see cref="SpellUiRules.Pick"/>) for <paramref name="caster"/> as the
+    /// local PC: the object the screen pick found under the point (<paramref name="atPoint"/>, a map id, found without the objects
+    /// <see cref="PickSpares"/> names), else the objects on <paramref name="tile"/> (null: no tile under the point) in the map's order,
+    /// else the tile, each through <see cref="TestTarget"/>. The caster's followers are the map's party of the caster.
+    /// </summary>
+    public SpellPick PickTarget(string caster, int spell, ulong mask, string? atPoint, SpellLocation? tile)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        var followers = Followers(caster);
+        return SpellUiRules.Pick(mask, caster, followers, atPoint is null ? null : _map.Object(atPoint), tile, _map,
+            (o, at) => TestTarget(caster, spell, mask, o?.Id, at));
+    }
+
+    /// <summary>ARC-MAGIC-021: which map objects the pick sees through for this mask (SU15, <see cref="SpellUiRules.PickSpares"/>), the
+    /// screen pick's extra skip while the cursor is open; the followers are read once, when it is made.</summary>
+    public Func<string, bool> PickSpared(string caster, ulong mask)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        var followers = Followers(caster);
+        return id => _map.Object(id ?? throw new ArgumentNullException(nameof(id))) is { } o && SpellUiRules.PickSpares(mask, o, caster, followers);
+    }
+
+    // The follower list of the pick (0x441260): the map's party of the caster, the caster left out.
+    private HashSet<string> Followers(string caster) =>
+        _map.Object(caster) is { } self ? _map.Party(self).Select(o => o.Id).Where(id => id != caster).ToHashSet(StringComparer.Ordinal) : [];
 
     // A run whose BEGIN has not run yet: the only one a release frame begins.
     private static bool AwaitsBegin(SpellRun run) => run.Action == SpellRunAction.Begin && (run.Flags & SpellRunFlags.Processed) == 0;
 
     /// <summary>The object flag the picker's wrapper refuses an object target for (0x4F2680).</summary>
-    public const int PickerRefused = 0x800;
+    public const int PickerRefused = SpellUiRules.ClickThrough;
 
     /// <summary>One action on the session's runs through this host, with its notes applied.</summary>
     public SessionSpellRunResult Act(SessionSpellRunAction action)
