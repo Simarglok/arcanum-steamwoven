@@ -443,8 +443,9 @@ public sealed class GameSessionSnapshot
     /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
     /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019); schema 53
     /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022); schema 54 adds the hero's background description number to <see cref="Hero"/>
-    /// (ARC-WORLD-097). Schemas 1..53 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 54;
+    /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100). Schemas 1..54 are refused,
+    /// not migrated.</summary>
+    public const int CurrentSchemaVersion = 55;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

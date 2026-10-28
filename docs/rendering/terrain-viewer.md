@@ -1575,8 +1575,53 @@ prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and q
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
 window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
-turn in the self-test or the smoke). Not done: the start movies, the menu after the hero's death
-or the game's end (the original restarts it there), the original menu art and button sounds.
+turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
+it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.
+
+### Hero death (ARC-UI-026)
+
+What follows the hero's death in crash-site-area (exterior, cave and map mode), as the original's in single player
+([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
+[`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
+
+- **The wait.** Five seconds after the session's hero dies (real time; the original counts from the end of the PC's dying
+  animation, which the viewer does not play for the hero) the death comes. Play goes on meanwhile. When it comes the
+  hero is checked again (one brought back to life meanwhile is not reset), the inventory and barter windows close, and an
+  open main-menu window (the in-play menu, its save and load windows, the options) closes and the death comes again
+  0.3 s later. A session whose hero is dead already when it comes (a load) starts nothing: only a death does.
+- **The slides.** The screen fades to black (2 s) and owns every key and mouse button from then on; the world stands still
+  under it (the game clock, the walk, the scene's sounds). The default death slide of the installed `rules\slide.mes`
+  (message 0, read at module load: its first word names the picture in `slide\`, its second the voice in
+  `sound\speech\slide\`; the installed one is `death.bmp` with `DeathSound.mp3`) fades in (2 s) while the slides' music
+  `sound\music\DwarvenMusic.mp3` loops, then its voice plays. The slide ends when the voice ends (at once without one),
+  on a key's release or a left, right or middle button release (presses do nothing); Escape ends the whole show. Input
+  during a fade does nothing. The slide fades out (2 s). The fades take their 2 s in both rule modes; the original's
+  flash by, a technical bug (PD9). A slide whose message names no picture and voice is skipped; one whose picture cannot be read shows
+  nothing and fades out. Without the table (no game folder) no slide shows: the fade to black leads straight to the reset.
+  Scripts that queue their own slides do not run (the installed data has none for a death).
+- **The reset.** The game ends as a quit does ([scene flow](#scene-flow-arc-ui-012)): the start scene loads from the launch
+  arguments with a fresh session and the main menu reopens over it (its root Escape exits), fading in from black (2 s).
+  Saves are not touched; a load is the main menu's (Single Player, Load Game or Last Save). There is no window with a
+  choice. A reset refused (another map or the start scene loading, a reset in progress) is tried again every 0.3 s with
+  the screen black; when no start scene is known (no launch arguments, a start map the shown map does not know), or no
+  menu has come 2 minutes after the first try, the screen fades in over the game as it is (the original's reset cannot
+  be refused). A start scene that fails shows its failure.
+
+Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
+or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
+the synthetic area owner, a synthetic slide table, picture and voice, the start scene published again): a new game's
+hero dies, the in-play menu opened meanwhile closes after 5 s and the death comes 0.3 s later, the fade to black owns
+the input (Escape opens nothing), the 800 × 600 picture fades in, its voice starts, a key ends it, the reset loads the
+start scene with a fresh session and the reopened main menu, which fades in; a hero brought back to life before the
+death comes is not reset; a voice's end ends the slide; a start scene that does not publish clears the screen over
+the game as it is. Steamwoven's own death window (load the last save, as the
+quit box asks) is a later task: it branches where the show ends, before the reset (`AreaHeroDeath`'s reset step). Native smoke on the original data, map mode on the start map
+with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` (a new game as the
+first pre-made hero, the hero killed through the session, the death after 5 s on the wall clock, the installed default
+slide's 800 × 600 picture with the slides' music and its voice, a left click through the window ending it, the start
+map loaded again with a fresh session and the main menu reopened). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
+slide (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
+animation.
 
 ### Options window (ARC-UI-013)
 

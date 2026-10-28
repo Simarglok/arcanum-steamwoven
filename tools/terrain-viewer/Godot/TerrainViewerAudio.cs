@@ -110,7 +110,8 @@ public partial class TerrainViewerApp
     private void TickAudio()
     {
         _audio?.Tick();
-        if (_readyMode == TerrainViewerMode.CrashSiteArea) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); TickInterfaceSounds(); }
+        // ARC-UI-026: under the death screen the scene's sounds stand still (only the slides' music and voice play).
+        if (_readyMode == TerrainViewerMode.CrashSiteArea && !HeroDeathCovering) { TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); TickInterfaceSounds(); }
     }
 
     private void DisposeAudio()
