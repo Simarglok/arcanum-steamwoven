@@ -119,13 +119,13 @@ them yet (no Crash Site `IN` gives a scripted item). The status line and the loo
 ## Item events (ARC-SCRIPT-041)
 
 Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#10-proposed-implementation-slices), the transfer
-half. With an `ISessionItemScriptHost`, `PickUpItem`, `LootItem` and `GiveItemToPc` run every item event of the original's
+half. With an `ISessionItemScriptHost`, `PickUpItem`, `LootItem`, `GiveItemToPc` and `TakeItemFromNpc` (ARC-WORLD-071) run every item event of the original's
 transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger IE1–IE7](../research/ledger/scripts.md#item-events-arc-script-041)):
 
 | Transfer | Events in order | Roles (triggerer / attachee / extra) | Result |
 | --- | --- | --- | --- |
 | Pickup from the ground (0x461810) | item `SAP_GET` (4), then the insert check, then the insertion's `SAP_INSERT_ITEM` (21) | PC / item / —; PC / item / — | get gates: skip default leaves the item; insert-item ignored |
-| Loot and negative `IN` (0x461CA0) | recipient's `SAP_TRANSFER` (32), then the insert check, then the removal's `SAP_REMOVE_ITEM` (28), then `SAP_INSERT_ITEM` (21) | holder / PC / item; holder / item / —; PC / item / — | transfer gates; remove-item and insert-item ignored |
+| Loot, negative `IN` and taking from an NPC (0x461CA0) | recipient's `SAP_TRANSFER` (32), then the insert check, then the removal's `SAP_REMOVE_ITEM` (28), then `SAP_INSERT_ITEM` (21) | holder / PC / item; holder / item / —; PC / item / — | transfer gates; remove-item and insert-item ignored |
 
 - An item point runs only when the item's facts list it (the seed's script points); the PC's transfer point always runs, and the
   host's `Slot` answers it (the AREA viewer's PC has no slot, so it ends `NoScript`). Without a host, an item that lists its get,
