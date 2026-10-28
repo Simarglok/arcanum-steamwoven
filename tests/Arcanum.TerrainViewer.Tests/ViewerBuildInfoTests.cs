@@ -27,13 +27,25 @@ public sealed class ViewerBuildInfoTests
     }
 
     [TestMethod]
+    public void TheDateIsReadUnderAnyCulture()
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("ar-SA");
+            Assert.AreEqual("2026-10-28", Read((ViewerBuildInfo.CommitKey, "abc1234"), (ViewerBuildInfo.DateKey, "2026-10-28")).Date);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
+    }
+
+    [TestMethod]
     public void MissingOrBrokenStampIsASourceRun()
     {
         foreach (var info in new[] { Read(), Read((ViewerBuildInfo.CommitKey, "")), Read((ViewerBuildInfo.CommitKey, "main")),
                      Read((ViewerBuildInfo.CommitKey, "abc123")), Read((ViewerBuildInfo.CommitKey, "abc1234 rm -rf")), Read((ViewerBuildInfo.DateKey, "2026-10-28")) })
         {
             Assert.IsFalse(info.IsPackage);
-            Assert.AreEqual("Arcanum Steamwoven · source run (not a packaged build)", info.Text);
+            Assert.AreEqual("Arcanum Steamwoven · not a packaged build", info.Text);
         }
     }
 }

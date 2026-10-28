@@ -28,7 +28,9 @@ class PackageTests(unittest.TestCase):
         (self.repo / "untracked-later.txt").write_text("x")
         git("add", str(package.INSTRUCTION)); git("commit", "-qm", "c")
         self.commit = subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
-        self.base = {"DOTNET_ROOT": "/sdk", "PATH": "/opt/homebrew/bin:/usr/bin", "HOME": str(self.root)}
+        self.base = {"DOTNET_ROOT": "/sdk", "PATH": "/opt/homebrew/bin:/usr/bin", "HOME": str(self.root), "DAT_ROOT": "/d",
+                     "ARC_AREA_MAP_SMOKE_ONLY": "walk", "ARCANUM_HD_PACK": "x", "ARCANUM_QUEUE_TICKET": "7",
+                     "LAUNCHER_SETTINGS_TEST_PATH": "/p", "WORLD_DIAGNOSTIC_ZOOM_TEST_PATH": "/z"}
         self.calls: list[tuple[list[str], dict[str, str]]] = []
         self.export_text = "dotnet /sdk/dotnet publish ... SDK 8.0.425\n"
         self.smoke_text = ""
@@ -75,9 +77,14 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(environment["PATH"].split(os.pathsep)[0], "/sdk")
         self.assertNotIn("/opt/homebrew/bin", environment["PATH"])
         self.assertEqual(environment["__GODOT_SHELL_ENV_SET"], "1")
+        self.assertEqual(environment["ARCANUM_QUEUE_TICKET"], "7")
+        for dropped in ("DAT_ROOT", "ARC_AREA_MAP_SMOKE_ONLY", "ARCANUM_HD_PACK", "LAUNCHER_SETTINGS_TEST_PATH", "WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"):
+            self.assertNotIn(dropped, environment)
         self.assertEqual(installed, self.root / "out" / "macos" / "Arcanum Steamwoven.app")
         self.assertTrue((installed / package.PLATFORMS["mac"].executable).is_file())
-        self.assertIn(f"commit {self.commit}", (self.root / "out" / "macos" / "BUILD.txt").read_text())
+        build = (self.root / "out" / "macos" / "BUILD.txt").read_text()
+        self.assertIn(f"commit {self.commit}", build)
+        self.assertIn("smoke SKIPPED", build)
         self.assertEqual((self.root / "out" / "macos" / "README.md").read_text(), "instruction\n")
         self.assertFalse(Path(export[export.index("--path") + 1]).parents[3].exists())  # the work folder is removed
 
@@ -89,6 +96,9 @@ class PackageTests(unittest.TestCase):
         self.assertFalse(first.exists())
         self.assertEqual((self.root / "out" / "macos" / "previous" / "Arcanum Steamwoven.app" / "marker").read_text(), "first")
         self.assertTrue((self.root / "out" / "macos" / "previous" / "BUILD.txt").is_file())
+        self.assertTrue((self.root / "out" / "macos" / "previous" / "README.md").is_file())
+        self.assertEqual(sorted(path.name for path in (self.root / "out" / "macos").iterdir()),
+                         ["Arcanum Steamwoven.app", "BUILD.txt", "README.md", "previous"])
 
     def test_an_export_without_the_pinned_sdk_is_refused_and_nothing_installed(self) -> None:
         self.export_text = "dotnet /opt/homebrew/bin/dotnet publish 8.0.131\n"
@@ -106,6 +116,7 @@ class PackageTests(unittest.TestCase):
         passes = "ARC-UI-014 native-smoke launcher PASS\nARC-UI-011 native-smoke main menu PASS\n"
         self.smoke_text = line + "Arcanum Steamwoven Game\n" + passes
         self.run_package(smoke_folder=self.root)
+        self.assertIn("smoke PASS", (self.root / "out" / "macos" / "BUILD.txt").read_text())
         smoke_command, smoke_environment = self.calls[-1]
         self.assertEqual(smoke_command[1:], ["--", "--native-smoke"])
         self.assertEqual(smoke_environment["ARC_AREA_MAP_SMOKE_ONLY"], "menu")
@@ -124,6 +135,11 @@ class PackageTests(unittest.TestCase):
         with self.assertRaisesRegex(package.PackageError, r"step restore FAILED exit=1 log=.*restore\.log\nerror CS0001"):
             package.package(package.PLATFORMS["mac"], root=self.repo, output=self.root / "out", ref="HEAD", fetch=False, smoke=False,
                             keep_work=False, runner=failing, base=self.base)
+
+    def test_a_command_that_cannot_start_is_a_failed_step(self) -> None:
+        log = self.root / "missing.log"
+        self.assertEqual(package.run_logged([str(self.root / "no-such-tool")], self.root, {}, log, None), 127)
+        self.assertIn("could not start", log.read_text())
 
     def test_a_ref_that_is_not_a_commit_is_refused(self) -> None:
         with self.assertRaises(package.PackageError):

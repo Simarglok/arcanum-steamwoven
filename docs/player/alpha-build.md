@@ -22,7 +22,7 @@ installed.
 **Which build is this?** The launcher and the main menu show a line in the bottom right corner:
 `Arcanum Steamwoven alpha · main 1a2b3c4d5e · 2026-10-28` — the first ten digits of the commit of `main` it was built from
 and that commit's date. `BUILD.txt` has the full commit. A build started from the source instead says
-`source run (not a packaged build)`.
+`not a packaged build`.
 
 ## 2. First start on macOS: "Open Anyway"
 
@@ -35,7 +35,8 @@ on how the app reached the Mac:
   1. Double-click the app once and close the message with **Done** (not "Move to Bin").
   2. Open **System Settings → Privacy & Security** and scroll down to **Security**. There is a line saying that
      "Arcanum Steamwoven" was blocked, with an **Open Anyway** button. Press it and confirm with your password or Touch ID.
-  3. Start the app again and choose **Open** in the last question. From then on it opens normally.
+  3. Start the app again and confirm in the last dialog (**Open** or **Open Anyway**). From then on it opens normally.
+     The button in System Settings is shown for a while after the blocked start; if it is gone, start the app once more.
 
   On macOS 15 and later the old "right-click → Open" shortcut no longer skips this check; use System Settings as above.
   (Advanced, same effect: `xattr -dr com.apple.quarantine "/Applications/Arcanum Steamwoven.app"` in Terminal.)
@@ -76,7 +77,8 @@ The build keeps its own folder, separate from any developer build:
 
     ~/Library/Application Support/Arcanum Steamwoven Game/
 
-It holds the launcher settings (`launcher_v1.json`), the options and the saves (`saves/`). Deleting the folder starts
+It holds the launcher settings (`launcher_v1.json`), the options, the saves (`saves/`) and Godot's log of the last runs
+(`logs/godot.log`, useful for a bug report). Deleting the folder starts
 the game as on its first run. The game folder of Arcanum is only read.
 
 ## 5. Updating

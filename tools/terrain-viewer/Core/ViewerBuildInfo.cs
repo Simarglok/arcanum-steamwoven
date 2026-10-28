@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
@@ -26,13 +28,13 @@ public sealed record ViewerBuildInfo(string? Commit, string? Date)
         foreach (var (key, value) in metadata)
         {
             if (key == CommitKey && value is { Length: >= 7 and <= 64 } && value.All(Uri.IsHexDigit)) commit = value.ToLowerInvariant();
-            else if (key == DateKey && DateOnly.TryParseExact(value, "yyyy-MM-dd", out _)) date = value;
+            else if (key == DateKey && DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) date = value;
         }
         return commit is null ? Source : new(commit, date);
     }
 
     /// <summary>The line the launcher and the main menu show.</summary>
     public string Text => Commit is null
-        ? "Arcanum Steamwoven · source run (not a packaged build)"
+        ? "Arcanum Steamwoven · not a packaged build"
         : $"Arcanum Steamwoven alpha · main {Commit[..Math.Min(ShortCommitLength, Commit.Length)]}" + (Date is null ? "" : $" · {Date}");
 }

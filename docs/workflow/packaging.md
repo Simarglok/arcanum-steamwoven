@@ -24,27 +24,31 @@ every line, stdout keeps PASS or FAIL). The builder is `tools/local_dev/package.
    (`--export-release "macOS package"`), with the canonical toolchain of [toolchain.md](toolchain.md) (the pinned SDK first
    on `PATH`, the Godot shell sentinel). The export log must show the pinned SDK, as for the export endpoints.
 4. The bundle has its executable, `codesign --verify --deep --strict` passes and the signature is ad-hoc.
-5. Smoke, when the game is in `/Applications/Arcanum` or `~/Applications/Arcanum`: the exported app is started with
+5. Smoke, when the game is in `/Applications/Arcanum`, `~/Applications/Arcanum` or a CrossOver bottle (the launcher's
+   own macOS candidates): the exported app is started with
    `-- --native-smoke`, `ARC_AREA_MAP_SMOKE_ONLY=menu` and a fresh `LAUNCHER_SETTINGS_TEST_PATH` (a player's first
    start): it must print `ARC-DEV-047 build Arcanum Steamwoven alpha · main <commit>` with its user folder
    `Arcanum Steamwoven Game`, then `ARC-UI-014 native-smoke launcher PASS` and `ARC-UI-011 native-smoke main menu PASS`.
-   Without the game the smoke is skipped and the run says so; `--no-smoke` skips it on purpose.
+   Without the game the smoke is skipped and the run says so; `--no-smoke` skips it on purpose. `BUILD.txt` and the
+   final `PASS` line record whether the smoke passed or was skipped.
 6. Only then the build is installed (below). A failed step installs nothing and prints the step, its exit code, its log
-   and the log's last 20 lines. The temporary folder is removed (`--keep-work` keeps it).
+   and the log's last 20 lines. The temporary folder is removed, also when the queue stops the run (`--keep-work` keeps
+   it). The owner's opt-in variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the queue's own, `LAUNCHER_SETTINGS_*`,
+   `WORLD_DIAGNOSTIC_*`) are dropped from the build and smoke environment.
 
 ## Where the build lands
 
 In the **main checkout** (also when the command runs from a worktree):
 
     artifacts/packages/macos/Arcanum Steamwoven.app
-    artifacts/packages/macos/BUILD.txt            commit, date, product
+    artifacts/packages/macos/BUILD.txt            commit, date, product, smoke result
     artifacts/packages/macos/README.md            the player instruction of that commit
-    artifacts/packages/macos/previous/            the build before, with its BUILD.txt
+    artifacts/packages/macos/previous/            the build before, with its BUILD.txt and README.md
     artifacts/packages/logs/macos/                the last run's step logs
 
 The next successful package replaces the current build and moves it to `previous/` (the older `previous/` goes). Nothing
 else removes them; `./arcanum clean` lists `artifacts/packages` as kept ([build retention](build-retention.md)). Packages
-are local: they are never committed, uploaded or published.
+are local: the tool never commits, uploads or publishes them; giving a copy to a tester is the owner's own private act.
 
 ## What makes the package different from a developer build
 
@@ -59,7 +63,7 @@ are local: they are never committed, uploaded or published.
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
   environment variables); the viewer project turns them into assembly metadata, and `ViewerBuildInfo` shows
   `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of the launcher and the main
-  menu (a source run or an endpoint export shows `source run (not a packaged build)`). Every run prints
+  menu (a source run or an endpoint export shows `not a packaged build`). Every run prints
   `ARC-DEV-047 build <that line> user=<user folder>` at start.
 
 ## Not done

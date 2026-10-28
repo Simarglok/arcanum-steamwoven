@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,9 @@ USER_FOLDER = "Arcanum Steamwoven Game"
 INSTRUCTION = Path("docs/player/alpha-build.md")
 SMOKE_PASS = ("ARC-UI-014 native-smoke launcher PASS", "ARC-UI-011 native-smoke main menu PASS")
 SMOKE_MINUTES = 10.0
+DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_")
+BOTTLES = 32  # GameFolderLocator.MaxBottles
+KEPT_VARIABLES = frozenset({"ARCANUM_QUEUE_TICKET", "ARCANUM_QUEUE_KIND"})
 
 
 @dataclass(frozen=True)
@@ -79,7 +83,10 @@ def build_environment(base: dict[str, str], commit: str, date: str) -> dict[str,
     """The canonical toolchain (docs/workflow/toolchain.md: the pinned SDK first, the Godot shell sentinel) and the
     commit stamp the viewer project reads as MSBuild properties (ViewerBuildInfo)."""
     sdk = dotnet_root(base)
-    environment = dict(base)
+    # The owner's opt-in data, smoke and settings variables (DAT_ROOT, ARC_*, ARCANUM_* HD and data selections,
+    # LAUNCHER_SETTINGS_TEST_PATH, WORLD_DIAGNOSTIC_*) must not reach the build or its smoke; the queue's own stay.
+    environment = {key: value for key, value in base.items()
+                   if key in KEPT_VARIABLES or not key.startswith(DROPPED_PREFIXES)}
     environment.update({"DOTNET_ROOT": str(sdk), "PATH": os.pathsep.join([str(sdk), "/usr/bin", "/bin", "/usr/sbin", "/sbin"]),
                         "__GODOT_SHELL_ENV_SET": "1", "ArcanumPackageCommit": commit, "ArcanumPackageDate": date})
     return environment
@@ -95,6 +102,13 @@ def steps(platform: Platform, source: Path, product: Path, environment: dict[str
         ("import", [str(GODOT), "--headless", "--path", project, "--import"]),
         ("export", [str(GODOT), "--verbose", "--headless", "--path", project, "--export-release", platform.preset, str(product)]),
     ]
+
+
+def check_tools(environment: dict[str, str]) -> None:
+    """The canonical SDK and Godot exist before anything runs (as validate-macos.sh checks)."""
+    for tool in (dotnet_root(environment) / "dotnet", GODOT):
+        if not os.access(tool, os.X_OK):
+            raise PackageError(f"{tool} is missing: the canonical SDK {SDK_VERSION} and Godot 4.7.2 .NET are needed (toolchain.md)")
 
 
 def check_export_log(text: str, environment: dict[str, str]) -> None:
@@ -128,6 +142,9 @@ def run_logged(command: Sequence[str], cwd: Path, environment: dict[str, str], l
         except subprocess.TimeoutExpired:
             handle.write(f"\npackage: stopped after {minutes:g} minutes\n".encode())
             return 124
+        except OSError as error:
+            handle.write(f"package: could not start {command[0]}: {error}\n".encode())
+            return 127
 
 
 def step(name: str, command: Sequence[str], cwd: Path, environment: dict[str, str], logs: Path, runner: Runner,
@@ -136,16 +153,19 @@ def step(name: str, command: Sequence[str], cwd: Path, environment: dict[str, st
     log = logs / f"{name}.log"
     code = runner(command, cwd, environment, log, minutes)
     if code != 0:
-        tail = log.read_text(errors="replace").splitlines()[-20:] if log.is_file() else []
+        tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:] if log.is_file() else []
         raise PackageError("\n".join([f"step {name} FAILED exit={code} log={log}", *tail]))
-    return log.read_text(errors="replace") if log.is_file() else ""
+    return log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
 
 
 def extract(root: Path, commit: str, source: Path) -> None:
     """The commit's tracked files only (git archive), so nothing untracked or uncommitted can enter a package."""
     source.mkdir(parents=True)
-    archive = subprocess.Popen(["git", "-C", str(root), "archive", "--format=tar", commit], stdout=subprocess.PIPE)
-    unpack = subprocess.run(["tar", "-x", "-f", "-", "-C", str(source)], stdin=archive.stdout)
+    try:
+        archive = subprocess.Popen(["git", "-C", str(root), "archive", "--format=tar", commit], stdout=subprocess.PIPE)
+        unpack = subprocess.run(["tar", "-x", "-f", "-", "-C", str(source)], stdin=archive.stdout)
+    except OSError as error:
+        raise PackageError(f"could not extract {commit[:10]}: {error}") from error
     assert archive.stdout is not None
     archive.stdout.close()
     if archive.wait() != 0 or unpack.returncode != 0:
@@ -153,16 +173,26 @@ def extract(root: Path, commit: str, source: Path) -> None:
 
 
 def game_folder() -> Path | None:
-    """The folder the smoke's first start detects (GameFolderLocator's fixed macOS folders), or None to skip the smoke."""
-    for candidate in (Path("/Applications/Arcanum"), Path.home() / "Applications" / "Arcanum"):
+    """A folder the smoke's first start detects (GameFolderLocator's macOS candidates: the fixed folders, then the GOG
+    folders in CrossOver bottles), or None to skip the smoke."""
+    bottles = Path.home() / "Library" / "Application Support" / "CrossOver" / "Bottles"
+    crossover = [bottle / "drive_c" / Path(*folder) for bottle in (sorted(bottles.iterdir())[:BOTTLES] if bottles.is_dir() else [])
+                 for folder in (("GOG Games", "Arcanum"), ("Program Files (x86)", "GOG Galaxy", "Games", "Arcanum"))]
+    for candidate in (Path("/Applications/Arcanum"), Path.home() / "Applications" / "Arcanum", *crossover):
         if (candidate / "modules" / "Arcanum.dat").is_file():
             return candidate
     return None
 
 
-def install(built: Path, destination: Path, commit: str, date: str, instruction: Path) -> Path:
-    """Replace destination/<product> by `built`; the build it replaces moves to destination/previous/."""
+def install(built: Path, destination: Path, commit: str, date: str, smoke: str, instruction: Path) -> Path:
+    """Replace destination/<product> by `built`; the build it replaces moves to destination/previous/ with its BUILD.txt and
+    README.md. The new build is first moved next to its place (the copy across volumes, the step that can fail on a full
+    disk), so the current build is rotated only once the new one is complete on the same volume."""
     destination.mkdir(parents=True, exist_ok=True)
+    incoming = destination / f".incoming-{built.name}"
+    if incoming.exists():
+        shutil.rmtree(incoming)
+    shutil.move(str(built), str(incoming))
     current = destination / built.name
     if current.exists():
         previous = destination / "previous"
@@ -170,10 +200,11 @@ def install(built: Path, destination: Path, commit: str, date: str, instruction:
             shutil.rmtree(previous)
         previous.mkdir()
         current.rename(previous / built.name)
-        if (destination / "BUILD.txt").is_file():
-            (destination / "BUILD.txt").rename(previous / "BUILD.txt")
-    shutil.move(str(built), str(current))
-    (destination / "BUILD.txt").write_text(f"commit {commit}\ndate {date}\nproduct {built.name}\n")
+        for name in ("BUILD.txt", "README.md"):
+            if (destination / name).is_file():
+                (destination / name).rename(previous / name)
+    incoming.rename(current)
+    (destination / "BUILD.txt").write_text(f"commit {commit}\ndate {date}\nproduct {built.name}\nsmoke {smoke}\n", encoding="utf-8")
     if instruction.is_file():
         shutil.copyfile(instruction, destination / "README.md")
     return current
@@ -187,6 +218,8 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
     commit, date = resolve(root, ref)
     say(f"commit {commit} ({date}) from {ref}")
     environment = build_environment(dict(os.environ if base is None else base), commit, date)
+    if runner is run_logged:
+        check_tools(environment)
     output.mkdir(parents=True, exist_ok=True)
     logs = output / "logs" / platform.folder
     if logs.exists():
@@ -216,16 +249,21 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
                 raise PackageError("the bundle is not ad-hoc signed")
         folder = game_folder() if smoke else None
         if folder is None:
-            say("smoke SKIPPED (" + ("--no-smoke" if not smoke else "no game in /Applications/Arcanum or ~/Applications/Arcanum") + ")")
+            smoked = "SKIPPED (" + ("--no-smoke" if not smoke else "no game in /Applications/Arcanum, ~/Applications/Arcanum or a CrossOver bottle") + ")"
+            say(f"smoke {smoked}")
         else:
             # An automated run keeps its settings and saves in an isolated folder (ViewerStoragePaths); the launcher file is
             # a fresh one, so the launcher detects the game folder as a player's first start would.
             smoke_environment = dict(environment, LAUNCHER_SETTINGS_TEST_PATH=str(work / "launcher_v1.json"), ARC_AREA_MAP_SMOKE_ONLY="menu")
             text = step("smoke-menu", [str(executable), "--", "--native-smoke"], source, smoke_environment, logs, runner, SMOKE_MINUTES)
             check_smoke_log(text, commit)
-            say(f"smoke PASS (launcher and main menu on {folder.name}, own user folder {USER_FOLDER})")
-        installed = install(product, output / platform.folder, commit, date, source / INSTRUCTION)
-        say(f"PASS {installed} (main {commit[:10]}, {date})")
+            smoked = f"PASS (launcher and main menu, own user folder {USER_FOLDER})"
+            say(f"smoke {smoked}")
+        try:
+            installed = install(product, output / platform.folder, commit, date, smoked, source / INSTRUCTION)
+        except OSError as error:
+            raise PackageError(f"could not install into {output / platform.folder}: {error}") from error
+        say(f"PASS {installed} (main {commit[:10]}, {date}, smoke {smoked.split(' ', 1)[0]})")
         return installed
     finally:
         if keep_work:
@@ -251,6 +289,12 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+
+    def stopped(number: int, _frame: object) -> None:
+        raise PackageError(f"stopped by signal {number}")
+    # A queue timeout or stop (SIGTERM, SIGHUP) unwinds like an error, so the temporary folder is removed.
+    for number in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(number, stopped)
     try:
         root = main_checkout()
         output = args.output or root / "artifacts" / "packages"
