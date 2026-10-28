@@ -121,6 +121,15 @@ public sealed class GameFolderLocatorTests
         Assert.AreEqual((GameFolderStatus.UnsupportedLayout, "archives"), Pair(GameFolderLocator.Check(game)));
     }
 
+    [TestMethod]
+    public void An_archive_name_with_a_control_character_is_an_unsupported_layout()
+    {
+        if (OperatingSystem.IsWindows()) return; // Windows file names cannot hold one.
+        var game = Game(Path.Combine(_root, "Arcanum"));
+        File.WriteAllBytes(Path.Combine(game, "arcanum\u0001.dat"), [1]);
+        Assert.AreEqual((GameFolderStatus.UnsupportedLayout, "archive name"), Pair(GameFolderLocator.Check(game)));
+    }
+
     private static (GameFolderStatus, string?) Pair(GameFolderCheck check) => (check.Status, check.Detail);
 
     [TestMethod]

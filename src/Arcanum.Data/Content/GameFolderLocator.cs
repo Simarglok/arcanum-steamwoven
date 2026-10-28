@@ -212,8 +212,11 @@ public static class GameFolderLocator
         if (actor is null) return new(GameFolderStatus.MissingActorArchive, full, origin, "arcanum1.dat", plan);
         var terrain = BaseArchive(plan, "arcanum2.dat");
         if (terrain is null) return new(GameFolderStatus.MissingTerrainArchive, full, origin, "arcanum2.dat", plan);
-        if (plan.SearchOrder.Count(source => source.Kind == ContentSourceKind.Archive) > MaxArchives)
-            return new(GameFolderStatus.UnsupportedLayout, full, origin, "archives", plan);
+        var archives = plan.SearchOrder.Where(source => source.Kind == ContentSourceKind.Archive).ToArray();
+        if (archives.Length > MaxArchives) return new(GameFolderStatus.UnsupportedLayout, full, origin, "archives", plan);
+        // The identity stores each archive's name; a name with a control character cannot be stored (or shown).
+        if (archives.Any(source => Path.GetFileName(source.Path).Any(char.IsControl)))
+            return new(GameFolderStatus.UnsupportedLayout, full, origin, "archive name", plan);
         try
         {
             return new(GameFolderStatus.Ready, plan.GameRoot, origin, null, plan, new(plan.GameRoot, module.Path, actor.Path, terrain.Path), Identify(plan));
