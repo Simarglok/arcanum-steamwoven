@@ -175,9 +175,12 @@ pinned `HumanFixedArea` back (ordinals, selectors, frames, rates, strides and it
 
 The map load still publishes `HumanFixedArea`. Each frame the viewer compares the session hero's body with the drawn one; on a
 change (new game, loaded save, a map publication that brought the fixed human back) it loads the body once a run, uploads its
-textures and swaps the actor's profile, its plan and its gait timing (`DiagnosticGridActor.UseProfile`). Without a hero, or for a
-race outside the creation table, the fixed human stays. A body that does not read keeps the fixed human, logs
-`ARC-UI-039 hero body=… FAILED reason` and is not retried that run. The HUD's gait line names the drawn body.
+textures and swaps the actor's profile, its plan and its gait timing (`DiagnosticGridActor.UseProfile`); a map publication swaps
+before its first frame. Companions and NPC movers keep the human timing. Without a hero, or for a race outside the creation table,
+the fixed human is drawn. A body that does not read or swap is drawn as the fixed human with the human timing, logs
+`ARC-UI-039 hero body=… FAILED reason` and is not retried that run. The HUD's gait line names the drawn body. The first sighting of a
+body reads the archive on the frame (about 0.05 s per body on the owner's Mac); the archive is the same file the map load
+authenticated, read again after that check.
 
 Not implemented: the worn armour, shield and weapon art (ARC-WORLD-112 and later), NPC walk animations, the PC's
 Speed (the timing stays at Speed 8).

@@ -7,7 +7,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-039: the AREA hero is drawn with its own body (race and gender, HeroBody), not the fixed human woman every map load
 // publishes. Each frame the session hero's body is compared with the drawn one; on a change (a new game, a loaded save, a map
 // publication that brought the fixed human back) the body's ARTs are read from the actor archive once a run, uploaded, and the
-// actor, its gait timing and its plan are swapped. A body that cannot be read leaves the fixed human with its reason in the log.
+// actor, its gait timing and its plan are swapped (NPCs and companions keep the human timing). A body that cannot be read or
+// swapped is drawn as the fixed human, with its reason in the log, and is not tried again that run.
 public partial class TerrainViewerApp
 {
     private readonly Dictionary<HeroBody, HeroBodyLoad> _heroBodies = new();
@@ -23,16 +24,17 @@ public partial class TerrainViewerApp
     {
         if (_readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || _readyActorPlan is null || _worldActor.Session is not AreaGridSession) return;
         var wanted = WantedHeroBody();
+        // A body that did not read or swap is drawn as the fixed human, with the human's profile and timing.
+        if (_heroBodyFailures.ContainsKey(wanted)) wanted = HeroBody.HumanFemale;
         if (wanted == HeroBody.HumanFemale)
         {
             // The fixed human is the published plan's own profile; a plan published since a swap already carries it.
             if (ReferenceEquals(_worldActor.Profile, ActorDiagnosticProfile.HumanFixedArea) && ReferenceEquals(_readyActorPlan.Profile, ActorDiagnosticProfile.HumanFixedArea)) return;
-            if (_humanActorFrames is not { } human) return;
+            if (_humanActorFrames is not { } human || _heroBodyFailures.ContainsKey(HeroBody.HumanFemale)) return;
             SwapHeroBody(wanted, ActorDiagnosticProfile.HumanFixedArea, GaitTiming.HumanFixed, human, null);
             return;
         }
         if (_heroBodies.TryGetValue(wanted, out var known) && ReferenceEquals(_worldActor.Profile, known.Profile) && ReferenceEquals(_readyActorPlan.Profile, known.Profile)) return;
-        if (_heroBodyFailures.ContainsKey(wanted)) return;
         if (known is null)
         {
             if (_arguments?.ActorResourcePath is not { } path) { NoteHeroBodyFailure(wanted, "no actor archive"); return; }
@@ -47,17 +49,27 @@ public partial class TerrainViewerApp
         SwapHeroBody(wanted, known.Profile, known.Timing, known.Frames, known.Textures);
     }
 
+    // The swap is all or nothing: a plan that cannot be built puts the actor's previous profile and timing back and records
+    // the body as failed (the next frame then draws the fixed human).
     private void SwapHeroBody(HeroBody body, ActorDiagnosticProfile profile, GaitTiming timing, IReadOnlyList<ActorDiagnosticFrame> frames,
         IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture>? textures)
     {
-        if (textures is not null) _cache.UploadActor(textures);
-        _worldActor.UseProfile(profile, timing);
-        var input = _worldActor.Placement();
-        var frame = frames.Single(f => f.TextureKey.Selector == profile.Resource(input.Action).Selector
-            && f.TextureKey.PhysicalGroup == profile.Facing(input.Action, input.Facing).PhysicalGroup && f.TextureKey.Frame == input.Frame);
-        _readyActorPlan = ActorDiagnosticScenePlan.CreateSynthetic(input with { Width = frame.Width, Height = frame.Height, HotX = frame.HotX,
-            HotY = frame.HotY, ArtOffsetX = frame.ArtOffsetX, ArtOffsetY = frame.ArtOffsetY }, frames, profile);
-        _readyActor = _readyActorPlan.Current; _readyActorInput = input;
+        var (previousProfile, previousTiming) = (_worldActor.Profile, _worldActor.AreaGaitTiming ?? GaitTiming.HumanFixed);
+        ActorDiagnosticScenePlan plan; ActorDiagnosticPlacementInput input;
+        try
+        {
+            if (textures is not null) _cache.UploadActor(textures);
+            _worldActor.UseProfile(profile, timing);
+            input = _worldActor.Placement();
+            plan = HeroBodyLoad.PlanOf(profile, frames, input);
+        }
+        catch (Exception exception) when (exception is TerrainViewerException or ArgumentException or InvalidOperationException)
+        {
+            _worldActor.UseProfile(previousProfile, previousTiming);
+            NoteHeroBodyFailure(body, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name);
+            return;
+        }
+        _readyActorPlan = plan; _readyActor = plan.Current; _readyActorInput = input;
         _heroBodyStatus = body == HeroBody.HumanFemale ? "fixed human" : $"{body.Label} ({profile.Provenance})";
         GD.Print($"ARC-UI-039 hero body={body.Label} profile={profile.Id} idle=0x{profile.Idle.Selector:x8} walkRate={timing.ArtRate(MovementGait.Walk)} runRate={timing.ArtRate(MovementGait.Run)}");
         PublishWorldSelection();
@@ -87,6 +99,6 @@ public partial class TerrainViewerApp
     {
         _heroBodyFailures[body] = reason;
         _heroBodyStatus = $"fixed human ({body.Label} not drawn: {reason})";
-        GD.Print($"ARC-UI-039 hero body={body.Label} FAILED {reason}; the fixed human stays");
+        GD.Print($"ARC-UI-039 hero body={body.Label} FAILED {reason}; the fixed human is drawn");
     }
 }

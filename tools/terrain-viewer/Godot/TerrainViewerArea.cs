@@ -66,6 +66,8 @@ public partial class TerrainViewerApp
         _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         // As in WORLD: quarantine first, then enter Follow on the actor, so the
         // safety reset cannot clear the fresh camera's actor tracking.
+        // ARC-UI-039: the session hero's body before the first publication, so the fixed human never shows for a frame.
+        SyncHeroBody();
         QuarantineWorld(); PublishWorldSelection();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         RefreshAreaStatus();

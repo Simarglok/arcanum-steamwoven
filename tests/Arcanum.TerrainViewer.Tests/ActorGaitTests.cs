@@ -83,6 +83,35 @@ public sealed class ActorGaitTests
     }
 
     [TestMethod]
+    public void AHeroBodySwapChangesTheProfileTheSessionTimingAndThePlaybackRate()
+    {
+        // ARC-UI-039: a dwarf or halfling body steps and plays its walk at 17 + 4 frames per second.
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        var fast = new GaitTiming(human.Walk.Stride!, human.Run!.Stride!, GaitTiming.BaseSpeed, human.Vault!.FramesPerGroup, human.Vault.RawFramesPerSecond, 4);
+        var actor = new DiagnosticGridActor { AreaGaitTiming = GaitTiming.HumanFixed, AreaGait = () => MovementGait.Walk };
+        actor.Configure(Steps(), SimulationTime.At(0));
+        var session = (AreaGridSession)actor.Session!;
+        // The human's resources as a hero body profile (another profile object, as an elf man's would be).
+        var body = ActorDiagnosticProfile.ForHeroBody(human.Idle, human.Walk, human.Run, human.Vault, human.Attack!, human.DistinctKeys);
+        actor.AttackPose = (5, 3);
+        actor.UseProfile(body, fast);
+        Assert.AreSame(body, actor.Profile);
+        Assert.AreSame(fast, actor.AreaGaitTiming);
+        Assert.AreSame(fast, session.Timing);
+        Assert.IsNull(actor.AttackPose);
+        Assert.AreEqual((ActorDiagnosticAction.Idle, 0), (actor.State.Action, actor.CurrentFrame));
+        // A walk step east, sampled at 0.1 s: the step takes the fast duration and the walk clock runs at 21 fps (frame 2, not 1).
+        var step = fast.For(MovementGait.Walk, NeighborDirection.XPlus);
+        Assert.IsTrue(step.Value < GaitTiming.HumanFixed.For(MovementGait.Walk, NeighborDirection.XPlus).Value);
+        var started = actor.Advance(SimulationTime.At(1, 10), [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        Assert.AreEqual(step, started.Movement.Events.Single(e => e.Kind == MovementEventKind.StepStarted).Assessment!.Duration);
+        Assert.AreEqual((ActorDiagnosticAction.Walk, 2), (actor.State.Action, actor.CurrentFrame));
+        // A profile without the AREA actions is refused, and the actor keeps its own.
+        Assert.Throws<ArgumentException>(() => actor.UseProfile(ActorDiagnosticProfile.MonsterRegression, fast));
+        Assert.AreSame(body, actor.Profile);
+    }
+
+    [TestMethod]
     public void RunGaitPermitsShorterStepsAndTheActorDrawsTheRunArt()
     {
         var gait = MovementGait.Run;

@@ -20,6 +20,7 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
 {
     private static readonly string[] BodyCodes = ["HM", "DF", "GH", "HG", "EF"];
     private static readonly string[] ArmorCodes = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"];
+    private const string WeaponCodes = "ABCDEFGHIJKXYNZ";
 
     /// <summary>The body the fixed diagnostic human is drawn with (<see cref="ActorDiagnosticProfile.HumanFixedArea"/>).</summary>
     public static HeroBody HumanFemale { get; } = new(0, 0);
@@ -48,13 +49,14 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     public uint Selector(uint humanSelector) =>
         (humanSelector & ~0x0FF00030u) | ((uint)Gender << 27) | ((uint)Body << 24) | ((uint)Armor << 20) | ((uint)Palette << 4);
 
-    /// <summary>The critter ART file a selector names (no shield): <c>art/critter/{label}/{label}{armour}X{weapon}{animation}.art</c>,
+    /// <summary>The critter ART file a selector's animation and weapon name for this body, armour part and palette (no shield): <c>art/critter/{label}/{label}{armour}X{weapon}{animation}.art</c>,
     /// rule N1. The animations and weapons the hero draws (stand, walk, run, vault without a weapon; the unarmed attack) are none of
     /// the missing-art pairs that rename a creatable body's file (MA1, SH-04), so no repair applies.</summary>
     public string ArtPath(uint selector)
     {
         var animation = (int)((selector >> 6) & 31); var weapon = (int)(selector & 15);
-        return $"art/critter/{Label}/{Label}{ArmorCodes[Armor]}X{"ABCDEFGHIJKXYNZ"[weapon]}{(char)('a' + animation)}.art";
+        if (animation > 24 || weapon >= WeaponCodes.Length) throw new ArgumentOutOfRangeException(nameof(selector), "no critter ART names this animation or weapon");
+        return $"art/critter/{Label}/{Label}{ArmorCodes[Armor]}X{WeaponCodes[weapon]}{(char)('a' + animation)}.art";
     }
 }
 
@@ -63,15 +65,21 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
     IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> Textures, long RgbaBytes)
 {
     /// <summary>The actor plan of this body at a placement (its action, facing and frame; the frame's geometry is filled in).</summary>
-    public ActorDiagnosticScenePlan Plan(ActorDiagnosticPlacementInput input)
+    public ActorDiagnosticScenePlan Plan(ActorDiagnosticPlacementInput input) => PlanOf(Profile, Frames, input);
+
+    /// <summary>The actor plan of a profile's decoded frames at a placement, the frame's geometry filled in; a typed
+    /// <see cref="TerrainViewerException"/> when the placement's frame is not among them.</summary>
+    public static ActorDiagnosticScenePlan PlanOf(ActorDiagnosticProfile profile, IReadOnlyList<ActorDiagnosticFrame> frames, ActorDiagnosticPlacementInput input)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        var facing = Profile.Facing(input.Action, input.Facing);
-        var selector = Profile.Resource(input.Action).Selector;
-        var frame = Frames.SingleOrDefault(f => f.TextureKey.Selector == selector && f.TextureKey.PhysicalGroup == facing.PhysicalGroup
-            && f.TextureKey.Frame == input.Frame) ?? throw new TerrainViewerException(new(TerrainViewerErrorCode.ActorFrame, Stage: TerrainViewerFailureStage.ActorFrame));
+        ArgumentNullException.ThrowIfNull(profile); ArgumentNullException.ThrowIfNull(frames); ArgumentNullException.ThrowIfNull(input);
+        var facing = profile.Facing(input.Action, input.Facing);
+        var selector = profile.Resource(input.Action).Selector;
+        var matches = frames.Where(f => f.TextureKey.Selector == selector && f.TextureKey.PhysicalGroup == facing.PhysicalGroup
+            && f.TextureKey.Frame == input.Frame).Take(2).ToArray();
+        if (matches.Length != 1) throw new TerrainViewerException(new(TerrainViewerErrorCode.ActorFrame, Stage: TerrainViewerFailureStage.ActorFrame));
+        var frame = matches[0];
         return ActorDiagnosticScenePlan.CreateSynthetic(input with { Width = frame.Width, Height = frame.Height, HotX = frame.HotX, HotY = frame.HotY,
-            ArtOffsetX = frame.ArtOffsetX, ArtOffsetY = frame.ArtOffsetY }, Frames, Profile);
+            ArtOffsetX = frame.ArtOffsetX, ArtOffsetY = frame.ArtOffsetY }, frames, profile);
     }
 }
 

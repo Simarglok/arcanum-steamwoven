@@ -53,6 +53,7 @@ public sealed class HeroBodyArtTests
         // The palette (bits 4..5) the worn body armour's use art sets (0x465AE0, for ARC-WORLD-112).
         Assert.AreEqual(0x2C200060u, HeroBody.For(CharacterRace.Elf, CharacterGender.Male, 2, 2)!.Value.Selector(human.Walk.Selector));
         Assert.IsNull(HeroBody.For(CharacterRace.Human, CharacterGender.Male, 0, 4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => elf.ArtPath(0x2C00000F));
         // Races outside the creation table have no body here.
         Assert.IsNull(HeroBody.For(CharacterRace.Ogre, CharacterGender.Male));
     }
@@ -100,7 +101,19 @@ public sealed class HeroBodyArtTests
                 .Where(gender => CharacterCreationRules.Allows((CharacterRace)race, gender)).Select(gender => HeroBody.For((CharacterRace)race, gender)!.Value))).Distinct())
         {
             var load = HeroBodyArt.Load(archive, body);
-            Assert.AreEqual(load.Profile.DistinctKeys, load.Textures.Count, body.Label);
+            // HB4: the human's frame counts and 195 keys for every creatable body.
+            Assert.AreEqual((195, 195), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
+            CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
+            // HB3: the installed strides (axis dx, dy, diagonal) of walk and run.
+            var (walk, run) = body.Label switch
+            {
+                "DFM" or "GHM" => ((27, 14, 40), (78, 40, 112)),
+                "HGM" => ((55, 28, 80), (137, 69, 196)),
+                _ => ((42, 22, 60), (119, 60, 170)),
+            };
+            Assert.AreEqual(walk, (load.Profile.Walk.Stride!.AxisDx, load.Profile.Walk.Stride.AxisDy, load.Profile.Walk.Stride.DiagonalPixels), body.Label);
+            Assert.AreEqual(run, (load.Profile.Run!.Stride!.AxisDx, load.Profile.Run.Stride.AxisDy, load.Profile.Run.Stride.DiagonalPixels), body.Label);
+            Assert.AreEqual(body.GaitRateBonus, load.Timing.RateBonus, body.Label);
             Assert.AreEqual(ActorDiagnosticProfileId.HeroBody, load.Profile.Id);
             var plan = load.Plan(new ActorDiagnosticPlacementInput(6, 1, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached,
                 100, false, ActorDiagnosticAction.Idle, 5, 0, 0, 0, 0, 0, 0, 0));
