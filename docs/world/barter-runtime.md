@@ -167,7 +167,8 @@ items removed, 934 coins and 26 new wares (none refused or skipped); the window 
 
 A container with flag 0x200 (116 installed, all with a source) is generated once, the first time something reaches its whole list,
 from draws the original makes reproducible (ledger [RK10–RK14](../research/ledger/items.md#generated-once-containers-arc-world-098),
-one reading, F1). Simulation holds the rules; the session and the viewer do not run them yet.
+one reading, F1). Simulation holds the rules; the session runs them (ARC-WORLD-100, [below](#session-generation-arc-world-100)); no
+viewer window calls the session's first-open generation yet.
 
 | API | Original | Rule |
 | --- | --- | --- |
@@ -175,7 +176,7 @@ one reading, F1). Simulation holds the rules; the session and the viewer do not 
 | `OriginalRandom` | 0x4CEF40, 0x4CEF50, 0x4CEF00 | The original's one generator: state × 0x19660D + 0x3C6EF35F, a draw is bits 8..22 (0..32767); `Between` draws nothing for equal bounds, swaps reversed ones and takes the draw modulo the width in signed 32-bit arithmetic. The whole 32-bit range, where the original divides by zero, gives the low bound plus the draw (technical fix, both modes). |
 | `RestockRules.GenerateOnce(set, seed)` | 0x463E20 | `Generate` drawing from `OriginalRandom(seed)` through `OriginalRestockRolls`: the same PC at the same container gets the same goods. |
 
-The caller's part, for the session task: the clear before (RK5), then after the lines the container's source and flag 0x200 are
+The caller's part: the clear before (RK5), then after the lines the container's source and flag 0x200 are
 cleared, so the window's restock schedule right after the first open finds no source and the container never restocks (RK12). The
 original reaches the generation at the first open in loot mode (2) or mode 4 (RK12), at a restock event (RK3), and before any
 whole-list work: the summon marking, the spill of a broken container, the death and destruction moves (RK13). The session keeps its
@@ -184,14 +185,32 @@ state after the generation, which only the original's later draws notice. Tests:
 [`OriginalRandomTests`](../../tests/Arcanum.Simulation.Tests/Randomness/OriginalRandomTests.cs),
 [`RestockRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/RestockRulesTests.cs).
 
+### Session generation (ARC-WORLD-100)
+
+The session generates a container with flag 0x200 once and remembers it (`inventory.generated`, snapshot schema 55): from then on its
+source is 0 and its flag 0x200 clear, whatever the host's data says, so `ScheduleRestock` leaves it without an event and a pending
+event finds no source (`RestockRules.Fire` → nothing). The draws come from `RestockRules.GenerateOnce` at
+`RestockRules.GeneratedOnceSeed`, never from the session's own generator, so the same hero at the same container gets the same goods.
+
+| API | Original | Rule |
+| --- | --- | --- |
+| `GenerateContainerOnce(expected, container, world)` | partner setup 0x572640 (call site 0x572779) → 0x463E20, RK12 | The first open in loot mode, which the host calls before `ScheduleRestock` for a container of the actor's map. Without flag 0x200, or once generated, no change. Otherwise the clear (persistent items stay, RK5) and the seeded generation as at a restock event; with a source the container is then recorded as generated. Flag 0x200 with source 0 (none installed) is only cleared and keeps its flag. An unreachable set (RK7) clears, generates nothing and is recorded. A container the session cannot regenerate (a set it does not admit, a transfer script, no seed facts from the host) keeps its list: outcome `Unsupported`, no change. Refused before any effect: an invalid entity, the version, no seed for the map, a container the seed or the host does not list as one or a spilled one, a full record, list or generated budget (4096), the revision. One revision. |
+| `FireRestock` (event `inventory.restock`) | 0x464180 → 0x463C60 → 0x463E20, RK3, RK10 | A container with flag 0x200 that the decision regenerates (on its own with flag 0x400, or through its merchant) draws seeded and is recorded; the merchant's own regeneration before it keeps the session's draws. Without the host's seed facts it keeps its list (`Unsupported`, as before). |
+| `ISessionRestockWorld.GeneratedOnceFacts(map, container)` | 0x463E20 (field 2), 0x441B60 (field 0x10E) | The host's part of the seed: the container's tile x and the PC's player name bytes (the host's PC, else its prototype's; empty when unset). The default answers null (no seed facts). |
+| `QueryContainerGenerated(map, container)` | 0x4EFDD0 | Whether the session generated the container (its source and flag cleared). |
+
+The seed's PC is the session hero: its race as the source's index (stat 27) and its gender (stat 26: female 0, male 1), which no
+session effect changes, and its background (field 0x101); a session without a hero seeds from the tile x alone. Tests:
+[`GeneratedOnceStateTests`](../../tests/Arcanum.Session.Tests/GeneratedOnceStateTests.cs).
+
 ## Not modelled (NOT READY)
 
 - **Restock limits**: the viewer's loot window opens only on dead NPCs and junk piles (no container loot window yet), so only the barter
   window schedules a container. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
-  zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 is a rule only
-  ([above](#generated-once-containers-arc-world-098)): the session still keeps their lists at a restock and no viewer window opens a
-  container, so none is generated; an NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
+  zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 runs in the session
+  ([above](#session-generation-arc-world-100)), but no viewer window opens a container in loot mode and the viewer's restock host gives
+  no seed facts (the tile x and the player name), so the viewer generates none yet; an NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
   broken or destroyed holder, objects created in play) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
   session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the

@@ -183,8 +183,9 @@ public sealed class SessionInventoryState
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
         SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
-        string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null)
+        string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null, SessionGeneratedContainer[]? generated = null)
     {
+        Generated = Array.AsReadOnly(generated ?? []);
         Grid = Array.AsReadOnly(grid ?? []);
         Identified = Array.AsReadOnly(identified ?? []);
         LastDiscardedMade = lastDiscardedMade;
@@ -228,12 +229,20 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-094: the highest made number of a made item a regeneration discarded without a deleted-item record (0 when
     /// none), so a new made item never takes a discarded one's number.</summary>
     public int LastDiscardedMade { get; }
+    /// <summary>ARC-WORLD-100: the containers with flag 0x200 the session generated once (their source and flag cleared, ledger RK10), by
+    /// map and then entity in ordinal order.</summary>
+    public IReadOnlyList<SessionGeneratedContainer> Generated { get; }
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
+    /// <summary>ARC-WORLD-100: how many generated-once containers a session keeps (116 installed, many times over).</summary>
+    public const int MaxGenerated = 4096;
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
+
+/// <summary>ARC-WORLD-100: a container with flag 0x200 the session generated once: its map and entity.</summary>
+public readonly record struct SessionGeneratedContainer(SessionMapId Map, string Entity);
 
 public sealed record SessionGroundItem(SessionInventoryItem Item, CellCoord Cell);
 
@@ -416,6 +425,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
     internal int LastDiscardedMade { get; set; }
 
+    /// <summary>ARC-WORLD-100: the generated-once containers (<see cref="SessionInventoryState.Generated"/>).</summary>
+    internal HashSet<SessionGeneratedContainer> Generated { get; } = [];
+
     /// <summary>The made items added to NPCs and containers (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
     internal int NpcHeld => Npcs.Values.Sum(list => list.Count);
 
@@ -534,7 +546,8 @@ internal sealed class InventoryDomain
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray())) { Container = Containers.Contains(pair.Key) }).ToArray(),
         Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
-        LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray());
+        LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
+        Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray());
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);
