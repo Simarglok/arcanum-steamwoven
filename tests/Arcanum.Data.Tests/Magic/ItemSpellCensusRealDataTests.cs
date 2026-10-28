@@ -70,7 +70,8 @@ public sealed class ItemSpellCensusRealDataTests
         Assert.AreEqual("6130:5:147:-1 6175:5:203:-1 6179:5:204:-1 8215:7:87:-1", string.Join(" ", slots
             .Where(s => (s.Triggers & CombatEvents & ~0x800000u) != 0).Select(s => $"{s.Prototype}:{s.Type}:{s.Spell}:{s.Charges}")),
             "ARC-MAGIC-023: three weapons and an armour fire on the damage step, unlimited, no chance bit");
-        Assert.AreEqual(14, slots.Count(s => s.Triggers == 0x800000 && s.Type is 9 or 14), "the location records are thrown items' (food 10105, generic 14)");
+        Assert.AreEqual((14, 14), (slots.Count(s => (s.Triggers & 0x800000) != 0), slots.Count(s => s.Triggers == 0x800000 && s.Type is 9 or 14)),
+            "the location records are thrown items' alone (food 10105, generic 14), without an aim bit");
     }
 
     [TestMethod, TestCategory("RealData")]

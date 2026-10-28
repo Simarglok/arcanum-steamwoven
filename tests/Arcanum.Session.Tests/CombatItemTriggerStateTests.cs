@@ -29,14 +29,17 @@ public sealed class CombatItemTriggerStateTests
         [EquipmentSlot.Weapon] = new("golem-sword", Sturdy),
     };
 
-    private sealed class Recorder : ISessionItemTriggers
+    // Records each call and, with a probe, whether the holder still held the item when the call came.
+    private sealed class Recorder(Func<string, string, bool>? holds = null) : ISessionItemTriggers
     {
         public List<(uint Mask, string Item, string Holder, string? Other)> Calls { get; } = [];
+        public List<bool> Held { get; } = [];
         public bool Supports(string item) => true;
 
         public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null)
         {
             Calls.Add((eventMask, item, holder, other));
+            if (holds is not null) Held.Add(holds(item, holder));
             return SessionItemTriggerResult.None;
         }
 
@@ -114,10 +117,17 @@ public sealed class CombatItemTriggerStateTests
             CollectionAssert.AreEqual(host.Calls.ToArray(), result.ItemSpells.Select(f => (f.Mask, f.Item, f.Holder, f.Other)).ToArray());
             Assert.AreEqual(ItemTriggerEvent.ParentHit, result.ItemSpells[0].Event);
 
-            // Without a host, or without the golem's item data, its items fire nothing; the hero's still do.
-            var bare = owner.AttackCritter(owner.Version, new(golem) { TargetWorn = Worn(owner) });
-            Assert.AreEqual(0, bare.ItemSpells.Count);
-            return;
+            // Without a host nothing fires; without the golem's item data its items fire nothing, the hero's still do.
+            Assert.AreEqual(0, owner.AttackCritter(owner.Version, new(golem) { TargetWorn = Worn(owner) }).ItemSpells.Count);
+            for (var next = 0; next < 200; next++)
+            {
+                var blind = new Recorder();
+                var unknown = owner.AttackCritter(owner.Version, new(golem) { ItemTriggers = blind });
+                if (unknown.Recipient != DamageRecipient.Target) continue;
+                Assert.IsTrue(blind.Calls.Count > 0 && blind.Calls.All(call => call.Holder == Hero), "only the hero's items walk");
+                return;
+            }
+            Assert.Fail("no second hit within the bounded run");
         }
         Assert.Fail("no plain hit within the bounded run");
     }
@@ -136,7 +146,7 @@ public sealed class CombatItemTriggerStateTests
             CollectionAssert.AreEqual(new[] { "golem-helmet", "golem-sword", "golem-vest" }, dying.Select(call => call.Item).ToArray());
             Assert.IsTrue(dying.All(call => call.Holder == Golem && call.Other == Hero));
             Assert.AreEqual(3, host.Calls.Count(call => call.Mask == (ParentHit | WeaponMelee)), "the dead golem's items still take the parent hit");
-            // A dead golem takes no step: nothing fires.
+            // An attack on the dead golem stops before any damage step: nothing fires.
             var after = new Recorder();
             owner.AttackCritter(owner.Version, new(golem) { TargetWorn = Worn(owner), ItemTriggers = after });
             Assert.AreEqual(0, after.Calls.Count);
@@ -152,17 +162,24 @@ public sealed class CombatItemTriggerStateTests
         var golem = GolemCombat();
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            var host = new Recorder();
+            var host = new Recorder((item, holder) => holder != Golem || Worn(owner).Values.Any(worn => worn.Entity == item));
             var result = owner.AttackCritter(owner.Version, new(golem) { TargetWorn = Worn(owner), TargetCell = new(101, 200), ItemTriggers = host });
             Assert.AreEqual(GameSessionFailure.None, result.StepFailure);
-            if (!result.Criticals.Any(step => step is { Kind: SessionCriticalStepKind.DropWeapon, Outcome: SessionCriticalStepOutcome.Dropped })) continue;
+            if (!result.Criticals.Any(step => step is { Kind: SessionCriticalStepKind.DropWeapon, Outcome: SessionCriticalStepOutcome.Dropped }))
+            {
+                Assert.AreEqual(GolemItems.Count, Worn(owner).Count, "nothing dropped yet");
+                continue;
+            }
             var effects = result.Resolution!.Damage!.HitEffects;
+            var down = (effects & (CriticalHitEffects.Knockdown | CriticalHitEffects.Knockout)) != 0;
+            Assert.IsTrue(down || effects.HasFlag(CriticalHitEffects.Stun), $"the seeded run's drop comes with a stun or a knockdown: {effects}");
             var hit = host.Calls.Where(call => call.Mask == (ParentHit | WeaponMelee)).Select(call => call.Item).ToArray();
             CollectionAssert.AreEqual(new[] { "golem-helmet", "golem-vest" }, hit, "the drop came before the parent hit");
-            if (effects.HasFlag(CriticalHitEffects.Stun) && (effects & (CriticalHitEffects.Knockdown | CriticalHitEffects.Knockout)) == 0)
+            Assert.IsTrue(host.Held.All(held => held), "every walk named items the golem held at its call: the stun's and knockdown's before the drop");
+            if (!down)
                 CollectionAssert.AreEqual(new[] { "golem-helmet", "golem-sword", "golem-vest" },
                     host.Calls.Where(call => call.Mask == ParentStunned).Select(call => call.Item).ToArray(), "the stun came before it");
-            if ((effects & (CriticalHitEffects.Knockdown | CriticalHitEffects.Knockout)) != 0)
+            else
             {
                 CollectionAssert.AreEqual(new[] { "golem-helmet", "golem-sword", "golem-vest" },
                     host.Calls.Where(call => call.Mask == ParentGoingUnconscious && call.Other == Hero).Select(call => call.Item).ToArray());
@@ -171,6 +188,52 @@ public sealed class CombatItemTriggerStateTests
             return;
         }
         Assert.Fail("no dropped sword within the bounded run");
+    }
+
+    // A bow (kit:1, range 10) with arrows picked up from the ground, the golem's items in the same seed.
+    private static GameSessionOwner BowOwner()
+    {
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var seed = Seed();
+        seed = new(seed.Holders, [.. seed.Items,
+            new SessionSeedItem("arrows", new(new(SessionItemType.Ammo, 7058, 100, 200), 1, 0, 0, 40, []) { AmmoType = 0 }, new Arcanum.Simulation.Movement.CellCoord(101, 200))]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "arrows", Accept).Disposition);
+        var bow = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Bow, Damage = DamageRanges.None with { Normal = new(2, 8) }, SpeedFactor = 10, Range = 10, AmmoType = 0, AmmoConsumption = 1 },
+        };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, Blade, EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, bow), (_, _) => true, Accept).Failure);
+        return owner;
+    }
+
+    [TestMethod]
+    public void A_landed_arrow_fires_without_the_melee_bit_and_the_bow_takes_its_own_mask()
+    {
+        using var owner = BowOwner();
+        var golem = GolemCombat();
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            var shot = owner.AttackCritter(owner.Version, new(golem) { Distance = 3, Flight = true, TargetWorn = Worn(owner), ItemTriggers = new Recorder() });
+            Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+            Assert.AreEqual(0, shot.ItemSpells.Count, "the flight carries no damage step");
+            if (shot.Resolution!.Outcome is not AttackOutcome.Hit || shot.Shots.Count != 1)
+            {
+                foreach (var flying in shot.Shots) owner.EndShot(flying);
+                continue;
+            }
+            var host = new Recorder();
+            var landed = owner.LandShot(owner.Version, shot.Shot!.Value, new(golem) { TargetWorn = Worn(owner), ItemTriggers = host });
+            Assert.AreEqual(GameSessionFailure.None, landed.Failure);
+            CollectionAssert.AreEqual(new[] { "golem-helmet", "golem-sword", "golem-vest" },
+                host.Calls.Where(call => call.Mask == ParentHit).Select(call => call.Item).ToArray(), "a reach of 10: no melee bit");
+            Assert.IsFalse(host.Calls.Any(call => (call.Mask & WeaponMelee) != 0));
+            Assert.IsTrue(host.Calls.Any(call => call is { Mask: ParentDamagesOpponentWithItem, Item: Blade, Holder: Hero, Other: Golem }),
+                "the projectile's item is the worn bow");
+            return;
+        }
+        Assert.Fail("no single hit within the bounded run");
     }
 
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap

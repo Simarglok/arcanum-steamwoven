@@ -385,7 +385,7 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     private readonly IReadOnlyList<SessionItemTriggerFiring>? _itemSpells;
 
     /// <summary>ARC-MAGIC-023: the executor calls of the damage step's item events, in order (<see cref="SessionAttack.ItemTriggers"/>);
-    /// empty without a host, without damage to the target or after a refused item step.</summary>
+    /// empty without a host or without damage to the target; none from a refused experience or item step on.</summary>
     public IReadOnlyList<SessionItemTriggerFiring> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerFiring>(); init => _itemSpells = value; }
 }
 
@@ -596,7 +596,8 @@ public sealed partial class GameSessionOwner
         var scatter = scatterRotation is { } rotation ? ScatterThrow(scatterFrom!.Value, hero.SkillLevel, rotation, attack.DropMap) : (Arcanum.Simulation.Movement.CellCoord?)null;
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown) }, ShotProjectiles(hero)) : [];
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
+                ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };
@@ -605,7 +606,7 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-023: the hero's worn items and the context's weapon (0x4B2210: the wielded weapon, or the projectile's item) for the
         // damage step's item events, as they are before the step.
         var heroWorn = _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity).ToArray();
-        var contextWeapon = pending?.Thrown is not null ? null : _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var held) ? held.Entity : null;
+        var contextWeapon = pending is null ? WieldedEntity() : pending.WeaponItem;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
@@ -631,16 +632,24 @@ public sealed partial class GameSessionOwner
         }
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
+        // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and
+        // the range of the weapon the swing or shot carries (0x465E30): the reach, which a throw keeps (its thrown range is the weapon's
+        // Range only for the check).
+        var striker = pending?.Hero ?? hero;
+        var itemSteps = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None && attack.ItemTriggers is not null
+            ? ItemSpellTriggerRules.DamageStep(facts!, damage, outcome, attacker: true, killer: true,
+                ItemSpellTriggerRules.MeleeHit(attackEntry: true, striker.Weapon.Kind == WeaponKind.Unarmed ? null : striker.Range))
+            : [];
+        var npcWorn = attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
+        // The stun's and the knockdown's walks come before the step's drops and wear (IC3), the others after them.
+        var itemSpells = FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => BeforeItemSteps(step, outcome)), target.Entity, npcWorn,
+            heroWorn, contextWeapon).ToList();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
                 attack.TargetCell, attack.DropMap, criticals);
-        // The parent hit's melee bit (0x4CBAD0): an attack entry's context, the range of the weapon the shot or swing carries (0x465E30).
-        var striker = pending?.Hero ?? hero;
-        var itemSpells = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None
-            ? FireDamageStepItems(attack.ItemTriggers, facts!, damage, outcome, target.Entity, heroWorn, contextWeapon,
-                ItemSpellTriggerRules.MeleeHit(attackEntry: true, striker.Weapon.Kind == WeaponKind.Unarmed ? null : striker.Range),
-                attack.TargetWorn, wear, criticals)
-            : [];
+        if (stepFailure == GameSessionFailure.None)
+            itemSpells.AddRange(FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => !BeforeItemSteps(step, outcome)), target.Entity,
+                StillWorn(npcWorn, wear, criticals), heroWorn, contextWeapon));
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
@@ -651,6 +660,8 @@ public sealed partial class GameSessionOwner
             ItemSpells = itemSpells,
         };
     }
+
+    private string? WieldedEntity() => _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Entity : null;
 
     /// <summary>ARC-COMBAT-015: a melee weapon strikes within its reach; a bow or firearm also beyond its range, where the shared check's
     /// range limit makes the shot impossible (SC8: the original's attack goal shoots within range, the target may have moved since).</summary>

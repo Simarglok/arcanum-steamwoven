@@ -1,5 +1,4 @@
 using Arcanum.Simulation.Combat;
-using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 
@@ -12,34 +11,23 @@ public sealed record SessionItemTriggerFiring(ItemTriggerEvent Event, uint Mask,
 public sealed partial class GameSessionOwner
 {
     /// <summary>
-    /// ARC-MAGIC-023: the item events of the hero's damage step on an NPC (0x4B4390, ledger IC2), fired through
-    /// <paramref name="triggers"/> after the attack's steps, in the step's order (<see cref="ItemSpellTriggerRules.DamageStep"/>). Each
-    /// wrapper walks its parent's worn items in slot order (<see cref="ItemSpellTriggerRules.WornCalls"/>) as they are at its point of
-    /// the step: the NPC's items as the host passed them (<see cref="SessionAttack.TargetWorn"/>; none without them) for the stun and
-    /// the knockdown, and, for the fatigue's going unconscious (unless a knockout caused it), the dying and the parent hit, without
-    /// those this attack's critical drops or breaks took off; the hero's items as it wore them before the attack's own weapon wear.
-    /// Without a host nothing fires.
+    /// ARC-MAGIC-023: fires damage step item events of the hero's attack on an NPC (0x4B4390, ledger IC2;
+    /// <see cref="ItemSpellTriggerRules.DamageStep"/>) through <paramref name="triggers"/>, in order. Each wrapper walks its parent's
+    /// worn items in slot order (<see cref="ItemSpellTriggerRules.WornCalls"/>): the NPC's are <paramref name="targetWorn"/> (as the
+    /// caller has them at this point of the step; none without the host's item data), the hero's <paramref name="heroWorn"/> (before
+    /// the attack's weapon wear). Nothing without a host.
     /// </summary>
-    private IReadOnlyList<SessionItemTriggerFiring> FireDamageStepItems(ISessionItemTriggers? triggers, LifeFacts facts, LifeDamage damage,
-        LifeOutcome outcome, string target, IReadOnlyList<string> heroWorn, string? weapon, bool melee,
-        IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? targetWorn, SessionAttackWearResult? wear, IReadOnlyList<SessionCriticalStep> criticals)
+    private IReadOnlyList<SessionItemTriggerFiring> FireDamageStepItems(ISessionItemTriggers? triggers, IEnumerable<ItemTriggerStep> steps,
+        string target, IReadOnlyList<string> targetWorn, IReadOnlyList<string> heroWorn, string? weapon)
     {
         if (triggers is null) return [];
         var hero = SessionEventKinds.PlayerEntity;
-        var before = targetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
-        var gone = criticals.Where(step => step is { Whose: DamageRecipient.Target, Outcome: SessionCriticalStepOutcome.Dropped }).Select(step => step.Entity)
-            .Concat(wear?.Steps.Where(step => step.Wearer == DamageRecipient.Target && step.Item is { Break: not ItemBreakStep.None }).Select(step => step.Entity) ?? [])
-            .ToHashSet();
-        var after = before.Where(item => !gone.Contains(item)).ToArray();
         var firings = new List<SessionItemTriggerFiring>();
-        foreach (var step in ItemSpellTriggerRules.DamageStep(facts, damage, outcome, attacker: true, killer: true, melee))
+        foreach (var step in steps)
         {
-            var (holder, worn) = step.Parent == ItemTriggerParty.Target
-                ? (target, step.Event is ItemTriggerEvent.ParentStunned || step.Other != ItemTriggerParty.None && step.Event == ItemTriggerEvent.ParentGoingUnconscious
-                    || step.Other == ItemTriggerParty.None && outcome.Events.HasFlag(LifeEvents.KnockedOut) ? before : after)
-                : (hero, heroWorn);
+            var (holder, worn) = step.Parent == ItemTriggerParty.Target ? (target, targetWorn) : (hero, heroWorn);
             var other = step.Other switch { ItemTriggerParty.Target => target, ItemTriggerParty.None => null, _ => hero };
-            var used = weapon is null ? -1 : Array.IndexOf(worn.ToArray(), weapon);
+            var used = weapon is null ? -1 : worn.ToList().IndexOf(weapon);
             foreach (var call in ItemSpellTriggerRules.WornCalls(step.Event, worn.Count, step.Melee, used < 0 ? null : used))
             {
                 var item = worn[call.Item];
@@ -47,5 +35,21 @@ public sealed partial class GameSessionOwner
             }
         }
         return firings;
+    }
+
+    /// <summary>Whether a damage step's item event comes before the step's critical drops and its wear (IC3): the stun, the knockdown's
+    /// two walks and a going unconscious the knockout's fatigue caused; the fatigue write's, the dying and the hooks come after.</summary>
+    private static bool BeforeItemSteps(ItemTriggerStep step, LifeOutcome outcome) =>
+        step.Event is ItemTriggerEvent.ParentStunned or ItemTriggerEvent.TargetGoingUnconscious
+        || step.Event == ItemTriggerEvent.ParentGoingUnconscious && (step.Other != ItemTriggerParty.None || outcome.Events.HasFlag(LifeEvents.KnockedOut));
+
+    /// <summary>The NPC's worn items without those this attack's critical drops or its wear's breaks took off (IC3).</summary>
+    private static string[] StillWorn(IReadOnlyList<string> worn, SessionAttackWearResult? wear, IReadOnlyList<SessionCriticalStep> criticals)
+    {
+        var gone = criticals.Where(step => step is { Whose: DamageRecipient.Target, Outcome: SessionCriticalStepOutcome.Dropped }).Select(step => step.Entity)
+            .Concat(wear?.Steps.Where(step => step.Wearer == DamageRecipient.Target && (step.Item is { Break: not ItemBreakStep.None }
+                || step is { Kind: SessionWearStepKind.WeaponDestroy, Skip: SessionWearSkip.None })).Select(step => step.Entity) ?? [])
+            .ToHashSet();
+        return [.. worn.Where(item => !gone.Contains(item))];
     }
 }

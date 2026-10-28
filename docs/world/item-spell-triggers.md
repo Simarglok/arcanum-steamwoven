@@ -141,17 +141,18 @@ other object (IC1). `ItemSpellTriggerRules` (Simulation) holds them as rules:
 
 The session fires them for the hero's attack on an NPC (`AttackCritter`, `LandShot`) through `SessionAttack.ItemTriggers`, a trigger
 host of the same session (`ISessionItemTriggers.Fire` now takes the event's other object, the aim of `Target_Attacker`); the executor
-calls and their results are `SessionAttackResult.ItemSpells` (`SessionItemTriggerFiring`). They fire after the attack's item steps, in
-the step's order: the runs they start begin then, as the original's goal 73 runs begin after the step. Each walk takes the items as
-they are at its point of the step (IC3): the NPC's items as the host passed them (`SessionAttack.TargetWorn`) for the stun and the
-knockdown, and without those this attack's critical drops or breaks took off for the fatigue's going unconscious (unless a knockout
-caused it), the dying and the parent hit; the hero's items as it wore them before the attack's weapon wear. The context's weapon is
-the wielded weapon, or a thrown shot's item (which the hero no longer wears); the melee bit reads the reach of the weapon the swing
-or the shot carries. An NPC's items fire only when the host's item lookup knows them, with their holder the NPC; their spent charges
-are saved by entity as the hero's are.
+calls and their results are `SessionAttackResult.ItemSpells` (`SessionItemTriggerFiring`). In the step's order, they fire after the
+life and experience steps: the stun's and the knockdown's walks (and a going unconscious the knockout caused) before the attack's
+critical drops and wear, so over the NPC's items as the host passed them (`SessionAttack.TargetWorn`), the others after them, over the
+NPC's items without those this attack's drops or breaks took off (IC3); the hero's items walk as it wore them before the attack's
+weapon wear. The host plays each run's goal at once, so a run begins (and its BEGIN acts) before the next executor call. The
+context's weapon is the wielded weapon, or a shot's item (kept with the shot: the weapon wielded at the shot, or the thrown item,
+which the hero no longer wears); the melee bit reads the reach of the weapon the swing or the shot carries (a throw keeps the
+weapon's reach). An NPC's items fire only when the host's item lookup knows them, with their holder the NPC; their spent charges are
+saved by entity as the hero's are.
 
-Not fired here: a critical miss that hurts the hero (its damage step's context is not read), a refused item step of the attack, the
-damage step without a host or (for the NPC's items) without the host's item data.
+Not fired here: a critical miss that hurts the hero (its damage step's context is not read), an attack whose experience or item step
+the session refused (from that step on), the damage step without a host or (for the NPC's items) without the host's item data.
 
 ## Installed data
 
@@ -175,7 +176,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | The wear and unwear executors run inside the wield and unwield (0x4677B0, 0x467CB0), before the light recalculation and script points 24/25 (IT8). | They run after the move and its scripts. No installed wear item has a move script. | — (order of the session's move) |
 | A fired run whose goal 73 refuses at its start stays in its slot, never begun (IT10). | Freed unpaid in both modes. | none (owner decision 2026-10-28: fixed in both modes) |
 | The casting goal's release waits for the caster's eye candy (EC7). | The goals of item spells are released at once. | — (presentation, not ready) |
-| The damage step's executor calls run inside the step, between its writes and the weapon wear (IC2). | They run after the attack's item steps, in the step's order, each walk over the items as they were at its point (IC3). | — (order of the session's attack; the runs begin after the step in both) |
+| The damage step's executor calls run inside the step, and their goal 73 runs begin after it (IC2). | The stun's and knockdown's calls run before the attack's drops and wear, the others after them, each walk over the items as they were at its point (IC3); each run begins at once, before the next call. | — (order of the session's attack and the goals played at once) |
+| The attacker's damages opponent walk comes before its weapon wear, so a weapon this attack's wear breaks still fires (IC2). | The hero's walk names the weapon, but the host no longer knows it as held once the wear broke it, so it fires nothing. | — (not visible: no installed weapon carrying combat triggers breaks in one hit) |
 | The kill's dying event waits for the victim's dying script (point 12), which may stop it (IC5). | It always fires: the session runs no dying script. | — (scripts are the host's, not ready) |
 | An item use's empty slot 0 on the spell branch reads a record outside the table (IU6). | Nothing is cast. | none (technical bug, fixed in both modes; owner rule 2026-10-28) |
 | A used scroll whose slot-0 spell targets an inventory item opens the inventory and is cast at the use's target (IU4). | Nothing is cast and the scroll is still spent (one installed scroll). | — (not ready: inventory targets) |
