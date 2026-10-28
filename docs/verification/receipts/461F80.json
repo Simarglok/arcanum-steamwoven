@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x461F80",
+  "name": "item-price",
+  "method": "Arcanum.Simulation.Items.TradeRules.Price",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 6,
+  "mutantsCaught": 6,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "9331a53cf18af7953d2ee9b33e4c3212707ef7d29498732dc5a7471b31b2c1e9",
+  "configuration": "Debug"
+}

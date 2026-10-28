@@ -473,7 +473,9 @@ Selling to an NPC pays `worth × (H / 2 + 50) %`, where H is haggle effectivenes
 buying costs `worth + worth × multiplier × (100 − H) / 10000` before the
 reaction adjustment (price (0x461F80)). An expert can sell items the NPC
 would not buy; a master can buy "won't sell" and worn items
-(sell/buy (0x462170, 0x462230)). Dialog `ha` compares the effective level.
+(sell/buy (0x462170, 0x462230)). Dialog `ha` compares the effective level. Read in the executable by ARC-UI-050 (ledger
+[BT1, BT3](ledger/items.md#barter-arc-ui-050)): a sale first applies the buyer's multiplier when it is above 100 (`100 + trunc(3(100 − m)/8)`
+percent), and from Expert the sale also skips the merchant's buy list, not only its buy-object script.
 
 ### Persuasion
 

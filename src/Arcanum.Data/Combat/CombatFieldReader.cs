@@ -55,7 +55,7 @@ public static class CombatFieldReader
     /// <summary>The longest effect list read (project policy; the session's own lists hold at most 64 entries).</summary>
     public const int MaxEffects = 256;
     // NPC block (69..93).
-    private const int NpcFlagsSlot = 69, AiDataSlot = 71, ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, FactionSlot = 81,
+    private const int NpcFlagsSlot = 69, AiDataSlot = 71, ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, FactionSlot = 81, RetailPriceMultiplierSlot = 82,
         ReactionBaseSlot = 84, SocialClassSlot = 85, WaitSlot = 89, NpcDamageSlot = 92;
 
     /// <summary>Skill points of a stored basic or tech skill value (bits 0..5).</summary>
@@ -201,7 +201,8 @@ public static class CombatFieldReader
                 var damage = Array(NpcDamageSlot, 2 * DamageTypes);
                 npc = new(Flags(NpcFlagsSlot), Int(AiDataSlot), Int(ExperienceWorthSlot), Int(ExperiencePoolSlot), Int(FactionSlot),
                     Int(ReactionBaseSlot), Int(SocialClassSlot),
-                    Ranges(damage.Where((_, i) => i % 2 == 0).ToArray(), damage.Where((_, i) => i % 2 == 1).ToArray()), Int(WaitSlot));
+                    Ranges(damage.Where((_, i) => i % 2 == 0).ToArray(), damage.Where((_, i) => i % 2 == 1).ToArray()), Int(WaitSlot),
+                    Int(RetailPriceMultiplierSlot));
             }
             return new(origin, common, null, null, null, null, null, critter, npc);
         }

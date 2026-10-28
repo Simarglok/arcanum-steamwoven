@@ -186,6 +186,18 @@ insult in the same reply (offered blocked, `UnsupportedInteraction`) and `SU` in
 frontier; the source also sets its window code there, NC8, one reader). The AREA viewer's port records the speaker for the window
 ([schematic window](../world/schematic-window-runtime.md#npc-crafter-arc-technology-006)).
 
+## Barter reply (ARC-UI-050)
+
+With the optional `IDialogBarterPort` (`DialogConversationPorts.Barter`) a Player reply whose text is exactly `b:` (the generated barter
+phrase, its text not loaded) is offered with the transition `DialogOptionTransition.Barter` and no target node; without the port it stays
+blocked as before (`UnsupportedInteraction`). Picking it runs the reply's action in field order, then the port's `OpenBarterCommand` (the
+NPC as merchant, the PC as buyer, recorded after the action), and ends the conversation with `DialogEndKind.BarterWindow`: no further NPC
+line, no SCR continuation, and the talk does not resume (the original's mode change ends the dialog, ledger
+[BT7](../research/ledger/items.md#barter-arc-ui-050)). The reply's response value is not followed, so a missing target does not fail
+the step. A rejected command (the AREA port refuses without a living hero) fails the conversation. Outside the subset: a `b:` reply
+whose action holds JO, UW, FL, ET or SU (offered blocked). The AREA viewer's port records the speaker for the
+[barter window](../world/barter-runtime.md).
+
 ## Bounds and failure accounting
 
 Caller options may only lower the hard caps: 64 structural replies, 1024 turns (default 256),
