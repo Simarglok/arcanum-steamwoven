@@ -36,12 +36,12 @@ public sealed class SnapshotUpgradeTests
             var older = Decode(Schema56(current));
             Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, older.SchemaVersion);
             Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(older), "The upgraded save is the current save it stands for.");
+            using var restored = Restore(older);
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(restored.Capture()));
+            Assert.AreEqual(0, restored.Capture().Inventory.NpcWorn.Count, "No NPC of a schema 56 session was dressed.");
         }
         // Whitespace in the older text does not matter, as in a current one (the plain fixture has no colon inside a value).
         Assert.AreEqual(GoldenJson, GameSessionSnapshotCodec.Encode(Decode(Schema56(GoldenJson).Replace(",", " ,\n ").Replace(":", " : "))));
-        using var restored = Restore(Decode(Schema56(GoldenJson)));
-        Assert.AreEqual(GoldenJson, GameSessionSnapshotCodec.Encode(restored.Capture()));
-        Assert.AreEqual(0, restored.Capture().Inventory.NpcWorn.Count, "No NPC of a schema 56 session was dressed.");
     }
 
     [TestMethod]
@@ -90,7 +90,12 @@ public sealed class SnapshotUpgradeTests
         // After the upgrade every check of the current schema applies.
         Fails(With("\"revision\":2,", "\"revision\":-2,"), SnapshotDecodeFailure.OutOfRange, "$.revision");
         Fails(With(",\"grid\":[]", ""), SnapshotDecodeFailure.MissingField, "$.inventory.grid");
-        Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":2,"), SnapshotDecodeFailure.DuplicateField, null);
+        // A repeated property in an object the step unpacks is found while upgrading, elsewhere by the strict decode at its path.
+        Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":2,"), SnapshotDecodeFailure.DuplicateField, "$");
+        Fails(With("\"hour\":15}", "\"hour\":15,\"hour\":15}"), SnapshotDecodeFailure.DuplicateField, "$.lighting.hour");
+        // A lone surrogate escaped in a property name is damaged text, in an older and in a current save.
+        Fails(With("\"revision\":2,", "\"\\uD800\":2,\"revision\":2,"), SnapshotDecodeFailure.MalformedJson, "$");
+        Fails(GoldenJson.Replace("\"revision\":2,", "\"\\uD800\":2,\"revision\":2,"), SnapshotDecodeFailure.MalformedJson, "$");
         Fails(With("\"world\":\"11111111-1111-1111-1111-111111111111\"", "\"world\":\"\\uD800\""), SnapshotDecodeFailure.MalformedJson, null);
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.

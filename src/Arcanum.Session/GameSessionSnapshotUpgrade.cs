@@ -19,7 +19,9 @@ public static partial class GameSessionSnapshotCodec
     /// <summary>The oldest schema this build loads: 56, the schema of the first packaged build (ARC-DEV-047).</summary>
     public const int OldestReadableSchemaVersion = 56;
 
-    // Each step upgrades a root of schema `key` to schema `key + 1`; the caller then sets its schemaVersion.
+    // Each step upgrades a root of schema `key` to schema `key + 1`; the caller then sets its schemaVersion. A step reaches its
+    // sections through Section and adds through AddField only, so a damaged older save gets its typed failure and path; the
+    // node tree's own exceptions are mapped below as damaged text.
     private static readonly IReadOnlyDictionary<int, Action<JsonObject>> UpgradeSteps = new Dictionary<int, Action<JsonObject>>
     {
         // ARC-WORLD-103 (schema 57): no NPC was dressed by a regeneration, so each NPC keeps its map data's inventory locations.
@@ -28,7 +30,7 @@ public static partial class GameSessionSnapshotCodec
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
     /// <see cref="OldestReadableSchemaVersion"/> up to the one before the current.</summary>
-    public static IReadOnlyList<int> UpgradableSchemaVersions => UpgradeSteps.Keys.Order().ToArray();
+    internal static IReadOnlyList<int> UpgradableSchemaVersions => UpgradeSteps.Keys.Order().ToArray();
 
     // The schema of a snapshot this build upgrades, or null (the current schema, or a text the strict decode refuses as it is).
     private static int? UpgradableVersion(JsonElement root) =>
@@ -58,7 +60,8 @@ public static partial class GameSessionSnapshotCodec
         }
         // A lone UTF-16 surrogate escaped in a string has no string value to write back.
         catch (Exception e) when (e is JsonException or InvalidOperationException) { throw new DecodeException(SnapshotDecodeFailure.MalformedJson, "$"); }
-        // The document parsed already, so this is a repeated property name, which the node tree refuses as it is built.
+        // The document parsed already, so this is a repeated property name in an object a step unpacked (the root or a section it
+        // extends), which the node tree refuses as it is built; a repeat elsewhere passes through to the strict decode and its path.
         catch (ArgumentException) { throw new DecodeException(SnapshotDecodeFailure.DuplicateField, "$"); }
     }
 

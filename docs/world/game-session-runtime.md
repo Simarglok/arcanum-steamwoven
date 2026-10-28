@@ -224,7 +224,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `SnapshotDecodeResult` with a typed `SnapshotDecodeFailure` and a JSON path; it never
 throws on bad text and never builds an owner. It refuses: input over 96 MiB characters (8 MiB before ARC-DATA-029)
 (`TooLarge`); invalid JSON, comments, trailing commas or depth over 8 (`MalformedJson`);
-another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`); unknown,
+another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`; the older readable schemas are upgraded first, [older saves](#older-saves-arc-ui-037)); unknown,
 duplicate or missing fields; wrong JSON types; fractions, exponents and out-of-range
 integers; non-canonical GUIDs, enum names or identifiers (`OutOfRange`); unsorted or
 repeated flags, maps, change keys, quests, rumors or quelled rumors (`NotCanonical`); quest or rumor
@@ -301,7 +301,7 @@ required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of an older schema (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of an older schema (ARC-WORLD-011) loads (before ARC-UI-037; since then below schema 56) as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
@@ -310,7 +310,7 @@ ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
 refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-040
 added the sound state as schema 18 and refuses schema 17. ARC-UI-008 added the quelled rumors to the story domain as
-schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible). ARC-WORLD-036 added the hero's
+schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible; since ARC-UI-037 only below schema 56). ARC-WORLD-036 added the hero's
 advancement fields and the levelled NPCs' sheets as schema 20 and refuses schema 19
 ([auto-level schemes](advancement-runtime.md#snapshot-schema-20)). ARC-SKILLS-002 added the hero's innate skill changes as
 schema 21 and refuses schema 20. ARC-WORLD-053 added item durability as schema 22 and refuses schemas 1..21. ARC-TECHNOLOGY-003 added the found schematics as
@@ -333,8 +333,8 @@ before the current as follows: it parses the text, applies one upgrade step per 
 step N turns the text of schema N into the text of schema N + 1 by adding the fields schema N + 1 added, with the value an
 older session means, and sets the schema number), then decodes the result with every check of the current schema. A step
 never invents what the older schema could not hold: a field the older schema cannot carry is `UnknownField`, a section the
-step extends that is missing or not an object is `MissingField` or `WrongType` at its path, a repeated property is
-`DuplicateField` at `$`, a lone surrogate escape `MalformedJson` at `$`. Schemas below the oldest readable one, and newer
+step extends that is missing or not an object is `MissingField` or `WrongType` at its path, a repeated property in an object a step unpacks (the root, a section it extends)
+is `DuplicateField` at `$` (elsewhere the strict decode reports it at its path), a lone surrogate escape `MalformedJson` at `$`. Schemas below the oldest readable one, and newer
 schemas, stay `UnsupportedSchema`. The save file is not rewritten by a load; the next save of the loaded session writes the
 current schema. `GameSaveLibrary` and `GameSessionSaveSlot` are unchanged: they read through the codec.
 
@@ -427,10 +427,10 @@ and a literal, independently written canonical JSON text:
   failures with paths (including lone surrogates and a newer schema), a restore at the
   per-map policy maximum, revision capacity, and the lifetime-safe flag view.
 - `SnapshotUpgradeTests` (ARC-UI-037): every schema from the oldest readable one has a step to the next; a schema 56
-  text (plain and with a hero) decodes, encodes and restores as the current text it stands for; a schema 56 save file
+  text (plain and with a hero) decodes, encodes and restores as the current text it stands for, with no dressed NPC; a schema 56 save file
   loads through the slot, is left as written and the next save writes the current schema; damaged older texts (no or a
-  wrong inventory, a field the older schema cannot hold, current-schema checks after the upgrade, a repeated property, a
-  lone surrogate, a foreign format) are typed failures; schemas 55 and 58 stay refused.
+  wrong inventory, a field the older schema cannot hold, current-schema checks after the upgrade, a repeated property in
+  the root and in a nested section, a lone surrogate in a value or a property name, a foreign format) are typed failures; schemas 55 and 58 stay refused.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build
