@@ -215,8 +215,9 @@ Rules of the wiring:
   count the elapsed time, a poison tick applies one step. The AREA viewer's wait is one hour per call and one jump
   ([host pump](#host-pump-arc-world-039)), as the source's sleep steps one hour at a time.
 - **Rule mode.** A restore uses the event profile of the options' rule mode (`GameRules.For(options.Rules).Events`,
-  ARC-WORLD-023); no session kind is `SavedUnlessRebuilt` yet (the AI tick arrives with I6), so both modes restore the
-  same timers. The poison recovery timer reads the session's current rules when it fires (`PoisonRecoveryTwice`, TE10).
+  ARC-WORLD-023). The AI tick (`ai.tick`, ARC-WORLD-084, [AI scheduler](ai-scheduler.md)) is the one `SavedUnlessRebuilt`
+  kind: the Steamwoven mode restores it with its timing, the Original mode rebuilds each one as a wake-up 1 ms after the
+  restored clock (OQ2); the other timers restore the same in both modes. The poison recovery timer reads the session's current rules when it fires (`PoisonRecoveryTwice`, TE10).
 - **Poison recovery value.** A recovery timer carries a second value: 1 when a poison write set it, 2 when the recovery
   tick set the next one (it then stands for the source's two events). In the Steamwoven mode a timer applies one tick;
   in the Original mode a timer with 2 applies the tick twice, the second only while poison remains. The value does not

@@ -152,8 +152,9 @@ which passes the turn on; Space off ends the round and the event pump recovers t
 ## Not ready
 
 - **No AI.** `SubturnStarted` and `SubturnEnded` tell the host to run the NPC's heartbeat, AI and end-of-combat scripts;
-  there is no SCR heartbeat dispatch or AI yet (RES-039 I6/I7, the AI lane's I10 takes over the NPC's subturn from the
-  viewer host). With A9 the host runs them twice. An NPC never joins a round on its own (the AI's insert).
+  the session's subturn hook (`RunAiSubturnHook`, 0x4B7010, ARC-WORLD-084, [AI scheduler](ai-scheduler.md)) runs the
+  heartbeat and the pass through an `ISessionAiWorld` and ends the subturn when no animation runs, but no host implements
+  that world yet (the AI lane's I10 takes over the NPC's subturn from the viewer host). With A9 the host runs them twice. An NPC never joins a round on its own (the AI's insert).
 - **Charges not wired.** Reading, repairing, assembling and the other inventory and window actions charge nothing in a
   round; the get-up (A3) has no host; a reach-1 attack's adjacent move is charged step by step as the approach walks, not
   as one estimate; the path cost preview and the turn-based cursor are not shown (the HUD is alpha-gap N4).

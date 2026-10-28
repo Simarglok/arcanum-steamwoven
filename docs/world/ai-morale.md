@@ -8,7 +8,7 @@ The morale rules of the retail 1.0.7.4 executable ([morale study](../research/np
 follower lists) and an `IAiRollSource`, and the writes they decide in `Arcanum.Session` (`GameSessionMorale.cs`) on the danger
 records of slice I3 ([danger state](ai-danger-state.md)). Flight and surrender requests go through the setter
 (`SetDangerState`), as the reaction to an attack and the danger update of slice I4 ([hostility and targets](ai-hostility.md))
-return them. No AI pass, executor or host calls them yet: the scheduler (I6) and the executor (I7) are their first callers.
+return them. No executor or host calls them yet: the scheduler (I6, [AI scheduler](ai-scheduler.md)) runs the danger update and perform only as host stages, and the host behind them (I10) and the executor (I7) are their first callers.
 
 ## Rules (`MoraleRules`)
 
@@ -58,7 +58,7 @@ retry changes nothing, so the back-off simply ends without a clear line.
 
 ## Not ready
 
-- **Callers.** No AI pass (I6) runs the danger update's FLEE and SURRENDER paths, perform (0x4AC180) or combat perform; no
+- **Callers.** The AI pass (I6) runs the danger update and perform (0x4AC180) only as host stages, so nothing runs their FLEE and SURRENDER paths or combat perform yet; no
   combat path reports a kill; no host implements `IMoraleWorld`. The fear effect and the dialog start (flee 0x4AF130 = the
   setter's FLEE), the fear effect's end and resurrection (stop fleeing) are their domains' callers.
 - **Execution.** The flee goal (type 25), the "away" path and the run to its end are the executor's (I7, stage A6); the
