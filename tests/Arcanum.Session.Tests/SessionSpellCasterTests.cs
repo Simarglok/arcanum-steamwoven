@@ -49,12 +49,12 @@ public sealed class SessionSpellCasterTests
 
     // A self spell (BEGIN area self, cost 7, instant) whose BEGIN deals 3 normal damage to its target.
     private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false, int duration = 0,
-        int range = 99) =>
+        int range = 99, uint cancels = 0x4) =>
         SessionSpellRecords.Translate(Record(number: 90, beginTargets: beginTargets, info: SpellInfo.Friendly, technology: technology,
             components: [new(SpellAction.Begin, SpellComponentType.Damage, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 3, 3, 0)),
                 .. heal ? new[] { new SpellComponent(SpellAction.Begin, SpellComponentType.Heal, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 2, 2, 0)) } : []])
         with { Cost = cost, Range = range, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
-            DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+            DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = cancels });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true,
         bool noLineOfFire = false)
@@ -432,5 +432,100 @@ public sealed class SessionSpellCasterTests
         var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null,
             new Map(owner, boxDestroyed: false, boxFlags: SessionSpellCaster.PickerRefused), new Events());
         Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "box", SpellLocation.None).Passes);
+    }
+
+    // ARC-MAGIC-019: a second cast while a goal plays (SU13) and the queued casts a stack drops (MG43).
+
+    private static int Cast(SessionSpellCaster caster, SessionSpellRecord record)
+    {
+        var attempt = caster.CastAt(SessionSpellCaster.Hero, record.Data.Number, SessionSpellCaster.Hero, SpellLocation.None);
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, attempt.Outcome, $"{attempt.Run?.Failure} {attempt.Run?.Creation?.Check}");
+        return attempt.RunId!.Value;
+    }
+
+    [TestMethod]
+    public void Su13_casts_queue_beneath_a_playing_goal_up_to_a_stack_index_of_4_and_each_plays_later_through_its_own_goal()
+    {
+        // No Cancels_SF: a queued run is active from the click, so the playing run's cancels (0x4534E0) would interrupt it.
+        var record = SelfBolt(cost: 1, cancels: 0);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var before = Hero(owner).Fatigue;
+        var playing = Cast(caster, record);
+        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(playing, new NoCombat()).Outcome);
+        var queued = new List<int>();
+        for (var depth = 0; depth < SpellUiRules.QueueRefusedFromDepth; depth++)
+        {
+            var run = Cast(caster, record);
+            Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(run, depth), $"depth {depth}");
+            queued.Add(run);
+        }
+        var refused = Cast(caster, record);
+        Assert.AreEqual(SpellCastQueueOutcome.Refused, caster.Queue(refused, SpellUiRules.QueueRefusedFromDepth));
+        Assert.IsNull(owner.QuerySpellRuns()[refused], "a refused cast's run is freed");
+        Assert.AreEqual(before, Hero(owner).Fatigue, "nothing paid at the clicks: each run waits for its own release");
+        Assert.IsTrue(queued.All(r => owner.QuerySpellRuns()[r] is { Action: SpellRunAction.Begin }), "the queued runs exist from the click");
+
+        // The playing goal releases and ends; then each queued goal starts, releases and pays in turn.
+        foreach (var run in queued.Prepend(playing))
+        {
+            if (run != playing) Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run, new NoCombat()).Outcome);
+            Assert.IsTrue(owner.QuerySpellRuns()[run] is not null, $"run {run} waits for its goal");
+            Assert.AreEqual(GameSessionDisposition.Changed, caster.Release(run)!.Disposition);
+            Assert.IsNull(caster.EndGoal(run), "nothing freed after the release frame");
+        }
+        Assert.AreEqual(before - 5, Hero(owner).Fatigue, "five casts paid once each");
+        Assert.AreEqual(SpellCastQueueOutcome.NoRun, caster.Queue(refused, 0));
+    }
+
+    [TestMethod]
+    public void Su13_a_queued_run_is_active_so_the_playing_runs_cancels_interrupt_it()
+    {
+        var record = SelfBolt(cost: 1);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var playing = Cast(caster, record);
+        caster.StartGoal(playing, new NoCombat());
+        var queued = Cast(caster, record);
+        Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(queued, 0));
+        caster.Release(playing);
+        Assert.IsNull(owner.QuerySpellRuns()[queued], "the record's Cancels_SF matches its own: the BEGIN interrupts the queued run");
+        Assert.AreEqual(SpellCastGoalOutcome.NoRun, caster.StartGoal(queued, new NoCombat()).Outcome);
+    }
+
+    [TestMethod]
+    public void Su13_no_cast_is_queued_in_a_turn_based_round()
+    {
+        var record = SelfBolt(cost: 1);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.StartCombatRound(owner.Version, new SoloRound()).Disposition);
+        var run = Cast(caster, record);
+        Assert.AreEqual(SpellCastQueueOutcome.Refused, caster.Queue(run, 0));
+        Assert.IsNull(owner.QuerySpellRuns()[run]);
+    }
+
+    [TestMethod]
+    public void Mg43_a_dropped_queued_cast_keeps_its_run_in_the_original_and_is_freed_unpaid_in_Steamwoven()
+    {
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        {
+            var record = SelfBolt();
+            var (owner, caster) = Session(mode, record);
+            using var _ = owner;
+            var before = Hero(owner).Fatigue;
+            var run = Cast(caster, record);
+            Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(run, 0));
+            Assert.AreEqual(!kept, caster.DropQueued(run) is not null, $"{mode}");
+            Assert.AreEqual((kept, before), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue), $"{mode}: unpaid");
+        }
+        // A run whose BEGIN ran is no queued cast: nothing is freed.
+        var begun = SelfBolt(duration: 30);
+        var (session, host) = Session(RuleMode.Steamwoven, begun);
+        using var __ = session;
+        var started = Cast(host, begun);
+        host.Release(started);
+        Assert.IsNull(host.DropQueued(started));
+        Assert.IsNotNull(session.QuerySpellRuns()[started]);
     }
 }
