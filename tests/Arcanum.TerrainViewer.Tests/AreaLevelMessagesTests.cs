@@ -22,6 +22,7 @@ public sealed class AreaLevelMessagesTests
         [AreaLevelTexts.SkillPath] = Mes("{2}{Melee}{12}{Repair}"),
         [AreaLevelTexts.TechPath] = Mes("{3}{Smithy}{10}{Journeyman}"),
         [AreaLevelTexts.SpellPath] = Mes("{22}{Flame}"),
+        [AreaLevelTexts.CritterPath] = Mes("{11}{Light}{17}{Crushed}"),
     });
 
     [TestMethod]
@@ -47,6 +48,15 @@ public sealed class AreaLevelMessagesTests
         Assert.AreEqual("Bought: WP 11, Melee 1, Repair 2, Flame 3, Smithy Journeyman, HP 44, FT.  DONE", AreaLevelMessages.SchemeText(scheme, Texts()));
         // A hero with a scheme number gets the scheme's text, never the points line.
         Assert.AreEqual(new AreaMessageEntry("TITLE", "Lvl 2!", AreaLevelMessages.SchemeText(scheme, Texts())), AreaLevelMessages.Compose(new(2, 99, scheme), Texts()));
+    }
+
+    [TestMethod]
+    public void The_encumbrance_message_is_critter_line_eleven_plus_the_level()
+    {
+        // ARC-WORLD-087 (ledger WE5).
+        Assert.AreEqual(new AreaMessageEntry("Light", "", ""), AreaLevelMessages.Encumbrance(0, Texts()));
+        Assert.AreEqual(new AreaMessageEntry("Crushed", "", ""), AreaLevelMessages.Encumbrance(6, Texts()));
+        Assert.AreEqual(new AreaMessageEntry("Encumbrance level 3", "", ""), AreaLevelMessages.Encumbrance(3, Texts()), "a missing line: the label");
     }
 
     [TestMethod]

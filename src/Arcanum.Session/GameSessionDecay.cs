@@ -81,7 +81,7 @@ public sealed partial class GameSessionOwner
         {
             if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
             Delete(entity.Code);
-            _revision++;
+            Revise();
         }
         _passDecays?.Add(new(firing.Event, map, entity.Code, step) { Postponed = postponed });
         return GameEventHandlerOutcome.Completed;

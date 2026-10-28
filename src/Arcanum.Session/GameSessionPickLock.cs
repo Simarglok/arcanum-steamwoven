@@ -153,7 +153,7 @@ public sealed partial class GameSessionOwner
             if (ApplyChanges(Version, null, edits).Disposition != GameSessionDisposition.Changed)
                 throw new InvalidOperationException("An admitted lock write was refused.");
         }
-        else _revision++;
+        else Revise();
         if (schedules && _events.ScheduleAfter(SessionEventKinds.LockReset, GameEventPayload.Of([new(openable.Map.RuntimeMap, openable.Entity)], now), delay,
             new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
             throw new InvalidOperationException("An admitted Lock event could not be scheduled.");

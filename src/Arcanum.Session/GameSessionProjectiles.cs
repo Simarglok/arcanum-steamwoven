@@ -97,7 +97,7 @@ public sealed partial class GameSessionOwner
         var index = _inventory.Placed.FindIndex(placed => placed.Entity == thrown.Item);
         if (index < 0 || _inventory.Placed[index].Cell == cell) return NoChange();
         _inventory.Placed[index] = _inventory.Placed[index] with { Cell = cell };
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 

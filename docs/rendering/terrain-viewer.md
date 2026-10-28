@@ -969,7 +969,7 @@ The HUD shows `combat mode: ON (real time)` or `off`, the hero's fatigue and the
 dead hero is refused with the reason. Without `--hero` R reports that combat mode needs a hero. A dialog start leaves
 combat mode first (the exit gate never closes here: no NPC has a combat focus yet), and the cave transfer leaves it as the
 original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
-walks, and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
+walks, and so does a hero at encumbrance level 4 or more (ARC-WORLD-087, ledger WE9), and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
 mode a left click on a living NPC attacks it (below). Native smoke with `--hero` (after the run stage):
 `ARC-COMBAT-004 native-smoke combat-mode PASS`. Since ARC-COMBAT-006 its run goal is a cell the PC can walk to 12 cells
 from its start (a search over open steps; else the farthest such cell at least 8 away) and its held-stick run takes the first direction that runs at least one
@@ -1135,6 +1135,13 @@ to rank 0.
   Then a `+` on the first college either learns the next rank (`−` then unlearns it) or is refused with the failing check.
 
 ### Level-up messages (ARC-UI-046)
+
+Since ARC-WORLD-087 the same window also shows a change of the hero's encumbrance level: line `11 + level` of
+`mes\critter.mes` (loaded with the level texts), once per new change the session records
+([encumbrance consequences](../world/inventory-runtime.md#encumbrance-consequences-arc-world-087)). The viewer attaches effect 158
+from the hero's effect tables to every new or loaded session. Native smoke (after the level message one):
+`ARC-WORLD-087 native-smoke encumbrance PASS` (the installed rule of effect 158 changes the speed, the seven message lines are
+the player's texts, an entry is shown).
 
 Each level the hero's recalculation writes in its normal branch posts one entry to the viewer's message window, as the
 original posts one per level for the local PC (checked in the 1.0.7.4 executable, rows

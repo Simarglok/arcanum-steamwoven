@@ -261,6 +261,7 @@ public partial class TerrainViewerApp
         RebindAreaAmbient(session);
         var previous = _areaSession;
         _areaSession = session;
+        AttachAreaEncumbranceEffect();
         SyncTurnBasedSetting(session);
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
         if (_conversationHost is not null) _conversationHost = talk!;

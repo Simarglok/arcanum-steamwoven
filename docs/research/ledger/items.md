@@ -219,5 +219,5 @@ Anomalies:
 
 | ID | Behaviour | Classification |
 | --- | --- | --- |
-| WEA1 | A gold or ammunition item that merges into a held stack adds its weight without a level recalculation, so the level (its effects and timer) lags until the next recalculation. | Bug of the original (F2); proposed switch for the consequences task: Original lags, Steamwoven recalculates. Not decided. |
+| WEA1 | A gold or ammunition item that merges into a held stack adds its weight without a level recalculation, so the level (its effects and timer) lags until the next recalculation. The unit move (0x4658E0, AM4) grows a held stack without one too: 0x45F820 has exactly five call sites (0x46693F insertion, 0x467C37 removal, 0x4B0C3E stat setter, 0x4EA08E effect add, 0x4EA625 effect removal; counted again by ARC-WORLD-087). | Bug of the original (F2); **decided** by the owner 2026-10-28 (option A, ARC-WORLD-087): switch `ItemRuleProfile.EncumbranceLagsOnStackMerge`, Original lags, Steamwoven recalculates when a held stack grows in place. |
 | WEA2 | A level rise while a mode-1 timer is pending keeps the older, longer delay (a jump from level 4 to 6 drains once after up to 600 s before the 5 s cadence starts). | In the original (F2); no switch proposed. |

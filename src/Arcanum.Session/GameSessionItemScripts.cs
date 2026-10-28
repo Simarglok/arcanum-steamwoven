@@ -31,7 +31,7 @@ public sealed partial class GameSessionOwner
         if (changed)
         {
             runs.Commit();
-            _revision++;
+            Revise();
         }
         return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision))
             { DeclinedBy = point, Scripts = runs.Runs, Messages = runs.Messages };

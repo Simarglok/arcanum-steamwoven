@@ -89,7 +89,7 @@ public sealed partial class GameSessionOwner
             _combat.Concealed.Remove(next.Entity);
             ClearNoAttackOnLeave(next.Entity);
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, step, Version);
     }
 
@@ -194,7 +194,7 @@ public sealed partial class GameSessionOwner
         // ARC-SKILLS-008 (ST2): the waiting follower that leaves is no longer concealed.
         _combat.Concealed.Remove(current.Entity);
         ClearNoAttackOnLeave(current.Entity);
-        _revision++;
+        Revise();
         _passWaits?.Add(new(e, entity.Code, charisma, failure == GameSessionFailure.None ? adjustment : null, failure));
         return GameEventHandlerOutcome.Completed;
     }

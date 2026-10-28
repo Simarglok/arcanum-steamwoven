@@ -192,7 +192,7 @@ public sealed partial class GameSessionOwner
         if (outcome.Break == ItemBreakStep.Deleted)
         {
             Delete(entity);
-            _revision++;
+            Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, ItemBreakStep.Deleted, slot, Version);
         }
         _durability.Records[entity] = outcome.Condition;
@@ -204,7 +204,7 @@ public sealed partial class GameSessionOwner
             if (outcome.Break == ItemBreakStep.Broken) { _equipment.Worn.Remove(worn); unworn = worn; }
             else _equipment.Worn[worn] = _equipment.Worn[worn] with { Item = Conditioned(_equipment.Worn[worn].Item, outcome.Condition) };
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome.Condition, outcome.Break, unworn, Version);
     }
 

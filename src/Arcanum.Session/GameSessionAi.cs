@@ -149,7 +149,7 @@ public sealed partial class GameSessionOwner
             if (refused == GameSessionFailure.None)
             {
                 ScheduleTick(entity.Map, entity.Code, firing.NowMs, delay, false);
-                _revision++;
+                Revise();
             }
             else if (failure == GameSessionFailure.None) failure = refused;
         }
@@ -301,7 +301,7 @@ public sealed partial class GameSessionOwner
         else if (combat) _combat.Critters.Remove(npc);
         if (conceal && flags.Concealed) _combat.Concealed.Add(npc);
         else if (conceal) _combat.Concealed.Remove(npc);
-        _revision++;
+        Revise();
         return GameSessionFailure.None;
     }
 }

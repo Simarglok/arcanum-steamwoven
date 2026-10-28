@@ -75,7 +75,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
         _spellRuns = creation.Table;
         QueueSpellEvents(queued);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, creation, [], Version);
     }
 
@@ -110,7 +110,7 @@ public sealed partial class GameSessionOwner
         if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
         CommitSpellSystem(system);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, system.Notes, Version);
     }
 
@@ -160,7 +160,7 @@ public sealed partial class GameSessionOwner
             return GameEventHandlerOutcome.Refused;
         }
         CommitSpellSystem(system);
-        _revision++;
+        Revise();
         _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
         return GameEventHandlerOutcome.Completed;
     }
