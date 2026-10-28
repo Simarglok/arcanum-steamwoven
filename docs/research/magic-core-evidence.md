@@ -618,7 +618,8 @@ remove an identical effect that an item or background added
   MAINTAIN does not test the tech flag, so maintained tech records do pay
   maintenance.
 - **O6** Item triggers (the item spell functions 0x4CB720–0x4CC160, FR-MAGIC-011) and the spell visual
-  catalogue (`SpellEyeCandy.mes`, the missile and casting art) were not read.
+  catalogue (`SpellEyeCandy.mes`, the missile and casting art) were not read. Item triggers answered by ARC-MAGIC-020
+  ([ledger IT1–IT9](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the eye candy by ARC-MAGIC-017.
 - **O7** The effect list semantics (the effect functions 0x4E99F0–0x4EABF0) belong to the durable-effects
   owner (top-20 item 17); this reading used only add and remove. Answered by
   ARC-WORLD-029 ([durable effects](../world/durable-effects-runtime.md), ledger rows

@@ -78,8 +78,9 @@ nothing. **Not yet tested:** the ChargeNBranch components (the component runner 
 `GameSessionOwner.QueryHeroDeviceUse(complexity, weapon)` answers it for the hero with the hero's effective aptitude; null
 without a hero or for a complexity out of range. It changes nothing.
 
-The equipment's refusal of items with spells (`ItemEffectUnsupported`) is not aptitude: it stays until the shared item trigger
-slice runs item spells (DV3; the magic plan's "Item spells").
+The equipment's refusal of items with spells (`ItemEffectUnsupported`) is not aptitude. Since ARC-MAGIC-020 it holds only without
+an item trigger host: with one, the wear and unwear executors run the item's spells ([item spell triggers](item-spell-triggers.md),
+IT1–IT9; record 168's three armours start their maintained run on the wear).
 
 ## Not implemented
 

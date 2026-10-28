@@ -232,7 +232,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - A second cast while one plays: the original queues it under the running goal (SU13); the viewer refuses it ("a cast is still
   playing"), ignores world presses and the stick until the goal ends, and refuses F7 meanwhile (the session saves no goal).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
-  (0x57C040, 0x57C080); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
+  (0x57C040, 0x57C080, read as IT9). The host runs an item's own spells with the item as source since ARC-MAGIC-020
+  ([item spell triggers](item-spell-triggers.md)); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
 - A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse
   them.
 - In a turn-based round (ARC-COMBAT-020) the casting goal's start charges its 4 action points through the round's world; outside

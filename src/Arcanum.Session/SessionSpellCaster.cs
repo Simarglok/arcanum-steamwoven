@@ -93,7 +93,7 @@ public enum SpellCastEventKind
 /// come from the map. Damage and Heal (MT12) are applied to the session's life; the other component types are not ready and report
 /// <see cref="SpellCastEventKind.ComponentNotReady"/>. Payments the rules return are applied through <see cref="Apply"/>.
 /// </summary>
-public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld
+public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld
 {
     /// <summary>The PC's entity id in the run rules and the map (the session's player entity).</summary>
     public const string Hero = SessionEventKinds.PlayerEntity;
@@ -110,12 +110,17 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     // before the cells of every payment; a run without a source asks neither and pays nothing.
     private string? _cellsPayer;
 
-    public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events)
+    /// <summary>A host over <paramref name="map"/>; with <paramref name="items"/> (ARC-MAGIC-020) the items a critter of the map holds
+    /// are objects too (<see cref="Item"/>), so their spells can run with the item as source.</summary>
+    public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events,
+        Func<string, SessionItemSpells?>? items = null)
     {
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _records = records ?? throw new ArgumentNullException(nameof(records));
-        _map = map ?? throw new ArgumentNullException(nameof(map));
+        ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
+        _items = items;
+        _map = items is null ? map : new ItemCastMap(map, items);
     }
 
     /// <summary>The session this host casts in.</summary>
@@ -161,9 +166,11 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
             parent is null ? 0 : Stat(parent, 6) ?? 0, parent?.Id == Hero, source is null ? null : Payer(source), Caster(source));
     }
 
-    /// <summary>The charge cells of the payer asked for last (<see cref="Payer"/>): the hero's; any other payer's are not modelled yet
-    /// and refuse.</summary>
-    public ISpellCellSource Cells => _cellsPayer == Hero ? _owner.HeroCellSource() ?? NoCells.Instance : NoCells.Instance;
+    /// <summary>The charge cells of the payer asked for last (<see cref="Payer"/>): the hero's, also for an item the hero holds (its
+    /// parent's stack, ARC-MAGIC-020); any other payer's are not modelled yet and refuse.</summary>
+    public ISpellCellSource Cells => _cellsPayer == Hero ? _owner.HeroCellSource() ?? NoCells.Instance
+        : _cellsPayer is not null && Item(_cellsPayer) is { Holder: Hero } item ? _owner.HeroCellSource(item.Complexity) ?? NoCells.Instance
+        : NoCells.Instance;
 
     public bool FlagsAllow(SpellRun run)
     {
@@ -182,7 +189,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     {
         ArgumentNullException.ThrowIfNull(who);
         _cellsPayer = who.Id;
-        if (!who.IsCritter) return new(SpellPayerKind.Other);
+        if (!who.IsCritter) return Item(who.Id) is { } item ? new(SpellPayerKind.Item, ItemCharges: item.Charges) : new(SpellPayerKind.Other);
         if (Life(who.Id) is not { } life) return null;
         var limiting = who.Id != Hero && _map.Critter(who.Id) is { } npc && (npc.CritterFlags & unchecked((int)0x80000000)) != 0;
         // Worn mana stores are not modelled yet (no item store state): the fatigue pays all.
