@@ -126,6 +126,9 @@ public sealed class AreaNewCharacterTests
             (definition.Prototype, definition.Race, definition.Gender, definition.Background));
         Assert.AreEqual((66, 330), (definition.RaceEffect!.EffectId, definition.GenderEffect!.EffectId), "NW3: 64 + race and the female effect");
         Assert.IsNull(hero.Flag, "no main-menu flag for a new character");
+        // Only the new character may start without a flag: a pre-made hero without one is still refused.
+        Assert.ThrowsExactly<ArgumentException>(() => AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero with { Hero = AreaStartingHero.Premade[0] }));
 
         var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
             AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero);

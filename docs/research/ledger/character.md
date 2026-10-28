@@ -293,7 +293,9 @@ Source: [`CharacterCreationRules`](../../../src/Arcanum.Simulation/Character/Cha
 [new-character window](../../rendering/terrain-viewer.md#new-character-window-arc-ui-030) (N10b, FR-CHAR-001, FR-CHAR-003,
 FR-CHAR-005), on top of [ARC-RES-025](../character-creation-evidence.md#new-character), BD4, BD10 and PO9. Question: what the
 original's window 12 makes, which buttons it has, how the race and gender buttons step and what their setters write, and what its
-Accept checks. Read on 2026-10-28 with `llvm-objdump` by the implementing task (F1).
+Accept checks. Read on 2026-10-28 with `llvm-objdump` by the implementing task and, independently, by a fresh reviewer agent for
+NW2–NW5 (the race table read from the file); both agree, so NW2–NW5 are F2, NW1 and NW6 have one reader (F1). The second reader
+added: the stat setter's lowering check (0x4C6B50) never refuses stats 26 and 27, and field 0x21 is 10 × (2 × race + gender + 1).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

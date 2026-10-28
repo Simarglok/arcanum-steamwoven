@@ -1655,8 +1655,9 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   female effect (330) are its innate effects (NW3), then the chosen background is set with its effect (cause 1,
   [ARC-WORLD-097](../world/equipment-runtime.md#setting-and-clearing-the-background-arc-world-097)); no main-menu flag is
   set. The new character's tables (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
-  transfer reads the generic start again; a reload that makes a fresh session (the palette's reload) starts the generic human
-  man, as it starts a pre-made hero afresh.
+  transfer reads the generic start again; a load that makes a fresh session instead of carrying it (the palette's reload, an
+  exterior scene load without a carried session) starts the generic human man with background 0, as it starts a pre-made hero
+  afresh.
 - **Keys.** The window's buttons are art only in the original: no letters. Escape and Cancel go back. A controller moves
   over the rows, Accept and Cancel, and its confirm presses a row's next arrow or the button.
 
@@ -1666,7 +1667,7 @@ buying, FR-CHAR-015, FR-CHAR-020), and the opening shop with the background's mo
 (FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no gold, no items and
 its 5 points unspent. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
 back and an Accept that starts a dwarf with a background and its effect); native smoke on the original data: the `menu` stage
-(`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, steps to a dwarf woman's refusal and an elf woman with a background,
+(`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
 accepts and checks the session (`ARC-UI-030 native-smoke new character PASS`).
 
 ### Interface bars (ARC-UI-018)

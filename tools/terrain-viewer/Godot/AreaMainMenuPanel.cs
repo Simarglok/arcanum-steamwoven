@@ -92,6 +92,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _browser.AddChild(_hero); _browser.AddChild(browse);
         _creation = new VBoxContainer { Name = "NewCharacter" };
         _creationText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.1f, .1f, .1f), CustomMinimumSize = new Vector2(320, 90) };
+        _creation.AddChild(_creationText);
         _note = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.3f, .3f, .3f) };
         _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
         _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -169,13 +170,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     /// <summary>ARC-UI-030: the new-character window's rows (gender, race, background) with their arrows, the background's text, Accept
     /// and Cancel; the controller's focus row is highlighted.</summary>
-    private void RenderCreation(AreaMainMenu menu, bool creating)
+    private void RenderCreation(AreaMainMenu? menu, bool creating)
     {
+        // The background text stays the window's own child (never orphaned); the rows and buttons are rebuilt around it.
         foreach (var child in _creation.GetChildren()) { if (child == _creationText) continue; _creation.RemoveChild(child); child.QueueFree(); }
-        if (_creationText.GetParent() == _creation) _creation.RemoveChild(_creationText);
         _creation.Visible = creating;
-        if (!creating) return;
-        var creation = menu.Creation!;
+        if (!creating || menu?.Creation is not { } creation) return;
         var text = creation.BackgroundText();
         var rows = new (string Label, string Value, AreaNewCharacterButton Previous, AreaNewCharacterButton Next)[]
         {
@@ -195,6 +195,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
             {
                 var press = new Button { Name = name, Text = arrow, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(34, 30) };
                 press.Pressed += () => CreationPressed?.Invoke(button);
+                press.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
                 press.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
                 if (name == "Less") { row.AddChild(press); row.AddChild(valueLabel); }
                 else row.AddChild(press);
@@ -202,7 +203,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
             _creation.AddChild(row);
         }
         _creationText.Text = text is { } shown ? shown.Body : "(the background table did not read)";
-        _creation.AddChild(_creationText);
+        _creation.MoveChild(_creationText, _creation.GetChildCount() - 1);
         var actions = new HBoxContainer { Name = "Actions" };
         foreach (var (name, label, row, action) in new (string, string, int, Action)[]
         {
@@ -251,7 +252,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         Hide();
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
-        RenderCreation(null!, false);
+        RenderCreation(null, false);
         GetViewport().GuiReleaseFocus();
     }
 
