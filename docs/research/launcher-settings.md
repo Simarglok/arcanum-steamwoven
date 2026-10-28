@@ -48,7 +48,7 @@ switch is `true`, Steamwoven `false`:
 | `GameRules` member | Profile (assembly) | Switches | Examples |
 | --- | --- | ---: | --- |
 | `Combat` | `CombatAnomalyProfile` (Simulation) | 22 | A2 bed modifier counted twice, A7 critical self-hit rolled twice, EX12 spread-out sets no-flee |
-| `Magic` | `MagicAnomalyProfile` (Simulation) | 17 | MG4 save subtracts resistance, MG3 maintenance pays both, MG35 difficulty scales kill damage |
+| `Magic` | `MagicAnomalyProfile` (Simulation) | 18 | MG4 save subtracts resistance, MG3 maintenance pays both, MG35 difficulty scales kill damage |
 | `Data` | `DataFixProfile` (Data) | 5 | DF1 stone examine text lost, MP7 map patch script 0 ignored |
 | `Orders` | `CompanionOrderRuleProfile` (Simulation) | 4 | OL6 follow order never unwaits |
 | `Travel` | `TravelRuleProfile` (Simulation) | 4 | WT3 discovery uses the best radius |

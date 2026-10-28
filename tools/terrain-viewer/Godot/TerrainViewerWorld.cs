@@ -491,6 +491,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-016: projectiles fly and strike after the attack's frame.
         ProcessAreaProjectiles();
         ProcessAreaSpells();
+        // ARC-MAGIC-018: spell missiles fly after the casting goal's release frame.
+        ProcessSpellMissiles();
         ProcessAreaEyeCandy();
         // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
         ProcessTurnBasedRound();

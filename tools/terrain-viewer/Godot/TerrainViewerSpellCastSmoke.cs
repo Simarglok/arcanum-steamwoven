@@ -18,7 +18,10 @@ public partial class TerrainViewerApp
     // presses the spell, hovers the NPC (the cast cursor), clicks it, and the casting goal plays its start, release frame and end; the
     // hero's fatigue drops by the spell's cost and the NPC resists or takes damage. Since ARC-MAGIC-017 the goal is timed by the spell's
     // cast eye candy, drawn on the hero: the release comes at its action frame as the rules time it, within one frame of the smoke's
-    // clock, and an EyeCandy component the run logs is drawn on its target when its entry plays. A right click closes the cursor. The NPC and the
+    // clock, and an EyeCandy component the run logs is drawn on its target when its entry plays. ARC-MAGIC-018: the goal's start turns the
+    // hero toward the NPC; a spell with a missile launches it at the release frame and its BEGIN comes when it arrives on the NPC's
+    // tile, after one leg of the line's steps; when the first spell has no missile the hero also casts (learning it if needed) the first
+    // critter spell that has one (its damage, if any, is not asserted). A right click closes the cursor. The NPC and the
     // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
@@ -49,11 +52,12 @@ public partial class TerrainViewerApp
         bool Damaging(SessionSpellRecord r) => r.Data.Number < SpellRecord.CollegeSpells && r.Data.Cost > 0 && r.Data.Enabled
             && r.Areas.Length > 0 && (r.Areas[0].Targets & 0x40) != 0 && !SpellUiRules.CastsAtOnce(r.Areas[0].Targets)
             && r.Of(SpellRunAction.Begin).Any(c => c.Type == SpellComponentType.Damage && c.Damage!.Maximum > 0);
-        SessionSpellRecord? Known() => session.QueryHeroSpellBook() is { } book
-            ? records.FirstOrDefault(r => Damaging(r) && r.Data.Number % SpellRecord.Ranks < book.Ranks[r.Data.Number / SpellRecord.Ranks]) : null;
-        var spell = Known();
-        if (spell is null)
+        SessionSpellRecord? Known(Func<SessionSpellRecord, bool> wanted) => session.QueryHeroSpellBook() is { } book
+            ? records.FirstOrDefault(r => wanted(r) && r.Data.Number % SpellRecord.Ranks < book.Ranks[r.Data.Number / SpellRecord.Ranks]) : null;
+        // The hero knows a spell <paramref name="wanted"/> picks, or learns the first rank-1 one it does not know yet.
+        SessionSpellRecord? Learn(Func<SessionSpellRecord, bool> wanted)
         {
+            if (Known(wanted) is { } known) return known;
             if (session.QueryHeroExperience() is { UnspentPoints: not > 0 } before)
             {
                 // The award must write a level whose points stay unspent: a hero's auto-level scheme (ARC-WORLD-036) would spend them,
@@ -70,8 +74,8 @@ public partial class TerrainViewerApp
                     + $"level {before.Level} -> {after?.Level}, experience {before.Experience} -> {after?.Experience}, to next {before.ToNextLevel}");
             }
             var book = session.QueryHeroSpellBook()!;
-            var first = records.FirstOrDefault(r => Damaging(r) && r.Data.Number % SpellRecord.Ranks == 0 && book.Ranks[r.Data.Number / SpellRecord.Ranks] == 0);
-            Require(first is not null, "a damaging rank-1 college spell");
+            var first = records.FirstOrDefault(r => wanted(r) && r.Data.Number % SpellRecord.Ranks == 0 && book.Ranks[r.Data.Number / SpellRecord.Ranks] == 0);
+            Require(first is not null, "a rank-1 college spell to learn");
             // Points are spent only in the open character editor (0x5597C0, CP1), as the sheet's + does; the editor closes again
             // unless it was already open.
             var opened = !session.HeroEditorOpen;
@@ -80,36 +84,33 @@ public partial class TerrainViewerApp
             var spent = session.SpendHeroPoint(session.Version, AdvancementTrack.College, first!.Data.Number / SpellRecord.Ranks);
             if (opened) session.CloseHeroEditor();
             Require(spent.Disposition == GameSessionDisposition.Changed, "the hero learns the spell: " + spent.Failure + " " + spent.Change?.Status);
-            spell = Known();
+            return Known(wanted);
         }
+        var spell = Learn(Damaging);
         Require(spell is not null, "the hero knows a damaging spell");
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         var target = candidates[0];
         var npc = target.Build.Combat!.Target;
-        var heroBefore = session.QueryHeroLife()!.Status;
-        var npcBefore = session.QueryLife(npc).View!.Status.HitPoints;
-        try
+        var npcStart = session.QueryLife(npc).View!.Status.HitPoints;
+        var scaled = false;
+
+        // One cast at the NPC through the pane, the cursor and the click, played to its end (and its missile's arrival); the NPC and
+        // the hero's fatigue are restored first and the hero turned back, so a second cast finds them as the first did.
+        async Task<object> CastOnce(SessionSpellRecord spell)
         {
-            _worldFocused = true; SelectSimulatedPadForSelfTest();
-            if (HeroInCombatMode) ToggleCombatMode();
-            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            CellCoord? start = null;
-            foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2) })
-            {
-                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
-                if (!map.Chart.Contains(near)) continue;
-                try { start = AreaSmokeStandable(map, near, 1); break; } catch (InvalidOperationException) { }
-            }
-            AreaSmokePlace(map, start ?? AreaSmokeStandable(map, targetCell, 1));
-            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
-            PublishWorldSelection();
+            if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
+                session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+            var heroBefore = session.QueryHeroLife()!.Status;
+            var npcBefore = session.QueryLife(npc).View!.Status.HitPoints;
+            _worldActor.TurnedFacing = null;
 
             // M opens the pane with the spell; pressing it opens the cursor (or, for a spell cast at once, would cast).
             InventoryKey(Key.M);
-            Require(_spellPane is { Shown: true } && _spellPane.ShownForSelfTest.Any(c => c.Spell == spell!.Data.Number), "M shows the pane with the spell: " + _spellNotice);
-            _spellPane!.PressForSelfTest(spell!.Data.Number);
+            Require(_spellPane is { Shown: true } && _spellPane.ShownForSelfTest.Any(c => c.Spell == spell.Data.Number), "M shows the pane with the spell: " + _spellNotice);
+            _spellPane!.PressForSelfTest(spell.Data.Number);
             Require(_spellTargeting?.Spell == spell.Data.Number, "the spell opened the targeting cursor: " + _spellNotice);
 
             var point = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-MAGIC-015 smoke: target not visible");
@@ -119,11 +120,22 @@ public partial class TerrainViewerApp
 
             var casts = _spellCasts;
             var timings = _castTimingsForSelfTest.Count; _eyeCandyDrawnForSelfTest.Clear();
-            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var logStart = _spellCaster!.Log.Count;
+            if (!scaled) { _areaSmokeTime *= 20; scaled = true; }
+            _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
+            // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
+            var heroCell = HeroWorldCell()!.Value;
+            var npcCell = new CellCoord(checked((int)target.Row.WorldX!.Value), checked((int)target.Row.WorldY!.Value));
+            var rotation = LineOfFireRules.Rotation(heroCell, npcCell);
+            Require(_worldActor.TurnedFacing?.Octant == DiagnosticGridActor.Octant((NeighborDirection)rotation) && _worldActor.State.Facing == _worldActor.TurnedFacing?.Octant,
+                $"the hero turned toward the NPC: rotation {rotation}, turned {_worldActor.TurnedFacing}, drawn {_worldActor.State.Facing}");
+            var missileArt = SpellMissileArt(spell.Data.Number);
+            var missileEnds = _spellMissileEndsForSelfTest.Count;
+            _spellMissilesDrawnForSelfTest.Clear();
             var frames = 0;
             for (; frames < 400 && _spellGoal is not null; frames++)
             {
@@ -131,6 +143,27 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellGoal is null, $"the goal ended after {frames} frames");
+            // ARC-MAGIC-018: a missile flies on after the goal until it arrives.
+            var flying = 0;
+            for (; flying < 400 && _spellMissiles.Count > 0; flying++)
+            {
+                _areaSmokeTime++;
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(_spellMissiles.Count == 0, $"the missile arrived within {flying} frames");
+            string missileNote = "none";
+            if (missileArt is not null)
+            {
+                Require(_spellMissileEndsForSelfTest.Count > missileEnds || _spellMissileEndsForSelfTest.Count == 16, "the spell launched a missile");
+                var end = _spellMissileEndsForSelfTest[^1];
+                var leg = SpellMissileRules.Leg(heroCell, npcCell).Flight;
+                Require(end.Run == run && end.End == "arrived" && end.Legs == 1 && end.Steps == (leg?.Samples.Count ?? 0),
+                    $"the missile flew one leg of {leg?.Samples.Count} steps to the NPC and arrived: {end}");
+                var faced = ProjectileRules.FacedArt(missileArt.Value, ProjectileRules.Direction(heroCell, npcCell));
+                Require(faced is { } f && _spellMissilesDrawnForSelfTest.Contains(f), $"the missile was drawn faced toward the NPC: 0x{faced:X8}");
+                missileNote = $"{end.Steps} steps, {flying} frames after the goal";
+            }
+            else Require(_spellMissileEndsForSelfTest.Count == missileEnds, "a spell without a missile art launches none");
             // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
             var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
             Require(_castTimingsForSelfTest.Count == Math.Min(timings + 1, 16) && _castTimingsForSelfTest.Count > 0, "the goal recorded its eye-candy timing");
@@ -147,19 +180,18 @@ public partial class TerrainViewerApp
             Require(expectedRelease is { } due ? timing.ReleaseMs >= due && timing.ReleaseMs < due + 50 : timing.ReleaseMs == timing.EndMs,
                 $"the release came at the eye candy's action frame: {timing.ReleaseMs} ms, expected {expectedRelease} ms (clip {clip})");
             Require(timing.EndMs >= expectedEnd && timing.EndMs < expectedEnd + 50, $"the goal ended after the eye candy: {timing.EndMs} ms, expected {expectedEnd} ms");
-            var played = _spellCaster!.Log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded).ToArray();
-            foreach (var added in played)
+            var log = _spellCaster!.Log.Skip(logStart).ToArray();
+            foreach (var added in log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded))
                 if (EyeCandyTable?.At(added.Value) is { Art: { } } shown && EyeCandyAnimation.Plays((shown.Flags & SpellEyeCandyFlags.Animates) != 0, PartsOf(shown.Flags)))
                     Require(_eyeCandyDrawnForSelfTest.Contains(added.Value), $"the component's eye candy {added.Value} was drawn on {added.Object}");
             Require(_spellTargeting is not null, "the cursor stays open after the cast (SU9)");
-            var log = _spellCaster!.Log;
             var paid = log.Where(e => e.Kind == SpellCastEventKind.FatiguePaid).Sum(e => e.Value);
             var damaged = log.Where(e => e.Kind == SpellCastEventKind.Damaged && e.Object == target.Holder.Entity).Sum(e => e.Value);
             var resisted = log.Any(e => e.Kind == SpellCastEventKind.Resisted && e.Object == target.Holder.Entity);
             var heroAfter = session.QueryHeroLife()!.Status;
             var npcAfter = session.QueryLife(npc).View!.Status.HitPoints;
             Require(paid > 0 && heroAfter.Fatigue < heroBefore.Fatigue, $"the cast cost fatigue: paid {paid}, {heroBefore.Fatigue} -> {heroAfter.Fatigue}");
-            Require(resisted || damaged > 0 && npcAfter == npcBefore - damaged || npcAfter <= 0,
+            Require(!Damaging(spell) || resisted || damaged > 0 && npcAfter == npcBefore - damaged || npcAfter <= 0,
                 $"the NPC resists or takes the damage: damaged {damaged}, resisted {resisted}, hp {npcBefore} -> {npcAfter}");
             Require(session.QuerySpellRuns()[run] is null, "the instant run is freed");
             RefreshAreaStatus();
@@ -170,23 +202,57 @@ public partial class TerrainViewerApp
             InventoryKey(Key.M);
             Require(_spellPane is { Shown: false }, "M hides the pane");
             HoverReleaseForSelfTest();
-            GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Paid = paid,
+            return new {
+                Spell = spell.Data.Number, Cost = spell.Data.Cost, Frames = frames, Paid = paid,
                 Fatigue = $"{heroBefore.Fatigue}->{heroAfter.Fatigue}", HitPoints = $"{npcBefore}->{npcAfter}", Damaged = damaged, Resisted = resisted,
                 Log = string.Join(",", log.Select(e => e.Kind)), Hover = hover.ToString(),
                 EyeCandy = $"release {timing.ReleaseMs} end {timing.EndMs} drawn {string.Join("/", _eyeCandyDrawnForSelfTest.Order())}",
-                Parity = "NOT_VERIFIED (spell UI and eye-candy timing read in the original executable; no original-runtime run)" }));
+                Turn = rotation, Missile = missileNote };
+        }
+
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest();
+            if (HeroInCombatMode) ToggleCombatMode();
+            // The hero stands three cells from the NPC for both casts (placed once: the smoke's clock then runs on).
+            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            CellCoord? start = null;
+            foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2) })
+            {
+                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
+                if (!map.Chart.Contains(near)) continue;
+                try { start = AreaSmokeStandable(map, near, 1); break; } catch (InvalidOperationException) { }
+            }
+            AreaSmokePlace(map, start ?? AreaSmokeStandable(map, targetCell, 1));
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            var first = await CastOnce(spell!);
+            // ARC-MAGIC-018: a hero whose damaging spell has no missile also casts one that has (learned when it knows none).
+            object? second = null;
+            if (SpellMissileArt(spell!.Data.Number) is null)
+            {
+                // The installed ones learnable at rank 1 target critters but do no damage (a missile spell is not chosen by name).
+                var missile = Learn(r => r.Data.Number < SpellRecord.CollegeSpells && r.Data.Cost > 0 && r.Data.Enabled && r.Areas.Length > 0
+                    && (r.Areas[0].Targets & 0x40) != 0 && !SpellUiRules.CastsAtOnce(r.Areas[0].Targets) && SpellMissileArt(r.Data.Number) is not null);
+                Require(missile is not null, "the hero knows a critter spell with a missile");
+                second = await CastOnce(missile!);
+            }
+            GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second,
+                Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
         }
         finally
         {
             CancelSpellCast(null); _spellPane?.HidePane();
-            // The later stages see the map and the hero as they were (the learned spell and the experience stay).
+            // ARC-MAGIC-018: a missile still flying is lost; the later stages see the hero unturned.
+            ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
+            // The later stages see the map and the hero as they were (the learned spells and the experience stay).
             var npcNow = session.QueryLife(npc).View?.Status;
-            if (npcNow is { } now && (now.HitPoints != npcBefore || now.IsDead))
+            if (npcNow is { } now && (now.HitPoints != npcStart || now.IsDead))
                 session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
             PublishWorldSelection();
-            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }

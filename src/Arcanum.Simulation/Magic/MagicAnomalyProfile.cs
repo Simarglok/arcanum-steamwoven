@@ -129,6 +129,14 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ReleaseRefusalKeepsRun { get; init; }
 
+    /// <summary>
+    /// MG44 (ARC-MAGIC-018, proposed fix awaiting the owner's decision): a spell missile whose goal ends before it arrives — its next
+    /// leg's line is refused (more than 100 steps of 10 pixels, 0x4201C0) or the goal is stopped — is destroyed by the goal's end
+    /// (0x429E70), which frees nothing, and the casting goal's release gate has already marked its frame handled, so the run keeps
+    /// its slot, never begun, until the game ends. Steamwoven frees it, unpaid, as MG41's fix does.
+    /// </summary>
+    public bool MissileLossKeepsRun { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -139,7 +147,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true,
+        ReleaseRefusalKeepsRun = true, MissileLossKeepsRun = true,
     };
 
     /// <summary>Both settings, default first.</summary>

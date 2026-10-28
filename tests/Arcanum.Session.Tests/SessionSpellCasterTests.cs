@@ -13,12 +13,17 @@ public sealed class SessionSpellCasterTests
 {
     private static readonly SpellLocation HeroTile = new(5, 5), BoxTile = new(6, 5);
 
-    private sealed class Map(GameSessionOwner owner, bool boxDestroyed = true, int boxFlags = 0, bool noLineOfFire = false) : ISpellCastMap
+    private sealed class Map(GameSessionOwner owner, bool boxDestroyed = true, int boxFlags = 0, bool noLineOfFire = false, int heroSpellFlags = 0,
+        int heroCritterFlags = 0) : ISpellCastMap
     {
+        // ARC-MAGIC-018: the box destroyed later (while a missile flies).
+        public bool BoxGone { get; set; }
+
         public SpellTargetObject? Object(string id) => id switch
         {
-            SessionSpellCaster.Hero => new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
-            "box" => new(id, SpellTargetObject.Scenery, BoxTile, boxFlags | (boxDestroyed ? SpellTargetObject.Destroyed : 0)),
+            SessionSpellCaster.Hero => new(id, SpellTargetObject.Pc, HeroTile, SpellFlags: heroSpellFlags, CritterFlags: heroCritterFlags,
+                HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
+            "box" => new(id, SpellTargetObject.Scenery, BoxTile, boxFlags | (boxDestroyed || BoxGone ? SpellTargetObject.Destroyed : 0)),
             _ => null,
         };
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
@@ -432,5 +437,99 @@ public sealed class SessionSpellCasterTests
         var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null,
             new Map(owner, boxDestroyed: false, boxFlags: SessionSpellCaster.PickerRefused), new Events());
         Assert.IsFalse(caster.TestTarget(SessionSpellCaster.Hero, record.Data.Number, 0x4, "box", SpellLocation.None).Passes);
+    }
+
+    // ---- ARC-MAGIC-018: the missile and the facing turn ----
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) MissileSession(RuleMode mode, SessionSpellRecord record, int heroSpellFlags = 0,
+        int heroCritterFlags = 0)
+    {
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        owner.SelectRules(mode);
+        var map = new Map(owner, boxDestroyed: false, heroSpellFlags: heroSpellFlags, heroCritterFlags: heroCritterFlags);
+        return (owner, new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, map, new Events()), map);
+    }
+
+    [TestMethod]
+    public void A_missile_launch_handles_the_release_frame_and_its_arrival_begins_the_run()
+    {
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster, _) = MissileSession(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var before = Hero(owner).Fatigue;
+        var run = Start(owner, caster, record, "box");
+        var start = caster.StartGoal(run, new NoCombat());
+        Assert.AreEqual((SpellCastGoalOutcome.Started, new SpellFacing(SpellFacingKind.Turned, 5)), (start.Outcome, start.Facing), "the hero turns to the box (+x)");
+        Assert.IsTrue(caster.LaunchMissile(run));
+        Assert.IsFalse(caster.LaunchMissile(run), "one missile a goal");
+        Assert.IsTrue(caster.MissileFlies(run));
+        Assert.IsNull(caster.Release(run), "the release frame is handled");
+        Assert.IsNull(caster.EndGoal(run), "the casting goal's end frees nothing while the missile flies");
+        Assert.AreEqual((before, true), (Hero(owner).Fatigue, owner.QuerySpellRuns()[run] is not null), "nothing paid before the arrival");
+        Assert.AreEqual(GameSessionDisposition.Changed, caster.ArriveMissile(run)!.Disposition);
+        Assert.AreEqual(before - 7, Hero(owner).Fatigue, "the BEGIN paid at the arrival");
+        Assert.IsFalse(caster.MissileFlies(run));
+        Assert.IsNull(caster.ArriveMissile(run), "a missile arrives once");
+        Assert.IsNull(caster.LoseMissile(run));
+    }
+
+    [TestMethod]
+    public void Mg41_a_target_gone_when_the_missile_arrives_keeps_the_run_in_the_original_and_frees_it_in_Steamwoven()
+    {
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        {
+            var record = SelfBolt(beginTargets: 0x4);
+            var (owner, caster, map) = MissileSession(mode, record);
+            using var _ = owner;
+            var run = Start(owner, caster, record, "box");
+            caster.StartGoal(run, new NoCombat());
+            Assert.IsTrue(caster.LaunchMissile(run));
+            map.BoxGone = true;
+            var before = Hero(owner).Fatigue;
+            Assert.IsNull(caster.ArriveMissile(run), "nothing begins");
+            Assert.AreEqual((kept, before), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue), $"{mode}");
+        }
+    }
+
+    [TestMethod]
+    public void Mg44_a_lost_missile_keeps_the_run_in_the_original_and_frees_it_unpaid_in_Steamwoven()
+    {
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        {
+            var record = SelfBolt(beginTargets: 0x4);
+            var (owner, caster, _) = MissileSession(mode, record);
+            using var _ = owner;
+            var run = Start(owner, caster, record, "box");
+            caster.StartGoal(run, new NoCombat());
+            Assert.IsNull(caster.LoseMissile(run), "no missile flies yet");
+            caster.LaunchMissile(run);
+            var before = Hero(owner).Fatigue;
+            var lost = caster.LoseMissile(run);
+            Assert.AreEqual((kept, before, kept), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue, lost is null), $"{mode}");
+            Assert.IsFalse(caster.MissileFlies(run));
+            Assert.IsNull(caster.ArriveMissile(run), "a lost missile never arrives");
+            Assert.IsNull(caster.EndGoal(run), "the casting goal's end still frees nothing");
+        }
+    }
+
+    [TestMethod]
+    public void The_facing_turn_refuses_a_stunned_or_stoned_caster_and_turns_nothing_toward_itself()
+    {
+        foreach (var (spellFlags, critterFlags) in new[] { (SpellFacingRules.Stoned, 0), (0, 0x20), (0, 0x40) })
+        {
+            var record = SelfBolt(beginTargets: 0x4);
+            var (owner, caster, _) = MissileSession(RuleMode.Steamwoven, record, spellFlags, critterFlags);
+            using var _ = owner;
+            var run = Start(owner, caster, record, "box");
+            var start = caster.StartGoal(run, new NoCombat());
+            Assert.AreEqual((SpellCastGoalOutcome.CannotTurn, SpellFacingKind.Refused), (start.Outcome, start.Facing?.Kind), $"0x{spellFlags:X}/0x{critterFlags:X}");
+            caster.EndGoal(run, refused: true);
+            Assert.IsNull(owner.QuerySpellRuns()[run], "ended through the goal's end (MG39: unpaid in Steamwoven)");
+        }
+        var self = SelfBolt();
+        var (o, c, _) = MissileSession(RuleMode.Steamwoven, self, heroCritterFlags: 0x20);
+        using var __ = o;
+        var started = c.StartGoal(Start(o, c, self), new NoCombat());
+        Assert.AreEqual((SpellCastGoalOutcome.Started, SpellFacingKind.Unturned), (started.Outcome, started.Facing?.Kind), "its own target: no turn, no refusal");
     }
 }
