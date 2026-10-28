@@ -122,7 +122,7 @@ public sealed class PlacedItemsStateTests
         var none = Text(heroless);
         Assert.IsTrue(none.Contains(",\"placed\":[],"));
         Refused(none.Replace(",\"placed\":[],", ",\"placed\":[{\"entity\":\"made:1\",\"source\":\"made\",\"origin\":0,\"map\":79,\"x\":1,\"y\":2," +
-            "\"type\":\"Generic\",\"prototype\":1,\"name\":2,\"description\":3}],"), GameSessionFailure.InvalidSnapshot);
+            "\"type\":\"Generic\",\"prototype\":1,\"name\":2,\"description\":3,\"complexity\":0}],"), GameSessionFailure.InvalidSnapshot);
     }
 
     [TestMethod]

@@ -38,8 +38,10 @@ public enum DangerFlags
     Surrendered = 1 << 7,
     /// <summary>Critter flag 2 0x200000 (the target lock): the setter ignores every fight request (rule 6).</summary>
     TargetLocked = 1 << 8,
+    /// <summary>Critter flag 0x10000 (SPELL_FLEE): the flight's flee spell or item was chosen (0x4AAF50, slice I5).</summary>
+    SpellFlee = 1 << 9,
     /// <summary>Every defined bit.</summary>
-    All = (1 << 9) - 1,
+    All = (1 << 10) - 1,
 }
 
 /// <summary>
@@ -147,7 +149,9 @@ public static class DangerRules
     /// CHECK_WIELD and CHECK_GRENADE, the enter-combat hook and the alerted sound; rules 8 and 9 on every such call. Rule 10:
     /// any other state clears BACKING_OFF and, when FIGHTING, clears it, sets DEMAINTAIN_SPELLS unless fleeing and runs the
     /// exit-combat hook. FO14 (<see cref="CombatAnomalyProfile.LockedNoneStateFights"/> off): an applied state other than
-    /// COMBAT_FOCUS also clears the target lock, which the original keeps.
+    /// COMBAT_FOCUS also clears the target lock, which the original keeps. MR7
+    /// (<see cref="CombatAnomalyProfile.StaleSpellFleeSkipsFleeSpell"/> off): an applied state other than FLEE also clears
+    /// SPELL_FLEE, which the original clears only in its flee-spell step (ARC-WORLD-082).
     /// </summary>
     [OriginalFunction(0x4AABE0, OriginalFunctionScope.Partial)]
     public static DangerTransition Set(DangerFlags flags, DangerState requested, DangerSetterFacts facts, CombatAnomalyProfile profile)
@@ -166,6 +170,7 @@ public static class DangerRules
 
         var line = false;
         var after = flags & ~FleeBits;
+        if (state != DangerState.Flee && !profile.StaleSpellFleeSkipsFleeSpell) after &= ~DangerFlags.SpellFlee;
         var fleeing = state is DangerState.Flee or DangerState.Surrender;
         if (fleeing)
         {

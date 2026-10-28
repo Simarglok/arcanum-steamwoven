@@ -76,7 +76,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] NpcInventoryFields = ["npc", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
-    // ARC-WORLD-083 (schema 40): a made item's complexity.
+    // ARC-WORLD-083 (schema 41): a made item's complexity.
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
@@ -1948,9 +1948,10 @@ public static class GameSessionSnapshotCodec
         "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
-    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079).</summary>
+    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082).</summary>
     private static readonly string[] DangerFlagNames =
-        ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked"];
+        ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked",
+            "SpellFlee"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>

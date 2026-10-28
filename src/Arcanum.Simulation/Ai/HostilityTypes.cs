@@ -116,6 +116,8 @@ public enum AiRollPurpose
     EnemyListStart,
     /// <summary>A surrendered NPC at 80 % hit points or more calms down on 1 of 1..500 (danger update 0x4A92D0).</summary>
     SurrenderCalm,
+    /// <summary>Combat perform (0x4AC6E0) starts a back-off on 1 of 1..20 when closer to its target than parameter 15 (slice I5).</summary>
+    BackOffStart,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds
@@ -232,7 +234,7 @@ public enum DangerUpdatePath
     EnemyList,
     /// <summary>COMBAT_FOCUS: nothing found; the setter is asked for NONE.</summary>
     CalmDown,
-    /// <summary>FLEE: the fleeing action helper runs (0x4AAF50, slice I5).</summary>
+    /// <summary>FLEE: the fleeing action helper runs (0x4AAF50, <see cref="MoraleRules.FleeSpell"/>).</summary>
     Flee,
     /// <summary>SURRENDER: nothing happens.</summary>
     SurrenderStays,
