@@ -73,6 +73,22 @@ public sealed class HotkeyStateTests
     }
 
     [TestMethod]
+    public void An_item_entry_counts_the_items_of_its_prototype_the_hero_holds()
+    {
+        using var owner = Hero();
+        Changed(owner.AssignHotkey(owner.Version, 0, HotkeyEntry.ForItem("potion")), owner);
+        Changed(owner.AssignHotkey(owner.Version, 1, HotkeyEntry.ForItem("rock")), owner);
+        Changed(owner.AssignHotkey(owner.Version, 2, HotkeyEntry.ForSpell(62)), owner);
+        Assert.AreEqual(2, owner.QueryHotkeyCount(0), "the entry's own potion and the other one (0x462B40)");
+        Assert.AreEqual(1, owner.QueryHotkeyCount(1));
+        Assert.IsNull(owner.QueryHotkeyCount(2), "a spell entry prints no count");
+        Assert.IsNull(owner.QueryHotkeyCount(3), "an empty entry");
+        Assert.IsNull(owner.QueryHotkeyCount(10));
+        Changed(owner.DestroyUsedItem(owner.Version, "potion2"), owner);
+        Assert.AreEqual(1, owner.QueryHotkeyCount(0), "the other potion was used up");
+    }
+
+    [TestMethod]
     public void Entries_naming_an_item_that_left_the_hero_or_moved_empty()
     {
         using var owner = Hero();

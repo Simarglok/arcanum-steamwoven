@@ -176,6 +176,9 @@ public partial class TerrainViewerApp
             _spellPane.Activated += spell => { RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell)); ActivateSpell(spell); };
             _spellPane.WeaponToggled += ToggleWeaponPane;
             _spellPane.ItemActivated += ActivateItemSlot;
+            // ARC-UI-027: a right press there starts a drag onto the hotkey bar.
+            _spellPane.SpellDragStarted += HotkeyPaneDrag;
+            _spellPane.ItemDragStarted += HotkeyWeaponPaneDrag;
         }
         AdoptSpellData();
         _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());

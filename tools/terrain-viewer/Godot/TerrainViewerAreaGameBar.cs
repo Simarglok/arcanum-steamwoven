@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
                 // No leave or release reaches hidden bars: the pointer state starts afresh when they show again.
                 hidden.Visible = false; _gameBar.Reset(); hidden.Render(); _hud?.SetTopInset(0);
             }
+            HideHotkeyBar();
             return;
         }
         if (_gameBarPanel is null)
@@ -58,6 +59,7 @@ public partial class TerrainViewerApp
         }
         _gameBarPanel.Visible = true;
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
+        SyncHotkeyBar();
     }
 
     private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>

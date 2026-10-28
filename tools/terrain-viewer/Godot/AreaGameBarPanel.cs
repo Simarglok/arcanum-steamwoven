@@ -88,6 +88,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (IsNodeReady()) Render();
     }
 
+    /// <summary>ARC-UI-027: puts <paramref name="part"/> on <paramref name="strip"/>, in the strip's own frame (scaled and placed with it),
+    /// above the strip's art and buttons.</summary>
+    public void AddPart(AreaBarStrip strip, Control part) => _strips[strip].AddChild(part ?? throw new ArgumentNullException(nameof(part)));
+
     private void ButtonInput(AreaBarButton button, TextureRect rect, InputEvent input)
     {
         if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Left } click) return;

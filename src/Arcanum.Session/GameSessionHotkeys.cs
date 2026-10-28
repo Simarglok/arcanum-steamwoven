@@ -136,6 +136,18 @@ public sealed partial class GameSessionOwner
         return HeroHeld().Where(held => held.Entity != item && held.Kind.Prototype == kind.Prototype).Select(held => held.Entity).FirstOrDefault();
     }
 
+    /// <summary>ARC-UI-027: the count item entry <paramref name="slot"/> prints on the bar (0x462B40 as the bar's drop and load call it,
+    /// ledger HK12): the items the hero holds with the entry item's prototype, the entry's own included. Null for a slot outside 0..9, an
+    /// entry of another kind or an item the hero no longer holds. (The original counts 1 for the prototype 0x3AD9, which the session's
+    /// same-kind finder does not single out either.)</summary>
+    [Arcanum.Simulation.OriginalFunction(0x462B40, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public int? QueryHotkeyCount(int slot)
+    {
+        ThrowIfDisposed();
+        if (slot is < 0 or >= HotkeyRules.Entries || _hotkeys[slot] is not { Kind: HotkeyKind.Item, Item: { } item } || HeldKind(item) is not { } kind) return null;
+        return HeroHeld().Count(held => held.Kind.Prototype == kind.Prototype);
+    }
+
     // An entry fits its kind; a spell lies below the empty spell field (10000).
     private static bool ValidHotkey(HotkeyEntry entry) => entry.IsWellFormed && (entry.Item is null || SessionValidation.Entity(entry.Item))
         && (entry.Kind is not (HotkeyKind.Spell or HotkeyKind.ItemSpell) || entry.Index < ItemSpellPaneRules.NoSpell);

@@ -8,8 +8,8 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-022: the original's hotkey bar in the AREA view (ledger "Hotkey bar", HK rows). The keys 1..0 activate the session's entries 0..9
 // and A the latest recent action, as 0x54DE50 → 0x57F1D0 and 0x57DC60 do (not while another critter acts in a turn-based round). The bar's
-// art and its drag and drop are a later thread, so the viewer stands in with keys: Ctrl+1..0 puts the latest recent action on that entry
-// (the original drags it from the recent-action button), Ctrl+Shift+1..0 empties the entry, and 1..0 while an item is held in the
+// art and its drag and drop are ARC-UI-027 (TerrainViewerHotkeyBar.cs); the viewer keeps stand-in keys: Ctrl+1..0 puts the latest recent action on that entry
+// (a stand-in for the skill bar, which the viewer does not draw: the original drags from the bars, not from the recent-action buttons, HK13), Ctrl+Shift+1..0 empties the entry, and 1..0 while an item is held in the
 // inventory window drops it on the entry. A spell pressed in the spell pane and the palette's Prowl action (the skill bar's prowling
 // button) become the latest recent action (0x57EFA0). The activation carries out what the viewer has: a spell (the spell UI's activation),
 // an item's spell (its weapon wielded first), prowling, the repair button (the inventory window), and a weapon's or armour's hotkey wear;
@@ -59,21 +59,26 @@ public partial class TerrainViewerApp
     private bool DropHeldOnHotkey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (!key.Pressed || key.Echo || routed is < Key.Key0 or > Key.Key9 || !HotkeysActive || _inventoryPanel?.Held is not { } held) return false;
-        var slot = routed == Key.Key0 ? 9 : routed - Key.Key1;
-        var session = _areaSession!;
+        if (!key.Pressed || key.Echo || routed is < Key.Key0 or > Key.Key9 || !HotkeysActive || _inventoryPanel?.Held is null) return false;
+        DropHeldItemOnEntry(routed == Key.Key0 ? 9 : (int)(routed - Key.Key1));
+        return true;
+    }
+
+    /// <summary>The item the inventory window holds dropped on entry <paramref name="slot"/> (by its key, or ARC-UI-027 a click on its slot).</summary>
+    private void DropHeldItemOnEntry(int slot)
+    {
+        if (_inventoryPanel?.Held is not { } held || _areaSession is not { } session) return;
         if (held.Worn is not null)
         {
             _inventoryStatus = "a worn item cannot go on the hotkey bar here (not ready)";
             _inventoryPanel.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
-            return true;
+            return;
         }
         _inventoryPanel.Hold(null);
-        var result = session.AssignHotkey(session.Version, (int)slot, HotkeyEntry.ForItem(held.Entity));
+        var result = session.AssignHotkey(session.Version, slot, HotkeyEntry.ForItem(held.Entity));
         GD.Print($"ARC-UI-022 hotkey-drop slot={slot} item={held.Entity} disposition={result.Disposition} failure={result.Failure}");
-        _inventoryStatus = $"hotkey {KeyName((int)slot)}: {result.Disposition} {result.Failure}";
+        _inventoryStatus = $"hotkey {KeyName(slot)}: {result.Disposition} {result.Failure}";
         _inventoryPanel.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
-        return true;
     }
 
     /// <summary>A press of the spell pane or the skill bar becomes the latest recent action (0x57EFA0, before the activation).</summary>
