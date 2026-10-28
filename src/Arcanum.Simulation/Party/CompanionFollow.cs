@@ -51,8 +51,10 @@ public readonly record struct CompanionFollowUpdate(FollowAction Action, CellCoo
 /// ARC-WORLD-075: with <c>segmentEndCritterCheck</c> answering yes the route checks the cell before a segment's last step for a
 /// living critter (the walk goals' step check, ledger EX20 and LR5); the original's approach walk (goal 61) then pops back to its
 /// parent, which plans again, so a goal stopped there (<see cref="SegmentEndCritterReason"/>) is not remembered as unreachable and the
-/// next update plans it again from where the follower stands: the critter is then on the new plan's first step and is passed, so the
-/// follower pauses one frame before it (the original's pause is 2 action points and a random 0..300 ms wait, not modelled).
+/// next update goes on approaching from where the follower stands (beyond the range it plans again, whatever the start distance): the
+/// critter is then on the new plan's first step and is passed, so the follower pauses one frame before it (the original's pause is 2
+/// action points and a random 0..300 ms wait, not modelled). An ordered goal (<see cref="WalkTo"/>) stopped there ends, as the walk-here
+/// order's goal 4 does (LR5); the spread-out step's goal 69 would plan again in the original (an approximation).
 /// </summary>
 public sealed class CompanionFollower
 {
@@ -119,10 +121,13 @@ public sealed class CompanionFollower
         }
         var settled = state.Phase == MovementPhase.Settled;
         var cell = state.CommittedCell;
-        // A goal that ended without arriving is remembered for the cells it ended at; one stopped before a critter is planned again (EX20).
+        // A goal that ended without arriving is remembered for the cells it ended at; an approach stopped before a critter goes on
+        // approaching: its parent plans again (EX20, LR11).
+        var resume = false;
         if (!_stopSeen && Route.Status == RouteFollowStatus.Stopped && settled)
         {
             if (Route.StopReason != SegmentEndCritterReason) _unreachable = (cell, Route.Target ?? leader);
+            else resume = Route.Range > 0;
             _stopSeen = true;
         }
         var range = FollowDistanceRules.RangeOf(spreadOut);
@@ -136,7 +141,7 @@ public sealed class CompanionFollower
             return Done(action == FollowAction.Run ? FollowAction.Run : FollowAction.Walk);
         }
         if (!settled) return Done(FollowAction.Hold);
-        var decision = FollowDistanceRules.Decide(cell, leader, spreadOut, approaching: false);
+        var decision = FollowDistanceRules.Decide(cell, leader, spreadOut, approaching: resume);
         switch (decision)
         {
             case FollowAction.Jump:
@@ -145,7 +150,8 @@ public sealed class CompanionFollower
                 foreach (var direction in Directions)
                 {
                     var next = RoutePlanner.Neighbor(cell, direction);
-                    if (!_source.Contains(next) || _source.Assess(cell, direction) != RouteStepVerdict.Open) continue;
+                    // A neighbour holding a living critter is open to a mover that passes critters but refused as a goal (DC2).
+                    if (!_source.Contains(next) || _source.Assess(cell, direction) != RouteStepVerdict.Open || _source.GoalHoldsCritter(next)) continue;
                     Retarget(next, observedAt, 0);
                     return Done(FollowAction.Separate);
                 }

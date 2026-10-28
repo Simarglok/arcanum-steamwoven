@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaCritterPassTests
 {
     private static readonly StepDuration Step = StepDuration.Of(1);
-    private static readonly AreaObjectKey Npc = new("s", 1, AreaSourceKind.Mobile, 0, 0, 1, "npc", 1), FarNpc = new("s", 1, AreaSourceKind.Mobile, 0, 0, 3, "far", 1);
+    internal static readonly AreaObjectKey Npc = new("s", 1, AreaSourceKind.Mobile, 0, 0, 1, "npc", 1), FarNpc = new("s", 1, AreaSourceKind.Mobile, 0, 0, 3, "far", 1);
     private static readonly AreaObjectKey Chest = new("s", 1, AreaSourceKind.Static, 0, 0, 2, "chest", 1);
     private static readonly CellCoord Companion = new(12, 20);
     internal static readonly AreaChart Chart = new(0, 0, default, "TEST") { MinimumCell = 0, MaximumCell = 63 };

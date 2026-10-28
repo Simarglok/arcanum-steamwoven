@@ -407,14 +407,15 @@ public partial class TerrainViewerApp
                 "a waiting Virgil stays although the PC is farther than 4");
             GD.Print("ARC-WORLD-045 native-smoke loyalty PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Script = speaker.ScriptId, StepClearedMarks = true, GoalGated = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
-            // ARC-WORLD-067: the HUD names the PC side of the party rules; ARC-WORLD-075: out of combat mode his walk passes critters.
+            // ARC-WORLD-067: the HUD names the PC side of the party rules; ARC-WORLD-075: a wiring check that out of combat mode his walk
+            // passes critters (the walk through a critter itself is covered by the Core tests).
             RefreshAreaStatus();
             var side = _areaSession.QueryHero() is null ? "PC side: diagnostic profile" : "PC side: hero (";
             Require(_hud!.Text.Contains(side, StringComparison.Ordinal), $"the HUD names the PC side ('{side}')");
             Require(companion.PassesCritters && !_areaSession.QueryCombatMode(SessionCombatant.Critter(companion.Entity)),
-                "out of combat mode Virgil's walk passes critters");
+                "out of combat mode Virgil's walk is set to pass critters");
             GD.Print("ARC-WORLD-075 native-smoke companion pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Script = speaker.ScriptId, PassesCritters = true, PcSide = PartySideLabel(), Parity = "NOT_VERIFIED" }));
+                Script = speaker.ScriptId, PassesCritters = "wired", PcSide = PartySideLabel(), Parity = "NOT_VERIFIED" }));
             GD.Print("ARC-WORLD-016 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Origin = new { speaker.WorldX, speaker.WorldY }, Pc = map.Chart.ToWorld(pc), Followed = world, Distance = FollowDistanceRules.Distance(cell, pc),
                 Plans = plans, Session = revision, Parity = "NOT_VERIFIED" }));

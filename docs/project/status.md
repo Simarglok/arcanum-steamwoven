@@ -107,7 +107,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC conversation | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-005, ARC-WORLD-043, ARC-WORLD-044 |
 | Walking and running | [World, maps and movement](status/world.md) | ARC-WORLD-020, ARC-WORLD-021 |
 | Window jump | [World, maps and movement](status/world.md) | ARC-WORLD-021, ARC-RES-049 |
-| Companion follow | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-016, ARC-WORLD-074, ARC-WORLD-020 |
+| Companion follow | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-016, ARC-WORLD-074, ARC-WORLD-020, ARC-WORLD-075 |
 | Wait timer and loyalty | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-045, ARC-WORLD-046 |
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |

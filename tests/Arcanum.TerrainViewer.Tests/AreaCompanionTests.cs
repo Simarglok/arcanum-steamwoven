@@ -272,6 +272,46 @@ public sealed class AreaCompanionTests
         Assert.IsFalse(companion.PassesCritters || companion.Grid.CrittersPass?.Invoke() == true, "in combat mode critters block it");
     }
 
+    [TestMethod]
+    public void A_following_companion_walks_through_an_NPC_record_and_Original_stops_before_it_once()
+    {
+        // ARC-WORLD-075 through the group: Virgil stands on (10,30) of the open steps of AreaCritterPassTests, an NPC record on (18,30),
+        // the eighth cell of his first segment toward a PC on (30,30).
+        var f = Load();
+        var steps = AreaCritterPassTests.Steps();
+        var chart = AreaCritterPassTests.Chart;
+        var speaker = f.Speaker with { WorldX = 10, WorldY = 30 };
+        var templates = AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(f.Area), f.Area.Visuals, chart, new(1));
+        (HashSet<CellCoord> Visited, List<string?> Stops) Walk(RuleMode mode, bool npcDead)
+        {
+            using var session = ConversationSessionFixture.Create();
+            Assert.AreNotEqual(GameSessionDisposition.Rejected, session.SelectRules(mode));
+            var group = AreaCompanionGroup.Create(templates, steps, chart, session, new(1), SimulationTime.At(0));
+            if (npcDead) group.Dead = key => key == AreaCritterPassTests.FarNpc;
+            var companion = group.Companions.Single();
+            Assert.AreEqual(new CellCoord(10, 30), companion.Grid.State.CommittedCell);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, companion.Entity).Disposition);
+            var pc = new AreaGridSession(steps, SimulationTime.At(0), Step, chart: chart, start: new(30, 30)) { Occupancy = group.OccupancyForPc };
+            var visited = new HashSet<CellCoord>(); var stops = new List<string?>();
+            for (var i = 1; i <= 120; i++)
+            {
+                pc.Advance(SimulationTime.At(i, 4), []);
+                group.Drive(session, pc.State, SimulationTime.At(i, 4));
+                visited.Add(companion.Grid.State.CommittedCell);
+                if (companion.Follow.Route.Status == RouteFollowStatus.Stopped && stops.LastOrDefault() != companion.Follow.Route.StopReason)
+                    stops.Add(companion.Follow.Route.StopReason);
+            }
+            Assert.AreEqual(new CellCoord(28, 30), companion.Grid.State.CommittedCell, string.Join(",", stops));
+            return (visited, stops);
+        }
+        var steamwoven = Walk(RuleMode.Steamwoven, npcDead: false);
+        Assert.IsTrue(steamwoven.Visited.Contains(new(18, 30)) && steamwoven.Stops.Count == 0, "Steamwoven walks through the NPC");
+        var original = Walk(RuleMode.Original, npcDead: false);
+        Assert.IsTrue(original.Visited.Contains(new(18, 30)));
+        CollectionAssert.AreEqual(new[] { CompanionFollower.SegmentEndCritterReason }, original.Stops, "Original stops before it once, then plans again");
+        Assert.AreEqual(0, Walk(RuleMode.Original, npcDead: true).Stops.Count, "a dead NPC is not a living critter at the segment end");
+    }
+
     // ARC-WORLD-017: the fixture stands for both maps of a transfer, home map 1 and a second map 2 on the same chart.
     [TestMethod]
     public void AFollowingCompanionGoesWithThePcToTheArrivalCellAndBackAndAWaitingOneStays()

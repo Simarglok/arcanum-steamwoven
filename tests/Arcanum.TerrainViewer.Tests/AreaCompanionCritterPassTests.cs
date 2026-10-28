@@ -97,11 +97,34 @@ public sealed class AreaCompanionCritterPassTests
         var live = new Walker(new(10, 40), pass: true, segmentEndCheck: true);
         live.Live.Add(new(18, 40));
         live.Frames(30, new(30, 40));
+        Assert.IsTrue(live.Trace.Contains("17:1/0/Stopped"), "it stopped before the live critter: " + live.Describe());
         Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(28, 40)), (live.Follow.Route.Status, live.Grid.State.CommittedCell), live.Describe());
         var through = new Walker(new(10, 40), pass: true, segmentEndCheck: false);
         through.Live.Add(new(18, 40));
         through.Frames(30, new(30, 40));
         Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(28, 40)), (through.Follow.Route.Status, through.Grid.State.CommittedCell), through.Describe());
         Assert.IsTrue(through.Visited.Contains(new(18, 40)) && !through.Trace.Any(t => t.EndsWith("Stopped", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void An_approach_stopped_before_a_critter_within_the_start_distance_goes_on_approaching()
+    {
+        // From (10,30) toward a leader on (21,30): the stop before the NPC on (18,30) leaves it on (17,30), 4 from the leader, where a
+        // fresh decision would hold; the stopped approach goes on to range 2.
+        var walker = new Walker(new(10, 30), pass: true, segmentEndCheck: true);
+        walker.Frames(20, new(21, 30));
+        Assert.IsTrue(walker.Trace.Contains("17:1/0/Stopped"), walker.Describe());
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(19, 30)), (walker.Follow.Route.Status, walker.Grid.State.CommittedCell), walker.Describe());
+    }
+
+    [TestMethod]
+    public void Separating_from_the_leaders_cell_skips_a_neighbour_holding_a_critter()
+    {
+        // On the leader's cell (19,31) the first neighbour in direction order is (18,30), the NPC's: it is not a goal (DC2).
+        var walker = new Walker(new(19, 31), pass: true, segmentEndCheck: false);
+        walker.Frames(4, new(19, 31));
+        Assert.AreEqual(FollowAction.Hold, walker.Follow.LastAction, walker.Describe());
+        Assert.AreEqual(1, FollowDistanceRules.Distance(walker.Grid.State.CommittedCell, new(19, 31)), walker.Describe());
+        Assert.IsFalse(walker.Visited.Contains(new(18, 30)), walker.Describe());
     }
 }

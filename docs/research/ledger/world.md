@@ -281,6 +281,9 @@ again (LR2, LR5, LR9, DC2–DC5, EX20).
 Since ARC-WORLD-075 a companion's follow and walk-order goals plan and step through living critters while the session has the
 companion out of combat mode (`AreaCompanion.PassesCritters`, the PC's admission of ARC-WORLD-074 and the route source's
 `crittersPass` of ARC-WORLD-073). The segment-end check of LR11 follows the switch `NavigationRuleProfile.SegmentEndCritterEndsWalk`
-(LRA1): Original stops the companion's goal before the critter and plans it again at the next frame (`CompanionFollower`, the stop
-is not remembered as unreachable), Steamwoven walks on. The pause is one host frame; the action points and the random wait are
-not modelled (no companion moves in a turn-based round yet).
+(LRA1): Original stops the companion's approach before the critter and the next update goes on approaching from where it stands
+(`CompanionFollower`: the stop is not remembered as unreachable, and beyond the range it plans again even within the start
+distance), Steamwoven walks on. The pause is one host frame; the action points and the random wait are not modelled (no
+companion moves in a turn-based round yet). An ordered goal (walk here) stopped there ends, as goal 4 does (LR5); the
+spread-out step, goal 69 in the original, ends too (an approximation). The companion's combat mode is the session's; nothing in
+the viewer puts a companion in combat mode yet.
