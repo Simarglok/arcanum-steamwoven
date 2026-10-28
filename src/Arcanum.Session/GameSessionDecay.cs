@@ -80,7 +80,11 @@ public sealed partial class GameSessionOwner
         else if (step == ItemDecayStep.Destroy)
         {
             if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
+            // ARC-WORLD-063: an item destroyed in a junk pile leaves it first, and with no container shown in the loot window the pile
+            // dissolves when one item or none is left (0x43CCA0 → 0x467860 → 0x463540, ledger JP4, JP7).
+            var pile = _inventory.JunkPileOf(entity.Code);
             Delete(entity.Code);
+            if (pile is not null && _inventory.JunkPile(pile.Entity) is { } left) DissolveJunkPile(left);
             Revise();
         }
         _passDecays?.Add(new(firing.Event, map, entity.Code, step) { Postponed = postponed });

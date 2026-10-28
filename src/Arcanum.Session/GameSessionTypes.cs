@@ -418,9 +418,10 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-082); schema 41 adds the made and placed items' complexity to <see cref="Inventory"/> (ARC-WORLD-083); schema 42 adds
     /// the CheckWeapon danger bit and the AI ticks to <see cref="Events"/> (ARC-WORLD-084); schema 43 adds
     /// the kept item script slots to <see cref="Inventory"/> and a worn item's item event points to <see cref="Equipment"/>
-    /// (ARC-SCRIPT-042); schema 44 adds the weight rows to <see cref="Inventory"/> (ARC-WORLD-085). Schemas 1..43 are refused, not
+    /// (ARC-SCRIPT-042); schema 44 adds the weight rows to <see cref="Inventory"/> (ARC-WORLD-085); schema 45 adds the NoFlee danger
+    /// bit (ARC-WORLD-086); schema 46 adds the junk piles to <see cref="Inventory"/> (ARC-WORLD-063). Schemas 1..45 are refused, not
     /// migrated.</summary>
-    public const int CurrentSchemaVersion = 44;
+    public const int CurrentSchemaVersion = 46;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

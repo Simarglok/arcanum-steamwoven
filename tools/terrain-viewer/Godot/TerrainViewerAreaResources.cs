@@ -57,8 +57,10 @@ public partial class TerrainViewerApp
                 // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
                 Require(_camera.State == view, "CAMERA_MOVED");
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
-                // A body of no plan command is a visiting companion's, never anything else.
-                Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)), "UNPLANNED_BODY");
+                // A body of no plan command is a visiting companion's or (ARC-WORLD-063) a junk pile's or placed item's drawn under its own
+                // key (ARC-RENDER-033), never anything else.
+                Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)
+                    || _groundOnly.ContainsKey(key)), "UNPLANNED_BODY");
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);

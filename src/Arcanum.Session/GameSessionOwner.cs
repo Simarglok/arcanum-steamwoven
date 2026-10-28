@@ -791,6 +791,12 @@ public sealed partial class GameSessionOwner : IDisposable
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
+        // ARC-WORLD-063: an item in a junk pile on this map that is no placed item is an item of this seed; no seed of another map lists
+        // it. (Where it lies is the seed's and the map changes' answer: an item no longer on the pile's cell is not shown in the pile.)
+        foreach (var pile in _inventory.JunkPiles)
+            foreach (var entry in pile.Items.Where(entry => _inventory.PlacedItem(entry.Entity) is null))
+                if (pile.Map == map ? !admitted.Items.ContainsKey(entry.Entity) : admitted.Items.ContainsKey(entry.Entity))
+                    return Reject(GameSessionFailure.InventoryMismatch);
         if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
         _inventory.Seeds[map] = admitted;
         _inventory.SeedGeneration++;
@@ -836,6 +842,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands.
         if (ItemInFlight(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        // ARC-WORLD-063: an item in a junk pile is taken from the pile (LootItem), not from the ground.
+        if (_inventory.JunkPileOf(item) is not null) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
         if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return Picked(item, TakePlaced(placed, insertCheck));
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
@@ -862,6 +870,8 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(holder) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        // ARC-WORLD-063: a junk pile the session made on the actor's map is looted as the container it is.
+        if (_inventory.JunkPile(holder) is { } pile && pile.Map == _actor.Map) return LootJunkPile(pile, item, insertCheck, scripts);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder)) return RejectItem(GameSessionFailure.HolderNotLootable);
@@ -1543,8 +1553,13 @@ public sealed partial class GameSessionOwner : IDisposable
         else throw new InvalidOperationException("PLACED_ITEM_NOT_HELD");
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
         _inventory.Placed.Add(placed);
-        // ARC-WORLD-062: every drop on the ground schedules the item's decay (ledger ID4).
-        if (decays) ScheduleDecay(entity, placed.Map);
+        // ARC-WORLD-063: the drop's placement may put it into a junk pile; ARC-WORLD-062: every drop on the ground then schedules the
+        // item's decay (ledger ID4). A thrown item's plain placement does neither.
+        if (decays)
+        {
+            SettleDrop(entity, placed.Map, cell);
+            ScheduleDecay(entity, placed.Map);
+        }
         Revise();
     }
 
@@ -1833,6 +1848,36 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             lastWeight = row.Entity;
             inventory.Weights[row.Entity] = row.Facts;
+        }
+        return RestoreJunkPiles(inventory, saved.JunkPiles, destroyed);
+    }
+
+    // ARC-WORLD-063: the junk piles within the bounds, each a pile entity (junk:n) once, on a valid map and cell, its items once in all
+    // piles with rectangles inside the grid that do not overlap; a placed item in a pile lies on the pile's map and cell, any other
+    // item in a pile is no item of the hero's, of an NPC's added list or deleted (a seed item, checked when its seed attaches).
+    private static GameSessionFailure RestoreJunkPiles(InventoryDomain inventory, IReadOnlyList<SessionJunkPile> saved, IReadOnlySet<string> destroyed)
+    {
+        if (saved.Count > SessionJunkPile.MaxPiles || saved.Sum(pile => (long)(pile?.Items?.Count ?? 0)) > SessionJunkPile.MaxItems) return GameSessionFailure.BudgetExceeded;
+        var piles = new HashSet<string>(StringComparer.Ordinal);
+        var items = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pile in saved)
+        {
+            if (pile?.Items is null || SessionJunkPile.Number(pile.Entity) is null || !piles.Add(pile.Entity) || !SessionValidation.Map(pile.Map) ||
+                !DropCellFits(pile.Cell)) return GameSessionFailure.InvalidSnapshot;
+            foreach (var item in pile.Items)
+            {
+                if (item is null || !SessionValidation.Entity(item.Entity) || !items.Add(item.Entity) || piles.Contains(item.Entity) ||
+                    !InventoryGridRules.Fits(item.Grid, InventoryGridRules.ContainerRows) || destroyed.Contains(item.Entity))
+                    return GameSessionFailure.InvalidSnapshot;
+                var held = inventory.PlacedItem(item.Entity) is { } placed ? placed.Map != pile.Map || placed.Cell != pile.Cell
+                    : inventory.Taken.Contains(item.Entity) || inventory.NpcOf(item.Entity) is not null;
+                if (held) return GameSessionFailure.InvalidSnapshot;
+            }
+            // Rectangles inside the grid (checked above) overlap when they cover fewer cells than their areas add up to.
+            if (pile.Items.Sum(item => (long)item.Width * item.Height) !=
+                InventoryGridRules.Occupied(pile.Items.Select(item => item.Grid), InventoryGridRules.ContainerRows).Count(cell => cell))
+                return GameSessionFailure.InvalidSnapshot;
+            inventory.JunkPiles.Add(pile with { Items = Array.AsReadOnly(pile.Items.ToArray()) });
         }
         return GameSessionFailure.None;
     }

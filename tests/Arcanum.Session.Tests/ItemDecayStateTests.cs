@@ -13,7 +13,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemDecayStateTests
 {
-    private static readonly CellCoord AppleCell = new(90, 200), There = new(120, 210);
+    private static readonly CellCoord AppleCell = new(90, 200), There = new(120, 210), Beside = new(121, 210);
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed class World(bool shows = false) : ISessionLootWindowWorld
@@ -40,7 +40,7 @@ public sealed class ItemDecayStateTests
         using var owner = Owner();
         var now = owner.QueryClockSnapshot().GameTimestampMs;
         owner.PlaceHeroItem("kit:2", There);
-        owner.PlaceHeroItem("apple", There);
+        owner.PlaceHeroItem("apple", Beside); // apart: on one cell they would make a junk pile (ARC-WORLD-063)
         CollectionAssert.AreEqual(new[] { ("kit:2", Exterior, now + ItemDecayRules.DelayMs), ("apple", Exterior, now + ItemDecayRules.DelayMs) },
             owner.QueryItemDecays().ToArray());
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);

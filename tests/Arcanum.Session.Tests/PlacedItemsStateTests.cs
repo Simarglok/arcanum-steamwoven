@@ -11,7 +11,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class PlacedItemsStateTests
 {
-    private static readonly CellCoord AppleCell = new(90, 200), There = new(120, 210);
+    private static readonly CellCoord AppleCell = new(90, 200), There = new(120, 210), Beside = new(121, 210);
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionItemFacts AppleFacts = InventoryStateTests.Facts(SessionItemType.Food, 3600);
 
@@ -32,16 +32,17 @@ public sealed class PlacedItemsStateTests
     {
         using var owner = Owner();
         var revision = owner.Version.Revision;
+        // On cells of their own (two items on one cell would make a junk pile, ARC-WORLD-063).
         owner.PlaceHeroItem("kit:2", There);
-        owner.PlaceHeroItem("apple", There);
+        owner.PlaceHeroItem("apple", Beside);
         Assert.AreEqual(revision + 2, owner.Version.Revision, "one revision each");
         CollectionAssert.AreEqual(new[] { "kit:1", "kit:3" }, owner.QueryHeroKit().Select(item => item.Entity).ToArray());
         Assert.AreEqual(0, owner.QueryPcInventory().Count);
         var placed = owner.QueryPlacedItems();
         Assert.AreEqual((SessionPlacedSource.Kit, (SessionMapId?)null), (placed[0].Source, placed[0].Origin));
-        Assert.AreEqual((SessionPlacedSource.Pc, (SessionMapId?)Exterior, Exterior, There), (placed[1].Source, placed[1].Origin, placed[1].Map, placed[1].Cell));
+        Assert.AreEqual((SessionPlacedSource.Pc, (SessionMapId?)Exterior, Exterior, Beside), (placed[1].Source, placed[1].Origin, placed[1].Map, placed[1].Cell));
         // The apple lies where it was placed, not at its seed cell.
-        CollectionAssert.AreEqual(new[] { ("kit:2", There), ("apple", There) },
+        CollectionAssert.AreEqual(new[] { ("kit:2", There), ("apple", Beside) },
             owner.QueryMapInventory(Exterior)!.Ground.Select(g => (g.Item.Entity, g.Cell)).ToArray());
 
         // On another map it cannot be picked up.
@@ -138,7 +139,7 @@ public sealed class PlacedItemsStateTests
         CollectionAssert.AreEqual(new[] { "kit:1", "kit:2", "kit:3" }, restored.QueryHeroKit().Select(item => item.Entity).ToArray());
 
         // An insert check that changes the session refuses as stale.
-        owner.PlaceHeroItem("apple", There);
+        owner.PlaceHeroItem("apple", Beside);
         var stale = owner.PickUpItem(owner.Version, "apple", _ =>
         {
             owner.ApplyChanges(owner.Version, null, [new(Exterior, MapChangeKey.ForEntity("x", "y"), 1)]);
