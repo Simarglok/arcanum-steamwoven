@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
             if (_gameBarPanel is { Visible: true } hidden)
             {
                 // No leave or release reaches hidden bars: the pointer state starts afresh when they show again.
-                hidden.Visible = false; _gameBar.Reset(); hidden.Render(); _hud?.SetTopInset(0);
+                hidden.Visible = false; _gameBar.Reset(); hidden.Render(); hidden.ShowHoverPortrait(null, null); _hud?.SetTopInset(0);
             }
             return;
         }

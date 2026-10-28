@@ -227,6 +227,8 @@ public partial class TerrainViewerApp
                 _hoverPanel.Visible = true;
             }
         }
+        // ARC-UI-024: the hovered follower's portrait and name in the message window while the bars are drawn.
+        SyncHoverPortrait(text is null ? null : key);
         if (changed && refreshStatus) RefreshAreaStatus();
     }
 

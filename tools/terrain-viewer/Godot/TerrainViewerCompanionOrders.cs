@@ -114,9 +114,11 @@ public partial class TerrainViewerApp
             _followerPortraits.ItemChosen += FollowerMenuChosen;
         }
         var shown = group.Companions.ToDictionary(c => c.Entity, StringComparer.Ordinal);
+        var followers = session.QueryParty().Followers.Where(f => shown.ContainsKey(f.Entity)).Select(f => shown[f.Entity]).ToArray();
+        // ARC-UI-024: the frames' art and each follower's portrait, read when a new one is needed.
+        LoadFollowerPortraits(followers);
         // ARC-UI-020: each portrait's bars from the follower's life.
-        _followerPortraits.Show(session.QueryParty().Followers.Where(f => shown.ContainsKey(f.Entity))
-            .Select(f => (f.Entity, CompanionName(shown[f.Entity]), CompanionLife(shown[f.Entity]))).ToArray());
+        _followerPortraits.Show(followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray());
     }
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)

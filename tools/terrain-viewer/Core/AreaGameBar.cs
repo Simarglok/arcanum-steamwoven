@@ -41,6 +41,16 @@ public static class AreaGameBarLayout
     public const int MenuHoverSound = 3026, MenuPressSound = 3027;
     /// <summary>The message window's first text rectangle (0x5C6D60) on the screen, where the hover name is drawn (GB5).</summary>
     public static readonly (int X, int Y, int Width, int Height) HoverText = (211, 503, 383, 82);
+    /// <summary>ARC-UI-024: the PC's gauges' vial art (PA1): the fill art of health (18), health while poisoned (17) and fatigue
+    /// (19), each 28 × 96, and the empty vial (20); the gauges draw frame 0 of each.</summary>
+    public const int HealthVialArt = 18, PoisonedVialArt = 17, FatigueVialArt = 19, EmptyVialArt = 20;
+    /// <summary>ARC-UI-024: the gauges' rectangles on the screen (0x5C63D8, CH7).</summary>
+    public static readonly (int X, int Y, int Width, int Height) HealthGauge = (14, 472, 28, 88), FatigueGauge = (754, 473, 28, 88);
+    /// <summary>ARC-UI-024: the hovered critter's image in the message window (PA6): its top left on the screen and, for a
+    /// portrait, the portrait's own 64 × 64 size; the name goes in the panel's first line rectangle (0x5C70C8).</summary>
+    public static readonly (int X, int Y) HoverImage = (217, 510);
+    public const int HoverPortraitSize = 64;
+    public static readonly (int X, int Y, int Width, int Height) HoverNameLine = (290, 504, 291, 19);
 
     public static (int X, int Y, int Width, int Height) StripRect(AreaBarStrip strip) =>
         strip == AreaBarStrip.Top ? (0, 0, ScreenWidth, TopHeight) : (0, BottomTop, ScreenWidth, BottomHeight);
@@ -67,7 +77,8 @@ public static class AreaGameBarLayout
     public static AreaBarButtonSpec Spec(AreaBarButton button) => Buttons.First(spec => spec.Button == button);
 
     /// <summary>Every interface art number the bars draw.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct()];
+    public static IReadOnlyList<int> ArtNumbers { get; } =
+        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt];
 
     /// <summary>The frame a button draws (GB4): idle frame 0; down advances one frame and hovered two, each step wrapping to frame 0
     /// past the art's last frame (so a two-frame art shows frame 0 when hovered, a one-frame art always frame 0).</summary>

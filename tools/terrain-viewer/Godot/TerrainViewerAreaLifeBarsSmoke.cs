@@ -44,17 +44,38 @@ public partial class TerrainViewerApp
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             for (var i = 0; i < 600 && _hoverNames is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptHoverNames(); }
 
-            // The PC's gauges: fills and numbers from the hero's life (CH7).
+            // The PC's gauges: fills and numbers from the hero's life (CH7); with the bars the vials' art (PA1–PA3), without them
+            // the compact panel at the screen's bottom right (PA5, ARC-UI-024).
             void CheckGauges(string when)
             {
                 RefreshFollowerPortraits();
                 var life = AreaLife.From(session.QueryHeroLife()!);
                 Require(_heroGauges is { ShownForSelfTest: true }, when + ": the PC's gauges are shown");
                 var shown = _heroGauges!.ValuesForSelfTest;
-                Require(shown.Health == LifeBarRules.GaugeFill(life.Health, life.MaxHealth, LifeBarRules.GaugeHeight)
-                    && shown.Fatigue == LifeBarRules.GaugeFill(life.Fatigue, life.MaxFatigue, LifeBarRules.GaugeHeight), $"{when}: gauge fills {shown}");
-                Require(shown.HealthText == LifeBarRules.GaugeNumber(life.Health) && shown.FatigueText == LifeBarRules.GaugeNumber(life.Fatigue), $"{when}: gauge numbers {shown}");
-                Require(shown.Poisoned == life.Poisoned && shown.PoisonText == (life.Poisoned ? LifeBarRules.GaugeNumber(life.Poison) : null), $"{when}: poison {shown}");
+                var placed = _heroGauges.PlacementForSelfTest;
+                if (placed.InBars)
+                {
+                    Require(shown.Health == LifeBarRules.GaugeFill(life.Health, life.MaxHealth, LifeBarRules.GaugeHeight)
+                        && shown.Fatigue == LifeBarRules.GaugeFill(life.Fatigue, life.MaxFatigue, LifeBarRules.GaugeHeight), $"{when}: gauge fills {shown}");
+                    Require(shown.HealthText == LifeBarRules.GaugeNumber(life.Health) && shown.FatigueText == LifeBarRules.GaugeNumber(life.Fatigue), $"{when}: gauge numbers {shown}");
+                    Require(shown.Poisoned == life.Poisoned && shown.PoisonText == (life.Poisoned ? LifeBarRules.GaugeNumber(life.Poison) : null), $"{when}: poison {shown}");
+                    var art = _heroGauges.VialArtForSelfTest;
+                    Require(art == ((int?)(life.Poisoned ? AreaGameBarLayout.PoisonedVialArt : AreaGameBarLayout.HealthVialArt), (int?)AreaGameBarLayout.FatigueVialArt, true),
+                        $"{when}: the vials draw the original's art {art} (bars art {_gameBarContent?.Detail})");
+                    return;
+                }
+                var health = LifeBarRules.CompactFill(life.Health, life.MaxHealth, fatigue: false);
+                var fatigue = LifeBarRules.CompactFill(life.Fatigue, life.MaxFatigue, fatigue: true);
+                Require(shown.Health == health.Rows && shown.Fatigue == fatigue.Rows, $"{when}: compact columns {shown}");
+                Require(_heroGauges.CompactForSelfTest.ValuesForSelfTest.Health == health && _heroGauges.CompactForSelfTest.ValuesForSelfTest.Fatigue == fatigue,
+                    $"{when}: compact rows {_heroGauges.CompactForSelfTest.ValuesForSelfTest}");
+                Require(shown.HealthText == LifeBarRules.CompactNumber(life.Health) && shown.FatigueText == LifeBarRules.CompactNumber(life.Fatigue), $"{when}: compact numbers {shown}");
+                Require(shown.Poisoned == life.Poisoned && shown.PoisonText == (life.Poisoned ? LifeBarRules.CompactNumber(life.Poison) : null), $"{when}: compact poison {shown}");
+                var view = GetViewport().GetVisibleRect().Size; var factor = AreaGameBarPanel.ScreenFactor(view);
+                var origin = new Vector2(AreaGameBarPanel.ScreenLeft(view, factor), view.Y - AreaGameBarLayout.ScreenHeight * factor);
+                var (cx, cy, cw, ch) = AreaCompactPanelLayout.Window;
+                Require(placed.Health.Position.IsEqualApprox(origin + new Vector2(cx, cy) * factor) && placed.Health.Size.IsEqualApprox(new Vector2(cw, ch) * factor),
+                    $"{when}: the compact panel at the screen's bottom right {placed.Health} at factor {factor}");
             }
             CheckGauges("start");
             var heroBefore = AreaLife.From(session.QueryHeroLife()!);
@@ -80,6 +101,9 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 30; i++) AreaSmokeFrame();
 
             // Its portrait's bars (CH9), then a hit-point packet that leaves it below 20 %: the red tint.
+            // ARC-UI-024: the frame is the original's (art 503, bars 505/616 and 504) in slot 0 at 11, 50, with the follower's
+            // stored portrait when it has one that reads.
+            var storedPortrait = AreaPortraits.Stored(companion!.Speaker.Row);
             void CheckPortrait(string when, bool tinted)
             {
                 RefreshFollowerPortraits();
@@ -89,6 +113,17 @@ public partial class TerrainViewerApp
                     && b.Fatigue == LifeBarRules.PortraitFill(life.FatiguePercent, AreaFollowerPortraits.BarWidth) && b.Poisoned == life.Poisoned,
                     $"{when}: portrait bars {bars} for {life}");
                 Require(bars!.Value.Tinted == tinted && LifeBarRules.PortraitTinted(life.Health, life.MaxHealth) == tinted, $"{when}: portrait tint {bars} for {life}");
+                var frame = _followerPortraits!.FrameForSelfTest(companion!.Entity);
+                Require(frame is { Frame: true } f && f.HealthArt == (life.Poisoned ? AreaFollowerFrameLayout.PoisonedHealthArt : AreaFollowerFrameLayout.HealthArt)
+                    && f.FatigueArt == AreaFollowerFrameLayout.FatigueArt, $"{when}: the frame draws the original's art {frame} ({_portraitContent?.Detail})");
+                var view = GetViewport().GetVisibleRect().Size; var factor = AreaGameBarPanel.ScreenFactor(view);
+                Require(frame!.Value.Rect.Position.IsEqualApprox(new Vector2(AreaGameBarPanel.ScreenLeft(view, factor) + AreaFollowerFrameLayout.X * factor, AreaFollowerFrameLayout.FirstY * factor))
+                    && frame.Value.Rect.Size.IsEqualApprox(new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height) * factor), $"{when}: frame place {frame.Value.Rect} at factor {factor}");
+                var file = storedPortrait is { } id ? _portraitContent?.Portraits.GetValueOrDefault(id) : null;
+                Require((frame.Value.Portrait is not null) == (file is { Status: AreaPortraitStatus.Ready }), $"{when}: portrait {storedPortrait} drawn={frame.Value.Portrait is not null} file={file?.Status} {file?.Detail}");
+                Require(frame.Value.PortraitRect.Position.IsEqualApprox(frame.Value.Rect.Position + new Vector2(AreaFollowerFrameLayout.ImageX, AreaFollowerFrameLayout.ImageY) * factor)
+                    && frame.Value.PortraitRect.Size.IsEqualApprox(new Vector2(AreaFollowerFrameLayout.PortraitSize, AreaFollowerFrameLayout.PortraitSize) * factor),
+                    $"{when}: the portrait is drawn at 4, 4 at 32 × 32: {frame.Value.PortraitRect}");
             }
             var start = CompanionLife(companion!)!.Value;
             CheckPortrait("joined", LifeBarRules.PortraitTinted(start.Health, start.MaxHealth));
@@ -161,12 +196,28 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var view = GetViewport().GetVisibleRect().Size; var factor = _gameBarPanel!.Factor;
             var origin = new Vector2(MathF.Round((view.X - AreaGameBarLayout.ScreenWidth * factor) / 2), view.Y - AreaGameBarLayout.ScreenHeight * factor);
+            RefreshFollowerPortraits();
             var placed = _heroGauges!.PlacementForSelfTest;
             Require(placed.InBars && _heroGauges.ShownForSelfTest, "the gauges moved into the bars");
             Require(placed.Health.Position.IsEqualApprox(origin + new Vector2(14, 472) * factor) && placed.Health.Size.IsEqualApprox(new Vector2(28, 88) * factor)
                 && placed.Fatigue.Position.IsEqualApprox(origin + new Vector2(754, 473) * factor), $"vial places {placed} at factor {factor}");
             CheckGauges("in the bars");
+            // ARC-UI-024: hovering the follower with the bars drawn puts its portrait and name in the message window (PA6).
+            var barsPoint = ScreenPoint(companion.Speaker.Row.Key);
+            Require(barsPoint is not null, "the follower is drawn on screen with the bars");
+            HoverAtForSelfTest(barsPoint);
+            var messagePortrait = _gameBarPanel.HoverPortraitForSelfTest;
+            var portraitShown = FollowerPortrait(companion) is not null;
+            Require((messagePortrait.Image is not null) == portraitShown && (!portraitShown || messagePortrait.Name == CompanionName(companion)),
+                $"the message window shows the follower's portrait ({portraitShown}): {messagePortrait}");
+            if (portraitShown)
+                Require(messagePortrait.Rect.Position.IsEqualApprox(origin + new Vector2(AreaGameBarLayout.HoverImage.X, AreaGameBarLayout.HoverImage.Y) * factor)
+                    && messagePortrait.Rect.Size.IsEqualApprox(new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize) * factor),
+                    $"the portrait at 217, 510: {messagePortrait.Rect}");
             await Capture("bars");
+            HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
+            Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null, "no hover, no portrait");
+            HoverReleaseForSelfTest();
             // A window the bars stay over (the inventory, by its key) keeps the gauges in the vials.
             void InventoryKey()
             {
@@ -196,9 +247,11 @@ public partial class TerrainViewerApp
                 Map = _readyMapName,
                 Hero = new { Before = heroBefore.ToString(), After = heroAfter.ToString(), Gauges = _heroGauges!.ValuesForSelfTest.ToString(), BarFactor = factor },
                 Follower = new { template.Speaker.ScriptId, Start = start.ToString(), Wounded = wounded.ToString(),
-                    Portrait = _followerPortraits!.BarsForSelfTest(companion.Entity).ToString(), Hover = followerBars.ToString() },
+                    Portrait = _followerPortraits!.BarsForSelfTest(companion.Entity).ToString(), Hover = followerBars.ToString(),
+                    StoredPortrait = storedPortrait, PortraitDrawn = _followerPortraits.FrameForSelfTest(companion.Entity)?.Portrait is not null, MessagePortrait = portraitShown },
                 OtherNpc = other is { } o ? new { Life = o.Life.ToString(), Text = otherText } : null,
-                Parity = "NOT_VERIFIED (no original interface art)" }));
+                Art = new { Vials = _gameBarContent?.Detail, Frames = _portraitContent?.Detail },
+                Parity = "NOT_VERIFIED (original art drawn; no screenshot comparison with the original)" }));
         }
         finally
         {

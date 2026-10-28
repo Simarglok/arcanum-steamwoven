@@ -6,27 +6,73 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-WORLD-046 follower portraits: one button per follower in the PC's array (the original's portrait list; waiting NPCs have none,
+/// ARC-UI-024: one bar of a follower frame: the bar art cropped from its left to the filled width (<see cref="LifeBarRules.PortraitFill"/>),
+/// or a plain rectangle without the art.
+/// </summary>
+public partial class AreaArtBar : Control
+{
+    private Texture2D? _art;
+    private Color _fallback;
+    public int Filled { get; private set; }
+    /// <summary>The art number drawn (null for the plain fallback).</summary>
+    public int? Art { get; private set; }
+    public Color FillColor => _fallback;
+
+    public override void _Ready()
+    {
+        MouseFilter = MouseFilterEnum.Ignore;
+        Size = CustomMinimumSize = new Vector2(AreaFollowerFrameLayout.BarWidth, AreaFollowerFrameLayout.BarHeight);
+    }
+
+    public void Set(int filled, int art, Texture2D? texture, Color fallback)
+    {
+        filled = Math.Clamp(filled, 0, AreaFollowerFrameLayout.BarWidth);
+        int? drawn = texture is null ? null : art;
+        if (filled == Filled && drawn == Art && texture == _art && fallback == _fallback) return;
+        Filled = filled; Art = drawn; _art = texture; _fallback = fallback;
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        if (Filled <= 0) return;
+        var height = AreaFollowerFrameLayout.BarHeight;
+        if (_art is null) { DrawRect(new Rect2(0, 0, Filled, height), _fallback); return; }
+        var width = Math.Min(Filled, _art.GetWidth());
+        DrawTextureRectRegion(_art, new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())), new Rect2(0, 0, width, Math.Min(height, _art.GetHeight())));
+    }
+}
+
+/// <summary>
+/// ARC-WORLD-046 follower portraits: one frame per follower in the PC's array (the original's portrait list; waiting NPCs have none,
 /// OL16), each opening the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
-/// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and character sheet are shown disabled (not
-/// modelled for followers). A diagnostic strip: no portrait art. The menu is an inline panel of buttons that take no focus, not a
+/// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and
+/// character sheet are shown disabled (not modelled for followers). The menu is an inline panel of buttons that take no focus, not a
 /// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
-/// ARC-UI-020 (ledger CH9): under each button a health bar (in its poisoned colour while the follower is poisoned) and a fatigue
-/// bar, each cropped to the follower's percent (<see cref="LifeBarRules.PortraitFill"/>); below 20 % health the button turns red
-/// (<see cref="LifeBarRules.PortraitTinted"/>), as the original adds red over the face. A follower without combat values shows
-/// empty bars.
+/// ARC-UI-020 (ledger CH9): each frame's health bar (in its poisoned art while the follower is poisoned) and fatigue bar are cropped
+/// to the follower's percent (<see cref="LifeBarRules.PortraitFill"/>); below 20 % health the portrait turns red
+/// (<see cref="LifeBarRules.PortraitTinted"/>). A follower without combat values shows empty bars.
+/// ARC-UI-024 (ledger CH9, PA6): the frames are the original's, drawn with its art at its places (<see cref="AreaFollowerFrameLayout"/>:
+/// frame 503, bars 505/616 and 504, the follower's portrait at 32 × 32, the red added over it) on the 800 × 600 screen centred at the
+/// interface bars' whole factor, its top at the window's top. Without the art (no game folder) the frame is a dark rectangle with the
+/// name's first letters and plain bars. NOT READY: more than six followers (the original scrolls the list with its arrow buttons, the
+/// viewer shows the first six) and the critter art the original draws for a follower without a portrait.
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
-    private VBoxContainer _list = null!;
+    private sealed record Entry(Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
+        AreaArtBar Health, AreaArtBar Fatigue);
+
+    private Control _root = null!;
     private PanelContainer _menu = null!;
     private VBoxContainer _menuItems = null!;
     private string? _menuEntity;
     private string _signature = "";
-    private readonly Dictionary<string, (Button Button, AreaLifeBar Health, AreaLifeBar Fatigue)> _entries = new(StringComparer.Ordinal);
-    /// <summary>The width of a portrait's bars, in pixels.</summary>
-    public const int BarWidth = 96;
-    private static readonly Color Tint = new(1f, .35f, .35f);
+    private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private IReadOnlyDictionary<int, Texture2D> _art = new Dictionary<int, Texture2D>();
+    /// <summary>The width of a frame's bars, in the original's pixels (the bar art's).</summary>
+    public const int BarWidth = AreaFollowerFrameLayout.BarWidth;
+    private static readonly Color Back = new(14 / 255f, 16 / 255f, 22 / 255f, .85f);
 
     /// <summary>A menu item chosen for a follower: its entity and the item.</summary>
     public event Action<string, FollowerMenuItem>? ItemChosen;
@@ -34,14 +80,20 @@ public partial class AreaFollowerPortraits : CanvasLayer
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
     private const string EntityMeta = "follower_entity";
 
-    /// <summary>The screen centre of a follower's portrait button, or of an item of the open menu, for the native smoke's mouse
-    /// presses (the layer has no transform).</summary>
+    /// <summary>The screen centre of a follower's frame, or of an item of the open menu, for the native smoke's mouse presses.</summary>
     internal Vector2? PortraitCentreForSelfTest(string entity) =>
         _entries.TryGetValue(entity, out var entry) ? entry.Button.GetGlobalRect().GetCenter() : null;
-    /// <summary>A follower portrait's bar fills, whether its health bar has the poisoned colour, and its red tint.</summary>
+    /// <summary>A follower frame's bar fills (in the original's pixels), whether its health bar is the poisoned one, and its red tint.</summary>
     internal (int Health, int Fatigue, bool Poisoned, bool Tinted)? BarsForSelfTest(string entity) =>
         _entries.TryGetValue(entity, out var entry)
-            ? (entry.Health.Filled, entry.Fatigue.Filled, entry.Health.FillColor == AreaLifeBar.PoisonedHealthColor, entry.Button.SelfModulate == Tint)
+            ? (entry.Health.Filled, entry.Fatigue.Filled, entry.Health.FillColor == AreaLifeBar.PoisonedHealthColor, entry.Tint.Visible)
+            : null;
+    /// <summary>A follower frame's art: the frame art drawn, the portrait texture (null none), the bars' art numbers, and its and
+    /// the portrait's window rectangles.</summary>
+    internal (bool Frame, Texture2D? Portrait, int? HealthArt, int? FatigueArt, Rect2 Rect, Rect2 PortraitRect)? FrameForSelfTest(string entity) =>
+        _entries.TryGetValue(entity, out var entry)
+            ? (entry.Frame.Texture is not null, entry.Portrait.Visible ? entry.Portrait.Texture : null, entry.Health.Art, entry.Fatigue.Art,
+                entry.Button.GetGlobalRect(), entry.Portrait.GetGlobalRect())
             : null;
     internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
         _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
@@ -54,14 +106,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     public override void _Ready()
     {
         Layer = 3;
-        var panel = new PanelContainer { Name = "FollowerPortraits", MouseFilter = Control.MouseFilterEnum.Stop };
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .85f),
-            ContentMarginLeft = 6, ContentMarginRight = 6, ContentMarginTop = 6, ContentMarginBottom = 6,
-        });
-        AddChild(panel);
-        _list = new VBoxContainer(); panel.AddChild(_list);
+        // Nearest, as the bars' strips: the frames are scaled by the same whole factor.
+        _root = new Control { Name = "FollowerPortraits", MouseFilter = Control.MouseFilterEnum.Ignore, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+        AddChild(_root);
         _menu = new PanelContainer { Name = "FollowerOrders", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
         _menu.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -70,51 +117,87 @@ public partial class AreaFollowerPortraits : CanvasLayer
         });
         AddChild(_menu);
         _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
-        GetViewport().SizeChanged += () => { CloseMenu(); Place(); };
-        AreaGameBarPanel.InsetsChanged += Place;
+        GetViewport().SizeChanged += Resized;
+        Place();
         Hide();
     }
 
-    /// <summary>Shows one button per follower (entity, label, life) in array order, with its bars; hidden when there is none. The
-    /// buttons are rebuilt only when the followers or their labels change; the bars follow every call.</summary>
-    public void Show(IReadOnlyList<(string Entity, string Label, AreaLife? Life)> followers)
+    private void Resized() { CloseMenu(); Place(); }
+
+    /// <summary>Gives the frames their interface art (frame 0 of 503, 504, 505 and 616 by number); missing numbers draw the fallback.</summary>
+    public void Bind(IReadOnlyDictionary<int, Texture2D> art)
     {
-        var signature = string.Join("\n", followers.Select(f => f.Entity + "\t" + f.Label));
+        _art = art ?? throw new ArgumentNullException(nameof(art));
+        _signature = "";
+    }
+
+    /// <summary>Shows one frame per follower (entity, label, life, portrait) in array order, at most six, with its bars; hidden when
+    /// there is none. The frames are rebuilt only when the followers, their labels or portraits change; the bars follow every call.</summary>
+    public void Show(IReadOnlyList<(string Entity, string Label, AreaLife? Life, Texture2D? Portrait)> followers)
+    {
+        var shown = followers.Take(AreaFollowerFrameLayout.Slots).ToArray();
+        var signature = string.Join("\n", shown.Select(f => f.Entity + "\t" + f.Label + "\t" + f.Portrait?.GetRid().Id));
         if (signature != _signature)
         {
             _signature = signature;
-            // Removed at once so the panel's minimum size no longer counts them when it is placed below.
-            foreach (var child in _list.GetChildren()) { _list.RemoveChild(child); child.QueueFree(); }
+            foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
             _entries.Clear();
-            EntitiesForSelfTest = followers.Select(f => f.Entity).ToArray();
+            EntitiesForSelfTest = shown.Select(f => f.Entity).ToArray();
             if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
-            foreach (var (entity, label, _) in followers)
+            for (var slot = 0; slot < shown.Length; slot++)
             {
-                var entry = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-                entry.AddThemeConstantOverride("separation", 2);
-                var button = new Button { Text = label + " ▸", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
+                var (entity, label, _, portrait) = shown[slot];
+                var (x, y) = AreaFollowerFrameLayout.Slot(slot);
+                var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
+                var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
                 button.Pressed += () => OpenMenu(entity, button);
                 button.SetMeta(EntityMeta, entity);
-                var health = new AreaLifeBar { Name = "Health", Length = BarWidth, Thickness = 4 };
-                var fatigue = new AreaLifeBar { Name = "Fatigue", Length = BarWidth, Thickness = 4 };
-                entry.AddChild(button); entry.AddChild(health); entry.AddChild(fatigue);
-                _list.AddChild(entry);
-                _entries[entity] = (button, health, fatigue);
+                var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
+                var back = new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = frame is null };
+                var image = new Rect2(AreaFollowerFrameLayout.ImageX, AreaFollowerFrameLayout.ImageY, AreaFollowerFrameLayout.PortraitSize, AreaFollowerFrameLayout.PortraitSize);
+                // The expand mode first: with the default one the 64 × 64 image would hold the rectangle at its own size.
+                var picture = new TextureRect
+                {
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                    Texture = portrait, Visible = portrait is not null, Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore,
+                };
+                var initials = new Label
+                {
+                    Text = new string(label.Where(char.IsLetter).Take(3).ToArray()), Visible = portrait is null, Position = image.Position, Size = image.Size,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
+                };
+                initials.AddThemeFontSizeOverride("font_size", 9);
+                // The original adds pure red to the image's pixels (0x51E0A0).
+                var tint = new ColorRect
+                {
+                    Color = new Color(1, 0, 0), Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+                    Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
+                };
+                var frameRect = new TextureRect { Texture = frame, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore };
+                var health = new AreaArtBar { Name = "Health", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.HealthBarY) };
+                var fatigue = new AreaArtBar { Name = "Fatigue", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.FatigueBarY) };
+                // The frame (503) first, the image and bars over it, as the original draws them.
+                foreach (Control child in new Control[] { back, frameRect, picture, initials, tint, health, fatigue }) button.AddChild(child);
+                _root.AddChild(button);
+                _entries[entity] = new(button, back, frameRect, picture, initials, tint, health, fatigue);
             }
-            Visible = followers.Count > 0;
+            Visible = shown.Length > 0;
             Place();
         }
-        foreach (var (entity, _, life) in followers)
+        foreach (var (entity, _, life, _) in shown)
         {
-            var (button, health, fatigue) = _entries[entity];
+            var entry = _entries[entity];
             var value = life ?? default;
-            health.SetFill(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-            fatigue.SetFill(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
-            button.SelfModulate = life is not null && LifeBarRules.PortraitTinted(value.Health, value.MaxHealth) ? Tint : Colors.White;
+            var healthArt = value.Poisoned ? AreaFollowerFrameLayout.PoisonedHealthArt : AreaFollowerFrameLayout.HealthArt;
+            entry.Health.Set(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), healthArt, _art.GetValueOrDefault(healthArt),
+                value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+            entry.Fatigue.Set(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaFollowerFrameLayout.FatigueArt,
+                _art.GetValueOrDefault(AreaFollowerFrameLayout.FatigueArt), AreaLifeBar.FatigueColor);
+            entry.Tint.Visible = life is not null && LifeBarRules.PortraitTinted(value.Health, value.MaxHealth);
         }
     }
 
-    /// <summary>Opens the order menu of a follower next to its portrait button (a second press of the same portrait closes it).</summary>
+    /// <summary>Opens the order menu of a follower next to its frame (a second press of the same frame closes it).</summary>
     public void OpenMenu(string entity, Control? anchor = null, bool mindControlled = false)
     {
         if (_menu.Visible && _menuEntity == entity) { CloseMenu(); return; }
@@ -134,7 +217,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         }
         _menu.ResetSize();
         var size = GetViewport().GetVisibleRect().Size;
-        var wanted = anchor is null ? new Vector2(24, 24) : anchor.GetGlobalRect().Position + new Vector2(anchor.Size.X + 4, 0);
+        var anchorRect = anchor?.GetGlobalRect();
+        var wanted = anchorRect is { } rect ? rect.Position + new Vector2(rect.Size.X + 4, 0) : new Vector2(24, 24);
         var menuSize = _menu.GetCombinedMinimumSize();
         _menu.Position = new(Math.Min(wanted.X, Math.Max(0, size.X - menuSize.X)), Math.Clamp(wanted.Y, 0, Math.Max(0, size.Y - menuSize.Y)));
         _menu.Show();
@@ -149,14 +233,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     public void CloseMenu() { _menu.Hide(); _menuEntity = null; }
 
-    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
-    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
+    public override void _ExitTree() => GetViewport().SizeChanged -= Resized;
 
     private void Place()
     {
-        if (_list?.GetParent() is not PanelContainer panel) return;
+        if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
-        panel.ResetSize();
-        panel.Position = new(12, Math.Max(12, size.Y - panel.GetCombinedMinimumSize().Y - 12 - AreaGameBarPanel.BottomInset));
+        var factor = AreaGameBarPanel.ScreenFactor(size);
+        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
+        _root.Scale = new(factor, factor);
     }
 }

@@ -713,14 +713,15 @@ maximum truncated toward zero.
   original prints it (C's `%03d`: `030`, `-05`). While the hero is poisoned the health gauge takes the poisoned colour
   (green) and the poison level is printed over it. While the [interface bars](#interface-bars-arc-ui-018) are shown the
   gauges fill the bottom strip's vials at the original's places (gauges at 14, 472 and 754, 473 of the 800 × 600 screen,
-  the numbers at 15, 578 and 755, 578, the poison at 15, 500), scaled with the bars and drawn over them as plain fills
-  (the original's fill art 17–20 is not drawn); they stay while a window the bars reach is open. Without the bars they
-  stand in a small panel at the bottom right, hidden while a window or the palette is open. Without a hero there are
-  none. Automated runs draw them only when their smoke asks or the bars are drawn.
-- **Follower portraits** (CH9). Under each portrait button of the [follower strip](../world/companion-orders-runtime.md#area-viewer)
-  (ARC-WORLD-046) a health bar (green while poisoned) and a fatigue bar, each cropped to the follower's percent
-  (nothing at 0 % or less, capped at 100 %); below 20 % health the button turns red, as the original adds red over the
-  face. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
+  the numbers at 15, 578 and 755, 578, the poison at 15, 500), scaled with the bars and drawn over them, since ARC-UI-024
+  with the original's vial art ([panel art](#panel-art-arc-ui-024)); they stay while a window the bars reach is open.
+  Without the bars the original's compact panel stands at the screen's bottom right (ARC-UI-024), hidden while a window
+  or the palette is open. Without a hero there are none. Automated runs draw them only when their smoke asks or the bars
+  are drawn.
+- **Follower portraits** (CH9). In each frame of the [follower portraits](../world/companion-orders-runtime.md#area-viewer)
+  (ARC-WORLD-046; the original's frames since ARC-UI-024) a health bar (its poisoned art while poisoned) and a fatigue bar,
+  each cropped to the follower's percent (nothing at 0 % or less, capped at 100 %); below 20 % health red is added over
+  the portrait, as the original does. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
   without combat values shows empty bars.
 - **Hovered critter** (CH8). The [tooltip](#hover-tooltip-and-action-cursor-arc-ui-005) of a critter with combat values
   (an NPC of a covered map or a companion) adds its health and fatigue bars under the name, each filled to the
@@ -736,10 +737,55 @@ lev 2`; `ARC_AREA_LIFE_CAPTURE=<ignored path prefix>` saves readbacks): the gaug
 poison packet, a speaker that joins shows its portrait bars and turns red after a hit to 15 % of its maximum, hovering it
 reads `current/maximum` (`15/100` on that map), hovering another living NPC reads a percent, with the bars drawn the gauges
 sit in the vials at the original's places and stay there with the inventory open, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
-(the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the original's fill art in the vials, the
-hovered panel's level line and its place on the bars' description line, portrait art, the PC as a hover target (the
-viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4). Original visual parity
-NOT VERIFIED.
+(the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the hovered panel's level line and its
+place on the bars' description line, the PC as a hover target (the viewer's actor is not pickable), action points and the
+turn cue (slice 2), floating text (slice 4). The art (vials, compact panel, frames, portraits) is ARC-UI-024's. Original
+visual parity NOT VERIFIED.
+
+### Panel art (ARC-UI-024)
+
+FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-arc-ui-018) and the
+[health and fatigue bars](#health-and-fatigue-bars-arc-ui-020), read in the 1.0.7.4 executable (ledger
+[PA1–PA6](../research/ledger/ui-audio.md#panel-art-arc-ui-024) and CH9). The rules are `LifeBarRules.GaugeArt`,
+`CompactFill` and `CompactNumber`; the layouts and the portrait reading are `AreaPanelArt.cs` in the viewer's Core.
+
+- **Vials** (PA1–PA3). While the bars are drawn each gauge draws, as the original, the empty vial (art 20) over its
+  empty rows from the art's top left, then the fill art (18 health, 17 while poisoned, 19 fatigue; frame 0 of the 15)
+  placed with its top 8 rows, the liquid's surface, above the fill line and clipped to the gauge, so a full gauge shows
+  the art's rows 8 to 95 and an empty one only the empty vial. The art comes with the bars' own art read. A fill beyond
+  the gauge (a value above its maximum, or a dead PC's negative one), which the original draws from a lower art row or
+  with the empty art past the gauge, is clamped to the gauge in both rule modes (a technical drawing overflow).
+- **Compact panel** (PA4–PA5). The original draws, instead of the bars, a 49 × 102 "Health/Fatigue Bar" panel at the
+  screen's bottom right when the interface is hidden (only with its `-fullscreen` start option). The viewer draws it
+  whenever its bars are not drawn (it has no hide toggle): a (9, 9, 9) outline and divider, the health column (red, green
+  while poisoned) and the fatigue column (blue), each filled from row d + 1 to row 100 where d is the damage percent
+  (damage × 100 / maximum, so 2 of 3 hit points fill from row 34, not by the life percent), and each current value
+  printed `%02d` in white at the fill's top, the poison level 40 rows lower; nothing filled at 100 % damage. The original
+  divides by a zero maximum there (a crash): the column reads fully damaged in both rule modes. The original's font (art
+  229) is not drawn; Godot's default font stands in.
+- **Follower frames** (CH9, PA6). The [follower portraits](../world/companion-orders-runtime.md#area-viewer) are the
+  original's frames: up to six 40 × 49 frames (art 503) at 11, 50 + 62 × slot of the 800 × 600 screen, scaled by the
+  bars' whole factor with the screen centred and its top at the window's top (with or without the bars), each with the
+  follower's portrait at 4, 4 scaled to 32 × 32, the health bar (505, 616 while poisoned) at 3, 39 and the fatigue bar
+  (504) at 3, 44, cropped to the percent, and pure red added over the portrait below 20 % health. A follower's portrait
+  is its stored field 0xE7 (critter slot 49 of its map record), its image the portrait catalogue's small `.bmp`
+  (ARC-DATA-045), read when a follower first needs it. A press on a frame opens the order menu as before; the name is
+  the frame's tooltip. Without the art (no game folder) a frame is a dark rectangle with the name's first letters and
+  plain bars.
+- **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
+  in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
+  and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered
+  follower the PC leads that has a portrait.
+
+Checks: `LifeBarsTests` (gauge art placement, compact fill and numbers), `AreaPanelArtTests` (layouts, the stored portrait
+of a critter record; with `DAT_ROOT` the installed frame and vial art and a portrait image read) and the native smoke stage
+`life` (map mode, `bates mansion lev 2` with `--hero`): without the bars the compact panel's columns, numbers and place,
+the frame's art, place and portrait, with the bars the vials' art numbers (17 while poisoned) and the hovered follower's
+portrait and name in the message window when it has one. NOT READY: frames past six (the original scrolls them with its
+arrow buttons), the critter art the original draws for a follower without a portrait (by race or flags, at 50 %), the
+PC's portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
+portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
+toggle. Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -1555,8 +1601,10 @@ name and lit frame, its down frame with 3000, the release with 3001 opening the 
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
-message log, hot-key bar and portraits (later slices; the vials since ARC-UI-020), the skill pane, fate and sleep windows, the town map, the
-buttons' lit art the original sets from game events (0x556A90), the compact interface (F10).
+message log and hot-key bar (later slices; the vials since ARC-UI-020, their art, the follower frames and the hovered
+portrait since [ARC-UI-024](#panel-art-arc-ui-024)), the skill pane, fate and sleep windows, the town map, the
+buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
+compact panel whenever its bars are not drawn).
 
 ### Logbook (ARC-UI-008)
 
