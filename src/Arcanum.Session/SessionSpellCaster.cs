@@ -1,5 +1,6 @@
 using Arcanum.Data.Magic;
 using Arcanum.Simulation;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
@@ -675,7 +676,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     public SessionEventPassResult ProcessEvents(int budget = 500)
     {
         var before = _owner.QuerySpellRuns();
-        var pass = _owner.ProcessEvents(_events is ISessionScriptWorld scripts ? new ScriptPassWorld(this, scripts) : new PassWorld(this, _events), budget);
+        ISessionEventWorld world = _events switch
+        {
+            ISessionAiWorld ai => new AiPassWorld(this, ai),
+            ISessionScriptWorld scripts => new ScriptPassWorld(this, scripts),
+            _ => new PassWorld(this, _events),
+        };
+        var pass = _owner.ProcessEvents(world, budget);
         // ARC-MAGIC-024: the pass's life steps call for theirs too (the encumbrance drain, a poison death fires nothing without a killer).
         foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
         foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
@@ -761,10 +768,48 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     // The pass world of a host whose event world also runs deferred script calls.
-    private sealed class ScriptPassWorld(SessionSpellCaster caster, ISessionScriptWorld scripts) : PassWorld(caster, scripts), ISessionScriptWorld
+    private class ScriptPassWorld(SessionSpellCaster caster, ISessionScriptWorld scripts) : PassWorld(caster, scripts), ISessionScriptWorld
     {
         public bool ObjectExists(SessionMapId map, string entity) => scripts.ObjectExists(map, entity);
         public bool RunScriptCall(SessionScriptCall call) => scripts.RunScriptCall(call);
+    }
+
+    // ARC-WORLD-092: the pass world of a host whose event world is also the AI scheduler's host, so the AI ticks run through it.
+    private sealed class AiPassWorld(SessionSpellCaster caster, ISessionAiWorld ai) : ScriptPassWorld(caster, ai), ISessionAiWorld
+    {
+        public SessionLifeTarget? AiLifeTarget(string entity) => ai.AiLifeTarget(entity);
+        public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => ai.ScanCombatants(map);
+        public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => ai.CombatantFacts(map, entity);
+        public long DistanceToPc(string npc) => ai.DistanceToPc(npc);
+        public bool RunScript(AiScriptPoint point, string npc, string? triggerer) => ai.RunScript(point, npc, triggerer);
+        public bool RunWaypoints(string npc) => ai.RunWaypoints(npc);
+        public void RunStandpoints(string npc) => ai.RunStandpoints(npc);
+        public bool IsGenerator(string npc) => ai.IsGenerator(npc);
+        public long? Spawn(string npc) => ai.Spawn(npc);
+        public bool IsEncounterCreature(string npc) => ai.IsEncounterCreature(npc);
+        public void Destroy(string npc) => ai.Destroy(npc);
+        public void InterruptAnimations(string npc) => ai.InterruptAnimations(npc);
+        public bool SectorLoaded(string npc) => ai.SectorLoaded(npc);
+        public AiCatchUpFacts CatchUp(string npc) => ai.CatchUp(npc);
+        public void MoveToLeader(string npc) => ai.MoveToLeader(npc);
+        public bool MapClearing => ai.MapClearing;
+        public bool Sleeping(string npc) => ai.Sleeping(npc);
+        public bool Hidden(string npc) => ai.Hidden(npc);
+        public bool PcHidden => ai.PcHidden;
+        public AiConversation Conversation(string npc) => ai.Conversation(npc);
+        public bool ConversationCallback => ai.ConversationCallback;
+        public void EndConversation(string npc) => ai.EndConversation(npc);
+        public int AnimationPriority(string npc) => ai.AnimationPriority(npc);
+        public bool StunAnimationRunning(string npc) => ai.StunAnimationRunning(npc);
+        public bool AnimationRunning(string npc) => ai.AnimationRunning(npc);
+        public void ReWield(string npc, bool allSlots) => ai.ReWield(npc, allSlots);
+        public string? Leader(string npc) => ai.Leader(npc);
+        public void EndMaintainedSpells(string npc) => ai.EndMaintainedSpells(npc);
+        public bool Heal(string npc) => ai.Heal(npc);
+        public bool SearchItems(string npc) => ai.SearchItems(npc);
+        public void UpdateDanger(string npc) => ai.UpdateDanger(npc);
+        public void Perform(string npc) => ai.Perform(npc);
+        public bool Loading => ai.Loading;
     }
 
     private SessionCombatant? Combatant(string id) =>

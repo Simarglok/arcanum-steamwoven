@@ -230,8 +230,8 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
 - The attack start's attacks an opponent and the projectile's attacks a location (IC6), an item-type attacker's own target hit
-  (0x4CBE70: a spell run whose parent is an item fires no damages opponent), and NPC attacks (the session has no NPC attack path
-  yet). No viewer caller sets the cast host's `ItemTriggers` or fires a life result's item events (its cast host has no item lookup),
+  (0x4CBE70: a spell run whose parent is an item fires no damages opponent), and the item events of an NPC's attack
+  (ARC-WORLD-092's `AttackByNpc` fires none yet). No viewer caller sets the cast host's `ItemTriggers` or fires a life result's item events (its cast host has no item lookup),
   and the viewer does not report the dying animation's end. The hero's critical miss on itself and an object's damage to the hero
   (`AttackCritter`, `AttackObject`) do not return their life step's item events, so its fatigue setter's call fires nothing yet. The global attacker (IC6) needs the run's other object, which
   the invocation does not carry (MT7). The aims at the other's worn weapon or armour stay not ready (no installed record uses them).

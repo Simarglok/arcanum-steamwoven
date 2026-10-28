@@ -74,11 +74,12 @@ follow the original in both settings; P5 (the combat scripts on every pass) is k
 
 ## Not ready
 
-- **Host.** No host implements `ISessionAiWorld`: the viewer schedules no tick on a sector fold or an NPC's placement, runs no
-  heartbeat or combat script through the gate, and ends an NPC's subturn at once (`AreaTurnBased.Step`); I10 wires them.
+- **Host.** The AREA viewer's AI host ([AI viewer host](ai-host.md), ARC-WORLD-092) implements `ISessionAiWorld` and schedules the
+  delayed tick of every NPC of the shown map when it is built; it schedules none on a sector fold, runs no heartbeat or combat
+  script through the gate, and the viewer still ends an NPC's subturn at once (`AreaTurnBased.Step`, I10's next part).
 - **Pipeline stages.** Heal and the item search (rules of slice I8, `AiSupportRules.Heal` and `AiGroundRules.SearchItems`, [AI support](ai-support.md)), the danger update's writes (the decisions of slices I4 and I5) and
   perform are the host's stages; perform's rules are the executor's `AiExecutorRules.Perform` (ARC-WORLD-086,
-  [AI executor](ai-executor.md)), but no host calls it behind the port yet (I10).
+  [AI executor](ai-executor.md)); the viewer's host runs the danger update and perform (ARC-WORLD-092), not heal and the item search yet.
 - **Other callers of the pass.** The attack misses and the damage without death (0x4B30F5, 0x4B3948, 0x4B52FC) and the follower
   orders (I9) do not call `RunAiPass` yet; the animation end of a round (call at 0x423B8D) does not call the hook.
 - **Routine.** Waypoints, standpoints, day and night positions, sleeping and wandering (FR-AI-001) are the host's; the spawner

@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
     }
 
-    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
+    private void UnbindAreaCombat() { _aiHost = null; _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 
@@ -300,7 +300,10 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-016/065: the PC's live overlay: the companions' (which moves the removed objects too), or with no
     /// companions the removed objects alone (null when there are none).</summary>
-    private AreaOccupancy? AreaPcOccupancy()
+    private AreaOccupancy? AreaPcOccupancy() => WithAiMovers(CompanionPcOccupancy());
+
+    // ARC-WORLD-092: the AI's moved NPCs are added by WithAiMovers.
+    private AreaOccupancy? CompanionPcOccupancy()
     {
         if (_areaCompanions is { } group) return group.OccupancyForPc();
         var removed = AreaRemovedObjects();
@@ -346,7 +349,7 @@ public partial class TerrainViewerApp
         }
         // A walk that arrived and still left the target out of reach is not tried again and again.
         if (goal.Approaches >= 3) { CancelAreaAttack(distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"); return; }
-        if (WorldRoute(session) is { } route && AttackApproachCell(session, row.WorldX!.Value, row.WorldY!.Value) is { } approach)
+        if (WorldRoute(session) is { } route && AttackApproachCell(session, LiveWorldCell(row).X, LiveWorldCell(row).Y) is { } approach)
         {
             goal.Approaches++;
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
@@ -387,7 +390,8 @@ public partial class TerrainViewerApp
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), AttackArtWeapon.Unarmed);
         var sound = _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
         var session = (AreaGridSession)_worldActor.Session!;
-        var targetCell = session.Chart.ToChart(new(goal.Row.WorldX!.Value, goal.Row.WorldY!.Value));
+        var (tx, ty) = LiveWorldCell(goal.Row);
+        var targetCell = session.Chart.ToChart(new(tx, ty));
         goal.Octant = AreaCombatHost.Facing(session.State.CommittedCell, targetCell) is { } facing ? DiagnosticGridActor.Octant(facing)
             : DiagnosticGridActor.RenderState(session.State).Facing;
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
@@ -480,7 +484,8 @@ public partial class TerrainViewerApp
     // A target next to the hero is read as the Original setting reads it (owner decision 2026-10-28, LineOfFireRules.ReachTrace): the
     // reach test, the redirect and the check read the same line.
     private LineOfFireTrace<AreaObjectRecord>? TraceLineOfFire(CellCoord from, AreaObjectRecord target) =>
-        target.WorldX is { } x && target.WorldY is { } y && AreaLineOfFireNow() is { } map && _areaSession is { } owner
+        target.WorldX is not null && target.WorldY is not null && AreaLineOfFireNow() is { } map && _areaSession is { } owner
+            && LiveWorldCell(target) is var (x, y)
             ? LineOfFireRules.ReachTrace(from, 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat) : null;
 
     /// <summary>ARC-COMBAT-012: the line of fire from the hero's committed cell to <paramref name="target"/>, logged; the original strikes
@@ -550,6 +555,10 @@ public partial class TerrainViewerApp
                 var (x, y) = group.WorldCell(companion.Speaker);
                 live.TryAdd(new(checked((int)x), checked((int)y)), companion.Speaker.Row);
             }
+        // ARC-WORLD-092: the NPCs the AI walked stand on their cells now.
+        if (_aiHost is { } ai)
+            foreach (var npc in ai.Scene.Npcs)
+                if (ai.Movers.IsMoved(npc.Entity)) live.TryAdd(ai.Movers.Of(npc.Entity)!.Cell, npc.Row);
         var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
         var map = CurrentAreaMap;
         var portals = _areaPortals;
@@ -632,6 +641,8 @@ public partial class TerrainViewerApp
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
         });
         goal.Attacks++;
+        // ARC-WORLD-092: the attack event of a resolved attack: the victim (and the witnesses of the noise) react.
+        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(struck.Entity);
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
@@ -659,8 +670,9 @@ public partial class TerrainViewerApp
             LineOfFire = line,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
             TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, struck.Entity),
-            // ARC-COMBAT-009: a critical drops the NPC's items where it stands (its map data's cell; NPCs do not move here).
-            TargetCell = struck.Row.WorldX is { } x && struck.Row.WorldY is { } y ? new(checked((int)x), checked((int)y)) : null,
+            // ARC-COMBAT-009: a critical drops the NPC's items where it stands (ARC-WORLD-092: where the AI walked it).
+            TargetCell = struck.Row.WorldX is not null && struck.Row.WorldY is not null && LiveWorldCell(struck.Row) is var (x, y)
+                ? new(checked((int)x), checked((int)y)) : null,
             // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
             DropMap = AreaDropMapNow(),
         };
@@ -793,6 +805,9 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
     {
         var companions = AreaCompanionCommands();
+        // ARC-WORLD-092: the NPCs the AI walked, after the companions (a fallen body where it stands).
+        if (AiMoverCommands() is { Count: > 0 } walked)
+            companions = [.. companions ?? [], .. walked.Where(c => companions?.Any(o => o.Identity == c.Identity) != true)];
         if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0
             && _spellMissileBodies.Count == 0)
             || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
