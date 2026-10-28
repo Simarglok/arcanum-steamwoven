@@ -816,8 +816,9 @@ says how to turn it on.
   waypoint, no journey, teleport only.
 - **Teleport.** The selected area's location on the start map becomes the landing, as a journey's landing: the panel closes
   and the start map loads around it (from another map, as a transfer to the start map), the session carried and following
-  companions arriving with the PC. It opens at the area's sector, so when the location itself is not walkable the PC stands
-  on the walkable tile nearest to the sector's middle. No game time passes and no area is discovered. Refused during a
+  companions arriving with the PC. It opens at the area's sector without an arrival tile (an area's location may be a
+  blocked tile, and the map load takes an arrival whenever its sector is loaded), so the PC stands on the walkable tile
+  nearest to the sector's middle. No game time passes and no area is discovered. Refused during a
   journey and for an area without a location (0,0).
 - **Marks.** A save made in debug mode has `[DEBUG] ` before its location, so the save list names it; the build line of the
   main menu ends in "DEBUG MODE"; the status line says "W world map (DEBUG MODE: teleport)". The session's rules and its

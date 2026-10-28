@@ -144,7 +144,7 @@ app is). On Windows, in a command prompt in the game folder: `"Arcanum Steamwove
 ` -- --debug-mode` after the target of a shortcut to the `.exe`.
 
 **Use it:** press **W** in play, select an area in the list on the right and press **Teleport**. The game loads the world
-around that area and puts you on the nearest walkable spot, together with the companions that follow you. A teleport takes
+around that area and puts you on a walkable spot in it, together with the companions that follow you. A teleport takes
 no game time and does not mark the area as discovered; areas you have really discovered stay marked in yellow. Normal
 travel on the world map works as without the debug mode.
 

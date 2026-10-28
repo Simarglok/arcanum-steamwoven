@@ -179,8 +179,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The panel closes and the start map loads around the landing location, as a transfer to it does. ARC-DEV-050: a
-    /// debug teleport may start on another map (a transfer to the start map), and it opens at the landing's sector, so the PC
-    /// stands on the walkable tile nearest to it when the location itself is not walkable.</summary>
+    /// debug teleport may start on another map (a transfer to the start map), and it opens at the landing's sector without an
+    /// arrival tile, so the PC stands on the walkable tile nearest to the sector's middle (an area's location tile may be blocked,
+    /// and an arrival is taken whenever its sector is loaded, walkable or not).</summary>
     private void LandWorldMap(TravelLocation landing, string why, bool teleport = false)
     {
         var steps = _worldMap?.Steps ?? 0; var hours = (_worldMap?.GameMs ?? 0) / WorldJourney.MsPerSector;
@@ -194,8 +195,9 @@ public partial class TerrainViewerApp
         var origin = _arguments;
         _mapHandoff = new(_areaSession, CurrentAreaMap, target, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell),
             target, Companions: LeavingCompanions());
-        var next = origin with { AreaMapName = target, AreaMapArrival = new(landing.X, landing.Y),
-            AreaMapSector = teleport ? new Arcanum.Data.Area.AreaSectorCoordinate(landing.X >> 6, landing.Y >> 6) : null };
+        var next = teleport
+            ? origin with { AreaMapName = target, AreaMapArrival = null, AreaMapSector = new Arcanum.Data.Area.AreaSectorCoordinate(landing.X >> 6, landing.Y >> 6) }
+            : origin with { AreaMapName = target, AreaMapArrival = new(landing.X, landing.Y), AreaMapSector = null };
         _worldMapStatus = $"{why} after {steps} step(s), {hours} h: landing at ({landing.X},{landing.Y})";
         GD.Print("ARC-UI-048 landing " + System.Text.Json.JsonSerializer.Serialize(new { Why = why, landing.X, landing.Y, Steps = steps, Hours = hours,
             Known = _areaSession?.QueryKnownAreas().ToArray() }));

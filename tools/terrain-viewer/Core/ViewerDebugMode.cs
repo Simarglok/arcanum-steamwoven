@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// world map (W) lists every area and teleports to the chosen one at once, from any map; without it the world map has no area list
 /// and keeps the original's travel only. The session's rules and state are not changed by the mode itself: a teleport moves the
 /// PC (and the following companions) as a landing does, with no game time and no discovered area. A save made while it is on is
-/// marked in its location (<see cref="MarkLocation"/>), and the build line of the launcher and the main menu says so.
+/// marked in its location (<see cref="MarkLocation"/>), and the main menu's build line says so.
 /// </summary>
 public static class ViewerDebugMode
 {
