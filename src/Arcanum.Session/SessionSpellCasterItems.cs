@@ -180,19 +180,21 @@ public sealed partial class SessionSpellCaster
     /// slot-0 spell needs more intelligence (0x4B1750: the constant <see cref="SpellBookRules.MinimumIntelligence"/> for every
     /// spell) than the hero has (stat 4). The original tells a PC message 13 (the host's).
     /// </summary>
-    public bool ScrollTooHard(string item) =>
-        Item(item) is { Type: SessionItemSpells.ScrollType } && (HeroStat(CharacterStat.Intelligence) ?? 0) < SpellBookRules.MinimumIntelligence;
+    public bool ScrollTooHard(string item) => Item(item) is { Type: SessionItemSpells.ScrollType, Holder: Hero } &&
+        (HeroStat(CharacterStat.Intelligence) ?? 0) < SpellBookRules.MinimumIntelligence;
 
     /// <summary>
-    /// ARC-MAGIC-022: the use's spending of a used food or scroll (0x4574D0, then the destruction 0x43CCA0): the source of every run
-    /// whose parent or source is the item is cleared, then the session deletes it (<see cref="GameSessionOwner.DestroyUsedItem"/>).
-    /// False when nothing was deleted.
+    /// ARC-MAGIC-022: the use's spending of a used food or scroll (0x4574D0, then the destruction 0x43CCA0): the session deletes it
+    /// (<see cref="GameSessionOwner.DestroyUsedItem"/>), then the source of every run whose parent or source is the item is cleared
+    /// (the original clears first; nothing reads the runs in between). Nothing is cleared when the deletion is refused. False when
+    /// nothing was deleted.
     /// </summary>
     public bool SpendUsedItem(string item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        if (_owner.DestroyUsedItem(_owner.Version, item).Disposition != GameSessionDisposition.Changed) return false;
         Act(new(SessionSpellRunActionKind.ClearSources, Object: item));
-        return _owner.DestroyUsedItem(_owner.Version, item).Disposition == GameSessionDisposition.Changed;
+        return true;
     }
 
     // The map with the items a critter of it holds (ARC-MAGIC-020): an item is an object in its holder's inventory, at its holder's
@@ -248,7 +250,8 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     /// ARC-MAGIC-022: the spell path of the hero's use of <paramref name="item"/> on <paramref name="target"/> (0x462CC0, single
     /// player). The host runs the use's earlier steps first: the scroll test (<see cref="SessionSpellCaster.ScrollTooHard"/>), the
     /// targeting cursor of an item that needs a target and has none, a trap device's own use, and the use script, which may stop
-    /// the use. Taken when the item's charges are not 0 or it has the magical flag; no action points are charged here. In order:
+    /// the use. Taken when the item's charges are not 0 or it has the magical flag; the use charges no action points (each casting
+    /// goal charges its own 4 in a turn-based round, <see cref="SessionSpellCaster.StartGoal"/>). In order:
     /// the slot-0 cast (0x4605E0 → 0x57CE30): nothing for an empty slot or a record with item triggers; otherwise the activation
     /// (0x57BC70, <see cref="SpellUiRules.Activate"/> with the holder as caster, no Shift or Alt) casts at the holder's tile, or,
     /// when it opens the cursor or its action points refuse, the cast goes to the use's target (0x57C110,
@@ -272,15 +275,18 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
     private (SessionItemUseCast, SpellCastAttempt?, SpellCastGoalStart?) CastSlotZero(SessionItemSpells item, string? target)
     {
         // An empty slot 0 reads the record before the table in the original (no installed item on the spell path has one): nothing.
-        if (item.Spells[0] is var value && (value == ItemSpellTriggerRules.NoSpell || (value & ItemSpellTriggerRules.SpellMask) >= SpellPaymentRules.Spells))
+        // The callback looks the value up unmasked (0x45A030), as the executor's trigger read does.
+        if (item.Spells.Count == 0 || item.Spells[0] is var value && (value == ItemSpellTriggerRules.NoSpell || value is < 0 or >= SpellPaymentRules.Spells))
             return (SessionItemUseCast.NoSpell, null, null);
-        var spell = value & ItemSpellTriggerRules.SpellMask;
+        var spell = value;
         if (_caster.SpellRecord(spell) is not { } record) return (SessionItemUseCast.NoSpell, null, null);
         if (record.Data.ItemTriggers != 0) return (SessionItemUseCast.Triggered, null, null);
         var begin = record.Areas.Length > 0 ? record.Areas[0].Targets : 0;
-        if (SpellUiRules.TargetsInventory(begin)) return (SessionItemUseCast.InventoryTarget, null, null);
         var life = _caster.HeroLife;
-        var activation = SpellUiRules.Activate(life is { IsDead: false, IsUnconscious: false }, record.Data.Enabled, begin, record.Resist.Aggressive,
+        var active = life is { IsDead: false, IsUnconscious: false };
+        // The activation's early refusals come before its inventory branch (IU4).
+        if (active && record.Data.Enabled && SpellUiRules.TargetsInventory(begin)) return (SessionItemUseCast.InventoryTarget, null, null);
+        var activation = SpellUiRules.Activate(active, record.Data.Enabled, begin, record.Resist.Aggressive,
             altHeld: false, shiftHeld: false, actionPointsAllow: true);
         SessionItemUseCast cast;
         SpellCastAttempt attempt;

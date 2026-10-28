@@ -544,15 +544,15 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     /// <summary>
-    /// The spell UI's cast at a picked target (0x57C110, ARC-MAGIC-015) by <paramref name="caster"/>, which is the run's source and
-    /// parent: nothing when the caster is missing, dead or unconscious; a critter caster must afford the spell's <c>Cost:</c> (0x4508A0:
+    /// The spell UI's cast at a picked target (0x57C110, ARC-MAGIC-015) by <paramref name="caster"/>, which is the run's parent and,
+    /// without <paramref name="item"/>, its source: nothing when the caster is missing, dead or unconscious; a critter caster must afford the spell's <c>Cost:</c> (0x4508A0:
     /// <see cref="SpellCostRules.CheckCost"/>, the payment asked without applying), else spell.mes 600; the invocation (0x455A20) takes
     /// the target object, or else the tile; no line of fire (0x456BC0) shows spell.mes 604; then the run starts (0x455AC0: the
     /// invocation check, a slot and the run), whose casting goal is the host's (<see cref="StartGoal"/>).
-    /// </summary>
     /// ARC-MAGIC-022: with <paramref name="item"/> (an item the host knows that <paramref name="caster"/> holds) the item is the
     /// invocation's source and the caster its parent, with the power the caster draws from it, as the item use's slot-0 cast sets the
     /// activation's source (0x57BC70: an item's holder is the caster); an item source skips the cost check.
+    /// </summary>
     [OriginalFunction(0x57C110, OriginalFunctionScope.Partial)]
     public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile, string? item = null)
     {
