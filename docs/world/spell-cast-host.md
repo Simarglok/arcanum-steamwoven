@@ -469,7 +469,7 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   (0x557370), the inventory window modes' extras of the still pointer (HK23),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.
-- NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
+- The missile's light and sound (an NPC caster's missile flies since ARC-WORLD-105, its facing turn is the AI host's since ARC-WORLD-102).
 - Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
   (EC9, EC11, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
