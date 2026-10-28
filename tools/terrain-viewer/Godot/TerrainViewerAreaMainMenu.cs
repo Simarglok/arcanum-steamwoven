@@ -76,7 +76,8 @@ public partial class TerrainViewerApp
     private void OpenMainMenu(AreaMainMenuTexts texts, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false)
     {
         // A menu waiting under the save list (or for its window to open) is not replaced.
-        if (!QuickKeysActive || MainMenuOpen || WorldModal || _mainMenu is not null) return;
+        // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
+        if (!QuickKeysActive || MainMenuOpen || (WorldModal && !HeroDeathCovering) || _mainMenu is not null) return;
         if (_mainMenuPanel is null)
         {
             _mainMenuPanel = new AreaMainMenuPanel(); AddChild(_mainMenuPanel);
@@ -158,13 +159,15 @@ public partial class TerrainViewerApp
         {
             _sceneFlow = null;
             GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
+            // ARC-UI-026: a death's black screen gives way to the failure.
+            HeroDeathSceneReady();
         }
     }
 
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
     private void ContinueSceneFlow(SceneFlowRequest flow)
     {
-        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); return; }
+        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); HeroDeathSceneReady(); return; }
         var texts = MainMenuTexts(_arguments);
         string? refused = null;
         if (flow.Kind == SceneFlowKind.NewGame)
@@ -181,6 +184,8 @@ public partial class TerrainViewerApp
         // A quit, or a new game the start scene refused: the main menu, opened again (its root Escape exits the game, MM6).
         OpenMainMenu(texts, AreaMenuWindow.Main, reopened: true);
         if (_mainMenu is not null && refused is not null) { _mainMenu.Notice = refused; RenderMainMenu(); }
+        // ARC-UI-026: after a death the main menu fades in from black (PD8).
+        HeroDeathSceneReady();
     }
 
     private void RenderMainMenu()
