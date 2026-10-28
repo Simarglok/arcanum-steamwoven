@@ -121,7 +121,7 @@ public readonly record struct SessionAmmoRecord(string Entity, int AmmoType, int
 
 /// <summary>
 /// ARC-WORLD-071: the coins of an NPC's gold pile the session tracks: a seed pile whose coins it changed, or a pile it created in the
-/// NPC's list (a <c>made:n</c> item of the gold prototype). Its coins are 0 or more (a move that empties a pile destroys it, NT1).
+/// NPC's list (a <c>made:n</c> item of the gold prototype). Its coins are 1 or more (a move that empties a pile destroys it, NT1).
 /// </summary>
 public readonly record struct SessionGoldRecord(string Entity, int Quantity);
 

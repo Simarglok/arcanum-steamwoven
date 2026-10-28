@@ -1676,7 +1676,7 @@ public sealed partial class GameSessionOwner : IDisposable
         foreach (var item in saved.Kit)
         {
             if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.KitAdmitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            while (next < limits.MaxPcItems + destroyed.Count &&
+            while (next < limits.MaxPcItems + destroyed.Count + placedKit.Count &&
                 (destroyed.Contains(HeroDomain.KitEntity(next)) || placedKit.Contains(HeroDomain.KitEntity(next)))) next++;
             if (item.Entity != HeroDomain.KitEntity(next++)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);

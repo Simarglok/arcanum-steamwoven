@@ -113,9 +113,22 @@ public sealed class NpcTransferStateTests
         // A given record whose item is in no NPC's list (kit:2 is still in the hero's kit).
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(text.Replace("\"given\":[{\"entity\":\"kit:1\",\"origin\":0}]",
             "\"given\":[{\"entity\":\"kit:1\",\"origin\":0},{\"entity\":\"kit:2\",\"origin\":0}]")), RestoreOptions()).Failure);
-        // A given kit item past the kit's numbers, though in an NPC's list.
-        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(text.Replace("\"entity\":\"kit:1\",\"origin\":0}]", "\"entity\":\"kit:9\",\"origin\":0}]")
-            .Replace("{\"entity\":\"kit:1\",\"type\"", "{\"entity\":\"kit:9\",\"type\"")), RestoreOptions()).Failure);
+        // A given kit item past the kit's numbers, though in an NPC's list: kit:3 given leaves the kit [kit:1, kit:2] in order, so only
+        // the number check refuses kit:5.
+        using (var other = Hero())
+        {
+            Changed(other.GiveItemToNpc(other.Version, "virgil", "kit:3", Accept), "kit:3");
+            var past = GameSessionSnapshotCodec.Encode(other.Capture()).Replace("\"entity\":\"kit:3\"", "\"entity\":\"kit:5\"");
+            Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(past), RestoreOptions()).Failure);
+            // A given made item and an unordered given list.
+            Changed(other.GiveItemToNpc(other.Version, "virgil", "kit:2", Accept), "kit:2");
+            var two = GameSessionSnapshotCodec.Encode(other.Capture());
+            StringAssert.Contains(two, "\"given\":[{\"entity\":\"kit:2\",\"origin\":0},{\"entity\":\"kit:3\",\"origin\":0}]");
+            Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(two.Replace(
+                "{\"entity\":\"kit:2\",\"origin\":0},{\"entity\":\"kit:3\",\"origin\":0}", "{\"entity\":\"kit:3\",\"origin\":0},{\"entity\":\"kit:2\",\"origin\":0}")).Failure);
+            Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(two.Replace("\"entity\":\"kit:3\"", "\"entity\":\"made:7\"")),
+                RestoreOptions()).Failure, "a made item is never a given record");
+        }
 
         // Taking it back from the living NPC returns it to the kit at its number's place.
         Changed(owner.TakeItemFromNpc(owner.Version, "virgil", "kit:1", Accept), "kit:1");
@@ -224,9 +237,55 @@ public sealed class NpcTransferStateTests
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.GiveAmmoToNpc(owner.Version, "merchant", "made:3", 1, Bullets, Accept).Failure, "not the hero's stack");
 
         // The ammunition records come back after a save.
-        var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
         Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
         Assert.AreEqual((5, 30), (restored.QueryNpcGold("merchant"), restored.QueryAmmo("made:3")!.Value.Units));
-        restored.Dispose();
+    }
+
+    [TestMethod]
+    public void A_given_ammunition_item_merges_into_the_npcs_stack()
+    {
+        using var owner = Hero();
+        var npcStack = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (1, 30)).Item!;
+        Changed(owner.TakeAmmoFromNpc(owner.Version, "virgil", npcStack, 10, Bullets, Accept), "made:2");
+        Changed(owner.GiveItemToNpc(owner.Version, "virgil", "made:2", Accept));
+        Assert.AreEqual((30, false), (owner.QueryAmmo(npcStack)!.Value.Units, owner.QueryHeroAmmo().Any()), "the NPC's stack grows by the moved stack");
+        Assert.IsTrue(owner.IsItemDestroyed("made:2"), "the moved stack is deleted (NT3)");
+        Assert.AreEqual(0, owner.QueryGivenItems().Count, "a made item is not recorded as given");
+    }
+
+    [TestMethod]
+    public void Given_kit_items_do_not_count_against_the_heros_item_budget_on_restore()
+    {
+        using var owner = Hero();
+        Changed(owner.GiveItemToNpc(owner.Version, "virgil", "kit:1", Accept));
+        Changed(owner.GiveItemToNpc(owner.Version, "virgil", "kit:2", Accept));
+        // The hero holds one item (kit:3); the kit order skips both given numbers within a budget of one.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions(new GameSessionLimits(maxPcItems: 1)));
+        CollectionAssert.AreEqual(new[] { "kit:3" }, restored.QueryHeroKit().Select(item => item.Entity).ToArray());
+    }
+
+    [TestMethod]
+    public void Pile_scripts_coin_overflow_and_an_emptied_scripted_stack()
+    {
+        // The merchant's pile has an insert-item script (the event the original fires on the source pile first); an archer holds a seed
+        // stack with a remove-item script, which an emptying move deletes without that event (AM4, NT1); a hoarder's pile is nearly full.
+        var seed = Seed();
+        var custom = seed with
+        {
+            Holders = [.. seed.Holders, new("archer", SessionHolderKind.Npc, false, false, [], ["arrows"]),
+                new("hoarder", SessionHolderKind.Npc, false, false, [], ["hoard"])],
+            Items = [.. seed.Items.Select(item => item.Entity == "coins" ? item with { Facts = Facts(SessionItemType.Gold, 3200, quantity: 5, scripts: SessionScriptPoint.InsertItem) } : item),
+                new SessionSeedItem("arrows", Facts(SessionItemType.Ammo, 3300, quantity: 30, scripts: SessionScriptPoint.RemoveItem) with { AmmoType = 0 }, null),
+                new SessionSeedItem("hoard", Facts(SessionItemType.Gold, 3200, quantity: int.MaxValue - 5), null)],
+        };
+        using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, custom).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.TakeGoldFromNpc(owner.Version, "merchant", 1).Failure);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.TakeGoldFromNpc(owner.Version, "hoarder", int.MaxValue - 5).Failure, "the hero's gold past 32 bits");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.GiveGoldToNpc(owner.Version, "hoarder", 6, GoldPile, Accept).Failure, "the pile past 32 bits");
+        Assert.AreEqual((0L, 385), (owner.Version.Revision, owner.QueryGold()));
+        Changed(owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 30, Bullets with { Prototype = 7058 }, Accept), "made:1");
+        Assert.IsTrue(owner.IsItemDestroyed("arrows"));
     }
 }

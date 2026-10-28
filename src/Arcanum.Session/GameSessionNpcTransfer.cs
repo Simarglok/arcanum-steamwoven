@@ -210,8 +210,7 @@ public sealed partial class GameSessionOwner
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
-        // A stack that goes at its last unit leaves the NPC's list: a seed stack with a remove-item script is refused, as a take of it is.
-        if (source.Units == count && SeedListing(npc, stack)?.Facts.HasScript(SessionScriptPoint.RemoveItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // A stack that goes at its last unit is deleted (0x43CCA0, AM4), not removed: no remove-item event, as for an emptied gold pile (NT1).
         var into = HeroStackOfType(source.AmmoType);
         return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
     }

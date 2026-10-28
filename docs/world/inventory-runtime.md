@@ -450,7 +450,8 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   32) refuses a given item and a new pile or stack moved into it (`HolderScriptUnsupported`; an existing pile or stack grows without it, NT1), as does a taken item whose origin seed shows a remove-item, insert-item or (worn)
   wield-off script (`ItemScriptUnsupported`).
 - **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
-  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack, more leave the rest; the destination's
+  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
+  script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
   first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
   host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
 - **State.** The inventory section's `given` list (kit or taken items in NPCs' lists, by entity, origin 0 for a kit item) and `piles` list
