@@ -385,3 +385,24 @@ No anomaly. The session's limits (the tile's list order is the session's own, th
 no stack merges in a pile, the map data's own junk piles take nothing, the items' inventory sizes are known only from an attached
 seed, the project bounds of 4,096 piles and 8,192 items in them) are listed with the runtime's
 [not-ready items](../../world/inventory-runtime.md#junk-piles-arc-world-063).
+
+## Body armour art (ARC-WORLD-112)
+
+Source: [equipment runtime](../../world/equipment-runtime.md#body-armour-art-arc-world-112). Question: which art does a critter show for
+the body armour it wears, and which slots change it? Read on 2026-10-28 by this task alone (one reading, F1) in the retail 1.0.7.4
+`Arcanum.exe` (SHA-256 `9bd80511…8d52`): the body-armour art 0x465AE0 (0x465AE0..0x465B92), the wield-on and wield-off art hooks
+0x4677B0 (0x4677B0..0x467853) and 0x467CB0 (0x467CB0..0x467D55), the art id helpers 0x502700, 0x502D80, 0x502DB0,
+0x504030, 0x504060 and 0x5044F0, and the body-armour part of the wear check 0x464D20 (0x464E65..0x464EC7). Every direct branch stays
+inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BA1 | wield-on hook 0x4677B0 (called by the insert 0x466640 at 0x466929), wield-off hook 0x467CB0 | Only the worn locations change the body art: 1004 and 1005 (weapon, shield) set the art the weapon function 0x465020 builds; 1006 (body armour) sets the art 0x465AE0 builds, with the item on wield-on and with no item (two zero words) on wield-off, through the object art setter 0x43EB30 on the critter, and only when 0x465AE0 succeeds. Helmet, gauntlets, boots, rings and medallion (1000..1003, 1007, 1008) leave the art alone. Then the wield-on hook runs 0x4CB7D0 and the wield-off hook 0x4CBFC0, and both the light recalculation 0x467E80 and 0x441980. | Original |
+| BA2 | body-armour art 0x465AE0 | With no item: the critter's current art (field 1) with armour part 0 (0x504060) and the palette (0x502DB0) of the critter's base art (field 0x18, read by 0x502D80); returns 1. With an item: the current art with the armour part of the item's field 0x5F (the use-art fragment, decoded by 0x5044F0); when the art's armour part read back (0x504030) differs from that part it returns 0 and writes nothing; otherwise the palette of the item's use art is set and it returns 1. | Original |
+| BA3 | 0x5044F0 | An item art id (type 6, bits 28..31 by 0x502700) gives bits 6..9 (arithmetic shift, masked to 4 bits); another type gives 0. | Original |
+| BA4 | 0x504060, 0x504030 | The armour part is bits 20..23 of a critter art id (type 2) and bits 20..22 of a monster art id (type 12); a part of 9 or more (type 2) or 8 or more (type 12) logs an error and sets 0. Another type is returned unchanged and reads 0, so a unique NPC (type 13) takes only part 0. | Original |
+| BA5 | 0x502D80, 0x502DB0 | The palette is bits 4..5 of an art id; art types 9 and 11 have none (read 0, written unchanged); a palette of 4 or more logs an error and sets 0. | Original |
+| BA6 | wear check 0x464D20 (0x464E65..0x464EC7) | After the size, gender and unique-NPC tests of the body-armour slot (EQ1) the check builds 0x465AE0 for the item and refuses with 9 (not wieldable) when it fails or when the art it names does not exist (0x502220 non-zero). | Original (the session's art check is the host's, as before) |
+
+No anomaly. The file the art id names (race and gender body; plate parts 4 and 6 drawn with the sexless art, elf as human and halfling
+as dwarf) follows the art names already recorded (N1, [whole-map art gaps](../whole-map-art-gaps.md)).
