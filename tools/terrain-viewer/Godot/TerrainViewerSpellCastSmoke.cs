@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
     // tile, after one leg of the line's steps; when the first spell has no missile the hero also casts (learning it if needed) the first
     // critter spell that has one (its damage, if any, is not asserted). ARC-MAGIC-019: a spell without a missile is clicked twice
     // while its goal plays, the second cast queued beneath the first and played once it ends. A right click closes the cursor. The NPC and the
-    // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
+    // hero's fatigue are restored for the later stages; the learned spell, the experience, the level and (ARC-UI-016) the kit weapon's spent spell charge stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
     // ARC-UI-016: then the weapon's spell pane. No kit weapon carries castable spells, so the stage lends the hero's wielded kit weapon
     // the spell facts of the first weapon prototype (in number order, from the data) that has a castable critter spell needing a
@@ -256,7 +256,7 @@ public partial class TerrainViewerApp
                 && !SpellUiRules.TargetsInventory(r.Areas[0].Targets) && (r.Areas[0].Targets & SpellUiRules.DamagedBit) == 0;
             var lent = LentWeaponSpells(wielded.Entity, Castable);
             Require(lent is not null, "a weapon prototype with a castable critter spell: " + _lentItemSpellsDetail);
-            _lentItemSpellsForSelfTest = lent;
+            _lentItemSpellsForSelfTest = lent; _weaponPaneCache = null;
             try
             {
                 var slot = Enumerable.Range(0, lent!.Spells.Count).First(i => Castable(lent.Spells[i]));
@@ -315,7 +315,16 @@ public partial class TerrainViewerApp
                     + $"charges={charges}->{left} frames={frames} log={string.Join(",", log.Select(e => e.Kind))}");
                 return new { Lent = _lentItemSpellsDetail, Slot = slot, Spell = spellNumber, Charges = $"{charges}->{left}", Frames = frames };
             }
-            finally { _lentItemSpellsForSelfTest = null; _itemPaneItem = null; }
+            finally
+            {
+                // The later stages wear and take off the kit weapon without a trigger host: no run keeps it as its source (its saved
+                // spent charge stays, and without the lent facts it shows no weapon button).
+                if (SpellCasterNow() is { } caster)
+                    foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Source?.Id == wielded.Entity).Select(r => r.Id).ToArray())
+                        caster.Act(new(SessionSpellRunActionKind.Free, run));
+                Require(session.QuerySpellRuns().Runs.All(r => r.Source?.Id != wielded.Entity), "no run keeps the weapon as its source");
+                _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;
+            }
         }
 
         try

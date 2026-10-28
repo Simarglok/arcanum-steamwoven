@@ -37,7 +37,8 @@ public partial class TerrainViewerApp
     private SpellCastGoal? _spellGoal;
     // ARC-UI-016: the item whose spell pane is open (bar mode 8), or null for the spell list.
     private string? _itemPaneItem;
-    private int _itemPaneActivations;
+    // The weapon pane last built and what it was built from (the session's revision, the weapon, open, the spell data).
+    private ((GameSessionOwner, long, string, bool, object?) Stamp, AreaWeaponSpellPane? Pane)? _weaponPaneCache;
     // ARC-MAGIC-019: the casts queued beneath the playing goal, first cast first (the original inserts each at the bottom of the
     // caster's goal stack, 0x44D9B0).
     private readonly List<SpellCastGoal> _spellQueue = [];
@@ -96,11 +97,26 @@ public partial class TerrainViewerApp
         CancelSpellCast("the map changed");
         ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
-            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions);
+            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds);
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents, HeroItemSpells);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
         GD.Print($"ARC-MAGIC-015 cast-host map={area.Snapshot.RuntimeMap} records={records.Length}");
         return _spellCaster;
+    }
+
+    // ARC-UI-016: the entities the hero holds now (listed or worn), once per session revision: a taken row is no map object then.
+    private (GameSessionOwner Owner, long Revision, HashSet<string> Held)? _heroHeld;
+
+    private bool HeroHolds(string id)
+    {
+        if (_areaSession is not { } owner) return false;
+        if (_heroHeld is not { } known || !ReferenceEquals(known.Owner, owner) || known.Revision != owner.Version.Revision)
+        {
+            var held = owner.QueryPcInventory().Select(item => item.Entity).Concat(owner.QueryEquipment().Worn.Select(worn => worn.Entity))
+                .ToHashSet(StringComparer.Ordinal);
+            _heroHeld = known = (owner, owner.Version.Revision, held);
+        }
+        return known.Held.Contains(id);
     }
 
     // ARC-UI-016: the cast host's item lookup: the spell facts of an item the hero holds, kit or taken.
@@ -169,6 +185,8 @@ public partial class TerrainViewerApp
     /// closes the cursor and ends the goal.</summary>
     private void ProcessAreaSpells()
     {
+        // ARC-UI-016: the pane leaves the weapon's spells when the weapon leaves its slot, shown or not (0x5570D0 on the removal).
+        if (_itemPaneItem is not null && _itemPaneItem != HeroWeapon()) WeaponPaneNow();
         if (_spellPane?.Shown == true)
         {
             if (!SpellMapActive || _areaSession?.QueryHero() is null) _spellPane.HidePane();
@@ -299,8 +317,12 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-016 item-pane-close item={_itemPaneItem} weapon={weapon ?? "none"}");
             _itemPaneItem = null;
         }
-        if (weapon is null || SpellCasterNow() is not { } caster) return null;
-        return AreaSpellCasting.WeaponPane(caster.ItemPane(weapon), _itemPaneItem == weapon, _spellData?.Data);
+        if (weapon is null || _areaSession is not { } owner || SpellCasterNow() is not { } caster) return null;
+        var stamp = (owner, owner.Version.Revision, weapon, _itemPaneItem == weapon, (object?)_spellData?.Data);
+        if (_weaponPaneCache is { } cached && cached.Stamp.Equals(stamp)) return cached.Pane;
+        var pane = AreaSpellCasting.WeaponPane(caster.ItemPane(weapon), _itemPaneItem == weapon, _spellData?.Data);
+        _weaponPaneCache = (stamp, pane);
+        return pane;
     }
 
     /// <summary>The weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
@@ -323,7 +345,6 @@ public partial class TerrainViewerApp
         var activates = ItemSpellPaneRules.CanActivate(spell, caster.ItemTriggered);
         GD.Print($"ARC-UI-016 item-activate item={item} slot={slot} spell={spell} activates={activates}");
         if (!activates) return;
-        _itemPaneActivations++;
         ActivateSpell(spell, item);
     }
 

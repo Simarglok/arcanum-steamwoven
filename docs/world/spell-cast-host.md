@@ -276,15 +276,18 @@ The original's interface bar has a weapon button and a mode 8 that shows the wie
 item facts come from the cast host (`SessionSpellCaster.ItemPane`), the viewer draws them in its spell pane:
 
 1. **The items.** Since ARC-UI-016 the viewer's cast host knows the hero's items (its item lookup: a kit item's prototype fields
-   from the hero load, a taken item's from its object row, listed or worn), so an item can be the source of a cast
-   (`CastAt(..., item)`, ARC-MAGIC-022) and the item executors find it.
+   from the hero load, a taken item's from its object row, listed or worn; made items are not covered yet), so an item can be the
+   source of a cast (`CastAt(..., item)`, ARC-MAGIC-022) and the item executors find it. A row of the shown map whose item the hero
+   holds is no map object then (`AreaSpellCastMap`'s `held`): the item stands in the hero's inventory at the hero's location.
 2. **The weapon button** (`WeaponButtonShown`, IP1). It shows in the pane's header while the wielded weapon (slot 1004) has charges
    (not 0, unlimited included) or the magical flag and a complexity above 0; technological weapons never show it. A press opens the
    weapon's spell pane in place of the spell list (IP2, the bar's mode 8), a second press returns to the list.
 3. **The weapon's pane** (`PaneButtons`, `Gauge`, IP3, IP4). An identified weapon with a complexity above 0 shows one button per
    filled spell slot whose record is not technological, in slot order; a slot whose record has item triggers shows disabled (its
    press does nothing, IP5). The header shows the charges, "unlimited" or, for an unidentified weapon, nothing known (the pane then
-   has no buttons). Identification is the item's stored flag: the session does not change it yet.
+   has no buttons). Identification is the item's stored flag: the session does not change it yet, and no installed weapon prototype
+   is identified (census), so with the installed data the pane shows no slot buttons until identification is modelled; the cast
+   from a slot is exercised by the smoke's lent, identified facts.
 4. **The activation** (IP5, `CanActivate` for 0x57C040). A slot without item triggers is activated as a spell of the pane is (SU1–SU3)
    with the hero, the weapon's holder, as the caster and the weapon as the source: the targeting cursor keeps the weapon, and the
    cast at the picked target (`CastAt` with the item) skips the hero's cost check and pays from the weapon's charges (the
