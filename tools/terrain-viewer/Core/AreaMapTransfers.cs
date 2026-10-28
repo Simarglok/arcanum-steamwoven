@@ -91,6 +91,8 @@ public sealed class AreaMapTransfers
     /// <summary>ARC-SCRIPT-017: the tiles and sectors with a script.</summary>
     public IReadOnlyCollection<AreaStepCell> ScriptTiles => _tiles.Keys;
     public IReadOnlyCollection<WorldSectorCoordinate> ScriptSectors => _sectors.Keys;
+    /// <summary>ARC-WORLD-081: the script a sector runs on entry (its own file's or its template's), or null.</summary>
+    public MapPlacedScript? SectorScript(WorldSectorCoordinate sector) => _sectors.GetValueOrDefault(sector);
 
     /// <summary>ARC-SCRIPT-015: the guards a scripted use runs its script for (a conditional path, a computed destination);
     /// any other guard (another object moved, a trap, a container's loot screen, an object a click cannot pick) keeps the

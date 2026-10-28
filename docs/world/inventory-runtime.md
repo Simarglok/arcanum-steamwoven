@@ -289,6 +289,12 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.
+- **Created items** (ARC-WORLD-081, [template sector plants](template-sector-plants-runtime.md)): an item a script's create object adds
+  to the ground (`CreateGroundItem`, the plant generator's herbs) is a placed item of source `created`: a new `made:n` entity numbered with
+  the made items, with its prototype's weight facts and complexity, on the tile the create action draws next to its object. It needs no
+  hero, schedules no decay (ID9) and has a budget of its own (`MaxCreatedItems`, 8,192) outside the hero's; picked up it joins the made
+  items, which needs room in the hero's budget. Under Steamwoven no item is created next to an object with 6 created items within 3 tiles
+  (`CreatedItemRules`).
 - **Deletion**: a placed item the durability rules delete leaves the store.
 - **Seeds**: an attached seed must still list a placed world item of its map with its saved kind and no seed may list a placed kit
   or made item (`InventoryMismatch`), as for the hero's lists.

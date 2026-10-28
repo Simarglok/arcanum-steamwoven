@@ -186,7 +186,7 @@ public partial class TerrainViewerApp
             && ReferenceEquals(cached.Content, content) && ReferenceEquals(cached.Inventory, _inventoryHost)) return cached.Host;
         // ARC-WORLD-081: the world actions read the live actor, the session's removed objects, the module's prototypes and the shown map.
         var world = new AreaScriptWorld(
-            () => _worldActor.Session is AreaGridSession grid ? LiveCell(grid) : null,
+            () => _plantSmokePcCell ?? (_worldActor.Session is AreaGridSession grid ? LiveCell(grid) : null),
             row => _areaSession is { } now && ObjectTargets()?.Gone(now).Contains(row.Key) == true,
             number => PrototypeItems()?.ScriptItem(number),
             AreaDropMapNow);
