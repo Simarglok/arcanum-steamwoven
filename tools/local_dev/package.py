@@ -1,10 +1,11 @@
-"""ARC-DEV-047: the packaged alpha build for a player (`./arcanum package mac`).
+"""ARC-DEV-047/ARC-DEV-048: the packaged alpha build for a player (`./arcanum package mac|win`).
 
 Builds the game (the terrain viewer project, which starts at the launcher and the original main menu without inputs) from
 one commit of origin/main, never from the working tree: `git fetch origin main`, `git archive` of that commit into a fresh
 temporary folder, a locked restore and build, a Godot import and a release export with the package preset (its own player
 name and user folder, ad-hoc signature), then checks of the bundle and, when the game folder is found, a native smoke of
-the launcher and the main menu on the exported app. Only a build that passed every step replaces
+the launcher and the main menu on the exported app (macOS; the Windows build cannot start on the Mac, so it gets file checks
+and is zipped). Only a build that passed every step replaces
 `artifacts/packages/<platform>/` in the main checkout; the build before it is kept in `previous/`. The developer build
 registry (artifacts/world-builds) and the checkout's own files are not touched. Docs: docs/workflow/packaging.md.
 """
@@ -17,10 +18,12 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
 from typing import Callable, Sequence
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path("tools/terrain-viewer/Godot")
@@ -43,13 +46,20 @@ class Platform:
     key: str
     preset: str
     folder: str
-    product: str
+    product: str  # what the export writes: the .app bundle, or the folder of the .exe
     executable: str  # inside the product
+    installed: str  # what lands in artifacts/packages/<folder>: the bundle itself, or the zip of the folder
+
+    def export_target(self, product: Path) -> Path:
+        """The path given to --export-release: the bundle on macOS, the .exe (beside it the .pck and data folder) on Windows."""
+        return product if self.key == "mac" else product / self.executable
 
 
 PLATFORMS = {
-    "mac": Platform("mac", "macOS package", "macos", f"{PLAYER_NAME}.app", f"Contents/MacOS/{PLAYER_NAME}"),
+    "mac": Platform("mac", "macOS package", "macos", f"{PLAYER_NAME}.app", f"Contents/MacOS/{PLAYER_NAME}", f"{PLAYER_NAME}.app"),
+    "win": Platform("win", "Windows package", "windows", PLAYER_NAME, f"{PLAYER_NAME}.exe", f"{PLAYER_NAME} Windows x64.zip"),
 }
+WINDOWS_ASSEMBLIES = ("Arcanum.TerrainViewer.dll", "GodotSharp.dll", "coreclr.dll", "hostfxr.dll")
 
 
 class PackageError(Exception):
@@ -96,11 +106,12 @@ def steps(platform: Platform, source: Path, product: Path, environment: dict[str
     """The build steps: (log name, command), run in `source`."""
     dotnet = str(dotnet_root(environment) / "dotnet")
     project = str(source / PROJECT)
+    target = platform.export_target(product)
     return [
         ("restore", [dotnet, "restore", str(source / SOLUTION), "--locked-mode"]),
         ("build", [dotnet, "build", str(source / SOLUTION), "--no-restore"]),
         ("import", [str(GODOT), "--headless", "--path", project, "--import"]),
-        ("export", [str(GODOT), "--verbose", "--headless", "--path", project, "--export-release", platform.preset, str(product)]),
+        ("export", [str(GODOT), "--verbose", "--headless", "--path", project, "--export-release", platform.preset, str(target)]),
     ]
 
 
@@ -129,6 +140,44 @@ def check_smoke_log(text: str, commit: str) -> None:
     for needed in SMOKE_PASS:
         if needed not in text:
             raise PackageError(f"the native smoke did not print {needed!r}")
+
+
+def check_windows(product: Path) -> None:
+    """The Windows export, which cannot start on the Mac, by its files: an x86-64 GUI executable carrying the player name in
+    its version resource, the .pck of the package feature beside it and the .NET data folder with the game's assemblies."""
+    executable = product / f"{PLAYER_NAME}.exe"
+    try:
+        head = executable.read_bytes()
+    except OSError as error:
+        raise PackageError(f"the export has no {executable.name}") from error
+    offset = struct.unpack_from("<I", head, 0x3C)[0] if len(head) >= 0x40 and head[:2] == b"MZ" else -1
+    if offset < 0 or head[offset:offset + 4] != b"PE\0\0":
+        raise PackageError(f"{executable.name} is not a Windows executable")
+    machine = struct.unpack_from("<H", head, offset + 4)[0]
+    magic, subsystem = struct.unpack_from("<H", head, offset + 24)[0], struct.unpack_from("<H", head, offset + 24 + 68)[0]
+    if machine != 0x8664 or magic != 0x20B or subsystem != 2:
+        raise PackageError(f"{executable.name} is not an x86-64 GUI executable (machine {machine:#x}, subsystem {subsystem})")
+    version = head.find("VS_VERSION_INFO".encode("utf-16-le"))
+    if version < 0 or PLAYER_NAME.encode("utf-16-le") not in head[version:version + 4096]:
+        raise PackageError(f"{executable.name} does not carry the product name {PLAYER_NAME!r} (modify_resources)")
+    pck = product / f"{PLAYER_NAME}.pck"
+    if not pck.is_file() or pck.open("rb").read(4) != b"GDPC":
+        raise PackageError(f"the export has no Godot pack {pck.name}")
+    if FEATURE.encode() not in pck.read_bytes():
+        raise PackageError(f"{pck.name} was not exported with the feature {FEATURE}")
+    data = [path for path in product.glob("data_*_windows_x86_64") if path.is_dir()]
+    if len(data) != 1:
+        raise PackageError(f"the export has {len(data)} .NET data folders, not one data_*_windows_x86_64")
+    missing = [name for name in WINDOWS_ASSEMBLIES if not any(data[0].rglob(name))]
+    if missing:
+        raise PackageError(f"{data[0].name} lacks {', '.join(missing)}")
+
+
+def zip_folder(folder: Path, archive: Path) -> None:
+    """The folder as one zip (its name the zip's top folder), the file a player copies to the Windows PC."""
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as handle:
+        for path in sorted(folder.rglob("*")):
+            handle.write(path, Path(folder.name) / path.relative_to(folder))
 
 
 Runner = Callable[[Sequence[str], Path, dict[str, str], Path, float | None], int]
@@ -184,14 +233,21 @@ def game_folder() -> Path | None:
     return None
 
 
+def remove(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
 def install(built: Path, destination: Path, commit: str, date: str, smoke: str, instruction: Path) -> Path:
-    """Replace destination/<product> by `built`; the build it replaces moves to destination/previous/ with its BUILD.txt and
+    """Replace destination/<product> (a bundle or a zip) by `built`; the build it replaces moves to destination/previous/ with its BUILD.txt and
     README.md. The new build is first moved next to its place (the copy across volumes, the step that can fail on a full
     disk), so the current build is rotated only once the new one is complete on the same volume."""
     destination.mkdir(parents=True, exist_ok=True)
     incoming = destination / f".incoming-{built.name}"
     if incoming.exists():
-        shutil.rmtree(incoming)
+        remove(incoming)
     shutil.move(str(built), str(incoming))
     current = destination / built.name
     if current.exists():
@@ -233,13 +289,15 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
         source = work / "source"
         extract(root, commit, source)
         product = work / "out" / platform.product
-        product.parent.mkdir()
+        platform.export_target(product).parent.mkdir(parents=True)  # Godot refuses a Windows export path whose folder is missing
         for name, command in steps(platform, source, product, environment):
             text = step(name, command, source, environment, logs, runner)
             if name == "export":
                 check_export_log(text, environment)
         executable = product / platform.executable
-        if not os.access(executable, os.X_OK):
+        if platform.key == "win":
+            check_windows(product)
+        elif not os.access(executable, os.X_OK):
             raise PackageError(f"the export has no executable {platform.executable}")
         if platform.key == "mac":
             step("codesign-verify", ["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(product)],
@@ -247,8 +305,11 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             details = step("codesign-details", ["/usr/bin/codesign", "-d", "--verbose=2", str(product)], source, environment, logs, runner)
             if "Signature=adhoc" not in details:
                 raise PackageError("the bundle is not ad-hoc signed")
-        folder = game_folder() if smoke else None
-        if folder is None:
+        folder = game_folder() if smoke and platform.key == "mac" else None
+        if platform.key == "win":
+            smoked = "NOT RUN (a Windows build cannot start on the Mac: file checks only)"
+            say(f"smoke {smoked}")
+        elif folder is None:
             smoked = "SKIPPED (" + ("--no-smoke" if not smoke else "no game in /Applications/Arcanum, ~/Applications/Arcanum or a CrossOver bottle") + ")"
             say(f"smoke {smoked}")
         else:
@@ -259,11 +320,16 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             check_smoke_log(text, commit)
             smoked = f"PASS (launcher and main menu, own user folder {USER_FOLDER})"
             say(f"smoke {smoked}")
+        if platform.installed != platform.product:
+            say(f"zip {platform.installed}")
+            built = product.parent / platform.installed
+            zip_folder(product, built)
+            product = built
         try:
             installed = install(product, output / platform.folder, commit, date, smoked, source / INSTRUCTION)
         except OSError as error:
             raise PackageError(f"could not install into {output / platform.folder}: {error}") from error
-        say(f"PASS {installed} (main {commit[:10]}, {date}, smoke {smoked.split(' ', 1)[0]})")
+        say(f"PASS {installed} (main {commit[:10]}, {date}, smoke {smoked.split(' (', 1)[0]})")
         return installed
     finally:
         if keep_work:

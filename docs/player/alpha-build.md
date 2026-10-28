@@ -1,23 +1,28 @@
 # Arcanum Steamwoven alpha: install and first start
 
-This is the instruction for a player of the packaged alpha build (ARC-DEV-047). The build is a test build of an unfinished
+This is the instruction for a player of the packaged alpha build (ARC-DEV-047, Windows ARC-DEV-048). The build is a test build of an unfinished
 reimplementation: it opens the launcher and the original main menu, and much of the game is not there yet
 ([component catalogue](../project/status.md)). It contains **no game content**: it reads the files of your own copy of
 *Arcanum: Of Steamworks and Magick Obscura* (GOG release 1.0.7.4) at run time and never writes into that folder.
 
-Platforms: **macOS** (Apple silicon and Intel, one universal `.app`). The Windows 11 x64 build is a separate, later step.
+Platforms: **macOS** (Apple silicon and Intel, one universal `.app`) and **Windows 11 x64** (a folder with
+`Arcanum Steamwoven.exe`, delivered as one zip).
 
 ## 1. Get the build
 
-The build is made on the developer's Mac with `./arcanum package mac` ([packaging](../workflow/packaging.md)) and lands in
-the project checkout:
+Both builds are made on the developer's Mac, `./arcanum package mac` and `./arcanum package win`
+([packaging](../workflow/packaging.md)), and land in the project checkout:
 
     artifacts/packages/macos/Arcanum Steamwoven.app
-    artifacts/packages/macos/BUILD.txt      (the commit and date it was built from)
-    artifacts/packages/macos/README.md      (this instruction)
+    artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
+    artifacts/packages/<macos|windows>/BUILD.txt   (the commit and date it was built from)
+    artifacts/packages/<macos|windows>/README.md   (this instruction)
 
-Copy `Arcanum Steamwoven.app` wherever you like (for example `/Applications`). It is a self-contained app; nothing else is
-installed.
+**macOS:** copy `Arcanum Steamwoven.app` wherever you like (for example `/Applications`). It is a self-contained app;
+nothing else is installed.
+
+**Windows:** copy the zip to the PC (a USB stick, a shared folder or a file transfer). Section 3 says how to unpack and start
+it. The folder in it is self-contained too (the .NET runtime is inside); nothing is installed.
 
 **Which build is this?** The launcher and the main menu show a line in the bottom right corner:
 `Arcanum Steamwoven alpha · main 1a2b3c4d5e · 2026-10-28` — the first ten digits of the commit of `main` it was built from
@@ -43,10 +48,39 @@ on how the app reached the Mac:
 
 These steps follow Apple's documentation; the build itself was started on the developer's Mac without the download mark.
 
-## 3. Point the game at your Arcanum files
+## 3. First start on Windows 11: unzip, then "Run anyway"
+
+The Windows build is **not signed** (a code-signing certificate costs money), so Windows does not know its publisher.
+
+1. **Unpack the zip; do not start the game from inside it.** Right-click `Arcanum Steamwoven Windows x64.zip` →
+   **Extract All…** and pick a folder you can write to, for example `C:\Games` or your Documents folder (not
+   `C:\Program Files`, which needs administrator rights). You get a folder `Arcanum Steamwoven` with
+   `Arcanum Steamwoven.exe`, `Arcanum Steamwoven.pck` and a `data_Arcanum.TerrainViewer_windows_x86_64` folder. Keep the
+   three together: the `.exe` does not start without the other two beside it.
+2. **Start `Arcanum Steamwoven.exe`.** If the zip came from the internet, a messenger or mail, Windows marks the files and
+   **Microsoft Defender SmartScreen** stops the first start with a blue window "Windows protected your PC". Press
+   **More info**, check that the app is `Arcanum Steamwoven.exe` with "Publisher: Unknown publisher", and press
+   **Run anyway**. It is asked once for this file.
+   (Same effect, before unpacking: right-click the zip → **Properties** → tick **Unblock** → **OK**; the unpacked files then
+   carry no mark and SmartScreen does not ask.)
+3. **Smart App Control.** On a PC where *Smart App Control* is on (Windows Security → App & browser control), Windows may
+   block an unsigned app outright, with no "Run anyway" button. Smart App Control has no per-app exception; the build
+   cannot start there unless you turn it off, which is your own decision for the whole PC.
+
+These steps follow Microsoft's documentation; they have not yet been tried with this build on a Windows 11 PC.
+
+## 4. Point the game at your Arcanum files
 
 The game needs the folder of an installed GOG Arcanum: the folder that holds `Arcanum.exe`, `arcanum1.dat`,
-`arcanum2.dat` and `modules/Arcanum.dat`. GOG sells Arcanum for Windows only, so on a Mac use one of these:
+`arcanum2.dat` and `modules/Arcanum.dat`.
+
+**On Windows**, install Arcanum from GOG as usual (GOG Galaxy or the offline installer). The launcher looks, in this order,
+at the install folder GOG records in the registry (the GOG game key of Arcanum), then at `C:\GOG Games\Arcanum` (the
+offline installer's default) and `C:\Program Files (x86)\GOG Galaxy\Games\Arcanum` (GOG Galaxy's default). A game
+installed elsewhere is found through the registry; if it is not, press **Choose folder…** and pick the folder that holds
+`Arcanum.exe`. This detection has so far been tested only with synthetic folders, not on a Windows PC.
+
+**On a Mac**, GOG sells Arcanum for Windows only, so use one of these:
 
 - **A. Copy an installed game from Windows.** Install Arcanum from GOG on a Windows PC (GOG Galaxy or the offline
   installer; the default folder is `C:\GOG Games\Arcanum`) and copy that whole folder to the Mac as
@@ -71,19 +105,21 @@ On the first start the **launcher** screen opens before the main menu:
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
 folder and rules.
 
-## 4. Where your settings and saves live
+## 5. Where your settings and saves live
 
 The build keeps its own folder, separate from any developer build:
 
-    ~/Library/Application Support/Arcanum Steamwoven Game/
+    macOS:    ~/Library/Application Support/Arcanum Steamwoven Game/
+    Windows:  %APPDATA%\Arcanum Steamwoven Game\      (C:\Users\<you>\AppData\Roaming\Arcanum Steamwoven Game)
 
 It holds the launcher settings (`launcher_v1.json`), the options, the saves (`saves/`) and Godot's log of the last runs
 (`logs/godot.log`, useful for a bug report). Deleting the folder starts
 the game as on its first run. The game folder of Arcanum is only read.
 
-## 5. Updating
+## 6. Updating
 
-The build does not update itself. A newer build is made from the current `main` with `./arcanum package mac` on the
-developer's Mac; it replaces `artifacts/packages/macos/Arcanum Steamwoven.app` (the one before moves to
-`artifacts/packages/macos/previous/`). Copy the new app over the old one. Settings and saves stay in the folder above; an
-older build may refuse a save made by a newer one.
+The build does not update itself. A newer build is made from the current `main` with `./arcanum package mac` or
+`./arcanum package win` on the developer's Mac; it replaces the app or the zip in `artifacts/packages/macos/` or
+`artifacts/packages/windows/` (the one before moves to `previous/` there). On macOS copy the new app over the old one; on
+Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
+the old build may stay). Settings and saves stay in the folder above; an older build may refuse a save made by a newer one.
