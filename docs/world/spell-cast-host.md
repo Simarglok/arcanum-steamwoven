@@ -302,6 +302,40 @@ cursor with the weapon as the source, a click casts at the NPC, the weapon pays 
 the weapon off (through the trigger host, since the run still has it as its source) returns the pane to the list, and wielding it
 again brings the button back. Marker `ARC-UI-016 native-smoke item-pane PASS`.
 
+## The hotkey bar (ARC-UI-022)
+
+The original's hotkey bar holds ten entries on the keys 1..0 and two recent actions, the latest on the key A (ledger
+[HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022), IP7–IP9). The rules are Godot-free (`HotkeyRules`,
+`Arcanum.Simulation.Hotkeys`), the entries are the session's (`GameSessionOwner` hotkey calls, saved since schema 53), the viewer
+carries out the activations with the session and the cast host.
+
+1. **Entries** (`HotkeyEntry`). Type 1 an item, 2 a skill-bar button (0 prowling, 1 pick pocket, 2 disarm traps, 3 repair, HK9), 3 a
+   spell, 4 an item and one of its spells. `AssignHotkey` is a drop on the bar from outside it (HK5): it overwrites the entry, and an
+   item entry's item leaves the grid for the inventory location 2000 + entry; ammunition, gold and a second item of a prototype an item
+   entry already holds are refused. `MoveHotkey` is a drag between entries (the two trade places), `ClearHotkey` a drag off the bar
+   (the item goes back to the grid). An entry empties when its item leaves the hero or moves: a wear, a take-off, a grid move or a move
+   onto, along or off the bar runs the original's inventory callback, which empties every entry naming the item, whatever its type,
+   except the item entry that now holds it (HK6).
+2. **Recent actions** (`RecordHotkeyAction`, `HotkeyRules.RecordAction` for 0x57EFA0, HK2). A press of the spell pane (a spell) or the
+   skill bar (a button) becomes the latest; the same action as the latest changes nothing, any other pushes the latest to the second
+   place. Only spells and skill-bar buttons are recorded, as only the bars write them.
+3. **Keys** (`KeyActivates`, HK8). The keys 1..0 activate their entries on the press, not while another critter has the turn of a
+   turn-based round, and A the latest recent action (the character path has no turn test); an empty entry does nothing.
+4. **The activation** (0x54FCF0, `PcCanActivate`, `PlanItem`, `PlanItemSpell`, `SpellActivates` for 0x57C080; HK1, HK3, HK4).
+   Nothing for a dead or unconscious hero. A spell is activated as a press of the spell pane is (SU1–SU3). An item-and-spell entry
+   activates the spell with the item as its source when the item is the wielded weapon; any other item is first wielded into the weapon
+   slot (which empties the entry, HK6). A skill-bar button: prowling toggles the concealment (ST1); repair opens the inventory window,
+   whose Repair buttons stand in for the item cursor (RP4). An item entry acts on another item of its prototype first (0x462930,
+   `QueryHotkeySameKind`), except a written item that keeps its text: it is used when it can be used and is not thrown, else a weapon or
+   armour is worn into its slot (0x550000; the entry's own item, the occupant goes back to the pack), ammunition and gold do nothing and
+   any other item is held on the cursor.
+
+The viewer stands in for the bar's art and its drag and drop (a later thread draws them): `Ctrl`+`1`..`0` puts the latest recent action
+on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
+palette's Prowl action is the skill bar's prowling button, and the status line lists the entries. The cast smoke checks the latest recent
+action after its pane presses, `Ctrl`+`1`, the keys `1` and `A` (each opens the spell's cursor), `Ctrl`+`Shift`+`1` and an empty key, and
+the weapon's spell on entry 1 opening the weapon's cursor; marker `ARC-UI-022 native-smoke hotkeys PASS`.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -329,6 +363,10 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | Goal 28's first leg builds its line only when the reused run slot's path flag is set; a slot whose last run did not end through the end step flies its stale line, and a never-used one does not advance (SM9; not observed in play). | The first leg always builds its line. | — (latent, no switch) |
 | The missile plays its projectile entry's sound (0x458C00). | No sound. | — (not ready) |
 | The bar's weapon button is refreshed only on the PC's inventory moves, so a weapon whose charges ran out keeps a stale button until the next move (IP1). | The viewer re-reads the button's condition each frame. | — (technical, fixed in both modes by the owner rule 2026-10-28) |
+| An item-and-spell entry whose item is not the wielded weapon wields it, which empties the entry, then reads the emptied entry again: the cast is lost (HK4). | The item and spell read before the wield are cast; the entry still empties. | — (technical, fixed in both modes) |
+| That wield takes the old weapon off first and leaves it off when the wield is refused (HK3). | The session's wear swaps in one step; a refusal changes nothing. | — (technical, fixed in both modes) |
+| A drag between entries leaves the source an entry without its object and puts a target item back into the inventory (HK5). | The two entries trade places. | — (technical, fixed in both modes) |
+| A load replays the two recent actions through 0x57EFA0 in saved order, so they trade places on every load; a new action's object goes to the second slot (HK2, HK7). | The bar comes back as saved; recent actions are only spells and skill-bar buttons. | — (technical, fixed in both modes) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -338,6 +376,10 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 
 ## Not ready
 
+- A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
+  the hotkey bar's art, its buttons and drag and drop, the sounds (sound 0, SN31), the item use and the cursor hold of an item entry,
+  the pick-pocket and disarm-traps buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and
+  0x541680 (ARC-UI-022).
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
 - Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
   (EC9, EC11, EC12).
