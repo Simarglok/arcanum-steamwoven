@@ -414,8 +414,9 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-066); schema 35 adds the hero's and its followers' concealment (<see cref="Concealment"/>, ARC-SKILLS-008); schema 36
     /// adds the hero's background id to <see cref="Hero"/> (ARC-WORLD-069); schema 37 adds the story-state number to the story
     /// (ARC-SCRIPT-019); schema 38 adds the NPCs' danger records (<see cref="Danger"/>, ARC-WORLD-079); schema 39 adds the items the
-    /// hero gave NPCs and the tracked gold piles to <see cref="Inventory"/> (ARC-WORLD-071). Schemas 1..38 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 39;
+    /// hero gave NPCs and the tracked gold piles to <see cref="Inventory"/> (ARC-WORLD-071); schema 40 adds the made and placed items'
+    /// complexity to <see cref="Inventory"/> (ARC-WORLD-083). Schemas 1..39 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 40;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

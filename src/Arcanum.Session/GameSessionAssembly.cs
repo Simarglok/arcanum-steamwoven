@@ -158,8 +158,9 @@ public sealed partial class GameSessionOwner
         }
         foreach (var unit in units)
         {
-            if (unit.Ground) PlaceMade(unit.Entity, kind, map, cell);
-            else if (unit.NewObject) _inventory.Add(new SessionMadeItem(unit.Entity, kind));
+            // ARC-WORLD-083: each new unit keeps the product's complexity, in the list and on the ground.
+            if (unit.Ground) PlaceMade(unit.Entity, kind, complexity, map, cell);
+            else if (unit.NewObject) _inventory.Add(new SessionMadeItem(unit.Entity, kind, complexity));
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         _revision++;
@@ -202,9 +203,9 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-WORLD-070: a made product unit lying on the crafter's tile in the ground store (taken, so no seed lists it).</summary>
-    private void PlaceMade(string entity, SessionItemKind kind, SessionMapId map, Arcanum.Simulation.Movement.CellCoord cell)
+    private void PlaceMade(string entity, SessionItemKind kind, int complexity, SessionMapId map, Arcanum.Simulation.Movement.CellCoord cell)
     {
-        _inventory.Placed.Add(new(entity, kind, SessionPlacedSource.Made, null, map, cell));
+        _inventory.Placed.Add(new(entity, kind, SessionPlacedSource.Made, null, map, cell, complexity));
         _inventory.Taken.Add(entity);
         // ARC-WORLD-062: no decay event. The original creates the product on the tile (0x4ED8B0) and a refused transfer (0x4617F0)
         // leaves it there; neither reaches the schedule 0x468090, so it lies until someone moves it (ledger ID9).

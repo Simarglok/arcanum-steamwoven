@@ -85,8 +85,10 @@ public readonly record struct SessionKitItem(string Entity, SessionItemKind Kind
 
 /// <summary>A made item (ARC-TECHNOLOGY-004): entity <c>made:n</c> and its saved kind. Made items came from no map: the hero makes
 /// them from schematics, and since ARC-WORLD-055 the session adds them to NPCs (one numbering); in the hero's inventory they follow
-/// the items it took from the world.</summary>
-public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kind)
+/// the items it took from the world. ARC-WORLD-083: its magick/tech complexity (field 0x60), which the original's object keeps through
+/// every move (ledger MC1): an assembly product's from the host's facts for its prototype, 0 (neutral) where the session was given
+/// none.</summary>
+public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kind, int Complexity = 0)
 {
     internal const string Prefix = "made:";
 
@@ -138,9 +140,11 @@ public enum SessionPlacedSource { Kit, Pc, Made }
 /// <summary>
 /// One of the hero's items the session placed on the ground (ARC-WORLD-059): its entity and kind, the hero's list it came from
 /// (<see cref="Origin"/>, the map whose seed lists it, for an item the PC took from the world), and the map and cell it lies on.
+/// ARC-WORLD-083: a made item keeps its <see cref="SessionMadeItem.Complexity"/> on the ground (0 for any other source, whose seed
+/// answers for a taken item).
 /// </summary>
 public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, SessionMapId Map,
-    CellCoord Cell);
+    CellCoord Cell, int Complexity = 0);
 
 /// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
@@ -344,15 +348,15 @@ internal sealed class InventoryDomain
                 Kit.Insert(at < 0 ? Kit.Count : at, new(item.Entity, item.Kind));
                 break;
             case SessionPlacedSource.Pc: Pc.Add(new(item.Entity, item.Origin!.Value, item.Kind)); break;
-            default: Made.Add(new(item.Entity, item.Kind)); break;
+            default: Made.Add(new(item.Entity, item.Kind, item.Complexity)); break;
         }
     }
 
     /// <summary>ARC-WORLD-071: an item leaving an NPC for the hero: a given kit item back at its kit number's place, a given taken item at
-    /// the end of the taken items with its origin, any other at the end of the made items. It stays taken.</summary>
-    internal void ReturnGiven(string entity, SessionItemKind kind)
+    /// the end of the taken items with its origin, any other at the end of the made items with its complexity. It stays taken.</summary>
+    internal void ReturnGiven(string entity, SessionItemKind kind, int complexity)
     {
-        if (!Given.Remove(entity, out var given)) { Add(new SessionMadeItem(entity, kind)); return; }
+        if (!Given.Remove(entity, out var given)) { Add(new SessionMadeItem(entity, kind, complexity)); return; }
         if (given.Origin is { } origin) { Pc.Add(new(entity, origin, kind)); return; }
         var number = HeroDomain.KitNumber(entity) ?? throw new InvalidOperationException("GIVEN_KIT_ENTITY");
         var at = Kit.FindIndex(kit => HeroDomain.KitNumber(kit.Entity) > number);
@@ -392,9 +396,9 @@ internal sealed class InventoryDomain
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
         Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray());
 
-    /// <summary>The facts of a made item: its kind, no weight, complexity, location (-1, in the bag) or scripts; the host knows
-    /// the prototype's weight.</summary>
-    internal static SessionItemFacts MadeFacts(SessionItemKind kind) => new(kind, 0, 0, -1, null, []);
+    /// <summary>The facts of a made item: its kind, no weight, location (-1, in the bag) or scripts; the host knows the prototype's
+    /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>
+    internal static SessionItemFacts MadeFacts(SessionItemKind kind, int complexity = 0) => new(kind, 0, complexity, -1, null, []);
 
     /// <summary>ARC-WORLD-066: an item's facts with its tracked ammunition units (a made or placed stack's type and units, a seed
     /// stack's changed units); any other item's facts unchanged.</summary>
@@ -417,7 +421,7 @@ internal sealed class InventoryDomain
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), dropped(entity)!.Value))))
-            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind))), item.Cell)))
+            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, item.Complexity))), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
@@ -429,7 +433,7 @@ internal sealed class InventoryDomain
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
         .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, WithAmmo(entity, seed.Items[entity].Facts)))
         .Concat(holder.Kind == SessionHolderKind.Npc
-            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind))))
+            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, item.Complexity))))
             : []);
 
     /// <summary>Checks a seed's structure and copies it, so later changes to the caller's lists cannot reach the
