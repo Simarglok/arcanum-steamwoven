@@ -39,13 +39,21 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(0, defaults["always run"]);
         Assert.AreEqual(6, defaults["text duration"]);
         Assert.AreEqual(2, defaults["float speed"]);
+        Assert.AreEqual(1, defaults["text floaters"], "CH10: messages only");
         Assert.AreEqual(5, defaults["music volume"]);
         Assert.AreEqual(9, AreaOptionTable.Of(AreaOption.Brightness).Max, "brightness's record sets its slider's top");
         Assert.AreEqual(10, AreaOptionTable.Of(AreaOption.Effects).Max, "a slider's default top");
         Assert.AreEqual((int)RuleMode.Steamwoven, defaults["rules"], "Steamwoven is the default mode");
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules },
+        CollectionAssert.AreEqual(new[]
+            {
+                AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed,
+                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules,
+            },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
-        Assert.IsFalse(AreaOptionTable.Offered(AreaOptionsPage.Video));
+        Assert.IsTrue(AreaOptionTable.Offered(AreaOptionsPage.Video), "ARC-UI-021: the floating text's two controls");
+        Assert.AreEqual(AreaOptionKind.List, AreaOptionTable.Of(AreaOption.Floats).Kind);
+        Assert.AreEqual(2, AreaOptionTable.Of(AreaOption.Floats).Limit);
+        Assert.AreEqual(10, AreaOptionTable.Of(AreaOption.FloatSpeed).Limit);
         Assert.AreEqual(AreaGameSettings.Defaults, new AreaGameSettings(1, RealTimeCombatRules.TurnBasedDefault, RealTimeCombatRules.AutoAttackDefault));
     }
 
@@ -72,13 +80,13 @@ public sealed class AreaGameOptionsTests
     {
         var main = Options();
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
-        CollectionAssert.AreEqual(new[] { "Game", "Sound", "Done" }, Labels(main));
+        CollectionAssert.AreEqual(new[] { "Game", "Video", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
         CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules },
             main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
-            "Video: " + AreaOptionTable.NoVideoPage, "Module: " + AreaOptionTable.NoModules, "Violence Filter: " + AreaOptionTable.NoViolenceFilter,
+            "Module: " + AreaOptionTable.NoModules, "Violence Filter: " + AreaOptionTable.NoViolenceFilter,
             "Default Combat Mode: " + AreaOptionTable.NoFastTurnBased, "Auto Switch Weapons: " + AreaOptionTable.NoAutoSwitch, "Follower Skills: " + AreaOptionTable.NoFollowerSkills,
         }, main.HiddenNotes.ToArray());
         Assert.AreEqual(0, main.OptionsFocus);
@@ -93,12 +101,22 @@ public sealed class AreaGameOptionsTests
     public void Pages_change_by_letter_and_controls_by_arrow()
     {
         var menu = Options();
-        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('v'), "the hidden Video page takes no letter");
-        Assert.AreEqual(AreaOptionsPage.Game, menu.Page);
+        menu.Type('v');
+        Assert.AreEqual(AreaOptionsPage.Video, menu.Page, "ARC-UI-021: the Video page");
+        CollectionAssert.AreEqual(new[] { AreaOption.Floats, AreaOption.FloatSpeed }, menu.Controls.Select(c => c.Option).ToArray());
+        CollectionAssert.AreEqual(new[]
+        {
+            "Brightness: " + AreaOptionTable.NoBrightness, "Text Duration: " + AreaOptionTable.NoTextDuration, "Combat Taunts: " + AreaOptionTable.NoTaunts,
+        }, menu.HiddenNotes.ToArray());
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 2), menu.Change(0, 1), "Minimal to Verbose");
+        menu.SetOptions(Values with { Floats = 2 });
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 0), menu.Change(0, 1), "a list wraps to Never");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.FloatSpeed, Value: 3), menu.Change(1, 1));
+        Assert.AreEqual("Verbose", menu.OptionsTexts.Value(AreaOptionTable.Of(AreaOption.Floats), 2));
         menu.Type('s');
         Assert.AreEqual(AreaOptionsPage.Sound, menu.Page);
         CollectionAssert.AreEqual(new[] { AreaOption.Effects, AreaOption.Voice, AreaOption.Music }, menu.Controls.Select(c => c.Option).ToArray());
-        Assert.AreEqual(0, menu.HiddenNotes.Count(note => !note.StartsWith("Video:", StringComparison.Ordinal)), "the Sound page hides nothing");
+        Assert.AreEqual(0, menu.HiddenNotes.Count, "the Sound page hides nothing");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Voice, Value: 6), menu.Change(1, 1));
         Assert.AreEqual(1, menu.OptionsFocus, "a control's arrow takes the focus");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Music, Value: 4), menu.Change(2, -1));
@@ -134,7 +152,7 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(7, menu.OptionsFocus, "5 controls and 3 buttons, wrapping");
+        Assert.AreEqual(8, menu.OptionsFocus, "5 controls and 4 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
     }
@@ -184,12 +202,16 @@ public sealed class AreaGameOptionsTests
     [TestMethod]
     public void The_settings_file_round_trips_and_refuses_anything_else()
     {
-        var settings = new AreaGameSettings(2, true, false);
+        var settings = new AreaGameSettings(2, true, false) { Floats = 2, FloatSpeed = 7 };
         Assert.AreEqual(settings, AreaGameSettingsCodec.Deserialize(AreaGameSettingsCodec.Serialize(settings)));
-        Assert.AreEqual("""{"version":1,"difficulty":1,"turnBased":false,"autoAttack":true}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        Assert.AreEqual("""{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        Assert.AreEqual(new AreaGameSettings(2, true, false), AreaGameSettingsCodec.Deserialize("""{"version":1,"difficulty":2,"turnBased":true,"autoAttack":false}"""),
+            "an ARC-UI-013 file reads with the floaters' defaults");
         foreach (var bad in new[]
         {
-            "", "[]", "{}", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true}""",
+            "", "[]", "{}", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true}""", """{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""",
+            """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":3,"floatSpeed":2}""", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":11}""",
+            """{"version":1,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""",
             """{"version":1,"difficulty":3,"turnBased":false,"autoAttack":true}""", """{"version":1,"difficulty":1,"turnBased":0,"autoAttack":true}""",
             """{"version":1,"difficulty":1,"turnBased":false}""", """{"version":1,"difficulty":1,"turnBased":false,"autoAttack":true,"x":1}""",
         })
@@ -199,5 +221,8 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(GameDifficulty.Hard, settings.SessionDifficulty);
         Assert.Throws<ArgumentOutOfRangeException>(() => new AreaGameSettings(3, false, true));
         Assert.Throws<ArgumentOutOfRangeException>(() => settings with { Difficulty = -1 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => settings with { Floats = 3 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => settings with { FloatSpeed = -1 });
+        Assert.AreEqual(2, AreaGameSettings.Defaults.FloatSpeed);
     }
 }

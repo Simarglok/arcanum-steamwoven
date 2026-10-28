@@ -159,17 +159,53 @@ public sealed class ItemSpellTriggerEventsTests
     }
 
     [TestMethod]
-    public void A_spell_s_damage_step_has_no_melee_bit_and_an_item_run_s_hooks_follow_the_setting()
+    public void A_spell_s_damage_step_has_no_melee_bit_and_keeps_every_call_for_an_item_run_too()
     {
         var (damage, outcome) = Step(new LifeDamage { HitPoints = 2 });
         var hooks = new[] { S(ItemTriggerEvent.ParentHit, Target, Attacker), S(ItemTriggerEvent.ParentDamagesOpponent, Attacker, Target) };
-        CollectionAssert.AreEqual(hooks, SpellDamageStep(Facts, damage, outcome, true, true, false, MagicAnomalyProfile.Steamwoven).ToArray());
-        CollectionAssert.AreEqual(hooks, SpellDamageStep(Facts, damage, outcome, true, true, true, MagicAnomalyProfile.Original).ToArray(), "MG46 kept");
-        Assert.AreEqual(0, SpellDamageStep(Facts, damage, outcome, true, true, true, MagicAnomalyProfile.Steamwoven).Count, "MG46 fixed");
-        // The fix leaves the other calls: a kill still fires dying with the run's damage source.
+        CollectionAssert.AreEqual(hooks, SpellDamageStep(Facts, damage, outcome, true, true).ToArray());
+        // A kill fires dying with the run's damage source, then the hooks.
         var (kill, killed) = Step(new LifeDamage { HitPoints = 10_000 });
-        CollectionAssert.AreEqual(new[] { S(ItemTriggerEvent.ParentDying, Target, Killer) },
-            SpellDamageStep(Facts, kill, killed, true, true, true, MagicAnomalyProfile.Steamwoven).ToArray());
-        Assert.AreEqual(0, SpellDamageStep(Facts, kill, killed, false, false, false, MagicAnomalyProfile.Original).Count, "no parent, no source");
+        ItemTriggerStep[] killing = [S(ItemTriggerEvent.ParentDying, Target, Killer), .. hooks];
+        CollectionAssert.AreEqual(killing, SpellDamageStep(Facts, kill, killed, true, true).ToArray());
+        Assert.AreEqual(0, SpellDamageStep(Facts, kill, killed, false, false).Count, "no parent, no source");
+    }
+
+    // ARC-MAGIC-025 (IC6, IC10): attack start, attacks a location, the item parent's branch and the MG46 chain.
+    [TestMethod]
+    public void An_attack_start_fires_the_attacker_s_attacks_an_opponent_and_only_the_first_worn_item_carries_the_attacker()
+    {
+        CollectionAssert.AreEqual(new[] { S(ItemTriggerEvent.ParentAttacksOpponent, Attacker, Target) }, AttackStart().ToArray());
+        CollectionAssert.AreEqual(new ItemTriggerCall[] { new(0, ParentAttacksOpponent, true), new(1, ParentAttacksOpponent), new(2, ParentAttacksOpponent) },
+            WornCalls(ItemTriggerEvent.ParentAttacksOpponent, 3).ToArray());
+        Assert.AreEqual(ParentAttacksOpponent, Mask(ItemTriggerEvent.ParentAttacksOpponent));
+        Assert.IsFalse(WornCalls(ItemTriggerEvent.ParentHit, 2).Any(call => call.RunOtherIsParent), "only the attacker global's wrappers");
+    }
+
+    [TestMethod]
+    public void Attacks_a_location_makes_one_call_for_an_item_and_walks_nothing()
+    {
+        Assert.AreEqual(new ItemTriggerCall(0, ParentAttacksLocation, true), LocationCall(item: true));
+        Assert.IsNull(LocationCall(item: false));
+        Assert.AreEqual(0, WornCalls(ItemTriggerEvent.ParentAttacksLocation, 3).Count);
+        Assert.AreEqual(ParentAttacksLocation, Mask(ItemTriggerEvent.ParentAttacksLocation));
+    }
+
+    [TestMethod]
+    public void An_item_parent_fires_only_its_own_target_hit_on_damages_an_opponent()
+    {
+        CollectionAssert.AreEqual(new ItemTriggerCall[] { new(0, TargetHit) }, ItemParentCalls(ItemTriggerEvent.ParentDamagesOpponent).ToArray());
+        foreach (var kind in Enum.GetValues<ItemTriggerEvent>().Where(kind => kind != ItemTriggerEvent.ParentDamagesOpponent))
+            Assert.AreEqual(0, ItemParentCalls(kind).Count, kind.ToString());
+    }
+
+    [TestMethod]
+    public void MG46_Steamwoven_skips_an_item_of_the_chain_and_the_original_skips_nothing()
+    {
+        string[] chain = ["blade", "vest"];
+        Assert.IsTrue(ChainSkips(MagicAnomalyProfile.Steamwoven, "vest", chain));
+        Assert.IsFalse(ChainSkips(MagicAnomalyProfile.Steamwoven, "helmet", chain), "another item still answers");
+        Assert.IsFalse(ChainSkips(MagicAnomalyProfile.Steamwoven, "vest", null), "an event no item run caused");
+        Assert.IsFalse(ChainSkips(MagicAnomalyProfile.Original, "vest", chain));
     }
 }

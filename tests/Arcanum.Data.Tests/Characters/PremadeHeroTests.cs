@@ -133,6 +133,28 @@ public sealed class PremadeHeroTests
             InventorySourceRules.Read(MesFile.Parse(Encoding.Latin1.GetBytes("{1}{aé: 1,1}{2}{b: 1,1}")).File!, null, 1, Any).Status);
     }
 
+    // ARC-WORLD-096: the coin pair an emptied set keeps (RK6): what the loot-line parse read first, through atoi; undefined when the
+    // parse failed before it.
+    [TestMethod]
+    public void AnEmptiedSetKeepsTheCoinPairItsLootLineReadFirst()
+    {
+        static InventorySourceCoins Read(int min, int max) => new(InventorySourceCoinsStatus.Read, min, max);
+        var undefined = new InventorySourceCoins(InventorySourceCoinsStatus.Undefined, 0, 0);
+        foreach (var (set, coins) in new[] { (6, Read(1, 1)), (8, Read(1, 1)), (12, Read(1, 1)), (3, Read(5, 50)), (10, undefined), (4, undefined),
+            (5, undefined), (9, undefined), (0, undefined), (15, undefined) })
+            Assert.AreEqual(coins, InventorySourceRules.LootCoins(Sources, set), set.ToString());
+        InventorySourceCoins Line(string text) => InventorySourceBuyRules.LootLineCoins(Encoding.ASCII.GetBytes(text));
+        Assert.AreEqual(Read(-5, 10), Line("a: -5,10 100,1"), "atoi keeps a sign");
+        Assert.AreEqual(Read(5, 7), Line("a: 5x,7y 100,1"), "atoi stops at the first other character");
+        Assert.AreEqual(Read(5, 5), Line("a: 5,5,5"), "the right side runs to the space");
+        Assert.AreEqual(Read(0, 4), Line("a: x,4"));
+        Assert.AreEqual(InventorySourceCoinsStatus.Unsupported, Line("a: 99999999999,1").Status, "an overflow is undefined in C");
+        Assert.AreEqual(undefined, Line("a: 1"), "a pair without its right side");
+        Assert.AreEqual(undefined, Line("a: 1,1 " + new string('1', 2000)), "a line of 2000 characters fails first");
+        Assert.AreEqual(InventorySourceCoinsStatus.Unsupported, InventorySourceRules.LootCoins(Mes("{1}{a: 385,385\n100,6029}"), 1).Status,
+            "text the source would read otherwise");
+    }
+
     // ---------------------------------------------------------------- synthetic v119 prototypes
     private const int PcType = 15;
 

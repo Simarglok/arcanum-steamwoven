@@ -143,9 +143,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants, bar, ai, life)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census, barter, menu, scene, options, plants, bar, ai and life run.
+                        // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life and floaters run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -174,10 +174,14 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("bar")) await RunAreaGameBarSmokeAsync();
                                 // ARC-UI-020: the health and fatigue bars (with --hero, on a map with a speaker that can join).
                                 if (Stage("life")) await RunAreaLifeBarsSmokeAsync();
+                                // ARC-UI-021: the floating text (with --hero, on a map with a living NPC with combat values).
+                                if (Stage("floaters")) await RunAreaFloatersSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
                                 // ARC-WORLD-092: only when named, the first fight with the AI on (the other stages run with it off).
                                 if (only?.Contains("ai") == true) await RunAreaAiSmokeAsync(result);
+                                // ARC-WORLD-095: only when named, the fight in a turn-based round (the NPC acts in its own subturns).
+                                if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                             }
                         }
                         else await RunAreaSmokeAsync(result);
@@ -930,7 +934,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
