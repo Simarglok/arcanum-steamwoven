@@ -208,6 +208,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-casting-host-arc-world-102"></a>[NPC AI casting host (ARC-WORLD-102)](ledger/npc-ai.md#npc-ai-casting-host-arc-world-102) | [NPC AI](ledger/npc-ai.md) | AC1–AC4 |
 | <a id="npc-ai-queued-cast-arc-world-104"></a>[NPC AI queued cast (ARC-WORLD-104)](ledger/npc-ai.md#npc-ai-queued-cast-arc-world-104) | [NPC AI](ledger/npc-ai.md) | AC5–AC7 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
+| <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 
 ## Decisions to revisit
 
