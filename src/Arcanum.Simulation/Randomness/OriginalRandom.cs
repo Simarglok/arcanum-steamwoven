@@ -3,8 +3,9 @@ namespace Arcanum.Simulation.Randomness;
 /// <summary>
 /// ARC-WORLD-098: the original's one random generator (ledger RK11, read in the retail 1.0.7.4 executable): a 32-bit linear
 /// congruential state (global 0x601778) stepped as <c>state × 0x19660D + 0x3C6EF35F</c> (wrapping), each draw bits 8..22 of the new
-/// state (0..32767). The game seeds it from the clock at start (0x4CEEE0); a container generated once (flag 0x200) seeds it from the
-/// PC and the container's place before its draws (<see cref="Items.RestockRules.GeneratedOnceSeed"/>). The session keeps its own
+/// state (0..32767), as R1–R6 read it too. The game seeds it from the clock (0x4CEEE0), the dialog reseeds it (R1–R6) and a container
+/// generated once (flag 0x200) seeds it from the PC and the container's place before its draws
+/// (<see cref="Items.RestockRules.GeneratedOnceSeed"/>); other seed callers were not read. The session keeps its own
 /// generator (<see cref="SeededRandom"/>) for every other draw; this one serves a draw sequence the original makes reproducible.
 /// Caller-serialized; no locks, clocks or global state.
 /// </summary>
