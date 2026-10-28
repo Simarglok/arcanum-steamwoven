@@ -36,6 +36,9 @@ public enum ProjectileStrikeKind
     Obstruction,
     /// <summary>Nothing was struck and the tile left lies beyond the range from the start: the flight ends.</summary>
     RangeEnd,
+    /// <summary>ARC-COMBAT-018: a shot without a target (a missed throw's scatter) leaves its destination: the flight ends there,
+    /// before anything on the tile is struck (0x4B2870).</summary>
+    DestinationEnd,
 }
 
 /// <summary>A shot in flight as the original's projectile carries it (field 0x4D): whether it hit (flag 0x2) and whether it flies free
@@ -83,6 +86,23 @@ public static class ProjectileRules
     public const int Directions = 32;
     /// <summary>The stray strike's die: a critter on the tile is struck when it rolls 1 (0x4B2870, random(1, 3) == 1).</summary>
     public const int StrayDie = 3;
+    /// <summary>ARC-COMBAT-018: the projectiles of a bow shot at expert training or more (0x4B39B0).</summary>
+    public const int BowExpertProjectiles = 2;
+
+    /// <summary>
+    /// ARC-COMBAT-018: how many projectiles a shot that flies leaves with (the ranged path 0x4B39B0, ledger PF2 and PS rows): two when
+    /// the attack's skill is the bow and the attacker's bow training (0x4C60C0) is expert or more, else one. Both fly the same line from
+    /// the attacker's tile (the offsets the path passes them, 0 and 10 of the table 0x5B57FC, are never read), carry the same decided
+    /// outcome and each resolves its own strike; the ammunition was spent once, at the shot. A shot without a projectile art resolves
+    /// at once and has none; the missed throw's scatter of the same path is <see cref="ThrowRules.ScatterTiles"/>.
+    /// </summary>
+    [OriginalFunction(0x4B39B0, OriginalFunctionScope.Partial)]
+    public static int Projectiles(CombatSkill skill, SkillTraining bowTraining)
+    {
+        if (!Enum.IsDefined(skill)) throw new ArgumentOutOfRangeException(nameof(skill));
+        if (!Enum.IsDefined(bowTraining)) throw new ArgumentOutOfRangeException(nameof(bowTraining));
+        return skill == CombatSkill.Bow && bowTraining >= SkillTraining.Expert ? BowExpertProjectiles : 1;
+    }
 
     /// <summary>
     /// 0x4B6A00: the screen direction 0..31 from one tile to another, 0 up the screen and counting clockwise: the angle of the screen
@@ -169,7 +189,9 @@ public static class ProjectileRules
     /// shot flies free as a miss). A shot that missed meets, when it flies free, the object stopping the step toward the entered tile
     /// (an obstruction), else each living critter on the tile left other than the target and the attacker in list order, struck when
     /// <paramref name="roll"/>(1, 3) is 1 (the first that rolls it; nothing more is rolled). When nothing was struck and the tile left
-    /// lies more than the range from the start, the flight ends.
+    /// lies more than the range from the start, the flight ends. ARC-COMBAT-018: a shot without a <paramref name="target"/> (a missed
+    /// throw's scatter) is a miss flying free from the start (else <see cref="ArgumentException"/>) and ends when it leaves its
+    /// destination, before any of these tests.
     /// </summary>
     [OriginalFunction(0x4B2870, OriginalFunctionScope.Partial)]
     public static ProjectileCrossingResult<TObject> Cross<TObject>(ProjectileShot shot, ProjectileCrossing crossing, CellCoord destination,
@@ -178,6 +200,10 @@ public static class ProjectileRules
         ArgumentNullException.ThrowIfNull(attacker);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(roll);
+        // ARC-COMBAT-018: a shot without a target (a missed throw's scatter cleared it and set flag 0x20, 0x4B39B0) flies free and
+        // ends on leaving its destination.
+        if (target is null && (shot.Hit || !shot.FreeFlight)) throw new ArgumentException("A shot without a target is a miss flying free.", nameof(shot));
+        if (crossing.Left == destination && target is null) return new(shot, ProjectileStrikeKind.DestinationEnd, null);
         // The stored flags change when the destination is left; the rest of this crossing reads the shot as it was.
         var next = crossing.Left == destination && target is not null ? shot with { Hit = false, FreeFlight = true } : shot;
         if (shot.Hit)
