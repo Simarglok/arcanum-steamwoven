@@ -11,9 +11,8 @@ namespace Arcanum.TerrainViewer;
 // auto attack is the real-time attack repeat's setting, Always Run and the three volumes are the palette's. They are user
 // preferences, saved at once in the viewer's preference files (the original writes arcanum.cfg when the game exits) and never in a
 // save; Always Run and the volumes keep their own files. ARC-UI-014: the window's Rules line switches the session between the two
-// built-in rule modes (owner decision D8); every session the viewer then makes, loads or brings takes the chosen mode. The choice
-// lasts the run: its stored value belongs to the launcher's settings file (ARC-DEV-046), which this window will write through the
-// launcher's store once it lands.
+// built-in rule modes (owner decision D8); every session the viewer then makes, loads or brings takes the chosen mode. The mode is
+// stored in the launcher's settings file (ARC-DEV-046's store), which the launcher screen also writes; each ordinary run starts in it.
 public partial class TerrainViewerApp
 {
     private GameSettingsStore? _gameSettingsStore;
@@ -28,6 +27,10 @@ public partial class TerrainViewerApp
         _gameSettings = _gameSettingsStore.Load();
         _gameSettingsOrigin = !_gameSettingsStore.Persistent ? "default (automated run)" : _gameSettingsStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
         _turnBasedSetting = _gameSettings.TurnBased;
+        // ARC-UI-014: the rule mode of the launcher settings (read once a run; a start through the launcher has its Play's).
+        LauncherSettingsRead();
+        _ruleMode = _launcherSettings.Rules;
+        GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
         GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} from={_gameSettingsOrigin}");
     }
 
@@ -85,6 +88,7 @@ public partial class TerrainViewerApp
                 // and nothing is saved (docs/world/rule-modes.md).
                 if (!Enum.IsDefined((RuleMode)value)) { refused = "no such rule mode"; break; }
                 _ruleMode = (RuleMode)value;
+                SaveLauncherRules();
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
                 break;
             default: refused = option + " is not offered"; break;

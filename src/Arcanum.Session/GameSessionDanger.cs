@@ -181,13 +181,8 @@ public sealed partial class GameSessionOwner
         if (failure != GameSessionFailure.None) return RejectDanger(failure);
         if (!IsCurrent(expected)) return RejectDanger(GameSessionFailure.StaleVersion);
         var plan = new DangerPlan(this);
-        plan.Update(request.Entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
-        var result = plan.Set(request, false);
-        if (result.Failure != GameSessionFailure.None) return RejectDanger(result.Failure);
-        var after = plan.Get(request.Entity);
-        var locked = after.State == DangerState.CombatFocus && after.Focus == request.Target;
-        if (locked) plan.Update(request.Entity, record => record with { Flags = record.Flags | DangerFlags.TargetLocked });
-        return plan.Commit(result with { Locked = locked });
+        var result = plan.Lock(request);
+        return result.Failure != GameSessionFailure.None ? RejectDanger(result.Failure) : plan.Commit(result);
     }
 
     /// <summary>The target unlock (0x4AFC70): the lock bit cleared.</summary>
@@ -352,6 +347,19 @@ public sealed partial class GameSessionOwner
             foreach (var npc in npcs) Update(npc, record => record with { Flags = record.Flags & ~DangerFlags.NoAttack });
         }
 
+        // The target lock (0x4AFBD0): unlock, the setter for COMBAT_FOCUS on the target with no sound, and the lock only when the
+        // NPC then reads COMBAT_FOCUS on that target.
+        internal SessionDangerResult Lock(SessionDangerRequest request)
+        {
+            Update(request.Entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
+            var result = Set(request with { State = DangerState.CombatFocus }, false);
+            if (result.Failure != GameSessionFailure.None) return result;
+            var after = Get(request.Entity);
+            var locked = after.State == DangerState.CombatFocus && after.Focus == request.Target;
+            if (locked) Update(request.Entity, record => record with { Flags = record.Flags | DangerFlags.TargetLocked });
+            return result with { Locked = locked };
+        }
+
         // The setter for one NPC; Failure is set when a needed fact is missing or a reaction write is out of range.
         internal SessionDangerResult Set(SessionDangerRequest request, bool alertSound)
         {
@@ -426,6 +434,19 @@ public sealed partial class GameSessionOwner
             var delta = ReactionRules.DeltaTo(bound, value);
             if (!ReactionLimits.InRange(delta)) return GameSessionFailure.InvalidReactionAmount;
             var failure = PlanReaction(record, stored, (int)delta, npc, pc, owner.LedByPc(entity), out var adjustment, out var updated);
+            planned = adjustment;
+            if (failure != GameSessionFailure.None) return failure;
+            _reactions[entity] = (adjustment.Applies ? updated : staged.Write, adjustment);
+            return GameSessionFailure.None;
+        }
+
+        // A reaction change of <entity> toward the hero by <delta> through the reaction change rules (0x4C0DE0, R2), with the hero
+        // on its enemy list as the plan has it.
+        internal GameSessionFailure PlanReactionChange(string entity, ReactionNpcFacts facts, ReactionPcFacts pc, int delta, out ReactionAdjustment? planned)
+        {
+            var npc = facts with { PcOnEnemyList = Get(entity).Enemies.Contains(SessionCombatant.Hero) };
+            var record = _reactions.TryGetValue(entity, out var staged) && staged.Write is { } write ? write : owner._reactions.Get(entity);
+            var failure = PlanReaction(record, record.Stored(npc.BaseReaction), delta, npc, pc, owner.LedByPc(entity), out var adjustment, out var updated);
             planned = adjustment;
             if (failure != GameSessionFailure.None) return failure;
             _reactions[entity] = (adjustment.Applies ? updated : staged.Write, adjustment);

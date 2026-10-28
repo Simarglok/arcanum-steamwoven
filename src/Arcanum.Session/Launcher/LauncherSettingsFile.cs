@@ -40,7 +40,19 @@ public static class LauncherSettingsFile
         var current = Load(path);
         if (current.Status == LauncherSettingsReadStatus.OtherSchema) return LauncherSettingsSaveStatus.RefusedOtherSchema;
         if (current.Status == LauncherSettingsReadStatus.Unreadable) return LauncherSettingsSaveStatus.RefusedUnreadable;
-        var text = LauncherSettingsCodec.Serialize(settings, current);
+        return Write(path, LauncherSettingsCodec.Serialize(settings, current));
+    }
+
+    /// <summary>ARC-UI-014: the player's "reset settings": the defaults replace whatever file is there, one of another schema or one
+    /// that cannot be read included (the only write that does), and keep none of its keys.</summary>
+    public static LauncherSettingsSaveStatus Reset(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        return Write(path, LauncherSettingsCodec.Serialize(LauncherSettings.Defaults));
+    }
+
+    private static LauncherSettingsSaveStatus Write(string path, string text)
+    {
         string? temporary = null;
         try
         {
