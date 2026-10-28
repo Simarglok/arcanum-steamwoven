@@ -51,13 +51,46 @@ internal static partial class Program
     /// <summary>The first component of a clause outside the S1 candidate set, or null. Slots past
     /// the signature are never read by the interpreter and are not checked (the census shows
     /// that the installed data leaves editor bytes in them).</summary>
-    internal static string? CsS1Refusal(bool condition, WorldClause clause)
+    internal static string? CsS1Refusal(bool condition, WorldClause clause) => CsRefusal(condition, clause, CsS1Conditions, CsS1Actions, CsS1ValueKinds, []);
+
+    /// <summary>The first component of a clause outside a set of condition, action, value-kind and focus-kind numbers, or null.</summary>
+    internal static string? CsRefusal(bool condition, WorldClause clause, int[] conditions, int[] actions, int[] valueKinds, int[] focusKinds)
     {
-        if (!(condition ? CsS1Conditions : CsS1Actions).Contains(clause.Type)) return (condition ? "condition:" : "action:") + clause.Type;
+        if (!(condition ? conditions : actions).Contains(clause.Type)) return (condition ? "condition:" : "action:") + clause.Type;
         foreach (var (slot, role, kind, value) in CsOperands(condition, clause))
         {
-            if (role == 'n' && !CsS1ValueKinds.Contains(kind)) return "value_kind:" + kind;
-            if (role == 'o') return "focus_kind:" + kind;
+            if (role == 'n' && !valueKinds.Contains(kind)) return "value_kind:" + kind;
+            if (role == 'o' && !focusKinds.Contains(kind)) return "focus_kind:" + kind;
+        }
+        return null;
+    }
+
+    // ARC-SCRIPT-041: the item events (get, drop, buy, insert-item, wield on and off, remove-item, transfer) and a copy of the
+    // session's item set (SessionItemScripts.Admission: S6 without dialog, story state and deferred calls; focus triggerer,
+    // attachee, extra object and player).
+    private static readonly int[] CsItemPoints = [4, 5, 17, 21, 24, 25, 28, 32];
+    private static readonly int[] CsItemConditions = [0, 3, 4, 5, 43, 18, 39];
+    private static readonly int[] CsItemActions = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 24, 100, 101];
+    private static readonly int[] CsItemFocusKinds = [0, 1, 12, 21];
+
+    /// <summary>The first clause a run of <paramref name="number"/> from line 0 reaches outside the item set (that script only;
+    /// the set has no call), "missing" without a file, or null when the whole reach is inside.</summary>
+    internal static string? CsItemRefusal(IReadOnlyDictionary<int, WorldScript> scripts, int number)
+    {
+        if (!scripts.TryGetValue(number, out var script)) return "missing";
+        if (script.Lines.Count == 0) return null;
+        var flow = AnalyseWorldFlow(script, 0);
+        if (flow.UnresolvedLines.Count > 0) return "computed_step";
+        for (var line = 0; line < script.Lines.Count; line++)
+        {
+            var (t, f) = (flow.True[line] != WorldReach.Unreached, flow.False[line] != WorldReach.Unreached);
+            if (!t && !f) continue;
+            var row = script.Lines[line];
+            var refusal = CsRefusal(true, row.Condition, CsItemConditions, CsItemActions, CsS1ValueKinds, CsItemFocusKinds)
+                ?? (t ? CsRefusal(false, row.True, CsItemConditions, CsItemActions, CsS1ValueKinds, CsItemFocusKinds) : null)
+                ?? (f ? CsRefusal(false, row.False, CsItemConditions, CsItemActions, CsS1ValueKinds, CsItemFocusKinds) : null);
+            if (refusal is null && (t && !CsS1GotoOk(row.True, script.Lines.Count) || f && !CsS1GotoOk(row.False, script.Lines.Count))) refusal = "goto_target";
+            if (refusal is not null) return refusal;
         }
         return null;
     }
@@ -268,6 +301,18 @@ internal static partial class Program
         var admittedBySap = Enumerable.Range(0, CsAttachmentPoints).Select(sap => (sap, scripts: walk.Hits.Where(h => h.Sap == sap).Select(h => h.Script).Distinct().ToArray()))
             .Where(x => x.scripts.Length > 0).Select(x => new { x.sap, attached = x.scripts.Length, admitted = x.scripts.Count(admitted.Contains) }).ToArray();
         var placedScripts = walk.Hits.Where(h => h.Sap < 0).Select(h => h.Script).Distinct().ToArray();
+        var itemPoints = CsItemPoints.Select(sap =>
+        {
+            var hits = walk.Hits.Where(h => h.Sap == sap).ToArray();
+            var numbers = hits.Select(h => h.Script).Distinct().Order().ToArray();
+            var refusal = numbers.ToDictionary(n => n, n => CsItemRefusal(scripts, n));
+            var firstRefusals = new CensusTally();
+            foreach (var reason in refusal.Values) if (reason is not null) firstRefusals.Add(reason);
+            // Counted as the attachment table counts: aggregates repeat the mobiles, prototypes are inherited defaults.
+            return new { sap, object_slots = hits.Count(h => h.Kind is not "aggregate" and not "prototype"), prototype_defaults = hits.Count(h => h.Kind == "prototype"),
+                scripts = numbers.Length, object_types = hits.Select(h => h.Type ?? -1).Distinct().Order().ToArray(),
+                admitted_from_line_0 = numbers.Where(n => refusal[n] is null).ToArray(), first_refusal = firstRefusals.Snapshot() };
+        }).ToArray();
 
         var report = new
         {
@@ -303,6 +348,7 @@ internal static partial class Program
                 live_scripts = live.Reach.Count, admitted_live_scripts = admitted.Count, admitted_whole_scripts = wholeAdmitted.Count, admitted_whole_live_scripts = wholeAdmitted.Count(live.Reach.ContainsKey), first_refusal = firstRefusal.Snapshot().OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal).Take(40).ToDictionary(p => p.Key, p => p.Value),
                 by_point = admittedBySap, placed = new { attached = placedScripts.Length, admitted = placedScripts.Count(admitted.Contains) },
             },
+            item_points = itemPoints,
             refusals = refusals.Snapshot(),
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
@@ -349,8 +395,14 @@ internal static partial class Program
             !CsS1GotoOk(root.Lines[0].True with { Values = [6, 0, 0, 0, 0, 0, 0, 0] }, 5) && !CsS1GotoOk(root.Lines[0].True with { Values = [-2, 0, 0, 0, 0, 0, 0, 0] }, 5) &&
             !CsS1GotoOk(root.Lines[0].True with { Kinds = [2, 0, 0, 0, 0, 0, 0, 0] }, 5), "goto rule P6: inside or exactly the end, literal only");
         Check(CsOperands(false, root.Lines[2].True).Count(o => o.Role == 'o') == 2, "call takes two objects");
+        // Item set (ARC-SCRIPT-041): the root's line 0 dialog action on its reached false branch refuses; a set flag then skip is
+        // admitted; a call is outside; a missing number names itself.
+        var items = new Dictionary<int, WorldScript> { [1] = root, [9] = callee, [11] = DecodeWorldScript(Script((0, [], 100, [5], 0, []), (0, [], SatReturnSkip, [], 0, []))),
+            [12] = DecodeWorldScript(Script((0, [], SatCall, [9, 1], 0, []))) };
+        Check(CsItemRefusal(items, 1) == "action:4" && CsItemRefusal(items, 11) is null && CsItemRefusal(items, 12) == "action:" + SatCall && CsItemRefusal(items, 2) == "missing",
+            "item set refusals from line 0");
         var truncated = Script((0, [], SatReturnRun, [], 0, []))[..^1];
         try { DecodeWorldScript(truncated); Check(false, "framing refusal"); } catch (InvalidDataException) { }
-        Console.WriteLine("script-census self-test: PASS (signature tables, live entries and reach, S1 candidate refusals, framing)");
+        Console.WriteLine("script-census self-test: PASS (signature tables, live entries and reach, S1 candidate and item set refusals, framing)");
     }
 }

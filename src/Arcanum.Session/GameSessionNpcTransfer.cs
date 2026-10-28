@@ -180,10 +180,10 @@ public sealed partial class GameSessionOwner
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
-            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(added.Kind))), true, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(added.Kind))), npc, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), true, insertCheck, scripts);
+        return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), npc, insertCheck, scripts);
     }
 
     /// <summary>
