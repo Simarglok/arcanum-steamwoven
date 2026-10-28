@@ -178,4 +178,46 @@ public sealed class ProjectileRulesTests
         Assert.AreEqual(21, ProjectileRules.StepsIn(3, 7));
         Assert.AreEqual(0, ProjectileRules.StepsIn(-2, 4));
     }
+
+    // ARC-COMBAT-018 (0x4B39B0, ledger PS rows): a bow shot from expert training flies as two projectiles; nothing else does.
+    [TestMethod]
+    public void ABowShotAtExpertFliesAsTwoProjectiles()
+    {
+        Assert.AreEqual(1, ProjectileRules.Projectiles(CombatSkill.Bow, SkillTraining.None));
+        Assert.AreEqual(1, ProjectileRules.Projectiles(CombatSkill.Bow, SkillTraining.Apprentice));
+        Assert.AreEqual(2, ProjectileRules.Projectiles(CombatSkill.Bow, SkillTraining.Expert));
+        Assert.AreEqual(2, ProjectileRules.Projectiles(CombatSkill.Bow, SkillTraining.Master));
+        Assert.AreEqual(1, ProjectileRules.Projectiles(CombatSkill.Firearms, SkillTraining.Master));
+        Assert.AreEqual(1, ProjectileRules.Projectiles(CombatSkill.Throwing, SkillTraining.Master));
+        Assert.AreEqual(1, ProjectileRules.Projectiles(CombatSkill.Melee, SkillTraining.Master));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ProjectileRules.Projectiles((CombatSkill)7, SkillTraining.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ProjectileRules.Projectiles(CombatSkill.Bow, (SkillTraining)7));
+    }
+
+    // ARC-COMBAT-018 (0x4B2870): a shot without a target (a missed throw's scatter) ends on leaving its destination, before the
+    // obstruction and stray tests of that tile; before it, it flies free.
+    [TestMethod]
+    public void AShotWithoutATargetEndsOnLeavingItsDestination()
+    {
+        var map = new Map { TargetTile = new(6, 6) };
+        var free = new ProjectileShot(false, true, 3);
+        var destination = new CellCoord(6, 6);
+        map.Critters[destination] = ["bystander"];
+        map.Blockers[(destination, LineOfFireRules.Rotation(destination, new(7, 7)))] = "wall";
+        var end = ProjectileRules.Cross(free, new(destination, new(7, 7), 6), destination, null, Hero, map, NoRolls);
+        Assert.AreEqual((ProjectileStrikeKind.DestinationEnd, (string?)null, true, free), (end.Strike, end.Struck, end.Ends, end.Shot),
+            "it ends there even beyond its range");
+        // On the way it meets obstructions and strays, the critter that was its target included.
+        map.Critters[new(4, 4)] = [Target, Hero];
+        var stray = ProjectileRules.Cross(free, new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, Rolls(1));
+        Assert.AreEqual((ProjectileStrikeKind.Stray, Target), (stray.Strike, stray.Struck));
+        map.Blockers[(new(5, 5), LineOfFireRules.Rotation(new(5, 5), new(6, 6)))] = "door";
+        Assert.AreEqual(ProjectileStrikeKind.Obstruction, ProjectileRules.Cross(free, new(new(5, 5), new(6, 6), 2), destination, null, Hero, map, NoRolls).Strike);
+        // Without a target a shot is a miss flying free (the scatter sets flag 0x20).
+        Assert.ThrowsExactly<ArgumentException>(() => ProjectileRules.Cross(new ProjectileShot(false, false, 3), new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, NoRolls));
+        Assert.ThrowsExactly<ArgumentException>(() => ProjectileRules.Cross(new ProjectileShot(true, true, 3), new(new(4, 4), new(5, 5), 2), destination, null, Hero, map, NoRolls));
+        // A shot with a target still flies on past its destination as a miss.
+        var past = ProjectileRules.Cross(new ProjectileShot(false, false, 10), new(destination, new(7, 7), 6), destination, Target, Hero, new Map(), NoRolls);
+        Assert.AreEqual((ProjectileStrikeKind.None, true), (past.Strike, past.Shot.FreeFlight));
+    }
 }

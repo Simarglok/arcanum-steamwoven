@@ -146,12 +146,13 @@ public partial class TerrainViewerApp
             }
             Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
+            var pairs = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await ExpertShots() : "NONE (a critical miss took the bow)";
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights, Throws = throws,
+                Projectiles = flights, ExpertShots = pairs, Throws = throws,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -223,6 +224,74 @@ public partial class TerrainViewerApp
             return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };
         }
 
+        // ARC-COMBAT-018: with the hero's bow training raised to expert a shot flies as two projectiles on the same line, each ending on
+        // its own: both strike the target of a hit (the second may find a corpse), both fly on past it after a miss. The bow's level
+        // reaches the expert minimum with the hero's unspent points in the character editor when it must. Shots until a hit (at most
+        // 12); the training, the points and the editor are set back afterwards.
+        async Task<object> ExpertShots()
+        {
+            const Arcanum.Simulation.Skills.Skill Bow = Arcanum.Simulation.Skills.Skill.Bow;
+            var bow = session.QueryHeroSkills()![Bow].Training;
+            var opened = session.OpenHeroEditor().Disposition == GameSessionDisposition.Changed;
+            var spent = 0;
+            while (session.QueryHeroSkills()![Bow].Level < Arcanum.Simulation.Skills.SkillRules.MinimumLevel(SkillTraining.Expert)
+                && spent < 40 && session.SpendHeroPoint(session.Version, AdvancementTrack.BasicSkill, (int)Bow).Disposition == GameSessionDisposition.Changed) spent++;
+            foreach (var tier in new[] { SkillTraining.Apprentice, SkillTraining.Expert })
+                if (session.QueryHeroSkills()![Bow].Training < tier) session.SetHeroSkillTraining(session.Version, Bow, tier);
+            var ends = new List<string>();
+            var hit = false;
+            var level = session.QueryHeroSkills()![Bow].Level;
+            var restored = false;
+            try
+            {
+                for (var shots = 0; shots < 12 && !hit && session.QueryHeroAttack() is { Training: >= SkillTraining.Expert }; shots++)
+                {
+                    Heal();
+                    _projectileEndsForSelfTest.Clear();
+                    var result = await ShootOnce(pick.Target, expectWalk: false);
+                    // A critical miss that took the bow ends the check; its arrows are given up.
+                    if (session.QueryHeroAttack() is not { Skill: CombatSkill.Bow }) { ClearAreaProjectiles("the bow was lost"); break; }
+                    Require(result?.Shots.Count == 2 && _projectiles.Count == 2 && _projectiles[0].Destination == _projectiles[1].Destination,
+                        $"the expert shot flies as two projectiles on one line ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
+                    hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                    for (var frames = 0; frames < 400 && _projectiles.Count > 0; frames++)
+                    {
+                        _areaSmokeTime++;
+                        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                    }
+                    Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 2 && session.QueryShotsInFlight().Count == 0,
+                        $"both flights ended ({_projectiles.Count} in flight, {_projectileEndsForSelfTest.Count} ends)");
+                    if (hit) Require(_projectileEndsForSelfTest.All(e => e.Strike == ProjectileStrikeKind.Target && e.Struck == pick.Target.Entity),
+                        $"both arrows of a hit strike its target ({string.Join(",", _projectileEndsForSelfTest.Select(e => $"{e.Strike}:{e.Struck}"))})");
+                    else Require(_projectileEndsForSelfTest.All(e => e.Strike != ProjectileStrikeKind.Target), "a miss's arrows never strike its target");
+                    ends.Add(string.Join("+", _projectileEndsForSelfTest.Select(e => $"{e.Strike}:{e.Struck ?? "none"}")));
+                }
+            }
+            finally
+            {
+                session.SetHeroSkillTraining(session.Version, Bow, bow);
+                // Back down by the points spent here, one refund each.
+                for (var left = spent; left > 0; left--)
+                    if (session.RefundHeroPoint(session.Version, AdvancementTrack.BasicSkill, (int)Bow, SkillRefundClick.OnePoint).Disposition != GameSessionDisposition.Changed) break;
+                if (opened) session.CloseHeroEditor();
+                restored = session.QueryHeroSkills()![Bow].Training == bow;
+            }
+            Require(restored, "the hero's bow training is set back");
+            if (ends.Count == 0 && session.QueryHeroAttack() is { Skill: CombatSkill.Bow } && level < Arcanum.Simulation.Skills.SkillRules.MinimumLevel(SkillTraining.Expert))
+            {
+                GD.Print($"ARC-COMBAT-018 native-smoke expert-bow NONE (bow level {level} with {spent} points spent allows no expert training)");
+                return $"NONE (bow level {level} allows no expert training)";
+            }
+            if (ends.Count == 0)
+            {
+                GD.Print("ARC-COMBAT-018 native-smoke expert-bow NONE (a critical miss took the bow before an expert shot flew)");
+                return "NONE (a critical miss took the bow first)";
+            }
+            GD.Print($"ARC-COMBAT-018 native-smoke expert-bow PASS map={_readyMapName} target={pick.Target.Entity} level={level} spent={spent} hit={hit}"
+                + $" ends={string.Join(",", ends)}");
+            return new { Shots = ends.Count, Hit = hit, Ends = ends };
+        }
+
         // ARC-COMBAT-017: the lent bow becomes a throwing dagger (melee skill, "default throws", the installed 6072's weight 15) with the
         // same projectile art. Each throw leaves the hand at the shot (the item lies hidden on the hero's cell and is not drawn), flies,
         // and lands on the tile its projectile ends on (the struck target's, or the last one beyond the thrown range), drawn again and
@@ -242,7 +311,7 @@ public partial class TerrainViewerApp
             _lentMissileArtForSelfTest = LentMissileArt;
             _lentThrowWeightForSelfTest = 15;
             var landings = new List<string>();
-            var hit = false; var hiddenChecked = false;
+            var hit = false; var hiddenChecked = false; var scatters = new List<string>();
             for (var throws = 0; throws < 12 && !hit; throws++)
             {
                 Heal();
@@ -253,8 +322,9 @@ public partial class TerrainViewerApp
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
                 var result = await ShootOnce(pick.Target, expectWalk: false);
                 var heroCell = session.QueryActor().Cell;
-                Require(result?.Shot is { } shot && session.QueryThrownShot(shot) is { Item: var item } && item == wielded.Entity,
-                    $"the dagger is thrown ({result?.Failure} {result?.Resolution?.Outcome}, shot {result?.Shot?.Id})");
+                // ARC-COMBAT-018: a miss that scatters back onto the hero's own cell has no line to fly and lands at once.
+                Require(result?.Shot is { } shot && (session.QueryThrownShot(shot) is { Item: var item } && item == wielded.Entity || result.Scatter == heroCell),
+                    $"the dagger is thrown ({result?.Failure} {result?.Resolution?.Outcome}, shot {result?.Shot?.Id}, scatter {result?.Scatter})");
                 Require(result!.Resolution!.Difficulty is not null && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
                     "the dagger left the hand at the shot");
                 if (_projectiles.Count == 1)
@@ -278,6 +348,10 @@ public partial class TerrainViewerApp
                 var end = _projectileEndsForSelfTest.Single();
                 hit = result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
                 if (hit) Require(end.Strike == ProjectileStrikeKind.Target && landing.Tile == World(pick.Target.Row), $"a hit lands on its target's tile ({end.Strike} {landing.Tile})");
+                // ARC-COMBAT-018: a missed throw flies to its scattered tile without a target and lands there unless it strikes on the way.
+                else Require(result.Scatter is { } scatter && end.Strike != ProjectileStrikeKind.Target
+                    && (end.Strike != ProjectileStrikeKind.DestinationEnd || landing.Tile == scatter), $"a miss scatters ({end.Strike} {landing.Tile} vs {result.Scatter})");
+                if (!hit) scatters.Add($"{result.Scatter!.Value.X},{result.Scatter.Value.Y}:{end.Strike}");
                 SyncAreaGroundBodies();
                 landings.Add($"{end.Strike}:{landing.Tile.X},{landing.Tile.Y}:drawn={_groundBodies.ContainsKey(PlacedKey(runtime, wielded.Entity))}");
                 Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
@@ -288,7 +362,8 @@ public partial class TerrainViewerApp
             Require(hiddenChecked, $"a throw was seen in flight ({string.Join(",", landings)})");
             _lentThrowWeightForSelfTest = null;
             GD.Print($"ARC-COMBAT-017 native-smoke throw PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} landings={string.Join(",", landings)}");
-            return new { Throws = landings.Count, Hit = hit, Landings = landings };
+            if (scatters.Count > 0) GD.Print($"ARC-COMBAT-018 native-smoke scatter PASS map={_readyMapName} misses={string.Join(",", scatters)}");
+            return new { Throws = landings.Count, Hit = hit, Landings = landings, Scatters = scatters };
         }
 
         void Heal()

@@ -222,13 +222,14 @@ public partial class TerrainViewerApp
         {
             DropMap = AreaDropMapNow(), Flight = flight is not null,
             // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
-            Throw = flight is null ? null : HeroThrow(),
+            Throw = flight is null ? null : HeroThrow(goal),
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
         {
-            LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, target.Row, null, target);
+            // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line.
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, target.Row, null, target, null);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -590,13 +591,13 @@ public partial class TerrainViewerApp
             {
                 Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
                 // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
-                Flight = flight is not null, Throw = flight is null ? null : HeroThrow(),
+                Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
             });
             goal.Attacks++;
             goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
             if (result.Shot is { } shot)
             {
-                LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, blocker, null, null);
+                foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, blocker, null, null, null);
                 // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
                 if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
                 if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
@@ -626,14 +627,15 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
         var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with
         {
-            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(),
+            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
         });
         goal.Attacks++;
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         if (result.Shot is { } shot)
         {
-            LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, struck.Row, struck, null);
+            // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line; a missed throw flies to its scattered tile.
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, struck.Row, struck, null, result.Scatter);
             // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             // A critical miss turned on the hero at the shot; anything else waits for the strike.

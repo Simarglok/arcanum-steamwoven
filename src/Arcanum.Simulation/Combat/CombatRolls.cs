@@ -50,6 +50,8 @@ public enum CombatRollPurpose
     CriticalExplodeWeapon,
     CriticalDestroyAmmo,
     CriticalLoseAmmo,
+    // ARC-COMBAT-018: a missed throw's scatter direction (0x4CEF00(0, 7) in the ranged path 0x4B39B0).
+    ThrowScatter,
 }
 
 /// <summary>
