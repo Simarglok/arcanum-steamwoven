@@ -23,7 +23,9 @@ public partial class TerrainViewerApp
     private Dictionary<AreaObjectKey, (string Entity, CellCoord Cell, AreaObjectRecord Row)> _groundOnly = [];
     private object? _groundStamp;
     private readonly HashSet<string> _groundReported = new(StringComparer.Ordinal);
-    private const int ItemType = 14, SceneryType = 3, TrapType = 17, DestroyedArtSlot = 24, FlagsSlot = 18, CurrentArtSlot = 0;
+    private const int ItemType = 14, SceneryType = 3, TrapType = 17, DestroyedArtSlot = 24, FlagsSlot = 18, CurrentArtSlot = 0, ContainerType = 2;
+    // ARC-WORLD-063: the junk pile prototype's current art (3043), read when the content stack opens; null when it does not read.
+    private uint? _junkPileArt;
 
     /// <summary>The extra art of the module the area was read from, opened on first use; null when its content stack does not open
     /// (said once).</summary>
@@ -35,9 +37,14 @@ public partial class TerrainViewerApp
         _extraArt?.Dispose(); _extraArt = null; _extraArtModule = module; _extraArtFailure = null;
         var found = AreaContentRoot.Discover(module);
         if (found.Status != AreaContentRootStatus.Ready) { _extraArtFailure = $"{found.Status}"; }
-        else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _extraArt = new(stack);
+        else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
+        {
+            _junkPileArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(ContentPrototypes.Open(stack).Read, Arcanum.Simulation.Items.JunkPileRules.Prototype).Fields?.CurrentArt;
+            _extraArt = new(stack);
+        }
         else _extraArtFailure = "content stack did not open";
         GD.Print($"ARC-RENDER-033 extra-art {(_extraArt is null ? "unavailable " + _extraArtFailure : "ready")}");
+        GD.Print($"ARC-WORLD-063 junk-pile-art {(_junkPileArt is { } pileArt ? $"0x{pileArt:X8}" : "unread")}");
         return _extraArt;
     }
 
@@ -85,7 +92,8 @@ public partial class TerrainViewerApp
             }
         // The items on the ground away from a T0 body.
         var map = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
-        if (session.QueryMapInventory(new SessionMapId(CurrentAreaMap)) is { } current)
+        var current = session.QueryMapInventory(new SessionMapId(CurrentAreaMap));
+        if (current is not null)
             foreach (var ground in current.Ground)
             {
                 var entity = ground.Item.Entity;
@@ -113,6 +121,21 @@ public partial class TerrainViewerApp
                     only[key] = (entity, ground.Cell, new AreaObjectRecord(key, 0, row?.Type ?? ItemType, row?.PrototypeNumber ?? 0, "", "", "", "",
                         AreaScope.Core, null, ground.Cell.X, ground.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
                         row?.EffectiveFields ?? [], true, true, true));
+            }
+        // ARC-WORLD-063: each junk pile the session made is drawn at its cell from the pile prototype's art (flat: its object flags carry
+        // OF_FLAT, as every placed pile of the interiors does) and opened as a container; its items are not drawn.
+        if (current is not null)
+            foreach (var pile in current.JunkPiles)
+            {
+                if (_junkPileArt is not { } pileArt || Frame(pileArt, "junk-pile") is not { } frame)
+                {
+                    if (_groundReported.Add("nopile:" + pile.Entity)) GD.Print($"ARC-WORLD-063 junk-pile entity={pile.Entity} not drawn: no pile art");
+                    continue;
+                }
+                var key = PlacedKey(area.Snapshot.RuntimeMap, pile.Entity);
+                bodies[key] = AreaScenePlan.Place(area.Plan.Chart, key, frame.Visual, pile.Cell.X, pile.Cell.Y, true);
+                only[key] = (pile.Entity, pile.Cell, new AreaObjectRecord(key, 0, ContainerType, Arcanum.Simulation.Items.JunkPileRules.Prototype, "", "", "", "",
+                    AreaScope.Core, null, pile.Cell.X, pile.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true));
             }
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
@@ -149,6 +172,7 @@ public partial class TerrainViewerApp
         if (_inventoryHost!.Target(_areaSession!, CurrentAreaMap, key) is { } target)
             return target.Kind == AreaInventoryTargetKind.GroundItem && _groundBodies.TryGetValue(key, out var drawn)
                 ? target with { Row = target.Row with { WorldX = drawn.MapX, WorldY = drawn.MapY } } : target;
-        return _groundOnly.TryGetValue(key, out var placed) ? new(AreaInventoryTargetKind.GroundItem, placed.Entity, placed.Row) : null;
+        if (!_groundOnly.TryGetValue(key, out var placed)) return null;
+        return new(SessionJunkPile.Number(placed.Entity) is not null ? AreaInventoryTargetKind.JunkPile : AreaInventoryTargetKind.GroundItem, placed.Entity, placed.Row);
     }
 }

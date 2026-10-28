@@ -222,6 +222,8 @@ public sealed partial class GameSessionOwner
         _inventory.Ammo.Remove(entity);
         _inventory.Piles.Remove(entity);
         _inventory.Given.Remove(entity);
+        // ARC-WORLD-063: a deleted item leaves its junk pile (the caller decides whether the pile dissolves).
+        _inventory.LeaveJunkPile(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);

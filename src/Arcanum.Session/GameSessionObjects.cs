@@ -472,11 +472,20 @@ public sealed partial class GameSessionOwner
             edits.AddRange(Edits(openable, openableBaseline.Kind, flags | LockRules.BustedBit, 0));
         }
         var applied = ApplyChanges(Version, null, edits);
-        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7).
+        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7);
+        // ARC-WORLD-063: one by one, so from the second item on they gather into a junk pile on the container's cell (JP1).
         if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
             _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
-            foreach (var item in _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)))
-                ScheduleDecay(item.Entity, target.Map);
+        {
+            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).ToArray();
+            var later = items.ToHashSet(StringComparer.Ordinal);
+            foreach (var item in items)
+            {
+                later.Remove(item);
+                SettleDrop(item, target.Map, target.Baseline.Cell, later);
+                ScheduleDecay(item, target.Map);
+            }
+        }
         if (applied.Disposition != GameSessionDisposition.Changed || hit.Break != ObjectBreak.SceneryRespawns) return applied;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var delay = ObjectDamageRules.RespawnDelayMs(target.Baseline.RespawnDelay);
@@ -568,7 +577,8 @@ public sealed partial class GameSessionOwner
     // The spill cell above the condition byte (each coordinate in 24 bits, +1 so a cell at 0,0 is told from none).
     private static long SpillValue(CellCoord cell) => (((long)cell.Y << 24 | (uint)cell.X) + 1) << 8;
 
-    private bool OnGround(string item) =>
+    // ARC-WORLD-063: an item in a junk pile lies in the pile, out of an attack's reach.
+    private bool OnGround(string item) => _inventory.JunkPileOf(item) is null &&
         _inventory.Seeds.Any(pair => !_inventory.Taken.Contains(item) && LooseCell(pair.Key, pair.Value, item) is not null);
 
     private static bool ValidObject(SessionObjectTarget target) =>

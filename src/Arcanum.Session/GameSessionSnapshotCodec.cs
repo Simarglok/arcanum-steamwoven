@@ -69,7 +69,10 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles"];
+    // ARC-WORLD-063 (schema 42): the junk piles the session made.
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "junkPiles"];
+    private static readonly string[] JunkPileFields = ["entity", "map", "x", "y", "items"];
+    private static readonly string[] JunkPileItemFields = ["entity", "slot", "width", "height"];
     private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
     private static readonly string[] GivenFields = ["entity", "origin"];
     private static readonly string[] PileFields = ["entity", "coins"];
@@ -407,6 +410,28 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", pile.Entity);
                 w.WriteNumber("coins", pile.Quantity);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("junkPiles");
+            foreach (var pile in snapshot.Inventory.JunkPiles)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", pile.Entity);
+                w.WriteNumber("map", pile.Map.RuntimeMap);
+                w.WriteNumber("x", pile.Cell.X);
+                w.WriteNumber("y", pile.Cell.Y);
+                w.WriteStartArray("items");
+                foreach (var item in pile.Items)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("entity", item.Entity);
+                    w.WriteNumber("slot", item.Slot);
+                    w.WriteNumber("width", item.Width);
+                    w.WriteNumber("height", item.Height);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1487,8 +1512,33 @@ public static class GameSessionSnapshotCodec
             lastPile = entity;
             piles[i] = new(entity, Int(row["coins"], path + ".coins", 0, int.MaxValue));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles);
+        // ARC-WORLD-063: the junk piles, in the order they were made; the grid's bounds and overlaps are checked on restore.
+        var junkRows = Array(f["junkPiles"], p + ".junkPiles", SessionJunkPile.MaxPiles);
+        var junkPiles = new SessionJunkPile[junkRows.Length];
+        var junkItems = 0;
+        for (var i = 0; i < junkRows.Length; i++)
+        {
+            var path = $"{p}.junkPiles[{i}]";
+            var row = Fields(junkRows[i], path, JunkPileFields);
+            var itemRows = Array(row["items"], path + ".items", SessionJunkPile.MaxItems);
+            if ((junkItems += itemRows.Length) > SessionJunkPile.MaxItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, path + ".items");
+            var pileItems = new SessionJunkPileItem[itemRows.Length];
+            for (var j = 0; j < itemRows.Length; j++)
+            {
+                var itemPath = $"{path}.items[{j}]";
+                var item = Fields(itemRows[j], itemPath, JunkPileItemFields);
+                pileItems[j] = new(Entity(item["entity"], itemPath + ".entity"), Int(item["slot"], itemPath + ".slot", 0, MaxJunkSlot),
+                    Int(item["width"], itemPath + ".width", 1, Arcanum.Simulation.Items.InventoryGridRules.Columns),
+                    Int(item["height"], itemPath + ".height", 1, Arcanum.Simulation.Items.InventoryGridRules.ContainerRows));
+            }
+            junkPiles[i] = new(Entity(row["entity"], path + ".entity"), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)), System.Array.AsReadOnly(pileItems));
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, junkPiles);
     }
+
+    // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
+    private const int MaxJunkSlot = Arcanum.Simulation.Items.InventoryGridRules.ContainerRows * Arcanum.Simulation.Items.InventoryGridRules.Columns - 1;
 
     // ARC-WORLD-083: a made or placed item's magick/tech complexity, any 32-bit value (the original's field 0x60 is one).
     private static int Complexity(Dictionary<string, JsonElement> item, string path) => Int(item["complexity"], path + ".complexity", int.MinValue, int.MaxValue);

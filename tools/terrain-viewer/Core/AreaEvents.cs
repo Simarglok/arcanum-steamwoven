@@ -184,19 +184,26 @@ public interface IAreaEventObjects
 /// viewer's current hosts. ARC-WORLD-045: a wait timeout's reaction change reads the shown area's conversation state (its
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
+    private readonly Func<bool>? _lootShowsContainer;
 
     /// <param name="callHost">ARC-WORLD-048: the host of a call's attachee when it is not the map's own (a companion visiting the
     /// shown map talks and runs its calls through its own host); null or a null answer: <paramref name="talk"/>.</param>
-    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null)
+    /// <param name="lootShowsContainer">ARC-WORLD-063: whether the viewer's loot window shows a container (a junk pile); an item's
+    /// decay then waits a minute (ledger ID3, ID6). Null: never.</param>
+    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null,
+        Func<bool>? lootShowsContainer = null)
     {
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
         _talk = talk ?? throw new ArgumentNullException(nameof(talk));
         _callHost = callHost;
+        _lootShowsContainer = lootShowsContainer;
     }
+
+    public bool LootWindowShowsContainer => _lootShowsContainer?.Invoke() == true;
 
     private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 

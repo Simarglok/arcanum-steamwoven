@@ -48,6 +48,13 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
 
+    /// <summary>ARC-WORLD-063: the item's size in inventory cells (its inventory art's frame in 32-pixel cells, 0x461780), which decides
+    /// whether a junk pile has room for it; 1 × 1 when the host does not know it (the original's size when the art does not read).</summary>
+    public int InventoryWidth { get; init; } = 1;
+
+    /// <inheritdoc cref="InventoryWidth"/>
+    public int InventoryHeight { get; init; } = 1;
+
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
     /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>
@@ -157,8 +164,10 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
 public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
-        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null)
+        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
+        SessionJunkPile[]? junkPiles = null)
     {
+        JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
         Given = Array.AsReadOnly(given ?? []);
         Piles = Array.AsReadOnly(piles ?? []);
@@ -181,6 +190,8 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionGivenItem> Given { get; }
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity in ordinal order.</summary>
     public IReadOnlyList<SessionGoldRecord> Piles { get; }
+    /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made.</summary>
+    public IReadOnlyList<SessionJunkPile> JunkPiles { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -193,8 +204,9 @@ public sealed record SessionHolderInventory(string Entity, SessionHolderKind Kin
 /// each NPC holder's list followed by the made items the session added to that NPC (ARC-WORLD-055).</summary>
 public sealed class SessionMapInventory
 {
-    internal SessionMapInventory(SessionMapId map, SessionGroundItem[] ground, SessionHolderInventory[] holders)
+    internal SessionMapInventory(SessionMapId map, SessionGroundItem[] ground, SessionHolderInventory[] holders, SessionJunkPileInventory[]? junkPiles = null)
     {
+        JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Map = map;
         Ground = Array.AsReadOnly(ground);
         Holders = Array.AsReadOnly(holders);
@@ -205,6 +217,9 @@ public sealed class SessionMapInventory
     public IReadOnlyList<SessionGroundItem> Ground { get; }
     /// <summary>Holders in seed order, each list in its current order.</summary>
     public IReadOnlyList<SessionHolderInventory> Holders { get; }
+    /// <summary>ARC-WORLD-063: the junk piles the session made on this map, in the order they were made, each with its items in the
+    /// pile's order; an item in a pile is not in <see cref="Ground"/>.</summary>
+    public IReadOnlyList<SessionJunkPileInventory> JunkPiles { get; }
 }
 
 /// <summary>
@@ -407,7 +422,29 @@ internal sealed class InventoryDomain
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray());
+        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray());
+
+    /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
+    internal List<SessionJunkPile> JunkPiles { get; } = [];
+
+    /// <summary>The junk pile that holds the item, or null.</summary>
+    internal SessionJunkPile? JunkPileOf(string entity) => JunkPiles.Find(pile => pile.Items.Any(item => item.Entity == entity));
+
+    /// <summary>The junk pile with this entity, or null.</summary>
+    internal SessionJunkPile? JunkPile(string entity) => JunkPiles.Find(pile => pile.Entity == entity);
+
+    /// <summary>The items the junk piles hold (the bound of <see cref="SessionJunkPile.MaxItems"/>).</summary>
+    internal int JunkPileItems => JunkPiles.Sum(pile => pile.Items.Count);
+
+    /// <summary>Takes the item out of its junk pile; returns the pile as it is now, or null when no pile held it.</summary>
+    internal SessionJunkPile? LeaveJunkPile(string entity)
+    {
+        var at = JunkPiles.FindIndex(pile => pile.Items.Any(item => item.Entity == entity));
+        if (at < 0) return null;
+        var left = JunkPiles[at] with { Items = Array.AsReadOnly(JunkPiles[at].Items.Where(item => item.Entity != entity).ToArray()) };
+        JunkPiles[at] = left;
+        return left;
+    }
 
     /// <summary>The facts of a made item: its kind, no weight, location (-1, in the bag) or scripts; the host knows the prototype's
     /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>
@@ -441,6 +478,19 @@ internal sealed class InventoryDomain
     /// <paramref name="dropped"/>), which leave their holder's list, then the hero's items placed on this map (ARC-WORLD-059) in
     /// placing order.</summary>
     internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
+        Func<string, CellCoord?> dropped)
+    {
+        // ARC-WORLD-063: an item in a junk pile lies in the pile, not on the ground.
+        var inPile = JunkPiles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        var inventory = WithPiled(map, seed, killed, spilled, dropped);
+        var ground = inventory.Ground.ToDictionary(item => item.Item.Entity, item => item.Item, StringComparer.Ordinal);
+        return new(map, inventory.Ground.Where(item => !inPile.Contains(item.Item.Entity)).ToArray(), inventory.Holders.ToArray(),
+            JunkPiles.Where(pile => pile.Map == map).Select(pile => new SessionJunkPileInventory(pile.Entity, pile.Cell,
+                Array.AsReadOnly(pile.Items.Where(item => ground.ContainsKey(item.Entity)).Select(item => ground[item.Entity]).ToArray()))).ToArray());
+    }
+
+    /// <summary>The map's inventory with every item on its ground, those in junk piles included (ARC-WORLD-063).</summary>
+    internal SessionMapInventory WithPiled(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
         Func<string, CellCoord?> dropped) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), item.Cell!.Value))
