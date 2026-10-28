@@ -175,7 +175,9 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   each round call, but no host runs a round yet. The event queue reads the rules too
   (ARC-WORLD-024): a restore uses `Rules.Events` for `RebuildOnLoad`, and the poison recovery timer reads
   `PoisonRecoveryTwice` when it fires.
-- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
+- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. Since ARC-DEV-046 the
+  launcher settings (`launcher_v1.json`, `rules.active`) store the player's built-in mode, but no session start reads
+  it yet (ARC-RES-074 task 3). The AREA quick load
   (F8) keeps the current session's mode.
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.

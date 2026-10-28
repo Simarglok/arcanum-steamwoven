@@ -15,9 +15,9 @@ not inferred world state. See [local development](../workflow/local-development.
 
 Use the `godot_canonical` function from the [shared toolchain](../workflow/toolchain.md), after restoring/building the viewer solution below. Launch the Godot project through the engine; its C# project is not a `dotnet run` executable.
 
-The viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
-policy, or extraction behavior. It requires caller-selected inputs and a safe,
-non-path source label:
+With arguments the viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
+policy, or extraction behavior (a start without arguments reads the stored game folder, [below](#start-without-inputs-arc-dev-046)).
+It requires caller-selected inputs and a safe, non-path source label:
 
     godot_canonical --path tools/terrain-viewer/Godot -- \
       --mode terrain-only --module PATH --resource PATH --source-id LABEL
@@ -68,6 +68,28 @@ recovered lookup IDs. `--expect-module-sha256` and `--expect-resource-sha256`
 are optional additional equality constraints, not replacements. Errors expose
 only stable categories and aggregate counts; paths, entry names, exception text,
 archive bytes, and sampled colours are deliberately not shown.
+
+### Start without inputs (ARC-DEV-046)
+
+Started with no viewer arguments (a player's build; `--native-smoke` and its screenshot option alone also count), the
+viewer reads the launcher settings `user://launcher_v1.json` ([research](../research/launcher-settings.md#configuration-file);
+`LAUNCHER_SETTINGS_TEST_PATH` names another file, and an automated run without it has no file). It opens the stored
+game folder while `GameFolderLocator.Check` finds it ready, else the first ready fixed candidate (Windows: the GOG
+registry key `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829` and its 64-bit twin, `C:\GOG Games\Arcanum`, the GOG
+Galaxy folder; macOS: `/Applications/Arcanum`, `~/Applications/Arcanum`, the GOG folders of each CrossOver bottle), and
+writes the folder found with its source and identity back. A folder is ready when the content stack mounts the
+`Arcanum` module and the module archive, `arcanum1.dat` and `arcanum2.dat` are there; any other result is a typed
+`GameFolderStatus` with the missing name. The start is map mode on `Arcanum1-024-fixed` with the main menu and the
+folder's own inputs, the same as `./arcanum area` (`test_launcher_sync.py` keeps the two in step). The log prints
+`ARC-DEV-046` lines: the settings read, each folder checked, the save and the folder used (GOG marker, verified
+1.0.7.4 executable, changed identity, whether the launcher screen would show). With no game folder the HUD shows
+`failure stage=GameFolder code=NotFound`. Not built: the launcher screen (ARC-RES-074 task 2), which shows on the
+first run, a stored folder that is gone, a changed installation or "show at start"; applying the stored rule mode
+(task 3) and display; the candidate paths are F0 until a packaging task checks them on Windows and in Wine wrappers.
+
+Native smoke on the original data: `LAUNCHER_SETTINGS_TEST_PATH=FILE ARC_AREA_MAP_SMOKE_ONLY=menu` and
+`godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke`, with `FILE` holding a stored folder or absent
+(detection), prints `ARC-DEV-046 game folder ready` and `ARC-UI-011 native-smoke main menu PASS`.
 
 ## Diagnostic rendering contract
 

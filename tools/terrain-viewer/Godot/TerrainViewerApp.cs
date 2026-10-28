@@ -79,7 +79,13 @@ public partial class TerrainViewerApp : Node
         try
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
-            _arguments = _launchArguments = TerrainViewerArguments.Parse(args);
+            // ARC-DEV-046: without command-line inputs the game folder comes from the launcher settings.
+            if (args.Count == 0)
+            {
+                if (GameFolderArguments() is not { } fromFolder) return;
+                _arguments = _launchArguments = fromFolder;
+            }
+            else _arguments = _launchArguments = TerrainViewerArguments.Parse(args);
             ConfigureVisualProfile();
             ConfigureAudio();
             ConfigureGameSettings();

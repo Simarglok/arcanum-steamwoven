@@ -12,6 +12,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | --- | --- | --- |
 | DAT | [Data and formats](status/data.md) | — |
 | Resource precedence | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-011 |
+| Launcher settings and game folder | [Data and formats](status/data.md) | ARC-DEV-046 |
 | Object names and MES text | [Data and formats](status/data.md) | ARC-DATA-042, ARC-DATA-013, ARC-UI-005 |
 | Universal map catalogue | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-015, ARC-DATA-025 |
 | Whole-map plans | [Data and formats](status/data.md) | ARC-RENDER-021, ARC-RENDER-022, ARC-DATA-020 |

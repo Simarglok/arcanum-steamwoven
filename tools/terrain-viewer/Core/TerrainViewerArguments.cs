@@ -130,6 +130,23 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             AreaMapSector = areaMapSector is null ? null : ParseSector(areaMapSector) };
     }
 
+    /// <summary>ARC-DEV-046: the map the game opens when it starts from the stored game folder, as <c>./arcanum area</c> does (its
+    /// <c>AREA_MAP</c>, the main world map).</summary>
+    public const string GameFolderStartMap = "Arcanum1-024-fixed";
+    /// <summary>The source id of a start from the stored game folder (<c>./arcanum setup</c>'s default).</summary>
+    public const string GameFolderSourceId = "local-original";
+
+    /// <summary>ARC-DEV-046: the arguments of a start without command-line inputs: map mode on <see cref="GameFolderStartMap"/> with
+    /// the main menu, every input from the ready game folder's <paramref name="inputs"/> (what <c>./arcanum area</c> passes). The same
+    /// checks as <see cref="Parse"/> apply.</summary>
+    public static TerrainViewerArguments ForGameFolder(Arcanum.Data.Content.GameFolderInputs inputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        return Parse(["--mode", "crash-site-area", "--module", inputs.ModuleArchive, "--resource", inputs.TerrainArchive,
+            "--source-id", GameFolderSourceId, "--actor-resource", inputs.ActorArchive, "--game-root", inputs.GameRoot,
+            "--area-map", GameFolderStartMap, "--main-menu", "true"]);
+    }
+
     /// <summary>A sector as <c>X,Y</c>: two decimal numbers below 2^26 (the packed sector id's field width).</summary>
     private static Arcanum.Data.Area.AreaSectorCoordinate ParseSector(string value)
     {
