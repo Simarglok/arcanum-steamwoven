@@ -256,7 +256,7 @@ The viewer's host (`AreaRestockHost.Wielder`, through `AreaEventWorld`) reads th
 (`SessionCritterCombat.Wearer`, `Chooser`; its life state the session's, else the map data's), an item's wear facts from its object row
 on that map or, for an item the session made, from its prototype's stored fields, and answers the art lookup with yes (one diagnostic
 body art, as at the hero's start). Native observation: stage `barter`, marker `ARC-WORLD-103 native-smoke redress PASS` (the first
-living NPC of the shown map with a source of its own, scheduled through the window open's path; SKIP on a map without one).
+living NPC of the shown map with a source of its own whose set the project admits, scheduled through the window open's path; SKIP on a map without one).
 
 ## Not modelled (NOT READY)
 
