@@ -1139,14 +1139,21 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public IReadOnlyList<string> Followers(string id) =>
         id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).ToArray() : [];
 
-    public AwarenessResult See(string observer, string target)
+    public AwarenessResult See(string observer, string target) => SeeFacing(observer, target, null);
+
+    /// <summary>ARC-SKILLS-010: sight (0x4AF260) with the observer turned toward the target (the hero's facing is not tracked: the viewer
+    /// turns it toward the critter it picks the pocket of).</summary>
+    public AwarenessResult SeeToward(string observer, string target) =>
+        Tile(observer) is { } from && Tile(target) is { } to ? SeeFacing(observer, target, AreaCombatHost.Facing(from, to)) : See(observer, target);
+
+    private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var sight = new SightFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
-            Rotation = DiagnosticGridActor.Octant(Movers.FacingOf(observer, NeighborDirection.XPlus)),
+            Rotation = DiagnosticGridActor.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
         };
