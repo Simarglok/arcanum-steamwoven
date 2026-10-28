@@ -6,7 +6,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.Data.Tests.Magic;
 
 /// <summary>ARC-MAGIC-020 opt-in census of the installed original (DAT_ROOT = the game folder): the item prototypes' spell slots
-/// and the item triggers of the records they name (docs/world/item-spell-triggers.md); ARC-MAGIC-022: the item uses. Counts only; no game text.</summary>
+/// and the item triggers of the records they name (docs/world/item-spell-triggers.md); ARC-MAGIC-022: the item uses; ARC-UI-016: the weapons'
+/// spell panes. Counts only; no game text.</summary>
 [TestClass]
 public sealed class ItemSpellCensusRealDataTests
 {
@@ -115,5 +116,33 @@ public sealed class ItemSpellCensusRealDataTests
             "t14 path:spell ch:- mag:0 tgt:1 slot0:trig x1; t5 path:spell ch:- mag:0 tgt:0 slot0:cursor x1; t5 path:spell ch:- mag:0 tgt:0 slot0:trig x3; " +
             "t5 path:spell ch:20 mag:0 tgt:0 slot0:cursor x3; t7 path:spell ch:- mag:0 tgt:0 slot0:trig x5; t9 path:spell ch:1 mag:0 tgt:0 slot0:trig x1; " +
             "t9 path:spell ch:1 mag:0 tgt:1 slot0:cursor x2; t9 path:spell ch:1 mag:0 tgt:1 slot0:trig x40", census);
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_weapon_spell_panes_match_the_census()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in weapon spell pane census; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var spells = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
+        Assert.AreEqual(SpellDataStatus.Read, spells.Status, $"{spells.Refusal}");
+        var records = spells.Data!.Records;
+        var prototypes = ContentPrototypes.Open(stack);
+        var rows = new List<string>();
+        foreach (var number in prototypes.Numbers)
+        {
+            if (CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is not { Item: { } item, Weapon: not null } fields) continue;
+            if (item.Spells.All(s => s == NoSpell) && item.SpellManaStore == 0) continue;
+            var slots = string.Join(",", item.Spells.Select(s => s == NoSpell ? "-" :
+                $"{s}{(records[s & 0xFF].ItemTriggers != 0 ? "t" : "")}{(records[s & 0xFF].IsTechnology ? "x" : "")}"));
+            rows.Add($"{number} ch:{item.SpellManaStore} cx:{item.MagickTechComplexity} id:{item.Flags & 0x1} mag:{(item.Flags & 0x4) >> 2} [{slots}]");
+        }
+        Console.WriteLine(string.Join("\n", rows));
+        // ARC-UI-016: the weapons the bar's weapon button can show for (0x556EF0: charges not 0, complexity above 0) and what their pane
+        // (0x551660) holds once identified: no prototype is identified or magical, the three technological weapons (negative
+        // complexity, technological records with item triggers) never show the button, and no shown slot has item triggers.
+        Assert.AreEqual("6085 ch:-1 cx:40 id:0 mag:0 [53,-,-,-,-]; 6130 ch:-1 cx:-90 id:0 mag:0 [147tx,-,-,-,-]; 6132 ch:20 cx:20 id:0 mag:0 [62,-,-,-,-]; " +
+            "6133 ch:20 cx:60 id:0 mag:0 [62,50,54,-,-]; 6134 ch:20 cx:60 id:0 mag:0 [65,42,-,-,-]; 6175 ch:-1 cx:-100 id:0 mag:0 [203tx,-,-,-,-]; " +
+            "6179 ch:-1 cx:-100 id:0 mag:0 [204tx,-,-,-,-]", string.Join("; ", rows));
     }
 }

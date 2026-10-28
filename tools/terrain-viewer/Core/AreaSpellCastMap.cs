@@ -30,6 +30,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<AreaLineOfFire?> _lineOfFire;
     private readonly Func<AreaObjectKey, bool> _gone;
     private readonly Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>> _placed;
+    private readonly Func<string, bool> _held;
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
     // The rows by their world cell, and each row's stored fields read once.
     private readonly Dictionary<(long X, long Y), List<string>> _cells = [];
@@ -48,9 +49,11 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// <param name="gone">Whether the session destroyed or switched off a row (none when null).</param>
     /// <param name="placed">ARC-MAGIC-021: the rows that stand elsewhere than their map cell now (the companions: their live cell, or
     /// null while on another map), asked at each query (none when null).</param>
+    /// <param name="held">ARC-UI-016: whether the hero holds the item a row's id names now (taken from the map, listed or worn); such a
+    /// row is no map object, so the cast host's item lookup answers for it as an item in the hero's inventory (none when null).</param>
     public AreaSpellCastMap(GameSessionOwner session, int runtimeMap, AreaStepSnapshot steps, IEnumerable<AreaObjectRecord> rows, AreaCombatHost combat,
         Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
-        Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null)
+        Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _map = runtimeMap;
@@ -61,6 +64,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         _lineOfFire = lineOfFire ?? throw new ArgumentNullException(nameof(lineOfFire));
         _gone = gone ?? (_ => false);
         _placed = placed ?? (() => new Dictionary<AreaObjectKey, (long X, long Y)?>());
+        _held = held ?? (_ => false);
         foreach (var row in rows)
         {
             // A carried item (object flag 0x1000) stands in no sector list, whatever location it stores.
@@ -98,7 +102,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(id);
         if (id == SessionSpellCaster.Hero) return HeroObject();
-        return _rows.TryGetValue(id, out var row) && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
+        return !_held(id) && _rows.TryGetValue(id, out var row) && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
     }
 
     // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.
@@ -134,7 +138,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         if (!_cells.TryGetValue((x, y), out var ids)) return;
         foreach (var id in ids)
-            if (!placed.ContainsKey(_rows[id].Key) && Matches(_rows[id], typeMask)) found.Add(RowObject(id, _rows[id], (x, y)));
+            if (!placed.ContainsKey(_rows[id].Key) && Matches(_rows[id], typeMask) && !_held(id)) found.Add(RowObject(id, _rows[id], (x, y)));
     }
 
     private void AddPlaced(List<SpellTargetObject> found, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed, int typeMask,

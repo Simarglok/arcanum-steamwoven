@@ -44,6 +44,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
 | Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
+| Weapon spell pane | [Magic](status/magic.md) | ARC-UI-016 |
 | Spell missile and caster facing | [Magic](status/magic.md) | ARC-MAGIC-018 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
@@ -66,6 +67,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
 | Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
+| Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |

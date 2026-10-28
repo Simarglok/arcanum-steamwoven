@@ -18,6 +18,8 @@ interface sound is non-positional at the plain volume (127, centre) through the 
 | The hero gains a level | 3005 (level up), with each level's message-window entry since [ARC-UI-046](../rendering/terrain-viewer.md#level-up-messages-arc-ui-046): one per level written, as the original plays it when it draws each entry |
 | A quest becomes completed for the PC (also by un-botching) | 3028 (quest completed) |
 | An item is taken from a body in the inventory window | the item's pickup sound ([sound cues](sound-cues.md)) |
+| A button of the [interface bars](../rendering/terrain-viewer.md#interface-bars-arc-ui-018) is pressed; released over it (ARC-UI-018) | 3000; 3001. A toggle (Spells, Skills) plays 3000 turning on and 3001 turning off. The pointer entering or leaving plays nothing ([GB6](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)) |
+| The pointer enters a button of the main menu, in-play menu or options window; a press on it (ARC-UI-018) | 3026; 3027. The release plays nothing ([GB7](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)) |
 
 The viewer's logbook has no pages to turn, so the page sound plays only for the tab. The original
 plays the pickup sound when an item is picked up in its inventory window; the viewer's take is one
@@ -53,7 +55,7 @@ by the smoke. The palette self-test counts 26 navigable controls and 8 number fi
 - The inventory window's own sounds (container open, close and locked by the container's formula,
   dropping items, 3007), the character sheet's and the conversation's buttons: the viewer's windows
   are diagnostic panels without the original's buttons, so they play nothing yet.
-- Interface sounds of windows the viewer does not have (schematics, written items, the main menu,
-  barter with its refused-trade sound 8158), the bless, curse, poison and exclamation messages, the
+- Interface sounds of windows the viewer does not have or draws without the original's buttons (schematics, written
+  items, barter with its refused-trade sound 8158, the options window's arrows), the bless, curse, poison and exclamation messages, the
   hot-key equip slot sound (switch candidate SN31).
 - Nothing was compared by ear with the running original.

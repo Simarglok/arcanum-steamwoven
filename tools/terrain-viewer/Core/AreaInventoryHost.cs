@@ -464,6 +464,22 @@ public sealed class AreaInventoryHost
         return null;
     }
 
+    /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from
+    /// <paramref name="kitItemSpells"/> (the hero load's, by kit entity), a taken item's from its object row
+    /// (<see cref="SessionItemSpells.FromCombatFields"/>), whether listed or worn; null for anything else, an item the session no
+    /// longer has, or a session without a hero.</summary>
+    public SessionItemSpells? ItemSpells(GameSessionOwner session, string entity, IReadOnlyList<SessionItemSpells?>? kitItemSpells)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitItemSpells?.FirstOrDefault(item => item?.Entity == entity);
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity) && !session.QueryEquipment().Worn.Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields)
+                return SessionItemSpells.FromCombatFields(entity, SessionSpellCaster.Hero, fields);
+        return null;
+    }
+
     /// <summary>ARC-SKILLS-007: the T0 condition of an item the PC holds: a kit item's from <paramref name="kitDurability"/> (the hero
     /// load's, by kit entity), a taken item's from its object row (<see cref="SessionItemConditions.FromCombatFields"/>); null for an
     /// item without one, an item the session no longer has, or a session without a hero.</summary>
