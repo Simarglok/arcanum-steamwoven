@@ -18,9 +18,11 @@ Two readers read the casting goal in the retail 1.0.7.4 `Arcanum.exe` ([ledger "
 goal"](../research/ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014), CG1–CG8). The headless first cast
 runs on the installed original (`AreaSpellCastRealDataTests`). The spell UI is read in [ledger "Spell
 UI"](../research/ledger/spell-runs.md#spell-ui-arc-magic-015) (SU1–SU14, MG42) and the queued cast in [ledger "Queued
-cast"](../research/ledger/spell-runs.md#queued-cast-arc-magic-019) (QC1–QC6, MG43), the cursor's pick in [ledger "Target
-picker"](../research/ledger/spell-runs.md#target-picker-arc-magic-021) (SU15–SU19, MG44); the viewer's cast, with a second cast queued
-behind it, is observed by the L2 native smoke `ARC-MAGIC-015 native-smoke cast`.
+cast"](../research/ledger/spell-runs.md#queued-cast-arc-magic-019) (QC1–QC6, MG43); the viewer's cast, with a second cast queued
+behind it, is observed by the L2 native smoke `ARC-MAGIC-015 native-smoke cast`. The missile and the facing turn (ARC-MAGIC-018)
+are read in [ledger "Spell missile and caster facing"](../research/ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018)
+(SM1–SM9, MG44); the same smoke casts a missile spell. The cursor's pick is read in [ledger "Target
+picker"](../research/ledger/spell-runs.md#target-picker-arc-magic-021) (SU15–SU19, MG45).
 
 Code:
 - [`SessionSpellRecords`](../../src/Arcanum.Session/SessionSpellRecords.cs) — the spell data in the rules' types;
@@ -32,7 +34,10 @@ Code:
 - [`AreaSpellCasting`](../../tools/terrain-viewer/Core/AreaSpellCasting.cs) and the viewer's
   [`TerrainViewerSpellCast`](../../tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs), [`AreaSpellPane`](../../tools/terrain-viewer/Godot/AreaSpellPane.cs)
   — the viewer's casting (ARC-MAGIC-015);
-- `GameSessionOwner.PaySpellFatigue` — a payment's fatigue.
+- `GameSessionOwner.PaySpellFatigue` — a payment's fatigue;
+- [`SpellMissileRules` and `SpellFacingRules`](../../src/Arcanum.Simulation/Magic/SpellMissileRules.cs) and the viewer's
+  [`TerrainViewerSpellMissiles`](../../tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs) — the missile and the facing turn
+  (ARC-MAGIC-018).
 
 Tests:
 - [`SessionSpellRecordsTests`](../../tests/Arcanum.Session.Tests/SessionSpellRecordsTests.cs);
@@ -40,6 +45,8 @@ Tests:
 - [`AreaSpellCastRealDataTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastRealDataTests.cs);
 - [`SpellUiRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellUiRulesTests.cs),
   [`AreaSpellCastingTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastingTests.cs) (ARC-MAGIC-015);
+- [`SpellMissileRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellMissileRulesTests.cs) and the missile census in
+  `SpellEyeCandyRealDataTests` (ARC-MAGIC-018);
 - [`SpellPickRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellPickRulesTests.cs) (ARC-MAGIC-021).
 
 ## The records (`SessionSpellRecords`)
@@ -125,8 +132,13 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
    original's later nodes stop it is not read: MT20a-2's). A refusal ends the goal. Then the pre-animation check (0x450940, PC3; a failed record lookup refuses): unless the run is
    free or has no source, the source must afford the cast spell's `Cost:` (its maintenance cost for another action) — no mastery,
    1 under the cheat, doubled for a dwarf — asked without applying. A refusal ends the goal.
-2. **Target.** A target that is destroyed or off ends the goal (0x429BC0); the facing turn is the viewer's.
-3. **Release frame (`Release`, 0x429C80).** At the animation's action frame the target is checked again (0x456A90,
+2. **Target.** A target that is destroyed or off ends the goal (0x429BC0).
+3. **Facing turn (`StartGoal`'s facing, 0x42C850, ARC-MAGIC-018).** After the range node, goal 26 turns the parent toward its
+   target object (`SpellFacingRules.Turn`, ledger SM rows). A parent stoned (spell flag 0x10000), or a PC or NPC parent stunned or
+   paralysed (critter flags 0x60), refuses: the goal ends through its end node (`SpellCastGoalOutcome.CannotTurn`, MG39's path).
+   Without a target object (a tile cast) or with the parent as its target, nothing turns. Otherwise the parent turns at once, with
+   no animation, to the rotation from its tile toward the target's (0x4B8D50); the host sets it on the parent's art.
+4. **Release frame (`Release`, 0x429C80).** At the animation's action frame the target is checked again (0x456A90,
    `TargetStillValid`):
    - the BEGIN area passes at once when it is 0, exactly 0x10, or has the self bit without the tile bit;
    - otherwise the picker's wrapper (0x4F2680) over the area test: a target object fails for object flag 0x800, is tested as the
@@ -135,7 +147,7 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 
    Then the run's BEGIN is processed (0x456F70). The release fires once per goal: a run already released, or whose BEGIN already
    ran, is not released again.
-4. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
+5. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
    the run cost with mastery, applied). After the release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, the end
    frees nothing; the host forgets the release when the run is freed or a new goal starts for its slot, since the slot is reused.
    A goal starts once (`StartGoal`) for the run it was made for: a caller must not start a second goal for a run the original
@@ -223,6 +235,38 @@ Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../r
    goal's end removes the cast entry. Each frame of a part is one art id of the viewer's extra art (at most 4,096 art ids and
    64 MiB of pixels per run, shared with the ground items); past it a frame is not drawn and said once.
 
+## The missile (ARC-MAGIC-018)
+
+A spell whose projectile eye candy (entry 6·spell + 1) has art launches a missile at the casting goal's release frame instead of
+releasing (goal 27's node 0x429C40, ledger [SM rows](../research/ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018));
+the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissileRules`), the session's part is in `SessionSpellCaster`:
+
+1. **The launch (`LaunchMissile`, SM1).** The release gate marks the goal's frame handled, so the casting goal's end frees nothing;
+   there is no target re-check and no BEGIN now. The secondary cast eye candy (6·spell + 4) plays on the caster at the launch (it
+   does not play again at the arrival). The casting goal goes on with its own eye candy one pace later (`PaceAfterRelease`) and
+   ends by itself. Only the gate of a cast eye candy launches: a cast without one, or whose target fails before its eye candy
+   (QC4), releases at once without a missile (EC7).
+2. **The missile (SM2).** It leaves the caster's tile for the target object's tile (a tile cast: the tile), its art the projectile
+   entry's, faced in the screen direction between the two tiles (0x4B6A00, 0x4B6B10 for an eye-candy art: rotation in bits 9..11,
+   number + direction / 8), unlit.
+3. **The flight (`Leg`, `Tick`, SM3–SM5).** A leg is the combat projectile's line (10-pixel steps between the two tiles' centres,
+   at most 100). Every 35 ms the missile takes the entry's `Proj Speed:` steps (4 when 0), one art frame a step, and nothing on the
+   tiles it crosses is tested: no strike, no obstruction, no range. When a leg's steps run out it waits one pace of its art
+   (1000 / its frame rate, 100 ms when that does not read), then (`LegEnd`): on its destination with its target object there, or a
+   tile cast, it arrives; a target that moved is followed on a new leg from the missile's tile; elsewhere it flies its line again.
+   A missile already on its destination at the launch (a cast at the caster's own tile) arrives at once.
+4. **The arrival (`ArriveMissile`, SM3; SM6 for a failed re-check).** The release: the target re-check and the BEGIN, as the casting goal's (`Release`); a
+   failed re-check keeps the run in the original and frees it unpaid in Steamwoven (MG41's switch). The missile is destroyed.
+5. **A lost missile (`LoseMissile`, MG44).** A leg whose line is refused (more than 100 steps), a point off the map, another
+   map or session ends the missile's goal without its release: the original destroys the missile and frees nothing, so the run
+   keeps its slot, never begun; both rule modes free it unpaid (owner decision 2026-10-28: fixed without a switch).
+6. **The viewer** (`TerrainViewerSpellMissiles.cs`). The hero's missile is drawn as the combat projectiles are (the faced art at its
+   step's frame, moved by its pixel offset, additive when translucent, at the art id's draw scale); the cast's log line follows the
+   arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 is refused while a missile flies (the
+   session saves no missile). Smoke: when its first damaging spell has no missile, the `cast` stage also casts the first critter
+spell that has one (learning it if needed): the hero turns to the NPC, the missile is drawn faced toward it, flies one leg of the
+line's steps and arrives, and the run's BEGIN pays its cost.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -235,13 +279,20 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
-| The pick's end clears `OF_CLICK_THROUGH` on the objects it saw through, so one whose data carried the flag loses it (MG44). | No flag is written: such an object keeps it. | — (latent, no switch built; pending owner decision) |
+| The pick's end clears `OF_CLICK_THROUGH` on the objects it saw through, so one whose data carried the flag loses it (MG45). | No flag is written: such an object keeps it, in both modes. | — (technical bug, latent; fixed without a switch by the owner rule of 2026-10-28) |
 | Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
 | An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
+| A spell missile whose goal ends before it arrives (its next leg's line refused, the goal stopped) frees nothing: its run keeps its slot, never begun (MG44). | The run is freed unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
+| A missile's point off the map stops the game with an error (0x42F390). | The missile is lost (MG44's path). | — |
+| A missile's art with a frame rate of 0 divides by zero at its setup (0x42F2D0). | Its pace is 100 ms, as for an art that does not read. | — |
+| A missile carries its entry's light (0x458C00) and is drawn at its object's scale. | No light; drawn at its art id's draw scale. | — (not ready) |
+| A target object freed while the missile flies has its location read from a freed handle (not read). | A target gone from the map counts as arrived; the re-check then refuses it. | — |
+| Goal 28's first leg builds its line only when the reused run slot's path flag is set; a slot whose last run did not end through the end step flies its stale line, and a never-used one does not advance (SM9; not observed in play). | The first leg always builds its line. | — (latent, no switch) |
+| The missile plays its projectile entry's sound (0x458C00). | No sound. | — (not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -251,7 +302,7 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 
 ## Not ready
 
-- The missile's art and flight (goal 28, the projectile entry 6·spell + 1); the facing turn of goal 26 (0x42C850).
+- NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.
 - Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
   (EC9, EC11, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
