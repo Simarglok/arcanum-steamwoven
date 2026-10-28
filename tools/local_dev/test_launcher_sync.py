@@ -186,6 +186,44 @@ class LauncherSyncTests(unittest.TestCase):
             else:
                 self.assertEqual(calls[1][-3:], ("Arcanum1-024-fixed", "--main-menu", "--dry-run"))
 
+    def test_the_debug_mode_is_passed_in_map_mode_and_refused_by_older_builds(self):
+        # ARC-DEV-050: the viewer takes its lone --debug-mode out before parsing; the launchers pass it in map mode only.
+        app = (REPO / "tools/terrain-viewer/Godot/TerrainViewerApp.cs").read_text()
+        self.assertIn("ViewerDebugMode.Take(args)", app)
+        self.assertIn(f'Flag = "{launch.DEBUG_MODE_FLAG}"', (REPO / "tools/terrain-viewer/Core/ViewerDebugMode.cs").read_text())
+        inputs = self.inputs()
+        self.assertNotIn("--debug-mode", launch.map_arguments(inputs, "Arcanum1-024-fixed"))
+        self.assertEqual(launch.map_arguments(inputs, "Arcanum1-024-fixed", "elf-male", debug_mode=True)[-1], "--debug-mode")
+        self.assertIn('launcher.add_argument("--debug-mode"', (REPO / "tools/arcanum-local").read_text())
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        for command in (["area", "--debug-mode"], ["map", "crash site cave", "--debug-mode"]):
+            self.assertTrue(project["parser"]().parse_args(command).debug_mode, command)
+        self.assertFalse(project["parser"]().parse_args(["area"]).debug_mode)
+        run = project["run"]
+        try:
+            head = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+            older = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", project["DEBUG_MODE_COMMIT"] + "~1"], text=True,
+                                            stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("needs a git checkout holding the debug mode's history")
+        self.assertTrue(project["build_has_debug_mode"]({"candidate": {"commit": head}}))
+        self.assertFalse(project["build_has_debug_mode"]({"candidate": {"commit": older}}))
+        conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {}}
+        for commit, expected in ((older, 2), (head, 0)):
+            calls = []
+            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+                    patch.object(run.__globals__["manifests"], "resolve_current",
+                                 lambda root, tool, *, root_id, selected_task: (self.root / "build" / "manifest.json", {"candidate": {"commit": commit}}, None)), \
+                    patch.object(run.__globals__["config"], "load_config", lambda: conf), \
+                    patch.object(run.__globals__["config"], "save_config", lambda value: None), \
+                    patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                self.assertEqual(expected, run(project["parser"]().parse_args(["area", "--debug-mode", "--dry-run"])))
+            if expected:
+                self.assertEqual(calls, [], "nothing is launched")
+                self.assertIn("without --debug-mode", stderr.getvalue())
+            else:
+                self.assertEqual(calls[1][-4:], ("Arcanum1-024-fixed", "--main-menu", "--debug-mode", "--dry-run"))
+
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
         modes = set(re.findall(r'"([a-z-]+)" => TerrainViewerMode\.', source))

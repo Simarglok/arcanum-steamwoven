@@ -22,7 +22,7 @@ public sealed class LauncherSettingsTests
         [new("tig.dat", 3), new("arcanum1.dat", 5), new("modules/Arcanum.dat", 11)]);
 
     private static readonly LauncherSettings Full = new(Path.Combine(Path.GetTempPath(), "Arcanum"), GameSource.Gog, Identity, true, RuleMode.Original,
-        new(LauncherWindowMode.Fullscreen, 1, 150));
+        new(LauncherWindowMode.Fullscreen, 1, 150)) { DebugMode = true };
 
     private static string Game(string folder, int terrainBytes = 7)
     {
@@ -58,6 +58,8 @@ public sealed class LauncherSettingsTests
         Assert.AreEqual(1, (int)root["schema"]!);
         Assert.AreEqual("original", (string)root["rules"]!["active"]!);
         Assert.AreEqual("fullscreen", (string)root["display"]!["window"]!);
+        Assert.IsTrue((bool)root["debugMode"]!, "ARC-DEV-050: the debug mode is stored");
+        Assert.IsFalse((bool)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["debugMode"]!, "and off by default");
 
         Assert.AreEqual(LauncherSettings.Defaults, Read(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults)));
         Assert.AreEqual(LauncherSettings.Defaults, Read("""{"schema":1}"""), "missing keys take their defaults");
@@ -87,13 +89,13 @@ public sealed class LauncherSettingsTests
     public void A_value_this_build_cannot_use_takes_its_default_and_is_listed()
     {
         var read = LauncherSettingsCodec.Deserialize("""
-            {"schema":1,"gameRoot":"a\u0007b","gameSource":"steam","showAtStart":"yes","rules":{"active":"my-mix"},
+            {"schema":1,"gameRoot":"a\u0007b","gameSource":"steam","showAtStart":"yes","rules":{"active":"my-mix"},"debugMode":1,
              "display":{"window":"windowed","monitor":16,"uiScale":100},
              "gameIdentity":{"version":"1.0","exeBytes":1,"exeSha256":"ABC","gog":true,"archives":[]}}
             """);
         Assert.AreEqual(LauncherSettingsReadStatus.Read, read.Status);
         Assert.AreEqual(LauncherSettings.Defaults, read.Settings);
-        CollectionAssert.AreEqual(new[] { "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display" }, read.Defaulted.ToArray());
+        CollectionAssert.AreEqual(new[] { "gameRoot", "gameSource", "gameIdentity", "showAtStart", "debugMode", "rules", "display" }, read.Defaulted.ToArray());
 
         Assert.AreEqual(LauncherSettings.Defaults, Read("""{"schema":1,"gameRoot":null,"gameIdentity":null}"""));
         foreach (var root in new[] { "relative/Arcanum", "Arcanum", OperatingSystem.IsWindows() ? "/Arcanum" : @"C:\GOG Games\Arcanum" })

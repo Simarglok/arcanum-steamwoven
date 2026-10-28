@@ -775,14 +775,15 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 
 - **Opening.** W acts on its logical key down under the guards of C, L and T: not with the palette, a dialog or another
   window open, not under UI focus. The panel is modal: the gate closes, the clock pauses for the frames and a walk stops.
-  It refuses on another map ("only on the start map"), in combat mode, while the actor is between cells, and until the
-  module's world-map data have loaded (in the background, once per module).
+  It refuses on another map ("only on the start map"; in [debug mode](#debug-mode-arc-dev-050) it opens there too), in
+  combat mode, while the actor is between cells, and until the module's world-map data have loaded (in the background,
+  once per module).
 - **What it shows.** It shows the project's own 500 × 500 picture of the start map. The picture is drawn from its terrain:
   one pixel for 4 × 4 sectors, coloured by terrain type, darker where travel is blocked, and brighter where a blocked type
-  has its own sector file. On top are the PC, the areas (known ones in yellow), the waypoints and the planned route. A list
-  holds every area by its data name.
+  has its own sector file. On top are the PC, the areas (known ones in yellow), the waypoints and the planned route.
   - A click on the picture adds a waypoint at that pixel's sector. A known area within 320 tiles takes its place.
-  - A double-click in the list adds a waypoint at that area (a diagnostic shortcut for clicking it).
+  - Only in debug mode a list holds every area by its data name; a double-click there adds a waypoint at that area (a
+    diagnostic shortcut for clicking it) and Teleport moves the PC there at once. Without debug mode there is no list.
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
 - **Travel.** Travel, Enter or confirm starts the journey. It runs one travel step per 62 real ms, at most four per frame.
   - Each step's game time jumps the session clock through the event pump, as an explicit wait does. Events that came due
@@ -800,6 +801,32 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   4. Enter travels. The run checks one step per 62 ms, the clock gained exactly 43 h, Crash Site and Shrouded Hills
      known, the start map loaded around the landing with the session carried, and the actor on the area's location:
      `ARC-UI-048 native-smoke worldmap PASS`.
+
+### Debug mode (ARC-DEV-050)
+
+A development aid, never gameplay, off by default. It is on for a run started with the lone user argument `--debug-mode`
+(after Godot's `--`; `./arcanum area|map --debug-mode`, or the packaged app's executable with `-- --debug-mode`) or when the
+launcher settings store it (`debugMode` in `launcher_v1.json`, the launcher screen's "Debug mode" box; it stays on until it is
+turned off there or by Reset settings). `ViewerDebugMode` holds the rules; the [player instruction](../player/alpha-build.md#7-debug-mode)
+says how to turn it on.
+
+- **World map.** W opens on any map in map mode, under the same guards as above (not in combat mode, not between cells). The
+  header says "DEBUG MODE". The area list and Teleport are shown; every area is open to Teleport, known or not (the session's
+  known areas are not changed, so the yellow marks stay the true ones). Off the start map the panel has no position: no
+  waypoint, no journey, teleport only.
+- **Teleport.** The selected area's location on the start map becomes the landing, as a journey's landing: the panel closes
+  and the start map loads around it (from another map, as a transfer to the start map), the session carried and following
+  companions arriving with the PC. It opens at the area's sector without an arrival tile (an area's location may be a
+  blocked tile, and the map load takes an arrival whenever its sector is loaded), so the PC stands on the walkable tile
+  nearest to the sector's middle. No game time passes and no area is discovered. Refused during a
+  journey and for an area without a location (0,0).
+- **Marks.** A save made in debug mode has `[DEBUG] ` before its location, so the save list names it; the build line of the
+  main menu ends in "DEBUG MODE"; the status line says "W world map (DEBUG MODE: teleport)". The session's rules and its
+  snapshot are not changed by the mode: a debug save loads in a run without it as any save does.
+- **Native smoke** (stage `debug-travel`, only when named, with `--debug-mode`): W shows the list and Teleport; Teleport on the
+  farthest placed area loads the start map around it with the session carried, the actor within 64 tiles of the area, no
+  area discovered and less than one game hour gained; a save location is marked: `ARC-DEV-050 native-smoke debug-travel PASS`.
+  The ordinary `worldmap` stage checks that the list and Teleport are hidden without the mode.
 
 **NOT READY:**
 - The original's world-map screen is not drawn: no map art, zoom, notes or town maps.
