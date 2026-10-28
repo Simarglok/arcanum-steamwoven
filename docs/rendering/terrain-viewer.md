@@ -1217,7 +1217,7 @@ original window art, sorting or paging options, a text cursor of the original's 
 With `--main-menu true` (launcher: `./arcanum area --main-menu` or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
-does not open and the status line says so). The scene's session is the placeholder the original also has before its menu; the menu
+does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
 
@@ -1246,7 +1246,7 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
   and closes the menu; with no save the window stays (the original says nothing; here the window says "no save to
   continue from"); a load refused before anything changes keeps the menu and names the reason. A save of another map
   (map mode) loads that map: the menu ends as the scene is taken down, and if that map's load then fails the shown map
-  comes back without the menu.
+  comes back without the menu (and keeps the loaded hero's tables and name in its arguments, so a reload starts as that hero).
 - **Hero tables of a load.** The placeholder session has no hero, so a hero save loaded from the menu (Last Save or
   Load Game) takes the game-wide experience and auto-level data from the pre-made heroes' tables, and the loaded
   pre-made hero's effect rules and kit facts are adopted with it (the scene's arguments name that hero). F8 and the
