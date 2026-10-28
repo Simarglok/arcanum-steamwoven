@@ -27,13 +27,14 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> at <see cref="GameSessionSnapshot.CurrentSchemaVersion"/>. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> at <see cref="GameSessionSnapshot.CurrentSchemaVersion"/> (decoding upgrades the older schemas
+/// from <see cref="OldestReadableSchemaVersion"/> first, ARC-UI-037). Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
 /// needs the kind registry) stays with <see cref="GameSessionOwner.Restore"/>.
 /// </summary>
-public static class GameSessionSnapshotCodec
+public static partial class GameSessionSnapshotCodec
 {
     public const string Format = "arcanum-steamwoven-session";
     /// <summary>ARC-DATA-029: a policy cap on one snapshot's text (and save file). It holds a change for every object
@@ -923,11 +924,22 @@ public static class GameSessionSnapshotCodec
         }
         catch (JsonException) { return new(null, SnapshotDecodeFailure.MalformedJson, "$"); }
         catch (ArgumentException) { return new(null, SnapshotDecodeFailure.MalformedJson, "$"); }
+        int? older;
         using (document)
         {
-            try { return new(Root(document.RootElement), SnapshotDecodeFailure.None, null); }
+            try
+            {
+                older = UpgradableVersion(document.RootElement);
+                if (older is null) return new(Root(document.RootElement), SnapshotDecodeFailure.None, null);
+            }
             catch (DecodeException e) { return new(null, e.Failure, e.Path); }
+            // Valid JSON may escape a lone UTF-16 surrogate in a property name, which has no name to compare.
+            catch (InvalidOperationException) { return new(null, SnapshotDecodeFailure.MalformedJson, "$"); }
         }
+        // ARC-UI-037: an older schema this build reads is upgraded to the current one (its document disposed first), then decoded as
+        // any current text.
+        try { return TryDecode(Upgrade(text, older.Value)); }
+        catch (DecodeException e) { return new(null, e.Failure, e.Path); }
     }
 
     private static GameSessionSnapshot Root(JsonElement root)

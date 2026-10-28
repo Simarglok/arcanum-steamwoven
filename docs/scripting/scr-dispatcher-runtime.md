@@ -64,7 +64,7 @@ dispatch 0x441980 and script executor 0x4449B0):
 4. Missing or unreadable script: `SkipDefault` (E4).
 5. A trap script, number 30000..30007 with a trap file flag (0x1 or 0x2), as
    the original's trap script test (0x4BCB70) checks: `SkipDefault`,
-   `TrapScript`. The trap domain runs it and must reproduce what the original does
+   `TrapScript`. The trap domain ([trap state](../world/trap-state-runtime.md), ARC-WORLD-076) runs it and must reproduce what the original does
    afterwards: the seven installed trap scripts carry the auto-removing flag, so
    the slot clears and a trap object is destroyed through E3 (E4). A trap flag on
    any other number is an ordinary script.
