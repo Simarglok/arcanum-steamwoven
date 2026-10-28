@@ -261,6 +261,8 @@ public partial class TerrainViewerApp
                     if (DisplayServer.GetName() != "headless") await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 }
             }
+            // The published scene is drawn before the key (a stage run right after the load would keep the loading frame).
+            await Frames(3);
             GD.Print("ARC-DEV-051 bug report smoke marker before-key");
             Chord();
             await Frames(2);
