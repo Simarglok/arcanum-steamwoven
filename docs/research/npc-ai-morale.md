@@ -7,7 +7,8 @@ flee, how a flight turns into a surrender and how a surrender ends, what a
 surrendered NPC does and how the rest of the game treats it, and when and how an
 NPC backs off, including the back-off a PC's kill starts. It settles the plan's
 anomalies P2 and P6. It changes no code; the rules are inputs for slice I5
-(morale) of the plan, on top of the danger state and setter of slice I3.
+(morale) of the plan, on top of the danger state and setter of slice I3. Slice I5 is implemented by ARC-WORLD-082
+([morale](../world/ai-morale.md)).
 
 Earlier facts reused here: the [core loop](npc-ai-core-loop.md) (ARC-RES-054:
 the pass order, the parameter dictionary, the danger states and the setter's rule

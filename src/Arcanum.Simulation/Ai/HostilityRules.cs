@@ -310,7 +310,7 @@ public static class HostilityRules
     /// <summary>
     /// The danger update's decision (0x4A92D0) for one NPC. Asleep → skipped. NONE: the scan's target is fought, else nothing.
     /// COMBAT_FOCUS: the focus while valid; else the lock is cleared and the scan's target fought (0x4ABBC0); else who-hit-me-last
-    /// while valid; else the enemy-list pick; else the setter is asked for NONE. FLEE: the fleeing helper (slice I5). SURRENDER:
+    /// while valid; else the enemy-list pick; else the setter is asked for NONE. FLEE: the fleeing helper (<see cref="MoraleRules.FleeSpell"/>). SURRENDER:
     /// at 80 % hit points or more a 1..500 roll of 1 (<see cref="AiRollPurpose.SurrenderCalm"/>) asks for NONE.
     /// </summary>
     [OriginalFunction(0x4A92D0, OriginalFunctionScope.Partial)]
@@ -386,7 +386,7 @@ public static class HostilityRules
     /// weigh. COMBAT_FOCUS → weigh when the attacker is the focus or <see cref="ChooseTarget"/> prefers it, else keep the focus.
     /// FLEE → keep fleeing when it flees the attacker; else weigh when mind-controlled or farther than parameter 4 from what it
     /// flees (0x4AB030). SURRENDER → weigh when it surrendered to the attacker or choose target prefers it, else a flee goal away
-    /// from the attacker. Weighing (0x4AB2A0) asks <paramref name="shouldFlee"/> (should-flee 0x4AB2F0, slice I5) and requests FLEE
+    /// from the attacker. Weighing (0x4AB2A0) asks <paramref name="shouldFlee"/> (<see cref="MoraleRules.ShouldFlee"/>, which <see cref="MoraleRules.ReactToAttack"/> passes) and requests FLEE
     /// from or COMBAT_FOCUS on the attacker. Every NPC that is not dead joins the turn-based round.
     /// </summary>
     [OriginalFunction(0x4AA620, OriginalFunctionScope.Partial)]

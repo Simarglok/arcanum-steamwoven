@@ -61,9 +61,9 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
   NPC has a substitute inventory;
 - then the shared item rules: `ItemTypeUnsupported` (gold merges into the PC's gold, a key may go onto the PC's
   key ring; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008),
-`ItemScriptUnsupported` (an item `SAP_GET` for pickup or `SAP_REMOVE_ITEM` for loot and IN, or an item
-`SAP_INSERT_ITEM` when the caller passes no script host; other attachments such as examine and use do not run on a
-transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
+`ItemScriptUnsupported` (an item `SAP_GET` for pickup, `SAP_REMOVE_ITEM` for loot and IN or `SAP_INSERT_ITEM` when the
+caller passes no script host; with a host they run, [item events](#item-events-arc-script-041); other attachments such as
+examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
 last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
@@ -76,7 +76,8 @@ A refusal changes nothing: for pickup and
 loot that is the source behaviour; for IN the source would drop the item at the PC's location (into a junk pile when
 items lie there), which is not modelled, so IN is refused instead.
 
-Not modelled, on purpose: the PC's `SAP_TRANSFER` attachment (no PC object), reach and the walk to an item, the
+Not modelled, on purpose: the PC's `SAP_TRANSFER` attachment without a script host (with one it runs, [item
+events](#item-events-arc-script-041)), reach and the walk to an item, the
 combat action-point cost of a pickup, item decay timers, the item insert's slot choice and hotkeys, encumbrance effects,
 dropping, barter, theft, positive `IN`, NPC respawn and chest generation.
 
@@ -114,6 +115,49 @@ the printed line uses the hero's gender (male without a hero) and the diagnostic
 `@npcname@` is `Unsupported` (whose name it would be on an item run is not read), so such an item is refused. Lines a
 script prints during Virgil's `IN` reach `SessionDialogInventoryPort.LastResult`, but the conversation panel does not show
 them yet (no Crash Site `IN` gives a scripted item). The status line and the loot window show the printed text after the item's name.
+
+## Item events (ARC-SCRIPT-041)
+
+Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#10-proposed-implementation-slices), the transfer
+half. With an `ISessionItemScriptHost`, `PickUpItem`, `LootItem`, `GiveItemToPc` and `TakeItemFromNpc` (ARC-WORLD-071) run every item event of the original's
+transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger IE1–IE7](../research/ledger/scripts.md#item-events-arc-script-041)):
+
+| Transfer | Events in order | Roles (triggerer / attachee / extra) | Result |
+| --- | --- | --- | --- |
+| Pickup from the ground (0x461810) | item `SAP_GET` (4), then the insert check, then the insertion's `SAP_INSERT_ITEM` (21) | PC / item / —; PC / item / — | get gates: skip default leaves the item; insert-item ignored |
+| Loot, negative `IN` and taking from an NPC (0x461CA0) | recipient's `SAP_TRANSFER` (32), then the insert check, then the removal's `SAP_REMOVE_ITEM` (28), then `SAP_INSERT_ITEM` (21) | holder / PC / item; holder / item / —; PC / item / — | transfer gates; remove-item and insert-item ignored |
+
+- The runs come after the session's own refusals of the item (type, worn, budgets, revision) and before the insert check; the
+  original runs the gate first, so the order differs only for items the session refuses anyway.
+- An item point runs only when the item's facts list it (the seed's script points); the PC's transfer point always runs, and the
+  host's `Slot` answers it (the AREA viewer's PC has no slot, so it ends `NoScript`). Without a host, an item that lists its get,
+  remove-item or insert-item point is refused as before, and nothing runs.
+- Every run uses `SessionItemScripts.Admission` (S6 without the dialog action, story state and deferred calls) and the effect rules
+  of the insert-item script above (global flags and printed lines only; a changed attachment, a dialog, story state, a deferred call
+  or a trap destruction refuses the transfer). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
+  original; nothing is applied before the commit, and the first refused run ends the transfer (`ItemScriptUnsupported`, no effect,
+  no later run).
+- **Skip default of a gate** (get or transfer): the item stays where it is and the insert check is not asked, as in the original. The
+  run's global flag writes and printed lines still happen: `InventoryMutationResult.DeclinedBy` names the point, `Item` is null, the
+  disposition is Changed (one revision) when the run wrote flags and NoChange otherwise; an item's decay event stays. The dialog port reports a declined `IN` as
+  applied. The AREA viewer names the declining script in the status line and the loot window.
+- **Session policy:** a transfer that is refused after a gate ran (by the insert check or a later run) drops the gate's writes too
+  (the original keeps them; no installed item or PC carries a gate script, below).
+- `InventoryMutationResult.Scripts` lists every run in order (`SessionItemScriptRun`: point, attachee entity, run), also on a
+  refusal; `InsertScript` stays the insert-item run.
+
+**Installed data** (the `--script-census` probe's `item_points`, counted as its attachment table: object slots, then prototype
+defaults, then scripts; a script is admitted when its run from line 0 stays inside the item set): no object or prototype carries a
+get (4), drop (5) or buy (17) script; insert-item 74 + 12 slots, 41 scripts, 7 admitted (the first refusals: loops, `is named`,
+get object type, toggle state); remove-item 6 + 8 slots on generic items, 3 scripts, none admitted; transfer 16 slots, all on
+containers (the recipient when the PC puts an item in), 14 scripts, 1 admitted; wield on 309 + 61 slots, 56 scripts, none admitted;
+wield off 299 + 59 slots, 52 scripts, 1 admitted. The wield pair needs add and remove effect (77, 78), magic-tech adjustment (91),
+call-ex (81) and the conditions identified (47) and items being rewielded (50).
+
+**Not ready.** The wield-on and wield-off events of `Equip`, `Unequip` and `EquipBest` (the order is read, IE5–IE7; the session
+still refuses to wield an item with a move script, [equipment](equipment-runtime.md)); the drop event (no drop command and no
+installed drop script; the critical drops of [placed items](#placed-items-arc-world-059) run no script); the buy event (no barter);
+the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 
 ## Dialog seam
 
@@ -353,6 +397,13 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 
 ## Evidence
 
+- Synthetic (ARC-SCRIPT-041): [ItemEventScriptTests](../../tests/Arcanum.Session.Tests/ItemEventScriptTests.cs) (the get script
+  before the insert check, its decline with and without effects, the transfer, remove-item and insert-item order of a loot with
+  each run reading the earlier writes, the PC's declining transfer script on loot and `IN`, a refused later run or insert check
+  dropping every write, a get read by insert-item, taking from an NPC with a host, a call back during a gate, a declined pickup
+  keeping the item's decay event) and the viewer's `Moved`/`NotMoved` in
+  [AreaInventoryHostTests](../../tests/Arcanum.TerrainViewer.Tests/AreaInventoryHostTests.cs). Native smoke: the exterior loot logs `scripts=32::NoScript,21:1341:ReturnSkipDefault` for the amulet.
+
 - Synthetic (ARC-COMBAT-010): [DropPlacementRulesTests](../../tests/Arcanum.Simulation.Tests/Items/DropPlacementRulesTests.cs)
   (the distance, the critter test of the walk, no path, a long path, the direct attempt's partial count, tries off the map,
   direction 8), [AreaDropMapTests](../../tests/Arcanum.TerrainViewer.Tests/AreaDropMapTests.cs) (rotation and step tables,
@@ -416,12 +467,54 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
   `made:n` stack only when it holds none; a unit the insert check refuses is a stack of its own on the crafter's tile
   (ARC-WORLD-070). The installed recipes use it: four make ammunition (cells ×5 and ×1, bullets ×2, the fourth
   type ×5) and three take one unit of ammunition as a component. The NPC crafter does the same in its list.
-- **Not modelled.** Gold (the AMA5 fix will apply to its container lookup too); transfers of units between holders (AM4's destination); the critter field and its
+- **Not modelled.** Gold in containers (the AMA5 fix will apply to its container lookup too); transfers of units between the hero and an NPC are
+  ARC-WORLD-071's ([NPC gold and transfers](#npc-gold-and-transfers-arc-world-071)), other holders' are not modelled; the critter field and its
   clearing (AM5: the session finds a holder's stack by type); the weight of a stack (the host's insert check). Since ARC-COMBAT-012 the hero's
   attacks spend a shot's ammunition through `SpendAmmo` with the weapon's ammunition type and per-shot count, hit or miss, and a
   short stack refuses the attack after the hit location ([hero attack](hero-attack-runtime.md#reach-and-line-of-fire-arc-combat-012));
   the critical misses that take the
   whole stack or five shots' worth do since ARC-COMBAT-013 ([hero attack](hero-attack-runtime.md#critical-effects-arc-combat-009)).
+
+## NPC gold and transfers (ARC-WORLD-071)
+
+NPC gold as counted piles and the moves between the hero and an NPC that pick pocket (task S15 of the
+[skills plan](../research/skills-plan.md)) and the barter window (ARC-UI-050) share, read in the executable
+([ledger NT1–NT4](../research/ledger/items.md#npc-gold-and-transfers-arc-world-071), with AM1–AM5). No prices and no skill:
+the caller decides how many coins or units move. Code: [`GameSessionNpcTransfer`](../../src/Arcanum.Session/GameSessionNpcTransfer.cs);
+tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferStateTests.cs). Snapshot schema 39.
+
+- **Gold (NT1).** An NPC's gold is its first gold pile in list order (its seed piles still in its list, then the piles the session added):
+  `QueryNpcGold(npc)` gives its coins (the seed's `Quantity`, or the tracked count), 0 without a pile, null for an NPC the session does not
+  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count)` moves coins to the hero's gold: fewer coins refuse with nothing changed (`GoldShort`),
+  exactly the count destroys the pile (the durability deletion), more leave the rest. `GiveGoldToNpc(expected, npc, count, pileKind,
+  insertCheck)` moves the hero's coins to the NPC: its pile grows with no insert check; without one a new `made:n` pile of `pileKind` (the
+  gold prototype 9056, the host's) enters the end of its list after the host's insert check. Gold needs a hero (`GoldUnavailable`); a pile
+  with an insert-item script refuses (the original fires that event on the source pile first; not run here). The map views show a tracked
+  pile's coins.
+- **Items (NT2, NT3).** `GiveItemToNpc(expected, npc, item, insertCheck)` moves one of the hero's items (its kit, a taken or a made item;
+  not a placed one) to the end of the NPC's list after the host's insert check for the NPC: a worn item leaves its slot, ammunition merges
+  into the NPC's first stack of its prototype. A kit or taken item is recorded as given (`QueryGivenItems`, with a taken item's origin
+  map); `QueryNpcInventory` still lists only made items. `TakeItemFromNpc(expected, npc, item, insertCheck, scripts)` takes an item of an
+  NPC's current list in the actor's map seed (alive or not; life is the caller's concern) under the item rules of `LootItem` (insert check, Technophobia, insert-item script,
+  ammunition merge), without its dead-holder and use-script conditions; a given kit item returns to the kit at its number's place, a given
+  taken item to the taken items with its origin. Gold is `TakeGoldFromNpc`'s (`ItemTypeUnsupported`). An NPC with a transfer script (point
+  32) refuses a given item and a new pile or stack moved into it (`HolderScriptUnsupported`; an existing pile or stack grows without it, NT1), as does a taken item whose origin seed shows a remove-item, insert-item or (worn)
+  wield-off script (`ItemScriptUnsupported`).
+- **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
+  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
+  script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
+  first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
+  host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
+- **State.** The inventory section's `given` list (kit or taken items in NPCs' lists, by entity, origin 0 for a kit item) and `piles` list
+  (tracked coins of seed piles and of made piles, by entity), each in ordinal order, at most `MaxNpcItems` and `MaxGoldRecords` (4,096).
+  Restore refuses a given record whose item is in no NPC's list, a given kit item without a hero or past the kit's numbers, a made gold
+  pile without its record, a pile record of the hero's item, of a made item in no NPC's list or with no coins; a seed attach refuses a
+  given taken item its origin seed does not list with its kind, a given kit item any seed lists, and a pile record a seed lists as no gold; a given kit item leaves its number out of the kit's order, like a placed one.
+- **Not modelled.** A refused new pile or stack, which the original leaves on the ground at the NPC's tile while it reports success (here
+  nothing moves, `InsertRefused`); the transfer script's veto and the item and holder events (refused when present, not run); a source
+  without a pile or stack, which the original credits from nothing (AMA6: refused here); the no-drop item flag
+  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers; the barter window's substitute
+  container, identified flag, payment order and restock (ARC-UI-050, NT4).
 
 ## Next steps
 

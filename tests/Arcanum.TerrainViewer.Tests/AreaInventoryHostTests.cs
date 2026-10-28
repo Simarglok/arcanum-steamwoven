@@ -52,6 +52,22 @@ public sealed class AreaInventoryHostTests
             .Where(row => !withoutCharm || row.Key.SourceIndex != 2).ToDictionary(row => Entity(row.Key.SourceIndex)));
 
     [TestMethod]
+    public void AGateScriptsDeclineIsNotAMove()
+    {
+        var version = new GameSessionVersion(null, 1);
+        var moved = new InventoryMutationResult(GameSessionDisposition.Changed, GameSessionFailure.None, "item", SessionInsertVerdict.Accepted, version);
+        // ARC-SCRIPT-041: a get script that wrote a flag and declined changes the session but moves nothing.
+        var declined = new InventoryMutationResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, version)
+            { DeclinedBy = SessionScriptPoint.Get, Messages = [new SessionScriptMessage(600, 2, 0, "Not yet.")] };
+        var transfer = new InventoryMutationResult(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, version) { DeclinedBy = SessionScriptPoint.Transfer };
+        Assert.IsTrue(AreaInventoryHost.Moved(moved));
+        Assert.IsFalse(AreaInventoryHost.Moved(declined));
+        Assert.AreEqual("the item's get script declined it — Not yet.", AreaInventoryHost.NotMoved(declined));
+        Assert.AreEqual("the PC's transfer script declined it", AreaInventoryHost.NotMoved(transfer));
+        Assert.AreEqual("the PC cannot take it", AreaInventoryHost.NotMoved(new(GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, null, null, version)));
+    }
+
+    [TestMethod]
     public void TargetsAreGroundItemsAndDeadNpcsOnly()
     {
         using var session = ConversationSessionFixture.Create();

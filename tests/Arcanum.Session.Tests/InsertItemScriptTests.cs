@@ -14,12 +14,12 @@ namespace Arcanum.Session.Tests;
 public sealed class InsertItemScriptTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
-    private const byte Local = 2, Number = 3, Flag = 4;
+    internal const byte Local = 2, Number = 3, Flag = 4;
     private const int Amulet = 500;
 
-    private static (int Type, (byte Kind, int Value)[] Operands) C(int type, params (byte, int)[] operands) => (type, operands);
+    internal static (int Type, (byte Kind, int Value)[] Operands) C(int type, params (byte, int)[] operands) => (type, operands);
 
-    private static ScrProgram Program(params (int Type, (byte Kind, int Value)[] Operands)[] actions)
+    internal static ScrProgram Program(params (int Type, (byte Kind, int Value)[] Operands)[] actions)
     {
         var bytes = new byte[64 + actions.Length * 132];
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), actions.Length);

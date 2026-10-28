@@ -142,16 +142,19 @@ public partial class TerrainViewerApp
         if (!pickup) { OpenInventory(target.Entity); return; }
         var result = _inventoryHost!.PickUp(_areaSession!, target.Entity);
         var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
-        _inventoryStatus = result.Disposition == GameSessionDisposition.Changed
-            ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}";
-        if (result.Disposition == GameSessionDisposition.Changed) PlayPickupSound(target.Entity);
+        _inventoryStatus = AreaInventoryHost.Moved(result)
+            ? $"picked up {name}{AreaInventoryHost.Printed(result)}" : $"pickup refused: {AreaInventoryHost.NotMoved(result)}";
+        if (AreaInventoryHost.Moved(result)) PlayPickupSound(target.Entity);
         GD.Print($"ARC-UI-004 pickup disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         SyncAreaInventory(); RefreshAreaStatus();
     }
 
     // ARC-SCRIPT-013: how an item's insert-item script ended and how many lines it printed (the text stays on screen only).
+    // ARC-SCRIPT-041: every item script run of the transfer (point:script:stop) and a gate's decline.
     private static string InsertScriptLog(InventoryMutationResult result) =>
-        result.InsertScript is { } run ? $" insert-script={run.Script} stop={run.Stop} lines={result.Messages.Count}" : string.Empty;
+        (result.InsertScript is { } run ? $" insert-script={run.Script} stop={run.Stop} lines={result.Messages.Count}" : string.Empty) +
+        (result.Scripts.Count == 0 ? string.Empty : " scripts=" + string.Join(",", result.Scripts.Select(s => $"{s.Point}:{s.Run.Script}:{s.Run.Stop}"))) +
+        (result.DeclinedBy is { } point ? $" declined-by={point}" : string.Empty);
 
     private void CancelInventoryApproach(string? why)
     {
@@ -285,9 +288,9 @@ public partial class TerrainViewerApp
     {
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
-        if (result.Disposition == GameSessionDisposition.Changed) PlayTakenItemSound(item);
-        var message = result.Disposition == GameSessionDisposition.Changed
-            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}";
+        if (AreaInventoryHost.Moved(result)) PlayTakenItemSound(item);
+        var message = AreaInventoryHost.Moved(result)
+            ? $"took {_inventoryHost.Name(item, _hoverNames?.Catalog)}{AreaInventoryHost.Printed(result)}" : $"not taken: {AreaInventoryHost.NotMoved(result)}";
         GD.Print($"ARC-UI-004 loot disposition={result.Disposition} failure={result.Failure} pc={_areaSession!.QueryPcInventory().Count}{InsertScriptLog(result)}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
@@ -304,8 +307,8 @@ public partial class TerrainViewerApp
             var result = _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
-            if (result.Disposition == GameSessionDisposition.Changed) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
-            else refused.Add($"{line.Text}: {AreaInventoryHost.Refusal(result.Failure, result.Verdict)}");
+            if (AreaInventoryHost.Moved(result)) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
+            else refused.Add($"{line.Text}: {AreaInventoryHost.NotMoved(result)}");
         }
         var message = $"took {taken} item(s){printed}" + (refused.Count == 0 ? string.Empty : "; not taken: " + string.Join("; ", refused));
         GD.Print($"ARC-UI-004 loot-all taken={taken} refused={refused.Count} pc={_areaSession!.QueryPcInventory().Count}");

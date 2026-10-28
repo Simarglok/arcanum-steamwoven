@@ -375,6 +375,15 @@ public sealed class AreaInventoryHost
     public static string Printed(InventoryMutationResult result) =>
         result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
 
+    /// <summary>ARC-SCRIPT-041: whether the transfer moved the item (a gate script's skip default leaves it, maybe with flag writes).</summary>
+    public static bool Moved(InventoryMutationResult result) => result.Disposition == GameSessionDisposition.Changed && result.Item is not null;
+
+    /// <summary>Plain text for a transfer that did not move the item: a gate script that declined it (ARC-SCRIPT-041, with what it
+    /// printed), or the refusal.</summary>
+    public static string NotMoved(InventoryMutationResult result) => result.DeclinedBy is { } point
+        ? (point == SessionScriptPoint.Get ? "the item's get script declined it" : "the PC's transfer script declined it") + Printed(result)
+        : Refusal(result.Failure, result.Verdict);
+
     /// <summary>Plain text for a transfer refusal shown in the window and the status line; an insert check's Technophobia answer (ARC-WORLD-069) names the background's refusal
     /// (<c>mes\item.mes</c> 115 in the original).</summary>
     public static string Refusal(GameSessionFailure failure, SessionInsertVerdict? verdict = null) => failure switch

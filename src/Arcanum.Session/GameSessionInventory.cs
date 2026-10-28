@@ -119,6 +119,19 @@ public readonly record struct SessionAmmoRecord(string Entity, int AmmoType, int
     public const int Cells = 2;
 }
 
+/// <summary>
+/// ARC-WORLD-071: the coins of an NPC's gold pile the session tracks: a seed pile whose coins it changed, or a pile it created in the
+/// NPC's list (a <c>made:n</c> item of the gold prototype). Its coins are 1 or more (a move that empties a pile destroys it, NT1).
+/// </summary>
+public readonly record struct SessionGoldRecord(string Entity, int Quantity);
+
+/// <summary>
+/// ARC-WORLD-071: an item the hero gave an NPC that is not a made item: a kit item (<see cref="Origin"/> null) or an item the PC took
+/// from the world, with the map it came from. It stays in the NPC's list (<see cref="SessionNpcInventory"/>) until it leaves it, and an
+/// item the hero takes back returns to the list it came from.
+/// </summary>
+public readonly record struct SessionGivenItem(string Entity, SessionMapId? Origin);
+
 /// <summary>Which of the hero's lists a placed item came from, and goes back to when it is picked up (ARC-WORLD-059).</summary>
 public enum SessionPlacedSource { Kit, Pc, Made }
 
@@ -140,9 +153,11 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
 public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
-        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null)
+        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null)
     {
         Ammo = Array.AsReadOnly(ammo ?? []);
+        Given = Array.AsReadOnly(given ?? []);
+        Piles = Array.AsReadOnly(piles ?? []);
         Gold = gold;
         Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
@@ -158,6 +173,10 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionNpcInventory> Npcs { get; }
     public IReadOnlyList<SessionPlacedItem> Placed { get; }
     public IReadOnlyList<SessionAmmoRecord> Ammo { get; }
+    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs, by entity in ordinal order.</summary>
+    public IReadOnlyList<SessionGivenItem> Given { get; }
+    /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity in ordinal order.</summary>
+    public IReadOnlyList<SessionGoldRecord> Piles { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -203,10 +222,23 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// <summary>ARC-SCRIPT-013: the item's insert-item script run, when one ran (also on a refusal of its effects).</summary>
     public ScrRunResult? InsertScript { get; init; }
     private readonly IReadOnlyList<SessionScriptMessage>? _messages;
+    private readonly IReadOnlyList<SessionItemScriptRun>? _scripts;
 
-    /// <summary>The lines that script printed, in order, for the host to show; empty when none.</summary>
+    /// <summary>The lines the transfer's scripts printed, in order, for the host to show; empty when none.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get => _messages ?? Array.Empty<SessionScriptMessage>(); init => _messages = value; }
+
+    /// <summary>ARC-SCRIPT-041: every item script run of the transfer, in order (also on a refusal); empty without a script host.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get => _scripts ?? Array.Empty<SessionItemScriptRun>(); init => _scripts = value; }
+
+    /// <summary>ARC-SCRIPT-041: the point whose script returned skip default (<see cref="SessionScriptPoint.Get"/> or
+    /// <see cref="SessionScriptPoint.Transfer"/>), so the item did not move; <see cref="Item"/> is null then, and the disposition is
+    /// Changed only when that run wrote global flags.</summary>
+    public int? DeclinedBy { get; init; }
 }
+
+/// <summary>ARC-SCRIPT-041: one item script run of a transfer: the attachment point, the attachee's entity (the item, or
+/// <see cref="SessionEventKinds.PlayerEntity"/> for the recipient's transfer script) and the dispatcher's result.</summary>
+public sealed record SessionItemScriptRun(int Point, string Attachee, ScrRunResult Run);
 
 /// <summary>A line a script printed (ARC-SCRIPT-013): the DLG line of <paramref name="Script"/>, the print action's second
 /// number and the text the host built.</summary>
@@ -329,6 +361,17 @@ internal sealed class InventoryDomain
         }
     }
 
+    /// <summary>ARC-WORLD-071: an item leaving an NPC for the hero: a given kit item back at its kit number's place, a given taken item at
+    /// the end of the taken items with its origin, any other at the end of the made items. It stays taken.</summary>
+    internal void ReturnGiven(string entity, SessionItemKind kind)
+    {
+        if (!Given.Remove(entity, out var given)) { Add(new SessionMadeItem(entity, kind)); return; }
+        if (given.Origin is { } origin) { Pc.Add(new(entity, origin, kind)); return; }
+        var number = HeroDomain.KitNumber(entity) ?? throw new InvalidOperationException("GIVEN_KIT_ENTITY");
+        var at = Kit.FindIndex(kit => HeroDomain.KitNumber(kit.Entity) > number);
+        Kit.Insert(at < 0 ? Kit.Count : at, new(entity, kind));
+    }
+
     /// <summary>A made item is also recorded as taken, so no seed can list it.</summary>
     internal void Add(SessionMadeItem item)
     {
@@ -352,9 +395,15 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-066: the ammunition stacks the session tracks, by entity.</summary>
     internal SortedDictionary<string, SessionAmmoRecord> Ammo { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs (their entries are in <see cref="Npcs"/>), by entity.</summary>
+    internal SortedDictionary<string, SessionGivenItem> Given { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity.</summary>
+    internal SortedDictionary<string, int> Piles { get; } = new(StringComparer.Ordinal);
+
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray());
+        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray());
 
     /// <summary>The facts of a made item: its kind, no weight, complexity, location (-1, in the bag) or scripts; the host knows
     /// the prototype's weight.</summary>
@@ -363,7 +412,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-066: an item's facts with its tracked ammunition units (a made or placed stack's type and units, a seed
     /// stack's changed units); any other item's facts unchanged.</summary>
     internal SessionItemFacts WithAmmo(string entity, SessionItemFacts facts) =>
-        Ammo.TryGetValue(entity, out var stack) ? facts with { AmmoType = stack.AmmoType, Quantity = stack.Units } : facts;
+        Ammo.TryGetValue(entity, out var stack) ? facts with { AmmoType = stack.AmmoType, Quantity = stack.Units }
+        // ARC-WORLD-071: a tracked gold pile's coins too.
+        : Piles.TryGetValue(entity, out var coins) ? facts with { Quantity = coins } : facts;
 
     /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
     /// life records, ARC-COMBAT-005) does. Ground items in seed order, then each spilled container's items at its cell (a container
