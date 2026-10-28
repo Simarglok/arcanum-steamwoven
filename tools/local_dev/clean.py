@@ -3,6 +3,8 @@
 The rule is docs/workflow/build-retention.md. The report is read-only; `apply` removes only the `.app` payloads of
 registered builds that a newer current build of the same task supersedes (or that are already retired), through the
 retention plan/apply path, which rechecks every protection under the registry lock and the launcher/export leases.
+ARC-DEV-055: `apply` also removes the outdated player packages of `./arcanum package` (each platform's previous/ and an
+interrupted install's leftover); the current package of each platform always stays.
 Everything else (unregistered or unmanaged builds, worktrees, caches) is reported for the owner, never removed here.
 """
 from __future__ import annotations
@@ -16,6 +18,7 @@ from typing import Any
 
 from . import config, retention
 from .manifests import SUPPORTED_TOOLS, resolve_pointer
+from .package import PLATFORMS, Platform, remove
 
 MARKER = "README-DO-NOT-DELETE.md"
 MARKER_TEXT = """# Do not delete this folder by hand
@@ -28,7 +31,8 @@ launcher and the next export; ARC-DEV-026 had to repair that once (2026-10-20).
 See what is protected and what can go:
 
     ./arcanum clean            # dry run: every build with its class and reason, nothing is removed
-    ./arcanum clean --apply    # removes only superseded or retired build payloads; manifests and evidence stay
+    ./arcanum clean --apply    # removes only superseded or retired build payloads (manifests and evidence stay)
+                               # and outdated player packages (previous/); the current packages stay
 
 The rule: docs/workflow/build-retention.md in the repository. This file is written by `./arcanum setup` and
 `./arcanum clean`; it is not tracked in git.
@@ -192,10 +196,131 @@ def _within(path: Path, other: Path) -> bool:
     return path == other or other in path.parents or path in other.parents
 
 
-# ARC-DEV-047: the player builds of `./arcanum package` (docs/workflow/packaging.md); that command replaces them itself.
+# ARC-DEV-047: the player builds of `./arcanum package` (docs/workflow/packaging.md), classified one by one in `packages`
+# (ARC-DEV-055); only a link or a file in place of the folder is reported here.
 PACKAGES = "packages"
-PACKAGES_REASON = ("packaged player builds of ./arcanum package (ARC-DEV-047): the current and the previous build per platform; "
-                   "the next package replaces them")
+PACKAGES_REASON = "artifacts/packages is not the folder ./arcanum package writes (a link or a file); owner decides"
+PLATFORM_NAMES = {"mac": "macOS", "win": "Windows"}
+PACKAGE_BUILDER = ("local_dev/package.py", "local_dev.package")  # the builder run as a script or as a module
+PACKAGE_FILES = ("BUILD.txt", "README.md", ".DS_Store")
+
+
+def _build_line(folder: Path) -> str:
+    """'main <first 10 digits>, <date>' from the BUILD.txt that ./arcanum package writes beside a package."""
+    try:
+        fields = dict(line.split(" ", 1) for line in (folder / "BUILD.txt").read_text(encoding="utf-8").splitlines() if " " in line)
+    except (OSError, ValueError):
+        return "no readable BUILD.txt"
+    return f"main {fields.get('commit', '?')[:10]}, {fields.get('date', '?')}"
+
+
+def _bytes(path: Path) -> int | None:
+    try:
+        node = os.lstat(path)
+    except OSError:
+        return None
+    return disk_bytes(path) if stat.S_ISDIR(node.st_mode) else node.st_size if stat.S_ISREG(node.st_mode) else None
+
+
+def _platform_packages(folder: Path, platform: Platform) -> list[dict[str, Any]]:
+    name = PLATFORM_NAMES[platform.key]
+    current = folder / platform.installed
+    present = not current.is_symlink() and (current.is_dir() if platform.key == "mac" else current.is_file())
+    results = []
+    for child in sorted(folder.iterdir()):
+        if child.name in PACKAGE_FILES:
+            continue
+        if child == current:
+            item = {"class": "keep", "reason": f"current {name} package ({_build_line(folder)}) with its BUILD.txt and README.md; never removed"
+                    if present else f"not a {name} package in the expected form; owner decides"}
+        elif child.is_symlink():
+            item = {"class": "keep", "reason": "a link; owner decides"}
+        elif child.name == "previous" and child.is_dir():
+            # A packaged game writes its bug reports beside its app (ARC-DEV-051), so an app started from previous/ may have
+            # left the player's reports there: only the build itself is disposable.
+            extra = sorted(entry.name for entry in child.iterdir() if entry.name not in (platform.installed, *PACKAGE_FILES))
+            item = ({"class": "keep", "reason": f"previous {name} package that also holds {', '.join(extra[:3])}"
+                     f"{'…' if len(extra) > 3 else ''} (for example bug reports of that build); owner decides"} if extra
+                    else {"class": "disposable", "reason": f"previous {name} package ({_build_line(child)}), superseded by the current one"}
+                    if present else {"class": "keep", "reason": f"previous {name} package with no current package beside it; owner decides"})
+        elif child.name == f".incoming-{platform.installed}":
+            item = ({"class": "disposable", "reason": "left by an interrupted ./arcanum package install; the current package is untouched"}
+                    if present else {"class": "keep", "reason": f"interrupted install with no current {name} package; owner decides"})
+        else:
+            item = {"class": "keep", "reason": "not written by ./arcanum package; owner decides"}
+        results.append({"path": str(child), "bytes": _bytes(child), **item})
+    return results
+
+
+def packages(checkout: Path) -> list[dict[str, Any]]:
+    """ARC-DEV-055: artifacts/packages per platform. The current package (with BUILD.txt and README.md) and the last run's
+    step logs stay; previous/ (holding only the build) and an interrupted install's .incoming-* are disposable only while
+    the current package is there; anything else, and every link, is kept for the owner. A folder that cannot be read is
+    reported as KEEP."""
+    artifacts = checkout / "artifacts"
+    base = artifacts / PACKAGES
+    if artifacts.is_symlink() or not base.is_dir() or base.is_symlink():
+        return []
+    folders = {platform.folder: platform for platform in PLATFORMS.values()}
+    results = []
+    try:
+        children = sorted(base.iterdir())
+    except OSError as error:
+        return [{"path": str(base), "bytes": None, "class": "keep", "reason": f"cannot be read ({error.strerror}); owner decides"}]
+    for child in children:
+        if child.name == ".DS_Store":
+            continue
+        if child.name in folders and child.is_dir() and not child.is_symlink():
+            try:
+                results += _platform_packages(child, folders[child.name])
+            except OSError as error:
+                results.append({"path": str(child), "bytes": None, "class": "keep", "reason": f"cannot be read ({error.strerror}); owner decides"})
+            continue
+        reason = ("step logs of the last ./arcanum package run per platform; the next run replaces them"
+                  if child.name == "logs" and child.is_dir() and not child.is_symlink() else "not written by ./arcanum package; owner decides")
+        results.append({"path": str(child), "bytes": _bytes(child), "class": "keep", "reason": reason})
+    return results
+
+
+def _processes() -> list[str]:
+    """Command lines of every process (ps), to see a package run or a packaged app started from the folder."""
+    return subprocess.run(["ps", "-axww", "-o", "command="], check=True, capture_output=True, text=True).stdout.splitlines()
+
+
+def apply_packages(checkout: Path) -> dict[str, Any]:
+    """Remove the disposable packages. Refuses all while a package run (local_dev/package.py) is running, and skips a
+    package whose app runs by a command line under its path; each path is classified again right before its removal,
+    and a failed removal stops with what was already removed."""
+    disposable = [item for item in packages(checkout) if item["class"] == "disposable"]
+    removed, freed, skipped = [], 0, []
+    if not disposable:
+        return {"status": "nothing-to-remove", "removed": removed, "freedBytes": freed}
+    try:
+        running = _processes()
+    except (OSError, subprocess.CalledProcessError) as error:
+        return {"status": f"stopped: cannot list processes ({error})", "removed": removed, "freedBytes": freed}
+    if any(builder in line for line in running for builder in PACKAGE_BUILDER):
+        return {"status": "stopped: ./arcanum package is running; run clean --apply again after it", "removed": removed, "freedBytes": freed}
+    for item in disposable:
+        path = Path(item["path"])
+        if any(f"{path}/" in line for line in running):
+            skipped.append(path.name)
+            continue
+        try:
+            again = next((other for other in _platform_packages(path.parent, _platform(path.parent)) if other["path"] == item["path"]), None)
+            if again is None or again["class"] != "disposable" or path.is_symlink():
+                continue
+            remove(path)
+        except OSError as error:
+            return {"status": f"stopped: cannot remove {path} ({error})", "removed": removed, "freedBytes": freed}
+        removed.append(str(path))
+        freed += item["bytes"] or 0
+    status = f"skipped running {', '.join(skipped)}" if skipped else "done" if removed else "nothing-to-remove"
+    return {"status": status, "removed": removed, "freedBytes": freed}
+
+
+def _platform(folder: Path) -> Platform:
+    return next(platform for platform in PLATFORMS.values() if platform.folder == folder.name)
 
 
 def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
@@ -216,6 +341,8 @@ def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
             continue
         if any(_within(child.resolve(), root) for root in configured):
             continue
+        if child.name == PACKAGES and child.is_dir() and not child.is_symlink():
+            continue  # classified by packages()
         home = next((name for root, name in owned.items() if _within(child.resolve(), root)), None)
         reason = (f"artifact root of the owned home {home}; run ARCANUM_LOCAL_HOME={home} ./arcanum clean" if home
                   else PACKAGES_REASON if child.name == PACKAGES
@@ -288,7 +415,8 @@ def caches(checkout: Path) -> list[dict[str, Any]]:
 
 def report(conf: dict[str, Any], registry: dict[str, Any], checkout: Path) -> dict[str, Any]:
     return {"schema": "arcanum-clean-report-v1", "home": str(config.home()), "builds": builds(conf, registry),
-            "unmanaged": unmanaged(conf, checkout), "worktrees": worktrees(checkout), "caches": caches(checkout)}
+            "unmanaged": unmanaged(conf, checkout), "packages": packages(checkout), "worktrees": worktrees(checkout),
+            "caches": caches(checkout)}
 
 
 def apply(checkout: Path) -> dict[str, Any]:
@@ -348,14 +476,17 @@ def render(result: dict[str, Any]) -> str:
         lines.append(f"  {item['class'].upper():<11} {_size(size):>9}  {item['candidateId']}: {item['reason']}")
     if not result["builds"]:
         lines.append("  none (no configured artifact root holds a build)")
-    for title, key in (("Not managed by this home", "unmanaged"), ("Worktrees (report only)", "worktrees"),
+    for title, key in (("Not managed by this home", "unmanaged"), ("Player packages (artifacts/packages)", "packages"),
+                       ("Worktrees (report only)", "worktrees"),
                        ("Regenerable build outputs (report only)", "caches")):
         if result[key]:
             lines.append(f"{title}:")
             lines += [f"  {item['class'].upper():<11} {_size(item['bytes']):>9}  {item['path']}: {item['reason']}" for item in result[key]]
     disposable = sum(item["payloadBytes"] or 0 for item in result["builds"] if item["class"] == "disposable")
-    lines.append(f"`./arcanum clean --apply` would remove {_size(disposable)} of DISPOSABLE build payloads; "
-                 "PROTECTED and KEEP builds, manifests and evidence stay. Never delete artifacts/ by hand "
+    outdated = sum(item["bytes"] or 0 for item in result["packages"] if item["class"] == "disposable")
+    lines.append(f"`./arcanum clean --apply` would remove {_size(disposable)} of DISPOSABLE build payloads and "
+                 f"{_size(outdated)} of DISPOSABLE (outdated) player packages; PROTECTED and KEEP builds, manifests, evidence "
+                 "and the current packages stay. Never delete artifacts/ by hand "
                  "(docs/workflow/build-retention.md).")
     return "\n".join(lines)
 
@@ -363,11 +494,17 @@ def render(result: dict[str, Any]) -> str:
 def run(checkout: Path, *, do_apply: bool, as_json: bool) -> int:
     write_marker(checkout / "artifacts")
     if do_apply:
-        result = apply(checkout)
+        # Packages first: they share no lock or lease with the builds, so a running viewer does not hold them back.
+        pruned = apply_packages(checkout)
+        try:
+            result = {**apply(checkout), "packages": pruned}
+        except ValueError as error:  # a running viewer refuses the builds before anything changes
+            result = {"retired": [], "removed": [], "status": f"stopped: {error}", "packages": pruned}
         print(json.dumps(result, indent=2, sort_keys=True) if as_json else
               f"Retired {len(result['retired'])}, removed {len(result['removed'])} payload(s), "
-              f"freed {_size(result.get('freedBytes', 0))} ({result['status']}).")
-        return 2 if result["status"].startswith("stopped") else 0
+              f"freed {_size(result.get('freedBytes', 0))} ({result['status']}). Player packages: removed "
+              f"{len(pruned['removed'])}, freed {_size(pruned['freedBytes'])} ({pruned['status']}).")
+        return 2 if result["status"].startswith("stopped") or pruned["status"].startswith("stopped") else 0
     result = report(config.load_config(), config.load_registry(), checkout)
     print(json.dumps(result, indent=2, sort_keys=True) if as_json else render(result))
     return 0

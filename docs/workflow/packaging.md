@@ -57,8 +57,10 @@ In the **main checkout** (also when the command runs from a worktree):
     artifacts/packages/<platform>/previous/       the build before, with its BUILD.txt and README.md
     artifacts/packages/logs/<platform>/           the last run's step logs
 
-The next successful package replaces the current build and moves it to `previous/` (the older `previous/` goes). Nothing
-else removes them; `./arcanum clean` lists `artifacts/packages` as kept ([build retention](build-retention.md)). Packages
+The next successful package replaces the current build and moves it to `previous/` (the older `previous/` goes).
+`./arcanum clean` lists each platform's current package as KEEP (never removed) and `previous/`, with an interrupted
+install's `.incoming-*`, as DISPOSABLE with its size; `./arcanum clean --apply` removes those, keeping no previous build,
+and refuses while a package run is going (ARC-DEV-055, [build retention](build-retention.md)). Packages
 are local: the tool never commits, uploads or publishes them; giving a copy to a tester is the owner's own private act.
 
 ## What makes the package different from a developer build
