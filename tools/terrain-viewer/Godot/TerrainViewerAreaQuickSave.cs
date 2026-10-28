@@ -269,6 +269,8 @@ public partial class TerrainViewerApp
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
         // ARC-SCRIPT-017: the cached use-script host kept the previous owner.
         _useScriptHost = null;
+        // ARC-COMBAT-016: the replaced session's flights end while it still lives.
+        ClearAreaProjectiles("session replaced");
         previous?.Dispose();
     }
 
