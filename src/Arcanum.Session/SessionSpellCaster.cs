@@ -172,6 +172,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public SpellRunRecord Record(int spell) => _records(spell)?.Run ?? new();
 
+    /// <summary>ARC-MAGIC-022: the whole record of <paramref name="spell"/> the host knows, or null.</summary>
+    public SessionSpellRecord? SpellRecord(int spell) => _records(spell);
+
+    /// <summary>ARC-MAGIC-022: the hero's life status, or null without a hero.</summary>
+    public LifeStatus? HeroLife => Life(Hero)?.Status;
+
     public SpellStageFacts StageFacts(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -544,12 +550,17 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     /// the target object, or else the tile; no line of fire (0x456BC0) shows spell.mes 604; then the run starts (0x455AC0: the
     /// invocation check, a slot and the run), whose casting goal is the host's (<see cref="StartGoal"/>).
     /// </summary>
+    /// ARC-MAGIC-022: with <paramref name="item"/> (an item the host knows that <paramref name="caster"/> holds) the item is the
+    /// invocation's source and the caster its parent, with the power the caster draws from it, as the item use's slot-0 cast sets the
+    /// activation's source (0x57BC70: an item's holder is the caster); an item source skips the cost check.
     [OriginalFunction(0x57C110, OriginalFunctionScope.Partial)]
-    public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile)
+    public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile, string? item = null)
     {
         ArgumentNullException.ThrowIfNull(caster);
         if (Life(caster) is not { } life || life.Status.IsDead || life.Status.IsUnconscious) return new(SpellCastAttemptOutcome.Nothing);
-        if (_records(spell) is not { } record || RunObject(caster) is not { } source || Facts(caster) is not { } facts)
+        if (item is not null && Item(item)?.Holder != caster) return new(SpellCastAttemptOutcome.Nothing);
+        if (_records(spell) is not { } record || RunObject(item ?? caster) is not { } source || Facts(caster) is not { } facts ||
+            (item is null ? facts : Facts(item)) is not { } sourceFacts)
             return new(SpellCastAttemptOutcome.Nothing);
         if (source.IsCritter)
         {
@@ -559,7 +570,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         }
         var target = targetObject is null ? null : Facts(targetObject);
         if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
-        var invocation = new SpellInvocation(spell, facts, facts, target, target is null ? targetTile : SpellLocation.None, ParentIsLocalPlayer: caster == Hero);
+        var invocation = new SpellInvocation(spell, facts, sourceFacts, target, target is null ? targetTile : SpellLocation.None,
+            item is null ? null : ItemPower(Item(item)!, facts), ParentIsLocalPlayer: caster == Hero);
         var world = InvocationWorld();
         if (!SpellInvocationRules.HasLineOfFire(invocation, world)) return Refused(SpellCastAttemptOutcome.NoLineOfFire, SpellUiRules.NoLineOfFireMessage);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
