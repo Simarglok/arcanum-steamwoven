@@ -11,11 +11,12 @@ namespace Arcanum.Session;
 public sealed partial class GameSessionOwner
 {
     /// <summary>Detached copy of the made items the session added to an NPC, in the order they entered its list (empty when none).
-    /// Throws for an invalid entity id.</summary>
+    /// Throws for an invalid entity id. ARC-WORLD-090: a container's list (a barter window's sales) is not an NPC's: empty.</summary>
     public IReadOnlyList<SessionMadeItem> QueryNpcInventory(string npc)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        if (_inventory.Containers.Contains(npc)) return [];
         // ARC-WORLD-071: the kit and taken items the hero gave the NPC are its list's too, but not made items (QueryGivenItems).
         return Array.AsReadOnly(_inventory.AddedTo(npc).Where(item => !_inventory.Given.ContainsKey(item.Entity)).ToArray());
     }
@@ -121,13 +122,14 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item, null, Version);
     }
 
-    /// <summary>An NPC holder of an attached seed, a party record, or an NPC holding added items.</summary>
-    private bool KnownNpc(string npc) => _inventory.Npcs.ContainsKey(npc) || _party.Records.ContainsKey(npc) ||
+    /// <summary>An NPC holder of an attached seed, a party record, or an NPC holding added items (ARC-WORLD-090: not a container).</summary>
+    private bool KnownNpc(string npc) => _inventory.Npcs.ContainsKey(npc) && !_inventory.Containers.Contains(npc) || _party.Records.ContainsKey(npc) ||
         _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc);
 
-    /// <summary>The NPC's seed items still in its list, in every attached seed that lists it as an NPC.</summary>
-    private int SeedItemCount(string npc) => _inventory.Seeds.Values
-        .Sum(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc
+    /// <summary>The NPC's seed items still in its list, in every attached seed that lists it as an NPC (ARC-WORLD-090: or the
+    /// container's, as a container).</summary>
+    private int SeedItemCount(string npc, SessionHolderKind kind = SessionHolderKind.Npc) => _inventory.Seeds.Values
+        .Sum(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == kind
             ? holder.Items.Count(entity => !_inventory.Taken.Contains(entity) && !Dropped(entity)) : 0);
 
     /// <summary>The seed item of an attached seed that lists <paramref name="item"/> in the NPC's list and still holds it, or null.</summary>

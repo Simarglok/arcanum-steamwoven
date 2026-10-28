@@ -112,6 +112,59 @@ public sealed class AreaBarterTests
         Assert.AreEqual("not enough money", Barter(poor, Data(), changes, reaction: -10).Buy("axe").Text, "1520 > 1100");
     }
 
+    // ARC-WORLD-090: a merchant whose set has no buy line and whose chest (set 1) buys the kit sword; the chest holds a magickal axe of
+    // worth 400 (complexity 30, not identified) and 50 coins.
+    private const int MagicAxe = 4050;
+
+    private static AreaBarterData StockData() => AreaBarterData.Create(Mes("{1}{Smith: 1,1}{2}{End: 1,1}"), Mes("{1}{4010}"),
+        new Dictionary<int, CombatFields>
+        {
+            [KitSword] = Weapon(KitSword, 100), [MagicAxe] = Weapon(MagicAxe, 400) is var axe ? axe with { Item = axe.Item! with { MagickTechComplexity = 30 } } : null!,
+            [AreaBarterData.GoldPrototype] = Gold(),
+        });
+
+    private static GameSessionOwner StockSession()
+    {
+        var session = Session();
+        SessionItemFacts Facts(SessionItemType type, int prototype, int complexity = 0, int? quantity = null) =>
+            new(new(type, prototype, 4200, 34200), 10, complexity, 0, quantity, []);
+        var seed = new SessionMapInventorySeed(
+            [new("merchant", SessionHolderKind.Npc, false, true, [], ["coins"]), new("chest", SessionHolderKind.Container, false, false, [], ["magic-axe", "chest-coins"])],
+            [new("coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 100), null),
+             new("magic-axe", Facts(SessionItemType.Weapon, MagicAxe, complexity: 30), null),
+             new("chest-coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 50), null)]);
+        Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(session.QueryActor().Map, seed).Failure);
+        return session;
+    }
+
+    [TestMethod]
+    public void A_merchant_with_a_stock_chest_trades_through_it_after_the_open()
+    {
+        using var session = StockSession();
+        var data = StockData();
+        var own = new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(2), false);
+        var near = own.WithSubstitute(new("chest", 1, new(40, 40)), new(60, 20), data);
+        Assert.AreEqual(("chest", InventorySourceBuyStatus.Listed), (near.Container, near.ContainerBuyList!.Status), "20 tiles away (Chebyshev)");
+        Assert.IsNull(own.WithSubstitute(new("chest", 1, new(40, 40)), new(61, 40), data).Container, "21 tiles away");
+        Assert.IsNull((own with { Follower = true }).WithSubstitute(new("chest", 1, new(40, 40)), new(40, 40), data).Container, "a follower has a leader");
+        var barter = new AreaBarter(session, new AreaInventoryHost([]), data, near, () => 50, _ => true, (entity, _) => entity);
+        // Before the open the axe is not identified: worth 300, so 300 + 90 × 100 × 300 / 10000 = 570.
+        Assert.AreEqual(("magic-axe", 570), (barter.View().Wares.Single().Entity, barter.View().Wares.Single().Quote.Price));
+        var opened = barter.Open();
+        Assert.AreEqual((50, 1), (opened.Coins, opened.Piles));
+        var view = barter.View();
+        Assert.AreEqual((150, 760), (view.MerchantGold, view.Wares.Single().Quote.Price), "the chest's coins are the merchant's; the axe is identified");
+        Assert.AreEqual(55, view.Hero.Single().Quote.Price, "the chest's buy list deals in the sword (BT8)");
+        Assert.AreEqual(TradeRefusal.NotDealt, new AreaBarter(session, new AreaInventoryHost([]), data, own, () => 50, _ => true, (entity, _) => entity)
+            .View().Hero.Single().Quote.Refusal, "without the chest the merchant buys nothing");
+        Assert.IsTrue(barter.Sell("kit:1").Moved);
+        Assert.AreEqual((1055, 95), (session.QueryGold(), session.QueryNpcGold("merchant")));
+        CollectionAssert.AreEqual(new[] { "magic-axe", "kit:1" }, barter.View().Wares.Select(line => line.Entity).ToArray(), "the sale went into the chest");
+        Assert.IsTrue(barter.Buy("magic-axe").Moved);
+        Assert.AreEqual((295, 855), (session.QueryGold(), session.QueryNpcGold("merchant")));
+        Assert.AreEqual(400, barter.View().Hero.Single(line => line.Entity == "magic-axe").Worth, "a bought item stays identified");
+    }
+
     /// <summary>Opt-in (DAT_ROOT = the game folder): the installed buy lists by status, and the
     /// NPCs of every whole map that are merchants (an inventory source that buys something, their own or their substitute container's), with
     /// their price multipliers. Counts only.</summary>
@@ -131,8 +184,8 @@ public sealed class AreaBarterTests
             statuses.GetValueOrDefault(InventorySourceBuyStatus.Emptied)), "the census changed: update the barter contract");
         using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
         // A merchant buys through its own source or, failing that, its substitute container's (0x464200); its wares are the container's
-        // list when it has one within reach (not modelled by the window yet).
-        int npcs = 0, own = 0, throughContainer = 0, speakersOwn = 0, speakersContainer = 0;
+        // list when it has one within reach (ARC-WORLD-090: no leader, 20 tiles, 0x45F650).
+        int npcs = 0, own = 0, throughContainer = 0, speakersOwn = 0, speakersContainer = 0, inReach = 0, stock = 0, stockCoins = 0, stockPiles = 0;
         var multipliers = new SortedDictionary<int, int>();
         var perMap = new List<(string Map, int Count)>();
         foreach (var map in WorldCatalog.Open(stack).Maps.Where(m => m.Name != "arcanum1-024-fixed"))
@@ -157,6 +210,15 @@ public sealed class AreaBarterTests
                 if (Buys(npc.InventorySource)) { own++; if (speaker) speakersOwn++; }
                 else if (container is not null && Buys(container.InventorySource)) { throughContainer++; if (speaker) speakersContainer++; }
                 else continue;
+                if (container is { WorldX: { } cx, WorldY: { } cy } && npc is { Leader: null, WorldX: { } nx, WorldY: { } ny } &&
+                    Math.Max(Math.Abs(cx - nx), Math.Abs(cy - ny)) <= AreaBarterMerchant.SubstituteRange)
+                {
+                    inReach++;
+                    var items = inventory.ListOf(container.SourceIndex);
+                    stock += items.Count;
+                    stockPiles += items.Count(item => item.Type == Arcanum.Data.Inventory.AreaItemType.Gold);
+                    stockCoins += items.Where(item => item.Type == Arcanum.Data.Inventory.AreaItemType.Gold).Sum(item => item.Quantity ?? 0);
+                }
                 count++;
                 if (CombatFieldReader.Read(result.Area.Snapshot.Objects.Single(o => o.Key == npc.Key)).Fields?.Npc is { } fields)
                     multipliers[fields.RetailPriceMultiplier] = multipliers.GetValueOrDefault(fields.RetailPriceMultiplier) + 1;
@@ -166,8 +228,11 @@ public sealed class AreaBarterTests
         var merchants = own + throughContainer;
         Console.WriteLine($"NPCs {npcs}; merchants {merchants} on {perMap.Count} maps: own buy list {own} ({speakersOwn} dialog speakers), through the substitute container {throughContainer} ({speakersContainer} speakers)");
         Console.WriteLine($"multipliers: {string.Join(", ", multipliers.Select(p => $"{p.Key}×{p.Value}"))}");
+        Console.WriteLine($"containers in reach {inReach}: {stock} items, {stockPiles} gold piles of {stockCoins} coins");
         Console.WriteLine("most: " + string.Join(", ", perMap.OrderByDescending(p => p.Count).Take(8).Select(p => $"{p.Map} {p.Count}")));
         // First observation 2026-10-28: no merchant buys through its own source; four (wheel clan 3, shopmap 1) through their containers.
         Assert.AreEqual((0, 4), (own, throughContainer), "the census changed: update the barter contract");
+        // ARC-WORLD-090, first observation 2026-10-28: all four containers lie in reach of a merchant without a leader.
+        Assert.AreEqual((4, 113, 4, 5085), (inReach, stock, stockPiles, stockCoins), "the census changed: update the barter contract");
     }
 }

@@ -499,7 +499,9 @@ public sealed partial class GameSessionOwner
         if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
             _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
         {
-            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).Reverse().ToArray();
+            // ARC-WORLD-090: the items a barter window sold into the container are not spilled (not modelled; they stay in its store).
+            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity), added: false)
+                .Select(item => item.Entity).Reverse().ToArray();
             var later = items.ToHashSet(StringComparer.Ordinal);
             foreach (var item in items)
             {
