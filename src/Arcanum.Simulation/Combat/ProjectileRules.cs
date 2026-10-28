@@ -80,21 +80,6 @@ public interface IProjectileMap<TObject> where TObject : class
 /// </summary>
 public static class ProjectileRules
 {
-    /// <summary>
-    /// ARC-COMBAT-019 (the projectile's end 0x4B2690 with attack flag 0x1000, the turn 0x435A00, ledger BR rows): a boomerang's
-    /// projectile at its first end (a strike, the end of its range, or the destination of a shot without a target) turns back: its
-    /// flight goal flies on from the tile it is on (<paramref name="flight"/>'s tile, the one being left) to
-    /// <paramref name="thrower"/>, the thrower's tile at the turn, on a new line (PF3's), and the shot returns (flag 0x2000) with its
-    /// outcome, range and facing kept. Null when the two tiles are the same or no line is built: the boomerang is back at once
-    /// (Steamwoven; the original's flight with a line of no step was not read).
-    /// </summary>
-    [OriginalFunction(0x435A00, OriginalFunctionScope.Partial)]
-    public static (ProjectileFlight? Flight, ProjectileShot Shot) TurnBack(ProjectileFlight flight, ProjectileShot shot, CellCoord thrower)
-    {
-        ArgumentNullException.ThrowIfNull(flight);
-        return (Launch(flight.Tile, thrower), shot with { Returning = true });
-    }
-
     /// <summary>The flight's tick: the goal reschedules itself every 35 ms (delay code −3, the global 0x5DE6CC it sets).</summary>
     public const int TickMs = 35;
     /// <summary>The steps per tick when the weapon's eye-candy record gives none (goal field +0x98 is 0).</summary>
@@ -158,6 +143,21 @@ public static class ProjectileRules
 
     /// <summary>The art class of a scenery art (id &gt;&gt; 28).</summary>
     public const uint SceneryArtClass = 4;
+
+    /// <summary>
+    /// ARC-COMBAT-019 (the projectile's end 0x4B2690 with attack flag 0x1000, the turn 0x435A00, ledger BR rows): a boomerang's
+    /// projectile at its first end (a strike, the end of its range, or the destination of a shot without a target) turns back: its
+    /// flight goal flies on from the tile it is on (<paramref name="flight"/>'s tile, the one being left) to
+    /// <paramref name="thrower"/>, the thrower's tile at the turn, on a new line (PF3's), and the shot returns (flag 0x2000) with its
+    /// outcome, range and facing kept. Null when the two tiles are the same or no line is built: the boomerang is back at once
+    /// (Steamwoven; the original's flight with a line of no step was not read).
+    /// </summary>
+    [OriginalFunction(0x435A00, OriginalFunctionScope.Partial)]
+    public static (ProjectileFlight? Flight, ProjectileShot Shot) TurnBack(ProjectileFlight flight, ProjectileShot shot, CellCoord thrower)
+    {
+        ArgumentNullException.ThrowIfNull(flight);
+        return (Launch(flight.Tile, thrower), shot with { Returning = true });
+    }
 
     /// <summary>
     /// The flight from <paramref name="start"/> to <paramref name="destination"/> (0x435870 and its path node): the pixel line between

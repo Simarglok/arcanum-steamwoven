@@ -144,6 +144,24 @@ public sealed class BoomerangStateTests
     }
 
     [TestMethod]
+    public void AWallStrikeTurnsTheBoomerangBackAndAThrowRequestIsRefused()
+    {
+        using var owner = Owner();
+        // A boomerang is no "default throws" weapon: a throw request for it is refused before any roll (ThrowingHero takes melee only).
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = new(150) }).Failure);
+        var wall = owner.AttackObject(owner.Version, new() { Wall = true, Distance = 3, Flight = true });
+        Assert.AreEqual(GameSessionFailure.None, wall.Failure);
+        var flying = wall.Shot!.Value;
+        Assert.IsTrue(owner.QueryShotReturns(flying));
+        Assert.AreEqual(GameSessionFailure.None, owner.LandShotOnObject(owner.Version, flying, new() { Wall = true }).Failure);
+        Assert.IsFalse(owner.QueryShotReturns(flying), "the wall turned it back");
+        Assert.IsTrue(owner.QueryBoomerangInFlight());
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandShotOnObject(owner.Version, flying, new() { Wall = true }).Failure, "it strikes once");
+        Assert.IsTrue(owner.EndShot(flying));
+        Assert.IsFalse(owner.QueryBoomerangInFlight());
+    }
+
+    [TestMethod]
     public void ASnapshotWhileTheBoomerangIsAwayRestoresItInTheHandWithoutTheMark()
     {
         using var owner = Owner();

@@ -229,9 +229,10 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-COMBAT-019 (the second end of 0x4B2690 → 0x4A9AD0 with the hero and the shot's struck object): back in the hand, the hero
+    /// ARC-COMBAT-019 (the second end of 0x4B2690 → 0x4A9AD0 with the hero and the goal's target object): back in the hand, the hero
     /// takes up combat mode when it left it (0x4B3F50) and, in real time with auto attack (0x4B8230: the option, off in a turn-based
-    /// round), attacks the shot's struck object again when no attack goal runs (0x434AE0 → 0x434B00, not aimed). A wall or a companion
+    /// round), attacks again what the shot was fired at (the goal's target slot: the clicked target, or the line of fire's blocker,
+    /// not a critter a stray strike hit on the way) when no attack goal runs (0x434AE0 → 0x434B00, not aimed). A wall or a companion
     /// is not attacked again; the original's goal-slot tests (0x423300, 0x423470) and the turn-based round's join (0x4B6E70) are not
     /// modelled.
     /// </summary>
@@ -298,9 +299,10 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        StruckEnd(projectile);
         Ended(projectile, kind, null, $"struck {(IsAreaCompanion(struck.Key) ? "a companion" : $"an object of type {struck.Type}")}: not ready");
-        _attackNotice = "the shot struck " + (IsAreaCompanion(struck.Key) ? "a companion" : "an object") + ": striking it is not ready";
+        StruckEnd(projectile);
+        if (_projectiles.Contains(projectile) || !projectile.Returns)
+            _attackNotice = "the shot struck " + (IsAreaCompanion(struck.Key) ? "a companion" : "an object") + ": striking it is not ready";
         RefreshAreaStatus();
     }
 

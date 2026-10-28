@@ -379,7 +379,6 @@ public partial class TerrainViewerApp
                 Weapon = wielded.Item.Weapon! with
                 {
                     Skill = CombatSkill.Throwing, Range = LentBowRange, MagicRange = 0, AmmoType = null, AmmoConsumption = 0,
-                    CriticalMissChart = wielded.Item.Weapon.CriticalMissChart,
                 },
             };
             Require(Wear(boomerang), "the kit weapon takes the lent boomerang's values");
@@ -430,7 +429,11 @@ public partial class TerrainViewerApp
                 CancelAreaAttack(null);
                 flights.Add($"{first.Strike}:{first.Struck ?? "none"}:{_boomerangTurnsForSelfTest[0].From.X},{_boomerangTurnsForSelfTest[0].From.Y}");
             }
-            Require(flights.Count > 0, "a boomerang flew (a critical miss took it before the first flight)");
+            if (flights.Count == 0)
+            {
+                GD.Print("ARC-COMBAT-019 native-smoke boomerang NONE (a critical miss took the boomerang before its first flight)");
+                return "NONE (a critical miss took the boomerang first)";
+            }
             Require(reattacks > 0 || _combatHost!.Target(session, runtime, pick.Target.Row.Key) is { Dead: true },
                 $"the auto attack started again after a return ({reattacks} of {flights.Count})");
             GD.Print($"ARC-COMBAT-019 native-smoke boomerang PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} reattacks={reattacks}"

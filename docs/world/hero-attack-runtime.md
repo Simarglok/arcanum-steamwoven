@@ -314,7 +314,8 @@ Viewer (AREA): a boomerang's projectile (`projectile-launch … boomerang range=
 boomerang-turn shot=… from=… to=…`; the strike or range end is logged as `projectile-end … turned back` first) and flies back to
 the hero's tile at the turn; its end there is `projectile-end … strike=DestinationEnd … back in the hero's hand` (notice "the
 boomerang is back"). Then (0x4A9AD0, `boomerang-back … reattack=…`) the hero takes up combat mode if it left it and, in real time
-with the auto-attack default and no attack goal running, starts a new attack goal on the shot's struck NPC or object, not aimed. A
+with the auto-attack default and no attack goal running, starts a new attack goal on what the shot was fired at (the clicked NPC or object, or the line of fire's blocker; not a critter struck on
+the way), not aimed. A
 click while the boomerang is away says "the boomerang is still in flight". Native smoke in the ranged stage: `ARC-COMBAT-019
 native-smoke boomerang PASS` (the lent kit weapon with a boomerang's values and the bow's projectile art: it stays wielded, a second
 attack is refused while it flies, it turns at its first end, flies back to the hero's tile and ends there, the mark clears and the
