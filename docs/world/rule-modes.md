@@ -18,6 +18,7 @@ and the [verification ledger](../research/original-verification-ledger.md) recor
 | Verdict | Steamwoven | Original |
 | --- | --- | --- |
 | Bug of the original game, fix recorded under D2 | the fix | the original's bug (a switch) |
+| Technical bug of the original game (owner rule 2026-10-28, below) | the fix | the fix (no switch) |
 | Bug of the original game, no fix recorded | the original's bug | the original's bug |
 | Behaviour of the original | the original | the original |
 | Project improvement recorded by the owner (for example persisted AI ticks, OQ2) | the improvement | the original's behaviour (a switch) |
@@ -31,7 +32,7 @@ Owner rule (2026-10-28, generalising the above): **a technical bug of the origin
 a hang and the like, which a player cannot read as a rule of the game — **is fixed in both modes without a switch**. **A
 gameplay bug** — behaviour that raises logical questions or assumptions for a player — keeps the original behaviour behind an
 Original switch and is fixed in Steamwoven. A task that finds a new anomaly proposes its class with the fix; the first case was
-MG43 (ARC-MAGIC-019).
+MG43 (ARC-MAGIC-019). Switches recorded before the rule keep their owner decisions until the owner reclassifies them.
 
 ## Mechanism
 

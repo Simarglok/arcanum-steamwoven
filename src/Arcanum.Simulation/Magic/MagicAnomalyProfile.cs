@@ -129,7 +129,6 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ReleaseRefusalKeepsRun { get; init; }
 
-
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
