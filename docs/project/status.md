@@ -83,6 +83,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Object damage | [Combat](status/combat.md) | ARC-COMBAT-008, ARC-WORLD-065, ARC-COMBAT-011 |
 | Critical effects | [Combat](status/combat.md) | ARC-COMBAT-009, ARC-WORLD-059, ARC-COMBAT-010 |
 | Placed items | [Items and inventory](status/items.md) | ARC-WORLD-059, ARC-COMBAT-010, ARC-WORLD-070 |
+| Junk piles | [Items and inventory](status/items.md) | ARC-WORLD-063 |
 | Equipment | [Items and inventory](status/items.md) | ARC-WORLD-028, ARC-WORLD-034, ARC-WORLD-066 |
 | Durable effects | [Game session and character](status/session.md) | ARC-WORLD-029, ARC-WORLD-035 |
 | Experience and levels | [Game session and character](status/session.md) | ARC-WORLD-030, ARC-WORLD-033, ARC-UI-046 |

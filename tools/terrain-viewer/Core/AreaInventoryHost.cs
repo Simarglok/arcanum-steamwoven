@@ -121,9 +121,10 @@ public sealed class AreaInventoryMap
 
 public sealed record AreaInventoryMapBuild(AreaInventoryMapStatus Status, AreaInventoryMap? Map, string Detail);
 
-public enum AreaInventoryTargetKind { GroundItem, DeadNpc }
+public enum AreaInventoryTargetKind { GroundItem, DeadNpc, JunkPile }
 
-/// <summary>A clickable inventory object of the current map: an item on its ground, or a dead NPC to loot.</summary>
+/// <summary>A clickable inventory object of the current map: an item on its ground, a dead NPC to loot, or (ARC-WORLD-063) a junk
+/// pile the session made, opened as a container.</summary>
 public sealed record AreaInventoryTarget(AreaInventoryTargetKind Kind, string Entity, AreaObjectRecord Row);
 
 public sealed record AreaInventoryLine(string Entity, string Text)
@@ -219,6 +220,14 @@ public sealed class AreaInventoryHost
             .Select(item => map.Row(item.Entity).Key).ToHashSet();
     }
 
+    /// <summary>ARC-WORLD-063: the drawn objects of this map that lie in a junk pile the session made: the pile is drawn instead.</summary>
+    public IReadOnlySet<AreaObjectKey> Piled(GameSessionOwner session, int runtimeMap)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || session.QueryMapInventory(new(runtimeMap)) is not { } current) return new HashSet<AreaObjectKey>();
+        return current.JunkPiles.SelectMany(pile => pile.Items).Where(item => map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key).ToHashSet();
+    }
+
     public InventoryMutationResult PickUp(GameSessionOwner session, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -269,13 +278,18 @@ public sealed class AreaInventoryHost
             .ToArray();
         var gold = session.QueryGold();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
-        var list = session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
-        // ARC-WORLD-055: a made item the session added to the NPC has no area row; its kind names it.
-        static bool Made(string entity) => entity.StartsWith("made:", StringComparison.Ordinal);
-        var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Made(item.Entity)
-                ? KindName(item.Facts.Kind, catalog) + " (made)" : Name(item.Entity, catalog), item.Facts.Kind.Type, Made(item.Entity) ? null : item.Facts.Weight)
-            + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
-        return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
+        var current = session.QueryMapInventory(new(runtimeMap));
+        // ARC-WORLD-063: a junk pile the session made lists its items in the pile's order.
+        var pile = current?.JunkPiles.FirstOrDefault(p => p.Entity == holder);
+        var list = pile?.Items ?? current?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
+        // ARC-WORLD-055: a made item the session added to the NPC has no area row; its kind names it (so does a kit or made item of the
+        // hero's in a junk pile, ARC-WORLD-063).
+        var kit = session.QueryPlacedItems().Where(item => item.Source == SessionPlacedSource.Kit).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        string? Rowless(string entity) => entity.StartsWith("made:", StringComparison.Ordinal) ? " (made)" : kit.Contains(entity) ? " (starting kit)" : null;
+        var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
+                ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
+            + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
+        return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
     }
 
     /// <summary>
@@ -348,6 +362,9 @@ public sealed class AreaInventoryHost
     /// <summary>A kit item's shown name: the text of its prototype's description number (the identified name; the kit's
     /// identification state is not modelled). No catalog, an absent or undecodable text gives a bracketed label.</summary>
     public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog) => KindName(item.Kind, catalog);
+
+    /// <summary>ARC-WORLD-063: the window title of a junk pile the session made (a project label; the pile has no map row to name it).</summary>
+    public const string JunkPileTitle = "[junk pile]";
 
     /// <summary>An item's shown name from its saved kind: the text of its description number, as <see cref="KitName"/>.</summary>
     public static string KindName(SessionItemKind kind, ObjectDescriptionCatalog? catalog)
