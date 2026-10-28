@@ -229,26 +229,7 @@ public sealed partial class GameSessionOwner
     private SessionCombatModeResult ToggleCombatMode(GameSessionVersion expected, SessionCombatant combatant, SessionCombatModeContext context)
     {
         var entering = !InCombatMode(combatant);
-        LifeStatus status;
-        LifeFacts lifeFacts;
-        if (combatant.IsHero)
-        {
-            var state = _life.Hero!.Value.State;
-            lifeFacts = HeroLifeFacts(state);
-            status = LifeRules.Evaluate(state, lifeFacts);
-        }
-        else
-        {
-            var facts = context.Facts!;
-            lifeFacts = facts.Life;
-            status = LifeRules.Evaluate(NpcState(combatant.Entity!, facts), facts.Life);
-        }
-        var traits = lifeFacts.Traits;
-        var stunned = combatant.IsHero ? _life.Hero!.Value.State.Conditions.HasFlag(LifeConditions.Stunned)
-            : NpcState(combatant.Entity!, context.Facts!).Conditions.HasFlag(LifeConditions.Stunned);
-        var refusal = RealTimeCombatRules.ToggleRefusal(!entering, new(status.IsDead, status.IsActive,
-            traits.HasFlag(LifeTraits.Stoned), traits.HasFlag(LifeTraits.Paralyzed), stunned,
-            context.Concealed, combatant.IsHero));
+        var refusal = ToggleRefusal(combatant, context, entering);
         if (refusal != CombatModeRefusal.None) return Refused(Refusal(refusal), !entering);
         if (!combatant.IsHero && entering && _combat.Critters.Count >= SessionCombatModeLimits.MaxCritters)
             return RejectCombatMode(GameSessionFailure.BudgetExceeded);
@@ -270,8 +251,40 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-040: the toggle starts combat music for an NPC entering combat mode and stops it when the PC leaves.
         if (!combatant.IsHero && entering) _sound.StartCombatMusic();
         else if (combatant.IsHero && !entering) _sound.StopCombatMusic(_soundSchemes);
+        // ARC-WORLD-079: the hero's entry allows its followers to attack (0x4B42B2); an NPC's exit unlocks its target (0x4B411C).
+        if (combatant.IsHero && entering) AllowFollowersOnCombatModeEntry();
+        else if (!combatant.IsHero && !entering) UnlockOnCombatModeExit(combatant.Entity!);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, SessionCombatModeRefusal.None, entering, Version) { Round = round };
+    }
+
+    // Whether a surrender's combat-mode exit (0x4B3F20) acts for an NPC in combat mode: the toggle's refusals for leaving.
+    private bool NpcCombatModeExitActs(string entity, SessionCombatModeContext context) =>
+        ToggleRefusal(SessionCombatant.Critter(entity), context, false) == CombatModeRefusal.None;
+
+    // The toggle's refusal (RealTimeCombatRules.ToggleRefusal) from the hero's life or the NPC's facts.
+    private CombatModeRefusal ToggleRefusal(SessionCombatant combatant, SessionCombatModeContext context, bool entering)
+    {
+        LifeStatus status;
+        LifeFacts lifeFacts;
+        if (combatant.IsHero)
+        {
+            var state = _life.Hero!.Value.State;
+            lifeFacts = HeroLifeFacts(state);
+            status = LifeRules.Evaluate(state, lifeFacts);
+        }
+        else
+        {
+            var facts = context.Facts!;
+            lifeFacts = facts.Life;
+            status = LifeRules.Evaluate(NpcState(combatant.Entity!, facts), facts.Life);
+        }
+        var traits = lifeFacts.Traits;
+        var stunned = combatant.IsHero ? _life.Hero!.Value.State.Conditions.HasFlag(LifeConditions.Stunned)
+            : NpcState(combatant.Entity!, context.Facts!).Conditions.HasFlag(LifeConditions.Stunned);
+        return RealTimeCombatRules.ToggleRefusal(!entering, new(status.IsDead, status.IsActive,
+            traits.HasFlag(LifeTraits.Stoned), traits.HasFlag(LifeTraits.Paralyzed), stunned,
+            context.Concealed, combatant.IsHero));
     }
 
     private static SessionCombatModeRefusal Refusal(CombatModeRefusal refusal) => refusal switch
@@ -299,7 +312,11 @@ public sealed partial class GameSessionOwner
     // its own revision.
     private void LeaveCombatModeOnDeath(SessionLifeTarget target)
     {
-        if (!target.IsHero) { _combat.Critters.Remove(target.Entity!); return; }
+        if (!target.IsHero)
+        {
+            if (_combat.Critters.Remove(target.Entity!)) UnlockOnCombatModeExit(target.Entity!);
+            return;
+        }
         if (_combat.HeroCombatMode && _combat.Round is not null) { _combat.Round = null; _combat.Stall = default; }
         if (_combat.HeroCombatMode) _sound.StopCombatMusic(_soundSchemes);
         _combat.HeroCombatMode = false;

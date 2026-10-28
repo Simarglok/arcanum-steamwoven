@@ -424,6 +424,11 @@ public sealed partial class GameSessionOwner
             edits.AddRange(Edits(openable, openableBaseline.Kind, flags | LockRules.BustedBit, 0));
         }
         var applied = ApplyChanges(Version, null, edits);
+        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7).
+        if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
+            _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
+            foreach (var item in _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)))
+                ScheduleDecay(item.Entity, target.Map);
         if (applied.Disposition != GameSessionDisposition.Changed || hit.Break != ObjectBreak.SceneryRespawns) return applied;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var delay = ObjectDamageRules.RespawnDelayMs(target.Baseline.RespawnDelay);

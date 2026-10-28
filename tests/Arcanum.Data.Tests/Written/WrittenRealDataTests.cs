@@ -19,7 +19,7 @@ public sealed class WrittenRealDataTests
         var texts = WrittenTexts.Open(stack);
         var prototypes = ContentPrototypes.Open(stack);
         var rows = new List<(int Prototype, CombatWrittenFields Written)>();
-        int useScripts = 0, otherScripts = 0, magical = 0;
+        int useScripts = 0, otherScripts = 0, magical = 0, targeted = 0;
         foreach (var number in prototypes.Numbers)
             if (CombatFieldReader.ReadPrototype(prototypes.Read, number).Fields is { Written: { } written } fields)
             {
@@ -27,8 +27,10 @@ public sealed class WrittenRealDataTests
                 if (fields.Object.ScriptPoints.Contains(1)) useScripts++;
                 else if (fields.Object.ScriptPoints.Count > 0) otherScripts++;
                 if (fields.Item is { SpellManaStore: not 0 } || (fields.Item?.Flags & 0x4) != 0) magical++;
+                if ((fields.Item?.Flags & 0x100) != 0) targeted++; // ARC-SCRIPT-020, IU2: a use that first asks for a target
             }
-        Console.WriteLine($"with a use script {useScripts}, with other scripts only {otherScripts}, magical {magical}");
+        Console.WriteLine($"with a use script {useScripts}, with other scripts only {otherScripts}, magical {magical}, targeted {targeted}");
+        Assert.AreEqual(0, targeted, "no written prototype asks for a target before its use");
         var bySubtype = rows.GroupBy(r => r.Written.Subtype).OrderBy(g => g.Key).Select(g => $"{g.Key}:{g.Count()}");
         var statuses = rows.Select(r => texts.Read(r.Written.Subtype, r.Written.TextStartLine, r.Prototype == WrittenTexts.NewspaperAlternatePrototype))
             .ToArray();

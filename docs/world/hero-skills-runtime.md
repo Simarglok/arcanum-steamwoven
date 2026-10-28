@@ -15,7 +15,7 @@ applied whenever a level is read, never written into the stored points. Snapshot
 
 - The rules read are at F2 or F3 already (levels, training, points: [skill rules](skill-rules-runtime.md); weapon speed
   0x465CF0, weapon skill 0x465D80, best items 0x465170; the follow check and max followers, ledger AP3, AP4). The persuasion
-  facts the task makes live were read by two readers ([ledger HK1, HK2](../research/original-verification-ledger.md#hero-skills-arc-skills-002)):
+  facts the task makes live were read by two readers ([ledger HK1, HK2](../research/ledger/skills.md#hero-skills-arc-skills-002)):
   a master persuader passes the leader check at once, and any persuasion training of the leader lengthens a follower's
   wait by one step; neither has a runtime yet. No rule-mode switch.
 - Installed original (opt-in, [below](#checks)): all twelve pre-made heroes start with the skill levels their scheme and their
@@ -44,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-38)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-39)).
 
 ## Viewer host
 

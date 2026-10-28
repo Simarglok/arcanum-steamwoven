@@ -124,7 +124,7 @@ orders, which is a superset of an own-ID match. There are 0 hits in either
 order. Statics are not yet loaded when the patch is applied, so the patch
 cannot reach them. Resolved by ARC-DATA-028: the original executable stores a parsed
 GUID in the Windows layout, as the object files do
-([ledger MP3](original-verification-ledger.md#map-patch-arc-data-028)), so its lines do
+([ledger MP3](ledger/data.md#map-patch-arc-data-028)), so its lines do
 find their objects; whole maps now apply them ([map patch](../world/map-patch.md)).
 
 ### F5 — exact-tile registry at T0

@@ -105,7 +105,7 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   prototype source, the description catalogue, the lighting readers, the starting hero's tables,
   the whole-map step rules and the whole-map plans' name tables; the
   files checked so far are in the ledger's
-  [load phases](original-verification-ledger.md#load-phases-arc-data-027) (effect, level and
+  [load phases](ledger/data.md#load-phases-arc-data-027) (effect, level and
   quest experience, inventory sources, main-menu and light/tile name tables at game start;
   game-init, map list, lighting schemes and the module quest table at module load; scheme
   files and `mapinfo.txt` while the game runs).

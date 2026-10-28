@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4518D0",
+  "name": "spell-damage",
+  "method": "Arcanum.Simulation.Magic.SpellDamageRules.Damage",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "MG37",
+    "ledgerInputs": 1384,
+    "differ": 1384,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "94ac7cb3463fb66b0f64d1b296a659f1038b99782c98d387a1810a88569f8ed4",
+  "configuration": "Debug"
+}

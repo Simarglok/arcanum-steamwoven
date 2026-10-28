@@ -12,7 +12,7 @@ Requirements: [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (s
 [FR-CHAR-017](../requirements/characters-skills.md#fr-char-017) (tech skill points and tech points).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Character point pool"](../research/original-verification-ledger.md#character-point-pool-arc-world-052), rows
+([ledger "Character point pool"](../research/ledger/character.md#character-point-pool-arc-world-052), rows
 CP1–CP12; CP11's page draw only by the first, F1). Code: [`CharacterPointRules`](../../src/Arcanum.Simulation/Character/CharacterPointRules.cs),
 [`GameSessionPoints`](../../src/Arcanum.Session/GameSessionPoints.cs); tests:
 [`CharacterPointRulesTests`](../../tests/Arcanum.Simulation.Tests/Character/CharacterPointRulesTests.cs),

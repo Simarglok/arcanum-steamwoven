@@ -8,19 +8,25 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME] [--dry-run]              # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
+    ./arcanum area [--hero NAME] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum map NAME [--hero NAME] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
+    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033), quiet unless --verbose (ARC-DEV-037)
+    ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
 
-`area` and `world` select the build named by that task's `current.json` pointer
-(never timestamps or directory order) and launch it; `area` tries its tasks in the
-fixed order ARC-RENDER-008 (adds the [passability overlay](../rendering/passability-overlay.md) on top of the cave build),
-ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
-ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
-launch selection on that build, a `--dry-run` restores the previous selection.
+`area`, `world` and `map` select the build named by that task's `current.json` pointer
+(never timestamps or directory order) and launch it; `area` and `map` try the universal ARC-DEV-015 build, then
+ARC-RENDER-008. Since ARC-RENDER-028 `area` is map mode on the main world map (`Arcanum1-024-fixed`) opened as a window
+around its map-list start, the Crash Site, on any installation: the pinned Crash Site exterior profile is no launcher mode any
+more (the viewer keeps it as a regression smoke, started by its own arguments; `tools/arcanum-local launch terrain --mode
+crash-site-area` without `--area-map` still reaches it). A real run leaves the terrain launch selection on that build, a
+`--dry-run` restores the previous selection.
+A real `area`, `world` or `map` launch takes the [launch queue](toolchain.md#launch-queue-arc-dev-033)'s Godot slot
+first in line and keeps it until the viewer window closes (the command waits in the terminal until then; Ctrl-C
+gives the place up and leaves the viewer open), so it does not open over a thread's smoke; `--no-queue` starts at once.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
 normal-game mobile file `modules/Arcanum/maps/qrmvs-420-1zjcnpgn` (the game's
@@ -38,8 +44,10 @@ again.
 requires only map mode's roles (`UNIVERSAL_ROLES`: the module, `arcanum1.dat`, `arcanum2.dat` and the game folder). It
 records an installation manifest in the configuration (`installation`, schema `arcanum-installation-v1`: each role's
 relative path, size and SHA-256, and whether it equals the pinned identity in `GAME_ROLES`; `pinnedVerified` lists the
-roles that do). The pinned identities stay the pinned Crash Site profiles': `area`, `world` and the older diagnostic
-modes are the regression of those profiles and refuse to launch when a role they read differs from its pin
+roles that do). The pinned identities stay the pinned Crash Site profiles': `world`, the pinned `crash-site-area` profile
+(since ARC-RENDER-028 reached only through `tools/arcanum-local launch terrain --mode crash-site-area` without `--area-map`;
+`./arcanum area` is map mode) and the older diagnostic modes are the regression of those profiles and refuse to launch when a
+role they read differs from its pin
 (`launch.pinned_roles`); `./arcanum status` names such roles. A configuration written before the record, or by
 `configure inputs`, has no record and keeps its earlier meaning. The universal build (export task ARC-DEV-015, below)
 is exported without the pinned Crash Site gates and launches map mode only. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer.md#starting-hero-arc-world-027)) starts
@@ -207,7 +215,8 @@ ARC-WORLD-009` adds the cave input to both area-original native smokes and requi
 other. A home configured before this role existed must run `./arcanum setup` (or
 `configure discover --write-inputs`, or `configure inputs ... --cave-mobile PATH`)
 again: launching the ARC-WORLD-009 build otherwise stops with the missing role named,
-and `./arcanum status` lists it for the build `area` would choose. Setup writes nothing
+and before ARC-RENDER-028 `./arcanum status` listed it for the build `area` would choose (`area` is map mode now, which
+reads no cave file). Setup writes nothing
 unless every pinned role, the cave file included, is found with its exact identity.
 
 ## Passability overlay candidate (ARC-RENDER-008)

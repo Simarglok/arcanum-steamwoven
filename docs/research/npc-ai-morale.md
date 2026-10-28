@@ -25,7 +25,7 @@ independently, by a second reader that saw only the questions
 ([method step 6](original-executable-check.md)). Object fields were named from
 the executable's own field table; flag bits, script flags and attachment points
 are constants. Rows and verdicts are in the
-[ledger](original-verification-ledger.md#npc-ai-morale-arc-res-058). Everything
+[ledger](ledger/npc-ai.md#npc-ai-morale-arc-res-058). Everything
 below is read from the executable unless marked **(inference)**. Parameter
 numbers are the slots of the [dictionary](npc-ai-core-loop.md#4-parameter-dictionary).
 HP% means `current HP × 100 / maximum HP` in signed 32-bit integer arithmetic
@@ -296,7 +296,7 @@ subturn.
 ## 5. Anomalies and decisions
 
 Verdicts and rows:
-[ledger](original-verification-ledger.md#npc-ai-morale-arc-res-058). Decisions
+[ledger](ledger/npc-ai.md#npc-ai-morale-arc-res-058). Decisions
 follow D2 and D8: a bug of the original gets a Steamwoven fix and a proposed
 Original switch; where only the reconstruction differs, both settings follow the
 original. The owner accepted every proposed Original switch of this table on

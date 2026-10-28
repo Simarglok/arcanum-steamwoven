@@ -11,7 +11,7 @@ resolves, and since ARC-DATA-041 admits payloads; it does not decode, play or sc
 
 The sound subsystem's init function runs while the game initialises, before the module is
 mounted (its entry in the executable's subsystem table holds init 0x41AA30 and module load
-0x41B0A0; the init loop and the mount order are the [load phases](../research/original-verification-ledger.md#load-phases-arc-data-027)
+0x41B0A0; the init loop and the mount order are the [load phases](../research/ledger/data.md#load-phases-arc-data-027)
 rows). So `ContentPhase` decides the copy read:
 
 | File | Read by | Phase | Copy read |

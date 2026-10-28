@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
         _areaKitLockpicks = result.Hero?.KitLockpicks;
         _areaKitDurability = result.Hero?.KitDurability;
         _areaKitArt = result.Hero?.KitArt;
-        if (carried is not null) _areaSession = carried;
+        if (carried is not null) { _areaSession = carried; SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is
@@ -114,6 +114,7 @@ public partial class TerrainViewerApp
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
+        EndSaveList();
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).

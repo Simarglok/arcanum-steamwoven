@@ -18,7 +18,7 @@ Fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
   attack handler (0x4A9650) and the internal quest state setter (0x4C4E60).
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); verdicts in the
-  [verification ledger](../research/original-verification-ledger.md#reaction-runtime-arc-world-026). Every function below
+  [verification ledger](../research/ledger/social.md#reaction-runtime-arc-world-026). Every function below
   behaves as that first reading describes except one: the effective reaction passes the **PC**, not the NPC, to the
   `reaction` effect lookup (the reaction getter 0x4C0D00 → 0x4EAA80, ledger R1 effects), so both rule modes use the
   PC's effects. The original has no switch that lets charm bypass the PC's adjustment effects (A4): the delta always
@@ -40,8 +40,8 @@ Fate points and the AI consumers are not part of it ([Not ready](#not-ready)).
 | `ReactionRules.ApplyEffects(value, effects)` | Percent, multiply, divide, add, minimum, maximum, as the character stats owner aggregates stat effects. The source uses −1 as "no minimum/maximum", so a written `min -1` or `max -1` is ignored there; Steamwoven applies it, like the stats owner (latent: no reaction effect of the data is known to use it). |
 | `ReactionRuleProfile` | Rule-mode profile: `Steamwoven`, `Original`, `All`, `FromName`; switch `FollowerHitRaisesReaction`. |
 
-Inputs are explicit records. `ReactionNpcFacts`: reaction base, race, aloof, monstrous, PC on the enemy list, mind
-controlled by the PC. `ReactionPcFacts`: race (one of the eight PC races), reaction modifier, reputation sum,
+Inputs are explicit records. `ReactionNpcFacts`: reaction base, race, aloof, monstrous, PC on the enemy list (the session
+replaces it with the NPC's danger record, ARC-WORLD-080), mind controlled by the PC. `ReactionPcFacts`: race (one of the eight PC races), reaction modifier, reputation sum,
 `reaction`, good and bad adjustment effects, extraordinary charisma. `ReactionHitFacts`: AI parameters 9 and 10.
 Magnitudes are bounded to ±1,000,000 and effect lists to 64 entries (project policy); a divisor of 0 and a PC race
 outside the table (LM12) are invalid in both modes, as the original would fault or read out of bounds.
@@ -103,7 +103,7 @@ are therefore never read; a quick save of schema 9 loads as "written by an incom
 
 ## Dialog binding (ARC-WORLD-043)
 
-Read in the retail executable by two readers ([ledger DR1–DR7](../research/original-verification-ledger.md#dialog-reaction-binding-arc-world-043)):
+Read in the retail executable by two readers ([ledger DR1–DR7](../research/ledger/social.md#dialog-reaction-binding-arc-world-043)):
 
 | Original | Steamwoven |
 | --- | --- |

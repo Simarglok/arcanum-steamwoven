@@ -11,7 +11,7 @@ predictable outcome), [FR-MAGIC-010](../requirements/combat-magic-tech.md#fr-mag
 records skip the resistance, a technologist's negative aptitude raises it).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell resistance"](../research/original-verification-ledger.md#spell-resistance-arc-magic-005), rows RS1–RS10), and the
+([ledger "Spell resistance"](../research/ledger/magic.md#spell-resistance-arc-magic-005), rows RS1–RS10), and the
 resistance (0x4537B0) and the predictor (0x453B20) were compared with the original in the function oracle on 10,000 seeded inputs
 each (F3, receipts [`4537B0.json`](../verification/receipts/4537B0.json), [`453B20.json`](../verification/receipts/453B20.json);
 re-run with `./arcanum oracle --function 0x4537B0` and `0x453B20`). The Original setting matches on every input; the Steamwoven
@@ -94,5 +94,5 @@ follow the original in both modes, as decided.
 ## Not ready
 
 - No caller: the per-target stage (MT10) runs the resolver for each target and applies the margin to the components
-  (MT12–MT18); the AI (slice I8) and the casting UI (MT20a) ask the predictor.
+  (MT12–MT18); the AI (slice I8) and the casting UI (MT20a-2) ask the predictor.
 - The entangle effect's re-resistance (0x459C10, RS10) is not implemented (slice MT13).

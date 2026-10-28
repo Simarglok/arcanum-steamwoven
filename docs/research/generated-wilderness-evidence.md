@@ -293,7 +293,7 @@ Source: `objlist_load` (0x4F1350),
   the object's modified flags are cleared and it gets the next temporary id of the
   sector. Offsets and every other field are unchanged.
 - **Lights:** the original moves them with the object rule, sector × 64 + local
-  tile ([ledger Wilderness A1](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock), anomaly A1). The lights are
+  tile ([ledger Wilderness A1](ledger/world.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock), anomaly A1). The lights are
   stored in their own slot exactly like the objects, so the data agree. Proposed
   project policy: relocate lights with the object rule.
 - **Not moved, sector-local by construction:** the 4,096 tile words, roof array,
@@ -355,7 +355,7 @@ missing (anomaly A5). No retail sector needs any of these.
 
 ## Anomalies
 
-**Original check (ARC-RES-048):** A1, A3 and A6 were checked in the retail 1.0.7.4 executable ([verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)); A2 is level F0 and A4, A5 are data facts.
+**Original check (ARC-RES-048):** A1, A3 and A6 were checked in the retail 1.0.7.4 executable ([verification ledger](ledger/world.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)); A2 is level F0 and A4, A5 are data facts.
 
 | Id | Where | Observation | Consequence |
 | --- | --- | --- | --- |
@@ -383,9 +383,10 @@ missing (anomaly A5). No retail sector needs any of these.
 
 Since ARC-DATA-031 the Data layer implements slices 1–3 in the map catalogue
 ([generated sectors](../world/map-catalog.md#generated-sectors-arc-data-031)), with the type table and path rule
-checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#terrain-templates-arc-data-031)).
+checked in the executable ([ledger TR1–TR5](ledger/world.md#terrain-templates-arc-data-031)).
 
-- No renderer, plan or session consumes generated sectors yet; nothing in the viewer changes.
+- Since ARC-DATA-032 window plans build generated sectors and since ARC-RENDER-024 map mode draws, walks and streams
+  them; their sector scripts do not run yet (ARC-RES-073).
 - This study read no executable; later checks did (A1 and A3/A6 in ARC-RES-048, the type
   table and path rule in ARC-DATA-031). The fill's random tile variation is still unchecked.
 - The v119 record walker met only object types 0 and 3 on real data; other types
@@ -393,8 +394,9 @@ checked in the executable ([ledger TR1–TR5](original-verification-ledger.md#te
 - The probe models the mounts of the measured installation (`patch0`,
   `arcanum1..4`, folders, `tig.dat`) and refuses others; an ambiguous loose name is
   treated as absent.
-- Script 30285 (sector plant generator) in 20 plain templates may change vegetation
-  at run time; what it does is not researched here.
+- Script 30285 (sector plant generator) in 20 plain templates lays herbs (items: Herbology
+  ingredients and Passion Root) next to one marked scenery object when the player enters the sector
+  ([template sector scripts](template-sector-plants.md), ARC-RES-073).
 - `.dif` files for generated sectors (save state) are not examined here; the executable
   looks one up under the real sector id for template sectors too
   ([main-map streaming](main-map-streaming.md), SS5).

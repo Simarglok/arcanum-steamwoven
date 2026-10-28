@@ -8,7 +8,7 @@ the recharge of a worn mana item. No session state, snapshot or viewer change: t
 Requirements: [FR-MAGIC-004](../requirements/combat-magic-tech.md#fr-magic-004) (casting spends the stated resource).
 
 Every rule below was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers
-([ledger "Spell cost and payment"](../research/original-verification-ledger.md#spell-cost-and-payment-arc-magic-003),
+([ledger "Spell cost and payment"](../research/ledger/magic.md#spell-cost-and-payment-arc-magic-003),
 rows PC1–PC12), and three functions were compared with the original in the function oracle on 10,000 seeded inputs each
 (F3, receipts in [`docs/verification/receipts`](../verification/receipts)). Where the
 [magic study](../research/magic-core-evidence.md#paying-fr-magic-004) differs, the ledger is the newer evidence.
@@ -102,7 +102,7 @@ rule modes; this slice adds no rule-mode switch.
 ## Not ready
 
 - The run (MT9a) charges BEGIN and MAINTAIN through these rules. The character sheet's spells page (ARC-MAGIC-008) shows
-  `CastCost` and `MaintainCost` in its hints, as the original's text bar does. The casting UI (MT20a) and the AI (I8) will show
+  `CastCost` and `MaintainCost` in its hints, as the original's text bar does. The casting UI (MT20a-2) and the AI (I8) will show
   and weigh `CastCost`.
 - The charge-cell amounts and refusals are the technology lane's (TC1), implemented by ARC-TECHNOLOGY-007 ([charge cells](charge-cell-runtime.md)); this slice defines only the port and its place.
 - The recharge event (scheduling, merging, saving) is MT11's; reflection's use of the last cost is MT10's (MG15).

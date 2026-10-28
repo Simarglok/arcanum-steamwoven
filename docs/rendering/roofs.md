@@ -4,7 +4,7 @@
 
 Roofs of any whole map of the content stack, read as the original reads them
 and kept with the original's rules for hiding, fading and covering, checked in
-the retail executable ([ledger RF1–RF10](../research/original-verification-ledger.md#roofs-arc-render-021);
+the retail executable ([ledger RF1–RF10](../research/ledger/world.md#roofs-arc-render-021);
 the stored layout and the first house are the
 [first building research](../research/first-building-evidence.md#roofs-fr-scene-010), ARC-RES-029).
 ARC-RENDER-021 is the data half: the roofs in the strict snapshot and the rules
@@ -56,7 +56,7 @@ implements an original function carries its address
   covers only when the caller counts it (objects do, tiles do not) (RF4). The
   caller tells whether a tile's art is of type 0: tile art with bit 8 clear,
   facade art with bit 25 clear, and any other art (a missing tile included),
-  as in the [leaving test](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049).
+  as in the [leaving test](../research/ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049).
 - `HotSpot(visual)`: a mirrored roof frame is drawn with hot spot x 0 and
   offset x 0, unlike other mirrored art (RF7).
 - `Slot`, `Normalize`, `ScreenPosition`, `Art` (RF1), `FadeCorners` (the corner
@@ -122,8 +122,10 @@ interior stays complete, and the shades are 255, 200 and 80.
 - The actor itself on a covered tile is still drawn (T0 bodies are covered on
   their tile, and since ARC-WORLD-037 a companion on the tile it stands on); the tile scripts' and other critters' moves do not
   recalculate roofs (the original does it for the local PC only).
-- Roofs of the start map (it is not opened in map mode) and of the pinned
-  Crash Site exterior.
+- Roofs of the pinned Crash Site exterior (a regression smoke only since
+  ARC-RENDER-028). The main world map opens by window since ARC-RENDER-024 and
+  its windows read roofs (ARC-DATA-036); the map battery's roof smoke runs
+  there too, but no main-map outcome is recorded.
 - What recomputes fill and fade after a save is loaded is not traced (U7 of the
   research).
 - The hit test's pixel rule: the original counts palette indexes 0 and 1 as a

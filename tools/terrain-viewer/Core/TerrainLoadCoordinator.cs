@@ -46,6 +46,10 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public string? MapTransitionsFailure { get; init; }
     /// <summary>ARC-RENDER-024 (map mode): the centre sector of a window load (a map too large to load whole), else null.</summary>
     public Arcanum.Data.Area.AreaSectorCoordinate? AreaMapWindowCentre { get; init; }
+    /// <summary>ARC-RENDER-034: a window's terrain overview beyond its core (null for a whole map, or when the terrain grid or
+    /// types could not be read: <see cref="AreaOverviewFailure"/> says why).</summary>
+    public AreaTerrainOverview? AreaOverview { get; init; }
+    public string? AreaOverviewFailure { get; init; }
     /// <summary>ARC-WORLD-057 (map mode): the module's start clock when the map is drawn unlit, so its game session still
     /// starts; null when the map is lit (its lighting carries the clock) or the clock cannot be read.</summary>
     public Arcanum.Data.Lighting.StartupClockDeclaration? UnlitSessionStartup { get; init; }

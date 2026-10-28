@@ -226,6 +226,8 @@ def run_export(args: argparse.Namespace) -> int:
         success = False
         try:
             sampler.start()
+            # ARC-DEV-041: the phases appear in the launch queue's run log as they start (the steps log elsewhere).
+            print(f"export-endpoint: validate {args.task} {args.candidate} evidence={candidate / 'evidence'}", flush=True)
             completed = subprocess.run(args.command, check=False, env=environment)
             success = completed.returncode == 0
         finally:
@@ -233,10 +235,13 @@ def run_export(args: argparse.Namespace) -> int:
             observation = sampler.finish(candidate_id, args.tool, success)
             config.write_atomic(candidate / "evidence/export-observation.json", observation)
         if completed.returncode:
+            print(f"export-endpoint: validate FAILED exit={completed.returncode}", flush=True)
             return completed.returncode
         retention.verify_destinations(paths, proofs)
+        print("export-endpoint: finalize", flush=True)
         finalized = subprocess.run(args.command, check=False, env={**environment, "ARCANUM_EXPORT_PHASE": "finalize"})
         if finalized.returncode:
+            print(f"export-endpoint: finalize FAILED exit={finalized.returncode}", flush=True)
             return finalized.returncode
         with config.registry_lock():
             # The root can change while an export is running; re-derive it
@@ -263,6 +268,7 @@ def run_export(args: argparse.Namespace) -> int:
             except (OSError, ValueError):
                 _restore_publication(pointer, pointer_snapshot, registry_snapshot)
                 raise
+        print(f"export-endpoint: registered {candidate}", flush=True)
         return 0
     finally:
         retention._release(lease)

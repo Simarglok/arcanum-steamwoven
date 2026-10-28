@@ -14,7 +14,7 @@ drawing side of [FR-SCENE-008](../requirements/scene.md#fr-scene-008) (a destroy
 ready.
 
 Every rule was read in the executable by two independent readers
-([ledger "Object damage"](../research/original-verification-ledger.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
+([ledger "Object damage"](../research/ledger/combat.md#object-damage-arc-combat-008), rows OD1–OD12, F2).
 
 Code: [`ObjectDamageRules`](../../src/Arcanum.Simulation/Combat/ObjectDamageRules.cs),
 [`GameSessionObjects`](../../src/Arcanum.Session/GameSessionObjects.cs); tests
@@ -162,7 +162,7 @@ The registry version stays 1, as when the Lock event was added.
   cells away has a planner route to the cell the attack will walk to, or when the pointer finds no point of it; with every
   candidate skipped the stage is `NONE` with the reasons. On the main map the earlier stage chose a click-through scenery
   ("target not visible") and then a start with no route to the approach cell. Known limit: the attack walks to the standable
-  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there; the
+  cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there (since ARC-WORLD-073 the attack takes the original's approach instead, a cell a route reaches by construction, [click route](click-route-runtime.md#attack-approach-arc-world-073)); the
   smoke starts where it does, so another reachable cell beside the object is not tried by the attack (the original's move-near
   is not read).
 
@@ -171,7 +171,7 @@ The registry version stays 1, as when the Lock event was added.
 | Original 1.0.7.4 | Steamwoven |
 | --- | --- |
 | The respawn delay multiplies in 32 bits (it wraps beyond 268,435 seconds or 35,791 minutes). | Exact. |
-| Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container, prototype 3023), and each dropped item gets an item-decay event two days later; the container drops its last item first. | The items lie loose on the cell in the holder's order, without a pile or decay. |
+| Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container, prototype 3023), and each dropped item gets an item-decay event two days later; the container drops its last item first. | The items lie loose on the cell in the holder's order, without a pile; since ARC-WORLD-062 each decays two game days later ([item decay](inventory-runtime.md#item-decay-arc-world-062)). |
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
 | A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
 
@@ -183,5 +183,5 @@ The registry version stays 1, as when the Lock event was added.
   The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
-- **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects, and the decay
-  of dropped items.
+- **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects (the decay
+  of dropped items is in since ARC-WORLD-062).

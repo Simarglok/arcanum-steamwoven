@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
         var canvas = _canvas!;
         var (profile, previousSource, budget) = (canvas.VisualProfile, canvas.HdSource, canvas.HdBudget);
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-save-").FullName;
-        _quickSaveSlotForSelfTest = GameSessionSaveSlot.QuickSave(directory);
+        _saveLibraryForSelfTest = new(directory);
         try
         {
             canvas.SetVisualProfile(VisualProfile.Legacy, source, HdDeviceBudget.Ceiling(source.Scale > 1 ? source.Scale : 4));
@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             canvas.SetVisualProfile(profile, previousSource, budget);
             System.IO.Directory.Delete(directory, recursive: true);
         }

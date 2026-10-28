@@ -20,7 +20,7 @@ Not wired into the viewer ([Not ready](#not-ready)).
   remove-effect actions.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers; rows EF1–EF10 in the
-  [verification ledger](../research/original-verification-ledger.md#durable-effects-arc-world-029). **The original does what
+  [verification ledger](../research/ledger/character.md#durable-effects-arc-world-029). **The original does what
   that first reading describes** in every row; it adds only a network branch before the critter test of add and typed removal, which a single
   player game never takes. The one oddity of the original that a player could meet (EF10: an effect that lowers a maximum
   far enough leaves the critter at no fatigue or no hit points without the faint or death handling) has no session effect

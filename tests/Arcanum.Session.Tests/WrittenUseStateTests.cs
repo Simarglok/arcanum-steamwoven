@@ -68,6 +68,11 @@ public sealed class WrittenUseStateTests
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, Refused("kit:9", new(0, 100)));
         Assert.AreEqual(GameSessionFailure.InventoryMismatch, Refused("kit:3", new(0, 100)), "not a written item");
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, Refused("kit:1", new(0, 100) { UseScript = true }), "the use script would run first");
+        // ARC-SCRIPT-020: a caller that ran the use script and saw it let the use go on reads the document.
+        Assert.AreEqual(WrittenReadStatus.Read, owner.UseWrittenItem(owner.Version, "kit:1", new(0, 100) { UseScript = true }, Texts, useScriptRan: true).Document!.Status);
+        Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.UseWrittenItem(owner.Version, "kit:1", new(0, 100) { UseScript = true, ItemSpell = true }, Texts,
+            useScriptRan: true).Failure, "a script that ran does not open the item-spell path");
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.UseWrittenItem(owner.Version, "kit:1", new(9, 100) { UseScript = true }, Texts, useScriptRan: true).Failure);
         Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, Refused("kit:1", new(0, 100) { ItemSpell = true }), "the item-spell path");
         Assert.AreEqual(GameSessionFailure.InvalidItem, Refused("kit:1", new(9, 100)), "a subtype outside 0..6 (both modes)");
         Assert.AreEqual(GameSessionFailure.InvalidItem, Refused("kit:1", new(4, 5000)), "a picture art outside 0..4095 (both modes)");

@@ -1,0 +1,243 @@
+# Original verification ledger: Magic: spells, costs and the spell book
+
+Part of the [original verification ledger](../original-verification-ledger.md) (ARC-RES-048): its [inputs and method](../original-verification-ledger.md#inputs-and-method), [verdicts](../original-verification-ledger.md#verdicts-and-what-they-mean-for-the-two-settings), [decisions to revisit](../original-verification-ledger.md#decisions-to-revisit) and [second reading](../original-verification-ledger.md#second-reading) cover every section below. A new section of this area goes at the end of this file and adds one line to the ledger's [area index](../original-verification-ledger.md#areas).
+
+## Magic (ARC-RES-043, load map ARC-RES-040)
+
+Source: [magic core](../magic-core-evidence.md#anomalies-recorded-not-adopted),
+[load map](../combat-domain-load-map.md#8-anomalies-found-by-this-reading),
+[reaction](../npc-reaction-reputation-evidence.md#source-anomalies-and-decisions).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| MG1 | `sub_450940` (0x450940), from `sub_429B50` | The pre-animation affordability check reads the **cast spell's** cost (the run's spell field) and maintenance cost; no read past the 223-entry table. It applies no mastery. | Reconstruction slip (spell index); no mastery is Original |
+| MG2 | `sub_4507D0` (0x4507D0), `spell_cast_cost` (0x4B1660), 0x4508A0 | Run time: a mastered cost is halved and rounded **up** (`ceil(cost / 2)`; the odd test reads the cost before halving), then cheat 1, then dwarf ×2. `spell_cast_cost` halves with truncation and the UI check applies no mastery, so odd costs still disagree between the three. Cost 6, mastered dwarf: 6 at run time, not 8. | Reconstruction slip (run-time rounding); three formulas Original |
+| MG3 | `sub_452F20` maintain branch, `sub_4532F0`, `sub_453370` | A tick with a resistance margin charges the plain cost and then the surcharged cost. | Original bug (second reading ARC-MAGIC-009, RN7: Steamwoven fix, Original switch) |
+| MG4 | `sub_4537B0` (0x4537B0) | The resistance term is subtracted from the save, against the manual's "+1 per 10 %". | Original bug |
+| MG5 | `magictech_invocation_check` (0x4564E0) | The tech-aligned target test compares a d100 with a negative value: never fires. | Original bug |
+| MG6 | `sub_455250` (0x455250) | Absolute aptitude difference tested for `< 0`: the time scaling never applies. | Original bug (second reading ARC-MAGIC-009, RN9: the original in both modes) |
+| MG7 | `MTComponentInterrupt_ProcFunc` (0x452300), `sub_4573D0` | The interrupt invocation has no source, so the search returns at once: Interrupt does nothing. | Original bug |
+| MG8 | `MTComponentSummon_ProcFunc` (0x452830), `magictech_effect_summon` (0x450C40) | The faction switch is fed **`Clear_Faction:`**; `List:` only picks the prototype. | Reconstruction slip |
+| MG9 | `magictech_pick_proto_from_list` (0x452900) | Roll 0..100 over weights summing to 100/120 (the tables the magic study lists); 100 falls off the end to entry 0 with a log. | Original bug |
+| MG10 | `magictech_component_trait` (0x452B00), `sub_452CD0` | Elemental polymorph assigns the two flag words; restore clears only those bits. | Original bug |
+| MG11 | `sub_450AC0`, `sub_450B40` | The maintained-run counter loops and returns 0. | Original bug (second reading ARC-MAGIC-009, RN13: Steamwoven fix, Original switch) |
+| MG12 | `spell_ui_maintain_add` (0x57C290) | Signed `≥ count` test lets slot −1 through; `INT / 4` uncapped. Latent. | Original bug |
+| MG13 | `sub_4537B0` | Fate save sets margin 10, display 100, and the save still rolls. | Original |
+| MG14 | `magictech_cast_spell_fail_chance` (0x453B20) | Predictor differs from the resolver as the magic study says (R / 10, 100 above R 40, a d20 consumed). | Original |
+| MG15 | `sub_455550`, `sub_450420` | Reflection charges the global "last cost". | Original bug (switch `ReflectionPaysLastCost`, ARC-MAGIC-011, PT3) |
+| MG16 | `sub_452F20` begin branch | BEGIN cost paid before the no-stack refusal. | Original (re-read by ARC-MAGIC-011, PT5) |
+| MG17 | `magictech_process` (0x4510F0) | Fate maximisation evaluated on every action with components. | Original (re-read by ARC-MAGIC-010, RP4) |
+| MG18 | target table at 0x596140 | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit. | Original (intent; reclassified by ARC-MAGIC-007, TA6: the not-dead test runs without the critter bit) |
+| MG19 | run creation near 0x455C30, `sub_453FA0` | One run flag means "unresistable" and "final END scheduled"; unresistable spells end after BEGIN. | Original bug (second reading ARC-MAGIC-009, RN14: Steamwoven fix, Original switch) |
+| MG20 | `sub_450420` | Mana stores drained before the fatigue refusal. | Original |
+| Shell and reflection order (O10) | `sub_455550` (0x455550) | The "target is the caster" pass comes **before** the anti-magic shell, so a caster can target itself through its own shell; END actions get no shell or reflection exception. | Reconstruction change |
+| Charm bonus (reaction A4) | `magictech_component_obj_flag` (0x454A10), `reaction_adj` (0x4C0DE0) | Charm on gives +30 and charm off −30, both through the PC's good/bad reaction effects, so the asymmetry the reaction study describes is real. Charm off has no animal test: an animal charmed by a PC (no +30) still gets −30. | Reconstruction change (asymmetry confirmed) |
+| Summon palette | `magictech_effect_summon`, `sub_452CD0` | The palette applies to the current art only; after a polymorph ends the summon shows the prototype palette. | Reconstruction change |
+| Magic resistance source (O9) | `sub_4537B0`, `magictech_cast_spell_fail_chance` | Both read the stored magic resistance directly: no armour, no effects, no 0..95 clamp. | Reconstruction change |
+| Effect remove risk | `MTComponentEffect_ProcFunc` (0x451F20), `effect_remove_one_typed` | Removes the first entry with that number, whatever its cause. | Original |
+| LM5 | `magictech_min_intelligence` (0x4502E0) | Returns 5. | Original |
+| LM6 | `magictech_min_willpower` (0x4502F0) | `IQ:` is the willpower minimum. | Original |
+| LM7 | `mt_item_spell_to_magictech_spell` (0x4CB790) | `& 0xFF`: 10000 becomes 16. | Original |
+| LM9 | `effect_parse` (0x4E9C20) | `*N` and `/N` parse the number **after** the operator, so no divide by zero; an unknown operator still counts and there is no pair bound. `min`/`max` are told apart by a case-sensitive second letter (the earlier reading's lowercase test is a reconstruction change). | Reconstruction slip (`*`, `/`); rest Original |
+| LM10 | `item_effect_mod_load` (0x4D3FF0) | Module maximum overwrites the base and is not restored. Latent. | Original bug |
+| LM19 | `magictech_post_load` (0x44F540) | Skipped slots are not cleared (the reset clears them first). | Original |
+| LM20 | `bless_mod_load`, `bless_copy_field`, `curse_copy_field`, `mes_search` | No guard on a missing module file; **both** bless and curse copy names unbounded (the earlier reading's bounded bless copy is an unmarked reconstruction change). | Original bug |
+
+## Spell records (ARC-MAGIC-001)
+
+Source: the [spell records](../../formats/spell-records.md) contract (slice MT1 of the
+[magic implementation plan](../magic-implementation-plan.md)), the [load map](../combat-domain-load-map.md#42-spell-records)
+and the [magic core definitions](../magic-core-evidence.md#definitions-fr-magic-001). Read on 2026-10-20 by this task and,
+independently, by a second reader that saw only the questions (method step 6): both agree on every row; the second reader
+added the eye-candy branch of the init, the unreachable failure branch of the second phase and the measure of the
+character table region (SR14). Every direct branch of these functions stays inside `.text`. No row is a reconstruction
+slip: the earlier reading named these behaviours correctly, and the rows below add what it left open. SR12–SR14 are
+latent (no installed record reaches them) and need no rule-mode switch: the reader modes (load-map policy 2) reproduce the
+harmless quirk in "like original" mode, refuse it in strict mode, and refuse in both modes what ends the process (owner's
+no-crash rule). The owner accepted this handling on 2026-10-20 ([anomaly decisions](../npc-combat-ai-plan.md#anomaly-decisions)
+SR12–SR14); every difference from the original is listed in the contract's
+[differences](../../formats/spell-records.md#differences-from-the-original).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SR1 | magic-tech init (0x44EF50), second phase (0x44F160) | Loads `Rules\magictech.mes`, then `mes\spell.mes`, then reads messages 10..34 of the first as the 25 component type names (each tested, a missing one fails the init), then the eye-candy file (skipped in one mode of the init argument), then calls the record load with `Rules\spelllist.mes` and base 1000. A file that does not load fails the init. The second phase calls the component pass with the same arguments; its failure branch is unreachable. | Original |
+| SR2 | record load, first pass (0x44FE30) | Loads the file (the only failure) and keeps it open; records 0..79 at base + 50·n, 80..139 likewise, then the willpower minimum is set to 0; 140..222 at base + 2000 + 50·n, then the technology flag (bit 0x4) is set and the willpower minimum set to 0. A fourth loop after them is never entered. | Original |
+| SR3 | record load, second pass (0x44FFA0) | Uses the open file, runs the same ranges and bases through the component reader, writes the same forced values again, frees the file and returns success. | Original |
+| SR4 | one record (0x450090) | Sets the defaults; the name is message n of `mes\spell.mes`; lines +0 and +1 are read unconditionally (a missing one is the MES module's shared missing-line message with the number, which holds no key), +2 and +3 only when present; then the ten AI values are set to −1 and the defensive second value to 0 whether or not line +4 exists, and +4 is read when present. | Original |
+| SR5 | component lines (0x4501D0) | From base + 50·n + 5 while the next message exists, at most 44 lines (+5..+48). | Original |
+| SR6 | defaults (0x457580) | Willpower minimum {6, 9, 12, 15, 18}[n mod 5] unless a global flag is set (0x5E7600, in uninitialised data, never written by any instruction that names it: the table always applies); cost 0, resist stat −1 and value 0, maintain 0/0, duration 0/−1, duration stat info 0/1, trigger count 0, range 99, flags 0, item triggers 0, line +2 eye candy −1, the five area blocks and component pairs empty (count −1), the line +3 sets and `No_Stack` 0. | Original |
+| SR7 | line +1 (0x4578F0) | Keys in the order `IQ`, `Cost`, `Maintain`, `Duration`, `DurationStatInfo` (tried only after a matched `Duration` whose second value is not −1), `DurationTriggerCount` (kept only above 0), `Resist` (stat by name in the 28-entry stat key table, 23 names then null entries), `Range`, `ChargesFromCells` (non-zero sets bit 0x20), `ChargeBeginCost` (zero sets bit 0x100), `Info` (neutral 0, friendly 1, aggressive 2, may be aggressive 3, OR-ed into the flags), `Disabled` (absent or zero sets bit 0x8, "enabled"). | Original |
+| SR8 | line +2 (0x457B20) | `CastingAnim`, `Missile`, caster and target eye candy of the five actions in action order, `Is_Tech` (non-zero sets the technology flag). | Original |
+| SR9 | line +3 (0x457D00) | `No_Stack` (number), `Cancels_SF`, `Cancels_EnvSF`, `Disallowed_SF`, `Disallowed_TSF` over the 32 spell-flag names (bit = index), `Disallowed_TCF` over the 32 critter-flag names, `ItemTriggers` over 26 trigger names with their own values (`Item_Used` is 0x3000). | Original |
+| SR10 | line +4 (0x457E70) | The ten `AI_*` keys (`AI_Defensive` a pair whose second value is kept apart), then `No_Resist` (bit 0x200) and `No_Reflect` (bit 0x400) by presence; their values are read and ignored. | Original |
+| SR11 | key and number parse (0x5318E0, 0x532320, 0x531990, 0x532480, 0x531EE0) | The delimiter is the comma. White space before a key is skipped; a key matches only as a case-sensitive prefix at the cursor, otherwise the cursor stays and every later key of the line fails. A value ends at the next comma (or the end of the line, which spends the cursor). Numbers are C `atol` (the same as `atoi` on Win32: white space, one sign, digits, 32-bit wrap). A name value is the whole text to the comma, trailing spaces included, matched case-insensitively; no match logs and exits. | Original |
+| SR12 | pair parse (0x532710, 0x531B70; 0x5328F0, 0x531D80) | A pair must start with `(` after white space or the process exits; without `@` the second value is the first (`Duration:(30)` has stat 30); `)` is never checked. A stat name runs from right after `(` to its first space or `@`; without `@` the `)` is part of the name. A name matching none of the 23 stat keys reaches the table's null entries and the compare crashes. | Original bug (latent crash; refused in both modes) |
+| SR13 | flag lists (0x532AC0, 0x532B90; 0x532630, 0x531FB0) | Names end at the first space or `\|`; when a space comes first and a `\|` follows, the walk resumes after the `\|`, skipping the names between (`A B\|C` reads A and C, `A\|B C` all three). An unknown or empty name logs and exits; a separator as the last character of the value sets the cursor to null and the white-space loop reads through it (crash). White space after a separator is skipped. | Original (the skip: reproduced in like-original mode, refused in strict mode); the crash an original bug (latent; refused in both modes) |
+| SR14 | white-space skip of the parse functions | The byte is sign-extended before indexing the character class table, so a byte from 0x80 reads up to 254 bytes before the table; in the shipped image about 47 of those 127 entries carry the space bit, and part of the region is run-time library data. | Original bug (latent, data-dependent; a line with such a byte is refused in both modes) |
+| SR15 | spell module init (0x4B1440) | Reads `mes\spell.mes` 500..515 (college names), 700..779 (descriptions of the 80 college spells), 8000..8015 (college descriptions) and 9000..9015 (mastery descriptions); a missing message is the shared missing-line text; never fails. | Original |
+| SR16 | installed original (`DAT_ROOT`) | Both reader modes read lines +0..+4 of all 223 records alike (strict mode now refuses the file for its component lines, SC11); the counts match the [data census](../combat-data-census.md#3-spell-records) (`SpellRecordRealDataTests`); no line holds a flag list with a skipped name, a trailing separator, a byte above 0x7F, a pair without `@` or an `IQ:` key. | Data |
+
+## Spell components (ARC-MAGIC-002)
+
+Source: the [spell record contract](../../formats/spell-records.md#components-lines-5-onward) (slice MT2 of the
+[magic implementation plan](../magic-implementation-plan.md)), the [load map](../combat-domain-load-map.md#42-spell-records) and
+the [magic core](../magic-core-evidence.md#effect-components-fr-magic-007). Read on 2026-10-20 by this task and, independently,
+by a second reader that saw only the questions (method step 6); both agree on every row. One difference arose before the
+comparison and was settled by re-reading: the first reader first took the range without `-` (SC4) to leave its maximum
+unwritten, misplacing a stack offset around the integer conversion; both readers then read that it writes the one number
+into both. The second reader added the three further table inconsistencies (MG21–MG23) and the prototype call chain
+(SC7). Every direct branch stays inside `.text`; the one indirect branch, the component type switch, has all 23 table
+entries inside the function.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SC1 | line +0 (0x457650) | Keys in order: `AoE:` (64-bit target list; a miss logs an error and reads on with 0), `AoE_SF:`, `AoE_NO_SF:` (replace every action's sets, 0 when absent), `Radius:`, `Count:` (replace every action's value when present), then for each action in order the same five keys with its prefix, whose lists are OR-ed into that action's area and whose numbers replace. Every action's mask gets the high word's 0x2000 (the not-invulnerable test bit, without the object bit) except for records 1, 2 and 9, also when `AoE:` is missing. Defaults of an action area: mask, sets and radius 0, count −1. | Original |
+| SC2 | target names (0x5BBD70) and values (0x596140) | 65 names with 64-bit values: a kind bit (object 0x4, critter 0x40 with it, tile bit 47) and one test bit each. `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit that every other `Tgt_Obj_No_ST_Critter_*` name and the positive `Tgt_Obj_ST_Critter_Dead` carry (MG18, re-read). | Original (intent): ARC-MAGIC-007 read the target functions (TA6) — the not-dead test runs for any object without the critter bit |
+| SC3 | 64-bit flag lists (0x5329E0, 0x532160) | The 32-bit lists' control flow (SR13) with 64-bit values: same separators, skip and trailing-separator crash, same exit on an unknown name; only the log text differs. | Original |
+| SC4 | range (0x532550, 0x531AB0) | The value is cut at the comma and at the first `-`; the first number is the `atoi` before it, the second the `atoi` after it, or the first again without `-` (a leading `-` gives 0 and the number). A missing key gives 0 and 0. | Original |
+| SC5 | component line (0x458060) | The line starts with the action name without a key (unknown: exit). The action's component array grows by one 0x68-byte entry (allocation unchecked, a failed resize exits) and its count is raised before the parse. Keys: `AoE:`, `AoE_SF:`, `AoE_NO_SF:` (0), `Radius:` (the action's line +0 radius), `Count:` (−1, not the action's), `Apply_AoE:` (0), `ItemTriggers:` (0), `Type:` over the 25 names read from `rules\magictech.mes` (missing: type 0, NoOp, and nothing more is read; unknown: exit). Every positional value (no key) is read without a null test, so a value after the line has ended is a null read (crash); a name matching none of a table with null entries (a field's flag names, the stat keys) reaches a null entry (crash). | Original; the crashes are original bugs, refused in both reader modes (SC5 row of the anomaly decisions) |
+| SC6 | component data (0x458060, cases 1..23) | Per type as the contract lists them: goal names with their values 0, 43, 24, 44, 32, 62; critter-flag, spell-flag and object-field names as bits; `DmgType:` six names for Damage and five for Heal; `Dmg_Flags:`, `Play:`, `Cause:`, `Move_Location:` (with `Tile_Radius:` only after index 1), field and comparison names; defaults Count 1, Cause 6, Branch −1, Max 9999, MinIQ −1, List −1. A Damage component sets the record's "has damage" flag (0x80); an ObjFlag turning a bit of `obj_f_spell_flags` on adds it to the record's set flags. Trait and TraitIdx fix the working multiplier and divisor at 1 and the addend at 0. | Original |
+| SC7 | Summon `Proto:` (0x458060, 0x4685A0, 0x468860) | A positive number is turned into the prototype whose object number is the value + 20 and kept as its 24-byte identifier; 0 or a missing key (logged) keeps a null prototype. The installed data agrees: every `Proto:` value has a prototype file at the number + 20. | Original (the value is the basic prototype number) |
+| SC8 | Cast and Interrupt (0x458060) | `Spell:` and `MagicTech:` missing: the value is 10000 and an error is logged. | Original |
+| SC9 | records changed by the component pass | Only the action's component count and array, the "has damage" flag and the set spell flags. | Original |
+| SC10 | MG21–MG23, target values (0x596140) | `Tgt_Non_Party_Critters` lacks the critter bit its party siblings carry (MG21); `Tgt_Obj_Radius` lacks the object bit every other `Tgt_Obj_*` carries (MG22); `Tgt_Tile_Self` lacks the tile bit every other `Tgt_Tile_*` carries (MG23). Installed use: 20, 24 and 0 records. | Original (intent): ARC-MAGIC-007 (TA6, TA8, TA9, TA10) — non-party is tested for PCs and NPCs without the critter bit, the radius bit is an object kind, the tile-self bit gathers the source's tile |
+| SC11 | installed original (`DAT_ROOT`) | 44 component lines hold text the cursor never reaches: a word after 40 Destroy and 3 Identify components, and a repeated `Dmg_Flags:` in record 221 (line +8) whose second value `Scaled` is lost. | Data (record 221: data fix DF4, decided 2026-10-21 under the owner's data-fix rule; lands with MT12) |
+| SC12 | installed original (`DAT_ROOT`) | 1,009 component lines; no Interrupt component (MG7 record only); `Tgt_Obj_No_ST_Critter_Dead` in 105 records, but adding the critter bit would change only records 33 (five line +0 areas) and 168 (two Maintain components) (MG18 open); no `Clear_Faction:` or `Palette:` on a summon (MG8 and the summon palette change nothing installed); `No_Resist:` never with maintenance, duration or a trigger count (MG19 changes no installed record). | Data |
+
+**F0 facts raised** (owner decision 2026-10-20: every fact of the slice's area still at F0 is re-read): the
+[load map](../combat-domain-load-map.md#42-spell-records)'s rows for line +0 (keys, per-action prefixes, the
+not-invulnerable bit except records 1, 2 and 9) and for lines +5..+48 (first gap, at most 44, second pass after the
+first, `Proto:` resolved at load); the [magic core](../magic-core-evidence.md#definitions-fr-magic-001) definitions' "Components" row and the
+"has damage" rule; the data side of its [effect component table](../magic-core-evidence.md#effect-components-fr-magic-007)
+(each type's keys, names and defaults: the six damage types with "magic" at index 4, `Dmg:a-b`, the damage flags, Effect
+`Count:`/`Cause:`/`Scaled:`, Recharge `Max:` 9999, TestNBranch's four fields, Trait64's sources, TraitIdx's stat or
+resistance field, AIRedirect's critter flag and `MinIQ:`, Movement's four locations, Summon's keys) — now at F2. Not
+raised (run time, other slices' functions): what each component does when it runs, the summon lists (0x452900), the
+EnvFlag stub (0x452F10), the target tests (0x4F40B0).
+
+## Spell cost and payment (ARC-MAGIC-003)
+
+Source: the [spell cost and payment runtime](../../world/spell-cost-runtime.md) (slice MT5 of the
+[magic implementation plan](../magic-implementation-plan.md)) and the [magic core](../magic-core-evidence.md#paying-fr-magic-004).
+Read on 2026-10-21 by this task and, independently, by a second reader that saw only the questions (method step 6); both
+agree on every row. The second reader added which run object pays in the pre-animation check and at BEGIN (the source) and
+which one gates the BEGIN payment (the parent). Three functions were also run in the function oracle on 10,000 seeded
+inputs each (0x4507D0, 0x4508A0, 0x4B1660; receipts in `docs/verification/receipts`): no difference, every planted mutant
+caught (F3). Every direct branch stays inside `.text`; MG1, MG2 and MG20 get their second reading here and stay as decided.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| PC1 | run-time cost (0x4507D0; 0x4507B0 only forwards to it) | A missing source returns success at once. The record's `Cost:` is read before any range test of the spell number. For a spell 0..79 whose college (spell / 5) is the caster's mastered one, the cost is halved toward zero and raised by 1 when the original cost is odd (a negative odd cost comes out one above its ceiling). The cheat flag then makes it 1; a dwarf PC or NPC then pays double (32-bit). It calls the payment with "apply" and returns its result. Oracle F3. | Original (MG2 run-time rounding confirmed) |
+| PC2 | check cost (0x4508A0) | As PC1 without mastery, asking the payment without applying. A missing source logs an error and fails, unlike PC1. Oracle F3. | Original (MG2) |
+| PC3 | pre-animation check (0x450940) | Finds the run by its slot (a failed lookup logs and fails); a free run (run flag 0x2) or a run without a source passes; the cost is the run spell's `Cost:` for a BEGIN, its maintenance cost otherwise; cheat 1; dwarf source × 2; no mastery; the source is asked without applying. | Original (MG1: the cast spell is read, no mastery) |
+| PC4 | payment (0x450420), entry | A network client sends the payment to the host (out of scope). Spell 10000 has no record; another number's record is addressed unchecked, and the charge-cell flag is set only for 0..222 with the record's 0x20. A cost of 0 or less succeeds; otherwise the "last cost" global is written (the cost as given, before any halving), then a missing payer succeeds. | Original |
+| PC5 | payment, charge cells | Before every other step and whatever the apply flag: an item source takes `2 × cost − adjust` cells from its parent (the technology lane's TC1), any other payer `cost` from itself; too few cells refuse, otherwise the cells are removed and nothing else is paid. | Original (the technology lane decides TC1) |
+| PC6 | payment, critter | A fatigue-limiting critter pays half toward zero, at least 1. The items worn in slots 0..8 pay from their mana stores in order (a store covering the rest keeps the difference, a smaller one is emptied, a negative one adds to the rest); when applying, each store is written and a recharge of the drained amount is scheduled or merged, also for a drain of 0 after the cost is covered, and an emptied store notifies the AI. The stores are written before the fatigue test (MG20, second reading). | Original (MG20) |
+| PC7 | payment, fatigue | The rest is refused when current fatigue minus the rest is −15 or lower (also when not applying); without applying the payment then succeeds. When applying, the fatigue damage becomes the stored damage plus the rest (the setter returns the clamped damage; 0 fails the payment). With no record the cast lands; a maintained record (period ≠ 0) or one with neither period nor duration fails when fatigue is now below 0; a timed, non-maintained one lands. | Original |
+| PC8 | payment, item source and other objects | An item (types 5..14) with 0 spell charges is refused; a negative store succeeds and changes nothing; a positive one marks the item's flags with 0x4 whatever the apply flag and spends one charge only when applying. Any other object succeeds. | Original |
+| PC9 | fatigue setter (0x45D5A0), current fatigue (0x45D700), fatigue damage (0x45D550) | The setter clamps the damage at 0, writes it and returns it (0 for a non-critter); a critter it makes unconscious ends its maintained runs and more (MT11). Current fatigue is the maximum minus the damage. | Original |
+| PC10 | spell UI and AI costs (0x4B1660, 0x4B16C0, 0x4B1650, 0x4B1740) | The cast cost: the record's `Cost:` (1 before the table loads), doubled for any object of the dwarf race, then halved toward zero when spell / 5 is the mastered college, with no range test (oracle F3). The maintenance: its cost doubled for a dwarf, its period doubled when mastered, the cost never halved. A rank costs 1 character point; a paid service costs 100. | Original (MG2: the three formulas disagree) |
+| PC11 | worn-store recharge (0x459590, 0x459640, 0x459680) | A drain stores the amount, the item and the time (game seconds); with merging, a pending recharge event of the item (type 23) gets the amount added; otherwise a new event fires 60000 ms × 8 (480 game seconds) later. When it fires it restores `2 × max(1, elapsed / 120)` points, at most what is pending, with no cap at the item's maximum, refreshes the interface for a PC holder and reschedules the rest without merging. | Original |
+| PC12 | BEGIN payment (0x452F20, BEGIN branch to its payment) | A critter source that is dead or unconscious ends the cast; only a critter parent and a magic record reach the payment block; a parent below intelligence 5 or the record's willpower is refused for a critter source; the source pays (PC1) unless the run is free or the record sets `ChargeBeginCost: 0`; a refused payment sets the "not enough" status. | Original |
+
+**F0 facts raised** (owner decision 2026-10-20): the [magic core](../magic-core-evidence.md#paying-fr-magic-004)'s
+"Paying" section — when a cast pays (the pre-animation check, the BEGIN condition, free runs), how much (its cost
+formula, now with the odd test on the cost before halving, so its worked example charges 6, not 8), from where (cells,
+fatigue-limiting, worn stores and MG20, the −15 refusal and fail-after-pay, item charges) and the recharge — and its MG1,
+MG2 and MG20 rows now stand at F2 (the three cost functions at F3); the definitions' `ChargeBeginCost: 0` row. Not raised
+(other slices' functions): an interrupted cast charged in full (MT9a), the 4 action points of a cast (MT20a), the knockout
+of a caster and the runs it ends (MT11).
+
+## Spell book (ARC-MAGIC-004)
+
+Source: the [spell book runtime](../../world/spell-book-runtime.md) (slice MT3 of the
+[magic implementation plan](../magic-implementation-plan.md)) and the [magic core](../magic-core-evidence.md#learning-colleges-and-mastery-fr-magic-002).
+Read on 2026-10-21 by this task and, independently, by a second reader that saw only the questions (method step 6); both
+agree on every row. The second reader added the network paths of the rank writes and the loader of the willpower minima.
+The learn (0x4B1790) was also run in the function oracle on 10,000 seeded inputs (receipt in `docs/verification/receipts`):
+no difference, every planted mutant caught (F3). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SB1 | book storage (0x4B1530, 0x4B1AB0, 0x4B1B30, 0x4B1CB0) | The critter's spell-and-tech field holds the sixteen college ranks (indices 0..15) and the mastered college (16); the defaults are ranks 0 and mastery −1. The rank getter and setter and the mastery getter accept only a PC or NPC (other objects read 0, or −1 for the mastery, and write nothing) and do not check the index; the rank setter also sends a network message in a multiplayer game. | Original |
+| SB2 | learn (0x4B1790), unforced | College spell / 5, rank spell % 5 + 1, no range test of the spell. The rank must be the known one + 1; then the **effective** level ≥ the rank's minimum (0x4B1770), the effective intelligence ≥ 0x4B1750's and the effective willpower ≥ 0x4B1760's, each failure returning 0 with nothing written. On success the stored magick points + 0x4B1650 (1) go through the stat setter, the rank is written as an absolute value, the local player's interface is refreshed, and 1 is returned. A network client sends the learn to the host first (and, as a host-less client, stops there). Oracle F3. | Original |
+| SB3 | learn, forced | No order, level or stat check: a rank at most the known one returns 1 with nothing written; a higher one is written and `rank − known` magick points added. Callers with the flag set: the text prototype loader (the `Spell` keyword of `monster.txt`, `unique.txt`, `npc.txt`) and the debug key handler (it learns spells 0..79); the network handlers pass the sender's flag; auto-level (0x4A7890) and the editor pass 0. | Original |
+| SB4 | minima (0x4B1770, 0x4B1750 → 0x4502E0, 0x4B1760 → 0x4502F0, 0x4B1650) | Level {1, 1, 5, 10, 15} by spell % 5 (no range test); intelligence the constant 5; willpower the loaded spell table's value (the record's `IQ:`, else {6, 9, 12, 15, 18} by rank; records 80..139 get 0), before loading {6, 9, 12, 15, 18} by rank for 0..79 and 9 otherwise; a rank costs and adds 1. | Original (LM5, LM6, AL6 agree) |
+| SB5 | known (0x4B1950) | 0 for a null object or a spell outside 0..79; otherwise whether spell % 5 + 1 ≤ the college's rank. | Original |
+| SB6 | unlearn (0x4B19B0) | No null or range test. Only when the spell is the college's highest known rank: the stored magick points − 1 through the stat setter, the rank − 1; returns 1, else 0. The mastered college is not touched, also when its college falls below five ranks; nothing is re-validated. | Original (mastery for life) |
+| SB7 | mastery (0x4B1C70, 0x4B1CF0; callers 0x4EF080, 0x4EF0F0) | Allowed only while no college is mastered (−1) and the college has at least five ranks (the test 0x4B1C70, which the set 0x4B1CF0 calls itself); the set then writes it locally for a PC or NPC; the college is not range-checked. Mastery cannot be set twice; only the defaults reset it. | Original |
+| SB8 | editor learn (0x57C540) | The unspent points first: the cost (1) above the **effective** unspent points refuses ("not enough points"). Then the unforced learn; on success the stored unspent points become the effective value read before − the cost and the editor is refreshed. On failure the editor re-tests the level ("level too low"), then intelligence ("intelligence too low"), else names willpower, so a rank-order failure is reported as one of those. | Original (the messages: MT19) |
+| SB9 | learn and unlearn with a spell outside 0..79 | The college index reaches 16 and above of the spell-and-tech field (the mastery, then the tech degrees); 0x4B1770 reads before or past its table for a negative or large spell. No caller passes such a number. | Original bug (latent; both modes refuse, no-out-of-bounds rule) |
+| SB10 | editor unlearn (0x57C670) | Reads the effective unspent points, unlearns (SB6); on success clears the spell from the spell bar (0x57F340), writes the stored unspent points as the value read + 1 and refreshes. No message on failure; the floor is the college button's (CP11). | Original |
+| SB11 | spell checks (0x4B1B90, 0x4B1C00) | For each college and each known rank (re-reading the rank), the rank's intelligence (5) or willpower minimum above the value fails. | Original (CP8 agrees) |
+
+**F0 facts raised** (owner decision 2026-10-20): the [magic core](../magic-core-evidence.md#learning-colleges-and-mastery-fr-magic-002)'s
+"Learning, colleges and mastery" section and its Answer items 2 and 3 (order, minima, the effect of learning, the forced
+variant, unlearning, mastery), and the state model's "Known spells" and "Magick points" rows, now F2 (the learn F3), with three
+corrections: the forced learn adds the missing ranks' magick points but never lowers them (SB3), unlearning keeps the mastery
+(SB6), and the stat decrease re-validated is a base decrease through the stat setter, not an effect's (SB11, CP8);
+[FR-MAGIC-002](../../requirements/combat-magic-tech.md#fr-magic-002)'s path (0x4B1790, 0x4B19B0, 0x4B1950, 0x4B1750, 0x4B1760,
+0x4B1770, 0x57C540, 0x57C670), now F2/F3. Not raised (other slices' functions): the spell UI's other functions
+(0x57BB30–0x57C4B0, MT19, MT20), the script mastery action (0x447220, MT21), the spell bar's clear (0x57F340, MT20).
+
+## Spell resistance (ARC-MAGIC-005)
+
+Source: the [spell resistance runtime](../../world/spell-resistance-runtime.md) (slice MT6 of the
+[magic implementation plan](../magic-implementation-plan.md)) and the [magic core](../magic-core-evidence.md#resistance-saving-throw-and-aptitude-fr-magic-005-fr-magic-010).
+Read on 2026-10-21 by this task and, independently, by a second reader that saw only the questions (method step 6). They
+agree on every row but one: the second reader took the predictor's answer for its save penalty; the first reader read it as
+the resistance R, and the function oracle decides for R (no difference on 10,000 inputs). The second reader added the record
+keys behind the flags, the callers of the fate use by kind and a second copy of the resistance in the entangle effect (0x459C10, below). The
+resistance (0x4537B0) and the predictor (0x453B20) were run in the function oracle on 10,000 seeded inputs each (receipts in
+`docs/verification/receipts`): the Original setting matches on every input, the Steamwoven setting differs only on MG4's inputs,
+every planted mutant caught (F3). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RS1 | resistance (0x4537B0), entry; caller 0x45134D | No arguments: the run, the record, the target and the record's `Resist:` pair come from globals (the pair through a pointer to the record's +0xC). It returns 1 (apply) without touching the margins for an action other than BEGIN, a technology record (record flag 0x4, `Is_Tech:` and forced for 140..222) and an unresistable run (run flag 0x10: `No_Resist:` records and the "cast unresistable" request, MG19); then the run's margin and the displayed margin are set to 0 and a null target applies. The caller applies the components on 1 and plays "resisted" on 0. Oracle F3. | Original |
+| RS2 | the same, first half | Disintegrate (spell 34) against a PC or NPC with "no disintegrate" (critter flags 2, 0x2000): 0, before the caster test. The caster (run +0x58) skips to RS3. A PC target whose armed fate "save against magick" fires (0x4F5270 with kind 4) gets run margin 10 and displayed margin 100 (MG13). Otherwise R is the stored magic resistance (resistance array, index 4: no armour, effects or clamp, O9), scaled when the action is not fate-maximised and the target's effective aptitude A is negative: `R = 100 − (A + 100) × (100 − R) / 100`, signed, toward zero; a d100 (1..100) below R makes both margins R − roll. For R > 0, a record without a damage component and a maintenance period not above 0: with a `Resist:` stat the save penalty is margin / 10 (toward zero); without one a roll below R returns 0. | Original (MG13, O9) |
+| RS3 | the same, second half | The caster, a record without a `Resist:` stat or a target type (the cached one) other than PC or NPC: 1. A willpower save against an extraordinary willpower (0x4B0EE0: a PC or NPC, a primary stat, effective 20 or more): 0, telling the target's AI when the record is aggressive (0x453F20, deduplicated per target). The save is `S = effective stat − penalty + modifier` (the penalty is **subtracted**, MG4); S ≤ 0 or a d20 (1..20) above S: 1. Otherwise the run's margin grows by S − d20 and the displayed margin is set to it (a fate's display 100 is replaced); a damaging record raises both to at least 50 and returns 1; a maintenance period other than 0 returns 1; any other returns 0 (skipped). | Original bug (MG4: Steamwoven adds the penalty, Original switch) |
+| RS4 | aptitude scaling and the fate-maximised flag | The flag is set by the run's processing (0x4512BC) when the run's source is a PC whose armed fate "spell at maximum" (kind 5) fires, and cleared otherwise; positive aptitude never changes R. | Original |
+| RS5 | fail-chance predictor (0x453B20; arguments caster, target, spell) | A null target or a technology record: 0. For a target other than the caster: R as RS2 (the same scaling, gated on the fate-maximised flag the last processed action left); for R > 0, no damage component and a period not above 0: without a save R above 40 answers 100, with one the penalty is R / 10. Then the caster answers R (0), a record without a save R, a target type (read fresh) other than PC or NPC R, a willpower save against an extraordinary willpower 100; S as RS3 (penalty subtracted, MG4); S ≤ 0 or a d20 above S answers R; otherwise a damaging record answers max(R, 50), a maintained one R, any other 100. It rolls its d20 from the shared random stream whenever the save is reached (MG14), writes nothing, and has no fate, Disintegrate, phase or unresistable test. Oracle F3. | Original (MG14) |
+| RS6 | item fail chance (0x453CC0; arguments user, item, target) | A null target or item, an item with no spell charges (field 0x69) and without the magical item flag (0x4), or an item whose first spell (field 0x64) is −1: 0; otherwise the predictor for that spell. | Original |
+| RS7 | callers of the predictor (0x4AE720, 0x4AE8A5 spell, 0x4AE95D item) | The AI's cast check refuses a spell (code 8) when the predictor answers 38 or more. | Original (the second reader only, F1; the AI's use is slice I8) |
+| RS8 | fate use (0x4F5270) | Reads the PC's fate flags (field 0xFE), the mask `1 << (kind − 1)` (table 0x5BC48C); clear: 0; set: the bit is cleared, the fate callback runs, 1; no fate point is refunded. Kind 4 is used by the resistance (0x4538B3, 0x459D11), kind 5 by the run's processing. | Original (agrees with ARC-WORLD-054) |
+| RS9 | record fields | `Resist:` stat at +0xC and modifier at +0x10 (−1 for none); `Maintain:` cost +0x14 and period +0x18; flags +0x34: 0x2 aggressive (`Info:`), 0x4 technology, 0x80 a damage component, 0x200 `No_Resist:`, 0x400 `No_Reflect:`. | Original |
+| RS10 | the entangle effect's re-resistance (0x459C10, the code near 0x459CF0..0x459E3F; the other user of fate kind 4) | Entangle resists again each time its target is hit; it uses the fate save and, on it, goes to its save part without setting a margin; not read further. | F1 (not implemented; slice MT13, entangle) |
+
+**F0 facts raised** (owner decision 2026-10-20): the [magic core](../magic-core-evidence.md#resistance-saving-throw-and-aptitude-fr-magic-005-fr-magic-010)'s
+"Resistance, saving throw and aptitude" pseudo-code, its "Predictor for UI and AI" paragraph and the resistance part of its
+"Fate" paragraph (the save against magick), now F2 (the resistance and the predictor F3), with two corrections: the
+early exits for an action other than BEGIN, a technology record and an unresistable run leave the margins as they were,
+and the predictor's answer is the resistance R itself (its save penalty is R / 10, as the study says) unless it answers
+100, at least 50 or 0;
+[FR-MAGIC-005](../../requirements/combat-magic-tech.md#fr-magic-005)'s and
+[FR-MAGIC-010](../../requirements/combat-magic-tech.md#fr-magic-010)'s resistance paths (0x4537B0, 0x453B20, 0x453CC0), now F2/F3;
+MG4, MG13, MG14 and O9 get their second reading here and stay as decided. Not raised (other slices' functions): what a margin
+does to Damage, Movement and Destroy components (MT12–MT18), the maintenance surcharge (MG3, MT9a), the shell and reflection
+order (O10, MT10), the entangle re-resistance (0x459C10, RS10, MT13).
+
+## Spell page (ARC-MAGIC-008)
+
+Source: the character sheet's [spells page](../../rendering/terrain-viewer.md#spells-page-arc-magic-008), slice MT19 of the
+[magic implementation plan](../magic-implementation-plan.md). Read on 2026-10-21 by this task and, independently, by a second
+reader that saw only the questions (method step 6); both agree on every row. The second reader added the colours, the button
+positions, the hint timing and the modes' floor (SG8). The learn and unlearn rules themselves are SB2–SB10, the point pool
+CP1–CP12, the costs PC rows.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SG1 | college page handler (0x55DC60) | Button messages only: on pointer enter the hint id is set (a college tab 3000 + college; a spell area 2000 + spell; + the next rank's spell, − the highest known spell); on leave it is cleared with the text bar; on press (mouse-down) a college tab selects that college and redraws the page, + learns spell 5 × college + rank (0x57C540), − compares the rank with the floor (the ranks taken when the editor opened, 0x64D364, filled by 0x5597C0) and at it shows charedit.mes 27, else unlearns spell 5 × college + rank − 1 (0x57C670). A network client sends the press instead. The hint is drawn on the mouse-idle message (35 ms still). | Original |
+| SG2 | hint (0x55AE70), text bar (0x5529C0 cases 8 and 9) | A spell hint: the college icon, the spell's name (0x4B1600), intgame.mes 73 with the minimum willpower (0x4B1760), intgame.mes 59 with the cast cost of the sheet's critter (0x4B1660) and, when the maintenance period it returns (0x4B16C0) is 1, "(maintenance / intgame.mes 74)", above 1 "(maintenance / period intgame.mes 75)", at 0 or below no maintenance part; then the description (0x4B1620). A college hint: its icon, name (0x4B1A40) and description (0x4B1A50). The point cost (0x4B1650, 1) is stored and never drawn. | Original |
+| SG3 | spell texts (0x4B1440, 0x4B1600, 0x4B1620, 0x4B1A40, 0x4B1A50) | Names are spell.mes message n, college names 500 + c, descriptions 700 + n (80), college texts 8000 + c and mastery texts 9000 + c. 0x4B1A50 returns the mastery text when the **local player's** mastered college is that college, else the college text, whichever critter the sheet shows; 0x4B1A40 does not check the index, 0x4B1600 and 0x4B1620 only −1 and 10000. | Original (the player test is harmless for the hero's own sheet) |
+| SG4 | page draw (0x55CBC0, 0x55CA70) | For the shown college's five spells: the icon (greyed from the known rank on), the name and charedit.mes 44 with the minimum level (0x4B1770). Names and labels of the known ranks are white, of the next rank gold and yellow, of the ranks above grey (all five white with five ranks). + (over the next spell's icon) only below five ranks; − (over the highest known spell's icon) only above rank 0 and, in the in-game sheet (mode 1), above the floor; in the view-only mode 2 neither. The page is redrawn by every editor refresh (0x55B150). | Original |
+| SG5 | college selection (0x64E024) | Initially 0 (process start); written only by a college press; neither the open nor the close resets it, so the shown college is kept between opens. | Original |
+| SG6 | editor learn (0x57C540) messages | Not enough points: charedit.mes 18; after a refused learn: the level below the minimum 30, else intelligence below 5 26, else the stat message of willpower 36 (0x55F200 with stat 6). Shown only while the editor is open, through the editor's message helpers (0x55F160..0x55F340) the skills page uses, so SP7's refusal sound 3004 and SP5's 3 s hint delay after a refusal apply here too. | Original (the messages: SB8's order) |
+| SG7 | editor unlearn (0x57C670) | No message on failure; on success the spell is cleared from the spell bar (0x57F340) and the point given back. | Original (the spell bar is MT20's) |
+| SG8 | floor in the main-menu modes (0x5597C0 mode 3, 0x55CBC0 modes 0 and 3) | The menu flow's modes 0 and 3 show − down to rank 0, and mode 3 (and a network client) does not refill the floor at the open, so the press tests a stale floor for equality: an unlearn below an earlier floor goes through. | Original bug (latent in the viewer: it has no caller for these modes, and the session takes the floor at every open) |
+
+**F0 facts raised** (owner decision 2026-10-20): the [magic core](../magic-core-evidence.md#learning-colleges-and-mastery-fr-magic-002)'s
+UI callers of the learning path (0x57C540, 0x57C670) and the spell texts 0x4B1600, 0x4B1620 and 0x4B1A40 named in its "add" and
+"remove" lists, now F2 with registry rows (and 0x4B1A50); [FR-MAGIC-002](../../requirements/combat-magic-tech.md#fr-magic-002)'s
+interface path and [FR-UI-004](../../requirements/ui-media-lifecycle.md#fr-ui-004)'s character sheet open (0x5597C0) for the spell
+page. Not raised (other slices): the spell bar's clear (0x57F340, MT20), the icons (0x4B1570, 0x4B1A90).

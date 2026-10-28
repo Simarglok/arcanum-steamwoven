@@ -15,10 +15,10 @@ not covered: NPC pickers and the witnesses' reaction are not modelled.
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`, read statically per the [original executable check](../research/original-executable-check.md)
-  by two independent readers: rows PL1–PL7 of the [verification ledger](../research/original-verification-ledger.md#pick-locks-arc-skills-006).
+  by two independent readers: rows PL1–PL7 of the [verification ledger](../research/ledger/skills.md#pick-locks-arc-skills-006).
   They agree on every row; no anomaly that needs a rule-mode switch (PL7 confirms the ledger's SK4).
-- The check, its difficulty and the fate: [SC1–SC17](../research/original-verification-ledger.md#skill-check-arc-skills-003), FT6.
-  The lock setters and the Lock event: [LK2–LK5](../research/original-verification-ledger.md#doors-containers-and-locks-arc-res-065).
+- The check, its difficulty and the fate: [SC1–SC17](../research/ledger/skills.md#skill-check-arc-skills-003), FT6.
+  The lock setters and the Lock event: [LK2–LK5](../research/ledger/world.md#doors-containers-and-locks-arc-res-065).
 - Installed original (opt-in, [below](#real-data-census)).
 
 ## Rules
@@ -47,8 +47,8 @@ answer carries the check, the outcome, the object's state after it and whether t
 The AREA inventory window lists **Pick a lock with:** for each lockpicks item in the PC's list (the kit's from the hero load's
 prototype fields, a taken item's from its object row). The button closes the window and arms the lockpicks; the next left press on
 a door or window in map mode picks its lock, walking within range 1 first (the use-item-with-skill goal's range); a press anywhere
-else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes full light
-and no turn-based round, so no action points are charged.
+else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes full light;
+in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick charges its 4 action points on the hero's subturn.
 
 ## Boundaries (NOT READY)
 

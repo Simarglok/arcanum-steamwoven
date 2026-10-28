@@ -116,7 +116,7 @@ public partial class TerrainViewerApp
     private void BindAreaSpellData(TerrainViewerArguments arguments)
     {
         if (_spellDataModule == arguments.ModulePath) return;
-        _spellDataModule = arguments.ModulePath; _spellData = null;
+        _spellDataModule = arguments.ModulePath; _spellData = null; _spellRecords = null;
         var module = arguments.ModulePath;
         _spellDataTask = Task.Run(() => AreaSpellsPage.LoadData(module));
     }
@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
     private void HandleSheetKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && routed is Key.C or Key.Escape) EndSheet();
+        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.C && !CharacterKeySilenced(key, routed)))) EndSheet();
     }
 
     private void HandleSheetPulse(IntentFrame intent)

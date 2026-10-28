@@ -73,9 +73,12 @@ public partial class TerrainViewerApp
     private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
         && _combatHost.Covers(CurrentAreaMap);
 
-    private void BindAreaCombat(AreaInventoryHost host) { CancelAreaAttack(null); _combatHost = new AreaCombatHost(host); _attackNotice = null; }
+    private void BindAreaCombat(AreaInventoryHost host)
+    {
+        CancelAreaAttack(null); CancelSpellCast(null); _combatHost = new AreaCombatHost(host); _attackNotice = null; _spellCasterStamp = null;
+    }
 
-    private void UnbindAreaCombat() { CancelAreaAttack(null); _combatHost = null; _attackNotice = null; }
+    private void UnbindAreaCombat() { CancelAreaAttack(null); CancelSpellCast(null); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 
@@ -255,9 +258,14 @@ public partial class TerrainViewerApp
     }
 
     // Whether a critter row is dead in the session or its map data (a drop's and a line of fire's dead test).
-    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectRecord row) =>
-        _combatHost?.Target(owner, map, row.Key) is { } target &&
+    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectRecord row) => AreaCritterDead(owner, map, row.Key);
+
+    private bool AreaCritterDead(GameSessionOwner owner, int map, AreaObjectKey key) =>
+        _combatHost?.Target(owner, map, key) is { } target &&
             (target.Dead || target.Build.Combat is { } combat && owner.QueryLife(combat.Target).View?.Status.IsDead == true);
+
+    /// <summary>ARC-WORLD-073: whether a T0 critter record is dead in the session or its map data (the click route's critter checks).</summary>
+    private bool AreaCritterDeadNow(AreaObjectKey key) => _areaSession is { } owner && AreaCritterDead(owner, CurrentAreaMap, key);
 
     /// <summary>ARC-WORLD-065: the shown map's objects the session destroyed or switched off (the same set while nothing changed);
     /// the original's object lists skip them, so they block no step (ledger FC1–FC3).</summary>
@@ -312,7 +320,7 @@ public partial class TerrainViewerApp
         }
         // A walk that arrived and still left the target out of reach is not tried again and again.
         if (goal.Approaches >= 3) { CancelAreaAttack($"the target stays {distance} cells away"); return; }
-        if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, HeroReach(hero)) is { } approach)
+        if (WorldRoute(session) is { } route && AttackApproachCell(session, row.WorldX!.Value, row.WorldY!.Value) is { } approach)
         {
             goal.Approaches++;
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
@@ -325,13 +333,28 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        CancelAreaAttack($"the target is {distance} cells away and no standable cell within reach was found");
+        CancelAreaAttack($"the target is {distance} cells away and no route reaches it");
+    }
+
+    /// <summary>
+    /// ARC-WORLD-073: the cell the attack's approach walks to, as the original's (ledger AP1–AP4, 0x4280D0): the shared request's route to
+    /// the target's own tile with flag 0x1 and the walk's first budget, one step short of it, over the PC's steps with living critters
+    /// blocking in and out of combat mode (the approach never sets the request's flag 0x10); null when it has no route (the attack ends).
+    /// The cell is reachable by construction; the weapon's reach is tested when the walk ends (the ranged walk goes to the same cell).
+    /// </summary>
+    internal static CellCoord? AttackApproachCell(AreaGridSession session, long worldX, long worldY)
+    {
+        var routes = new AreaRouteSource(session.Snapshot, session.Chart, session.Occupancy, () => session.Portals?.Invoke());
+        var target = session.Chart.ToChart(new(worldX, worldY));
+        return RoutePlanner.PlanApproach(routes, session.State.CommittedCell, target) is { Outcome: RouteOutcome.Found } plan ? plan.Target : null;
     }
 
     /// <summary>Starts one attack animation: the clip from the attack ART and the hero's Speed and weapon, the attack sound roll
     /// (a draw the original makes at every attack start), the facing toward the target.</summary>
     private void BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
     {
+        // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
+        if (!ChargeHeroAction(TurnBasedRules.AttackCost(hero.WeaponSpeed), "attack")) { CancelAreaAttack(_turnBasedNotice); return; }
         var art = _worldActor.Profile.Attack!;
         var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);

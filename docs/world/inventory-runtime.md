@@ -154,7 +154,7 @@ in schema 4 to lose (its `IN` record was in memory only).
 ## NPC inventory changes (ARC-WORLD-055)
 
 One store of NPC inventory changes for every NPC on every map (`GameSessionNpcInventory.cs`), read in the executable first
-([ledger "NPC inventory changes"](../research/original-verification-ledger.md#npc-inventory-changes-arc-world-055), NI1–NI7).
+([ledger "NPC inventory changes"](../research/ledger/items.md#npc-inventory-changes-arc-world-055), NI1–NI7).
 
 **Original (NI1–NI5).** The original keeps no inventory store of its own: an NPC's list is fields of the NPC, each item its own
 object with a parent field, and all of them are saved with the map the NPC stands on when the PC leaves it (changed fields of
@@ -218,7 +218,7 @@ follower), NPC worn slots, gold, and a visiting companion's items in the map-bou
 ## Placed items (ARC-WORLD-059)
 
 The hero's items the session placed on the ground (`GameSessionOwner.QueryPlacedItems`, `SessionPlacedItem`), read in the
-executable first ([ledger "Placed items"](../research/original-verification-ledger.md#placed-items-arc-world-059), PI1–PI6). In the
+executable first ([ledger "Placed items"](../research/ledger/items.md#placed-items-arc-world-059), PI1–PI6). In the
 original an item is an object anywhere: dropping it removes it from the owner (unwielding a worn one) and moves it to a tile,
 where it stays until something picks it up or its 48-hour decay destroys it; a pickup is the ordinary transfer.
 
@@ -255,9 +255,6 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 **Not ready (the original's behaviour, PI1–PI6).**
 
-- The 48-hour Item Decay (PI4): the original destroys an item lying on the ground or in a junk pile 48 game hours after it was
-  dropped (unless its item flag 0x20000 is set; a container open in the loot window delays it by a minute); placed items, NPC drops
-  and spilled containers' items stay. A follow-up task.
 - Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
@@ -269,9 +266,37 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
   product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
 
+## Item decay (ARC-WORLD-062)
+
+Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read in the retail 1.0.7.4 executable by two readers
+([ledger "Item decay"](../research/ledger/items.md#item-decay-arc-world-062), ID1–ID9; it settles PI4).
+
+| Rule | Value |
+| --- | --- |
+| Event (ID1) | The original's Item Decay (kind 25): saved, on the game clock (the column Poison, Resting and Lock use). `SessionEventKinds.ItemDecay` (`item.decay`): scoped to the item's map, so it fires while that map is the actor's (late, on return, as the Lock event); entity the item; values the game time it was scheduled at and its delay. |
+| Which items (ID2, ID4, ID7, ID9) | Every drop on the ground schedules it two game days (172,800,000 ms) on, replacing the item's earlier one: the hero's critical drops, an NPC's items a critical dropped, and the items a broken container spilled. An item a map's data lays on the ground gets none (nothing dropped it), and neither does an assembly product the inventory refused (ARC-WORLD-070, ammunition stacks among them): the original creates it on the crafter's tile and the refused transfer leaves it there, and neither path reaches the schedule (ID9), so it lies until it is moved. |
+| No decay (ID2, ID5) | An item with item flag 0x20000 (`SessionItemFacts.NoDecay`, from the map data) gets no event; no installed item prototype carries it (opt-in census `ItemDecayFlagCensusTests`: 0 of 798), but map instances can (two Crash Site items, [item inventory](../research/crash-site-item-inventory.md)). The switch that turns decay off is the world editor's; the game never sets it. |
+| Pickup (ID4) | A pickup of the item ends its event (`PickUpItem`); a deleted item loses it too. |
+| Firing (ID3, ID6) | An item that still lies loose on its map is deleted (one revision; it leaves the placed items or its seed's ground). While the host's loot window shows a container (`ISessionLootWindowWorld.LootWindowShowsContainer`) the event waits a minute more each time. An item no longer on the ground: nothing. The pass reports each firing (`SessionEventPassResult.Decays`: map, item, `ItemDecayStep`). Two session limits postpone a deletion a minute (`Postponed`): a seed item whose map's seed is not attached yet, and a full deleted-item budget (`MaxDurabilityRecords`; every decayed item stays in the saved deleted list). |
+| Budget | At most 8,192 pending decay events (`MaxItemDecays`, project bound; the original has none): a drop beyond it does not decay. |
+
+`QueryItemDecays` lists the pending events. No snapshot change: the event queue is already saved (schema 9 form); a restore checks
+each decay event (one item on a map, set no later than the saved clock, the decay delay or the retry's, one per item). The viewer's
+event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
+
+Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
+the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
+the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
+installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
+whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
+original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
+budget (`MaxDurabilityRecords`) is full, each due decay postpones itself a minute at a time, so a long wait runs it once a game
+minute; a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
+with decay in the original (ID8), are not modelled.
+
 ## Drop cell (ARC-COMBAT-010)
 
-Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/original-verification-ledger.md#drop-cell-arc-combat-010),
+Where a dropped item lands, read in the executable first ([ledger "Drop cell"](../research/ledger/combat.md#drop-cell-arc-combat-010),
 DC1–DC8, with CR14). `DropPlacementRules` (Simulation) is the drop's draws and tries: `Distance` draws 2..4 (0x461A90), `Place` makes
 up to ten tries of 0x4F4E40, each with a direction draw 0..8 (8 stays), over an injected `IDropMap`: the original's step
 (0x4B8FF0), its path request with the drop's flags (0x41F3C0, flags 0x10) for a `DropOwner` (an object, the PC side, or an NPC on
@@ -324,7 +349,7 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
   body as it was and is logged once (`ARC-RENDER-033 extra-art`).
 
 **Not ready.** The junk pile of OD13
-(ARC-WORLD-063) and the items' decay (ARC-WORLD-062); a busted window's busted ART.
+(ARC-WORLD-063); a busted window's busted ART. The items' decay is in since ARC-WORLD-062 (the event pump redraws the ground).
 
 ## Evidence
 
@@ -357,7 +382,7 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
 ## Ammunition (ARC-WORLD-066)
 
 Ammunition (type 6) is admitted to the hero's and NPCs' lists since ARC-WORLD-066 (snapshot schema 34), read in the executable
-([ledger AM1–AM7](../research/original-verification-ledger.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
+([ledger AM1–AM7](../research/ledger/items.md#ammunition-arc-world-066), anomalies AMA1–AMA6). Gold, keys and key
 rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionAmmo.cs) and the transfers above; tests
 [`AmmoStateTests`](../../tests/Arcanum.Session.Tests/AmmoStateTests.cs) and
 [`AreaAmmoLinesTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaAmmoLinesTests.cs).
@@ -403,9 +428,9 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
 
 NPC gold as counted piles and the moves between the hero and an NPC that pick pocket (task S15 of the
 [skills plan](../research/skills-plan.md)) and the barter window (ARC-UI-050) share, read in the executable
-([ledger NT1–NT4](../research/original-verification-ledger.md#npc-gold-and-transfers-arc-world-071), with AM1–AM5). No prices and no skill:
+([ledger NT1–NT4](../research/ledger/items.md#npc-gold-and-transfers-arc-world-071), with AM1–AM5). No prices and no skill:
 the caller decides how many coins or units move. Code: [`GameSessionNpcTransfer`](../../src/Arcanum.Session/GameSessionNpcTransfer.cs);
-tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferStateTests.cs). Snapshot schema 37.
+tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferStateTests.cs). Snapshot schema 39.
 
 - **Gold (NT1).** An NPC's gold is its first gold pile in list order (its seed piles still in its list, then the piles the session added):
   `QueryNpcGold(npc)` gives its coins (the seed's `Quantity`, or the tracked count), 0 without a pile, null for an NPC the session does not

@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
 
@@ -194,6 +195,18 @@ public sealed partial class GameSessionOwner
             // Every refusal was checked before (the kind keeps any number), so a failure here is a defect.
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("An admitted magic-tech event could not be scheduled.");
         }
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-014: a spell payment's fatigue (<see cref="SpellPayment.FatigueDamageAdded"/>, the cast host's payment of a run's
+    /// stage or a reflection): the payer's fatigue damage grows by it through the life domain, as the original's payment writes it
+    /// (0x450420; losing consciousness ends a subturn like any life step). 1..1,000,000.
+    /// </summary>
+    public SessionLifeResult PaySpellFatigue(GameSessionVersion expected, SessionLifeTarget payer, int fatigue)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(payer);
+        return Life(expected, payer, fatigue is >= 1 and <= LifeLimits.MaxAmount, (state, facts, _) => LifeRules.ChargeFatigue(state, facts, fatigue));
     }
 
     private SessionSpellRunResult RejectRun(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, [], Version);

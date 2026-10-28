@@ -42,10 +42,10 @@ Requirements: [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016)
 two readers and stand at F2 or F3: storage, levels, caps, key stats, training get and set with its minima, points
 setters, cost and refund, the next point's key stat, the stat-lowering guard and its caller, the tech points side effect,
 the skill effect collections, the Educator update, the skill module (names, the "follower skills" setting, the saved
-gambling roll), the new-character kit and the aptitude formula ([ledger](original-verification-ledger.md#skill-rules-arc-skills-001)
-FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](original-verification-ledger.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
+gambling roll), the new-character kit and the aptitude formula ([ledger](ledger/skills.md#skill-rules-arc-skills-001)
+FA7–FA9, AL5, SR1–SR14; since ARC-SKILLS-004 also the dialog skill conditions and the `tr` and `et` actions, [DS1–DS5](ledger/skills.md#dialog-skill-gates-arc-skills-004)). They agree with the reading below. The editor's + and − buttons, its floor, snapshot and
 hints (0x57ACD0, 0x57AEB0, 0x55D3A0, 0x55D6F0, 0x5597C0, 0x55AE70) stand at F2 since ARC-WORLD-052
-([ledger CP1–CP12](original-verification-ledger.md#character-point-pool-arc-world-052)), with one correction to section 2: the
+([ledger CP1–CP12](ledger/character.md#character-point-pool-arc-world-052)), with one correction to section 2: the
 floor does not hold through a − click whose level an effect pins (CP6). Still F0, apart from the − loop (SK2) and the training
 dispatch (SK3) already read by ARC-RES-048: the sheet's skill page (0x55BD10; task S6), the training sources (0x418CA0,
 0x418DE0, 0x418F30, 0x411940; S16), and everything of sections 5 and 6
@@ -96,7 +96,7 @@ use of skill conditions) are listed for the census in
    (run (0x4C7160)). Effectiveness is a per-skill formula of the level, an
    opposed table for four skills, +10 for extraordinary intelligence, the game
    difficulty for the PC and a 95 % cap for every skill but bow, melee,
-   throwing, firearms and prowling ([SC1](original-verification-ledger.md#skill-check-arc-skills-003))
+   throwing, firearms and prowling ([SC1](ledger/skills.md#skill-check-arc-skills-003))
    (effectiveness (0x4C62E0), opposed (0x4C6410), tech (0x4C69F0)).
 7. **Persuasion and haggle in dialog are thresholds, not rolls.** Dialog
    conditions `ps`, `ha`, `sk` and `tr` compare the PC's effective level or
@@ -285,7 +285,7 @@ values divided by four: −9…+9 → 13, 16, 19, 22, 26, 30, 34, 38, 42, 47, 52
 ### 5.3 Difficulty
 
 **Original check (ARC-SKILLS-003):** sections 5.2–5.4 were read in the retail 1.0.7.4 executable by two readers, rows
-[SC1–SC17](original-verification-ledger.md#skill-check-arc-skills-003). They agree with this reading except that a small own
+[SC1–SC17](ledger/skills.md#skill-check-arc-skills-003). They agree with this reading except that a small own
 light keeps three quarters of the darkness penalty (SC9), and they complete it: heal without a healing item is impossible,
 and each worn armour's silent-move adjustment is halved on its own (SC11).
 
@@ -380,14 +380,14 @@ lock's difficulty is added (difficulty (0x4C8430)). Lockpicks are optional:
 a follower without them still tries (lockpicks (0x571CB0)).
 
 **Original check (ARC-SKILLS-006):** read in the retail executable by two readers, rows
-[PL1–PL7](original-verification-ledger.md#pick-locks-arc-skills-006). They add that the case reads only the lock query (not the
+[PL1–PL7](ledger/skills.md#pick-locks-arc-skills-006). They add that the case reads only the lock query (not the
 jam, hold or always-locked bits), that the witnesses are called only for a locked target, that lockpicks are never used up, and
 that the player's only start is the inventory use (4 action points, no animation); PL7 confirms the ledger's SK4.
 
 ### Heal
 
 **Original check (ARC-SKILLS-005):** read in the retail executable by two readers, rows
-[HL1–HL5](original-verification-ledger.md#heal-arc-skills-005); they agree with this reading and add that the cure also
+[HL1–HL5](ledger/skills.md#heal-arc-skills-005); they agree with this reading and add that the cure also
 applies to a dead target, that nothing refuses a full-health, undead or self target, and that the item use charges 4 action points.
 
 (handler (0x4C7160)) Healing = heal level, ×1.5 when trained, at least 1. A
@@ -410,7 +410,7 @@ amount is applied whatever the roll (SK7). NPC repair in the trade window is a
 forced repair for gold (service (0x4C8E60)).
 
 **Original check (ARC-SKILLS-007):** read in the retail executable by two readers, rows
-[RP1–RP5](original-verification-ledger.md#repair-arc-skills-007). They confirm SK7 (the case sets success whatever the roll), add
+[RP1–RP5](ledger/skills.md#repair-arc-skills-007). They confirm SK7 (the case sets success whatever the roll), add
 that the repair fate is used before the case also when there is nothing to repair, that the player's skill-bar repair makes the
 PC the repairer of any item it holds without action points, and that the master's 1 % with the critical flag is reachable only when
 the run restores nothing (an effectiveness of 0, which clears the case's success), on an item that is not broken.
@@ -454,7 +454,7 @@ below Expert it uses the stealth walk, and only a master can run concealed
 is not a valid AI target (target (0x4AB990)).
 
 **Original check (ARC-SKILLS-008):** read in the retail executable by two readers, rows
-[ST1–ST6](original-verification-ledger.md#stealth-arc-skills-008). They add that the toggle costs nothing and forces the hero's
+[ST1–ST6](ledger/skills.md#stealth-arc-skills-008). They add that the toggle costs nothing and forces the hero's
 new state on every follower, that a new follower copies its leader's concealment and a leaving one loses it, that a dialog's
 start and an attack on the party end it while being seen, a map change or a load do not, that an expert walks (only the
 stealth walk is below expert), and that the margin is computed per observer at each check and stored nowhere.
@@ -484,7 +484,7 @@ succeeds (follow (0x4AD950), leader (0x4ADB50)); any persuasion training of
 the leader lengthens a follower's "wait here" by one step, unless its charisma is
 extraordinary, when no wait ends (wait (0x4AA7A0); this summary first said
 "apprentice with extraordinary charisma", which the executable does not do,
-[ledger HK2](original-verification-ledger.md#hero-skills-arc-skills-002)).
+[ledger HK2](ledger/skills.md#hero-skills-arc-skills-002)).
 Steamwoven models the follow rules ([follow consent](../../src/Arcanum.Simulation/Party/FollowConsentRules.cs)),
 and since ARC-SKILLS-002 the session reads the hero's persuasion training itself
 ([hero skills](../world/hero-skills-runtime.md)).
@@ -522,7 +522,7 @@ and monstrous thresholds.
 
 ## 8. Anomalies found by this reading
 
-**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the earlier readings below where they differ.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](ledger/character.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the earlier readings below where they differ.
 
 Recorded, not adopted. "Inference" marks a reading of intent.
 

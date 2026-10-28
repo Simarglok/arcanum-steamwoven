@@ -68,7 +68,7 @@ public sealed class AreaCompanionData
         ArgumentNullException.ThrowIfNull(speaker);
         var read = CombatFieldReader.Read(speaker.Row);
         if (read.Fields is not { Critter: { } critter, Npc: { } npc }) { refusal = $"fields {read.Failure}"; return null; }
-        if (Table.Row(npc.AiData) is not { } row) { refusal = $"AI row {npc.AiData} outside the table"; return null; }
+        if (Table.Lookup(npc) is not { Status: AiParameterLookupStatus.Found, Row: { } row }) { refusal = $"AI row {npc.AiData} outside the table"; return null; }
         var level = new List<EffectModifier>(); var alignment = new List<EffectModifier>();
         foreach (var entry in critter.Effects ?? [])
         {
@@ -81,7 +81,7 @@ public sealed class AreaCompanionData
             }
         }
         refusal = null;
-        return new(speaker.Row.PrototypeNumber, speaker.ScriptId, new FollowThresholds(row.DislikeReaction, row.MaxAlignmentAbove, row.MaxAlignmentBelow, row.LevelGate),
+        return new(speaker.Row.PrototypeNumber, speaker.ScriptId, new FollowThresholds(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
             Math.Clamp(EffectModifiers.Apply(critter.BaseStats[LevelStat], level), MinLevel, MaxLevel),
             Math.Clamp(EffectModifiers.Apply(critter.BaseStats[AlignmentStat], alignment), MinAlignment, MaxAlignment), npc.Wait);
     }

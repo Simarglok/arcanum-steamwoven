@@ -131,6 +131,11 @@ public sealed class AreaGridSession : IGridSession
     public AreaChart Chart { get; }
     /// <summary>ARC-WORLD-016: the live actors this session's steps are admitted against (read at every assessment); null is T0 alone.</summary>
     public Func<AreaOccupancy?>? Occupancy { get; set; }
+    /// <summary>ARC-WORLD-074: the mover passes living critters (the PC outside combat mode; the owner's decision of 2026-10-21 that
+    /// outside combat NPCs do not block the way): its steps are admitted with <see cref="AreaOccupancyRules.ApplyPassingCritters"/>,
+    /// so neither T0 PCs and NPCs nor the live actors of <see cref="Occupancy"/> refuse them. Read once per advance; null or false keeps
+    /// the ordinary overlay.</summary>
+    public Func<bool>? CrittersPass { get; set; }
     /// <summary>ARC-WORLD-051: the runtime passage of the map's doors and windows (read at every assessment); null keeps
     /// their T0 rules.</summary>
     public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Portals { get; set; }
@@ -138,6 +143,10 @@ public sealed class AreaGridSession : IGridSession
     public GaitTiming? Timing { get; init; }
     /// <summary>ARC-WORLD-020: the gait a step starts with, read when it is admitted; null walks.</summary>
     public Func<MovementGait>? Gait { get; set; }
+    /// <summary>ARC-COMBAT-020: asked once when an open step starts, with the gait it starts with (the original charges a step's
+    /// action points when it starts, 0x430FC0); a reason refuses the step (its live verdict is blocked with that reason), null lets it
+    /// go. Null: every open step goes.</summary>
+    public Func<AdmissionKey, MovementGait, string?>? StepCharge { get; set; }
     public const string PcActorId = "HUMAN_FIXED_DIAGNOSTIC", PcCapabilities = "ISOLATED_PC_HUMAN_FIXED_V1";
 
     public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null,
@@ -171,11 +180,15 @@ public sealed class AreaGridSession : IGridSession
         Action<MovementState, MovementResult>? validatePresentation = null)
     {
         var occupancy = Occupancy?.Invoke();
+        var pass = CrittersPass?.Invoke() == true;
         var (result, evidence) = GridReplay.Run(State, target, batches, key =>
         {
             var assessment = Assess(key.From, key.To, key.Direction);
-            var live = AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
+            var live = pass ? AreaOccupancyRules.ApplyPassingCritters(assessment, key.From, key.Direction, occupancy)
+                : AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
             var gait = Gait?.Invoke() ?? MovementGait.Walk;
+            if (live.Disposition == CardinalTraversalDisposition.Open && StepCharge?.Invoke(key, gait) is { } refusal)
+                live = new AreaStepVerdict(live.Coverage, CardinalTraversalDisposition.Blocked, refusal, true);
             // ARC-WORLD-021: an Open window jump is the vault (its own time and ART), whatever the gait.
             var vault = Timing?.Vault is { } vaultTime && assessment.WindowJump is not null ? vaultTime : (StepDuration?)null;
             var duration = vault ?? Timing?.For(gait, key.Direction) ?? Duration;

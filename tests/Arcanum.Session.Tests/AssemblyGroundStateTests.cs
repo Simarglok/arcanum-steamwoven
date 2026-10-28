@@ -64,8 +64,11 @@ public sealed class AssemblyGroundStateTests
         Assert.AreEqual(1L, owner.Version.Revision, "one revision");
         Assert.AreEqual("made:1@100,200 made:2@100,200 made:3@100,200", Ground(owner), "on the hero's tile");
         Assert.IsTrue(owner.QueryPlacedItems().All(p => p.Source == SessionPlacedSource.Made && p.Kind == Product && p.Map == Exterior));
+        // ARC-WORLD-062: a product created on the tile is not dropped, so it gets no decay event (ledger ID9).
+        Assert.AreEqual(0, owner.QueryItemDecays().Count, "refused products do not decay");
         // The hero picks one up into its made items; saved and restored, the rest stay on the ground.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:2", Accept).Disposition);
+        Assert.AreEqual(0, owner.QueryItemDecays().Count);
         CollectionAssert.AreEqual(new[] { new SessionMadeItem("made:2", Product) }, owner.QueryMadeItems().ToArray());
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         CollectionAssert.AreEqual(owner.QueryPlacedItems().ToArray(), restored.QueryPlacedItems().ToArray());
@@ -113,6 +116,7 @@ public sealed class AssemblyGroundStateTests
         CollectionAssert.AreEqual(new[] { "made:1", "made:2", "made:3" }, all.OnGround.ToArray());
         Assert.AreEqual(0, full.QueryHeroAmmo().Count);
         Assert.IsTrue(all.OnGround.All(entity => full.QueryAmmo(entity) == new SessionAmmoRecord(entity, 2, 5)));
+        Assert.AreEqual(0, full.QueryItemDecays().Count, "refused stacks do not decay either (ARC-WORLD-062, ledger ID9)");
     }
 
     [TestMethod]
@@ -125,6 +129,7 @@ public sealed class AssemblyGroundStateTests
         CollectionAssert.AreEqual(new[] { "made:1", "made:2" }, result.OnGround.ToArray());
         Assert.AreEqual(0, owner.QueryNpcInventory("smith").Count, "the NPC's list gets nothing");
         Assert.AreEqual("made:1@104,201 made:2@104,201", Ground(owner), "on the smith's tile");
+        Assert.AreEqual(0, owner.QueryItemDecays().Count, "an NPC crafter's refused products do not decay either (ARC-WORLD-062, ledger ID9)");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:1", Accept).Disposition, "the hero can pick it up");
 
         // Without the crafter's tile, or without a hero (the ground store is the hero's), a refused unit can go nowhere: nothing is spent.

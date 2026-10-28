@@ -217,6 +217,16 @@ FLAG_CASTER, LAST_COST, ENVIRONMENT, INTERRUPT = 0x459040, 0x5E762C, 0x458A80, 0
 RUN_SET_FLAGS, RECORD_BEGIN_AREA, RECORD_CANCELS, RECORD_CANCELS_ENV = 0x138, 0x70, 0x118, 0x128
 STAGE_HANDLES = tuple((0x5EED0070 + i, 0x42) for i in range(4))   # source, parent, the candidate, the reflection's caster
 SCHEDULE_CALLS = 6
+
+# The Damage and Heal components and the acid's steps (ARC-MAGIC-012).
+CONTEXT_INIT, DAMAGE_STEP, ACID_STEPS, HEAL_APPLY = 0x4B2210, 0x4B4390, 0x4B5810, 0x4B58C0
+CURRENT_FATIGUE, DAMAGE_FX, ITEM_AT_SLOT = 0x45D700, 0x433020, 0x4649C0
+TARGET_OBJECT_FLAGS = 0x5E75D0  # the damage component stores the target's object flags here (written)
+RUN_PARENT_APTITUDE = 0x8C
+COMPONENT_MIN, COMPONENT_MAX, COMPONENT_TYPE, COMPONENT_FLAGS = 0x40, 0x44, 0x48, 0x4C
+DAMAGE_HANDLES = tuple((0x5EED0090 + i, 0x42) for i in range(3))   # the parent, the target, the run's other object
+ACID_ITEMS = tuple((0x5EED00A0 + i, 0x42) for i in range(9))      # the items a target may wear in slots 1000..1008
+DAMAGE_FLAG_BITS = (0x1, 0x2, 0x4, 0x40, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x400000, 0x800000)
 SCHEDULE_CODE = ((0x454790, 0x4548D0), (0x4503E0, 0x450420), (0x45A950, 0x45A970), (0x455250, 0x455350))
 
 
@@ -266,6 +276,9 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x455550, "spell-target-stage", ((0x455550, 0x455710),), "spell-target-stage"),
     FunctionSpec(0x453410, "spell-no-stack", ((0x453410, 0x4534E0),), "spell-no-stack"),
     FunctionSpec(0x4534E0, "spell-cancels", ((0x4534E0, 0x453630),), "spell-cancels"),
+    FunctionSpec(0x4518D0, "spell-damage", ((0x4518D0, 0x451AF0),), "spell-damage"),
+    FunctionSpec(0x4521A0, "spell-heal", ((0x4521A0, 0x452294),), "spell-heal"),
+    FunctionSpec(0x4B5810, "spell-acid", ((0x4B5810, 0x4B58BA),), "spell-acid"),
 )}
 
 
@@ -2428,6 +2441,141 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             document.update(fields=["run", "spell", "on", "runs", *slot_fields, *record_fields, "result", "out"])
         else:
             document.update(fields=["run", "env", "envAsked", "runs", *slot_fields, *record_fields, *(f"interrupt{i}" for i in range(13))])
+    elif spec.model in ("spell-damage", "spell-heal"):
+        from oracle_emu import StubRejected, to_signed
+        heal = spec.model == "spell-heal"
+        run_address = emulator.write_heap(b"\0" * RUN_SLOT, 0)
+        component = emulator.write_heap(b"\0" * 0x60, 0x200)
+        parent_h, target_h, other_h = DAMAGE_HANDLES
+        emulator.set_global(RUN_POINTER, run_address)
+        emulator.set_global(COMPONENT_POINTER, component)
+        for case_number in range(count):
+            has_target, has_parent, has_other = rng.random() < 0.96, rng.random() < 0.85, rng.random() < 0.2
+            parent_type = rng.choice((15, 16, 16, 5, 0)) if has_parent else 0
+            aptitude = rng.choice((0, 100, -20, rng.randint(-30, 120), rng.randint(1, 100)))
+            margin = rng.choice((0, 0, rng.randint(1, 100), rng.randint(1, 30), -5))
+            low, high = rng.choice(((0, 0), (5, 5), (rng.randint(0, 40), rng.randint(0, 60)), (rng.randint(1, 30), rng.randint(31, 300))))
+            kind = rng.randrange(5 if heal else 6)
+            flags = sum(bit for bit in DAMAGE_FLAG_BITS if rng.random() < 0.2)
+            fatigue, object_flags, dealt = rng.randint(-20, 60), rng.choice((0, 0, 0, 1, 2, 3)), int(rng.random() < 0.6)
+            emulator.write_heap(struct.pack("<II", *(parent_h if has_parent else (0, 0))), RUN_PARENT)
+            emulator.write_heap(struct.pack("<ii", aptitude, parent_type), RUN_PARENT_APTITUDE)
+            emulator.write_heap(struct.pack("<II", *(other_h if has_other else (0, 0))), RUN_OTHER)
+            emulator.write_heap(struct.pack("<i", margin), RUN_MARGIN)
+            emulator.write_heap(struct.pack("<iiiI", low, high, kind, flags), 0x200 + COMPONENT_MIN)
+            emulator.set_global(CURRENT_TARGET, target_h[0] if has_target else 0)
+            emulator.set_global(CURRENT_TARGET + 4, target_h[1] if has_target else 0)
+            seen = {"init": 0, "notice": 0, "draws": [], "step": None, "fx": 0, "context": 0}
+
+            def init(argument) -> int:
+                seen["init"] += 1
+                seen["context"] = argument(4)
+                context = bytearray(0x60)
+                struct.pack_into("<II", context, 0x08, argument(0), argument(1))
+                struct.pack_into("<II", context, 0x20, argument(2), argument(3))
+                struct.pack_into("<II", context, 0x28, argument(2), argument(3))
+                struct.pack_into("<II", context, 0x30, argument(0), argument(1))
+                emulator.poke(argument(4), bytes(context))
+                return 0
+
+            def draw(argument) -> int:
+                a, b = to_signed(argument(0)), to_signed(argument(1))
+                # 0x4CEF00 answers an empty range without a draw (both readers); only a real draw is recorded.
+                if a == b:
+                    return a
+                value = rng.randint(min(a, b), max(a, b))
+                seen["draws"].append((a, b, value))
+                return value
+
+            def step(which: int):
+                def stub(argument) -> int:
+                    if seen["step"] is not None:
+                        raise StubRejected("a second step")
+                    raw = emulator.peek(argument(0), 0x60)
+                    seen["step"] = (which, *struct.unpack_from("<5i", raw, 0x44), struct.unpack_from("<I", raw, 0x58)[0],
+                                    struct.unpack_from("<I", raw, 0)[0], DAMAGE_HANDLES.index(struct.unpack_from("<II", raw, 0x30))
+                                    if struct.unpack_from("<II", raw, 0x30) in DAMAGE_HANDLES else -1)
+                    if dealt and not heal:
+                        emulator.poke(argument(0) + 0x58, struct.pack("<I", struct.unpack_from("<I", raw, 0x58)[0] | 0x200000))
+                    return 0
+                return stub
+
+            def field(argument) -> int:
+                if (argument(0), argument(1)) != target_h or argument(2) != FIELD_OBJECT_FLAGS:
+                    raise StubRejected(f"field {argument(2):#x}")
+                return object_flags
+
+            def fx(argument) -> int:
+                seen["fx"] += 1
+                return 0
+            stubs = {CONTEXT_INIT: init, RANDOM: draw, CURRENT_FATIGUE: lambda a: fatigue, FIELD_GETTER: field, DAMAGE_FX: fx,
+                     NOTIFY_AI: lambda a: seen.__setitem__("notice", seen["notice"] + 1) or 0}
+            stubs.update({HEAL_APPLY: step(3)} if heal else {DAMAGE_STEP: step(1), ACID_STEPS: step(2)})
+            readable = (Range(run_address, run_address + RUN_SLOT), Range(component, component + 0x60),
+                        *(Range(a, a + 4) for a in (RUN_POINTER, COMPONENT_POINTER, CURRENT_TARGET, CURRENT_TARGET + 4)))
+            writable = (Range(TARGET_OBJECT_FLAGS, TARGET_OBJECT_FLAGS + 4),)
+            emulator.call(spec.address, (), code=code, stubs=stubs, readable=readable, writable=writable)
+            if len(seen["draws"]) > 1:
+                raise RunFailure("stub", f"two draws {seen['draws']}")
+            drawn = seen["draws"][0] if seen["draws"] else (0, 0, 0)
+            route, *slots = seen["step"] if seen["step"] is not None else (0, 0, 0, 0, 0, 0, 0, 0, -9)
+            cases.append([int(has_target), int(has_parent), parent_type, aptitude, int(has_other), margin, low, high, kind, flags, fatigue,
+                          object_flags, dealt, seen["init"], seen["notice"], len(seen["draws"]), *drawn, route, *slots, seen["fx"]])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["target", "parent", "parentType", "aptitude", "other", "margin", "min", "max", "type", "flags", "fatigue",
+                                "objectFlags", "dealt", "inits", "notices", "draws", "drawMin", "drawMax", "drawn", "route", "normal", "poison",
+                                "electrical", "fire", "fatigueSlot", "damageFlags", "contextFlags", "source", "fx"])
+    elif spec.model == "spell-acid":
+        from oracle_emu import StubRejected, to_signed
+        context = emulator.write_heap(b"\0" * 0x60, 0x400)
+        target_h = DAMAGE_HANDLES[1]
+        for case_number in range(count):
+            critter = rng.random() < 0.85
+            target_type = rng.choice((15, 16)) if critter else rng.choice((0, 5, 6, 17))
+            worn = {slot: ACID_ITEMS[slot - 1000] for slot in range(1000, 1009) if rng.random() < 0.35}
+            if rng.random() < 0.3:
+                worn[1006] = ACID_ITEMS[6]
+            resist = {slot: rng.choice((0, 0, rng.randint(1, 95))) for slot in worn}
+            amount, flags = rng.randint(-5, 120), rng.choice((0, 0, 1, 0x40))
+            body = bytearray(0x60)
+            struct.pack_into("<II", body, 0x20, *target_h)
+            struct.pack_into("<i", body, 0x44, amount)
+            struct.pack_into("<I", body, 0x58, flags)
+            emulator.write_heap(bytes(body), 0x400)
+            steps: list[tuple[int, int]] = []
+
+            def kind(argument) -> int:
+                handle = (argument(0), argument(1))
+                if argument(2) != 0x14F or handle != target_h:
+                    raise StubRejected(f"type of {handle} field {argument(2):#x}")
+                return target_type
+
+            def item(argument) -> tuple[int, int]:
+                if (argument(0), argument(1)) != target_h:
+                    raise StubRejected("an item of another object")
+                return worn.get(argument(2), (0, 0))
+
+            def damage(argument) -> int:
+                if argument(0) != context:
+                    raise StubRejected("another context")
+                handle = struct.unpack("<II", emulator.peek(context + 0x20, 8))
+                normal = to_signed(emulator.read_u32(context + 0x44))
+                slot = 1000 + ACID_ITEMS.index(handle) if handle in ACID_ITEMS else -1
+                steps.append((slot, normal))
+                # The step's resistance (0x4B6860) lowers the context's normal amount in place: the item's own resistance.
+                if slot >= 0 and resist[slot] > 0:
+                    emulator.poke(context + 0x44, struct.pack("<i", normal - int(resist[slot] * normal / 100)))
+                return 0
+            emulator.call(spec.address, (context,), code=code, stubs={FIELD_GETTER: kind, ITEM_AT_SLOT: item, DAMAGE_STEP: damage},
+                          writable=(Range(context, context + 0x60),))
+            flat = [v for slot, normal in steps for v in (slot, normal)] + [-9, 0] * (10 - len(steps))
+            cases.append([target_type, amount, flags, *(int(s in worn) for s in range(1000, 1009)), *(resist.get(s, 0) for s in range(1000, 1009)),
+                          len(steps), *flat])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["targetType", "amount", "flags", *(f"worn{s}" for s in range(1000, 1009)), *(f"resist{s}" for s in range(1000, 1009)),
+                                "steps", *(f"step{i}{n}" for i in range(10) for n in ("Slot", "Normal"))])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

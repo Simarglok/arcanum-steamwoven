@@ -17,7 +17,7 @@ experience data and a dialog's quest completion are wired (ARC-UI-007, [Not read
   damage function, quest experience, the stat ranges and the experience setter, and the dialog and script actions.
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers; rows XP1–XP12 in the
-  [verification ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030). The original
+  [verification ledger](../research/ledger/character.md#experience-and-levels-arc-world-030). The original
   differs from that first reading in two places (below), which need no rule-mode switch: both modes follow the
   original. A third difference, found later by the oracle trial of
   [ARC-RES-051](../research/original-oracle-research.md), is a bug of the original: progress computes `1000 × remaining`

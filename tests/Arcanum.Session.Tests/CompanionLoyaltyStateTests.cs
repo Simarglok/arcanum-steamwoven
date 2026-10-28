@@ -136,17 +136,23 @@ public sealed class CompanionLoyaltyStateTests
         var before = waiter.Version.Revision;
         Changed(waiter.WaitParty(waiter.Version, Npc, Wait(0)), waiter, before + 1);
         Assert.IsTrue(waiter.IsConcealed(SessionCombatant.Critter(Npc)), "waiting keeps it");
+        // ARC-WORLD-080 (FO7): a stopped follower that leaves loses NO_ATTACK, on the wait expiry and on the leader check alike.
+        Assert.AreEqual(GameSessionDisposition.Changed, waiter.StopAttacking(waiter.Version, new() { Combatant = SessionCombatant.Critter(Npc) }).Disposition);
         Advance(waiter, 1);
         Assert.AreEqual(Npc, waiter.ProcessEvents(new World()).Waits.Single().Entity);
         Assert.IsFalse(waiter.IsConcealed(SessionCombatant.Critter(Npc)));
+        Assert.IsFalse(waiter.QueryDanger(Npc).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.NoAttack));
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(waiter.Capture())), RestoreOptions()).Failure);
 
         using var leaver = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         Assert.AreEqual(GameSessionDisposition.Changed, leaver.JoinParty(leaver.Version, Npc, Facts(), false).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, leaver.ToggleHeroConcealment(leaver.Version).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, leaver.AdjustReaction(leaver.Version, Npc, Human50, Pc, -5).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, leaver.StopAttacking(leaver.Version, new() { Combatant = SessionCombatant.Hero }).Disposition);
+        Assert.IsTrue(leaver.QueryDanger(Npc).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.NoAttack));
         Assert.AreEqual(LoyaltyStepKind.Left, leaver.RunLoyaltyStep(leaver.Version, Npc, Facts(pcAlignment: 301), false).Step!.Value.Kind);
         Assert.IsFalse(leaver.IsConcealed(SessionCombatant.Critter(Npc)));
+        Assert.IsFalse(leaver.QueryDanger(Npc).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.NoAttack));
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(leaver.Capture())), RestoreOptions()).Failure);
     }
 
@@ -524,5 +530,5 @@ public sealed class CompanionLoyaltyStateTests
         long? revision = null) => new(
         saved.SchemaVersion, saved.Identity, revision ?? saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(), saved.Story, party,
         saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement,
-        saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, events ?? saved.Events, saved.Lighting, saved.Sound);
+        saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, saved.Danger, events ?? saved.Events, saved.Lighting, saved.Sound);
 }

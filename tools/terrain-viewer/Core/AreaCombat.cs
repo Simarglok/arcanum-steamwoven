@@ -35,6 +35,10 @@ public sealed class AreaCombatHost : IAreaEventObjects
 
     public bool Covers(int runtimeMap) => _maps.ContainsKey(runtimeMap);
 
+    /// <summary>ARC-MAGIC-014: the session entity id of a map object (its inventory seed's), or null.</summary>
+    public string? Entity(int runtimeMap, AreaObjectKey key) =>
+        _maps.TryGetValue(runtimeMap, out var map) && map.TryGetEntity(key, out var entity) ? entity : null;
+
     /// <summary>ARC-WORLD-039: whether an object of the map's T0 data has this session entity id (a deferred call's role).</summary>
     public bool HasObject(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out _);
 

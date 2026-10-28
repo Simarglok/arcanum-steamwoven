@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -16,8 +17,9 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class AreaDropMap : IDropMap
 {
     /// <summary>The drop's path request: at most 200 rotations, the direct attempt up to 32 tiles, the search window 64 × 64.</summary>
-    public const int MaxRotations = 200, DirectLimit = 32, Window = 64, ResultCap = 8;
-    private const int Excluded = unchecked((int)0xFFFF8000), BaseCost = 10, TrapCost = 90, WindowCost = 50;
+    public const int MaxRotations = OriginalPathRequest.BufferRotations, DirectLimit = OriginalPathRequest.DirectLimit, Window = OriginalPathRequest.Window,
+        ResultCap = OriginalPathRequest.ResultCap;
+    private const int TrapCost = 90;
     private const uint NoBlockObject = 0x400, TrapNpcIgnores = 0x1000000, TrapSpotted = 0x3000000;
     private const int ContainerType = 2, SceneryType = 3, PcType = 15, NpcType = 16, TrapType = 17, ObjectFlagsSlot = 18, TrapFlagsSlot = 36;
 
@@ -71,15 +73,23 @@ public sealed class AreaDropMap : IDropMap
     public bool HasCritter(CellCoord cell) =>
         _liveActors.Contains(cell) || Rows(cell).Any(row => row.Type is PcType or NpcType && !_moved.Contains(row.Key) && !_gone(row));
 
-    /// <summary>0x41F3C0 with flags 0x10: equal tiles none; the destination's gate; the direct attempt; else the search; capped at 8.</summary>
+    /// <summary>0x41F3C0 with flags 0x10: equal tiles none; the destination's gate; the direct attempt; else the search; capped at 8.
+    /// ARC-WORLD-073: the request is the shared <see cref="OriginalPathRequest"/> (the click route's too) over this map's tests.</summary>
     public DropPath Path(CellCoord from, CellCoord to, DropOwner owner)
     {
         if (!Enum.IsDefined(owner)) throw new ArgumentOutOfRangeException(nameof(owner));
-        if (from == to || !DestinationOpen(to)) return DropPath.None;
-        var rotations = new int[MaxRotations];
-        var direct = Direct(from, to, owner, rotations, out var partial);
-        var result = direct > 0 ? direct : Search(from, to, owner, rotations);
-        return new(Math.Min(result, ResultCap), partial, rotations);
+        var path = OriginalPathRequest.Request(new Tests(this, owner), from, to, MaxRotations);
+        return path.End is OriginalPathEnd.Same or OriginalPathEnd.Gate ? DropPath.None : new(path.Result, path.Partial, path.Rotations);
+    }
+
+    /// <summary>The request's tests on this map for one mover (traps by its kind, DC8).</summary>
+    private sealed class Tests(AreaDropMap map, DropOwner owner) : IOriginalPathMap
+    {
+        public CellCoord? Step(CellCoord from, int rotation) => map.Step(from, rotation);
+        public bool TileBlocked(CellCoord cell) => map.TileBlocked(cell);
+        public OriginalPathTraversal Traverse(CellCoord from, int rotation) => map.Traverse(from, rotation);
+        public int EnterCost(CellCoord to) => map.TrapAvoided(to, owner) ? TrapCost : OriginalPathRequest.BaseCost;
+        public bool DestinationOpen(CellCoord to) => map.DestinationOpen(to);
     }
 
     // The gate (0x41F3C0): the tile not blocked, and no container, scenery or living critter on it without the no-block flag.
@@ -91,117 +101,17 @@ public sealed class AreaDropMap : IDropMap
             || row.Type is PcType or NpcType && !_moved.Contains(row.Key) && !_dead(row)));
     }
 
-    // 0x41F840: toward the target one rotation at a time (0x4B8D50), each step tested; a failure records the completed steps.
-    private int Direct(CellCoord from, CellCoord to, DropOwner owner, int[] rotations, out int partial)
-    {
-        partial = 0;
-        if (Math.Max(Math.Abs(to.X - from.X), Math.Abs(to.Y - from.Y)) > DirectLimit) return 0;
-        var cur = from;
-        var i = 0;
-        for (; i < MaxRotations && cur != to; i++)
-        {
-            var rotation = Rotation(cur, to);
-            rotations[i] = rotation;
-            // Between two tiles on the map every rotation toward the target stays on it.
-            if (Step(cur, rotation) is not { } next || TileBlocked(next) || Traverse(cur, rotation) is not { Blocked: false, Window: false } ||
-                TrapAvoided(next, owner)) break;
-            cur = next;
-        }
-        if (cur == to) return i;
-        partial = i;
-        return 0;
-    }
-
-    // 0x41F9F0: a best-first search over the 64 × 64 window around both tiles.
-    private int Search(CellCoord from, CellCoord to, DropOwner owner, int[] rotations)
-    {
-        long dx = Math.Abs(from.X - to.X), dy = Math.Abs(from.Y - to.Y);
-        if (dx >= DirectLimit || dy >= DirectLimit) return 0;
-        var originX = Math.Min(from.X, to.X) - (Window - dx) / 2;
-        var originY = Math.Min(from.Y, to.Y) - (Window - dy) / 2;
-        int Index(CellCoord c) => (int)((c.Y - originY) * Window + (c.X - originX));
-        CellCoord Cell(int index) => new((int)(originX + index % Window), (int)(originY + index / Window));
-        bool Inside(CellCoord c) => c.X >= originX && c.X < originX + Window && c.Y >= originY && c.Y < originY + Window;
-        var cost = new int[Window * Window];
-        var parent = new int[Window * Window];
-        var start = Index(from);
-        var goal = Index(to);
-        cost[start] = 1;
-        parent[start] = -1;
-        while (true)
-        {
-            var best = -1;
-            long bestF = 0;
-            for (var index = 0; index < cost.Length; index++)
-            {
-                if (cost[index] <= 0) continue;
-                var f = cost[index] + Heuristic(Cell(index), to);
-                if (f / 10 > MaxRotations) { cost[index] = Excluded; continue; }
-                if (best < 0 || f < bestF) { best = index; bestF = f; }
-            }
-            if (best < 0) return 0;
-            if (best == goal) break;
-            var cur = Cell(best);
-            for (var rotation = 0; rotation < 8; rotation++)
-            {
-                if (Step(cur, rotation) is not { } n || !Inside(n)) continue;
-                var ni = Index(n);
-                if (cost[ni] == Excluded) continue;
-                if (TileBlocked(n)) { cost[ni] = Excluded; continue; }
-                var traversal = Traverse(cur, rotation);
-                if (traversal.Blocked)
-                {
-                    // A cardinal step blocked by an object that is no wall or portal excludes the tile.
-                    if ((rotation & 1) == 1 && traversal.BlockerType is { } type && type is not (0 or 1)) cost[ni] = Excluded;
-                    continue;
-                }
-                var step = TrapAvoided(n, owner) ? TrapCost : BaseCost;
-                if (traversal.Window) step += WindowCost;
-                var next = cost[best] + step;
-                if (parent[best] != -1 && Rotation(Cell(parent[best]), cur) != rotation) next++;
-                var v = cost[ni];
-                if (v == 0 || v > 0 && v > next || v < 0 && -v > next) { cost[ni] = next; parent[ni] = best; }
-            }
-            cost[best] = -cost[best];
-        }
-        var steps = 0;
-        for (var k = goal; parent[k] != -1; k = parent[k]) steps++;
-        if (steps > MaxRotations) return 0;
-        var at = goal;
-        for (var i = steps - 1; i >= 0; i--)
-        {
-            rotations[i] = Rotation(Cell(parent[at]), Cell(at));
-            at = parent[at];
-        }
-        return steps;
-    }
-
-    private static long Heuristic(CellCoord a, CellCoord b) => 10L * Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
-
     /// <summary>0x4B8D50: the rotation from one tile toward another; diagonal when twice the minor delta reaches the major one.</summary>
-    public static int Rotation(CellCoord a, CellCoord b)
-    {
-        long dx = b.X - a.X, dy = b.Y - a.Y;
-        int sx = Math.Sign(dx), sy = Math.Sign(dy);
-        if (Math.Abs(dx) > Math.Abs(dy)) { if (2 * Math.Abs(dy) < Math.Abs(dx)) sy = 0; }
-        else if (2 * Math.Abs(dx) < Math.Abs(dy)) sx = 0;
-        return (sx, sy) switch
-        {
-            (-1, -1) => 0, (-1, 0) => 1, (-1, 1) => 2, (0, 1) => 3, (1, 1) => 4, (1, 0) => 5, (1, -1) => 6, (0, -1) => 7,
-            _ => 5,
-        };
-    }
+    public static int Rotation(CellCoord a, CellCoord b) => OriginalPathRequest.Rotation(a, b);
 
     // 0x4D7110 from the evidence: the tile's own verdict; a tile the evidence cannot speak for counts as blocked.
     private bool TileBlocked(CellCoord cell) =>
         _steps.Terrain(new(cell.X, cell.Y)) is not { Coverage: CardinalTraversalCoverage.Supported, Disposition: CardinalTraversalDisposition.Open };
 
-    private readonly record struct Traversal(bool Blocked, bool Window, int? BlockerType);
-
     // 0x43FD70 in the drop's mode (traversal flags 4): walls and doors or windows the owner cannot pass block (the evidence names
     // both as the wall blocker), and containers, scenery and traps without the no-block flag that still stand; critters do not. A
     // window piece crossed on a cardinal step is the "window" output.
-    private Traversal Traverse(CellCoord from, int rotation)
+    private OriginalPathTraversal Traverse(CellCoord from, int rotation)
     {
         var to = new CellCoord(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
         var assessment = _steps.Assess(_steps.Request(new(from.X, from.Y), new(to.X, to.Y), GridReplay.MapDirection((NeighborDirection)rotation)),

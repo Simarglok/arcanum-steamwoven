@@ -4,7 +4,8 @@ using Arcanum.Session;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>The answer to one quick save. <see cref="Status"/> is the HUD line.</summary>
-public sealed record AreaQuickSaveResult(bool Saved, SaveSlotWriteResult? Write, GameSessionFailure PlaceFailure, string Status);
+public sealed record AreaQuickSaveResult(bool Saved, SaveSlotWriteResult? Write, GameSessionFailure PlaceFailure, string Status,
+    GameSaveWriteResult? Library = null);
 
 /// <summary>The answer to one quick load. On success <see cref="Owner"/> is a new session the caller adopts;
 /// on any failure there is no owner and the caller's session was not touched.</summary>
@@ -37,6 +38,34 @@ public static class AreaQuickSave
             : new(false, write, GameSessionFailure.None, $"quick save FAILED ({write.Failure} {write.Detail}); the previous save is kept");
     }
 
+    /// <summary>ARC-UI-010: a save into the save list. <paramref name="name"/> is the save to write (the auto slot for F7, an existing
+    /// save the player agreed to overwrite) or null for a new numbered save. The placement is recorded as for a quick save; the summary
+    /// is built after it, so it names the saved place. A details or preview write that fails after the snapshot is written still saves.</summary>
+    public static AreaQuickSaveResult Save(GameSessionOwner session, ActorPlacement actor, GameSaveLibrary library, string? name,
+        Func<GameSessionOwner, GameSaveSummary> summary, byte[]? thumbnail = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(library);
+        ArgumentNullException.ThrowIfNull(summary);
+        var placed = session.PlaceActor(session.Version, actor);
+        if (placed.Disposition == GameSessionDisposition.Rejected)
+            return new(false, null, placed.Failure, $"save refused: actor placement {placed.Failure}");
+        var details = summary(session);
+        var write = name is null ? library.Create(session.Capture(), details, thumbnail) : library.Write(name, session.Capture(), details, thumbnail);
+        if (!write.Saved)
+            return new(false, write.Snapshot, GameSessionFailure.None, $"save FAILED ({Describe(write)}); the previous save is kept", write);
+        var where = $"map {actor.Map.RuntimeMap} cell ({actor.Cell.X},{actor.Cell.Y}), session rev {session.Version.Revision}";
+        var verb = write.Name == GameSaveLibrary.AutoName ? "quick saved" : "saved " + write.Name;
+        return new(true, write.Snapshot, GameSessionFailure.None, $"{verb}: {where}" + (write.Warning is null ? "" : $" (warning: {write.Warning})"), write);
+    }
+
+    public static string Describe(GameSaveWriteResult write) => write.Failure switch
+    {
+        GameSaveFailure.SlotNumbersExhausted => "no free save number below 9999; delete or overwrite a save",
+        GameSaveFailure.SnapshotFailed => $"{write.Snapshot?.Failure} {write.Snapshot?.Detail}",
+        _ => $"{write.Failure} {write.Detail}",
+    };
+
     /// <param name="placementRefusal">The host's reason it cannot stand the actor at the saved placement
     /// (map not loaded, cell not admitted), or null when it can.</param>
     /// <param name="mapSound">The default music and ambient pair of the saved actor's map (ARC-WORLD-040: the original opens
@@ -66,7 +95,7 @@ public static class AreaQuickSave
     public static string Describe(SaveSlotReadResult read) => read.Failure switch
     {
         SaveSlotFailure.None => "read",
-        SaveSlotFailure.NoSave => "no quick save yet (F7 saves)",
+        SaveSlotFailure.NoSave => "no save yet (F7 saves)",
         SaveSlotFailure.TooLarge => "the save file is too large (" + read.Detail + ")",
         SaveSlotFailure.ReadFailed => "the save file could not be read (" + read.Detail + ")",
         SaveSlotFailure.NotUtf8 => "the save file is damaged (not UTF-8)",

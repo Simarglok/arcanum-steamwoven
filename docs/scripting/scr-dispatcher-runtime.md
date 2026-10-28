@@ -268,7 +268,7 @@ conversation is not run).
 - **`ScrAdmissionSet.S11`** is S10 plus get skill (47) and use item with skill (79); `ScrRunOptions` accepts any subset of S11 (now
   the interpreter's widest set; the default stays S5). A set with 47 needs a host that implements `IScrSkillQueries`, checked before
   any event runs. Read in the retail 1.0.7.4 executable by two independent readers: ledger
-  [SX1–SX6](../research/original-verification-ledger.md#script-skill-commands-arc-skills-009).
+  [SX1–SX6](../research/ledger/skills.md#script-skill-commands-arc-skills-009).
 - **Get skill (47)**: the skill number (a value), the object, the store (operand 2, the only store outside operand 0; admission refuses
   a number literal there). The run stores `IScrSkillQueries.SkillLevel(object, skill)`: the effective level the original's level
   functions give (basic 0..11, tech 12..15 as tech index skill − 12), never the points or the training. A number outside 0..15 stores 0
@@ -295,7 +295,7 @@ conversation is not run).
 
 - **`ScrAdmissionSet.S10`** is S9 plus show book (64), show picture (65) and show plaque (114); `ScrRunOptions` accepts any subset
   of S10 (the interpreter's widest set until ARC-SKILLS-009 widened it to S11; the default stays S5).
-- **The actions** (ledger [WR15](../research/original-verification-ledger.md#reading-window-arc-ui-049)): a value operand (the
+- **The actions** (ledger [WR15](../research/ledger/ui-audio.md#reading-window-arc-ui-049)): a value operand (the
   book's or plaque's first text line, the picture's art) and an object operand (the viewer). The run returns one
   `ScrReadingRequest(Kind, Number, Viewer)` per action in `ScrEffects.Readings`, in action order, and goes on to the next line; an
   absent viewer shows nothing. The
@@ -310,7 +310,7 @@ conversation is not run).
 
 - **`ScrAdmissionSet.S9`** is S8 plus start schematic UI (129); `ScrRunOptions` accepted any subset of S9 until ARC-UI-049 widened
   it to S10 (the default stays S5).
-- **The action** (ledger [SW8](../research/original-verification-ledger.md#schematic-window-arc-technology-005)): its object
+- **The action** (ledger [SW8](../research/ledger/technology.md#schematic-window-arc-technology-005)): its object
   operand names one object; the original opens the window with (PC, PC) for a PC, (NPC, its PC leader) for an NPC that has one,
   and nothing otherwise, but calls it through a callback slot the game never fills (TC2). The run returns one
   `ScrSchematicRequest(Object)` in `ScrEffects.Schematics` and goes on to the next line; an absent object names none. The host
@@ -326,7 +326,7 @@ conversation is not run).
 
 - **`ScrAdmissionSet.S8`** is S4 plus set auto-level scheme (139); `ScrRunOptions` accepts any subset of S9 since
   ARC-TECHNOLOGY-005 (the default stays S5). Its focus kinds stay the four single objects, so focus groups are not admitted.
-- **The action** (ledger [OL30](../research/original-verification-ledger.md#companion-orders-and-loyalty-arc-res-064)): its object
+- **The action** (ledger [OL30](../research/ledger/social.md#companion-orders-and-loyalty-arc-res-064)): its object
   operand is a list in the original (one object or a group, 0x44B4E0), and each object gets the number (a value operand, no range
   check) through the scheme setter (0x4A6D90), which writes a PC's or an NPC's scheme and ignores any other object. The run returns
   one `ScrSchemeRequest(Object, Scheme)` per object in `ScrEffects.Schemes`, in action order, and goes on to the next line; an
@@ -360,14 +360,14 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
   subset of S4 (the default set stays S5). Focus stays one object (triggerer, attachee, extra object, player), so the
   guards over focus groups are not admitted yet.
 - **Teleports.** `ScrEffects.Teleports` holds one `ScrTeleport(Object, CatalogueMap, X, Y, Fade)` per action, in order, and
-  the run goes on to the next line (ledger [TR1, TR2](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
+  the run goes on to the next line (ledger [TR1, TR2](../research/ledger/world.md#map-transitions-arc-data-025)):
   the object from operand 0 (fade-and-teleport: 3), then the map as the script gives it, x and y as values;
   `RuntimeMap` is the map less 4,999 in 32 bits, as the original computes it. A fade-and-teleport also carries its seconds,
   sound and movie (`ScrTeleportFade`); the original skips it only in a network game. An absent object asks for nothing
   (the original would queue a teleport of no object; what its processing does with one is NOT_VERIFIED). The host owns the
   pending-teleport rule: the original keeps one pending teleport, a new request replaces it unless the pending one is the
   local PC's, which refuses the rest (TR4).
-- **Guards** (ledger [SG1–SG6](../research/original-verification-ledger.md#guard-conditions-arc-script-014)). A host whose set
+- **Guards** (ledger [SG1–SG6](../research/ledger/scripts.md#guard-conditions-arc-script-014)). A host whose set
   holds them implements `IScrObjectQueries`: the quest state of the object, whether it holds an item with that name number,
   its name number, whether it is mind-controlled, the name number of the item it wields in each location 1000..1008, and
   whether it has the reputation. The interpreter asks only for the object the condition names: quest state equals the
@@ -384,7 +384,7 @@ the player's teleport becomes the transfer); tile and sector events since ARC-SC
 ## Object variables and calls (ARC-SCRIPT-018, set S12)
 
 `ScrAdmissionSet.S12` is S11 (the skill commands, ARC-SKILLS-009) plus call script (7), assign object (15), get object
-type (34) and the run's ten object variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](../research/original-verification-ledger.md#object-variables-and-calls-arc-script-018)).
+type (34) and the run's ten object variables as a focus kind (11), as the original runs them (ledger [OV1–OV4](../research/ledger/scripts.md#object-variables-and-calls-arc-script-018)).
 
 - **Object variables** start empty in every run. Assign object writes the object operand 1 names (none for an absent one)
   into the triggerer, the attachee, the extra object or an object variable; any other focus kind is not written. The run's
@@ -421,7 +421,7 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
 ## Story state and story actions (ARC-SCRIPT-019, set S13)
 
 `ScrAdmissionSet.S13` is S12 plus set PC quest state (16), mark map location (49), set rumor (50), add reputation (72) and
-remove reputation (73), as the original runs them (ledger [SS1–SS5](../research/original-verification-ledger.md#story-state-and-story-actions-arc-script-019)).
+remove reputation (73), as the original runs them (ledger [SS1–SS5](../research/ledger/scripts.md#story-state-and-story-actions-arc-script-019)).
 
 - **Story state** is the session's number (`GameSessionOwner.QueryStoryState`, `RaiseStoryState`; snapshot schema 37): 0 at a
   new game, only ever raised. Get story state (42) reads it through the host, set story state (43) asks to raise it; the
@@ -521,7 +521,9 @@ remove reputation (73), as the original runs them (ledger [SS1–SS5](../researc
   plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions and the story
   actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading-objects-story", and since ARC-SCRIPT-017 the tile and sector scripts the player
-  enters; heartbeat and combat are later slices.
+  enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
+  the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
+  combat are later slices.
 - Not in any admitted set yet: focus groups, loops, call-ex, float line, reactions and most other world actions.
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map

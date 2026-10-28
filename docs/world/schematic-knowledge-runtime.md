@@ -12,7 +12,7 @@ Requirements: [FR-ITEM-017](../requirements/items-economy.md#fr-item-017) (found
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of ARC-RES-062
 ([learned and found lists](../research/technology-evidence.md#learned-and-found-lists)) and a second reading for this slice
-([ledger "Schematic knowledge"](../research/original-verification-ledger.md#schematic-knowledge-arc-technology-003), rows
+([ledger "Schematic knowledge"](../research/ledger/technology.md#schematic-knowledge-arc-technology-003), rows
 SK1–SK4 and TC12). Code: [`CombatFieldReader`](../../src/Arcanum.Data/Combat/CombatFieldReader.cs) (the written block),
 [`SchematicCatalog.Tabs`](../../src/Arcanum.Data/Technology/SchematicCatalog.cs),
 [`SchematicKnowledgeRules`](../../src/Arcanum.Simulation/Technology/SchematicKnowledgeRules.cs),

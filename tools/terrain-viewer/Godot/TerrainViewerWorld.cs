@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -128,6 +128,10 @@ public partial class TerrainViewerApp
         _worldPreferredZoom = _worldZoomStore.Load();
         // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
         _worldActor.AreaOccupancy = AreaPcOccupancy;
+        // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
+        _worldActor.AreaCrittersPass = () => !HeroInCombatMode;
+        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points.
+        _worldActor.AreaStepCharge = HeroStepCharge;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
@@ -143,6 +147,8 @@ public partial class TerrainViewerApp
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
         _worldPanel.ProwlToggleRequested += PaletteProwlToggle;
         _worldPanel.SoundTestRequested += PaletteSoundTest;
+        _worldPanel.SaveGameRequested += PaletteSaveGame;
+        _worldPanel.LoadGameRequested += PaletteLoadGame;
         _worldPanel.VolumeChanged += PaletteVolumeChanged;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
@@ -188,7 +194,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -345,6 +351,7 @@ public partial class TerrainViewerApp
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
+        if (SaveListOpen) { HandleSaveListPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -480,10 +487,13 @@ public partial class TerrainViewerApp
         ProcessTalkAfterRoute();
         ProcessInventoryAfterRoute();
         ProcessAreaAttack();
+        ProcessAreaSpells();
+        // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
+        ProcessTurnBasedRound();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
-        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal ? null
+        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal || _spellGoal is not null ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is null) _stickHeld = false;
@@ -549,6 +559,7 @@ public partial class TerrainViewerApp
     }
     /// <summary>ARC-WORLD-016: the planner sees a companion where it stood when the route was planned; when it then steps
     /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).
+    /// Since ARC-WORLD-074 a companion refuses the PC's step only in combat mode.
     /// <paramref name="route"/> is null unless this frame's advance was driven by a following route, so a stick bump into
     /// a companion never revives an earlier, finished route.</summary>
     private void RetryActorDenial(RouteFollower? route, SimulationTime frontier)
@@ -603,8 +614,14 @@ public partial class TerrainViewerApp
         {
             // ARC-WORLD-042: the player's click route follows a corridor to a goal beyond the local planner's reach; ARC-WORLD-072:
             // not under the Original rule mode, read from the session's rules when a click sets the goal (the PC does not move).
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke()),
-                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true);
+            // ARC-WORLD-073: the original's walk (its request, budget, segments and the PC's straight-line retry); outside combat mode its
+            // plan passes living critters in both rule modes (the owner's decision 2026-10-21), and under Original the walk ends before
+            // a segment's last step onto one (LR5). The PC's steps pass them too outside combat mode (ARC-WORLD-074); a step refused
+            // for another reason (in combat, a door that closed) plans around its cell.
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(), () => !HeroInCombatMode,
+                    AreaCritterDeadNow),
+                corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,
+                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true);
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -631,6 +648,9 @@ public partial class TerrainViewerApp
         // no right-button action, so it is the original's Ctrl+LMB.
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
             WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
+        // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && _spellTargeting is not null)
+            WorldObservation(() => { CancelSpellTargeting("right click"); RefreshAreaStatus(); });
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && _readyActorPlan is not null
@@ -656,6 +676,17 @@ public partial class TerrainViewerApp
             _worldRouteClick = "closed the follower order menu";
             RefreshReadyStatus(); return;
         }
+        // ARC-COMBAT-020: in a turn-based round the world takes the hero's commands only on its own subturn (the original's world
+        // handler ignores them during another's).
+        if (_areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
+        {
+            _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
+            RefreshReadyStatus(); return;
+        }
+        // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
+        if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
+        // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
+        if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
         if (TryPendingWalkOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);
@@ -693,6 +724,14 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
+    private static WorldKeyModifiers KeyModifiers(InputEventKey key)
+        => (key.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (key.ShiftPressed ? WorldKeyModifiers.Shift : 0)
+            | (key.AltPressed ? WorldKeyModifiers.Alt : 0) | (key.MetaPressed ? WorldKeyModifiers.Meta : 0);
+
+    /// <summary>ARC-INPUT-004: an open window's own letter (L, C, I, T, W) does not close it under Ctrl, Alt or Command.</summary>
+    private static bool CharacterKeySilenced(InputEventKey key, Key routed)
+        => OriginalWorldKeyboard.CharacterKeySilenced(GodotInputAdapter.ToWorldKey(routed), KeyModifiers(key));
+
     private void InputWorld(InputEvent input)
     {
         if (_worldInitialized && !_exiting) WorldObservation(() => InputWorldObserved(input));
@@ -700,7 +739,7 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
-        if (input is InputEventKey modifierKey) TrackAttackModifiers(modifierKey);
+        if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
         if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)
         {
@@ -757,6 +796,12 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-UI-010: the open save window owns every key except the typing of a description into its field.
+        if (SaveListOpen && input is InputEventKey saveListKey)
+        {
+            if (HandleSaveListKey(saveListKey)) GetViewport().SetInputAsHandled();
+            return;
+        }
         // ARC-UI-048: the open world map owns every key (W and Escape close it or end the journey, Enter travels).
         if (WorldMapOpen && input is InputEventKey worldMapKey)
         {
@@ -771,8 +816,7 @@ public partial class TerrainViewerApp
             // Diagnostics first: a consumed chord key never reaches the shared
             // mapping, native GUI or an original-key sink (down, echo or release).
             var routedKey = chordKey.Keycode != Key.None ? chordKey.Keycode : chordKey.PhysicalKeycode;
-            var modifiers = (chordKey.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (chordKey.ShiftPressed ? WorldKeyModifiers.Shift : 0)
-                | (chordKey.AltPressed ? WorldKeyModifiers.Alt : 0) | (chordKey.MetaPressed ? WorldKeyModifiers.Meta : 0);
+            var modifiers = KeyModifiers(chordKey);
             var decision = _worldChord.Route(GodotInputAdapter.ToWorldKey(routedKey), chordKey.Pressed, chordKey.Echo, modifiers,
                 WorldModal, _worldFocused && !WorldUiFocus);
             if (decision.Consumed)
@@ -781,8 +825,10 @@ public partial class TerrainViewerApp
                 if (decision.TogglePalette) ToggleWorldSettings();
                 return;
             }
+            // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
+            // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSchematicsKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
@@ -941,6 +987,7 @@ public partial class TerrainViewerApp
                     panel.VisualToggleRequested -= PaletteVisualToggle;
                     panel.AlwaysRunToggleRequested -= PaletteAlwaysRunToggle;
                     panel.SoundTestRequested -= PaletteSoundTest;
+                    panel.SaveGameRequested -= PaletteSaveGame; panel.LoadGameRequested -= PaletteLoadGame;
                     panel.VolumeChanged -= PaletteVolumeChanged;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }

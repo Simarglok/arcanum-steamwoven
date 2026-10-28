@@ -15,21 +15,21 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, launch, manifests  # noqa: E402
+from tools.local_dev import clean, config, launch, manifests, run_queue  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
 ROOT_ID = "world"
-# Mode -> (viewer --mode, exact artifact tasks in preference order). The first task
-# with a current pointer is launched: ARC-RENDER-008 (passability overlay, on top of all the
-# following) supersedes ARC-WORLD-009 (cave and return), which supersedes
-# ARC-WORLD-007 (LMB click-to-move), which supersedes ARC-INPUT-001 (diagnostic palette),
-# which supersedes ARC-RENDER-007, on the same whole-core AREA mode when its build exists.
-MODES = {"area": ("crash-site-area", ("ARC-RENDER-008", "ARC-WORLD-009", "ARC-WORLD-007", "ARC-INPUT-001", "ARC-RENDER-007")), "world": ("world-diagnostic", ("ARC-WORLD-003",))}
+# Mode -> (viewer --mode, exact artifact tasks in preference order). The first task with a current pointer is launched.
+# ARC-RENDER-028: the pinned Crash Site exterior is no longer a launcher mode (`area` is map mode, below); the viewer keeps
+# its pinned profile as a regression smoke only.
+MODES = {"world": ("world-diagnostic", ("ARC-WORLD-003",))}
 # ARC-RENDER-017: `map NAME` shows one whole interior in crash-site-area map mode; only an ARC-RENDER-008 build
 # exported with map mode understands it (an older one refuses the arguments). ARC-DEV-015: a universal build, exported
 # without the pinned Crash Site gates, is preferred; it runs on any installation.
 MAP_MODE = ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
+# ARC-RENDER-028: `area` is map mode on the main world map, opened as a window around its map-list start (the Crash Site).
+AREA_MAP = "Arcanum1-024-fixed"
 
 
 def main_checkout() -> Path:
@@ -60,8 +60,9 @@ def setup(args: argparse.Namespace) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
-    mode, tasks = MAP_MODE if args.mode == "map" else MODES[args.mode]
-    extra = (("--area-map", args.name) if args.mode == "map" else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ()) \
+    mode, tasks = MAP_MODE if args.mode in ("map", "area") else MODES[args.mode]
+    name = AREA_MAP if args.mode == "area" else getattr(args, "name", None)
+    extra = (("--area-map", name) if args.mode in ("map", "area") else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ()) \
         + (("--area-map-sector", args.sector) if getattr(args, "sector", None) else ())
     roots = config.load_config().get("artifactRoots", {})
     if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
@@ -85,7 +86,13 @@ def run(args: argparse.Namespace) -> int:
     if code != 0:
         return code
     try:
-        return local("launch", "terrain", "--mode", mode, *extra, *(["--dry-run"] if args.dry_run else []))
+        if args.dry_run or args.no_queue:
+            return local("launch", "terrain", "--mode", mode, *extra, *(["--dry-run"] if args.dry_run else []))
+        # ARC-DEV-033: the owner's viewer takes the Godot slot first in line (after the run holding it) and keeps it
+        # until the window closes, so it neither waits behind the lanes' queue nor opens over a lane's smoke.
+        return run_queue.run("window", [sys.executable, "-B", str(LOCAL), "launch", "terrain", "--mode", mode, *extra],
+                             label=f"owner {args.mode}", timeout=0, priority=run_queue.FRONT,
+                             hold=lambda: run_queue.wait_unlocked(config.home() / "locks" / "terrain.lock"))
     finally:
         if args.dry_run and previous != candidate:
             conf = config.load_config()
@@ -139,6 +146,25 @@ def oracle(args: argparse.Namespace) -> int:
                             "--logger", "console;verbosity=detailed"], env=environment)
 
 
+def queued(args: argparse.Namespace) -> int:
+    """ARC-DEV-033: run one command through the launch queue (docs/workflow/toolchain.md#launch-queue-arc-dev-033)."""
+    command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
+    return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose)
+
+
+def positive(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("N must be a positive number")
+    return number
+
+
+def queue(args: argparse.Namespace) -> int:
+    for line in run_queue.status(args.history):
+        print(line)
+    return 0
+
+
 def cleanup(args: argparse.Namespace) -> int:
     """ARC-DEV-028: which builds are protected and which are disposable; removes only with --apply."""
     return local("builds", "clean", "--checkout", str(main_checkout()), *(["--apply"] if args.apply else []),
@@ -150,7 +176,7 @@ def status(_: argparse.Namespace) -> int:
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
     roots = conf.get("artifactRoots", {})
     for name, (mode, tasks) in MODES.items():
-        # A task's own roles (the ARC-WORLD-009 cave input) count when `run` would choose its build.
+        # A task's own roles (TASK_ROLES) count when `run` would choose its build (none of the remaining modes has any).
         chosen = None
         if isinstance(roots, dict) and isinstance(roots.get(ROOT_ID), str):
             for task in tasks:
@@ -173,7 +199,9 @@ def status(_: argparse.Namespace) -> int:
     missing = [role for role in launch.MAP_ROLES + ("sourceId",) if role not in inputs]
     print(f"map: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} "
           f"(needs an {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build with map mode; any installation)")
-    print(f"heroes (area/map --hero NAME, needs an ARC-RENDER-008 build with the hero start, or {launch.UNIVERSAL_TASK} for map):",
+    print(f"area: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} "
+          f"(map mode on {AREA_MAP} at the Crash Site; same build and inputs as map)")
+    print(f"heroes (area/map --hero NAME, needs an {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build with the hero start):",
           ", ".join(launch.PREMADE_HEROES))
     exe = original_exe(None)
     print(f"oracle: {'ready' if exe.is_file() else 'missing ' + str(exe) + ' (set ARCANUM_EXE)'} ({len(launch.ORACLE_FUNCTIONS)} functions)")
@@ -190,16 +218,23 @@ def parser() -> argparse.ArgumentParser:
     for name, (mode, tasks) in MODES.items():
         command = commands.add_parser(name, help=f"launch --mode {mode} from the current {' or '.join(tasks)} build")
         command.add_argument("--dry-run", action="store_true")
-        if mode == "crash-site-area":
-            command.add_argument("--hero", choices=launch.PREMADE_HEROES,
-                                 help="start as this pre-made hero (default: the diagnostic PC profile)")
+        command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
         command.set_defaults(func=run, mode=name)
+    # ARC-RENDER-028: the Crash Site in the universal map mode (the main world map's window around its map-list start).
+    command = commands.add_parser("area", help=f"launch the main world map ({AREA_MAP}) at the Crash Site from the current "
+                                  f"{launch.UNIVERSAL_TASK} or ARC-RENDER-008 build (map mode; the window moves with the actor)")
+    command.add_argument("--sector", help="X,Y: open the main map at this sector instead of the Crash Site")
+    command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
+    command.add_argument("--dry-run", action="store_true")
+    command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
+    command.set_defaults(func=run, mode="area")
     command = commands.add_parser("map", help=f"launch one map (a maps/ folder name) from the current {launch.UNIVERSAL_TASK} or ARC-RENDER-008 build; "
                                   "the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor")
     command.add_argument("name", help='the map folder name, e.g. "crash site cave" or Arcanum1-024-fixed')
     command.add_argument("--sector", help="X,Y: open the map at this sector (default: the transfer arrival or the map-list start)")
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
     command.add_argument("--dry-run", action="store_true")
+    command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
     command.set_defaults(func=run, mode="map")
     command = commands.add_parser("oracle", help="run the function oracle on the installed Arcanum.exe, then the OriginalExe tests")
     which = command.add_mutually_exclusive_group()
@@ -214,6 +249,23 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--json", action="store_true")
     command.set_defaults(func=cleanup)
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
+    command = commands.add_parser("run", help="run one command through the FIFO launch queue: Godot runs one at a time in "
+                                  "arrival order, an export also waits for running dotnet runs (ARC-DEV-033)")
+    command.add_argument("--kind", required=True, choices=run_queue.KINDS,
+                         help="window: Godot with a window; headless: Godot --headless or an import; export: an export "
+                              "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export)")
+    command.add_argument("--timeout", type=float, metavar="MIN",
+                         help="minutes before the run is stopped (default " + ", ".join(
+                             f"{kind} {value:g}" for kind, value in run_queue.DEFAULT_TIMEOUT_MINUTES.items()) + "; 0: no limit)")
+    command.add_argument("--label", help="a short note shown in ./arcanum queue")
+    command.add_argument("--verbose", action="store_true",
+                         help="stream the command's output here instead of the quiet default (ARC-DEV-037): the whole "
+                              "output goes to a log file and only PASS or FAIL with the first error is printed")
+    command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
+    command.set_defaults(func=queued)
+    command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
+    command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
+    command.set_defaults(func=queue)
     return result
 
 

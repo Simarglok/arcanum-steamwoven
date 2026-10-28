@@ -32,7 +32,7 @@ the reaction runtime (ARC-WORLD-026); the out-of-combat companion orders (follow
 leave, wait, stay close, spread out) belong to the companions thread
 ([ARC-RES-064](companion-orders-loyalty-evidence.md), ARC-WORLD-046); the
 dialog's reaction binding, insult and fate point are
-[ARC-WORLD-043](original-verification-ledger.md#dialog-reaction-binding-arc-world-043)'s
+[ARC-WORLD-043](ledger/social.md#dialog-reaction-binding-arc-world-043)'s
 (DR1–DR7) and [ARC-WORLD-054](../world/fate-points-runtime.md)'s; the magic
 object-flag component is the magic slices' (MT13). They are named, not re-derived.
 
@@ -57,7 +57,7 @@ condition numbers are the [census](scr-census.md)'s (the executor's jump table a
 0x44ADBC is indexed by action type − 1, the condition table at 0x44714C by type).
 DLG opcode names were read from the executable's own opcode table (0x5A0750). No
 game text or script is reproduced. The rows and verdicts are in the
-[ledger](original-verification-ledger.md#npc-ai-script-and-dialog-surface-arc-res-070).
+[ledger](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070).
 Everything below is read in the executable unless marked **(inference)**.
 
 Conventions: the danger states are NONE 0, COMBAT_FOCUS 1, FLEE 2, SURRENDER 3
@@ -276,7 +276,7 @@ callback only when the triggerer is a PC and always returns skip default (case
 (flag 0) and a local PC whose interface is in mode 3; then, for a PC in combat
 mode, it continues only when the PC may leave combat mode (0x4B3D90: not in an
 attempt-attack goal, and no active NPC on screen in COMBAT_FOCUS on the PC or one
-of its followers, [RT2](original-verification-ledger.md#real-time-combat-arc-combat-004))
+of its followers, [RT2](ledger/combat.md#real-time-combat-arc-combat-004))
 and then leaves combat mode (0x4B3F20). This is the "dialog refusal in combat":
 fighting NPCs refuse through can speak, a PC under attack through RT2. Every
 refusal is silent.
@@ -354,7 +354,7 @@ Consolidating A4 and the readings above:
 
 ## 7. Anomalies and decisions
 
-Verdicts and rows: [ledger](original-verification-ledger.md#npc-ai-script-and-dialog-surface-arc-res-070).
+Verdicts and rows: [ledger](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070).
 Decisions follow D2 and D8. The owner accepted the proposed Original switch of this
 table (SU17) on 2026-10-21 (ARC-RES-071).
 
@@ -426,4 +426,4 @@ first special bit (section 3); the interpreter's point-9 type test reads an
 uninitialised local when the attachee is null (the dispatcher's X2, here read in the
 executable); and that the gate's combat scripts do not run while a conversation is
 open. Details are in the
-[ledger section](original-verification-ledger.md#npc-ai-script-and-dialog-surface-arc-res-070).
+[ledger section](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070).

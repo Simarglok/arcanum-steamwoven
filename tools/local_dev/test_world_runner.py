@@ -240,5 +240,102 @@ class WorldRunnerStageTests(unittest.TestCase):
                             self.assertEqual({"exceptionClass": "OSError", "errno": 3}, caught.exception.reap_failure)
 
 
+class WorldRunnerRawLogTests(unittest.TestCase):
+    """ARC-DEV-043: the raw Godot output of a no-original-data validation lands in an owner-only evidence file."""
+
+    def setUp(self):
+        self.owned = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
+        self.addCleanup(self.owned.cleanup)
+        self.root = Path(self.owned.name)
+        source = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools/world_validate.py"
+        spec = importlib.util.spec_from_file_location("world_runner_raw_log_control", source)
+        assert spec and spec.loader
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+
+    def invoke(self, kind, raw_log, child):
+        output = io.StringIO()
+        argv = ["world_validate.py", "--candidate-root", str(self.root), "--kind", kind, "--raw-log", str(raw_log)]
+        with patch.object(sys, "argv", argv), patch.object(sys, "path", sys.path.copy()), \
+             patch.dict(os.environ, {"TMPDIR": self.owned.name}), \
+             patch.object(self.runner.subprocess, "run", return_value=SimpleNamespace(stdout="b" * 40)), \
+             patch.object(self.runner, "run_child", side_effect=child) as run, contextlib.redirect_stdout(output):
+            code = self.runner.main()
+        return code, json.loads(output.getvalue()), run
+
+    def test_synthetic_child_output_is_framed_in_an_owner_only_file_and_summary_stays_closed(self):
+        raw = self.root / "source-graphical.godot.log"
+        stage = "ARC-DEV-043 self-test stage AreaHover begin t=9000ms can-draw=False focused=False"
+        code, report, _ = self.invoke("synthetic", raw, lambda argv, env, timeout: (124, f"PRIVATE-SENTINEL\n{stage}"))
+        self.assertEqual((1, "FAIL", 124), (code, report["outcome"], report["exitCode"]))
+        self.assertNotIn("PRIVATE-SENTINEL", json.dumps(report))
+        lines = raw.read_text(encoding="utf-8").splitlines()
+        self.assertEqual("world-validate child self-test start timeout=60s", lines[0])
+        self.assertEqual(["PRIVATE-SENTINEL", stage], lines[1:3])
+        self.assertRegex(lines[3], r"^world-validate child self-test timeout code=124 elapsed=\d+\.\d{3}s$")
+        self.assertEqual(4, len(lines))
+        self.assertEqual(0o600, raw.stat().st_mode & 0o777)
+
+    def test_persistence_frames_every_settings_child_in_order(self):
+        raw = self.root / "source-world-persistence.godot.log"
+
+        def child(argv, env, timeout):
+            stage = argv[-1]
+            prefix = "ARC-GPAD-004" if stage.startswith("zoom-") else "ARC-WORLD-001"
+            return 0, f"{prefix} settings-test PASS {stage}\n"
+        code, report, run = self.invoke("persistence", raw, child)
+        self.assertEqual((0, "PASS"), (code, report["outcome"]))
+        starts = [line for line in raw.read_text(encoding="utf-8").splitlines() if line.endswith(" start timeout=30s")]
+        self.assertEqual(run.call_count, len(starts))
+        self.assertEqual("world-validate child settings-test first-launch start timeout=30s", starts[0])
+        self.assertIn("world-validate child settings-test zoom-malformed-11 start timeout=30s", starts)
+        self.assertEqual("world-validate child settings-test zoom-failure start timeout=30s", starts[-1])
+
+    def test_original_kinds_and_an_existing_file_are_refused_before_any_child(self):
+        for kind in ("original", "human", "human-metadata", "grid-original"):
+            with self.subTest(kind=kind):
+                raw = self.root / f"{kind}.godot.log"
+                code, report, run = self.invoke(kind, raw, lambda argv, env, timeout: (0, ""))
+                self.assertEqual((2, "argument-policy", "ValueError"), (code, report["failureStage"], report["exceptionClass"]))
+                self.assertFalse(raw.exists())
+                run.assert_not_called()
+        with patch.dict(os.environ, {"ARC_AREA_CONVERSATION_PROBE": "1"}):
+            raw = self.root / "probe.godot.log"
+            code, report, run = self.invoke("synthetic", raw, lambda argv, env, timeout: (0, ""))
+            self.assertEqual((2, "argument-policy"), (code, report["failureStage"]))
+            self.assertFalse(raw.exists())
+            run.assert_not_called()
+        raw = self.root / "kept.godot.log"
+        raw.write_text("earlier evidence\n", encoding="utf-8")
+        code, report, run = self.invoke("synthetic", raw, lambda argv, env, timeout: (0, ""))
+        self.assertEqual((2, "raw-log", "OSError"), (code, report["failureStage"], report["exceptionClass"]))
+        self.assertEqual("earlier evidence\n", raw.read_text(encoding="utf-8"))
+        run.assert_not_called()
+
+    def test_a_child_that_cannot_be_read_is_framed_with_its_closed_stage(self):
+        raw = self.root / "source-graphical.godot.log"
+
+        def child(argv, env, timeout):
+            raise self.runner.ChildFailure("child-communication", OSError(5, "PRIVATE-SENTINEL"), None)
+        code, report, _ = self.invoke("synthetic", raw, child)
+        self.assertEqual((2, "child-communication"), (code, report["failureStage"]))
+        lines = raw.read_text(encoding="utf-8").splitlines()
+        self.assertEqual("world-validate child self-test start timeout=60s", lines[0])
+        self.assertRegex(lines[1], r"^world-validate child self-test failure stage=child-communication elapsed=\d+\.\d{3}s$")
+        self.assertEqual(2, len(lines))
+        self.assertNotIn("PRIVATE-SENTINEL", raw.read_text(encoding="utf-8"))
+
+    def test_without_the_flag_no_file_is_written(self):
+        output = io.StringIO()
+        argv = ["world_validate.py", "--candidate-root", str(self.root), "--kind", "synthetic"]
+        before = set(self.root.iterdir())
+        with patch.object(sys, "argv", argv), patch.object(sys, "path", sys.path.copy()), \
+             patch.dict(os.environ, {"TMPDIR": self.owned.name}), \
+             patch.object(self.runner.subprocess, "run", return_value=SimpleNamespace(stdout="b" * 40)), \
+             patch.object(self.runner, "run_child", return_value=(1, "")), contextlib.redirect_stdout(output):
+            self.assertEqual(1, self.runner.main())
+        self.assertEqual(before, set(self.root.iterdir()))
+
+
 if __name__ == "__main__":
     unittest.main()

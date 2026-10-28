@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
-            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke()), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
+            && AreaMapGoalHandOff.Resume(new AreaRouteSource(placed.Snapshot, placed.Chart, placed.Occupancy, () => placed.Portals?.Invoke(), () => !HeroInCombatMode), placed.Chart, placed.State.CommittedCell, wanted) is { } resume)
         {
             follower.SetTarget(resume.Target, WorldTime); resumed = true;
             if (resume.FarGoal is { } far) _mapFarGoal = (far, placed.Chart.ToWorld(resume.Target));
@@ -217,7 +217,7 @@ public partial class TerrainViewerApp
 
     // "walk" (ARC-WORLD-042) and "census" (ARC-RENDER-027) run only when named: they walk across the main map or open every
     // map, for minutes.
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census"];
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>

@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
 event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003; equipment ARC-WORLD-028;
-durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); the NPC inventory changes ARC-WORLD-055 (schema 29, [inventory runtime](inventory-runtime.md#npc-inventory-changes-arc-world-055)); the PC's reputations ARC-WORLD-044 (schema 30, [reputation runtime](reputation-runtime.md)); healing with a healing item ARC-SKILLS-005 (schema 31, the items' remaining uses, [heal runtime](heal-runtime.md)). The hero's items placed on the ground ARC-WORLD-059 (schema 32, [placed items](inventory-runtime.md#placed-items-arc-world-059)). The waiting followers' missed level steps ARC-WORLD-047 (schema 33, [auto-level schemes](advancement-runtime.md#viewer-host)). The ammunition stacks ARC-WORLD-066 (schema 34, [ammunition](inventory-runtime.md#ammunition-arc-world-066)). The hero's and its followers' concealment ARC-SKILLS-008 (schema 35, [stealth](stealth-runtime.md)). The hero's background id ARC-WORLD-069 (schema 36, [backgrounds](equipment-runtime.md#backgrounds-arc-world-069)). The story-state number ARC-SCRIPT-019 (schema 37, [story state](../scripting/scr-dispatcher-runtime.md#story-state-and-story-actions-arc-script-019-set-s13)). The items the hero gave NPCs and the tracked NPC gold piles ARC-WORLD-071 (schema 38, [NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
+durable effects ARC-WORLD-029; quelled rumors and the logbook lists ARC-UI-008 (schema 19); experience ARC-WORLD-030; auto-level schemes ARC-WORLD-036 (schema 20); the hero's skills in play ARC-SKILLS-002 (schema 21); item durability ARC-WORLD-053 (schema 22); schematic knowledge ARC-TECHNOLOGY-003 (schema 23); made items ARC-TECHNOLOGY-004 (schema 24); the spell book's mastered college ARC-MAGIC-004 (schema 25); the hero's fate points ARC-WORLD-054 (schema 26, [fate points](fate-points-runtime.md)); the wait timer and follower loyalty ARC-WORLD-045 (schema 27, [party runtime](party-runtime.md#wait-timer-and-loyalty-arc-world-045)); the PC's known world-map areas ARC-WORLD-056 (schema 28, [world-map travel](world-map-travel-runtime.md#session-gamesessionowner-gamesessionareascs)); the NPC inventory changes ARC-WORLD-055 (schema 29, [inventory runtime](inventory-runtime.md#npc-inventory-changes-arc-world-055)); the PC's reputations ARC-WORLD-044 (schema 30, [reputation runtime](reputation-runtime.md)); healing with a healing item ARC-SKILLS-005 (schema 31, the items' remaining uses, [heal runtime](heal-runtime.md)). The hero's items placed on the ground ARC-WORLD-059 (schema 32, [placed items](inventory-runtime.md#placed-items-arc-world-059)). The waiting followers' missed level steps ARC-WORLD-047 (schema 33, [auto-level schemes](advancement-runtime.md#viewer-host)). The ammunition stacks ARC-WORLD-066 (schema 34, [ammunition](inventory-runtime.md#ammunition-arc-world-066)). The NPCs' danger records ARC-WORLD-079 (schema 38, [danger state](ai-danger-state.md#snapshot-schema-38)). The hero's and its followers' concealment ARC-SKILLS-008 (schema 35, [stealth](stealth-runtime.md)). The hero's background id ARC-WORLD-069 (schema 36, [backgrounds](equipment-runtime.md#backgrounds-arc-world-069)). The story-state number ARC-SCRIPT-019 (schema 37, [story state](../scripting/scr-dispatcher-runtime.md#story-state-and-story-actions-arc-script-019-set-s13)). The items the hero gave NPCs and the tracked NPC gold piles ARC-WORLD-071 (schema 39, [NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071)). The character editor's point pool ARC-WORLD-052 ([character point pool](character-point-pool.md)) adds no saved state: its floor lives only while the editor is open.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -23,8 +23,9 @@ it can store here. It covers the state boundary of
 [FR-WORLD-013](../requirements/world.md#fr-world-013) and
 [FR-LIFECYCLE-003](../requirements/ui-media-lifecycle.md#fr-lifecycle-003).
 The owner itself does no file I/O. One [save slot](#save-slot-arc-world-011)
-(ARC-WORLD-011) writes and reads a snapshot file atomically; there is still no
-save/load screen or save list, no autosave and no original `.gsi`/sector-diff format.
+(ARC-WORLD-011) writes and reads a snapshot file atomically; the [save list](#save-list-arc-ui-010)
+(ARC-UI-010) keeps a folder of such slots with their details and previews. There is no
+timed autosave (the original has none either) and no original `.gsi`/sector-diff format.
 
 ## Why a separate assembly
 
@@ -138,7 +139,7 @@ rules (quest state set (0x4C4CB0, 0x4C4D20, 0x4C4E60), quest reset (0x4C45C0, 0x
 - **Rumors** are numbered 1000..2999. `LearnRumor` records the current game time once;
   learning a known rumor is `NoChange` and keeps the first time.
 - **Quelled rumors** (ARC-UI-008): `QuellRumor(expected, rumor)` sets a game-wide mark, as the original's dialog `RQ`
-  does with no participant (ledger [LB11–LB12](../research/original-verification-ledger.md#logbook-arc-ui-008)); the PC
+  does with no participant (ledger [LB11–LB12](../research/ledger/ui-audio.md#logbook-arc-ui-008)); the PC
   need not know the rumor, quelling a quelled rumor is `NoChange`, nothing clears it, and a number outside 1000..2999 is
   `InvalidRumor` (the original writes it unchecked).
 - **Logbook lists** (ARC-UI-008, LB6 and LB9): `QueryQuestLog` lists every PC record whose stored state is not `Unknown`
@@ -157,7 +158,7 @@ state that left `Accepted` (`InvalidQuestState`). A shared state without a PC re
 as the source's shared state is not owned by one PC.
 
 
-## Snapshot schema 38
+## Snapshot schema 39
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -180,6 +181,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Combat` (the active round or `null`; [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)),
 `CombatMode` (the hero's flag and the NPCs in combat mode; [real-time combat](real-time-combat-runtime.md#snapshot-schema-15)),
 `Concealment` (the hero's flag and its concealed followers in ordinal order; [stealth](stealth-runtime.md#snapshot-schema-35)),
+`Danger` (the NPCs' danger bits, handles and enemy lists in ordinal order; [danger state](ai-danger-state.md#snapshot-schema-38)),
 `Sound` (the music and ambient scheme slots, the transition restore and combat music; [session sound](session-sound-runtime.md#snapshot-schema-18)),
 `Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
@@ -244,8 +246,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 37 is the only accepted version. ARC-WORLD-071 added the required `given` and `piles` lists to the
-inventory ([NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071)); schema 36 is refused like the earlier ones. ARC-WORLD-069 had added the hero's required `background`
+**Migration decision: none.** Schema 39 is the only accepted version. ARC-WORLD-071 added the required `given` and `piles` lists to the
+inventory ([NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071)); schema 38 is refused like the earlier ones. ARC-WORLD-079 had added the required `danger`
+section ([danger state](ai-danger-state.md#snapshot-schema-38)) and ARC-SCRIPT-019 the story-state number; schemas 37 and 36 are refused like the earlier ones. ARC-WORLD-069 had added the hero's required `background`
 ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); schema 35 is refused like the earlier ones. ARC-SKILLS-008 had added the required `concealment` section
 ([stealth](stealth-runtime.md#snapshot-schema-35)); schema 34 is refused like the earlier ones. ARC-WORLD-066 had added the required `ammo` list to the
 inventory ([ammunition](inventory-runtime.md#ammunition-arc-world-066)). ARC-WORLD-047 had added the required `missed` list to
@@ -318,7 +321,7 @@ known world-map areas and last discovered area as schema 28 and refuses schemas 
 NPCs as schema 29 and refuses schemas 1..28. ARC-WORLD-044 added the PC's reputations to the story domain
 as schema 30 and refuses schemas 1..29 (no migration). ARC-SKILLS-005 added the items' remaining uses as schema 31 and refuses schemas 1..30. ARC-WORLD-059 added the hero's placed items as
 schema 32 and refuses schemas 1..31. ARC-WORLD-047 added the waiting followers' missed level steps as schema 33 and refuses
-schemas 1..32. ARC-WORLD-066 added the ammunition stacks as schema 34 and refuses schemas 1..33. ARC-SKILLS-008 added the hero's and its followers' concealment as schema 35 and refuses schemas 1..34. ARC-WORLD-069 added the hero's background as schema 36 and refuses schemas 1..35. ARC-SCRIPT-019 added the story-state number as schema 37 and refuses schemas 1..36. ARC-WORLD-071 added the given items and the gold piles as schema 38 and refuses schemas 1..37.
+schemas 1..32. ARC-WORLD-066 added the ammunition stacks as schema 34 and refuses schemas 1..33. ARC-SKILLS-008 added the hero's and its followers' concealment as schema 35 and refuses schemas 1..34. ARC-WORLD-069 added the hero's background as schema 36 and refuses schemas 1..35. ARC-SCRIPT-019 added the story-state number as schema 37 and refuses schemas 1..36. ARC-WORLD-079 added the NPCs' danger records as schema 38 and refuses schemas 1..37. ARC-WORLD-071 added the given items and the gold piles as schema 39 and refuses schemas 1..38.
 Adding another domain needs the next free schema number with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
@@ -337,6 +340,27 @@ dialog state, a schema bump) is saved and loaded by the slot without changing it
 The slot does not restore: the caller passes the snapshot to `Restore` with its own
 expectations. Durability: file data is flushed before the rename; the directory entry
 is not separately synced. One process per slot; there is no cross-process lock.
+
+## Save list (ARC-UI-010)
+
+`GameSaveLibrary` (same assembly, Godot-free) is one folder of saves for the
+[save and load windows](../rendering/terrain-viewer.md#save-list-arc-ui-010) and F7/F8. Each save
+`NAME` is a snapshot slot `NAME.json` (`GameSessionSaveSlot`, unchanged), a details file
+`NAME.meta.json` and an optional preview `NAME.png`. The rules are the original's
+([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)).
+
+| Entry | Contract |
+| --- | --- |
+| Names | `quicksave` is the auto slot (the original's `SlotAuto`, described "Auto-Save"; the ARC-WORLD-011 file, so older quick saves are listed); numbered saves are `slot0000`..`slot9998`. Any other file is ignored; a bad name is `BadName`. |
+| `List()` | The auto slot first, then newest first by the snapshot file's last write time (ties: the higher name first), as the original's save window sorts by file date. Each `GameSaveEntry` has its byte count, date, preview flag and `GameSaveDetails`: `Present`, `Missing` (no details file), `Damaged` (not strict UTF-8, over 16 KiB, not exactly the written properties, out of bounds) or `Stale` (written for another snapshot: its recorded byte count differs). `DisplayDescription` falls back to "Auto-Save" or the slot name. Bounded to 10,000 entries (`Truncated`); a folder that cannot be listed is `ListFailed`; a missing folder is an empty list. |
+| `Latest()` | The newest save by file date, the auto slot included (the original's latest-save helper behind F8), or null. It reads file dates only, no details. |
+| `Create(snapshot, summary, png)` | A new save named the highest number plus one (`slot0000` when there is none; gaps are not reused, the auto slot is not counted); `SlotNumbersExhausted` once that reaches 9999, as the original refuses. A truncated list refuses (`ListFailed`) rather than reuse a number. |
+| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour and minute in range) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`, and the old details or preview of that name are removed so the list never shows another snapshot's (the save is then listed with `Missing` details); a save without a preview removes the old preview. The host asks before overwriting. |
+| `Delete(name)` | `Protected` for the auto slot (the original's delete helper refuses its auto-save name); `NoSuchSave`; otherwise the snapshot is deleted first (`DeleteFailed` removes nothing), then the details, preview and temporary files (a leftover is a `Warning`). |
+| `ReadThumbnail(name)` | The preview's bytes when present, PNG-signed and within the bound; else null. |
+
+Details are display only: the snapshot is authoritative, and a stale or missing details file
+never blocks a load. Caller-serialized, one process per folder, no lock.
 
 ## Tests
 
@@ -368,6 +392,12 @@ and a literal, independently written canonical JSON text:
   save and removes the temporary file; an unwritable slot; a stale temporary file;
   truncated, empty, BOM, invalid UTF-8, newer-schema, foreign-format and out-of-range
   files as typed failures; the byte limit; path validation.
+- `SaveLibraryTests` (ARC-UI-010): numbering from the highest (slot0000 first, gaps not reused, refused at 9999);
+  the list order (auto slot first, newest first, ties by name) and the latest save; details round trip, missing,
+  damaged and stale details; details that cannot be written are removed; an overwrite without a preview removes the old one;
+  `slot9999` is not a save name; the auto slot is not deleted and a
+  delete removes the save's files; an invalid summary or preview writes nothing; a failed snapshot write keeps the
+  previous save and details; unrelated files and the entry bound.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
@@ -380,8 +410,8 @@ and a literal, independently written canonical JSON text:
 
 ## Not implemented / remaining work
 
-- Save/load UI, a save list, more than one slot, backups, autosave, thumbnails (the
-  one quick-save slot is ARC-WORLD-011).
+- The in-game menu that opens the save and load windows, backups, the original `.gsi` save format (the save list
+  and its windows are ARC-UI-010).
 - Script (SCR) state and timers.
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original

@@ -94,7 +94,9 @@ behaviour of the checked branch is then verified; everything else in the
 document keeps its own evidence level (usually NOT_VERIFIED).
 
 The cross-domain results of the first systematic pass (ARC-RES-048) are in the
-[verification ledger](original-verification-ledger.md).
+[verification ledger](original-verification-ledger.md), one file per area under
+`ledger/` (ARC-DEV-038); a new section goes into its area file and adds a line to
+the ledger's area index.
 
 ## Function emulation (oracle)
 

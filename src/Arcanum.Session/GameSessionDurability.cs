@@ -227,6 +227,8 @@ public sealed partial class GameSessionOwner
         _durability.Records.Remove(entity);
         _durability.Uses.Remove(entity);
         _durability.Destroyed.Add(entity);
+        // ARC-WORLD-062: a deleted item no longer decays.
+        CancelDecay(entity);
     }
 
     /// <summary>An item of the hero's kit, one the PC took or made, a made item added to an NPC (ARC-WORLD-055), or one an attached seed
