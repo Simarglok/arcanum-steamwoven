@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
     private int _aiFidgets;
     // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
-    private int _aiCasts, _aiCastReleases;
+    private int _aiCasts, _aiCastReleases, _aiMissiles, _aiMissileArrivals;
     private string? _aiNotice;
     // The line of fire the AI reads, rebuilt once per frame.
     private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
@@ -140,6 +140,12 @@ public partial class TerrainViewerApp
                     AiCastReleased(notice);
                     redraw = true;
                     break;
+                case AreaAiNoticeKind.Missile:
+                    // ARC-WORLD-105: the NPC's launched missile flies as the hero's (TerrainViewerSpellMissiles.cs).
+                    _aiMissiles++;
+                    _aiNotice = $"{AiName(notice.Npc)} casts spell {notice.Spell}: a missile";
+                    LaunchNpcSpellMissile(notice, now);
+                    break;
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
                     break;
@@ -189,6 +195,13 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-WORLD-102 ai-cast-release npc={notice.Npc} spell={notice.Spell} run={notice.Run} released={notice.Released}"
             + $" disposition={notice.SpellRun?.Disposition} failure={notice.SpellRun?.Failure} hero-hp={_areaSession?.QueryHeroLife()?.Status.HitPoints}");
         FlushSpellLog(notice.Released ? null : $"{AiName(notice.Npc)}'s spell found no target");
+        AiSpellTook();
+    }
+
+    // An NPC's spell began (at its release, ARC-WORLD-105 also at its missile's arrival): a downed hero stops, and the damage reaches
+    // the bodies, the inventory and the status line.
+    private void AiSpellTook()
+    {
         if (_areaSession?.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         SyncAreaCombatBodies();
         SyncAreaInventory();

@@ -344,11 +344,12 @@ public partial class TerrainViewerApp
                 $"the NPC fights the hero: {danger.State} {host.TraceOf(entity)?.Reaction} {host.TraceOf(entity)?.Setter}");
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
-            var casts = _aiCasts; var releases = _aiCastReleases;
+            var casts = _aiCasts; var releases = _aiCastReleases; var landed = _aiMissileArrivals;
             var frames = 0; var choices = new HashSet<string>();
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
-            for (; frames < 4000 && _aiCastReleases == releases; frames++)
+            // ARC-WORLD-105: a chosen spell with a missile begins at its missile's arrival instead of a release.
+            for (; frames < 4000 && _aiCastReleases == releases && _aiMissileArrivals == landed; frames++)
             {
                 _areaSmokeTime++;
                 TickAreaClock(hostMs += 50);
@@ -358,9 +359,10 @@ public partial class TerrainViewerApp
             var trace = host.TraceOf(entity);
             GD.Print($"ARC-WORLD-102 ai-cast smoke trace knows={string.Join(",", known)} choices={string.Join(" | ", choices)} perform={trace?.Perform} cast={trace?.Cast}");
             Require(_aiCasts > casts, $"a casting goal played after {frames} frames: {trace?.Cast}");
-            Require(_aiCastReleases > releases, $"its release began the run: {trace?.Cast}");
-            // The goal's end follows its play; afterwards no run of the NPC waits for a BEGIN.
-            for (var f = 0; f < 200 && host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true; f++)
+            Require(_aiCastReleases > releases || _aiMissileArrivals > landed, $"its release (or its missile's arrival) began the run: {trace?.Cast}");
+            // The goal's end follows its play (and any missile lands); afterwards no run of the NPC waits for a BEGIN.
+            var settled = 0;
+            for (; settled < 200 && (host.RunOf(entity)?.Frames.Any(g => g.SpellRun is not null) == true || _spellMissiles.Count > 0); settled++)
             {
                 _areaSmokeTime++;
                 TickAreaClock(hostMs += 50);
@@ -368,11 +370,51 @@ public partial class TerrainViewerApp
             }
             Require(!session.QuerySpellRuns().Runs.Any(r => r.Parent?.Id == entity && r.Action == Arcanum.Simulation.Magic.SpellRunAction.Begin
                 && (r.Flags & Arcanum.Simulation.Magic.SpellRunFlags.Processed) == 0), "no run of the NPC waits for its BEGIN after its goal");
+            Require(settled < 200, "its casting goal ended and no missile flies");
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
+
+            // ARC-WORLD-105: the NPC casts a spell with a missile at the hero (the first the table lists whose run starts; the pass
+            // record's choice, as its danger update would make it): the play's action frame launches the missile from the NPC's tile,
+            // which flies, is drawn and arrives, its arrival beginning the run.
+            var missileSpells = Enumerable.Range(0, Arcanum.Simulation.Magic.SpellBookRules.Spells).Where(s => SpellMissileArt(s) is not null).ToArray();
+            Require(missileSpells.Length > 0, "the eye candy table lists spells with a missile");
+            var missiles = _aiMissiles; var arrivals = _aiMissileArrivals;
+            int? missileSpell = null; var missileRun = -1;
+            foreach (var candidate in missileSpells)
+            {
+                host.PerformChoice(entity, new AiPassChoice(AiPassAction.Cast, candidate, 0, null, AiSchedulerRules.Pc));
+                if (host.RunOf(entity)?.Bottom.SpellRun is { } started && session.QuerySpellRuns()[started]?.Spell == candidate)
+                {
+                    missileSpell = candidate; missileRun = started; break;
+                }
+            }
+            Require(missileSpell is not null, $"the NPC casts one of the missile spells {string.Join(",", missileSpells)}: {host.TraceOf(entity)?.Cast}");
+            var flewFrom = false; var drawn = false;
+            var missileFrames = 0;
+            for (; missileFrames < 2000 && (_aiMissiles == missiles || _spellMissiles.Count > 0); missileFrames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                if (_spellMissiles.FirstOrDefault(m => m.Run == missileRun) is { } flying)
+                {
+                    flewFrom |= flying.CasterObject == entity;
+                    drawn |= _spellMissileBodies.Count > 0;
+                }
+            }
+            var missileTrace = host.TraceOf(entity)?.Cast;
+            var missileEnd = _spellMissileEndsForSelfTest.LastOrDefault(e => e.Run == missileRun);
+            GD.Print($"ARC-WORLD-105 ai-cast missile spell={missileSpell} run={missileRun} frames={missileFrames} cast={missileTrace} end={missileEnd}");
+            Require(_aiMissiles > missiles, $"the play's action frame launched a missile: {missileTrace}");
+            Require(flewFrom && drawn, "the missile flew from the NPC and was drawn");
+            Require(missileEnd.End is "arrived" or "launched on its target", $"the missile arrived: {missileEnd.End}");
+            Require(_aiMissileArrivals > arrivals, "its arrival began the run");
+            Require(session.QuerySpellRuns()[missileRun] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }, "no run waits for its BEGIN");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
                 Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,
+                MissileSpell = missileSpell, MissileFrames = missileFrames, MissileLegs = missileEnd.Legs, MissileSteps = missileEnd.Steps,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroBefore.HitPointDamage,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
@@ -380,6 +422,7 @@ public partial class TerrainViewerApp
         {
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);
+            ClearSpellMissiles("the smoke ended");
             // The casts' runs (a maintained one keeps its slot) are freed, the NPC and the hero healed.
             foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity).ToArray())
                 _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));

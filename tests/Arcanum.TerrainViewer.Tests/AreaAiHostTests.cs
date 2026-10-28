@@ -86,6 +86,29 @@ public sealed class AreaAiHostTests
     [TestMethod, TestCategory("RealData")]
     public void In_the_cave_an_animal_hit_from_afar_walks_up_and_bites() => Fight(4);
 
+    // ARC-WORLD-105 (AC6): the AI gate's busy test reads the priority of the run's bottom goal (0x4233D0): an animal walking up to bite
+    // is busy at its attack goal's priority 3, not its walk's 2, so its pass does not run mid-approach.
+    [TestMethod, TestCategory("RealData")]
+    public void An_animal_walking_up_to_bite_is_busy_at_its_attack_goals_priority()
+    {
+        var (session, host, _, _, rat, _, _, _) = Open(4);
+        host.HeroAttacked(rat);
+        if (session.QueryDanger(rat).State == DangerState.Flee) Assert.Inconclusive("this animal flees the hero");
+        var pump = new AreaEventPump(session, host);
+        AiGoalRun? approach = null;
+        for (var frame = 0; frame < 1200 && approach is null; frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            host.DrainNotices();
+            if (host.RunOf(rat) is { Bottom.Goal: AiGoalType.Attack } run && run.Frames.Length > 1) approach = run;
+        }
+        Assert.IsNotNull(approach, "the attack goal walks up under its approach");
+        Trace($"approach {string.Join(",", approach.Frames.Select(f => f.Goal))} priority {host.AnimationPriority(rat)}");
+        Assert.AreNotEqual(AiGoalType.Attack, approach.Top.Goal);
+        Assert.AreEqual(3, host.AnimationPriority(rat), "the gate reads the bottom goal: busy (above 2 ends the pass)");
+    }
+
     private sealed record Cave(GameSessionOwner Session, AreaAiHost Host, AreaCombatHost Combat, int Map, string Rat, AreaObjectRecord RatRow,
         CellCoord Hero, AreaCombatWorld Round);
 

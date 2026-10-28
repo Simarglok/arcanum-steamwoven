@@ -54,6 +54,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? QuantityCancelled;
     public event Action<string>? TakeRequested;
     public event Action? TakeAllRequested;
+    /// <summary>ARC-SKILLS-010: in steal mode, plants the hero's item on the NPC (one pick-pocket attempt).</summary>
+    public event Action<string>? PlantRequested;
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right click on
     /// it does (the item use 0x462CC0 with the hero as user and target, IW5).</summary>
     public event Action<string>? UseRequested;
@@ -79,6 +81,9 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal string QuantityTextForSelfTest => _quantityLabel.Text;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
+
+    /// <summary>ARC-SKILLS-010: a Plant press for the smoke (the button's own signal).</summary>
+    internal void EmitPlantForSelfTest(string item) => PlantRequested?.Invoke(item);
     internal AreaInventoryView? ViewForSelfTest => _view;
     internal IReadOnlyList<Button> TakeButtonsForSelfTest => _buttons;
     internal IReadOnlyList<Button> UseButtonsForSelfTest => _useButtons;
@@ -186,7 +191,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _view = view;
         _area.Render(view);
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold} | {AmmoText(view.Ammo)}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
-            + (view.Holder is null ? string.Empty : " | looting a dead NPC");
+            + (view.Holder is null ? string.Empty : view.Steal ? " | picking a pocket" : " | looting a dead NPC");
         _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
             : string.Join("\n", view.Doll.Select(slot => $"{AreaInventoryHost.SlotName(slot.Slot)}: {slot.Name ?? "-"}"));
         foreach (var slot in view.Doll.Where(slot => slot.Entity is not null))
@@ -270,26 +275,41 @@ public partial class AreaInventoryPanel : CanvasLayer
             _use.AddChild(repair); _repairButtons.Add(repair);
         }
         var looting = view.Holder is not null;
-        _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting;
+        _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting && !view.Steal;
         if (looting)
         {
-            _lootHeader.Text = $"{view.HolderTitle} (dead): {(view.Loot.Count == 0 ? "nothing left" : $"{view.Loot.Count} items")}";
+            _lootHeader.Text = view.Steal ? $"{view.HolderTitle} (picking its pocket): {view.Loot.Count} items"
+                : $"{view.HolderTitle} (dead): {(view.Loot.Count == 0 ? "nothing left" : $"{view.Loot.Count} items")}";
             foreach (var line in view.Loot)
             {
                 var entity = line.Entity;
                 var button = new Button
                 {
-                    Name = $"Take{_buttons.Count + 1}", Text = "Take: " + line.Text, Alignment = HorizontalAlignment.Left,
+                    Name = $"Take{_buttons.Count + 1}", Text = (view.Steal ? "Steal: " : "Take: ") + line.Text, Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
                 };
                 // Rebuild after the emitting button's signal returns: Render frees the buttons.
                 button.Pressed += () => Callable.From(() => TakeRequested?.Invoke(entity)).CallDeferred();
                 _loot.AddChild(button); _buttons.Add(button);
             }
+            // ARC-SKILLS-010: steal mode plants the hero's items one by one (its coins are a count, not a pile, and stay).
+            if (view.Steal)
+                foreach (var line in view.Pc)
+                {
+                    var entity = line.Entity;
+                    var plant = new Button
+                    {
+                        Name = $"Plant{_buttons.Count + 1}", Text = "Plant: " + line.Text, Alignment = HorizontalAlignment.Left,
+                        AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+                    };
+                    plant.Pressed += () => Callable.From(() => PlantRequested?.Invoke(entity)).CallDeferred();
+                    _loot.AddChild(plant); _buttons.Add(plant);
+                }
             _takeAll.Disabled = view.Loot.Count == 0;
         }
         _message.Text = message ?? string.Empty;
-        _hint.Text = (looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
+        _hint.Text = (view.Steal ? "Steal or Plant is one pick-pocket attempt (4 action points in a turn-based round); a caught thief's window closes | "
+                : looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
             + (_useButtons.Count > 0 ? "Use (or a right click) uses an item on the hero; the Use icon uses a held item (Shift: on the hero) | " : string.Empty)
             + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
             + (_pickButtons.Count > 0 ? "Pick a lock closes the window; then press a door or window | " : string.Empty)

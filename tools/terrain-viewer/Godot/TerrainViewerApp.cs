@@ -191,6 +191,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                                 // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
+                                // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
+                                if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);

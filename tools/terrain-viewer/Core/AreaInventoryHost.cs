@@ -204,6 +204,10 @@ public sealed record AreaDollSlot(EquipmentSlot Slot, string? Entity, string? Na
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
 public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot)
 {
+    /// <summary>ARC-SKILLS-010: the window shows a living NPC in steal mode (mode 3): a take of a listed item is a theft, the hero's
+    /// items can be planted, and nothing is taken at once.</summary>
+    public bool Steal { get; init; }
+
     /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
     public int Gold { get; init; }
     /// <summary>ARC-UI-015: the hero's nine wear slots in slot order (empty without a hero).</summary>
