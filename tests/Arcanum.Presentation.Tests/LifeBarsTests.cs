@@ -76,4 +76,39 @@ public sealed class LifeBarsTests
         Assert.IsTrue(LifeBarRules.PortraitTinted(-2, 30), "a dead follower too");
         Assert.IsTrue(LifeBarRules.PortraitTinted(3, 0), "a zero maximum reads 0 %");
     }
+
+    [TestMethod]
+    public void GaugeArtPlacesTheLipAboveTheFillLine()
+    {
+        Assert.AreEqual((88, 0, 0, 0), LifeBarRules.GaugeArt(0, 88), "empty: the empty art only");
+        Assert.AreEqual((48, 40, 0, 48), LifeBarRules.GaugeArt(40, 88), "the art's top 8 rows over the empty part, down to the bottom");
+        Assert.AreEqual((8, 0, 0, 88), LifeBarRules.GaugeArt(80, 88), "the lip just reaches the top");
+        Assert.AreEqual((3, 0, 5, 88), LifeBarRules.GaugeArt(85, 88), "the lip is clipped at the top: art rows from 5");
+        Assert.AreEqual((0, 0, 8, 88), LifeBarRules.GaugeArt(88, 88), "full: art rows 8 to 95");
+        Assert.AreEqual((0, 0, 8, 88), LifeBarRules.GaugeArt(120, 88), "clamped to the gauge");
+        Assert.AreEqual((88, 0, 0, 0), LifeBarRules.GaugeArt(-4, 88));
+    }
+
+    [TestMethod]
+    public void CompactFillCountsTheDamagePercentFromTheTop()
+    {
+        Assert.AreEqual((1, 100), LifeBarRules.CompactFill(30, 30, false), "no damage: rows 1 to 100");
+        Assert.AreEqual((34, 67), LifeBarRules.CompactFill(2, 3, false), "damage 1 of 3 = 33 %: from row 34, not the life percent's 66");
+        Assert.AreEqual((100, 1), LifeBarRules.CompactFill(1, 100, false), "99 % damage: one row");
+        Assert.AreEqual((100, 0), LifeBarRules.CompactFill(0, 30, false), "dead: nothing, the number at row 100");
+        Assert.AreEqual((101, 0), LifeBarRules.CompactFill(0, 30, true), "the fatigue column caps at 101");
+        Assert.AreEqual((100, 0), LifeBarRules.CompactFill(-5, 30, false), "below 0 too");
+        Assert.AreEqual((100, 0), LifeBarRules.CompactFill(7, 0, false), "a zero maximum (a crash in the original) reads fully damaged");
+        Assert.AreEqual((-9, 110), LifeBarRules.CompactFill(33, 30, false), "above the maximum the fill starts above the panel");
+    }
+
+    [TestMethod]
+    public void CompactNumberIsTwoDigitPadded()
+    {
+        Assert.AreEqual("07", LifeBarRules.CompactNumber(7));
+        Assert.AreEqual("00", LifeBarRules.CompactNumber(0));
+        Assert.AreEqual("123", LifeBarRules.CompactNumber(123));
+        Assert.AreEqual("-5", LifeBarRules.CompactNumber(-5), "the sign counts in the width");
+        Assert.AreEqual("-2147483648", LifeBarRules.CompactNumber(int.MinValue));
+    }
 }
