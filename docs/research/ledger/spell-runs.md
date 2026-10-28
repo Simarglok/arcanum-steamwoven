@@ -403,7 +403,35 @@ are armour 8168, 8169, 8170 (record 168: a maintained technology heal with cells
 wrappers 0x4CB7D0..0x4CC130 and the stop 0x4573D0: F2); the activation wrappers of
 [FR-MAGIC-012](../../requirements/combat-magic-tech.md#fr-magic-012) (0x57C040, 0x57C080: F2). Left at F0: the attack record's flag
 0x40000 read by 0x4CBAD0, the windows that own 0x54BC68 and 0x54CF78, and whether the remove clears the item's inventory flag before
-the drop (which decides whether the drop's stop compares the holder or the item as parent).
+the drop (which decides whether the drop's stop compares the holder or the item as parent; settled by IU9: the holder is passed).
+
+## Item use and moves (ARC-MAGIC-022)
+
+Source: the [item spell triggers](../../world/item-spell-triggers.md) contract (its item use and moves sections), the second part of
+the shared item trigger slice of [FR-MAGIC-011](../../requirements/combat-magic-tech.md#fr-magic-011). Read on 2026-10-28 by this task
+and, independently, by a second reader that saw only the questions (method step 6): the item use (0x462CC0) from its use script on,
+0x4605E0 and the callback table it reads (0x45FD40, the builder 0x57C6E0), the callback 0x57CE30, the activation's returns (0x57BC70),
+the cast at a target (0x57C110) and the struct 0x4F2810 builds, 0x45A030 for an empty slot, the item used wrapper (0x4CBF70), the
+inventory removal (0x467860) and insertion (0x466640) around their executor calls, the source functions 0x457450 and 0x4574D0, and
+0x4B1750. Both agree on every row; the second reader added that the callback skips the cancel when the record has item triggers (IU3).
+Every direct branch stays inside `.text`. It agrees with IT7, IT8, SU1–SU8, AG15 and TP1.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| IU1 | item use (0x462CC0), single player | After a use script (0x441980) that lets it go on: a charge count (field 0x69) that is not 0, negative included, or the magical item flag (0x57 & 0x4) takes the spell branch: the use's target into an object struct (0x4F2810, even a null one), slot 0 (0x4CB7A0, −1 for none), 0x4605E0(item, struct, slot-0 value), then 0x4CBF70(item, target). No action points (0x4B7CD0 is called only when the script stops the use and on the other branch) and no charge write. Then food (9) and scrolls (10) only: 0x4574D0(item) and the destruction 0x43CCA0. | Original |
+| IU2 | 0x4605E0, callback table (0x45FD40, 0x57C6E0) | Calls the pointer at 0x5E86D0, when set, with its arguments unchanged. 0x45FD40 copies it from offset 0x78 of the interface callback table; the builder 0x57C6E0 stores 0x57CE30 there (the only occurrence of that value in the file). | Original |
+| IU3 | callback 0x57CE30 | A record with item triggers (0x45A030: record +0x38 not 0) returns at once (no cancel). Otherwise the activation 0x57BC70(item, spell); only when it answers 0 the cast at the use's target (0x57C110 with the struct); then the cancel 0x57BFF0. No test for −1 (the wrappers 0x57C040 and 0x57C080 have one). | Original |
+| IU4 | activation (0x57BC70) answers | 1 (the use's target is not read): every early refusal of SU1, a failed interface mode change, the casts at once (an area 0, exactly 0x10, or self without the tile bit: at the caster's location, 0x4F27F0) and the Shift cast at the player (SU3). 0: the cast's action-point check refused (0x4B7AA0) or the targeting cursor opened (the inventory bit first opens the source's inventory, 0x572240). So the use's target is cast at only for a spell that needs a picked target; the cancel then closes the cursor. The caster is the item's holder (0x4612A0). | Original |
+| IU5 | 0x4F2810, cast at a target (0x57C110) | The struct holds a handle and a word at +8: 0 (0x4F2810) an object, read through 0x4440E0 into the invocation's target object; not 0 (0x4F27F0) a location, copied to its target tile. The cost check (0x4508A0) runs only for a PC or NPC source, so an item source skips it; the invocation (0x455A20) has the item as source and its holder as parent. | Original |
+| IU6 | 0x45A030 for −1 | An empty slot 0 on the spell branch reaches 0x45A030(−1), which reads the dword 0x120 bytes before the record table (and 0x459F60(−1) would read 0x124 before it): outside the table, a value not determined. No installed item on the spell branch has an empty slot 0 (census). | Original bug (technical: a read outside the table; fixed in both modes without a switch: nothing is cast, owner rule 2026-10-28) |
+| IU7 | item used (0x4CBF70) | Nothing for a null item or a type outside 5..14; parent field 0x58; 0x4CB800(item, parent, the other object, mask 0x1000), which calls 0x4CB830 with no tile. Callers: the use (0x462F83) and its tile variant (0x4630DD). | Original |
+| IU8 | 0x457450, 0x4574D0, 0x4B1750 | 0x457450(object): every run whose source (+0x10) is the object, unless its record is technological (+0x34 bit 0x4) or has item triggers (+0x38) without a maintenance period (+0x18 ≤ 0), is ended (0x4571E0). 0x4574D0(object): every run whose source or parent (+0x58) is the object has its source cleared (0x457530; +0x48 = −1) and goes on; neither touches the target. 0x4B1750 returns the constant 5 (0x4502E0), the scroll test's minimum intelligence. | Original (agrees with RP13 and SpellRunSystem) |
+| IU9 | inventory removal (0x467860) | The holder is the explicit argument (the item's parent is only compared, 0x4612A0, and a mismatch prints a debug line and goes on). In order: 0x457450(item); the item unlisted (field 0x5E −1); the unwield (0x467CB0, which runs the unwear 0x4CBFC0) for a worn location 1000..1008; 0x4CCC00(holder); the drop 0x4CC130(item, holder), which passes the holder unchanged to the withdrawal 0x4CBFF0 with mask 0x1000000; then the remove-item script. Field 0x58 is not written. | Original (closes IT8's F0 question: the drop compares the holder) |
+| IU10 | inventory insertion (0x466640) | The pickup 0x4CBAA0(item, holder) (its only caller, at 0x466907) runs after the item is listed, its location written and field 0x58 set to the holder, before a wield into 1000..1008; it calls 0x4CB800 with no other object and mask 0x80000000. A merged ammunition stack (the inserted item deleted, 0x462930) returns before it. | Original |
+
+**F0 facts raised:** the item use's spell branch of [FR-MAGIC-011](../../requirements/combat-magic-tech.md#fr-magic-011) (0x462CC0's
+spell branch, 0x4605E0, 0x57CE30, 0x4CBF70: F2) and the removal's and insertion's executor calls (0x467860, 0x466640: F2). Left at
+F0: what 0x4CCC00 does and the AI's use path through the activation (an NPC holder is refused by 0x40DA20, SU1).
 
 ## Spell missile and caster facing (ARC-MAGIC-018)
 
