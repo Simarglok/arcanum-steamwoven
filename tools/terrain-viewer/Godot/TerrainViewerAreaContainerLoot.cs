@@ -34,13 +34,15 @@ public partial class TerrainViewerApp
         var done = open.Generation?.Regeneration;
         if (open.UseScript is { } ran)
             GD.Print($"ARC-WORLD-101 container use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} lines={ran.Lines.Count} detail={ran.Detail}");
+        if (open.UseScript?.Trap is { } met) NoteTrapMeeting(met);
         GD.Print($"ARC-WORLD-101 container open entity={target.Entity} outcome={open.Outcome} {open.Detail} " +
             $"removed={done?.Removed ?? 0} coins={done?.Coins ?? 0} created={done?.Created.Count ?? 0} refused={done?.Refused ?? 0} skipped={done?.Skipped ?? 0}");
         if (open.LockedSound) PlayContainerSound(target.Row, OpenableSoundAction.Locked);
         if (open.Outcome != AreaContainerOpenOutcome.Opened)
         {
             _inventoryStatus = $"{_inventoryHost.Name(target.Entity, _hoverNames?.Catalog)}: {Refusal(open.Outcome)}" +
-                (open.UseScript is { Lines.Count: > 0 } said ? " — \"" + string.Join(" / ", said.Lines) + "\"" : "");
+                (open.UseScript is { Lines.Count: > 0 } said ? " — \"" + string.Join(" / ", said.Lines) + "\"" : "") +
+                (open.UseScript?.Trap is { } trap ? $" ({trap.Describe()})" : "");
             RefreshAreaStatus();
             return;
         }
@@ -85,7 +87,10 @@ public partial class TerrainViewerApp
         AreaContainerOpenOutcome.MagicallyHeld => "magically held",
         AreaContainerOpenOutcome.UnlockScriptUnsupported => "not opened: its unlock script is not run here",
         AreaContainerOpenOutcome.UseScriptStopped => "its use script kept it shut",
-        AreaContainerOpenOutcome.TrapScriptUnsupported => "not opened: it is trapped (traps are not modelled on a loot open)",
+        AreaContainerOpenOutcome.TrapScriptUnsupported => "not opened: it is trapped (no cast host to set its trap off)",
+        AreaContainerOpenOutcome.TrapSpotted => "not opened: you spotted a trap on it",
+        AreaContainerOpenOutcome.TrapFired => "a trap went off",
+        AreaContainerOpenOutcome.TrapRefused => "not opened: the session refused its trap",
         AreaContainerOpenOutcome.UseScriptUnsupported => "not opened: its use script cannot run here",
         AreaContainerOpenOutcome.GenerationRefused => "not opened: its goods cannot be generated yet",
         _ => "not opened",

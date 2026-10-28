@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -130,8 +130,9 @@ public partial class TerrainViewerApp
         _worldActor.AreaOccupancy = AreaPcOccupancy;
         // ARC-WORLD-074: outside combat mode the PC steps through living NPCs and companions (the owner's decision 2026-10-21).
         _worldActor.AreaCrittersPass = () => !HeroInCombatMode;
-        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points.
-        _worldActor.AreaStepCharge = HeroStepCharge;
+        // ARC-COMBAT-020: in a turn-based round each step the PC starts charges its action points; ARC-WORLD-110: the walk's trap check
+        // of the next tile comes first.
+        _worldActor.AreaStepCharge = HeroStepGate;
         ConfigureGait();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
@@ -590,6 +591,7 @@ public partial class TerrainViewerApp
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
+        NoteTrapSteps(session, advance);
         NoteMapPortals(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
@@ -653,7 +655,7 @@ public partial class TerrainViewerApp
     /// GUI (HUD, palette) handles its own clicks first; release has no meaning.</summary>
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (!IsWorld || !_worldInitialized || _exiting) return;
+        if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed));
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world has
@@ -758,6 +760,8 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
+        // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
+        if (RouteBugReportInput(input)) return;
         // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.
         if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }

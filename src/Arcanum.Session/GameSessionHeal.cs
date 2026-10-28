@@ -31,6 +31,14 @@ public sealed record SessionHealingItem(string Entity, uint Flags, int UsageBonu
 public sealed record SessionHealResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionCombatResult? Charge,
     SkillCheckResult? Check, HealOutcome? Heal, LifeOutcome? Life, int? UsesLeft, bool ItemDestroyed, bool FateUsed, GameSessionVersion Version);
 
+/// <summary>
+/// ARC-WORLD-109: an NPC's heal with a healing item it holds (<see cref="GameSessionOwner.HealByNpc"/>): the healer's life target, its map
+/// data's advancement sheet and its effects' modifiers (the host's input; the session's saved sheet of a levelled follower wins), the
+/// target and the item.
+/// </summary>
+public sealed record SessionNpcHeal(SessionLifeTarget Healer, SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers, SessionLifeTarget Target,
+    SessionHealingItem Item);
+
 public sealed partial class GameSessionOwner
 {
     /// <summary>The bound of a healing item's usage bonus (project policy).</summary>
@@ -98,16 +106,80 @@ public sealed partial class GameSessionOwner
         }
         // The charge can change the hero's life (overexertion) or a critter's record (a new subturn); the target is read now.
         Resolve(target, out var record, out var facts, out var recorded);
-        var result = HealStep(target, item, record, facts!, recorded);
+        var condition = QueryItemCondition(item.Entity, item.Condition)!.Value;
+        var result = HealStep(target, item, record, facts!, recorded, HeroSkills()[Skill.Heal], HeroSkillRequest(Skill.Heal, condition));
         return result with { Charge = charge };
     }
 
-    private SessionHealResult HealStep(SessionLifeTarget target, SessionHealingItem item, SessionLifeRecord record, LifeFacts facts, bool recorded)
+    /// <summary>
+    /// ARC-WORLD-109: an NPC uses a healing item it holds on a living or dead critter, itself or the hero included: the heal case of the
+    /// skill invocation (0x4C7160) that the AI's skill attempt (goal 34, 0x42A2A0) reaches after paying its own 4 action points, so
+    /// nothing is charged here. The heal case reads no player test (ledger AK3): the check, the outcome and the item's uses follow
+    /// <see cref="HealWithItem"/> (HL1, HL4, HL5) with the healer's heal level and training (its saved sheet when the session levelled
+    /// it, else <see cref="SessionNpcHeal.Loaded"/> under <see cref="SessionNpcHeal.Modifiers"/>), its extraordinary intelligence, its
+    /// blindness and crippled arms and legs from its life record, no local-PC difficulty term and no fate. The rolls come from the session
+    /// generator; the life record and the item are one revision. Refused before anything is rolled: a healer whose sheet or modifiers do
+    /// not hold, that is not the sheet's NPC, or that is dead (<see cref="GameSessionFailure.HealUnavailable"/>); an item that is not a
+    /// healing item or holds values outside the bounds (<see cref="GameSessionFailure.InvalidHealingItem"/>), an item with a use or
+    /// destroy script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item the session destroyed or the hero holds
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>; the caller vouches that the NPC holds it), a target whose values do not hold,
+    /// the version.
+    /// </summary>
+    public SessionHealResult HealByNpc(GameSessionVersion expected, SessionNpcHeal heal)
     {
-        var hero = _hero!;
-        var heal = HeroSkills()[Skill.Heal];
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(heal);
+        ArgumentNullException.ThrowIfNull(heal.Healer);
+        ArgumentNullException.ThrowIfNull(heal.Loaded);
+        ArgumentNullException.ThrowIfNull(heal.Modifiers);
+        ArgumentNullException.ThrowIfNull(heal.Target);
+        ArgumentNullException.ThrowIfNull(heal.Item);
+        var item = heal.Item;
+        if (heal.Healer.IsHero || heal.Loaded.Entity != heal.Healer.Entity || !AutoLevelRules.IsValid(heal.Loaded.Sheet) ||
+            !AutoLevelRules.IsValid(heal.Modifiers))
+            return RejectHeal(GameSessionFailure.HealUnavailable);
+        if (Resolve(heal.Healer, out var healer, out var healerFacts, out _) is var invalid && invalid != GameSessionFailure.None) return RejectHeal(invalid);
+        if (LifeRules.Evaluate(healer.State, healerFacts!).IsDead) return RejectHeal(GameSessionFailure.HealUnavailable);
+        if (!item.Healing || item.UsageBonus is < -MaxHealingItemBonus or > MaxHealingItemBonus || item.Uses is < 0 or > SessionItemUseLimits.MaxUses ||
+            !SessionValidation.Entity(item.Entity) || !ItemDurabilityRules.IsValid(item.Condition) || item.ScriptPoints is null)
+            return RejectHeal(GameSessionFailure.InvalidHealingItem);
+        if (item.ScriptPoints.Contains(SessionHealingItem.UseScript) || item.ScriptPoints.Contains(SessionHealingItem.DestroyScript))
+            return RejectHeal(GameSessionFailure.ItemScriptUnsupported);
+        if (_durability.Destroyed.Contains(item.Entity) || _inventory.Kit.Any(kit => kit.Entity == item.Entity) || _inventory.Pc.Any(pc => pc.Entity == item.Entity) ||
+            _inventory.Made.Any(made => made.Entity == item.Entity))
+            return RejectHeal(GameSessionFailure.ItemNotAvailable);
+        var resolved = Resolve(heal.Target, out var record, out var facts, out var recorded);
+        if (resolved != GameSessionFailure.None) return RejectHeal(resolved);
+        if (!IsCurrent(expected)) return RejectHeal(GameSessionFailure.StaleVersion);
+
+        var sheet = _advancement.Npcs.TryGetValue(heal.Loaded.Entity, out var levelled) ? levelled.Sheet : heal.Loaded.Sheet;
+        var skill = QueryNpcSkills(heal.Loaded, heal.Modifiers)[Skill.Heal];
         var condition = QueryItemCondition(item.Entity, item.Condition)!.Value;
-        var request = HeroSkillRequest(Skill.Heal, condition);
+        var conditions = healer.State.Conditions;
+        var request = new SkillCheckRequest
+        {
+            Skill = Skill.Heal,
+            Level = skill.Level,
+            Training = skill.Training,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = AutoLevelRules.EffectiveStat(sheet, heal.Modifiers, CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+                Difficulty = _difficulty,
+            },
+            Difficulty = new() { SourceInjuries = SourceInjuries(conditions) },
+            Critical = new()
+            {
+                Item = true,
+                ItemHitPoints = Math.Clamp(condition.HitPoints, 0, Math.Max(0, condition.MaximumHitPoints)),
+                ItemMaxHitPoints = Math.Max(0, condition.MaximumHitPoints),
+            },
+        };
+        return HealStep(heal.Target, item, record, facts!, recorded, skill, request);
+    }
+
+    private SessionHealResult HealStep(SessionLifeTarget target, SessionHealingItem item, SessionLifeRecord record, LifeFacts facts, bool recorded,
+        SessionSkill heal, SkillCheckRequest request)
+    {
         request = request with
         {
             Difficulty = request.Difficulty with { Target = true, TargetCritter = true, HealingItem = true, HealingItemBonus = item.UsageBonus },
@@ -157,7 +229,8 @@ public sealed partial class GameSessionOwner
             if (target.IsHero) _life.Hero = next;
             else _life.Critters[target.Entity!] = next;
         }
-        if (check.Fated) hero.Apply(hero.State.WithFate(FateRules.Use(hero.State.Fate, FateKind.Heal).After));
+        // Only the hero's request arms a fate.
+        if (check.Fated) _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.Heal).After));
         if (destroyed) Delete(item.Entity);
         else _durability.Uses[item.Entity] = (int)left;
         Revise();
@@ -197,13 +270,7 @@ public sealed partial class GameSessionOwner
                 LocalPc = true,
                 Difficulty = _difficulty,
             },
-            Difficulty = new()
-            {
-                SourceInjuries = (conditions.HasFlag(LifeConditions.Blinded) ? SkillSourceInjuries.Blinded : 0)
-                    | (conditions.HasFlag(LifeConditions.CrippledArmOne) ? SkillSourceInjuries.CrippledArmOne : 0)
-                    | (conditions.HasFlag(LifeConditions.CrippledArmsBoth) ? SkillSourceInjuries.CrippledArmsBoth : 0)
-                    | (conditions.HasFlag(LifeConditions.CrippledLegsBoth) ? SkillSourceInjuries.CrippledLegsBoth : 0),
-            },
+            Difficulty = new() { SourceInjuries = SourceInjuries(conditions) },
             Critical = item is { } condition ? new()
             {
                 Item = true,
@@ -213,6 +280,13 @@ public sealed partial class GameSessionOwner
             FateArmed = HeroSkillFate(skill) is { } fate && FateRules.IsArmed(hero.State.Fate, fate),
         };
     }
+
+    // The skill user's blindness and crippled arms and legs, as the check's difficulty reads them.
+    private static SkillSourceInjuries SourceInjuries(LifeConditions conditions) =>
+        (conditions.HasFlag(LifeConditions.Blinded) ? SkillSourceInjuries.Blinded : 0)
+        | (conditions.HasFlag(LifeConditions.CrippledArmOne) ? SkillSourceInjuries.CrippledArmOne : 0)
+        | (conditions.HasFlag(LifeConditions.CrippledArmsBoth) ? SkillSourceInjuries.CrippledArmsBoth : 0)
+        | (conditions.HasFlag(LifeConditions.CrippledLegsBoth) ? SkillSourceInjuries.CrippledLegsBoth : 0);
 
     // A skill use's draws from a trial copy of the session generator: the check's two d100 and, for a heal, the amount.
     private sealed class SkillRolls(SeededRandom trial) : ISkillCheckRolls, IHealRolls

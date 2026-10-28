@@ -36,13 +36,29 @@ public sealed class MapTransitionsTests
         using var stack = Stack();
         var list = MapList.Read(stack);
         Assert.AreEqual(MapListStatus.Read, list.Status);
-        CollectionAssert.AreEqual(new[] { new MapListEntry(5000, "Alpha", new(10, 20)), new MapListEntry(5001, "beta", null), new MapListEntry(5002, "gamma", null) }, list.Entries.ToArray());
+        CollectionAssert.AreEqual(new[] { new MapListEntry(5000, "Alpha", new(10, 20)) { Type = MapListType.Start }, new MapListEntry(5001, "beta", null),
+            new MapListEntry(5002, "gamma", null) }, list.Entries.ToArray());
         Assert.AreEqual(5000, list.Find("ALPHA")!.Catalogue);
         Assert.AreEqual(2, list.Find("beta")!.Runtime);
         Assert.AreEqual("gamma", list.ByRuntime(3)!.Name);
         Assert.AreEqual("Alpha", list.ByCatalogue(5000)!.Name);
         Assert.IsNull(list.Find("late")); Assert.IsNull(list.ByCatalogue(5003)); Assert.IsNull(list.ByCatalogue(4999)); Assert.IsNull(list.ByRuntime(0));
         Assert.AreEqual((5001, 2), Arcanum.Data.Area.AreaMapPlans.CatalogueNumbers(stack, "Beta"));
+    }
+
+    /// <summary>ARC-UI-038: the type after the start (0x4125C0, 0x40FF50): the keyword is case-sensitive, the word is not, the last row
+    /// of a type is that type's map and an unknown word or one with trailing white space names none.</summary>
+    [TestMethod]
+    public void The_map_list_reads_each_rows_type_and_the_last_row_of_a_type_is_its_map()
+    {
+        Write("rules/maplist.mes", Encoding.Latin1.GetBytes("{5000}{start, 10, 20, Type: START_MAP, WorldMap: 0}\n{5001}{shop, 31, 29,  Type:shopping_map}\n" +
+            "{5002}{other, 1, 1, type: SHOPPING_MAP}\n{5003}{spaced, 1, 1, Type: SHOPPING_MAP }\n{5004}{market, 2, 2, Type: Shopping_Map}\n{5005}{none, 3, 3, Type: NONE}\n"));
+        using var stack = Stack();
+        var list = MapList.Read(stack);
+        CollectionAssert.AreEqual(new[] { MapListType.Start, MapListType.Shopping, MapListType.None, MapListType.None, MapListType.Shopping, MapListType.None },
+            list.Entries.Select(entry => entry.Type).ToArray());
+        Assert.AreEqual(("start", "market"), (list.OfType(MapListType.Start)!.Name, list.OfType(MapListType.Shopping)!.Name));
+        Assert.IsNull(list.OfType(MapListType.None));
     }
 
     [TestMethod]

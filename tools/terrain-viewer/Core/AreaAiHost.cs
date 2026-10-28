@@ -13,6 +13,7 @@ using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Reaction;
+using Arcanum.Simulation.Skills;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -66,13 +67,16 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-102: whether a spell's projectile eye candy has art (0x458B70), so its release launches a missile
     /// (ARC-WORLD-105: <see cref="AreaAiNoticeKind.Missile"/>, flown by the viewer).</summary>
     public Func<int, bool>? MissileArt { get; init; }
+    /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
+    /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
+    public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
 /// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), (ARC-WORLD-102) a
-/// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame and (ARC-WORLD-108) an
-/// item use's magic branch.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, ItemUse }
+/// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
+/// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame and (ARC-WORLD-108) an item use's magic branch.</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -91,8 +95,15 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionSpellRunResult? SpellRun { get; init; }
     /// <summary>ARC-WORLD-105: the cast host that launched the missile (its arrival and loss go through it).</summary>
     public SessionSpellCaster? Caster { get; init; }
-    /// <summary>ARC-WORLD-108: the used item and what its magic branch did (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
+    /// <summary>ARC-WORLD-109: the attempted skill (<see cref="AreaAiNoticeKind.Skill"/>) and, for a heal that reached the session, its
+    /// result.</summary>
+    public int Skill { get; init; } = -1;
+    public SessionHealResult? Heal { get; init; }
+    /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
+    /// <see cref="Target"/>, its attack in <see cref="Result"/>); ARC-WORLD-108: the used item (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public string? Item { get; init; }
+    public SessionNpcThrowResult? Throw { get; init; }
+    /// <summary>ARC-WORLD-108: what the item use's magic branch did (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public SessionItemUseResult? ItemUse { get; init; }
 }
 
@@ -115,10 +126,11 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// <see cref="SessionSpellCaster.CastByAi"/>) and the casting goals play through the cast host (start, turn, play, release, end).
 /// ARC-WORLD-104: a cast while the NPC's casting goal 26 or 27 plays is queued beneath it (SU13, AC5), its goal played once the goals
 /// above it are done; the AI pass itself never meets one, as the gate holds a casting NPC busy (AC6). ARC-WORLD-105: a spell with a
-/// missile launches it at the play's action frame (AC8), the viewer flying it from the NPC.
+/// missile launches it at the play's action frame (AC8), the viewer flying it from the NPC. ARC-WORLD-113: the attack starter's throw of
+/// a "default throws" weapon plays the throw goal 37 (<see cref="ThrowItem"/>, the session's <see cref="GameSessionOwner.ThrowByNpc"/>).
 /// ARC-WORLD-108: the NPCs' items are listed (<see cref="Inventory"/>, <see cref="Item"/>), the pass's heal step chooses among them
 /// (<see cref="Heal"/>), perform casts from an item (<see cref="Cast"/>) and goal 39 uses one through the cast host's item use.
-/// NOT READY (later slices): skills (the heal skill's rung and goal 40 among them), throws and pickups,
+/// NOT READY (later slices): the heal skill's rung and goal 40, pickups, a thrown item's flight,
 /// grenades, the back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
@@ -140,6 +152,11 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private const int GuardClass = 5;
     // The fixed human attack ART (hmfuwxbu: 9 frames, action frame 6, 15 frames per second) stands in for an NPC's own.
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedAttackArt = (9, 6, 15);
+    // ARC-WORLD-109: the skill animation (12), and since ARC-WORLD-113 the throw animation (14), stand in with the same frames, played
+    // at their raw rate: NPC ART is not read yet.
+    private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
+    // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
+    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40;
     // The goal priorities (the goal table's header word 1, read by this task; 0x423F3B counts the goals of priority 2 and above).
     private static readonly IReadOnlyDictionary<AiGoalType, int> Priorities = new Dictionary<AiGoalType, int>
     {
@@ -149,6 +166,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         [AiGoalType.ThrowItem] = 3, [AiGoalType.UseItem] = 3, [AiGoalType.MoveAway] = 2, [AiGoalType.RunNear] = 2,
         [AiGoalType.MeleeApproach] = 2, [AiGoalType.SpreadOut] = 2, [AiGoalType.CombatApproach] = 2, [AiGoalType.RangedApproach] = 2,
         [AiGoalType.CastSpellWithAnimation] = 3, [AiGoalType.AttemptSpellWithAnimation] = 4,
+        // ARC-WORLD-109 (ledger AK1): the skill goal 33 and its attempts 34, 67 and 86.
+        [AiGoalType.UseSkill] = 3, [AiGoalType.AttemptSkill] = 3, [AiGoalType.AttemptPickLocks] = 3, [AiGoalType.AttemptPickpocket] = 3,
     };
 
     private readonly GameSessionOwner _session;
@@ -559,7 +578,20 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var current = RunOf(npc);
         // ARC-WORLD-102: the pass record's choice from this pass's danger update (none: the action type 0).
         _passChoices.Remove(npc, out var choice);
-        var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
+        Started(npc, current, AiExecutorRules.Perform(this, npc, target, choice, null, current));
+    }
+
+    /// <summary>ARC-WORLD-113 test seam: the attack starter (0x434B00, <see cref="AiExecutorRules.StartAttack"/>) on
+    /// <paramref name="target"/>, as combat perform's attack starts it: a "default throws" weapon starts the throw goal 37.</summary>
+    public void PerformAttack(string npc, string target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var current = RunOf(npc);
+        Started(npc, current, AiExecutorRules.StartAttack(this, npc, target, null, current));
+    }
+
+    private void Started(string npc, AiGoalRun? current, AiPerformResult result)
+    {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
         if (!result.Started || result.Run is not { } run) return;
         if (current is not null && !ReferenceEquals(current, run)) EndDroppedRun(current);
@@ -574,6 +606,15 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         ArgumentNullException.ThrowIfNull(choice);
         _passChoices[npc] = choice;
         Perform(npc);
+    }
+
+    /// <summary>ARC-WORLD-109 test and smoke seam: perform with a skill use of <paramref name="skill"/> on <paramref name="target"/> with
+    /// the tool <paramref name="item"/> as the pass record's choice (the action type 3), as the heal ladder's heal skill would choose it
+    /// (the skill starter 0x4350F0, goal 33).</summary>
+    public void PerformSkill(string npc, string target, int skill, string? item)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        PerformChoice(npc, new AiPassChoice(AiPassAction.UseSkill, -1, skill, item, target));
     }
 
     // An NPC that joined the hero since the host was built is the companions' (it counts as gone here).
@@ -923,11 +964,177 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var freed = OwnRun(id, run) ? caster.EndGoal(run, refused) : null;
         _notices.Add(new(AreaAiNoticeKind.CastEnd, id, null) { Run = run, SpellRun = freed });
     }
-    public bool FaceForAction(string id, string? target, CellCoord? tile) => false;
-    public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.CannotStart);
-    public bool AttemptSkill(string id, string target, int skill, string? item) => false;
-    public void AttemptPickLocks(string id, string target, string? item) { }
-    public bool ThrowItem(string id, string item, CellCoord tile) => false;
+    // ---- the skill goals (ARC-WORLD-109) ----
+
+    /// <summary>The turn to an action's target object or tile (0x42C0F0, 0x42C390): refused for an object the host does not walk (the
+    /// hero and the companions run no goals here), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
+    /// (critter flags 0x60, or the session's stun).</summary>
+    public bool FaceForAction(string id, string? target, CellCoord? tile)
+    {
+        if (!_npcs.TryGetValue(id, out var npc) || !CanAct(id)) return false;
+        if ((target is null ? tile : Tile(target)) is not { } there) return false;
+        Movers.Face(id, npc.Row.Key, npc.Origin, there);
+        return true;
+    }
+
+    /// <summary>
+    /// An action animation's start (0x42BD40, 0x42CB10, 0x42D300): the skill animation (12) of goals 34 and 86 to its action frame and
+    /// rest; goal 67's pick-locks loops, as many as the pick-locks starter (0x436220, AG12) counts from the art's frames (frames ÷
+    /// max(frames − 2, 1) + 1, halved when the NPC's pick-locks training is apprentice or more), the attempt after the last;
+    /// ARC-WORLD-113: goal 37's throw animation (14) to its action frame, the throw, and rest. The art is the fixed stand-in's (NPC ART
+    /// is not read yet), played at its raw rate. An object flag 0x10000 or a stunned or paralysed critter cannot start.
+    /// </summary>
+    public AiActionSwing BeginAction(string id, AiActionAnimation animation)
+    {
+        if (!_npcs.ContainsKey(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
+        var art = FixedSkillArt;
+        var frameMs = 1000.0 / art.RawFramesPerSecond;
+        if (animation == AiActionAnimation.PickLocks)
+        {
+            var loops = art.Frames / Math.Max(art.Frames - 2, 1) + 1;
+            if (NpcSkill(id, Skill.PickLocks)?.Training is { } training && training >= SkillTraining.Apprentice) loops /= 2;
+            return new(AiActionStart.Started, (int)Math.Max(1, Math.Round(loops * art.Frames * frameMs)), 0);
+        }
+        var action = (int)Math.Max(1, Math.Round(art.ActionFrame * frameMs));
+        return new(AiActionStart.Started, action, (int)Math.Max(1, Math.Round(art.Frames * frameMs)) - action);
+    }
+
+    /// <summary>
+    /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
+    /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
+    /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
+    /// 0x40000 (ledger AK2). NOT READY: every other skill (pickpocket, the other skills a script might start), which does nothing and
+    /// answers false.
+    /// </summary>
+    public bool AttemptSkill(string id, string target, int skill, string? item)
+    {
+        if (skill != AiPassChoice.HealSkill)
+        {
+            Trace(id).Skill = $"skill {skill} on {target}: not ready";
+            _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill });
+            return false;
+        }
+        var heal = HealByNpc(id, target, item, out var refusal);
+        Trace(id).Skill = heal is null ? $"heal {target}: {refusal}"
+            : $"heal {target} {heal.Disposition} {heal.Failure} success={heal.Check?.Success} hp={heal.Heal?.HitPoints} uses={heal.UsesLeft?.ToString() ?? "-"}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, Heal = heal });
+        return heal is { Disposition: GameSessionDisposition.Changed, Check.Success: true };
+    }
+
+    /// <summary>The pick-locks attempt (0x42A4E0). NOT READY: an NPC's lock picking (the session's is the hero's) does nothing.</summary>
+    public void AttemptPickLocks(string id, string target, string? item)
+    {
+        Trace(id).Skill = $"pick locks {target}: not ready";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill });
+    }
+
+    // The heal: the healer's sheet, the target's life and the held healing item; null with the refusal when the session is not asked.
+    private SessionHealResult? HealByNpc(string id, string target, string? item, out string refusal)
+    {
+        refusal = "";
+        if (Build(id) is not { } healer || _scene.NpcSheet?.Invoke(id) is not { } sheet) { refusal = "no sheet"; return null; }
+        var life = target == Pc ? SessionLifeTarget.Hero : Build(target)?.Target;
+        if (life is null) { refusal = "no target"; return null; }
+        if (item is null || _scene.Combat.HeldItemFields(_session, _scene.RuntimeMap, id, item) is not { } fields
+            || AreaHealingItems.From(item, fields) is not { } healing)
+        {
+            refusal = "no healing item (impossible)";
+            return null;
+        }
+        return _session.HealByNpc(_session.Version, new SessionNpcHeal(healer.Target, sheet.Loaded, sheet.Modifiers, life, healing));
+    }
+
+    // Object flag 0x10000 and a stunned or paralysed critter refuse an action's turn and start.
+    private bool CanAct(string id)
+    {
+        if (Fields(id) is not { } fields) return false;
+        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & (StunnedCritter | ParalysedCritter)) != 0) return false;
+        return !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
+    }
+
+    private SessionSkill? NpcSkill(string id, Skill skill) =>
+        _scene.NpcSheet?.Invoke(id) is { } sheet ? _session.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[skill] : null;
+
+    // ---- the throw (ARC-WORLD-113) ----
+
+    /// <summary>
+    /// The throw at goal 37's action frame (0x42AB90 → 0x4B3C00, ledger TW rows, TA rows): the session's <see cref="GameSessionOwner.ThrowByNpc"/>
+    /// with the NPC's live cell, the item's weight as the thrower holds it (0x461370 with the thrower, TW5: its stored weight and its
+    /// magic adjustment under the thrower's aptitude) and the critter the line of fire to the tile names (TW4,
+    /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
+    /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
+    /// viewer. NOT READY: the projectile's flight (the item lands at once), and a first blocker on the line that is a scenery, a wall,
+    /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
+    /// tile, striking nothing.
+    /// </summary>
+    public bool ThrowItem(string id, string item, CellCoord tile)
+    {
+        if (!_npcs.ContainsKey(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
+        if (_scene.Combat.HeldItemFields(_session, _scene.RuntimeMap, id, item) is not { Item: { } stored } fields)
+        {
+            Trace(id).Throw = $"throw {item}: not held";
+            return false;
+        }
+        var aptitude = Math.Clamp(thrower.EffectiveStat(CharacterStat.MagickTechAptitude, state), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        int weight;
+        try
+        {
+            weight = Math.Clamp(Arcanum.Simulation.Items.CarryRules.ItemWeight(new(fields.Object.Type, stored.Weight, stored.MagicWeight,
+                stored.MagickTechComplexity), Arcanum.Simulation.Items.CarryHolder.Critter, aptitude), 0, ThrowRules.MaxWeight);
+        }
+        catch (ArgumentException)
+        {
+            Trace(id).Throw = $"throw {item}: weight facts out of range";
+            return false;
+        }
+        var struck = StruckAt(id, from, tile);
+        var hero = struck?.Who == Pc;
+        var request = new SessionNpcThrow(thrower, item, weight, from, tile)
+        {
+            Struck = struck is { Who: { } who } && who != Pc ? Build(who) : null,
+            StruckHero = hero,
+            StruckCell = struck?.Cell,
+            LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : null,
+            ThrowerWorn = _scene.Combat.WornItems(_session, _scene.RuntimeMap, id),
+            StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, _scene.RuntimeMap, target),
+            DropMap = _scene.DropMap?.Invoke(),
+        };
+        var result = _session.ThrowByNpc(_session.Version, request);
+        var attack = result.Attack;
+        Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
+            + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
+        _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
+        if (struck?.Who is { } victim && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None })
+            AttackEvent(id, victim);
+        return result.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    /// <summary>The throw's struck critter (TW4): the first object the line of fire from <paramref name="from"/> to the tile stops at
+    /// when it is a living critter the host knows (a walked NPC or a companion), else the living critter on the tile (the hero, a walked
+    /// NPC, a companion), with its cell and map key (none for the hero); null when it strikes no critter (a scenery or wall blocker
+    /// among them: not ready).</summary>
+    private (string Who, CellCoord Cell, AreaObjectKey? Key)? StruckAt(string id, CellCoord from, CellCoord tile)
+    {
+        if (_scene.LineOfFire?.Invoke() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, _session.Rules.Combat).Blocker is { } row)
+            return _scene.Combat.Entity(_scene.RuntimeMap, row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
+                && (_npcs.ContainsKey(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
+        if (Tile(Pc) == tile && !DeadCritter(Pc)) return (Pc, tile, null);
+        foreach (var npc in _scene.Npcs)
+            if (npc.Entity != id && Tile(npc.Entity) == tile && !DeadCritter(npc.Entity)) return (npc.Entity, tile, npc.Row.Key);
+        foreach (var (key, cell) in _scene.Companions?.Invoke() ?? [])
+            if (cell == tile && _scene.Combat.Entity(_scene.RuntimeMap, key) is { } companion && companion != id && !DeadCritter(companion))
+                return (companion, tile, key);
+        return null;
+    }
+
+    // The line of fire to the struck critter's cell as the check reads it (the hero's attack's SessionLineOfFire): its cost and whether
+    // an object other than the struck one stops it.
+    private SessionLineOfFire LineTo(CellCoord from, CellCoord to, AreaObjectKey? struck, ILineOfFireMap<AreaObjectRecord> map)
+    {
+        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        return new(Math.Min(trace.Cost, AttackResolver.MaxMagnitude), trace.Blocker is { } b && b.Key != struck);
+    }
+
     public void PickUp(string id, string item) { }
     /// <summary>ARC-WORLD-108: the NPC of the shown map that holds the item now (0x4612A0), or null (the hero's items are not the AI's).</summary>
     public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, _scene.RuntimeMap, item);
@@ -1091,9 +1298,28 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         && _session.StartBackOff(_session.Version, npc).Disposition == GameSessionDisposition.Changed;
 
     public AiGrenadeResult Grenade(string npc, string target) => new(AiGrenadeStop.NoGrenade);
-    public string? ThrowableWeapon(string npc) => null;
-    public void Unwield(string npc, string item) { }
-    public bool HasSkillArt(string npc) => false;
+
+    /// <summary>ARC-WORLD-113: the attack starter's throw (0x434B00, TW1, AG13): the item the NPC wears in its weapon slot (the session's
+    /// view) when it is a weapon with the "default throws" flag (weapon flag 0x200) that the remove check (0x466DA0: no no-drop flag)
+    /// lets go. Not ready: a weapon the session's throw refuses (one with scripts, or one the session added to the NPC, which no seed
+    /// holds) is answered as not throwable, so the NPC attacks with it instead of starting a throw that always fails.</summary>
+    public string? ThrowableWeapon(string npc)
+    {
+        if (!_npcs.ContainsKey(npc) || _scene.Combat.Worn(_session, _scene.RuntimeMap, npc) is not { } worn) return null;
+        foreach (var item in worn)
+            if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop
+                && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity))
+                return item.Entity;
+        return null;
+    }
+
+    /// <summary>ARC-WORLD-113: the attack starter's removal (0x466E00, read by this task: 0x4612A0 then 0x467860, the item leaves its
+    /// holder's inventory entirely, ledger TA1). The original then loses the weapon whenever the throw goal never reaches its throw (a
+    /// refused start, an interrupted or replaced run); a lost object, so both rule modes keep it in the NPC's hand until the throw,
+    /// which removes it (<see cref="GameSessionOwner.ThrowByNpc"/>). Nothing changes here.</summary>
+    public void Unwield(string npc, string item) => Trace(npc).Throw = $"unwield {item} (kept until the throw)";
+    /// <summary>ARC-WORLD-109: the skill animation's art (0x436220's test) is the fixed stand-in's, so every NPC the host walks has it.</summary>
+    public bool HasSkillArt(string npc) => _npcs.ContainsKey(npc);
     public bool NpcPickupsOn => false;
     public bool BoomerangInFlight(string npc) => false;
     public bool InterruptLowerAnimations(string id) => true;
@@ -1522,4 +1748,8 @@ public sealed class AreaAiTrace
     public string? Cast { get; set; }
     /// <summary>ARC-WORLD-108: its last heal choice and item use.</summary>
     public string? Item { get; set; }
+    /// <summary>ARC-WORLD-109: the last skill attempt.</summary>
+    public string? Skill { get; set; }
+    /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
+    public string? Throw { get; set; }
 }

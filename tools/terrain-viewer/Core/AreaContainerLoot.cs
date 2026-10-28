@@ -19,9 +19,17 @@ public enum AreaContainerOpenOutcome
     /// <summary>The container's use script (SAP 1), run after the attempt, ended with skip default: the original refuses the open with the
     /// locked sound.</summary>
     UseScriptStopped,
-    /// <summary>The container's use script is a native trap script (30000..30007, ScrStop.TrapScript), which the original's trap code
-    /// handles on the use (not read, not modelled): the viewer does not open a trapped container.</summary>
+    /// <summary>The container's use script is a native trap script (30000..30007, ScrStop.TrapScript) and the viewer met no trap (no
+    /// cast host): the open is refused, the trap untouched.</summary>
     TrapScriptUnsupported,
+    /// <summary>ARC-WORLD-110: the PC spotted the container's trap now (TT3, TT4): the use is cancelled and the open refused.</summary>
+    TrapSpotted,
+    /// <summary>ARC-WORLD-110: the container's native trap went off on the use (TT8, its effect applied by the cast host): the trap code
+    /// answers skip default, so the open is refused.</summary>
+    TrapFired,
+    /// <summary>ARC-WORLD-110: the session refused the trap meeting (a full budget, an old version): nothing happened and the open is
+    /// refused.</summary>
+    TrapRefused,
     /// <summary>The container has a use script that the viewer could not run (no script host, or the dispatcher refused the run, which
     /// then applied nothing): the open is refused (Not ready).</summary>
     UseScriptUnsupported,
@@ -62,8 +70,8 @@ public static class AreaContainerLoot
     /// but for the generation, which runs before the frame write so that a refusal changes nothing (the two do not read each other). The
     /// open attempt is the session's at its hour with the container's T0 lock baseline and its recorded lock state; then the container's
     /// use script runs through <paramref name="useScript"/> (the viewer's use-script host, with the PC as the triggerer): skip default
-    /// refuses the open, and so do a native trap script (its trap is not modelled), a run the host refuses (it applies nothing) and no
-    /// host; then, for a container with flag 0x200 the session has not generated, <see cref="GameSessionOwner.GenerateContainerOnce"/>
+    /// refuses the open, and so do a trap the host's trap meeting spotted, fired or could not record (ARC-WORLD-110), a native trap
+    /// script the host met no trap for, a run the host refuses (it applies nothing) and no host; then, for a container with flag 0x200 the session has not generated, <see cref="GameSessionOwner.GenerateContainerOnce"/>
     /// through <paramref name="world"/>; then a container on
     /// frame 0 steps to its next frame (the ART's <paramref name="frameCount"/>, wrapping to 0 past the last: an ART of one frame keeps
     /// frame 0) and <see cref="AreaContainerOpen.Opening"/> asks for the open sound.
@@ -96,6 +104,10 @@ public static class AreaContainerLoot
         {
             if (useScript is null) return new(AreaContainerOpenOutcome.UseScriptUnsupported, null, false, "use script: no script host");
             ran = useScript(row);
+            // ARC-WORLD-110: the trap meeting before the use script (the object entry point's E2 and trap run).
+            if (ran.Trap is { Cancels: true } trap)
+                return new(trap.Rejected ? AreaContainerOpenOutcome.TrapRefused : trap.Outcome == SessionTrapOutcome.Spotted
+                    ? AreaContainerOpenOutcome.TrapSpotted : AreaContainerOpenOutcome.TrapFired, null, false, "trap: " + trap.Describe()) { UseScript = ran };
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
                 return new(AreaContainerOpenOutcome.UseScriptUnsupported, null, false, $"use script {ran.Outcome}: {ran.Detail}") { UseScript = ran };
             if (ran.Run?.Stop == Arcanum.Scripting.Scr.ScrStop.TrapScript)

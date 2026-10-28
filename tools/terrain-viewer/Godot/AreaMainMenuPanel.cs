@@ -73,12 +73,15 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-036: the opening shop's Accept (true) or Back.</summary>
     internal void ShopPressForSelfTest(bool accept) => (accept ? AcceptRequested : BackRequested)?.Invoke();
 
+    /// <summary>ARC-DEV-050: the run's debug mode, named on the build line.</summary>
+    public bool DebugMode { get; init; }
+
     public override void _Ready()
     {
         Layer = 4;
         _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = new Color(.06f, .05f, .04f, .96f), MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
-        _backdrop.AddChild(ViewerBuild.MakeLabel()); // ARC-DEV-047: which build this is
+        _backdrop.AddChild(ViewerBuild.MakeLabel(DebugMode)); // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode)
         _panel = new PanelContainer { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -321,7 +324,18 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
         var width = Math.Max(1, Math.Min(560, size.X - 48));
         _panel.Size = new(width, 0);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - _panel.GetCombinedMinimumSize().Y) / 2));
+        var height = _panel.GetCombinedMinimumSize().Y;
+        _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
+    }
+
+    private bool _dockedBelow;
+
+    /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>
+    public void SetDockedBelow(bool docked)
+    {
+        _dockedBelow = docked;
+        if (_shopText is not null) _shopText.CustomMinimumSize = new Vector2(320, docked ? 0 : 120);
+        ResizePanel();
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
