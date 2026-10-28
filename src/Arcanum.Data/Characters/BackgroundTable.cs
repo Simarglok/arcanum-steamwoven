@@ -63,7 +63,9 @@ public sealed record BackgroundText(BackgroundTextStatus Status, ReadOnlyMemory<
 /// phase) and both required (the init fails without either). Read in the executable (ledger BD1–BD8):
 /// block <c>b</c> exists while message <c>10b+2</c> exists; a race and gender may take it when its condition is empty or,
 /// upper-cased, contains the race code and <c>F</c>/<c>M</c>, <c>ANY</c>, or <c>NPC</c> for an NPC; the creation buttons step
-/// through the allowed blocks and wrap; the text's first line is the name. Read-only: applying the effect to a character
+/// through the allowed blocks and wrap; the text's first line is the name. The legality table holds races 0..7 only (the
+/// player races; the original reads past it for 8..10), so the legality, search and button methods take race 0..7 and gender
+/// 0 or 1 and throw on anything else. Read-only: applying the effect to a character
 /// (<c>background_set</c>/<c>background_clear</c>), the start kit (FR-CHAR-007) and the context backgrounds (FR-CHAR-006)
 /// are the caller's. NOT READY: the multiplayer money scaling (0x4C2AA0) and the background item removal (0x4C2830).
 /// </summary>
@@ -126,9 +128,7 @@ public sealed class BackgroundTable
         var empty = false;
         foreach (var (slot, index) in new[] { (DescriptionSlot, 0), (EffectSlot, 1), (MoneySlot, 2) })
         {
-            var message = _blocks.Find(first + slot);
-            if (message is null) return new(BackgroundBlockStatus.MissingMessage, null, first + slot);
-            var status = Number(message.Bytes.Span, out values[index], out var isEmpty);
+            var status = Slot(first + slot, out values[index], out var isEmpty);
             if (status != BackgroundBlockStatus.Parsed) return new(status, null, first + slot);
             if (slot == EffectSlot) empty = isEmpty;
         }
@@ -194,15 +194,23 @@ public sealed class BackgroundTable
     }
 
     /// <summary>What the screen stores and adds when a button lands on <paramref name="background"/>: the description number
-    /// (<c>atoi</c> of <c>10b+0</c>) and the effect (<c>atoi</c> of <c>10b+1</c>, cause 1). Null when the block is refused.</summary>
-    [OriginalFunction(0x4C24B0, OriginalFunctionScope.Full)]
+    /// (<c>atoi</c> of <c>10b+0</c>) and the effect (<c>atoi</c> of <c>10b+1</c>, cause 1). Only those two slots are read, as the
+    /// original reads them; null when the block does not exist or either slot is absent or refused.</summary>
+    [OriginalFunction(0x4C24B0, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4C25E0, OriginalFunctionScope.Partial)]
-    public BackgroundChoice? Choice(int background) =>
-        Block(background).Block is { } block ? new(block.Number, block.Description, block.Effect) : null;
+    public BackgroundChoice? Choice(int background)
+    {
+        if (!HasBlock(background)) return null;
+        var first = background * MessagesPerBlock;
+        return Slot(first + DescriptionSlot, out var description, out _) == BackgroundBlockStatus.Parsed &&
+            Slot(first + EffectSlot, out var effect, out _) == BackgroundBlockStatus.Parsed
+                ? new(background, description, effect) : null;
+    }
 
-    /// <summary>Block 0's money, the base the multiplayer money scaling divides by.</summary>
-    [OriginalFunction(0x4C2A70, OriginalFunctionScope.Full)]
-    public int? BaseMoney() => Block(0).Block?.Money;
+    /// <summary>Block 0's money (message 3 alone), the base the multiplayer money scaling divides by; null when it is absent or
+    /// refused.</summary>
+    [OriginalFunction(0x4C2A70, OriginalFunctionScope.Partial)]
+    public int? BaseMoney() => Slot(MoneySlot, out var money, out _) == BackgroundBlockStatus.Parsed ? money : null;
 
     /// <summary>
     /// The text of description <paramref name="description"/> (field 0x102): 0 reads 1000, the default text; 1..999 have none.
@@ -237,6 +245,13 @@ public sealed class BackgroundTable
         if (race is < 0 or >= 8) throw new ArgumentOutOfRangeException(nameof(race), "the legality table holds races 0..7");
         if (gender is not (FemaleGender or MaleGender)) throw new ArgumentOutOfRangeException(nameof(gender));
         return System.Text.Encoding.ASCII.GetBytes(RaceCodes[race] + GenderLetters[gender]);
+    }
+
+    private BackgroundBlockStatus Slot(int number, out int value, out bool empty)
+    {
+        value = 0;
+        empty = false;
+        return _blocks.Find(number) is { } message ? Number(message.Bytes.Span, out value, out empty) : BackgroundBlockStatus.MissingMessage;
     }
 
     private static BackgroundBlockStatus Number(ReadOnlySpan<byte> text, out int value, out bool empty)

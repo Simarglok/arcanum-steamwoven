@@ -120,6 +120,14 @@ public sealed class BackgroundTableTests
         Assert.AreEqual((BackgroundBlockStatus.Malformed, 4), Status("{0}{1000}{1}{1}{2}{}{3}{0}{4}{9001,9002}"));
         Assert.AreEqual((BackgroundBlockStatus.InvalidText, 4), Status("{0}{1000}{1}{1}{2}{}{3}{0}{4}{9001\u000b9002}"));
         Assert.AreEqual((BackgroundBlockStatus.InvalidText, 3), Status("{0}{1000}{1}{1}{2}{}{3}{4\u00010}{4}{}"));
+        // Choice and the base money read only their own slots, as the original does.
+        var badItems = Table("{0}{1000}{1}{86}{2}{}{3}{400}{4}{9001,9002}");
+        Assert.AreEqual(BackgroundBlockStatus.Malformed, badItems.Block(0).Status);
+        Assert.AreEqual((new BackgroundChoice(0, 1000, 86), (int?)400), (badItems.Choice(0), badItems.BaseMoney()));
+        var noCondition = Table("{0}{1000}{1}{86}{3}{400}{4}{}");
+        Assert.AreEqual(((BackgroundChoice?)null, (int?)400), (noCondition.Choice(0), noCondition.BaseMoney()), "a block needs its condition, the base money does not");
+        Assert.IsNull(Table("{1}{86}{2}{}{3}{400}{4}{}").Choice(0), "a missing description slot is refused");
+        Assert.IsNull(Table("{0}{1000}{1}{86}{2}{}{3}{4x}{4}{}").BaseMoney());
         var table = Table("{0}{}{1}{1}{2}{}{3}{}{4}{   }");
         Assert.AreEqual((0, 0, 0), (table.Block(0).Block!.Description, table.Block(0).Block!.Money, table.Block(0).Block!.Items.Count), "empty slots read 0");
     }
