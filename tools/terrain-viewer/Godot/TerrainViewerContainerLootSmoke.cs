@@ -54,7 +54,8 @@ public partial class TerrainViewerApp
         var before = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items.Count;
         OpenContainer(crate);
         var open = _lastContainerOpen;
-        if (open is { Outcome: AreaContainerOpenOutcome.UseScriptStopped or AreaContainerOpenOutcome.UseScriptUnsupported or AreaContainerOpenOutcome.TrapScriptUnsupported })
+        if (open is { Outcome: AreaContainerOpenOutcome.UseScriptStopped or AreaContainerOpenOutcome.UseScriptUnsupported or AreaContainerOpenOutcome.TrapScriptUnsupported
+            or AreaContainerOpenOutcome.TrapSpotted or AreaContainerOpenOutcome.TrapFired or AreaContainerOpenOutcome.TrapRefused })
         {
             GD.Print($"ARC-WORLD-101 native-smoke container NONE map={_readyMapName} (the crate's use script: {open.Outcome} {open.Detail})");
             return;
