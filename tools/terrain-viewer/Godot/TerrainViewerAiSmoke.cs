@@ -100,18 +100,16 @@ public partial class TerrainViewerApp
             Require(_aiFidgets > fidgets, "its done attack run was followed by its fidget");
             // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
             var skills = _aiSkills;
-            if (session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true })
+            Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
+            host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);
+            Require(host.RunOf(entity)?.Bottom.Goal == AiGoalType.UseSkill, "the skill starter begins goal 33: " + host.TraceOf(entity)?.Perform);
+            for (var f = 0; f < 200 && _aiSkills == skills; f++)
             {
-                host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);
-                Require(host.RunOf(entity)?.Bottom.Goal == AiGoalType.UseSkill, "the skill starter begins goal 33: " + host.TraceOf(entity)?.Perform);
-                for (var f = 0; f < 200 && _aiSkills == skills; f++)
-                {
-                    _areaSmokeTime++;
-                    TickAreaClock(hostMs += 50);
-                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
-                }
-                Require(_aiSkills > skills, "the skill attempt reached the viewer: " + host.TraceOf(entity)?.Skill);
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
+            Require(_aiSkills > skills, "the skill attempt reached the viewer: " + host.TraceOf(entity)?.Skill);
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
 

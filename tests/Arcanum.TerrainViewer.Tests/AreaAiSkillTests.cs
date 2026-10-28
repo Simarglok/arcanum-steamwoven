@@ -99,7 +99,7 @@ public sealed class AreaAiSkillTests
         var started = session.Version;
         host.PerformSkill(npc, npc, AiPassChoice.HealSkill, item);
         Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
-        Assert.AreEqual(3, host.AnimationPriority(npc), "goal 33's priority (SG1)");
+        Assert.AreEqual(3, host.AnimationPriority(npc), "goal 33's priority (AK1)");
         Assert.AreEqual(started, session.Version, "the start changes no session state");
 
         var now = 0L;
@@ -113,7 +113,7 @@ public sealed class AreaAiSkillTests
         Assert.IsNotNull(heal.Check);
         Assert.IsNull(heal.Charge, "the attempt goal paid its own action points");
         Assert.IsFalse(heal.FateUsed, "an NPC has no fate");
-        Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1 or Uses - 5, "the heal spends a use, five on a critical failure");
+        Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1, "the heal spends a use (a critical failure's five use up the three)");
         Assert.AreNotEqual(started, session.Version);
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, "heal ");
     }
@@ -125,6 +125,8 @@ public sealed class AreaAiSkillTests
         var before = session.Version;
         Assert.IsFalse(host.AttemptSkill(npc, npc, AiPassChoice.HealSkill, null));
         Assert.IsFalse(host.AttemptSkill(npc, npc, AiPassChoice.HealSkill, Entity(9)), "an item the NPC does not hold");
+        Assert.IsFalse(host.AttemptSkill(npc, npc, AiPassChoice.HealSkill, npc), "a held object that is no healing item");
+        Assert.IsFalse(host.AttemptSkill(npc, Entity(9), AiPassChoice.HealSkill, Entity(1)), "a target that is neither the hero nor an NPC");
         Assert.AreEqual(before, session.Version);
         Assert.IsTrue(host.DrainNotices().All(n => n.Kind == AreaAiNoticeKind.Skill && n.Heal is null));
     }

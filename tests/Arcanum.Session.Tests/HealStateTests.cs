@@ -366,7 +366,11 @@ public sealed class HealStateTests
         Refused(owner.HealByNpc(owner.Version, good with { Item = good.Item with { Flags = 0x02 } }), GameSessionFailure.InvalidHealingItem);
         Refused(owner.HealByNpc(owner.Version, good with { Item = good.Item with { ScriptPoints = [SessionHealingItem.DestroyScript] } }),
             GameSessionFailure.ItemScriptUnsupported);
+        Refused(owner.HealByNpc(owner.Version, good with { Loaded = good.Loaded with { Sheet = good.Loaded.Sheet with { Level = -1 } } }),
+            GameSessionFailure.HealUnavailable);
         Refused(owner.HealByNpc(owner.Version, good with { Item = Item() }), GameSessionFailure.ItemNotAvailable);
+        Refused(owner.HealByNpc(owner.Version, good with { Target = SessionLifeTarget.Critter("not an id", new LifeFacts(), new LifeState(0, 0, 0, LifeConditions.None, 0)) }),
+            GameSessionFailure.InvalidLifeTarget);
         Refused(owner.HealByNpc(new(owner.Identity, 5), good), GameSessionFailure.StaleVersion);
     }
 }

@@ -114,7 +114,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-WORLD-109: an NPC uses a healing item it holds on a living or dead critter, itself or the hero included: the heal case of the
     /// skill invocation (0x4C7160) that the AI's skill attempt (goal 34, 0x42A2A0) reaches after paying its own 4 action points, so
-    /// nothing is charged here. The heal case reads no player test (ledger SG3): the check, the outcome and the item's uses follow
+    /// nothing is charged here. The heal case reads no player test (ledger AK3): the check, the outcome and the item's uses follow
     /// <see cref="HealWithItem"/> (HL1, HL4, HL5) with the healer's heal level and training (its saved sheet when the session levelled
     /// it, else <see cref="SessionNpcHeal.Loaded"/> under <see cref="SessionNpcHeal.Modifiers"/>), its extraordinary intelligence, its
     /// blindness and crippled arms and legs from its life record, no local-PC difficulty term and no fate. The rolls come from the session
@@ -129,6 +129,11 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(heal);
+        ArgumentNullException.ThrowIfNull(heal.Healer);
+        ArgumentNullException.ThrowIfNull(heal.Loaded);
+        ArgumentNullException.ThrowIfNull(heal.Modifiers);
+        ArgumentNullException.ThrowIfNull(heal.Target);
+        ArgumentNullException.ThrowIfNull(heal.Item);
         var item = heal.Item;
         if (heal.Healer.IsHero || heal.Loaded.Entity != heal.Healer.Entity || !AutoLevelRules.IsValid(heal.Loaded.Sheet) ||
             !AutoLevelRules.IsValid(heal.Modifiers))

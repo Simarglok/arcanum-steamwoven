@@ -154,7 +154,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         [AiGoalType.ThrowItem] = 3, [AiGoalType.UseItem] = 3, [AiGoalType.MoveAway] = 2, [AiGoalType.RunNear] = 2,
         [AiGoalType.MeleeApproach] = 2, [AiGoalType.SpreadOut] = 2, [AiGoalType.CombatApproach] = 2, [AiGoalType.RangedApproach] = 2,
         [AiGoalType.CastSpellWithAnimation] = 3, [AiGoalType.AttemptSpellWithAnimation] = 4,
-        // ARC-WORLD-109 (ledger SG1): the skill goal 33 and its attempts 34, 67 and 86.
+        // ARC-WORLD-109 (ledger AK1): the skill goal 33 and its attempts 34, 67 and 86.
         [AiGoalType.UseSkill] = 3, [AiGoalType.AttemptSkill] = 3, [AiGoalType.AttemptPickLocks] = 3, [AiGoalType.AttemptPickpocket] = 3,
     };
 
@@ -949,7 +949,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger SG2). NOT READY: every other skill (pickpocket, the other skills a script might start), which does nothing and
+    /// 0x40000 (ledger AK2). NOT READY: every other skill (pickpocket, the other skills a script might start), which does nothing and
     /// answers false.
     /// </summary>
     public bool AttemptSkill(string id, string target, int skill, string? item)
