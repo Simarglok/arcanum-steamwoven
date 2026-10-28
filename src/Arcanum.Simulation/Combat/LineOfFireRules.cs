@@ -226,6 +226,20 @@ public static class LineOfFireRules
     }
 
     /// <summary>
+    /// The line the attack goal's reach test reads (ARC-COMBAT-015; owner decision 2026-10-28): <see cref="Trace{TObject}"/>, except that
+    /// a target next to the attacker is read as the Original setting reads it (<see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/>:
+    /// the side tiles' objects of the diagonal step into the target are skipped, AW14), so the Steamwoven fix of AW13/AW14 keeps
+    /// every longer line and does not refuse a diagonal melee attack past a companion, NPC or scenery on a side tile.
+    /// </summary>
+    public static LineOfFireTrace<TObject> ReachTrace<TObject>(CellCoord from, int offsetX, int offsetY, CellCoord to, ILineOfFireMap<TObject> map,
+        CombatAnomalyProfile profile) where TObject : class
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var adjacent = Math.Max(Math.Abs((long)to.X - from.X), Math.Abs((long)to.Y - from.Y)) == 1;
+        return Trace(from, offsetX, offsetY, to, map, adjacent && !profile.CornerStepCountsBothRoutes ? profile with { CornerStepCountsBothRoutes = true } : profile);
+    }
+
+    /// <summary>
     /// The attack goal's reach test (0x429960, ledger EX8, RH1; ARC-COMBAT-015): the tile distance (0x4B96F0) at most the larger of the
     /// wielded weapon's range and 1, and a clear shot (<see cref="ClearShot{TObject}"/>) on the line traced from the attacker to the
     /// target, for every weapon (melee next to its target too). When it fails the goal approaches the target (ledger AP1–AP7). The

@@ -209,4 +209,25 @@ public sealed class LineOfFireRulesTests
         Assert.IsTrue(LineOfFireRules.InReach(6, 10, Trace(map, (2, 2), (2, 8)), "target"));
         Assert.IsFalse(LineOfFireRules.InReach(6, 10, Trace(map.With(2, 5, "screen2", Cover), (2, 2), (2, 8)), "target"));
     }
+
+    [TestMethod]
+    public void TheReachTestReadsALineToAnAdjacentTargetAsTheOriginal()
+    {
+        // Owner decision 2026-10-28 (ARC-COMBAT-015): a post on a side tile of the diagonal step into an adjacent target blocks
+        // Steamwoven's line (AW14 fixed) but not the reach test's, which reads it as the original; a longer line keeps the fix.
+        var steps = LineOfFireRules.Walk(new(2, 2), 0, 0, new(3, 3), _ => true)!;
+        Assert.AreEqual(1, steps.Count);
+        Assert.AreEqual(0, steps[0].Rotation % 2, "a corner step");
+        var sides = new[] { (steps[0].Rotation + 7) % 8, (steps[0].Rotation + 1) % 8 };
+        var map = new Map();
+        var side = map.Step(new(2, 2), sides[0])!.Value;
+        map.With(side.X, side.Y, "post", Opaque);
+        Assert.AreEqual("post", Trace(map, (2, 2), (3, 3)).Blocker, "Steamwoven counts the side tile");
+        Assert.IsNull(Trace(map, (2, 2), (3, 3), CombatAnomalyProfile.Original).Blocker);
+        var reach = LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(3, 3), map, CombatAnomalyProfile.Steamwoven);
+        Assert.IsNull(reach.Blocker);
+        Assert.IsTrue(LineOfFireRules.InReach(1, 1, reach, "target"));
+        var far = LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(5, 5), map, CombatAnomalyProfile.Steamwoven);
+        Assert.AreEqual(Trace(map, (2, 2), (5, 5)).Blocker, far.Blocker, "a longer line is the setting's own");
+    }
 }
