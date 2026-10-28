@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
     private IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> SpellPlacedCompanions()
     {
         var placed = new Dictionary<AreaObjectKey, (long X, long Y)?>();
-        if (_areaCompanions is not { } group) return placed;
+        if (_areaCompanions is not { } group || _readyArea is not { } area || group.Map.RuntimeMap != area.Snapshot.RuntimeMap) return placed;
         foreach (var key in group.Absent) placed[key] = null;
         foreach (var companion in group.Companions) placed[companion.Key] = group.WorldCell(companion.Speaker);
         return placed;
@@ -335,8 +335,8 @@ public partial class TerrainViewerApp
         return key => SpellPickId(key) is { } id && spared(id);
     }
 
-    private string? SpellPickId(AreaObjectKey key) =>
-        _spellCastMap is { } map && _hoverIndex is { } index && index.Contains(key) ? map.Id(index.Row(key)) : null;
+    // A visiting companion's row is another map's, so it has no id here (its key could name another row of this map).
+    private string? SpellPickId(AreaObjectKey key) => _spellCastMap?.IdOf(key);
 
     // A key-up lost to a focus change cannot leave an Alt held: some Alt must still be down (as the attack's left Alt).
     private bool SpellAltHeld => (_spellAltLeft || _spellAltRight) && Godot.Input.IsKeyPressed(Key.Alt);

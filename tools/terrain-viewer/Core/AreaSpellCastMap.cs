@@ -82,6 +82,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return _combat.Entity(_map, row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
     }
 
+    /// <summary>ARC-MAGIC-021: the cast's id of a row of this map's cell index by its key, or null (a carried item, a row of another
+    /// map such as a visiting companion's).</summary>
+    public string? IdOf(AreaObjectKey key) => _keys.GetValueOrDefault(key);
+
     /// <summary>ARC-MAGIC-015: the map row behind a cast's object id, or null (the hero, or no such row).</summary>
     public AreaObjectRecord? Row(string id) => _rows.GetValueOrDefault(id ?? throw new ArgumentNullException(nameof(id)));
 
@@ -188,6 +192,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (entity == SessionSpellCaster.Hero || !_rows.TryGetValue(entity, out var row) || row.Type != NpcType) return null;
+        // ARC-MAGIC-021: a companion on another map is not on this one.
+        if (Cell(row, _placed()) is null) return null;
         if (_combat.Build(_map, entity).Combat is not { } combat || Fields(entity, row) is not { } fields) return null;
         var resistances = fields.Object.Resistances;
         return new(combat, resistances.Count > 4 ? resistances[4] : 0, unchecked((int)fields.Object.Flags), unchecked((int)fields.Object.SpellFlags),

@@ -7,8 +7,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-MAGIC-021: the cast map's placed rows (a companion where it stands now, none while on another map), which the
-/// cursor's pick asks for the objects on a tile. Invented rows and cells, no original data.</summary>
+/// <summary>ARC-MAGIC-014: the cast map's direction of a tile offset, as the original numbers it (0x4B8D50). ARC-MAGIC-021: its
+/// placed rows (a companion where it stands now, none while on another map), which the cursor's pick asks for the objects on a
+/// tile. Invented rows and cells, no original data.</summary>
 [TestClass]
 public sealed class AreaSpellCastMapTests
 {
@@ -29,6 +30,17 @@ public sealed class AreaSpellCastMapTests
     }
 
     [TestMethod]
+    public void Directions_follow_the_original_table_with_a_two_to_one_slope_rule()
+    {
+        var cases = new (long Dx, long Dy, int Direction)[]
+        {
+            (-1, -1, 0), (-1, 0, 1), (-1, 1, 2), (0, 1, 3), (1, 1, 4), (1, 0, 5), (1, -1, 6), (0, -1, 7), (0, 0, 5),
+            (5, 2, 5), (3, 2, 4), (5, -1, 5), (-1, -5, 7), (-4, 2, 2), (-5, 2, 1),
+        };
+        foreach (var (dx, dy, direction) in cases) Assert.AreEqual(direction, AreaSpellCastMap.Direction(dx, dy), $"({dx},{dy})");
+    }
+
+    [TestMethod]
     public void A_placed_row_stands_where_it_is_now_and_on_no_cell_while_away()
     {
         using var session = ConversationSessionFixture.Create();
@@ -43,6 +55,7 @@ public sealed class AreaSpellCastMapTests
         Assert.AreEqual(0, map.ObjectsAt(new(5, 5), SpellUiRules.PickTileTypes).Count, "an absent row stands on no cell");
         Assert.IsNull(map.Object(Id(3)));
         Assert.AreEqual(new SpellLocation(7, 7), map.Object(Id(2))!.Location);
+        Assert.AreEqual((Id(1), (string?)null), (map.IdOf(Key(1)), map.IdOf(Key(9))), "only rows of this map have an id by key");
         CollectionAssert.AreEquivalent(new[] { Id(1), Id(2) }, map.ObjectsInSquare(new(5, 5), 2, SpellUiRules.PickTileTypes).Select(o => o.Id).ToArray());
     }
 }
