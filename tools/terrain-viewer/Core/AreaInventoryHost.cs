@@ -6,6 +6,7 @@ using Arcanum.Data.Scripts;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
@@ -158,13 +159,23 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Lockpick { get; init; }
     /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
     public bool Repairable { get; init; }
+    /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item
+    /// that is worn now, worn nowhere, or whose wear facts the viewer does not have.</summary>
+    public IReadOnlyList<EquipmentSlot> WearSlots { get; init; } = Array.Empty<EquipmentSlot>();
 }
+
+/// <summary>ARC-UI-015: one wear slot of the paper doll: the slot and the worn item's entity and name, or none.</summary>
+public sealed record AreaDollSlot(EquipmentSlot Slot, string? Entity, string? Name);
 
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
 public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot)
 {
     /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
     public int Gold { get; init; }
+    /// <summary>ARC-UI-015: the hero's nine wear slots in slot order (empty without a hero).</summary>
+    public IReadOnlyList<AreaDollSlot> Doll { get; init; } = Array.Empty<AreaDollSlot>();
+    /// <summary>ARC-UI-015: the hero's carried weight, carry weight and encumbrance level (null without a hero).</summary>
+    public SessionHeroCarry? Carry { get; init; }
 }
 
 /// <summary>
@@ -278,7 +289,7 @@ public sealed class AreaInventoryHost
     /// that holder's current list.</summary>
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
         IReadOnlyList<SessionHealingItem?>? kitHealing = null, IReadOnlyList<SessionLockpick?>? kitLockpicks = null,
-        IReadOnlyList<SessionWearItem?>? kitDurability = null)
+        IReadOnlyList<SessionWearItem?>? kitDurability = null, IReadOnlyList<SessionWearableItem?>? kitWear = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
@@ -289,16 +300,22 @@ public sealed class AreaInventoryHost
         string Units(string entity) => session.QueryAmmo(entity) is { } stack ? $" ×{stack.Units}" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability) })
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) })
             .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Units(item.Entity) + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability) }))
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
             .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
             .ToArray();
         var gold = session.QueryGold();
-        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
+        // ARC-UI-015: the paper doll lists the nine wear slots in slot order (the original's locations 1000..1008).
+        var wornBySlot = session.QueryEquipment().Worn.ToDictionary(item => item.Slot, item => item.Entity);
+        var doll = session.QueryHero() is null ? Array.Empty<AreaDollSlot>() : Enum.GetValues<EquipmentSlot>()
+            .Select(slot => wornBySlot.TryGetValue(slot, out var entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
+            .ToArray();
+        var carry = session.QueryHeroCarry();
+        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold, Doll = doll, Carry = carry };
         var current = session.QueryMapInventory(new(runtimeMap));
         // ARC-WORLD-063: a junk pile the session made lists its items in the pile's order.
         var pile = current?.JunkPiles.FirstOrDefault(p => p.Entity == holder);
@@ -310,8 +327,94 @@ public sealed class AreaInventoryHost
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
-        return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
+        return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold, Doll = doll, Carry = carry };
+
+        IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
     }
+
+    /// <summary>
+    /// ARC-UI-015: the wear facts of an item the PC holds, for <see cref="GameSessionOwner.Equip"/>: a kit item's from
+    /// <paramref name="kitWear"/> (the hero load's, by kit number, as the best-items start reads them), a taken item's from its object
+    /// row's fields (<see cref="SessionEquipmentFacts.Wearable"/> with the saved kind). Null for an item worn nowhere, a made item (its
+    /// prototype's facts are not read here: NOT READY), an item the session no longer has, or a session without a hero.
+    /// </summary>
+    public SessionWearableItem? Wearable(GameSessionOwner session, string entity, IReadOnlyList<SessionWearableItem?>? kitWear)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity))
+            return KitNumber(entity) is { } number && kitWear is not null && number <= kitWear.Count ? kitWear[number - 1] : null;
+        var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
+        if (taken.Entity is null) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionEquipmentFacts.Wearable(taken.Kind, fields);
+        return null;
+    }
+
+    /// <summary>ARC-UI-015: the slots an item can be put into: its wear location (<see cref="EquipmentRules.WearSlot"/>), for a ring
+    /// either ring slot (the original's doll has two ring locations, 1001 and 1002, and the wear check maps both to the ring's).</summary>
+    public static IReadOnlyList<EquipmentSlot> WearSlots(SessionWearableItem? item) => item is null || EquipmentRules.WearSlot(item.Item) is not { } slot
+        ? Array.Empty<EquipmentSlot>() : slot == EquipmentSlot.Ring1 ? [EquipmentSlot.Ring1, EquipmentSlot.Ring2] : [slot];
+
+    // kit:1 is the first kit item; a kit entity keeps its number when an earlier kit item is gone.
+    private static int? KitNumber(string entity) =>
+        entity.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(entity.AsSpan(4), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1 ? number : null;
+
+    /// <summary>ARC-UI-015: the shown name of an item the PC holds: a kit or made item's by its kind, a taken item's by its row.</summary>
+    public string ItemName(GameSessionOwner session, string entity, ObjectDescriptionCatalog? catalog)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
+        if (kit.Entity is not null) return KitName(kit, catalog);
+        var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);
+        if (made.Entity is not null) return KindName(made.Kind, catalog);
+        return Name(entity, catalog);
+    }
+
+    /// <summary>ARC-UI-015: a wear slot's shown name.</summary>
+    public static string SlotName(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.Ring1 => "ring 1",
+        EquipmentSlot.Ring2 => "ring 2",
+        _ => slot.ToString().ToLowerInvariant(),
+    };
+
+    /// <summary>
+    /// ARC-UI-015: plain text for a wear or take-off from the window: what moved (and the occupant that went back to the pack), or
+    /// the refusal; the lines the move's scripts printed follow.
+    /// </summary>
+    public static string WearText(EquipmentMutationResult result, string name, EquipmentSlot slot, bool takeOff, Func<string, string> nameOf)
+    {
+        ArgumentNullException.ThrowIfNull(nameOf);
+        var printed = result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
+        if (result.RolledBack) return $"not {(takeOff ? "taken off" : "worn")}: {Refusal(GameSessionFailure.InsertRefused, result.Verdict)}; both items went back{printed}";
+        if (result.Disposition == GameSessionDisposition.NoChange) return (takeOff ? $"nothing worn as {SlotName(slot)}" : $"{name} is already worn as {SlotName(slot)}") + printed;
+        if (result.Disposition == GameSessionDisposition.Rejected) return $"not {(takeOff ? "taken off" : "worn")}: {WearRefusal(result)}{printed}";
+        if (takeOff) return $"took off {name}{printed}";
+        return $"wore {name} as {SlotName(slot)}" + (result.Displaced is { } displaced ? $"; {nameOf(displaced)} went back to the pack" : string.Empty) + printed;
+    }
+
+    private static string WearRefusal(EquipmentMutationResult result) => result.Failure switch
+    {
+        GameSessionFailure.WearRefused => result.Refusal switch
+        {
+            EquipmentRefusal.NotWieldable => "the hero cannot wield it",
+            EquipmentRefusal.WieldMagicItems => "the hero's Magick Allergy refuses magickal items",
+            EquipmentRefusal.Broken => "the item is broken",
+            EquipmentRefusal.WrongType => "the item does not belong in that slot",
+            EquipmentRefusal.NoFreeHand => "a two-handed weapon and a shield do not go together",
+            EquipmentRefusal.Crippled => "a crippled arm prevents it",
+            EquipmentRefusal.WrongSize => "the armour is the wrong size",
+            EquipmentRefusal.WrongGender => "the armour is for the other gender",
+            EquipmentRefusal.NotDroppable => "the item cannot be moved (no-drop)",
+            var other => other.ToString(),
+        },
+        GameSessionFailure.EquipmentUnavailable => "no hero",
+        GameSessionFailure.ItemEffectUnsupported => "the item carries item spells (not supported here)",
+        GameSessionFailure.InvalidItem => "the item's wear values are not readable",
+        var failure => Refusal(failure, result.Verdict),
+    };
 
     /// <summary>
     /// ARC-SKILLS-005: the healing-item facts of an item the PC holds: a kit item's from <paramref name="kitHealing"/> (the hero
