@@ -13,6 +13,11 @@ public sealed record AreaAiMover(string Entity, AreaObjectKey Key, CellCoord Ori
     public CellCoord? From { get; init; }
     public long StepStartMs { get; init; }
     public int StepMs { get; init; }
+    /// <summary>ARC-WORLD-111: whether the step is run (drawn with the run ART), else walked.</summary>
+    public bool Running { get; init; }
+
+    /// <summary>ARC-WORLD-111: whether the NPC is on its way at <paramref name="nowMs"/> (drawn walking or running).</summary>
+    public bool Stepping(long nowMs) => From is not null && Progress(nowMs) < 1;
 
     /// <summary>The step's progress 0..1 at <paramref name="nowMs"/> (1 without a step).</summary>
     public double Progress(long nowMs) => From is null || StepMs <= 0 ? 1 : Math.Clamp((nowMs - StepStartMs) / (double)StepMs, 0, 1);
@@ -21,7 +26,7 @@ public sealed record AreaAiMover(string Entity, AreaObjectKey Key, CellCoord Ori
 /// <summary>
 /// ARC-WORLD-092: the NPCs of the shown map that the AI host moved, in world cells (an NPC never moved stands on its map data's
 /// cell and has no entry). The goal machine's step puts an NPC on its next cell at once (it stands there when the run's next step
-/// comes); the drawing slides its T0 body there over the step's time. Moved NPCs are not saved: a load or a map change stands every
+/// comes); the drawing slides its body there over the step's time (ARC-WORLD-111: the viewer draws the walk or run cycle on it). Moved NPCs are not saved: a load or a map change stands every
 /// NPC on its map data's cell again. Caller-serialized; no Godot.
 /// </summary>
 public sealed class AreaAiMovers
@@ -41,12 +46,12 @@ public sealed class AreaAiMovers
     /// <summary>The NPC's facing now: its mover's, else <paramref name="facing"/>.</summary>
     public NeighborDirection FacingOf(string entity, NeighborDirection facing) => _movers.TryGetValue(entity, out var mover) ? mover.Facing : facing;
 
-    /// <summary>Starts the NPC's step to <paramref name="next"/> (a neighbour of its cell), facing it.</summary>
-    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs)
+    /// <summary>Starts the NPC's step to <paramref name="next"/> (a neighbour of its cell), facing it, run when <paramref name="running"/>.</summary>
+    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs, bool running = false)
     {
         var from = CellOf(entity, origin);
         var facing = AreaCombatHost.Facing(from, next) ?? FacingOf(entity, NeighborDirection.XPlus);
-        _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs };
+        _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs, Running = running };
         Version++;
     }
 

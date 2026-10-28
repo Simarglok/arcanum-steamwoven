@@ -748,7 +748,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms);
+        Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running);
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }

@@ -235,6 +235,8 @@ public sealed class AreaCompanion
     /// request's flag 0x10 (the approach walks' path step asks the flag builder with its second argument set, as the PC's walk does,
     /// ledger LR2 and LR10) and its steps are admitted like the PC's since ARC-WORLD-074; false keeps the ordinary overlay.</summary>
     public bool PassesCritters { get; internal set; }
+    /// <summary>ARC-WORLD-111: the gait clock of its drawn walk cycle; a rebuilt group starts a fresh one (its body at T0 until it moves).</summary>
+    public AreaBodyCycle Cycle { get; } = new();
 }
 
 /// <summary>
@@ -245,8 +247,8 @@ public sealed class AreaCompanion
 /// party says it follows the PC, <see cref="CompanionFollower"/> drives it after the PC at each frame boundary; a
 /// waiting or free companion stands where it stopped. The PC is admitted against the companions in the same way.
 /// Placement lives in the session (<see cref="AreaCompanionPlacement"/>) only when the host records it (quick save,
-/// leaving the map), like the PC's. The drawn body is the NPC's T0 frame moved with the actor (no walk cycle or
-/// turning). ARC-WORLD-017: a companion stands on the map the session names (<see cref="AreaCompanionPlacement.Where"/>),
+/// leaving the map), like the PC's. The drawn body is the NPC's T0 frame moved with the actor; ARC-WORLD-111: the viewer
+/// draws its walk or run cycle and its facing on it (<see cref="AreaBodyMoveArt"/>). ARC-WORLD-017: a companion stands on the map the session names (<see cref="AreaCompanionPlacement.Where"/>),
 /// so a group holds the companions of every home map standing here (visitors too) and lists the home companions standing
 /// elsewhere as <see cref="Absent"/>; <see cref="Carry"/> gives the session changes of a map transfer. Caller-serialized;
 /// no Godot.

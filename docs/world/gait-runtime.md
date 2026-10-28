@@ -76,8 +76,8 @@ keyboards have no Num Lock key; the palette option works everywhere.
   `HumanFixedRun`) now has 150 keys, 1,259,440 RGBA bytes (195 keys, 1,705,144 bytes with the ARC-COMBAT-005 attack). The anchor moves linearly
   across the step and the cell commits at its half, not at the vault's action frame
   (research W4); the next step resumes the gait; two vaults in a row each play from the
-  first frame. A follower's window step takes the vault time too, but Virgil is drawn
-  with his T0 frame, and whether his (unique-NPC) ART may jump at all (research W2) is
+  first frame. A follower's window step takes the vault time too and is drawn with his walk
+  cycle (ARC-WORLD-111; his vault ART is not read), and whether his (unique-NPC) ART may jump at all (research W2) is
   NOT VERIFIED: his session reuses the PC's walker context.
 - Where to see it: map mode ([ARC-RENDER-017](../rendering/area-map-mode.md)), for
   example `./arcanum map "fal'kins maze"` or `"vendigroth underground"`: the two complete
