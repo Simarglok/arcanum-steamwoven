@@ -162,7 +162,8 @@ public interface IAreaDeathHost
 /// ARC-UI-028 (a Steamwoven addition the owner asked for; <see cref="LifecycleRuleProfile.DeathResetsToMainMenu"/> keeps the
 /// original under the Original setting): at the point of the reset, when a save exists, the black screen asks in a box like the
 /// original's quit box (SF3) whether to load the newest save. Yes loads it as the newest-save key does and the loaded game fades in
-/// (2 s) once its map is there; a refused load keeps the box with the refusal; No resets as the original. Without a save the
+/// (2 s) once its map is there; a refused load, or one that brought no living hero, keeps the box with the reason; No resets
+/// as the original. Without a save the
 /// original's reset follows at once. Caller-serialized; the host ticks it every frame.
 /// </summary>
 public sealed class AreaHeroDeath
@@ -174,6 +175,8 @@ public sealed class AreaHeroDeath
     /// <summary>ARC-UI-028: the box's question, the project's text (the game's message files hold none that asks this; its buttons
     /// are the quit box's Yes and No).</summary>
     public const string LoadQuestion = "You have died. Load the newest save?";
+    /// <summary>ARC-UI-028: the box's notice when a load ended without a living hero.</summary>
+    public const string NoLivingHero = "the load brought no living hero (the save's map did not load, or its hero is dead)";
     /// <summary>The original's slide queue holds up to 100 slides.</summary>
     public const int MaxQueued = 100;
     /// <summary>A reset whose main menu has not come this long after its first try (refused all along, or begun and never
@@ -206,6 +209,9 @@ public sealed class AreaHeroDeath
     public string? LoadRefusal { get; private set; }
     /// <summary>ARC-UI-028: true when the death ended with the newest save loaded (no reset).</summary>
     public bool Loaded { get; private set; }
+    /// <summary>ARC-UI-028: true when the load's map had not come after <see cref="ResetTimeout"/>: the screen faded in over
+    /// whatever is shown.</summary>
+    public bool LoadAbandoned { get; private set; }
     /// <summary>True while the death screen covers the game (from the fade to black until the menu has faded in).</summary>
     public bool Covering => Stage is not (AreaDeathStage.Watching or AreaDeathStage.Waiting);
 
@@ -261,6 +267,16 @@ public sealed class AreaHeroDeath
             case AreaDeathStage.Loading:
                 // Waiting for the loaded game's map; a load that never settles gives up as a reset does.
                 if (!host.LoadSettled && (_resetElapsed += milliseconds) < ResetTimeout) return;
+                // A load that brought no living hero (the other map failed and the old game came back, or the save's hero is
+                // dead) asks again, with why.
+                if (host.LoadSettled && host.HeroDead)
+                {
+                    Loaded = false; LoadRefusal = NoLivingHero;
+                    Stage = AreaDeathStage.Asking;
+                    host.Ask(_save!, NoLivingHero);
+                    return;
+                }
+                LoadAbandoned = !host.LoadSettled;
                 host.Fade(false, FadeTime);
                 Stage = AreaDeathStage.MenuFadeIn; Remaining = FadeTime;
                 return;
@@ -289,7 +305,7 @@ public sealed class AreaHeroDeath
     {
         ArgumentNullException.ThrowIfNull(host);
         if (Stage != AreaDeathStage.Asking) return false;
-        if (!yes) { host.EndAsk(); BeginReset(host); return true; }
+        if (!yes) { LoadRefusal = null; host.EndAsk(); BeginReset(host); return true; }
         if (host.LoadLastSave(_save!) is { } refused) { LoadRefusal = refused; host.Ask(_save!, refused); return true; }
         LoadRefusal = null; Loaded = true;
         host.EndAsk();
@@ -313,7 +329,7 @@ public sealed class AreaHeroDeath
         host.CloseWindows();
         if (host.MenuOpen) { host.CloseMenu(); Remaining = MenuRetryDelay; return; }
         _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetElapsed = 0;
-        _save = null; LoadRefusal = null; Loaded = false;
+        _save = null; LoadRefusal = null; Loaded = false; LoadAbandoned = false;
         if (host.Slides.Loaded) _queue.Add(DefaultSlide);
         host.Fade(true, FadeTime);
         Stage = AreaDeathStage.FadeOut; Remaining = FadeTime;

@@ -271,8 +271,18 @@ public partial class TerrainViewerApp
 
         public void EndAsk() => app.DeathPanel().HideChoice();
 
-        public string? LoadLastSave(string save) =>
-            app.LoadGame(app.SaveLibrary.Slot(save), "Death: last save ") ? null : app._quickSaveStatus ?? "the save was not loaded";
+        public string? LoadLastSave(string save)
+        {
+            // A window stream held under the death screen (it waits while a modal screen is up) would refuse the load for ever;
+            // the load replaces the scene anyway.
+            if (app._mapHandoff is { Kind: MapHandoffKind.Stream } stream)
+            {
+                app._loadCancellation?.Cancel();
+                app.EndMapStream(stream);
+                GD.Print("ARC-UI-028 hero death load dropped the window stream");
+            }
+            return app.LoadGame(app.SaveLibrary.Slot(save), "Death: last save ") ? null : app._quickSaveStatus ?? "the save was not loaded";
+        }
 
         public string? Reset(out bool lasting)
         {

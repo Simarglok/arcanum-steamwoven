@@ -209,16 +209,24 @@ public partial class TerrainViewerApp
             Require(_sceneLoadsForSelfTest == loads + 2 && MainMenuOpen && _heroDeath.Stage == AreaDeathStage.MenuFadeIn, "No reset to the main menu");
             TickHeroDeath(AreaHeroDeath.FadeTime);
 
+            // The N key resets as well.
+            game = NewGame();
+            Require(SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "self-test ") == saved, "saved for the N key");
+            Require(DieToTheBox(game) == AreaDeathStage.Asking, "the box for the N key");
+            Key(Godot.Key.N, 'n');
+            Require(_sceneLoadsForSelfTest == loads + 3 && MainMenuOpen && _heroDeath.Stage == AreaDeathStage.MenuFadeIn, "N reset to the main menu");
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+
             // Original never asks (PD8), a save there or not.
             game = NewGame();
             Require(game.SelectRules(RuleMode.Original) == GameSessionDisposition.Changed, "Original selected");
-            Require(DieToTheBox(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 3 && MainMenuOpen && !_heroDeathPanel.Asking,
+            Require(DieToTheBox(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 4 && MainMenuOpen && !_heroDeathPanel.Asking,
                 "Original reset to the main menu without the box: " + _heroDeath.Stage);
             TickHeroDeath(AreaHeroDeath.FadeTime);
             return "a death waits 5 s, closes the in-play menu and comes 0.3 s later, fades to black owning the input, shows the slide "
                 + "(picture, voice) until a key, resets to the reopened main menu fading in; a hero alive again is not reset; a voice's end ends the slide; "
                 + "an unpublished start scene clears the screen; Steamwoven with a save asks: Y loads it and it fades in, a corrupt save keeps the box, "
-                + "Escape and No reset; Original resets without asking";
+                + "Escape, the No button and N reset; Original resets without asking";
         }
         finally
         {

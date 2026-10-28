@@ -138,6 +138,26 @@ public sealed class AreaHeroDeathTests
         stuck.Answer(true, other);
         stuck.Tick(AreaHeroDeath.ResetTimeout, other);
         Assert.AreEqual(AreaDeathStage.MenuFadeIn, stuck.Stage);
+        Assert.IsTrue(stuck.LoadAbandoned);
+        Assert.IsFalse(death.LoadAbandoned);
+    }
+
+    [TestMethod]
+    public void A_load_that_brings_no_living_hero_asks_again()
+    {
+        // The other map failed and the old game came back, or the save's hero is dead: the hero is still dead when it settles.
+        var (death, host) = ShowEnded("slot0004", LifecycleRuleProfile.Steamwoven);
+        host.LoadSettled = false;
+        death.Answer(true, host);
+        host.LoadSettled = true;
+        death.Tick(16, host);
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage);
+        Assert.AreEqual(AreaHeroDeath.NoLivingHero, death.LoadRefusal);
+        Assert.IsFalse(death.Loaded);
+        Assert.AreEqual("ask slot0004 " + AreaHeroDeath.NoLivingHero, host.Calls[^1]);
+        Assert.IsTrue(death.Answer(false, host));
+        Assert.IsNull(death.LoadRefusal, "No clears the refusal");
+        Assert.AreEqual(AreaDeathStage.Reset, death.Stage);
     }
 
     [TestMethod]

@@ -66,7 +66,8 @@ public partial class TerrainViewerApp
             await Frames(3);
             Require(!MainMenuOpen && _areaSession?.QueryHero() is not null, "a new game began with a hero: " + _quickSaveStatus);
             var game = _areaSession!;
-            Require(game.Rules.Mode == RuleMode.Steamwoven, "the smoke's game runs under Steamwoven");
+            // The box is the Steamwoven setting's, whatever the stored rule preference is.
+            Require(game.SelectRules(RuleMode.Steamwoven) != GameSessionDisposition.Rejected, "Steamwoven selected");
             var saved = SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "smoke ");
             Require(saved is not null && SaveLibrary.Latest()?.Name == saved, "the new game saved: " + _quickSaveStatus);
             _heroDeathForSelfTest = true;
@@ -137,7 +138,8 @@ public partial class TerrainViewerApp
             if (_mainMenu is not null) EndMainMenu("smoke end");
             _quickKeys.Reset();
             _saveLibraryForSelfTest = null;
-            System.IO.Directory.Delete(saves, recursive: true);
+            try { System.IO.Directory.Delete(saves, recursive: true); }
+            catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-028 death smoke: temporary saves not removed: " + exception.GetType().Name); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

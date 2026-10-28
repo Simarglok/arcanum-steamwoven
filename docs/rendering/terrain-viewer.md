@@ -1618,10 +1618,11 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
   controller's confirm loads the newest save (by file date, as F8 and the main menu's Last Save) as F8 does: on the
   shown map at once, a save on another map after that map loads, while the screen stays black; then the loaded game
   fades in (2 s, or after 2 minutes without the map) and play goes on. A refused load (a damaged save, another map
-  loading) keeps the box with the reason under the buttons. N, Escape, the No button or the controller's cancel ends
+  loading) keeps the box with the reason under the buttons, and so does a load that brings no living hero (the save's
+  map failed to load and the old game came back, or the save's hero is dead); a window stream held under the screen is
+  dropped first, as the load replaces the scene. N, Escape, the No button or the controller's cancel ends
   the game with the reset above. Without any save the reset follows at once, as the original. The box acts on key
-  presses (the slides on releases); its buttons take the mouse, nothing under the screen does. A save whose hero is
-  dead loads as it is and starts no death (only a death does, PD1).
+  presses (the slides on releases); its buttons take the mouse, nothing under the screen does.
 
 Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
 or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
@@ -1633,7 +1634,7 @@ death comes is not reset; a voice's end ends the slide; a start scene that does 
 the game as it is. ARC-UI-028 in the same self-test: with a save in the list the Steamwoven setting asks after the
 slides (the question, the save "Auto-Save (quicksave)", Yes and No; another key does nothing), Y loads the save with its
 living hero and no reset, and it fades in; a damaged save keeps the box with the reason and Escape then resets; the No
-button resets; under Original the death resets without the box though a save is there. Native smoke on the original data, map mode on the start map
+button and the N key reset; under Original the death resets without the box though a save is there. Native smoke on the original data, map mode on the start map
 with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` and
 `ARC-UI-028 native-smoke death load PASS` (a new game as the first pre-made hero saved into a temporary save folder,
 the hero killed through the session, the death after 5 s on the wall clock, the installed default slide's 800 × 600

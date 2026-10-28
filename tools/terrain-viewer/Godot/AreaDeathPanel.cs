@@ -31,7 +31,8 @@ public partial class AreaDeathPanel : CanvasLayer
     internal string SaveForSelfTest => _box.Visible ? _save.Text : "";
     internal string NoticeForSelfTest => _box.Visible ? _notice.Text : "";
     internal IReadOnlyList<string> ButtonsForSelfTest => _box.Visible ? _box.FindChildren("*", nameof(Button), owned: false).OfType<Button>().Select(button => button.Text).ToArray() : [];
-    internal void PressForSelfTest(bool yes) => AnswerRequested?.Invoke(yes);
+    /// <summary>Emits the real button's pressed signal (the wiring a click goes through).</summary>
+    internal void PressForSelfTest(bool yes) => ((Button)_box.FindChild(yes ? "Yes" : "No", owned: false)!).EmitSignal(BaseButton.SignalName.Pressed);
     internal Vector2? ButtonCentreForSelfTest(bool yes) => _box.Visible && _box.FindChild(yes ? "Yes" : "No", owned: false) is Button button ? button.GetGlobalRect().GetCenter() : null;
     internal Vector2I? PictureSizeForSelfTest => _picture.Texture is { } texture ? new(texture.GetWidth(), texture.GetHeight()) : null;
 
