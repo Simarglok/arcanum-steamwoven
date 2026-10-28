@@ -178,6 +178,14 @@ live lines.
 | 34 | critical hit | 14 | 0 | 14 | 0 | 11 | 3 |
 | 35 | critical miss | 2 | 0 | 2 | 0 | 2 | 0 |
 
+**Item points (ARC-SCRIPT-041).** The report's `item_points` repeats these counts for the eight item events (get, drop,
+buy, insert item, wield on and off, remove item, transfer) with the object types that carry them and, per script, the first
+clause a run from line 0 reaches outside the session's item set (`SessionItemScripts.Admission`, copied into the probe). On the
+owner's installation it admits 7 insert-item scripts, 1 wield-off script (30236), 1 transfer script (2995, on a container) and
+no wield-on or remove-item script; the wield-on scripts stop first at `items are being rewielded` (50, 25 scripts) and
+magic-tech adjustment (91, 17), the wield-off scripts at call-ex (81, 43)
+([item events](../world/inventory-runtime.md#item-events-arc-script-041)).
+
 One dialog slot and one enter-combat slot name a script number that has no
 file (the interpreter returns *skip default* for them, E4 of ARC-RES-042). One
 of the seven trap-flagged use scripts is also on a sector object's dialog slot.

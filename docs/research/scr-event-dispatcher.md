@@ -173,7 +173,7 @@ Line 0 unless noted.
 | 24, 25 | WIELD_ON, WIELD_OFF | equip and unequip (item 0x465530, 0x4677B0, 0x467CB0) | wielder / item / — | ignored |
 | 26 | CRITTER_HITS | hit landed, on the attacker (combat 0x4B2F60, 0x4B3770) | target / attacker / — | ignored |
 | 27 | NEW_SECTOR | PC entered a sector, for each follower (sector object list 0x4F2330) | PC / follower / — | ignored |
-| 28 | REMOVE_ITEM | forced removal (item 0x467860) | holder / item / — | ignored |
+| 28 | REMOVE_ITEM | every removal from an inventory (item 0x466E00 → 0x467860; ledger [IE3](ledger/scripts.md#item-events-arc-script-041), not only a forced one) | holder / item / — | ignored |
 | 29 | LEADER_SLEEPING | the leader sleeps, for each follower (sleep UI 0x57BAC0) | sleeper / follower / — | ignored |
 | 30 | BUST | object or portal broken (object 0x43F1C0, portal 0x4F06E0) | breaker / object / — | ignored |
 | 31 | DIALOG_OVERRIDE | never fired by the engine; the slot's number names a DLG of override lines (dialog 0x418870) | — | — |
@@ -334,7 +334,7 @@ Codes are allocated when each task is created. All slices run on the Mac
 | S5 Deferred calls ([ARC-SCRIPT-010](../scripting/scr-dispatcher-runtime.md#deferred-calls-arc-script-010-slice-s5)) | S2, top-20 item 3 | Call-in, call-at and remove-call on the event queue, in the snapshot. |
 | S6 Heartbeat hook | S2, RES-039 I6 | First heartbeat and heartbeat on the AI time event, at subturn start and after each animation in a subturn, gating the AI pass. |
 | S7 Combat hooks | S2, RES-039 I3/I4, combat slices | Enter/exit/start/end, WILL_KOS, dying, hit/miss and damage events at the positions of section 2. |
-| S8 Item events | S2, inventory owner | Get, drop, transfer, insert, remove, wield, buy; lifts the current "item with script refused" rule. |
+| S8 Item events (transfer half done: ARC-SCRIPT-041, [item events](../world/inventory-runtime.md#item-events-arc-script-041)) | S2, inventory owner | Get, drop, transfer, insert, remove, wield, buy; lifts the current "item with script refused" rule. Left: wield on and off with the item-effect actions they need, drop, buy. |
 
 Suggested order: S0 → S1 → S2 → S3 (proves the core on the event that already
 works) → S4 (opens the conditional maps) → S5 → S6/S7 with the AI slices →

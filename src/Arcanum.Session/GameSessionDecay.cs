@@ -38,10 +38,11 @@ public sealed partial class GameSessionOwner
             .Select(e => (e.Payload.Entities[0].Code, new SessionMapId(e.Payload.Entities[0].Map), e.DeadlineMs)).ToArray());
     }
 
-    // A pickup that took the item off the ground ends its decay (0x461810 → 0x468110: in the PC's list it no longer decays).
+    // A pickup that took the item off the ground ends its decay (0x461810 → 0x468110: in the PC's list it no longer decays). A get script
+    // that declined the pickup (ARC-SCRIPT-041) leaves the item and its event, even when its flag writes changed the session.
     private InventoryMutationResult Picked(string entity, InventoryMutationResult result)
     {
-        if (result.Disposition == GameSessionDisposition.Changed) CancelDecay(entity);
+        if (result.Disposition == GameSessionDisposition.Changed && result.Item is not null) CancelDecay(entity);
         return result;
     }
 
