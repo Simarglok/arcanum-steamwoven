@@ -500,11 +500,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// ARC-MAGIC-019: a queued cast whose goal never plays, because its caster's goal stack ended through the end step or was
-    /// interrupted. Its only end node, the casting goal 26's animation reset (0x42B090), frees nothing: in the original the run keeps
-    /// its slot (MG43); Steamwoven frees a run still waiting for its BEGIN, unpaid. Null when nothing was freed.
+    /// interrupted. Its only end node, the casting goal 26's animation reset (0x42B090), frees nothing, so in the original the run
+    /// keeps its slot (MG43); fixed in both modes (owner decision 2026-10-28): a run still waiting for its BEGIN is freed, unpaid.
+    /// Null when nothing was freed.
     /// </summary>
     public SessionSpellRunResult? DropQueued(int run) =>
-        Profile.DroppedQueueKeepsRuns || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r) ? null : Act(new(SessionSpellRunActionKind.Free, run));
+        _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r) ? null : Act(new(SessionSpellRunActionKind.Free, run));
 
     /// <summary>
     /// The release frame's target re-check (0x456A90): the record's BEGIN area passes at once when it is 0, exactly 0x10, or has

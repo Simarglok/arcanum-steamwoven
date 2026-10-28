@@ -258,7 +258,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG40 | original bug (ARC-MAGIC-014, ledger MG40) | fix (owner decision 2026-10-27), switch `GoalEndChargesAnyRun`: a run freed before its BEGIN is charged only when its BEGIN would have paid | MT20a-1 |
 | MG41 | original bug (ARC-MAGIC-014, ledger MG41) | fix (owner decision 2026-10-27), switch `ReleaseRefusalKeepsRun`: a run whose target fails the release re-check is freed unpaid | MT20a-1 |
 | MG42 | original bug (ARC-MAGIC-015, ledger MG42) | fix without a switch (owner decision 2026-10-27, presentation only): the cursor's "not damaged" message only for the current pick's reason | MT20a-2 |
-| MG43 | original bug (ARC-MAGIC-019, ledger MG43) | pending owner decision; recommended and built: fix, switch `DroppedQueueKeepsRuns`: queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
+| MG43 | original bug (ARC-MAGIC-019, ledger MG43) | fix in both modes without a switch (owner decision 2026-10-28): queued casts whose goals never play are freed unpaid | MT20a-2 leftover |
 | MG44 | original bug (ARC-MAGIC-018, ledger MG44) | fix in both modes (owner decision 2026-10-28: fixed in both rule modes, no switch): a run whose missile is lost before it arrives (a leg's line refused, the goal stopped) is freed unpaid | MT20a-2 leftover |
 | O9 magic resistance source | reconstruction change | the original (stored value, no armour, effects or clamp) in both modes | MT6 |
 | O10 shell and reflection order | reconstruction change | the original in both modes | MT10 |
@@ -293,7 +293,7 @@ Agreed through the coordinator on 2026-10-20:
 
 - **Item spells** (FR-MAGIC-011): the item trigger executor (0x4CB830) and its callers (0x4CB720–0x4CC160), on use,
   wear, unwear, hit and death, with item spell charges and LM7, serve magic and technology items alike. Read with O6 by
-  ARC-MAGIC-020 ([ledger IT1–IT9](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)), which runs the wear and unwear
+  ARC-MAGIC-020 ([ledger IT1–IT10](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)), which runs the wear and unwear
   through the cast host and lifts the equipment's refusal where a trigger host is given ([contract](../world/item-spell-triggers.md)).
   Left as slices of their own: pickup, drop and item use with saved charges; the combat and life events; the item spell
   pane, inventory-target spells and hotkeys (0x57C040, 0x57C080).

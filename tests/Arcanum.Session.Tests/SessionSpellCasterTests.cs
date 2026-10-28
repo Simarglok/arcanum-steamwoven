@@ -511,9 +511,10 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg43_a_dropped_queued_cast_keeps_its_run_in_the_original_and_is_freed_unpaid_in_Steamwoven()
+    public void Mg43_a_dropped_queued_cast_is_freed_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        // A technical bug (the run leaks its slot): fixed in both modes, no switch (owner decision 2026-10-28).
+        foreach (var mode in new[] { RuleMode.Original, RuleMode.Steamwoven })
         {
             var record = SelfBolt();
             var (owner, caster) = Session(mode, record);
@@ -521,8 +522,8 @@ public sealed class SessionSpellCasterTests
             var before = Hero(owner).Fatigue;
             var run = Cast(caster, record);
             Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(run, 0));
-            Assert.AreEqual(!kept, caster.DropQueued(run) is not null, $"{mode}");
-            Assert.AreEqual((kept, before), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue), $"{mode}: unpaid");
+            Assert.IsNotNull(caster.DropQueued(run), $"{mode}");
+            Assert.AreEqual(((SpellRun?)null, before), (owner.QuerySpellRuns()[run], Hero(owner).Fatigue), $"{mode}: freed unpaid");
         }
         // A run whose BEGIN ran is no queued cast: nothing is freed.
         var begun = SelfBolt(duration: 30);
@@ -606,6 +607,27 @@ public sealed class SessionSpellCasterTests
             Assert.IsNull(caster.ArriveMissile(run), "a lost missile never arrives");
             Assert.IsNull(caster.EndGoal(run), "the casting goal's end still frees nothing");
         }
+    }
+
+    [TestMethod]
+    public void A_missile_whose_run_is_freed_meanwhile_stops_flying_and_a_new_goal_for_the_slot_forgets_it()
+    {
+        var record = SelfBolt(beginTargets: 0x4);
+        var (owner, caster, _) = MissileSession(RuleMode.Original, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record, "box");
+        caster.StartGoal(run, new NoCombat());
+        Assert.IsTrue(caster.LaunchMissile(run));
+        caster.Act(new(SessionSpellRunActionKind.Free, run));
+        Assert.IsFalse(caster.MissileFlies(run), "the freed note forgets the missile");
+        Assert.IsNull(caster.ArriveMissile(run));
+        // The slot reused: the new run's goal launches its own missile, which the old one's end cannot touch.
+        var second = Start(owner, caster, record, "box");
+        Assert.AreEqual(run, second, "the slot is reused");
+        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(second, new NoCombat()).Outcome);
+        Assert.IsFalse(caster.MissileFlies(second));
+        Assert.IsTrue(caster.LaunchMissile(second));
+        Assert.AreEqual(GameSessionDisposition.Changed, caster.ArriveMissile(second)!.Disposition);
     }
 
     [TestMethod]

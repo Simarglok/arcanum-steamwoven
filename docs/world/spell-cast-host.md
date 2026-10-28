@@ -189,7 +189,7 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    goal ends after its cast eye candy (a pop, QC3), the first queued goal starts (`StartGoal`, the same checks as a first goal).
    A goal without cast eye candy, one whose target failed before it, or a queued goal refused at its start ends through the end
    step, and a goal cut short — or a hero who cannot act when the goal ends — interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
-   unpaid in Steamwoven (`DropQueued`, MG43). A queued run exists from the click, so a run starting before it can cancel it by
+   unpaid in both modes (`DropQueued`, MG43, owner decision 2026-10-28). A queued run exists from the click, so a run starting before it can cancel it by
    its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6); its slot is free again, so the viewer forgets a queued
    entry whose slot a newer cast takes. F7 stays refused while a goal plays.
 
@@ -237,7 +237,9 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
 
 1. **The launch (`LaunchMissile`, SM1).** The release gate marks the goal's frame handled, so the casting goal's end frees nothing;
    there is no target re-check and no BEGIN now. The secondary cast eye candy (6·spell + 4) plays on the caster at the launch (it
-   does not play again at the arrival). The casting goal goes on with its own eye candy and ends by itself.
+   does not play again at the arrival). The casting goal goes on with its own eye candy one pace later (`PaceAfterRelease`) and
+   ends by itself. Only the gate of a cast eye candy launches: a cast without one, or whose target fails before its eye candy
+   (QC4), releases at once without a missile (EC7).
 2. **The missile (SM2).** It leaves the caster's tile for the target object's tile (a tile cast: the tile), its art the projectile
    entry's, faced in the screen direction between the two tiles (0x4B6A00, 0x4B6B10 for an eye-candy art: rotation in bits 9..11,
    number + direction / 8), unlit.
@@ -247,7 +249,7 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
    (1000 / its frame rate, 100 ms when that does not read), then (`LegEnd`): on its destination with its target object there, or a
    tile cast, it arrives; a target that moved is followed on a new leg from the missile's tile; elsewhere it flies its line again.
    A missile already on its destination at the launch (a cast at the caster's own tile) arrives at once.
-4. **The arrival (`ArriveMissile`, SM6).** The release: the target re-check and the BEGIN, as the casting goal's (`Release`); a
+4. **The arrival (`ArriveMissile`, SM3; SM6 for a failed re-check).** The release: the target re-check and the BEGIN, as the casting goal's (`Release`); a
    failed re-check keeps the run in the original and frees it unpaid in Steamwoven (MG41's switch). The missile is destroyed.
 5. **A lost missile (`LoseMissile`, MG44).** A leg whose line is refused (more than 100 steps), a point off the map, another
    map or session ends the missile's goal without its release: the original destroys the missile and frees nothing, so the run
@@ -271,7 +273,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
-| Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | `MagicAnomalyProfile.DroppedQueueKeepsRuns` (pending owner decision; recommended and built: fix) |
+| Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |

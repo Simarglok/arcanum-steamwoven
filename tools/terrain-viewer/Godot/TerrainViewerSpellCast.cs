@@ -157,13 +157,15 @@ public partial class TerrainViewerApp
         if (goal.Animation is null && owner.QuerySpellRuns()[goal.Run] is { } awaiting && !caster.TargetStillValid(awaiting))
         {
             goal.TargetFailedAtStart = true; _spellTargetFailedAtStart++;
-            ReleaseSpellGoal(caster, goal, now);
+            ReleaseSpellGoal(caster, goal, now, fromGate: false);
             EndSpellGoal(caster, goal, null);
             return;
         }
         // ARC-MAGIC-017: the cast entry's eye candy times the goal (goal 27): the release at its action frame, the end after it.
         var animation = goal.Animation ??= StartCastEyeCandy(goal.Run, goal.Spell, started);
-        animation.Advance(now, () => ReleaseSpellGoal(caster, goal, now));
+        // ARC-MAGIC-018: only the gate of a cast eye candy (0x42CAA0) reaches the missile's launch (0x429C40); without one the
+        // release (0x429C80) runs at once.
+        animation.Advance(now, () => ReleaseSpellGoal(caster, goal, now, fromGate: !animation.Immediate));
         if (animation.Ended)
         {
             _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), (goal.ReleasedMs ?? now) - started, now - started, animation.Immediate));
@@ -175,10 +177,16 @@ public partial class TerrainViewerApp
     /// <summary>The release frame (0x429C80): the target re-check and BEGIN; when it passes, the secondary cast entry's eye candy on the
     /// hero (0x456E00, 6·spell + 4). ARC-MAGIC-018: a spell whose projectile eye candy has art launches its missile instead
     /// (0x429C40), which releases when it arrives.</summary>
-    private bool ReleaseSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, long now)
+    private bool ReleaseSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, long now, bool fromGate)
     {
         goal.Released = true; goal.ReleasedMs = now;
-        if (SpellMissileArt(goal.Spell) is { } missile) return LaunchSpellMissile(caster, goal, missile, now);
+        if (fromGate && SpellMissileArt(goal.Spell) is { } missile)
+        {
+            var launched = LaunchSpellMissile(caster, goal, missile, now);
+            // The launch's true step restarts goal 27 one pace later (0x4246E0, delay −2).
+            if (launched && goal.Animation is { } playing) playing.PaceAfterRelease = true;
+            return launched;
+        }
         var released = caster.Release(goal.Run);
         GD.Print($"ARC-MAGIC-015 cast-release run={goal.Run} spell={goal.Spell} begun={released?.Disposition.ToString() ?? "re-check failed"}"
             + $" failure={released?.Failure} at={now - (goal.StartMs ?? now)}ms");
@@ -439,12 +447,20 @@ public partial class TerrainViewerApp
     private void FlushSpellLog(string? lead)
     {
         if (_spellCaster is not { } caster) return;
+        var from = _spellLogSeen;
+        _spellLogSeen = caster.Log.Count;
+        PostSpellLog(lead, caster.Log.Skip(from));
+    }
+
+    /// <summary>Log entries as the status notice and a message window entry (ARC-MAGIC-018: also a replaced host's own entries, for a
+    /// missile that left with it).</summary>
+    private void PostSpellLog(string? lead, IEnumerable<SpellCastEvent> entries)
+    {
         var lines = new List<string>();
         if (lead is not null) lines.Add(lead);
         var texts = _spellData?.Data?.Texts;
-        for (; _spellLogSeen < caster.Log.Count; _spellLogSeen++)
+        foreach (var entry in entries)
         {
-            var entry = caster.Log[_spellLogSeen];
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);

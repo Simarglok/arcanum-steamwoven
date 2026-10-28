@@ -203,7 +203,8 @@ public partial class TerrainViewerApp
             var (clip, back, pace) = EyeCandyClips(entry.Art!.Value, parts);
             var expected = new CastEyeCandyAnimation(clip, back, parts.TimesRelease, 0, pace);
             long? expectedRelease = null;
-            expected.Advance(long.MaxValue / 4, () => { expectedRelease = expected.DueMs; return true; });
+            // ARC-MAGIC-018: a launch waits one pace before the goal's next step (0x4246E0).
+            expected.Advance(long.MaxValue / 4, () => { expectedRelease = expected.DueMs; expected.PaceAfterRelease = missileArt is not null; return true; });
             var expectedEnd = expected.DueMs;
             Require(expectedRelease is { } due ? timing.ReleaseMs >= due && timing.ReleaseMs < due + 50 : timing.ReleaseMs == timing.EndMs,
                 $"the release came at the eye candy's action frame: {timing.ReleaseMs} ms, expected {expectedRelease} ms (clip {clip})");
@@ -255,6 +256,8 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, start ?? AreaSmokeStandable(map, targetCell, 1));
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             PublishWorldSelection();
+            if (SpellMissileArt(spell!.Data.Number) is not null)
+                GD.Print($"ARC-MAGIC-019 cast smoke: spell {spell.Data.Number} has a missile, so the queued second cast is not checked here");
             var first = await CastOnce(spell!);
             // ARC-MAGIC-018: a hero whose damaging spell has no missile also casts one that has (learned when it knows none).
             object? second = null;

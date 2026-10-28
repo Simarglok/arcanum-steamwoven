@@ -234,6 +234,19 @@ class LauncherSyncTests(unittest.TestCase):
         for flag in ("--prototypes", "--area-mobile", "--area-effects", "--area-patch", "--area-cave-mobile"):
             self.assertNotIn(flag, argv)
 
+    def test_a_game_folder_start_opens_what_area_opens(self):
+        # ARC-DEV-046: a viewer start without inputs (a player's build) opens the stored game folder's main map like `./arcanum area`.
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        self.assertIn(f'GameFolderStartMap = "{project["AREA_MAP"]}";', source)
+        self.assertIn('GameFolderSourceId = "local-original";', source)
+        self.assertIn('config.safe_source_id(source_id or "local-original")', (REPO / "tools/arcanum-local").read_text())
+        for role, flag in (("module", "--module"), ("terrainResource", "--resource"), ("actorResource", "--actor-resource"), ("gameRoot", "--game-root")):
+            self.assertIn(role, launch.MAP_ROLES)
+            self.assertIn(f'"{flag}", inputs.', source)
+        self.assertEqual(("modules/Arcanum.dat", "arcanum1.dat", "arcanum2.dat"),
+                         tuple(launch.GAME_ROLES[role][0] for role in ("module", "actorResource", "terrainResource")))
+
     def test_area_run_launches_the_map_mode_build_with_the_main_map(self):
         # ARC-RENDER-028: `run` for `area` tries the map-mode tasks in order and launches map mode on the main map.
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")

@@ -15,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 // (its art faced in the screen direction, one frame per step) in ticks of 35 ms, testing nothing on the way. When a leg's steps run
 // out it waits one pace of its art; then on its destination with its target there (or a tile target) it arrives: the target re-check
 // and the BEGIN (SessionSpellCaster.ArriveMissile); a target that moved is followed on a new leg; a refused line, another map or
-// another session loses it (LoseMissile, MG43). The casting goal ends on its own eye candy meanwhile.
+// another session loses it (LoseMissile, MG44: its run is freed unpaid). The casting goal ends on its own eye candy meanwhile.
 public partial class TerrainViewerApp
 {
     /// <summary>One spell missile in flight: its run and host, its target (an object, or none for a tile), its destination, its faced
@@ -58,6 +58,8 @@ public partial class TerrainViewerApp
     private bool LaunchSpellMissile(SessionSpellCaster caster, SpellCastGoal goal, uint art, long now)
     {
         if (_areaSession is not { } owner || HeroWorldCell() is not { } start || !caster.LaunchMissile(goal.Run)) return false;
+        // A missile of an earlier run in the same slot (freed meanwhile) is gone: the run id is the missile's identity.
+        foreach (var stale in _spellMissiles.Where(m => m.Run == goal.Run).ToArray()) DropSpellMissile(stale, "its slot was reused");
         PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run, now);
         var destination = goal.TargetObject is { } target ? EyeCandyCell(owner, target) ?? start : new CellCoord(unchecked((int)goal.TargetTile.X), unchecked((int)goal.TargetTile.Y));
         var direction = ProjectileRules.Direction(start, destination);
@@ -72,7 +74,8 @@ public partial class TerrainViewerApp
         {
             Caster = caster, Run = goal.Run, Spell = goal.Spell, Map = CurrentAreaMap, Target = goal.TargetObject, Destination = destination, Art = faced,
             StepsPerTick = SpellMissileRules.StepsPerTick(entry.ProjectileSpeed), PaceMs = SpellMissileRules.PaceMs(fps),
-            Flight = leg.Flight ?? ProjectileRules.Launch(start, start) ?? new(start, start, [(0, 0)], 1, start, 0, 0, 0), LegStartMs = now,
+            // A missile that does not fly (already there, or a refused line) ends below and is never stepped or drawn.
+            Flight = leg.Flight ?? new(start, start, [(0, 0)], 1, start, 0, 0, 0), LegStartMs = now,
         };
         switch (leg.Kind)
         {
@@ -100,6 +103,8 @@ public partial class TerrainViewerApp
                 LoseSpellMissile(missile, "the map or session changed");
                 continue;
             }
+            // Its run was freed meanwhile (a run of the same spell that began cancelled it, QC6): the missile goes with it.
+            if (!missile.Caster.MissileFlies(missile.Run)) { DropSpellMissile(missile, "its run was freed"); moved = true; continue; }
             while (_spellMissiles.Contains(missile))
             {
                 if (missile.WaitUntilMs is { } wait)
@@ -139,8 +144,7 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-MAGIC-018 missile-retarget run={missile.Run} from={missile.Flight.Tile.X},{missile.Flight.Tile.Y} to={target.Value.X},{target.Value.Y} leg={leg.Kind}");
                 if (leg.Kind == SpellMissileLegKind.Refused) { LoseSpellMissile(missile, "the line to the moved target is too long"); return; }
                 missile.Destination = target.Value;
-                if (leg.Flight is not { } flight) { ArriveSpellMissile(missile, "arrived"); return; }
-                missile.Flight = flight;
+                missile.Flight = leg.Flight!;
                 break;
         }
         _spellMissileLegs[missile.Run] = _spellMissileLegs.GetValueOrDefault(missile.Run) + 1;
@@ -152,20 +156,38 @@ public partial class TerrainViewerApp
     private void ArriveSpellMissile(SpellMissile missile, string why)
     {
         _spellMissiles.Remove(missile);
+        var mark = missile.Caster.Log.Count;
         var begun = missile.Caster.ArriveMissile(missile.Run);
         Ended(missile, why, $"begun={begun?.Disposition.ToString() ?? "re-check failed"} failure={begun?.Failure}");
-        if (ReferenceEquals(missile.Caster, _spellCaster)) FlushSpellLog(begun is null ? "the target is no longer valid" : null);
+        FlushMissileLog(missile, mark, begun is null ? "the target is no longer valid" : null);
         RefreshAreaStatus();
     }
 
-    /// <summary>The missile's goal ended without its release (0x429E70): the missile is destroyed; the run is freed unpaid under
-    /// Steamwoven and kept under the original's rule (MG43).</summary>
+    /// <summary>The missile's goal ended without its release (0x429E70): the missile is destroyed and its run freed unpaid (MG44, fixed
+    /// in both rule modes).</summary>
     private void LoseSpellMissile(SpellMissile missile, string why)
     {
         _spellMissiles.Remove(missile);
+        var mark = missile.Caster.Log.Count;
         var freed = missile.Caster.LoseMissile(missile.Run);
         Ended(missile, why, $"freed={freed?.Disposition.ToString() ?? "nothing"}");
-        if (ReferenceEquals(missile.Caster, _spellCaster) && ReferenceEquals(missile.Caster.Owner, _areaSession)) FlushSpellLog("the missile was lost: " + why);
+        FlushMissileLog(missile, mark, "the missile was lost: " + why);
+    }
+
+    /// <summary>A missile whose run is gone (freed, or its slot reused) is only removed: nothing of the run is touched.</summary>
+    private void DropSpellMissile(SpellMissile missile, string why)
+    {
+        _spellMissiles.Remove(missile);
+        Ended(missile, why, "dropped");
+    }
+
+    /// <summary>The log lines of a missile's end: the shown host's new entries, or, for a host replaced on the same map and session
+    /// (a door changed its stamp), that host's own entries since <paramref name="mark"/>.</summary>
+    private void FlushMissileLog(SpellMissile missile, int mark, string? lead)
+    {
+        if (!ReferenceEquals(missile.Caster.Owner, _areaSession)) return;
+        if (ReferenceEquals(missile.Caster, _spellCaster)) FlushSpellLog(lead);
+        else PostSpellLog(lead, missile.Caster.Log.Skip(mark));
     }
 
     private void Ended(SpellMissile missile, string why, string detail)

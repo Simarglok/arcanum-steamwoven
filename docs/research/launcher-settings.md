@@ -48,7 +48,7 @@ switch is `true`, Steamwoven `false`:
 | `GameRules` member | Profile (assembly) | Switches | Examples |
 | --- | --- | ---: | --- |
 | `Combat` | `CombatAnomalyProfile` (Simulation) | 22 | A2 bed modifier counted twice, A7 critical self-hit rolled twice, EX12 spread-out sets no-flee |
-| `Magic` | `MagicAnomalyProfile` (Simulation) | 18 | MG4 save subtracts resistance, MG3 maintenance pays both, MG35 difficulty scales kill damage |
+| `Magic` | `MagicAnomalyProfile` (Simulation) | 17 | MG4 save subtracts resistance, MG3 maintenance pays both, MG35 difficulty scales kill damage |
 | `Data` | `DataFixProfile` (Data) | 5 | DF1 stone examine text lost, MP7 map patch script 0 ignored |
 | `Orders` | `CompanionOrderRuleProfile` (Simulation) | 4 | OL6 follow order never unwaits |
 | `Travel` | `TravelRuleProfile` (Simulation) | 4 | WT3 discovery uses the best radius |
@@ -322,7 +322,8 @@ project yet).
 | 4 | Switch catalogue and custom profiles: catalogue with player texts, `GameRules.Custom`, codec schema 2, contract change, launcher editor | WORLD + UI (two tasks) | Mac | FR-PRODUCT-006 | 2, owner's decision |
 | 5 | Packaged builds (the alpha's final task): macOS `.app` and Windows x64 presets, player folder name, icon, signing level, smoke on both OSes, player instruction for GOG on macOS and Windows | DEV | Mac (+ a Windows 11 machine for the smoke) | FR-PRODUCT-005, FR-LIFECYCLE-001 | 1, 2 |
 
-Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
+Task 1 is done as ARC-DEV-046 (the settings store, the locator and a viewer start without inputs from the stored
+folder; [viewer start](../rendering/terrain-viewer.md#start-without-inputs-arc-dev-046)). Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
 
 ## Questions for the owner
 
