@@ -98,6 +98,20 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_aiFidgets > fidgets, "its done attack run was followed by its fidget");
+            // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
+            var skills = _aiSkills;
+            if (session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true })
+            {
+                host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);
+                Require(host.RunOf(entity)?.Bottom.Goal == AiGoalType.UseSkill, "the skill starter begins goal 33: " + host.TraceOf(entity)?.Perform);
+                for (var f = 0; f < 200 && _aiSkills == skills; f++)
+                {
+                    _areaSmokeTime++;
+                    TickAreaClock(hostMs += 50);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_aiSkills > skills, "the skill attempt reached the viewer: " + host.TraceOf(entity)?.Skill);
+            }
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
 
@@ -129,7 +143,7 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

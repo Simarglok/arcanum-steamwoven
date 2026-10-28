@@ -210,7 +210,8 @@ the fail-chance predictor (ARC-WORLD-102). `ExecutorRulesTests` (Simulation): `F
 PC, and in a round the action points and the gate. `CombatRoundTests` (Session): the subturn starts are counted
 whichever call began them, A9's twice, and not saved. Native smokes: `ARC_AREA_MAP_SMOKE_ONLY=ai` on `crash site cave` with
 `--hero`, marker `ARC-WORLD-092 native-smoke ai PASS` (since ARC-WORLD-099 also the fidget after the bite's run, `Fidgets` in the
-marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
+marker; since ARC-WORLD-109 a living animal's pickpocket run on itself, started through `PerformSkill`, walks goal 33 into 86 and its
+not-ready attempt reaches the viewer, `Skills` in the marker); `ai-turn-based`, marker `ARC-WORLD-095 native-smoke ai-turn-based PASS` (since ARC-WORLD-099 also the end-combat script
 asked at the NPC's subturn end, `EndCombatScripts`); `ai-cast` on `Arcanum1-024-fixed` with `--hero`, marker
 `ARC-WORLD-102 native-smoke ai-cast PASS` (since ARC-WORLD-105 the NPC then casts the first listed missile spell whose run starts at
 the hero, as its pass record's choice: the missile flies from it, is drawn and arrives; `MissileSpell`, `MissileLegs` and
