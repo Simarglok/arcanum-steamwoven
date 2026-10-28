@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -5,7 +7,8 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-004 diagnostic inventory window: the PC's list (items taken from the world, in order) and, when a dead NPC is
-/// looted, that body's current list with a take button per item and "take all". It renders an
+/// looted, that body's current list with a take button per item and "take all". ARC-UI-015: above the list the paper doll (the
+/// nine wear slots, a take-off button per worn item), a wear button per slot an item can go to, and the weight line. It renders an
 /// <see cref="AreaInventoryView"/>; the app runs every transfer through the session.
 /// </summary>
 public partial class AreaInventoryPanel : CanvasLayer
@@ -17,6 +20,11 @@ public partial class AreaInventoryPanel : CanvasLayer
     private readonly List<Button> _useButtons = new();
     private readonly List<Button> _pickButtons = new();
     private readonly List<Button> _repairButtons = new();
+    private Label _doll = null!;
+    private VBoxContainer _wear = null!;
+    private readonly List<Button> _wearButtons = new();
+    private readonly List<Button> _takeOffButtons = new();
+    private readonly List<(string Entity, EquipmentSlot Slot)> _wearTargets = new();
     private Label _lootHeader = null!;
     private VBoxContainer _loot = null!;
     private Label _message = null!;
@@ -38,6 +46,10 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action<string>? PickRequested;
     /// <summary>ARC-SKILLS-007: an item chosen for the hero's Repair skill (the original's skill-bar repair on an inventory item).</summary>
     public event Action<string>? RepairRequested;
+    /// <summary>ARC-UI-015: put a PC item into a wear slot (the original's drop of a held item on a doll slot).</summary>
+    public event Action<string, EquipmentSlot>? WearRequested;
+    /// <summary>ARC-UI-015: take the item of a wear slot off into the pack (the original's drop of a worn item on the grid).</summary>
+    public event Action<EquipmentSlot>? TakeOffRequested;
     public bool IsOpen => Visible;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
@@ -46,6 +58,11 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal IReadOnlyList<Button> UseButtonsForSelfTest => _useButtons;
     internal IReadOnlyList<Button> PickButtonsForSelfTest => _pickButtons;
     internal IReadOnlyList<Button> RepairButtonsForSelfTest => _repairButtons;
+    internal IReadOnlyList<Button> WearButtonsForSelfTest => _wearButtons;
+    internal IReadOnlyList<Button> TakeOffButtonsForSelfTest => _takeOffButtons;
+    internal IReadOnlyList<(string Entity, EquipmentSlot Slot)> WearTargetsForSelfTest => _wearTargets;
+    internal string DollTextForSelfTest => _doll.Text;
+    internal string HeaderForSelfTest => _header.Text;
     internal Button TakeAllForSelfTest => _takeAll;
     internal string MessageForSelfTest => _message.Text;
     internal string PcTextForSelfTest => _pc.Text;
@@ -69,6 +86,9 @@ public partial class AreaInventoryPanel : CanvasLayer
         var left = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         var right = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _pc = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _doll = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _wear = new VBoxContainer();
+        left.AddChild(new Label { Text = "Worn (paper doll)", Modulate = new Color(1f, .85f, .55f) }); left.AddChild(_doll); left.AddChild(_wear);
         left.AddChild(new Label { Text = "PC (taken from the world)", Modulate = new Color(1f, .85f, .55f) }); left.AddChild(_pc);
         _use = new VBoxContainer(); left.AddChild(_use);
         _lootHeader = new Label { Modulate = new Color(1f, .85f, .55f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -106,8 +126,36 @@ public partial class AreaInventoryPanel : CanvasLayer
         _buttons.Clear();
         foreach (var button in _useButtons.Concat(_pickButtons).Concat(_repairButtons)) { _use.RemoveChild(button); button.QueueFree(); }
         _useButtons.Clear(); _pickButtons.Clear(); _repairButtons.Clear();
+        foreach (var button in _takeOffButtons.Concat(_wearButtons)) { _wear.RemoveChild(button); button.QueueFree(); }
+        _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear();
         _view = view;
-        _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Holder is null ? string.Empty : " | looting a dead NPC");
+        _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
+            + (view.Holder is null ? string.Empty : " | looting a dead NPC");
+        _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
+            : string.Join("\n", view.Doll.Select(slot => $"{AreaInventoryHost.SlotName(slot.Slot)}: {slot.Name ?? "-"}"));
+        foreach (var slot in view.Doll.Where(slot => slot.Entity is not null))
+        {
+            var wearSlot = slot.Slot;
+            var off = new Button
+            {
+                Name = $"TakeOff{_takeOffButtons.Count + 1}", Text = $"Take off ({AreaInventoryHost.SlotName(wearSlot)}): {slot.Name}", Alignment = HorizontalAlignment.Left,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+            };
+            off.Pressed += () => Callable.From(() => TakeOffRequested?.Invoke(wearSlot)).CallDeferred();
+            _wear.AddChild(off); _takeOffButtons.Add(off);
+        }
+        foreach (var line in view.Pc.Where(line => line.WearSlots.Count > 0))
+            foreach (var wearSlot in line.WearSlots)
+            {
+                var entity = line.Entity;
+                var wear = new Button
+                {
+                    Name = $"Wear{_wearButtons.Count + 1}", Text = $"Wear ({AreaInventoryHost.SlotName(wearSlot)}): {line.Text}", Alignment = HorizontalAlignment.Left,
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+                };
+                wear.Pressed += () => Callable.From(() => WearRequested?.Invoke(entity, wearSlot)).CallDeferred();
+                _wear.AddChild(wear); _wearButtons.Add(wear); _wearTargets.Add((entity, wearSlot));
+            }
         _pc.Text = view.Pc.Count == 0 ? "(nothing taken yet)" : string.Join("\n", view.Pc.Select((line, index) => $"{index + 1}. {line.Text}"));
         foreach (var line in view.Pc.Where(line => line.Healing))
         {
@@ -178,7 +226,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
             + (_pickButtons.Count > 0 ? "Pick a lock closes the window; then press a door or window | " : string.Empty)
             + (_repairButtons.Count > 0 ? "Repair uses the hero's Repair skill on a damaged item | " : string.Empty)
-            + "I, Escape or cancel closes | PROJECT diagnostic window: no grid, equipment, drop or weight limit; original UI parity NOT_VERIFIED";
+            + (_wearButtons.Count + _takeOffButtons.Count > 0 ? "Wear puts an item into a slot (an occupant goes back to the pack); Take off moves it to the pack | " : string.Empty)
+            + "I, Escape or cancel closes | PROJECT diagnostic window: no grid, drag, drop or stacks; original UI parity NOT_VERIFIED";
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
@@ -188,9 +237,16 @@ public partial class AreaInventoryPanel : CanvasLayer
     {
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
+        // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
+        list.AddRange(_takeOffButtons.Concat(_wearButtons));
         list.Add(_close);
         return list;
     }
+
+    /// <summary>ARC-UI-015: the original's weight lines (ledger IW9): the carried weight, and the encumbrance level with the weight
+    /// up to which it holds (the carry weight times the level's threshold).</summary>
+    internal static string CarryText(Arcanum.Session.SessionHeroCarry carry) =>
+        $"weight {carry.Weight} | encumbrance level {carry.Level} (up to {CarryRules.Threshold(carry.Level, carry.CarryWeight)} of {carry.CarryWeight})";
 
     public void Navigate(int direction)
     {
