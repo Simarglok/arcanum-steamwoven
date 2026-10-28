@@ -917,7 +917,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   While it asks the rest of the window, the doll and the grid do nothing (QW6); closing the window cancels it. Accept with 0 moves
   nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc` and `DropHeroAmmo`
   ([stack drop](../world/inventory-runtime.md#stack-drop-and-the-quantity-window-arc-ui-029)). *Take all* moves whole stacks
-  without asking, a gold pile too (QW1); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
+  without asking, a gold pile too (QW1; a session without a hero refuses the gold, as it has none to hold it); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
   stack's kind (the original makes the type's base prototype, QW5; every installed stack is one). A dead NPC with two gold piles
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
@@ -926,7 +926,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
-  stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first).
+  stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first and stay with it).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

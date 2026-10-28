@@ -522,8 +522,8 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var panel = _inventoryPanel!;
         var lent = "none";
-        // The units lent from an NPC go back to it at the end, so later steps see the hero and the NPC as before.
-        (string Npc, int Units, SessionItemKind Kind)? giveBack = null;
+        // The lent units stay with the hero for the later steps (the full smoke passes with them; giving them back would make the NPC a
+        // new stack it never had when its whole stack was lent).
         if (session.QueryHeroAmmo().All(stack => stack.Units < 2))
         {
             // Lent from the loaded maps: two units of an NPC's stack, else a whole stack lying on the ground.
@@ -537,7 +537,7 @@ public partial class TerrainViewerApp
             if (held.Item is not null)
             {
                 taken = session.TakeAmmoFromNpc(session.Version, held.Entity, held.Item.Entity, 2, held.Item.Facts.Kind, _inventoryHost!.InsertCheck);
-                lent = held.Item.Entity; giveBack = (held.Entity, 2, held.Item.Facts.Kind);
+                lent = held.Item.Entity;
             }
             else if (ground is not null) { taken = _inventoryHost!.PickUp(session, ground.Entity); lent = ground.Entity; }
             else
@@ -549,7 +549,7 @@ public partial class TerrainViewerApp
                 var added = session.AddItemToNpc(session.Version, npc!.Entity, arrows, _inventoryHost!.InsertCheck, (0, 5));
                 Require(added.Disposition == GameSessionDisposition.Changed, "an NPC's arrows: " + added.Failure);
                 taken = session.TakeAmmoFromNpc(session.Version, npc.Entity, added.Item!, 5, arrows, _inventoryHost.InsertCheck);
-                lent = $"{ArrowPrototype}x5"; giveBack = (npc.Entity, 5, arrows);
+                lent = $"{ArrowPrototype}x5";
             }
             Require(taken.Disposition == GameSessionDisposition.Changed, "lending: " + taken.Failure);
             panel.Render(InventoryView(null), null);
@@ -570,11 +570,6 @@ public partial class TerrainViewerApp
         var back = pile is null ? _inventoryHost!.PickUp(session, dropped!) : _inventoryHost!.Loot(session, pile.Entity, dropped!);
         Require(back.Disposition == GameSessionDisposition.Changed && session.QueryAmmo(stack.Entity)?.Units == stack.Units, "taken back into the stack: " + back.Failure);
         if (pile is not null) session.CloseJunkPile(session.Version, pile.Entity);
-        if (giveBack is { } loan)
-        {
-            var returned = session.GiveAmmoToNpc(session.Version, loan.Npc, stack.Entity, loan.Units, loan.Kind, _inventoryHost.InsertCheck);
-            Require(returned.Disposition == GameSessionDisposition.Changed, "the lent units go back: " + returned.Failure);
-        }
         panel.Render(InventoryView(null), null);
         GD.Print($"ARC-UI-029 native-smoke quantity PASS units={stack.Units} dropped=1 lent={lent} pile={pile is not null} cell={placed!.Cell}");
         return panel.ViewForSelfTest!;
