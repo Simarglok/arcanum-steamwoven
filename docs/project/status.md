@@ -108,6 +108,8 @@ One line per component; the full row (merged scope, implementation and contract 
 | Weight and encumbrance | [Items and inventory](status/items.md) | ARC-WORLD-085 |
 | Barter window | [Items and inventory](status/items.md) | ARC-UI-050 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
+| Background table | [Game session and character](status/session.md) | ARC-DATA-044 |
+| Portrait catalogue | [Game session and character](status/session.md) | ARC-DATA-045 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |
 | Fate points | [Skills](status/skills.md) | ARC-WORLD-054 |
