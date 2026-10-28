@@ -67,7 +67,7 @@ public sealed partial class GameSessionOwner
             if (_equipment.SlotOf(entity) is { } slot)
                 _equipment.Worn[slot] = _equipment.Worn[slot] with { Item = Conditioned(_equipment.Worn[slot].Item, outcome.Condition) };
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, check, outcome.Status == ItemRepairStatus.Repaired ? amount : 0, outcome.Status,
             outcome.Condition, check.Fated, Version);
     }

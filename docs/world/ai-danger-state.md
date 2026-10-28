@@ -76,7 +76,8 @@ Budgets: `GameSessionLimits.MaxDangerRecords` (8,192, as life and reaction) and
 `""` for the hero (never a valid entity id) or `null` for none. Restore refuses a baseline record,
 an undefined bit, an invalid handle, a repeated enemy and the budgets. Schema 40 (ARC-WORLD-082) adds the flag name
 `SpellFlee`, schema 42 (ARC-WORLD-084, [AI scheduler](ai-scheduler.md)) `CheckWeapon`, schema 45 (ARC-WORLD-086,
-[AI executor](ai-executor.md)) `NoFlee`; schemas 1..44 are refused, not migrated.
+[AI executor](ai-executor.md)) `NoFlee`, schema 47 (ARC-WORLD-088, [AI support](ai-support.md)) `LookForAmmo`, `LookForWeapon` and
+`LookForArmor`; schemas 1..46 are refused, not migrated.
 
 ## Settings
 

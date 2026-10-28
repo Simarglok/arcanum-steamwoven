@@ -46,8 +46,15 @@ public enum DangerFlags
     /// <summary>Critter flag 0x8000000 (NO_FLEE) as the AI sets it for good (0x4AF1D0: a flight's cornered move-away, slice I7); the
     /// setter also honours the caller's <see cref="DangerSetterFacts.NoFlee"/> from the critter's data.</summary>
     NoFlee = 1 << 11,
+    /// <summary>NPC flag 0x8000000 (LOOK_FOR_AMMO): the item search looks for ammunition (set by an AI ranged attack without
+    /// ammunition, 0x4ADFF0; slice I8).</summary>
+    LookForAmmo = 1 << 12,
+    /// <summary>NPC flag 0x2000000 (LOOK_FOR_WEAPON): the item search looks for a weapon (out of ammunition, or a weapon dropped).</summary>
+    LookForWeapon = 1 << 13,
+    /// <summary>NPC flag 0x4000000 (LOOK_FOR_ARMOR): the item search looks for armour (armour dropped).</summary>
+    LookForArmor = 1 << 14,
     /// <summary>Every defined bit.</summary>
-    All = (1 << 12) - 1,
+    All = (1 << 15) - 1,
 }
 
 /// <summary>

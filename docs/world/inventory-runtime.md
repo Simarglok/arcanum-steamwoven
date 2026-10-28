@@ -289,6 +289,12 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.
+- **Created items** (ARC-WORLD-081, [template sector plants](template-sector-plants-runtime.md)): an item a script's create object adds
+  to the ground (`CreateGroundItem`, the plant generator's herbs) is a placed item of source `created`: a new `made:n` entity numbered with
+  the made items, with its prototype's weight facts and complexity, on the tile the create action draws next to its object. It needs no
+  hero, schedules no decay (ID9) and has a budget of its own (`MaxCreatedItems`, 8,192) outside the hero's; picked up it joins the made
+  items, which needs room in the hero's budget. Under Steamwoven no item is created next to an object with 6 created items within 3 tiles
+  (`CreatedItemRules`).
 - **Deletion**: a placed item the durability rules delete leaves the store.
 - **Seeds**: an attached seed must still list a placed world item of its map with its saved kind and no seed may list a placed kit
   or made item (`InventoryMismatch`), as for the hero's lists.
@@ -628,9 +634,9 @@ executable ([ledger WE1–WE9](../research/ledger/items.md#weight-and-encumbranc
 plus, with a holder, its magic weight adjustment as the holder gets it (a critter by its power, EQ9; a container keeps a magickal
 item's whole adjustment and none of a technological one's); ammunition that times its units / 4. `TotalWeight` sums a list with
 the holder; `Fits(total, item, carryWeight)` is `total + item ≤ carryWeight`; `Level(total, carryWeight)` is the first of the
-thresholds 15, 30, 45, 60, 75, 90 % above the load, else 6. The numbers of the level's consequences are rules too, used by no caller
-yet: `EffectEntries` (effect 158, one a level, eight at level 6), `DrainIntervalMs` (600 s, 60 s, 5 s at levels 4..6) and
-`Drain(currentFatigue, steps)`. All arithmetic is the original's 32-bit arithmetic.
+thresholds 15, 30, 45, 60, 75, 90 % above the load, else 6. The numbers of the level's consequences are rules too (applied since
+ARC-WORLD-087): `EffectEntries` (effect 158, one a level, eight at level 6), `DrainIntervalMs` (600 s, 60 s, 5 s at levels 4..6),
+`Drain(currentFatigue, steps)` and `CanRun(level)` (below level 4). All arithmetic is the original's 32-bit arithmetic.
 
 **Session.**
 
@@ -648,13 +654,61 @@ weighs them. The hero's coins are a counter, not an item: they weigh nothing, as
 attaches its products' weights before an assembly; a refused pickup or loot reads "the PC cannot carry that much weight". The window
 shows no weight yet (the inventory window is alpha-gap N6).
 
-**Not ready.** The level's consequences: effect 158 entries and their recalculation at every insertion, removal, strength change and
-strength-changing effect (WE5, WE7, with the proposed WEA1 switch), the mode-1 fatigue timer (WE8, WEA2), the level message, the run
-gate below level 4 (WE9); the weight test of a wear move (the session does not weigh an item taken off or swapped: the original's
+**Not ready.** The level's consequences are [ARC-WORLD-087](#encumbrance-consequences-arc-world-087); the weight test of a wear move (the session does not weigh an item taken off or swapped: the original's
 unwield runs the insert check, which was not read for an item already in the list, so a hero above its carry weight can still take
 an item off); the key-ring exception (the session admits no keys); an NPC's weight and level; a sector's aptitude adjustment.
 
+## Encumbrance consequences (ARC-WORLD-087)
+
+The second half of alpha-gap item N5: what a change of the hero's encumbrance level does, read in the executable (ledger
+[WE5, WE7–WE9, WEA1, WEA2](../research/ledger/items.md#weight-and-encumbrance-arc-world-085), F2; the five call sites of the
+recalculation 0x45F820 were counted again for this task). Requirements: the consequences of
+[FR-CHAR-025](../requirements/characters-skills.md#fr-char-025) and of [FR-ITEM-002](../requirements/items-economy.md#fr-item-002).
+Tests: [`EncumbranceStateTests`](../../tests/Arcanum.Session.Tests/EncumbranceStateTests.cs), `CarryRulesTests`, the viewer's
+`AreaLevelMessagesTests`.
+
+**When the level is recalculated.** The original recalculates in five places, each comparing the level before its change with the
+level after: the insertion into and the removal from a critter's list (which a wear move, a placement and a deletion run too), the
+base strength setter, and the effect add and removal when the effective strength changed. The session follows them in one place:
+every change of its state (each revision) is compared with the state before it, and the level is recalculated when the hero's held
+objects changed, its base strength or the strength its effects give changed, and the level before differs from the level after.
+Any other change (poison, the aptitude, units spent from a stack) recalculates nothing, as in the original, so the level the
+effects show can lag the weight until the next recalculation (`QueryHeroCarry` always answers the level the weight gives).
+The comparison is once per revision, while the original recalculates at each insertion and removal: a change that moves several
+objects in one revision (an assembly's components and products, a wear swap, which the original runs as removals and insertions)
+recalculates once, from the level before it to the level after it. Where the original passes an intermediate level, it would post
+one more message, could set the fatigue timer at an intermediate level 4..6, and a level that differs only in between is never
+recalculated here; a wear move, which keeps the weight, recalculates nothing in either.
+
+| Setting | Units merged into a stack the hero holds (an insertion's merge, a unit move) |
+| --- | --- |
+| Steamwoven (default) | Recalculate: a held stack that grows counts as a change of the list (owner decision 2026-10-28, option A). |
+| Original (`ItemRuleProfile.EncumbranceLagsOnStackMerge`) | No recalculation (WEA1), as the retail executable: the stack's object enters no list. |
+
+**What a recalculation does** (no revision of its own: it is part of the change that caused it):
+
+| Step | Contract |
+| --- | --- |
+| Effect 158 | Every entry of effect 158 leaves the hero's list (whatever added it), then effect 158 with the item cause is added `CarryRules.EffectEntries(level)` times (one a level, eight at level 6), through the same trial as any effect. The rule comes from the host (`AttachEncumbranceEffect(definition)`, number 158, an admitted rule; never saved, attached again after a restore), else from the hero's saved entries of it; without either no entries are added. The session's list holds at most 64 entries, so a full list takes fewer; when the list's bounds refuse the additions, only the removals apply (no entries of effect 158 are left). |
+| Message | `QueryHeroEncumbranceChange()` answers `SessionEncumbranceChange(Sequence, Level, Entries)` of the last change (sequence from 1, per owner; a restore shows none); the host shows line `11 + level` of `mes\critter.mes`, as the original shows it to the local PC (the original shows one per recalculation; the viewer shows the latest when several came between two frames). The original holds the message back while the inventory window drags an item; the viewer has no drag. |
+| Fatigue timer | A level with a drain interval (4: 600 s, 5: 60 s, 6: 5 s) sets the `life.hero.encumbrance` event unless one is pending (WEA2), see the [event queue](game-event-queue-runtime.md). |
+| Run | `SessionHeroCarry.CanRun`: only below level 4 (WE9); the fatigue test of a run stays the host's. |
+
+A new session's hero starts with an empty list at level 0 before its kit, so the first change of the session recalculates a kit
+above level 0 (the host attaches the rule before that change; every installed pre-made kit is at level 0). A restore recalculates
+nothing: the saved effect list and timer hold the consequences. A save made before this task (or a new session saved before its
+first change) holds none, so its consequences appear at the next change of level. No snapshot schema change: the entries are effect entries
+(schema 13) and the timer a saved event.
+
+**Viewer.** The AREA viewer attaches effect 158 from the hero's effect tables to every new or loaded session, walks a hero at
+level 4 or more whatever the chosen gait, and posts the level message to its message window (the level-up texts load
+`mes\critter.mes` too). Native smoke: `ARC-WORLD-087 native-smoke encumbrance` (in the level message stage) checks the installed
+rule of effect 158 and the seven message lines.
+
+**Not ready.** The animation speed the level sets (0x436FA0); an NPC's level and its consequences; the level's display in the
+inventory window (N6).
+
 ## Next steps
 
-The AREA viewer is wired (ARC-UI-004) and the hero's weight is checked (ARC-WORLD-085). Next: the encumbrance consequences, and the
-remaining source paths (drop and junk piles, chests) after their own research.
+The AREA viewer is wired (ARC-UI-004), the hero's weight is checked (ARC-WORLD-085) and its level has its consequences
+(ARC-WORLD-087). Next: the remaining source paths (drop and junk piles, chests) after their own research.

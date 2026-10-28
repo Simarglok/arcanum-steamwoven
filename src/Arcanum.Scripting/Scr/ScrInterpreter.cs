@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S14"/>.
+/// <see cref="ScrAdmissionSet.S15"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -35,6 +35,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrStateRequest> States = new();
         public readonly List<ScrEffectRequest> EffectChanges = new();
         public readonly List<ScrEyeCandy> EyeCandies = new();
+        // ARC-WORLD-081: the create-object requests (PG1).
+        public readonly List<ScrCreateRequest> Creations = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -65,6 +67,11 @@ internal sealed class ScrInterpreter
     private uint _localFlags, _counters;
     // The original's "no change" sentinel for remove/change this script.
     private int _changedNumber = -1;
+    // PG7: the run's loop: the list loop for filled (null while no loop runs), the index of the current object, the line after the loop
+    // for, and the current looped object (focus kind 10), which a finished loop leaves as it was.
+    private IReadOnlyList<ScrObjectRef>? _loop;
+    private int _loopIndex, _loopReturn;
+    private ScrObjectRef? _looped;
 
     internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options)
         : this(admitted, number, slot, ownFileFlags, roles, host, options, new Shared(), 0) { }
@@ -150,7 +157,8 @@ internal sealed class ScrInterpreter
             _states.Count == 0 ? null : Array.AsReadOnly(_states.ToArray()),
             _shared.EffectChanges.Count == 0 ? null : Array.AsReadOnly(_shared.EffectChanges.ToArray()),
             _shared.EyeCandies.Count == 0 ? null : Array.AsReadOnly(_shared.EyeCandies.ToArray()),
-            _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()));
+            _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()),
+            _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -379,6 +387,42 @@ internal sealed class ScrInterpreter
                 CallEx(OptionalObject(a, 0), Get(a, 1), Get(a, 2), OptionalObject(a, 3), line);
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.Random:
+            {
+                // PG5: the bounds in either order, both included, into operand 2 (the session's generator stands in for the original's 15-bit
+                // one, so a span above 32,768 is covered in both modes).
+                var low = Get(a, 0); var high = Get(a, 1);
+                Set(a, 2, World.Random(Math.Min(low, high), Math.Max(low, high)), line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.LoopFor:
+            {
+                // PG7: a loop for inside a running loop does nothing (the original logs an error). Otherwise the list is filled once, the line
+                // after the loop for remembered and the first object made the current looped object; an empty list goes on after its loop end.
+                if (_loop is not null) return (Step.Next, 0);
+                var list = Objects(a, 0);
+                _loopReturn = line + 1;
+                if (list.Count == 0) return (Step.Jump, ScrAdmission.AfterLoopEnd(_admitted.Program, line));
+                _loop = list; _loopIndex = 0; _looped = list[0];
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.LoopEnd:
+            {
+                // PG7: without a running loop nothing happens (the original logs an error); otherwise the next object and back to the line after
+                // the loop for, or, after the last, the loop is cleared and the run goes on (the current looped object stays the last one).
+                if (_loop is not { } running) return (Step.Next, 0);
+                if (++_loopIndex < running.Count) { _looped = running[_loopIndex]; return (Step.Jump, _loopReturn); }
+                _loop = null;
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CreateObject:
+            {
+                // PG1: the prototype number (as named; PG8's +20 is the host's) next to the first object operand 1 names; an absent object creates
+                // nothing (the original would place it at a null handle's location). The tile and the object are the host's.
+                var prototype = Get(a, 0);
+                if (OptionalObject(a, 1) is { } near) _shared.Creations.Add(new(prototype, near));
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
@@ -493,7 +537,8 @@ internal sealed class ScrInterpreter
         var index = c.Value(slot);
         return (ScrValueKind)c.Kind(slot) switch
         {
-            ScrValueKind.Counter => (int)((_counters >> (8 * index)) & 0xFF),
+            // PG6: the shift by eight times the index keeps five bits, so any index reads counter (index mod 4).
+            ScrValueKind.Counter => (int)((_counters >> CounterShift(index)) & 0xFF),
             ScrValueKind.LocalVariable => _locals[index],
             ScrValueKind.Number => index,
             ScrValueKind.GlobalFlag => Flag(index) ? 1 : 0,
@@ -512,13 +557,15 @@ internal sealed class ScrInterpreter
         {
             case ScrValueKind.Counter:
                 // X8: the original masks a counter write to its byte (ledger X8).
-                _counters = (_counters & ~(0xFFu << (8 * index))) | (((uint)value & 0xFF) << (8 * index));
+                _counters = (_counters & ~(0xFFu << CounterShift(index))) | (((uint)value & 0xFF) << CounterShift(index));
                 break;
             case ScrValueKind.LocalVariable: _locals[index] = value; break;
             case ScrValueKind.GlobalFlag: WriteFlag(GlobalFlag(index, line), value); break;
             default: throw new InvalidOperationException("Store outside the interpreter's set.");
         }
     }
+
+    private static int CounterShift(int index) => unchecked(8 * index) & 31;
 
     private void WriteFlag(int index, int value)
     {
@@ -553,12 +600,28 @@ internal sealed class ScrInterpreter
         ScrFocusKind.Player => _host.Player(),
         // OV4: an object variable never assigned in this run names no object.
         ScrFocusKind.LocalObject => _objects[c.Value(slot)],
+        // PG7: the current looped object, none before the run's first loop.
+        ScrFocusKind.CurrentLoopedObject => _looped,
+        // A group's first object (0x44B960), none for an empty one.
+        ScrFocusKind.EverySceneryInVicinity => Vicinity() is { Count: > 0 } list ? list[0] : null,
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
-    // one. Focus groups are not admitted yet.
-    private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => OptionalObject(c, slot) is { } obj ? [obj] : [];
+    // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15.
+    private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) == ScrFocusKind.EverySceneryInVicinity ? Vicinity()
+        : OptionalObject(c, slot) is { } obj ? [obj] : [];
+
+    // PG3: the scenery around the run's attachee (none without one), the first 100 under the original's rule.
+    private IReadOnlyList<ScrObjectRef> Vicinity()
+    {
+        if (_roles.Attachee is not { } centre) return [];
+        var list = World.SceneryInVicinity(centre) ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
+        return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
+    }
+
+    private IScrWorldQueries World => _host as IScrWorldQueries
+        ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");
 
     // The basic (0..11) and tech (12..15) skill numbers.
     private const int SkillNumbers = 16;

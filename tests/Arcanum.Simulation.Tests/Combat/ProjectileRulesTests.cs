@@ -220,4 +220,41 @@ public sealed class ProjectileRulesTests
         var past = ProjectileRules.Cross(new ProjectileShot(false, false, 10), new(destination, new(7, 7), 6), destination, Target, Hero, new Map(), NoRolls);
         Assert.AreEqual((ProjectileStrikeKind.None, true), (past.Strike, past.Shot.FreeFlight));
     }
+
+    // ARC-COMBAT-019 (0x4B2690, 0x435A00): a boomerang's first end turns it back from the tile being left to the thrower's tile on a
+    // new line, its outcome, range and facing kept.
+    [TestMethod]
+    public void ABoomerangTurnsBackFromTheTileItLeavesToTheThrower()
+    {
+        var thrower = new CellCoord(10, 10);
+        var flight = ProjectileRules.Launch(thrower, new(14, 14))!;
+        while (flight.Tile != new CellCoord(13, 13)) flight = ProjectileRules.Step(flight, Inside).Flight!;
+        var shot = new ProjectileShot(true, false, 8);
+        var (back, turned) = ProjectileRules.TurnBack(flight, shot, new(11, 10));
+        Assert.AreEqual(shot with { Returning = true }, turned);
+        Assert.AreEqual((new CellCoord(13, 13), new CellCoord(11, 10), new CellCoord(13, 13), 0L), (back!.Start, back.Destination, back.Tile, back.Steps));
+        Assert.AreEqual(ProjectileRules.Launch(new(13, 13), new(11, 10))!.Samples.Count, back.Samples.Count, "the line of PF3 between the two tiles");
+        var (none, still) = ProjectileRules.TurnBack(flight, shot, new(13, 13));
+        Assert.AreEqual(((ProjectileFlight?)null, true), (none, still.Returning), "on the thrower's own tile there is no line: back at once");
+    }
+
+    // ARC-COMBAT-019 (0x4B2870, flag 0x2000): a returning boomerang strikes nothing, meets no obstruction, has no range and ends when it
+    // leaves the tile it flies back to.
+    [TestMethod]
+    public void AReturningBoomerangStrikesNothingAndEndsAtItsDestination()
+    {
+        var map = new Map { TargetTile = new(4, 4) };
+        map.Critters[new(4, 4)] = [Target, "bystander"];
+        map.Blockers[(new(4, 4), LineOfFireRules.Rotation(new(4, 4), new(3, 3)))] = "wall";
+        var back = new CellCoord(1, 1);
+        foreach (var shot in new[] { new ProjectileShot(true, false, 2, true), new ProjectileShot(false, true, 2, true) })
+        {
+            var on = ProjectileRules.Cross(shot, new(new(4, 4), new(3, 3), 50), back, Target, Hero, map, NoRolls);
+            Assert.AreEqual((ProjectileStrikeKind.None, (string?)null, shot), (on.Strike, on.Struck, on.Shot), "through the target's tile, a wall and beyond any range");
+            var end = ProjectileRules.Cross(shot, new(back, new(0, 0), 3), back, Target, Hero, map, NoRolls);
+            Assert.AreEqual((ProjectileStrikeKind.DestinationEnd, true), (end.Strike, end.Ends));
+            Assert.AreEqual(ProjectileStrikeKind.DestinationEnd, ProjectileRules.Cross(shot, new(back, new(0, 0), 3), back, null, Hero, map, NoRolls).Strike,
+                "with or without a target");
+        }
+    }
 }

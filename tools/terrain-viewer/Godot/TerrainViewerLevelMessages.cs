@@ -56,6 +56,7 @@ public partial class TerrainViewerApp
     /// <summary>Posts the queued level-up entries once the texts are there, each with the level-up sound.</summary>
     private void FlushLevelUps(TimeSpan wait)
     {
+        FlushEncumbranceMessage(wait);
         SyncLevelMessageSession();
         if (_pendingLevelUps.Count == 0 || LevelTexts(wait) is not { } texts) return;
         if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
@@ -70,6 +71,36 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-046 level-up level={level.Level} points={level.Points} scheme={(level.Scheme is not { } s ? "none" : !s.HasRule ? "no-rule"
                 : $"purchases={s.Purchases.Count} completed={s.Completed}")}");
         }
+    }
+
+    // ARC-WORLD-087: the last encumbrance change shown, by session (a quick load or a new game starts its own count).
+    private (GameSessionOwner Session, long Sequence)? _encumbranceShown;
+    private int _encumbranceMessagesPosted;
+
+    /// <summary>ARC-WORLD-087: gives the session the rule of effect 158 from the hero's effect tables (none without them); the session
+    /// does not save it, so every new or loaded session gets it before its first change.</summary>
+    private void AttachAreaEncumbranceEffect()
+    {
+        if (_areaSession is not { } session) return;
+        var rule = _areaEffectRules?.Invoke(Arcanum.Simulation.Items.CarryRules.EffectNumber);
+        try { session.AttachEncumbranceEffect(rule is null ? null : SessionEffectDefinition.FromRule(rule)); }
+        catch (ArgumentException) { session.AttachEncumbranceEffect(null); GD.Print("ARC-WORLD-087 effect 158 refused: no encumbrance entries"); return; }
+        GD.Print($"ARC-WORLD-087 effect 158 {(rule is null ? "missing" : "attached")}");
+    }
+
+    /// <summary>ARC-WORLD-087: posts the message of the hero's latest encumbrance change once the texts are there (one entry for the
+    /// latest level when several changes came between two frames, as the window shows only the last).</summary>
+    private void FlushEncumbranceMessage(TimeSpan wait)
+    {
+        if (_areaSession is not { } session || session.QueryHeroEncumbranceChange() is not { } change) return;
+        if (_encumbranceShown is { } shown && ReferenceEquals(shown.Session, session) && shown.Sequence >= change.Sequence) return;
+        SyncLevelMessageSession();
+        if (LevelTexts(wait) is not { } texts) return;
+        _encumbranceShown = (session, change.Sequence);
+        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
+        _messageWindow.Post(AreaLevelMessages.Encumbrance(change.Level, texts));
+        _encumbranceMessagesPosted++;
+        GD.Print($"ARC-WORLD-087 encumbrance level={change.Level} entries={change.Entries} sequence={change.Sequence}");
     }
 
     /// <summary>A different session than the one the entries belong to (a quick load, a new game) empties the window and the queue;
@@ -132,6 +163,29 @@ public partial class TerrainViewerApp
         ClearLevelMessages();
         GD.Print("ARC-UI-046 native-smoke level message PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Entries = 2, Missing = texts.Missing.Count, Sounds = _interfaceSoundsPlayed - played, History = shownHistory, Parity = "NOT_VERIFIED" }));
+        RunAreaEncumbranceSmoke(texts);
         return Task.CompletedTask;
+    }
+
+    /// <summary>ARC-WORLD-087 native observation: the hero's effect tables hold effect 158 as a rule the session admits with a speed change
+    /// (stat 11), each level's message (<c>mes\critter.mes</c> 11..17) is the player's text, and an entry goes through the production
+    /// window path. Counts and checks only; no text is printed.</summary>
+    private void RunAreaEncumbranceSmoke(AreaLevelTexts texts)
+    {
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-WORLD-087 encumbrance smoke FAIL: " + why); throw new InvalidOperationException("ARC-WORLD-087 encumbrance smoke: " + why); }
+        if (_areaEffectRules is null || _areaSession is null) { GD.Print("ARC-WORLD-087 native-smoke encumbrance SKIP no hero tables or session"); return; }
+        var rule = _areaEffectRules(Arcanum.Simulation.Items.CarryRules.EffectNumber);
+        Require(rule is not null, "effect 158 missing");
+        var definition = SessionEffectDefinition.FromRule(rule!);
+        Require(definition.Changes.Any(c => c.Kind == Arcanum.Data.Characters.EffectAttributeKind.Stat && c.Attribute == 11), "effect 158 changes the speed");
+        _areaSession!.AttachEncumbranceEffect(definition);
+        var lines = Enumerable.Range(0, Arcanum.Simulation.Items.CarryRules.Levels).Count(level => texts.Text(AreaLevelTexts.CritterPath, AreaLevelMessages.EncumbranceMessage + level) is not null);
+        Require(lines == Arcanum.Simulation.Items.CarryRules.Levels, $"critter.mes level lines {lines}/7");
+        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
+        _messageWindow.Post(AreaLevelMessages.Encumbrance(4, texts));
+        Require(_messageWindow.ShownForSelfTest?.Title == texts.Text(AreaLevelTexts.CritterPath, AreaLevelMessages.EncumbranceMessage + 4), "the level-4 entry is shown");
+        ClearLevelMessages();
+        GD.Print("ARC-WORLD-087 native-smoke encumbrance PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Changes = definition.Changes.Length, Lines = lines, Level = _areaSession.QueryHeroCarry()?.Level, Parity = "NOT_VERIFIED" }));
     }
 }

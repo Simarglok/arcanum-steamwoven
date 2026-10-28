@@ -302,7 +302,7 @@ public sealed partial class GameSessionOwner
         }
         if (_equipment.SlotOf(entity) is { } previous) _equipment.Worn.Remove(previous);
         _equipment.Worn[slot] = new(slot, entity, item.Item);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current?.Entity, verdict, Version);
     }
 
@@ -360,7 +360,7 @@ public sealed partial class GameSessionOwner
             if (previous is { } worn) _equipment.Worn.Remove(worn);
             _equipment.Worn[slot] = new(slot, entity, item.Item) { ScriptPoints = points };
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, rolledBack ? null : current?.Entity, verdict, Version)
             { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = rolledBack };
     }
@@ -424,12 +424,12 @@ public sealed partial class GameSessionOwner
             if (runs.Failure != GameSessionFailure.None) return RejectWear(runs.Failure, verdict: verdict) with { Scripts = runs.Runs };
             runs.Commit();
             _equipment.Worn.Remove(slot);
-            _revision++;
+            Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version)
                 { Scripts = runs.Runs, Messages = runs.Messages };
         }
         _equipment.Worn.Remove(slot);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version);
     }
 

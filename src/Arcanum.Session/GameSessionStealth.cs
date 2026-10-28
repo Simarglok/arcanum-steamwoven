@@ -59,7 +59,7 @@ public sealed partial class GameSessionOwner
         _combat.HeroConcealed = on;
         foreach (var follower in _party.Order)
             if (on) _combat.Concealed.Add(follower); else _combat.Concealed.Remove(follower);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 

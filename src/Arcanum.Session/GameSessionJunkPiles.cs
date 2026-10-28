@@ -113,7 +113,7 @@ public sealed partial class GameSessionOwner
         if (JunkPileRules.Dissolve(found.Items.Count) == JunkPileDissolve.Keep) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         DissolveJunkPile(found);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 

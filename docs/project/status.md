@@ -122,6 +122,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC morale | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-082, ARC-WORLD-080, ARC-WORLD-079 |
 | NPC AI scheduler | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-084, ARC-WORLD-079, ARC-WORLD-024 |
 | NPC AI executor | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-086, ARC-WORLD-084, ARC-WORLD-082 |
+| NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-088, ARC-WORLD-086, ARC-MAGIC-014 |
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
@@ -171,6 +172,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | SCR opcode and attachment census | [Dialog and scripting](status/scripting.md) | ARC-RES-045 |
 | Game event queue | [Game session and character](status/session.md) | ARC-RES-046, ARC-WORLD-022, ARC-WORLD-024 |
 | Multiplayer of the original | [Game session and character](status/session.md) | ARC-RES-072 |
+| Launcher and settings | [Game session and character](status/session.md) | ARC-RES-074 |
 | Combat-domain load map | [Combat](status/combat.md) | ARC-RES-040, ARC-RES-041 |
 | Combat-domain data census | [Combat](status/combat.md) | ARC-RES-041 |
 | NPC AI core loop | [NPC AI, reaction and companions](status/npc.md) | ARC-RES-054, ARC-DATA-033 |

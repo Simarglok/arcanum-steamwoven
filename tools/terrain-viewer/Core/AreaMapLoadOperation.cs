@@ -46,6 +46,12 @@ internal static class AreaMapLoadOperation
         // ARC-WORLD-031: the map's transitions and the maps this mode can open, from the same stack.
         var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map);
         Console.WriteLine($"ARC-WORLD-031 load stage=transitions sites={transitions?.Sites.Count} unconditional={transitions?.Unconditional.Count()} issues={transitions?.Issues.Count} destinations={destinations?.Count} failure={transitionsFailure}");
+        // ARC-WORLD-081: a window's template sectors run their templates' sector scripts on entry, as the own sectors do (PG9).
+        var templateScripts = mapPlan.Plan.Window is { } window
+            ? MapTransitions.TemplateSectorScripts(catalog, mapPlan.Map, window.Sectors.Where(s => s.Template is not null)
+                .Select(s => new WorldSectorCoordinate(checked((int)s.Coordinate.X), checked((int)s.Coordinate.Y))))
+            : [];
+        if (mapPlan.Plan.Window is not null) Console.WriteLine($"ARC-WORLD-081 load stage=template-scripts scripts={templateScripts.Count}");
         token.ThrowIfCancellationRequested();
 
         using var owner = mapPlan.Open();
@@ -131,7 +137,8 @@ internal static class AreaMapLoadOperation
             terrainCommands.Count(command => command.Phase == 0), terrainCommands.Count(command => command.Phase == 1), 0, 0,
             mf, rf, mf, rf, area.CpuRgbaBytes + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
-            MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, AreaMapWindowCentre = centre,
+            MapTransitions = transitions, MapDestinations = destinations, MapTransitionsFailure = transitionsFailure, MapTemplateScripts = templateScripts,
+            AreaMapWindowCentre = centre,
             AreaOverview = overview, AreaOverviewFailure = overviewFailure,
             UnlitSessionStartup = unlitStartup?.Startup, UnlitSessionStartupFailure = unlitStartup?.Failure,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };

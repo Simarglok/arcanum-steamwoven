@@ -91,7 +91,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="spell-records-arc-magic-001"></a>[Spell records (ARC-MAGIC-001)](ledger/magic.md#spell-records-arc-magic-001) | [Magic: spells, costs and the spell book](ledger/magic.md) | SR1–SR16 |
 | <a id="spell-components-arc-magic-002"></a>[Spell components (ARC-MAGIC-002)](ledger/magic.md#spell-components-arc-magic-002) | [Magic: spells, costs and the spell book](ledger/magic.md) | SC1–SC12 |
 | <a id="spell-cost-and-payment-arc-magic-003"></a>[Spell cost and payment (ARC-MAGIC-003)](ledger/magic.md#spell-cost-and-payment-arc-magic-003) | [Magic: spells, costs and the spell book](ledger/magic.md) | PC1–PC12 |
-| <a id="npc-ai-support-and-magic-arc-res-059"></a>[NPC AI support and magic (ARC-RES-059)](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059) | [NPC AI](ledger/npc-ai.md) | SP1–SP18 |
+| <a id="npc-ai-support-and-magic-arc-res-059"></a>[NPC AI support and magic (ARC-RES-059)](ledger/npc-ai.md#npc-ai-support-and-magic-arc-res-059) | [NPC AI](ledger/npc-ai.md) | SP1–SP21 (SP19–SP21 ARC-WORLD-088) |
 | <a id="technology-arc-res-062"></a>[Technology (ARC-RES-062)](ledger/technology.md#technology-arc-res-062) | [Technology](ledger/technology.md) | TC1–TC10 |
 | <a id="schematic-data-arc-technology-001"></a>[Schematic data (ARC-TECHNOLOGY-001)](ledger/technology.md#schematic-data-arc-technology-001) | [Technology](ledger/technology.md) | SD1–SD6, TC11 |
 | <a id="item-durability-arc-world-053"></a>[Item durability (ARC-WORLD-053)](ledger/items.md#item-durability-arc-world-053) | [Items and inventory](ledger/items.md) | DU1–DU8 |
@@ -171,6 +171,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
 | <a id="thrown-weapons-arc-combat-017"></a>[Thrown weapons (ARC-COMBAT-017)](ledger/combat.md#thrown-weapons-arc-combat-017) | [Combat](ledger/combat.md) | TW1–TW7 |
 | <a id="second-projectile-and-scatter-arc-combat-018"></a>[Second projectile and scatter (ARC-COMBAT-018)](ledger/combat.md#second-projectile-and-scatter-arc-combat-018) | [Combat](ledger/combat.md) | PS1–PS6 |
+| <a id="boomerangs-arc-combat-019"></a>[Boomerangs (ARC-COMBAT-019)](ledger/combat.md#boomerangs-arc-combat-019) | [Combat](ledger/combat.md) | BR1–BR7 |
 
 ## Decisions to revisit
 

@@ -102,6 +102,29 @@ public static class MapTransitions
 {
     /// <summary>Calls followed from the attached script, as in the research census.</summary>
     public const int MaxCallDepth = 6;
+    /// <summary>
+    /// ARC-WORLD-081: the sector scripts of the template sectors among <paramref name="sectors"/> (ledger PG9: the original runs a template
+    /// sector's script section, read from its template, like an own sector file's; SS5): one <see cref="MapTransitionTrigger.SectorEntry"/>
+    /// script for each template sector whose template holds a script other than 0, at the sector's origin, with the template's flags and
+    /// counters, in the order given. An own sector, a sector outside the map, a template that does not read and a map without a terrain grid
+    /// give none (<see cref="Read"/> lists the own sectors' scripts).
+    /// </summary>
+    public static IReadOnlyList<MapPlacedScript> TemplateSectorScripts(WorldCatalog catalog, WorldMap map, IEnumerable<WorldSectorCoordinate> sectors)
+    {
+        ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(sectors);
+        if (catalog.ReadTerrain(map).Grid is not { } grid) return [];
+        var placed = new List<MapPlacedScript>();
+        foreach (var coordinate in sectors)
+        {
+            var source = catalog.ResolveSector(map, coordinate, grid);
+            if (source.Kind != WorldSectorSourceKind.Template || catalog.ReadResolvedSector(map, source).Sector?.SectorScript is not { Count: 3 } script || script[2] == 0) continue;
+            // As an own sector's: the attachment's header flags and counters, then its number.
+            placed.Add(new(MapTransitionTrigger.SectorEntry, coordinate, -1, new(coordinate.X * 64L, coordinate.Y * 64L), unchecked((uint)script[0]),
+                unchecked((uint)script[1]), script[2]));
+        }
+        return placed.AsReadOnly();
+    }
+
     /// <summary>Script entries visited per attached script before its paths are refused as too large.</summary>
     public const int MaxVisits = 4096;
     private const int UseSlot = 1, ScriptsField = 31, FlagsField = 18, LocationField = 1;

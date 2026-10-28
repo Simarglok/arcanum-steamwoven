@@ -85,7 +85,7 @@ follow the original in both settings.
   perform stage is not wired to `Perform` (slice I10). The world's members are the planners (click-route and attack approach), the
   step walker, the attack animation and the hit step.
 - **Other goals.** The casting (26, 82), item use (39), skill (33), throw (37) and pickup (15, 16) goals are the world's starters
-  (slice I8, the magic and skills domains); the PC's attack goal and its auto-attack repeat stay the hero attack's
+  (slice I8b, the magic and skills domains; the decisions are [AI support](ai-support.md), slice I8); the PC's attack goal and its auto-attack repeat stay the hero attack's
   ([hero attack](hero-attack-runtime.md)).
 - **EX15.** The notification of a ranged hit on a line-of-fire blocker is the attack resolution's, inside the world's hit step;
   its switch `RangedBlockerHitNotifiesAimedTarget` lands with the ranged-combat slice (FR-COMBAT-007).

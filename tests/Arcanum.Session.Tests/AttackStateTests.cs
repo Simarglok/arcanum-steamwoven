@@ -238,7 +238,7 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
-    public void AnAimedAttackKeepsItsLocationAndAThrowingWeaponIsNotSupported()
+    public void AnAimedAttackKeepsItsLocationAndAThrowingWeaponIsSupported()
     {
         using var owner = Owner();
         var rat = Combat();
@@ -247,7 +247,8 @@ public sealed class AttackStateTests
         Assert.AreEqual(HitLocation.Head, aimed.Resolution!.HitLocation);
         Assert.IsTrue(aimed.Resolution.Aimed || aimed.Resolution.Outcome == AttackOutcome.CriticalMiss);
 
-        // ARC-COMBAT-015: a bow or firearm is supported (RangedAttackStateTests); a throw leaving the hand is not (ARC-COMBAT-017).
+        // ARC-COMBAT-015: a bow or firearm is supported (RangedAttackStateTests); ARC-COMBAT-019: a throwing-skill weapon (a boomerang)
+        // too, kept in the hand (BoomerangStateTests).
         var thrown = new EquipmentItem
         {
             Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
@@ -255,8 +256,9 @@ public sealed class AttackStateTests
         };
         var equipped = owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, thrown), (_, _) => true, Accept);
         Assert.AreEqual(GameSessionFailure.None, equipped.Failure);
-        Assert.IsFalse(owner.QueryHeroAttack()!.Supported);
-        Assert.AreEqual(GameSessionFailure.AttackUnsupported, owner.AttackCritter(owner.Version, new(rat)).Failure);
+        Assert.IsTrue(owner.QueryHeroAttack()!.Supported);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttackCritter(owner.Version, new(rat)).Failure);
+        Assert.IsFalse(owner.QueryBoomerangInFlight(), "a hit at once has no projectile to wait for");
     }
 
     [TestMethod]

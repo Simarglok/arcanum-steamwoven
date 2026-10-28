@@ -49,7 +49,7 @@ public sealed partial class GameSessionOwner
         _inventory.Gold += count;
         if (emptied) Delete(pile.Entity);
         else _inventory.Piles[pile.Entity] = pile.Quantity - count;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
     }
 
@@ -81,7 +81,7 @@ public sealed partial class GameSessionOwner
             if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
             _inventory.Gold -= count;
             _inventory.Piles[pile.Entity] = pile.Quantity + count;
-            _revision++;
+            Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
         }
         if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
@@ -89,7 +89,7 @@ public sealed partial class GameSessionOwner
         if (created is null) return refusal!.Value;
         _inventory.Gold -= count;
         _inventory.Piles[created.Value.Entity] = count;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, created.Value.Entity, SessionInsertVerdict.Accepted, Version);
     }
 
@@ -163,7 +163,7 @@ public sealed partial class GameSessionOwner
             _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
             if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
     }
 
@@ -276,7 +276,7 @@ public sealed partial class GameSessionOwner
         }
         if (emptied) Delete(source.Entity);
         else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, destination, verdict, Version);
     }
 

@@ -330,7 +330,9 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession session || _areaSession is not { } owner) { CancelAreaAttack("no actor"); return; }
         var hero = owner.QueryHeroAttack();
         if (hero is null) { CancelAreaAttack("needs a hero (start with --hero)"); return; }
-        if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet (its throw is not ready)"); return; }
+        if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet"); return; }
+        // ARC-COMBAT-019: no attack starts while the hero's boomerang is away (0x434B00).
+        if (owner.QueryBoomerangInFlight()) { CancelAreaAttack("the boomerang is still in flight"); return; }
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var row = goal.Row;
         var distance = Chebyshev(row, (cell.X, cell.Y));
@@ -443,7 +445,7 @@ public partial class TerrainViewerApp
         var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
-            owner.QueryCombatRound() is not null, goal.Combat is not null && target is null, dead, false, false, false, false));
+            owner.QueryCombatRound() is not null, goal.Combat is not null && target is null, dead, false, false, false, owner.QueryBoomerangInFlight()));
         if (repeats) goal.RepeatAtMs = now + RealTimeCombatRules.RepeatDelayMs;
         else _attack = null;
         GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");

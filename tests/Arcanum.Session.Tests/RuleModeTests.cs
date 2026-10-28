@@ -87,6 +87,9 @@ public sealed class RuleModeTests
         Assert.IsFalse(GameRules.Steamwoven.Written.UnprefixedMessageLosesFirstCharacter);
         Assert.IsTrue(GameRules.Original.Items.ContainerStackLookupFails);
         Assert.IsFalse(GameRules.Steamwoven.Items.ContainerStackLookupFails);
+        // ARC-WORLD-087: WEA1 is a Steamwoven fix with an Original switch.
+        Assert.IsTrue(GameRules.Original.Items.EncumbranceLagsOnStackMerge);
+        Assert.IsFalse(GameRules.Steamwoven.Items.EncumbranceLagsOnStackMerge);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

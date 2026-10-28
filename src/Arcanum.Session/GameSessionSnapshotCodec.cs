@@ -1480,10 +1480,9 @@ public static class GameSessionSnapshotCodec
             }
             npcs[i] = new(npc, System.Array.AsReadOnly(list));
         }
-        // ARC-WORLD-059: the hero's items placed on the ground share the hero's budget and its once-only rule.
-        var placedRows = Array(f["placed"], p + ".placed", GameSessionLimits.PolicyMaxPcItems);
-        if (kit.Length + items.Length + madeItems.Length + placedRows.Length > GameSessionLimits.PolicyMaxPcItems)
-            throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".placed");
+        // ARC-WORLD-059: the hero's items placed on the ground share the hero's budget and its once-only rule; ARC-WORLD-081: the items
+        // scripts created there have a budget of their own.
+        var placedRows = Array(f["placed"], p + ".placed", GameSessionLimits.PolicyMaxPcItems + GameSessionLimits.PolicyMaxCreatedItems);
         var placed = new SessionPlacedItem[placedRows.Length];
         for (var i = 0; i < placedRows.Length; i++)
         {
@@ -1494,13 +1493,17 @@ public static class GameSessionSnapshotCodec
             var source = PlacedSource(item["source"], path + ".source");
             var origin = Int(item["origin"], path + ".origin", 0, int.MaxValue);
             if ((origin == 0) != (source != SessionPlacedSource.Pc)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".origin");
-            // ARC-WORLD-083: only a made item keeps a complexity of its own.
+            // ARC-WORLD-083: only a made item keeps a complexity of its own (ARC-WORLD-081: and a created one).
             var complexity = Complexity(item, path);
-            if (complexity != 0 && source != SessionPlacedSource.Made) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".complexity");
+            if (complexity != 0 && source is not (SessionPlacedSource.Made or SessionPlacedSource.Created))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".complexity");
             placed[i] = new(entity, Kind(item, path), source, origin == 0 ? null : new SessionMapId(origin),
                 new(Int(item["map"], path + ".map", 1, int.MaxValue)),
                 new(Int(item["x"], path + ".x", 0, MaxPlacedCoordinate), Int(item["y"], path + ".y", 0, MaxPlacedCoordinate)), complexity);
         }
+        var created = placed.Count(item => item.Source == SessionPlacedSource.Created);
+        if (kit.Length + items.Length + madeItems.Length + placed.Length - created > GameSessionLimits.PolicyMaxPcItems || created > GameSessionLimits.PolicyMaxCreatedItems)
+            throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".placed");
         // ARC-WORLD-066: the ammunition stacks by entity in strictly ascending ordinal order.
         var ammoRows = Array(f["ammo"], p + ".ammo", GameSessionLimits.PolicyMaxAmmoRecords);
         var ammo = new SessionAmmoRecord[ammoRows.Length];
@@ -1608,6 +1611,7 @@ public static class GameSessionSnapshotCodec
         SessionPlacedSource.Kit => "kit",
         SessionPlacedSource.Pc => "pc",
         SessionPlacedSource.Made => "made",
+        SessionPlacedSource.Created => "created",
         _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 
@@ -1616,6 +1620,7 @@ public static class GameSessionSnapshotCodec
         "kit" => SessionPlacedSource.Kit,
         "pc" => SessionPlacedSource.Pc,
         "made" => SessionPlacedSource.Made,
+        "created" => SessionPlacedSource.Created,
         _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path),
     };
 
@@ -2071,10 +2076,10 @@ public static class GameSessionSnapshotCodec
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
     /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082; CheckWeapon
-    /// ARC-WORLD-084; NoFlee ARC-WORLD-086).</summary>
+    /// ARC-WORLD-084; NoFlee ARC-WORLD-086; the look-for bits ARC-WORLD-088).</summary>
     private static readonly string[] DangerFlagNames =
         ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked",
-            "SpellFlee", "CheckWeapon", "NoFlee"];
+            "SpellFlee", "CheckWeapon", "NoFlee", "LookForAmmo", "LookForWeapon", "LookForArmor"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>
