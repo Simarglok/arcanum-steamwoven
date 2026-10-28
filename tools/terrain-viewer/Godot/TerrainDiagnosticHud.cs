@@ -131,4 +131,26 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         _panel.OffsetBottom = 16 + _topInset + boundedHeight;
     }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizeForViewport;
+
+    /// <summary>ARC-DEV-050: the panel is shown (it starts shown in every run; <see cref="TogglePanel"/> hides it).</summary>
+    internal bool PanelShown => _panel?.Visible != false;
+
+    /// <summary>ARC-DEV-050: hides or shows the panel for this run, its text kept up to date while hidden.</summary>
+    internal void TogglePanel()
+    {
+        if (_panel is null) return;
+        _panel.Visible = !_panel.Visible;
+        GD.Print($"ARC-DEV-050 diagnostic panel shown={_panel.Visible}");
+    }
+
+    /// <summary>ARC-DEV-050: Ctrl+Shift+F10 (next to the palette's Ctrl+Shift+F9; F10 alone stays the original's reserved
+    /// interface key) toggles the panel in every mode and window. The chord's press and release are consumed here, before the
+    /// world's key routing.</summary>
+    public override void _Input(InputEvent input)
+    {
+        if (input is not InputEventKey { CtrlPressed: true, ShiftPressed: true, AltPressed: false, MetaPressed: false } key
+            || (key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode) != Key.F10) return;
+        if (key.Pressed && !key.Echo) TogglePanel();
+        GetViewport().SetInputAsHandled();
+    }
 }

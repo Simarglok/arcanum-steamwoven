@@ -172,6 +172,15 @@ def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
     return values
 
 
+# ARC-DEV-050: the viewer's lone debug-mode argument (not a pair; it is taken out before the other arguments are parsed).
+DEBUG_MODE_FLAG = "--debug-mode"
+
+
+def debug_mode_arguments(debug_mode: bool) -> list[str]:
+    """ARC-DEV-050: `--debug-mode` turns the viewer's debug mode on (every world-map area listed and open to a teleport)."""
+    return [DEBUG_MODE_FLAG] if debug_mode else []
+
+
 def main_menu_arguments(main_menu: bool, hero: str | None) -> list[str]:
     """ARC-UI-011: `--main-menu true` opens the main menu over the AREA scene once it is ready; the menu picks the hero, so it is
     refused with `--hero`."""
@@ -205,7 +214,8 @@ def sector_argument(sector: str | None) -> list[str]:
     return ["--area-map-sector", f"{int(parts[0])},{int(parts[1])}"]
 
 
-def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None, main_menu: bool = False) -> list[str]:
+def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None, main_menu: bool = False,
+                  debug_mode: bool = False) -> list[str]:
     """ARC-RENDER-017: the explicit argument set for one map in crash-site-area map mode. ARC-RENDER-024: a map too large
     to load whole (the main world map) opens as a window around `sector`, else around its map-list start."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
@@ -220,7 +230,7 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, se
     arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
                  "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector),
-                 *main_menu_arguments(main_menu, hero)]
+                 *main_menu_arguments(main_menu, hero), *debug_mode_arguments(debug_mode)]
     assert_ordinary(arguments)
     return arguments
 

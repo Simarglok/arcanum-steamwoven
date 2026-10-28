@@ -141,6 +141,9 @@ def command_launch(args: argparse.Namespace) -> None:
     if args.main_menu and (tool != "terrain" or args.mode != "crash-site-area"
                            or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
         raise ValueError(f"--main-menu requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the main menu")
+    # ARC-DEV-050: the debug mode; map mode only (the builds that hold it, `./arcanum` checks the commit).
+    if args.debug_mode and args.area_map is None:
+        raise ValueError("--debug-mode requires --area-map (map mode)")
     # ARC-RENDER-024: a map's opening sector; map mode only.
     if args.area_map_sector is not None and args.area_map is None:
         raise ValueError("--area-map-sector requires --area-map")
@@ -150,7 +153,7 @@ def command_launch(args: argparse.Namespace) -> None:
         inputs = conf.get("inputs", {})
         # ARC-DEV-015: a pinned mode needs its pinned roles verified by setup's installation record (absent for older or
         # explicit configurations, whose inputs keep their earlier meaning).
-        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero, args.area_map_sector, args.main_menu) if args.area_map is not None
+        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero, args.area_map_sector, args.main_menu, args.debug_mode) if args.area_map is not None
                 else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero,
                                               verified=launch.verified_roles(conf), main_menu=args.main_menu))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
@@ -234,6 +237,7 @@ def parser() -> argparse.ArgumentParser:
     launcher.add_argument("--area-map-sector", help="X,Y: the sector the map opens at (map mode; the main world map opens as a window there)")
     launcher.add_argument("--hero", choices=launch.PREMADE_HEROES)
     launcher.add_argument("--main-menu", action="store_true", help="open the main menu over the AREA scene (ARC-UI-011)")
+    launcher.add_argument("--debug-mode", action="store_true", help="debug mode (ARC-DEV-050): world-map area list and teleport; map mode only")
     for option in launch.ACTOR_DEFAULTS:
         launcher.add_argument("--" + option.replace("_", "-"))
     launcher.set_defaults(func=command_launch)

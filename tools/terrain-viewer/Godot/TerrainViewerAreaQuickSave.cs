@@ -121,7 +121,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The location a save names: the map mode's map, else the Crash Site or its cave.</summary>
-    private string SaveLocation() => _readyMapName ?? (InCave ? "Crash Site cave" : "Crash Site");
+    // ARC-DEV-050: a save made in debug mode says so in its location.
+    private string SaveLocation() => ViewerDebugMode.MarkLocation(_readyMapName ?? (InCave ? "Crash Site cave" : "Crash Site"), DebugMode);
 
     /// <summary>A PNG of the frame on screen fitted into the original's fixed 468×300 preview (SL8), or null when the frame cannot be
     /// read (a headless run).</summary>
