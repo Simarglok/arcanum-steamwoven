@@ -69,11 +69,15 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles"];
     private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
-    private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description"];
+    private static readonly string[] GivenFields = ["entity", "origin"];
+    private static readonly string[] PileFields = ["entity", "coins"];
+    private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] NpcInventoryFields = ["npc", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
+    // ARC-WORLD-083 (schema 41): a made item's complexity.
+    private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item"];
     private static readonly string[] DurabilityFields = ["items", "destroyed", "uses"];
@@ -372,6 +376,7 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("prototype", item.Kind.Prototype);
                 w.WriteNumber("name", item.Kind.Name);
                 w.WriteNumber("description", item.Kind.Description);
+                w.WriteNumber("complexity", item.Complexity);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -383,6 +388,25 @@ public static class GameSessionSnapshotCodec
                 w.WriteString("entity", stack.Entity);
                 w.WriteNumber("ammoType", stack.AmmoType);
                 w.WriteNumber("units", stack.Units);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-071: the items the hero gave NPCs (origin 0 for a kit item) and the tracked gold piles, by entity in ordinal order.
+            w.WriteStartArray("given");
+            foreach (var given in snapshot.Inventory.Given)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", given.Entity);
+                w.WriteNumber("origin", given.Origin?.RuntimeMap ?? 0);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("piles");
+            foreach (var pile in snapshot.Inventory.Piles)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", pile.Entity);
+                w.WriteNumber("coins", pile.Quantity);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1370,10 +1394,10 @@ public static class GameSessionSnapshotCodec
         for (var i = 0; i < madeItems.Length; i++)
         {
             var path = $"{p}.made[{i}]";
-            var item = Fields(madeItems[i], path, KitItemFields);
+            var item = Fields(madeItems[i], path, MadeItemFields);
             var entity = Entity(item["entity"], path + ".entity");
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
-            made[i] = new(entity, Kind(item, path));
+            made[i] = new(entity, Kind(item, path), Complexity(item, path));
         }
         // ARC-WORLD-055: the NPCs in strictly ascending ordinal order, none with an empty list; an item listed once in the whole
         // inventory.
@@ -1396,10 +1420,10 @@ public static class GameSessionSnapshotCodec
             for (var j = 0; j < rows.Length; j++)
             {
                 var itemPath = $"{path}.items[{j}]";
-                var item = Fields(rows[j], itemPath, KitItemFields);
+                var item = Fields(rows[j], itemPath, MadeItemFields);
                 var entity = Entity(item["entity"], itemPath + ".entity");
                 if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, itemPath + ".entity");
-                list[j] = new(entity, Kind(item, itemPath));
+                list[j] = new(entity, Kind(item, itemPath), Complexity(item, itemPath));
             }
             npcs[i] = new(npc, System.Array.AsReadOnly(list));
         }
@@ -1417,9 +1441,12 @@ public static class GameSessionSnapshotCodec
             var source = PlacedSource(item["source"], path + ".source");
             var origin = Int(item["origin"], path + ".origin", 0, int.MaxValue);
             if ((origin == 0) != (source != SessionPlacedSource.Pc)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".origin");
+            // ARC-WORLD-083: only a made item keeps a complexity of its own.
+            var complexity = Complexity(item, path);
+            if (complexity != 0 && source != SessionPlacedSource.Made) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".complexity");
             placed[i] = new(entity, Kind(item, path), source, origin == 0 ? null : new SessionMapId(origin),
                 new(Int(item["map"], path + ".map", 1, int.MaxValue)),
-                new(Int(item["x"], path + ".x", 0, MaxPlacedCoordinate), Int(item["y"], path + ".y", 0, MaxPlacedCoordinate)));
+                new(Int(item["x"], path + ".x", 0, MaxPlacedCoordinate), Int(item["y"], path + ".y", 0, MaxPlacedCoordinate)), complexity);
         }
         // ARC-WORLD-066: the ammunition stacks by entity in strictly ascending ordinal order.
         var ammoRows = Array(f["ammo"], p + ".ammo", GameSessionLimits.PolicyMaxAmmoRecords);
@@ -1434,8 +1461,37 @@ public static class GameSessionSnapshotCodec
             lastAmmo = entity;
             ammo[i] = new(entity, Int(row["ammoType"], path + ".ammoType", 0, SessionAmmoRecord.AmmoTypes - 1), Int(row["units"], path + ".units", 0, int.MaxValue));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo);
+        // ARC-WORLD-071: the given items and the gold piles, each by entity in strictly ascending ordinal order.
+        var givenRows = Array(f["given"], p + ".given", GameSessionLimits.PolicyMaxNpcItems);
+        var given = new SessionGivenItem[givenRows.Length];
+        string? lastGiven = null;
+        for (var i = 0; i < givenRows.Length; i++)
+        {
+            var path = $"{p}.given[{i}]";
+            var row = Fields(givenRows[i], path, GivenFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (lastGiven is not null && string.CompareOrdinal(lastGiven, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastGiven = entity;
+            var origin = Int(row["origin"], path + ".origin", 0, int.MaxValue);
+            given[i] = new(entity, origin == 0 ? null : new SessionMapId(origin));
+        }
+        var pileRows = Array(f["piles"], p + ".piles", GameSessionLimits.PolicyMaxGoldRecords);
+        var piles = new SessionGoldRecord[pileRows.Length];
+        string? lastPile = null;
+        for (var i = 0; i < pileRows.Length; i++)
+        {
+            var path = $"{p}.piles[{i}]";
+            var row = Fields(pileRows[i], path, PileFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (lastPile is not null && string.CompareOrdinal(lastPile, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastPile = entity;
+            piles[i] = new(entity, Int(row["coins"], path + ".coins", 0, int.MaxValue));
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles);
     }
+
+    // ARC-WORLD-083: a made or placed item's magick/tech complexity, any 32-bit value (the original's field 0x60 is one).
+    private static int Complexity(Dictionary<string, JsonElement> item, string path) => Int(item["complexity"], path + ".complexity", int.MinValue, int.MaxValue);
 
     // A placed item's cell coordinates fit 24 bits (the drop's packing, ARC-COMBAT-009).
     private const int MaxPlacedCoordinate = (1 << 24) - 1;
@@ -1464,6 +1520,7 @@ public static class GameSessionSnapshotCodec
         w.WriteNumber("prototype", item.Kind.Prototype);
         w.WriteNumber("name", item.Kind.Name);
         w.WriteNumber("description", item.Kind.Description);
+        w.WriteNumber("complexity", item.Complexity);
         w.WriteEndObject();
     }
 
@@ -1891,9 +1948,10 @@ public static class GameSessionSnapshotCodec
         "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
-    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079).</summary>
+    /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082).</summary>
     private static readonly string[] DangerFlagNames =
-        ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked"];
+        ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked",
+            "SpellFlee"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>

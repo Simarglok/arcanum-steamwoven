@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -352,6 +352,7 @@ public partial class TerrainViewerApp
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
         if (SaveListOpen) { HandleSaveListPulse(intent); return; }
+        if (MainMenuOpen) { HandleMainMenuPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -795,6 +796,13 @@ public partial class TerrainViewerApp
         if (ReadingOpen && input is InputEventKey readingKey)
         {
             HandleReadingKey(readingKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-011: the open main menu owns every key (a letter chooses its button, Escape goes back).
+        if (MainMenuOpen && input is InputEventKey mainMenuKey)
+        {
+            HandleMainMenuKey(mainMenuKey);
             GetViewport().SetInputAsHandled();
             return;
         }

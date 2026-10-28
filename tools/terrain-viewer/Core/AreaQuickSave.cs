@@ -70,8 +70,10 @@ public static class AreaQuickSave
     /// (map not loaded, cell not admitted), or null when it can.</param>
     /// <param name="mapSound">The default music and ambient pair of the saved actor's map (ARC-WORLD-040: the original opens
     /// the map before it loads the sound state), or null when the host has no sound catalogue.</param>
+    /// <param name="heroTables">ARC-UI-011: a ready hero load whose game-wide experience and auto-level data a save with a hero
+    /// takes when the running session has none (the main menu's placeholder session); null keeps the running session's.</param>
     public static AreaQuickLoadResult Load(GameSessionSaveSlot slot, GameSessionOwner current, Func<ActorPlacement, string?> placementRefusal,
-        Func<ActorPlacement, SessionMapSound?>? mapSound = null)
+        Func<ActorPlacement, SessionMapSound?>? mapSound = null, AreaHeroLoad? heroTables = null)
     {
         ArgumentNullException.ThrowIfNull(slot);
         ArgumentNullException.ThrowIfNull(current);
@@ -83,7 +85,8 @@ public static class AreaQuickSave
                 $"quick load REFUSED: saved actor on map {snapshot.Actor.Map.RuntimeMap} cell ({snapshot.Actor.Cell.X},{snapshot.Actor.Cell.Y}): {refusal}");
         var options = new GameSessionRestoreOptions(new(snapshot.Identity.World, current.Flags.Binding.Identity.Module),
             current.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), current.Limits, current.Rules.Mode,
-            current.Experience, current.Difficulty, current.AutoLevel, mapSound?.Invoke(snapshot.Actor), current.Reputations);
+            current.Experience ?? HeroTable(snapshot, heroTables)?.Experience, current.Difficulty, current.AutoLevel ?? HeroTable(snapshot, heroTables)?.AutoLevel,
+            mapSound?.Invoke(snapshot.Actor), current.Reputations);
         var restored = GameSessionOwner.Restore(snapshot, options);
         if (restored.Owner is null)
             return new(null, read, restored.Failure, "quick load REFUSED: " + Describe(restored.Failure));
@@ -91,6 +94,9 @@ public static class AreaQuickSave
         return new(restored.Owner, read, GameSessionFailure.None,
             $"quick loaded: map {actor.Map.RuntimeMap} cell ({actor.Cell.X},{actor.Cell.Y}), session rev {restored.Owner.Version.Revision}");
     }
+
+    private static AreaHeroLoad? HeroTable(GameSessionSnapshot snapshot, AreaHeroLoad? tables) =>
+        snapshot.Hero is not null && tables is { Status: AreaHeroStatus.Ready } ? tables : null;
 
     public static string Describe(SaveSlotReadResult read) => read.Failure switch
     {

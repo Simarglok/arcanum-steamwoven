@@ -120,7 +120,7 @@ are F2. Every direct branch stays inside `.text`. Prototype numbers below are th
 | AM4 | unit use (0x4658E0), stack lookup (0x465870) | Arguments: source, destination (or none), count, type, an optional explicit stack. The source stack is the explicit one, else a critter's stack field (unvalidated) or a container's lookup (AM6). Fewer units than the count: nothing changes, 0 returned. Exactly the count: the stack is destroyed; more: it keeps the rest. A destination's stack grows by the count, or a new object of the type's base prototype carries it in (0x465A40, 0x4617F0). A source without any stack credits the destination all the same. Callers: the attack (0x4B65D0: the weapon's ammunition type, field 0x7D, and per-shot count 0x7E; a normal shot, a critical miss taking the whole stack or five shots' worth; an NPC whose leader chain reaches no PC never spends), the cell payment (CC5), script action 135 (cells), assembly (one unit a component), a steal (at most 20 units, gold 100) and the quantity interface. | Original (AMA6) |
 | AM5 | removal (0x467860, from 0x466E00, 0x43CCA0, the drop and loot) | Every removal of gold or ammunition from a critter writes a null handle into its stack field of that kind, whether or not the field named the removed item, and never re-points it to another stack of the type. | Original (AMA4) |
 | AM6 | container lookups (0x465870, 0x4647D0) | A container's stack of a type is looked up by passing the raw base prototype number where a prototype handle is compared (every other caller converts the number first), so it never matches: a container's ammunition or gold is never counted or spent this way. | Original bug (AMA5; Steamwoven switch, ARC-TECHNOLOGY-009) |
-| AM7 | gold (0x4647D0, 0x464780, 0x464830, 0x464970) | The same mechanism: critter field 0xE8, quantity 0xA5, base prototype 9076, merge by prototype. | Original (gold not modelled) |
+| AM7 | gold (0x4647D0, 0x464780, 0x464830, 0x464970) | The same mechanism: critter field 0xE8, quantity 0xA5, base prototype 9056 (written 9076 here first; corrected by NT1), merge by prototype. | Original (gold modelled since ARC-WORLD-071, NT1) |
 
 Anomalies:
 
@@ -138,8 +138,11 @@ Anomalies:
   **Decided** (owner, 2026-10-21): a switch, `ItemRuleProfile.ContainerStackLookupFails` (ARC-TECHNOLOGY-009): Steamwoven finds the
   container's first stack of the type (a device in a container pays from its cells through `ContainerCellSource`, a spend from a
   container through `SpendAmmo`); Original keeps the failed lookup. Gold is not modelled; the same fix will apply to it.
-- AMA6 (AM4): a source without a stack still credits the destination. The session's spend has no destination (transfers of units
-  between holders are not modelled), so it does not arise.
+- AMA6 (AM4, NT1): a source without a stack (or, for gold, a pile) still credits the destination. Since ARC-WORLD-071 the session
+  moves units and coins between the hero and an NPC from a named ammunition stack or the NPC's first gold pile, and a source without one
+  is refused in both settings (`ItemNotAvailable` for ammunition, `GoldShort` for gold): nothing is credited from nothing. Unreachable
+  from the planned callers (a steal moves from the dragged pile or stack, PP3; a sale's price is capped at the merchant's gold, NT4).
+  **Proposed** (ARC-WORLD-071): no switch while no caller reaches it; to be decided by the owner if one does.
 
 ## Item decay (ARC-WORLD-062)
 
@@ -164,3 +167,29 @@ agent that saw only the questions (method step 6); both agree on every row, so t
 No anomaly. The session's limits (no junk pile yet, no container in the viewer's loot window, a bound on pending events, the no-decay
 flag kept only on seed rows) are in the
 [inventory runtime](../../world/inventory-runtime.md#item-decay-arc-world-062).
+
+## NPC gold and transfers (ARC-WORLD-071)
+
+Source: [inventory runtime](../../world/inventory-runtime.md#npc-gold-and-transfers-arc-world-071). Read on 2026-10-21 by two independent
+readers that saw only the questions (method step 6); they agree on every row below unless a row says otherwise. The insertion rules are
+AM1–AM5; this section adds the gold units, the move of an item between critters and what the barter window calls. Both readers found
+that the gold base prototype is 9056, not the 9076 of AM7 (a slip of that row; the repository's other gold numbers use 9056).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| NT1 | gold units 0x464830 (source, destination, count, explicit pile or none) | A count of 0 succeeds and changes nothing. A source pile with fewer coins changes nothing and returns 0; exactly the count destroys the pile (0x43CCA0, which nulls field 0xE8); more leaves the rest. With a destination, the insert-item event (21) fires first on the source pile with the destination as triggerer; it cannot refuse. A destination pile (field 0xE8) grows by a plain 32-bit add: no cap, no insert check, no event, no NPC flag. Without one, 0x464970 creates a pile of prototype 9056 at the destination's tile and 0x4617F0 moves it in (its events and insert check); a refused insert leaves the coins on the ground while the call still reports success. A source without a pile credits the destination all the same. The PC's gold is a pile of its list named by field 0xE8, as an NPC's. | Original |
+| NT2 | item move 0x4617F0 → 0x461CA0 | In order: the new parent's transfer script (point 32; 0 refuses); the item's no-drop flag 0x20 refuses (a worn item is always removable, 0x465010); the insert check 0x466510 refuses on weight, a PC-only condition (code 15, the technophobia rule of ARC-WORLD-069) or no free cell, while a same-prototype gold or ammunition stack needs no cell. Any refusal leaves the item with its old parent. | Original |
+| NT3 | removal 0x467860, insert 0x466640 | The removal takes the item out of the list, nulls the stack field of its kind (AM5), unwields a worn item (wield-off event 25), sets NPC flag 0x40 on an NPC giver and fires remove-item (28). The insert merges a gold or ammunition item into the holder's first item of its prototype (the moved object destroyed) or appends it at the end of the list in the checked cell, sets the stack field when there was no stack, sets NPC flag 0x40 on an NPC receiver and fires insert-item (21). The item's decay timer is cancelled. Flag 0x40 makes the AI re-wield its best items (0x4654F0, around 0x4A8570) and is then cleared. No other state (no separate gold count, no "given by the PC" mark). | Original; flag 0x40 F1 (not modelled) |
+| NT4 | the barter window | Items move through 0x461810 (the core of 0x4617F0), the price through 0x464830 after the item and only when its move succeeded. Buying is refused for a price of 0 or a PC with less gold; a sale's price is capped at the merchant's gold (a merchant without gold takes the item for nothing). A sold item goes into the merchant's substitute container (field 0x126, used within 20 for an NPC with no leader) and gets the identified flag 0x1; the merchant's gold in that container is moved onto the merchant when the window opens. A failed payment rolls back only gold or ammunition. One reader also reads a gift-reaction call (0x4C11D0 through 0x4C0DE0) whose positive branch looks gated on the love reaction. Where the restock event (NI6) is scheduled is read differently: at every opening of the inventory window (0x5733A9 inside 0x5727B0, one reader) or at the close (the other, inferred). | Original; the barter window's (ARC-UI-050), the gift reaction and NI6's point to re-read there |
+
+## Made item complexity (ARC-WORLD-083)
+
+Source: [inventory runtime](../../world/inventory-runtime.md#made-item-complexity-arc-world-083). Question: does an item's magick/tech
+complexity (field 0x60, which the insert check's Technophobia part reads, BG4) survive its drop, its placement on a tile, its pickup
+and its move between holders? Read on 2026-10-28 by this task alone (one reading, F1): the drop, removal, placement, pickup, transfer
+and insertion functions with their callees two calls deep (191 functions), and every call of the 32-bit field setter 0x406D40 whose
+field argument is the constant 0x60. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| MC1 | drop (0x461A90, 0x461AB0), removal (0x466E00, 0x467860, 0x467CB0), placement (0x466E50, 0x466EF0, 0x4415C0), pickup and transfer (0x4617F0, 0x461810, 0x461CA0), insertion (0x466640), creation (0x4ED8B0); setter 0x406D40 | None of these functions, nor any callee two calls deep, writes field 0x60: their constant-field writes are the location, parent, inventory location (0x5E), item flags (0x57) and sector fields, and their three setter calls with a field in a register write the owner's list count (a read plus one) and, on a stack merge, the quantity (the two holders' values added). Every call of 0x406D40 with the constant field 0x60 lies in the prototype initialisers (0x46C000..0x49FFFF); a created instance answers its prototype's value through the getter until it has its own (BG1). So an item keeps its complexity wherever it moves, and a made item has its prototype's: the insert check on its pickup reads the same value that refused it before. | Original |

@@ -240,6 +240,11 @@ conversation is not run).
   original would run the action or generate the text, which is not modelled, so a caller refuses the run's effects. It
   carries the registry mark of 0x44B390 (partial). The session uses both for an item's insert-item script
   ([inventory runtime](../world/inventory-runtime.md#insert-item-script-arc-script-013)).
+- **Item events (ARC-SCRIPT-041, the transfer half of slice S8).** The session runs the get, transfer, remove-item and
+  insert-item points of a pickup, loot and negative `IN` through `RunObject` in the executable's order, each run reading the
+  earlier runs' flag writes, and a gate's skip default leaves the item ([item events](../world/inventory-runtime.md#item-events-arc-script-041),
+  ledger [IE1–IE7](../research/ledger/scripts.md#item-events-arc-script-041)). The admitted set, call depth 16 and the line
+  budget are unchanged.
 
 ## Sound actions (ARC-SCRIPT-040, set S7)
 

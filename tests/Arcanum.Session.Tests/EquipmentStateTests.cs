@@ -15,9 +15,9 @@ namespace Arcanum.Session.Tests;
 public sealed class EquipmentStateTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
-    private static readonly SessionWearArtCheck Drawn = (_, _) => true;
+    internal static readonly SessionWearArtCheck Drawn = (_, _) => true;
 
-    private static readonly EquipmentItem Blade = new()
+    internal static readonly EquipmentItem Blade = new()
     {
         Kind = EquipmentItemKind.Weapon,
         HitPoints = 20,
@@ -40,7 +40,7 @@ public sealed class EquipmentStateTests
         Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring, AcAdjustment = ac },
     };
 
-    private static SessionWearableItem Wearable(int kit, EquipmentItem item, int[]? scripts = null, bool spells = false) =>
+    internal static SessionWearableItem Wearable(int kit, EquipmentItem item, int[]? scripts = null, bool spells = false) =>
         new(Kit[kit - 1].Kind, scripts ?? [], spells, item);
 
     private static GameSessionOwner Owner(SessionHeroDefinition? hero = null)

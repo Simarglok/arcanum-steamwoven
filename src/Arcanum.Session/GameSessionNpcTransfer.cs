@@ -1,0 +1,357 @@
+namespace Arcanum.Session;
+
+/// <summary>
+/// ARC-WORLD-071: NPC gold as counted piles and the moves between the hero and an NPC that the pick-pocket skill (task S15) and the
+/// barter window (ARC-UI-050) share, read in the executable (ledger NT1–NT4): gold coins in part (0x464830), an item of the hero's into an
+/// NPC's list and back (0x4617F0 → 0x461CA0), and ammunition units in part (0x4658E0, AM4). No prices and no skill: the caller decides how
+/// many coins or units move. Each call is one revision or refused before any effect. Contract: docs/world/inventory-runtime.md.
+/// </summary>
+public sealed partial class GameSessionOwner
+{
+    /// <summary>The coins of the NPC's gold pile (its first pile in list order, the pile the original's field 0xE8 names after an
+    /// insertion, AM2): its seed pile's coins or the tracked ones, or a pile the session created; 0 without a pile. Null for an NPC the
+    /// session does not know. A second pile (a made pile added while a seed with its own pile was not attached) is not counted until the
+    /// first is gone. Throws for an invalid entity id.</summary>
+    public int? QueryNpcGold(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        return KnownNpc(npc) ? NpcPile(npc)?.Quantity ?? 0 : null;
+    }
+
+    /// <summary>
+    /// Moves <paramref name="count"/> coins from the NPC's gold pile to the hero (0x464830 with the hero as destination, NT1): a pile
+    /// with exactly that many is destroyed (the durability deletion), a larger one keeps the rest. The hero's gold grows with no insert
+    /// check. Refused before any effect: an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session
+    /// does not know (<see cref="GameSessionFailure.UnknownHolder"/>), no hero to hold gold (<see cref="GameSessionFailure.GoldUnavailable"/>),
+    /// a pile with fewer coins or none (<see cref="GameSessionFailure.GoldShort"/>, the original's 0 with nothing changed), a pile with an
+    /// insert-item script (the event the original fires on it first, not run here: <see cref="GameSessionFailure.ItemScriptUnsupported"/>),
+    /// a sum past 32 bits or a full record budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. A count of 0 changes
+    /// nothing. The caller limits the count: a steal moves at most 100 (PP3), a merchant pays at most what it holds (NT4).
+    /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x464830, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public InventoryMutationResult TakeGoldFromNpc(GameSessionVersion expected, string npc, int count)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0)
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (NpcPile(npc) is not { } pile || pile.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
+        if (pile.Facts?.HasScript(SessionScriptPoint.InsertItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        var emptied = pile.Quantity == count;
+        if (emptied ? !_durability.Records.ContainsKey(pile.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
+            : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        _inventory.Gold += count;
+        if (emptied) Delete(pile.Entity);
+        else _inventory.Piles[pile.Entity] = pile.Quantity - count;
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
+    }
+
+    /// <summary>
+    /// Moves <paramref name="count"/> of the hero's coins to the NPC (0x464830 with the NPC as destination, NT1): its gold pile grows
+    /// with no insert check; an NPC without a pile gets a new one, a <c>made:n</c> item of <paramref name="pileKind"/> (the gold prototype,
+    /// the host's) at the end of its list, after the host's insert check for the NPC. The original then leaves a refused new pile on the
+    /// ground and still reports success; here a refusal moves nothing (<see cref="GameSessionFailure.InsertRefused"/>). Refused before any
+    /// effect, beyond <see cref="TakeGoldFromNpc"/>'s input, version, holder and hero checks: a kind that is not gold
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), fewer coins than the count (<see cref="GameSessionFailure.GoldShort"/>), a sum past 32
+    /// bits, a full list, store or record budget, or no free made number (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. A
+    /// count of 0 changes nothing.
+    /// </summary>
+    public InventoryMutationResult GiveGoldToNpc(GameSessionVersion expected, string npc, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0 || pileKind.Type != SessionItemType.Gold)
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (_inventory.Gold < count) return RejectItem(GameSessionFailure.GoldShort);
+        if (NpcPile(npc) is { } pile)
+        {
+            if ((long)pile.Quantity + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (!_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+            _inventory.Gold -= count;
+            _inventory.Piles[pile.Entity] = pile.Quantity + count;
+            _revision++;
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
+        }
+        if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal);
+        if (created is null) return refusal!.Value;
+        _inventory.Gold -= count;
+        _inventory.Piles[created.Value.Entity] = count;
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, created.Value.Entity, SessionInsertVerdict.Accepted, Version);
+    }
+
+    /// <summary>
+    /// Moves one of the hero's items (its kit, a taken or a made item; not one it placed on the ground) to the end of the NPC's list
+    /// (0x4617F0 → 0x461CA0, NT2, NT3), after the host's insert check for the NPC: a worn item leaves its slot; ammunition merges into the
+    /// NPC's first stack of its prototype (its units added, the moved stack deleted, AM1). The item keeps its entity: a kit or taken item is
+    /// recorded as given (<see cref="QueryGivenItems"/>), so taking it back returns it to the list it came from. Refused before any effect:
+    /// an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know
+    /// (<see cref="GameSessionFailure.UnknownHolder"/>), an item the hero does not hold (<see cref="GameSessionFailure.ItemNotAvailable"/>),
+    /// an NPC with a transfer script (point 32, which can veto in the original; not run here:
+    /// <see cref="GameSessionFailure.HolderScriptUnsupported"/>), a taken item whose attached origin seed shows a remove-item, insert-item
+    /// or (worn) wield-off script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a full list, store or durability budget or a sum
+    /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
+    /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
+    /// The original's no-drop item flag and the NPC flag 0x40 (re-wield) are not modelled. One revision.
+    /// </summary>
+    public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        if (NpcHasScript(npc, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        var worn = _equipment.SlotOf(item) is not null;
+        if (held.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item, out var listed) &&
+            (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
+                worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
+            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
+        var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
+            ? seedRow.Facts.Complexity : held.Complexity;
+        var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity));
+        var into = held.Kind.Type == SessionItemType.Ammo
+            ? NpcStacks(npc).Where(pair => pair.Prototype == held.Kind.Prototype).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault() : null;
+        if (into is { } stack)
+        {
+            var units = _inventory.Ammo[item].Units;
+            if ((long)stack.Units + units > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (!_inventory.Ammo.ContainsKey(stack.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        }
+        else if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+            return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+        var verdict = insertCheck(new SessionInventoryItem(item, facts));
+        ThrowIfDisposed();
+        if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        if (into is { } target)
+        {
+            var units = _inventory.Ammo[item].Units;
+            Delete(item);
+            _inventory.Ammo[target.Entity] = target with { Units = target.Units + units };
+        }
+        else
+        {
+            if (_equipment.SlotOf(item) is { } slot) _equipment.Worn.Remove(slot);
+            _inventory.Kit.RemoveAll(entry => entry.Entity == item);
+            _inventory.Pc.RemoveAll(entry => entry.Entity == item);
+            _inventory.Made.RemoveAll(entry => entry.Entity == item);
+            // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
+            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+            if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
+        }
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
+    }
+
+    /// <summary>
+    /// Moves an item of an NPC's current list in the actor's map seed (alive or not: life is the caller's concern) to the hero (0x4617F0 with the hero as the new parent, NT2, NT3), as
+    /// a steal or a purchase does: a seed item, a made item the session added to it, or an item the hero gave it (which returns to the list
+    /// it came from). The item rules and the commit are <see cref="LootItem"/>'s (the insert check, the Technophobia refusal, the
+    /// insert-item script, the ammunition merge), without its dead-holder and use-script conditions. Refused before any effect: an invalid
+    /// input, the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a holder that is not an NPC of
+    /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
+    /// gold (<see cref="TakeGoldFromNpc"/>) or a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), and the rules of
+    /// <see cref="LootItem"/>. One revision.
+    /// </summary>
+    public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
+        ISessionItemScriptHost? scripts = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
+        if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
+            return Take(seed, new(item, _inventory.AddedFacts(added)), npc, insertCheck, scripts);
+        if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
+            return RejectItem(GameSessionFailure.ItemNotAvailable);
+        return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), npc, insertCheck, scripts);
+    }
+
+    /// <summary>
+    /// Moves <paramref name="count"/> units of an NPC's ammunition stack <paramref name="stack"/> to the hero (0x4658E0 with the hero as
+    /// destination and the stack given, AM4): a stack with exactly that many is deleted, a larger one keeps the rest; the hero's first stack
+    /// of the same ammunition type grows, or a new <c>made:n</c> stack of <paramref name="newStackKind"/> (the type's base prototype, the
+    /// host's) enters the hero's list after the host's insert check. Refused before any effect: an invalid input or a kind that is not
+    /// ammunition (<see cref="GameSessionFailure.InvalidAmmo"/>), the version, an NPC the session does not know, a stack not in its current
+    /// list (<see cref="GameSessionFailure.ItemNotAvailable"/>), fewer units (<see cref="GameSessionFailure.AmmoShort"/>), a full budget or a
+    /// sum past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict. A count of 0 changes nothing.
+    /// The caller limits the count (a steal moves at most 20, PP3).
+    /// </summary>
+    public InventoryMutationResult TakeAmmoFromNpc(GameSessionVersion expected, string npc, string stack, int count, SessionItemKind newStackKind,
+        SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(stack))
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (count < 0 || newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (NpcStacks(npc).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(pair => pair!.Value.Entity == stack) is not { } source)
+            return RejectItem(GameSessionFailure.ItemNotAvailable);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        // A stack that goes at its last unit is deleted (0x43CCA0, AM4), not removed: no remove-item event, as for an emptied gold pile (NT1).
+        var into = HeroStackOfType(source.AmmoType);
+        return MoveUnits(source, count, into, into is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
+    }
+
+    /// <summary>
+    /// Moves <paramref name="count"/> units of the hero's ammunition stack <paramref name="stack"/> to the NPC (0x4658E0 with the NPC as
+    /// destination, AM4): the hero's stack goes at its last unit or keeps the rest; the NPC's first stack of the same type grows, or a new
+    /// <c>made:n</c> stack of <paramref name="newStackKind"/> enters its list after the host's insert check for the NPC. The refusals are
+    /// <see cref="TakeAmmoFromNpc"/>'s with the hero's stack. A count of 0 changes nothing.
+    /// </summary>
+    public InventoryMutationResult GiveAmmoToNpc(GameSessionVersion expected, string npc, string stack, int count, SessionItemKind newStackKind,
+        SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(stack))
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (count < 0 || newStackKind.Type != SessionItemType.Ammo) return RejectItem(GameSessionFailure.InvalidAmmo);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (!HeroHeld().Any(held => held.Entity == stack && held.Kind.Type == SessionItemType.Ammo)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        var source = _inventory.Ammo[stack];
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (source.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        var into = NpcStackOfType(npc, source.AmmoType);
+        return MoveUnits(source, count, into, into is null ? () => NewNpcStack(npc, newStackKind, source.AmmoType, count, insertCheck) : null);
+    }
+
+    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs and that are still in an NPC's list, by entity in ordinal order.</summary>
+    public IReadOnlyList<SessionGivenItem> QueryGivenItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Given.Values.ToArray()); }
+
+    // The units' move after the source checks: into an existing stack (its units grow), or into a new stack the creator makes after its
+    // insert check (null: refused, its result returned). The source goes at exactly the count.
+    private InventoryMutationResult MoveUnits(SessionAmmoRecord source, int count, SessionAmmoRecord? into, Func<(SessionMadeItem? Created, InventoryMutationResult? Refusal)>? create)
+    {
+        var emptied = source.Units == count;
+        if (into is { } target && (long)target.Units + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (emptied && !_durability.Records.ContainsKey(source.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // The records this move adds: the source's rest when untracked, the destination's (a new stack, or an untracked one that grows).
+        var added = (emptied || _inventory.Ammo.ContainsKey(source.Entity) ? 0 : 1) + (into is { } grown ? _inventory.Ammo.ContainsKey(grown.Entity) ? 0 : 1 : 1);
+        if (_inventory.Ammo.Count + added > _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        string destination;
+        SessionInsertVerdict? verdict = null;
+        if (into is { } stack)
+        {
+            _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + count };
+            destination = stack.Entity;
+        }
+        else
+        {
+            var (created, refusal) = create!();
+            if (created is null) return refusal!.Value;
+            destination = created.Value.Entity;
+            verdict = SessionInsertVerdict.Accepted;
+        }
+        if (emptied) Delete(source.Entity);
+        else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, destination, verdict, Version);
+    }
+
+    // A new ammunition stack for the hero: a made item at the end of its made items (the Technophobia refusal does not apply: no
+    // complexity), its units recorded.
+    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewHeroStack(SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
+    {
+        if (_inventory.Held >= _limits.MaxPcItems) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
+        var number = NextMadeNumber();
+        if (number > int.MaxValue) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
+        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
+        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0);
+        ThrowIfDisposed();
+        if (_revision != revision || _inventory.SeedGeneration != seeds) return (null, RejectItem(GameSessionFailure.StaleVersion, verdict));
+        if (verdict != SessionInsertVerdict.Accepted) return (null, RejectItem(GameSessionFailure.InsertRefused, verdict));
+        _inventory.Add(item);
+        _inventory.Ammo[item.Entity] = new(item.Entity, ammoType, units);
+        return (item, null);
+    }
+
+    private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewNpcStack(string npc, SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
+    {
+        var created = NewNpcEntry(npc, kind, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units }, insertCheck, out var refusal);
+        if (created is null) return (null, refusal);
+        _inventory.Ammo[created.Value.Entity] = new(created.Value.Entity, ammoType, units);
+        return (created, null);
+    }
+
+    // A new made item at the end of the NPC's list after the host's insert check for it (the original's new object moved in by
+    // 0x4617F0); its own bookkeeping (gold or ammunition record, revision) is the caller's.
+    private SessionMadeItem? NewNpcEntry(string npc, SessionItemKind kind, SessionItemFacts facts, SessionInsertCheck insertCheck, out InventoryMutationResult? refusal)
+    {
+        refusal = null;
+        // The new object moves in through 0x4617F0, whose first step is the NPC's transfer script (NT2): not run here.
+        if (NpcHasScript(npc, SessionScriptPoint.Transfer)) { refusal = RejectItem(GameSessionFailure.HolderScriptUnsupported); return null; }
+        if (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems)
+        {
+            refusal = RejectItem(GameSessionFailure.BudgetExceeded);
+            return null;
+        }
+        var number = NextMadeNumber();
+        if (number > int.MaxValue) { refusal = RejectItem(GameSessionFailure.BudgetExceeded); return null; }
+        if (_revision == long.MaxValue) { refusal = RejectItem(GameSessionFailure.RevisionExhausted); return null; }
+        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
+        var (revision, seeds) = (_revision, _inventory.SeedGeneration);
+        var verdict = insertCheck(new SessionInventoryItem(item.Entity, facts));
+        ThrowIfDisposed();
+        if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
+        if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
+        _inventory.AddToNpc(npc, item);
+        _inventory.Taken.Add(item.Entity);
+        return item;
+    }
+
+    // The NPC's first gold pile in its list order: its seed piles still in its list (in every attached seed that lists it), then the
+    // piles the session added to it; with the tracked or seed coins and a seed pile's facts.
+    private (string Entity, int Quantity, SessionItemFacts? Facts)? NpcPile(string npc)
+    {
+        foreach (var seed in _inventory.Seeds.Values)
+            if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
+                foreach (var entity in holder.Items)
+                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { Kind.Type: SessionItemType.Gold } facts)
+                        return (entity, _inventory.Piles.TryGetValue(entity, out var tracked) ? tracked : facts.Quantity ?? 0, facts);
+        foreach (var item in _inventory.AddedTo(npc))
+            if (item.Kind.Type == SessionItemType.Gold) return (item.Entity, _inventory.Piles[item.Entity], null);
+        return null;
+    }
+
+    // Whether any attached seed's holder row of the NPC has a script at the point.
+    private bool NpcHasScript(string npc, int point) => _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) &&
+        holder.Kind == SessionHolderKind.Npc && holder.ScriptPoints.Contains(point));
+
+    // One of the hero's held items (not placed) with its list, for a taken item its origin map, and for a made item its complexity.
+    private (SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, int Complexity)? HeroListed(string entity)
+    {
+        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit) return (kit.Kind, SessionPlacedSource.Kit, null, 0);
+        if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc) return (pc.Kind, SessionPlacedSource.Pc, pc.Origin, 0);
+        if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made) return (made.Kind, SessionPlacedSource.Made, null, made.Complexity);
+        return null;
+    }
+}

@@ -8,9 +8,9 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
+    ./arcanum area [--hero NAME | --main-menu] [--sector X,Y] [--dry-run]  # the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
-    ./arcanum map NAME [--hero NAME] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
+    ./arcanum map NAME [--hero NAME | --main-menu] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
@@ -57,7 +57,11 @@ is exported without the pinned Crash Site gates and launches map mode only. `--h
 diagnostic PC profile. It needs no new input role (the viewer reads the hero from the module archive's game folder) and
 is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it for an
 ARC-RENDER-008 build or, with map mode, an ARC-DEV-015 build: a build exported before ARC-WORLD-027 refuses the
-argument, so `--hero` needs a new export. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
+argument, so `--hero` needs a new export. `--main-menu` (ARC-UI-011, [main menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011))
+opens the original's main menu over the scene first (a new game as a pre-made hero picked in the menu, the last save,
+the load window, exit); it is refused with `--hero`, reaches the viewer as `--main-menu true` through
+`tools/arcanum-local launch terrain ... --main-menu`, and needs a build exported after ARC-UI-011 (an older build
+refuses the argument). `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
 `tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
 `tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
 `tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`, which write their receipts to `docs/verification/receipts`

@@ -10,11 +10,12 @@ covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-
 through the cave entrance and exit with the PC ([map change](#map-change-arc-world-017)), the bounded
 [FR-WORLD-010](../requirements/world.md#fr-world-010) A→B→A case for one follower.
 
-**NOT READY:** a companion does not walk through living critters outside combat mode, as the original's NPC movers do (the request's flag 0x10, ledger LR2): since ARC-WORLD-074 the PC does, and may stand on a cell a companion wants, while a companion's admission and planning overlays still block on the PC, the other companions and T0 critters (the companions lane's follow-up). A visible effect meanwhile: when a frame ends with the PC on a companion's cell, the companion's follow decides Separate (distance 0) and steps aside, and a step it picks onto the cell the PC is entering is refused (`ROUTE_STEP_DENIED`); nothing stalls. No walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
+**Critters (ARC-WORLD-075):** outside combat mode a companion walks through living critters, as the original's follower does (its move-near and run-near legs plan with the request's flag 0x10, ledger LR10, and the PC's walk does too since ARC-WORLD-074): `AreaCompanion.PassesCritters` is read from the session at each drive (the companion's own combat mode), and while it holds the companion's plan (`AreaRouteSource` `crittersPass`) and its steps (`AreaGridSession.CrittersPass`) pass T0 PCs and NPCs, the PC and the other companions; other objects still block, and a living critter on the goal still refuses it (DC2). In combat mode they block it as before; nothing in the viewer puts a companion in combat mode yet (only the hero's R key sets combat mode), so Virgil passes critters also while the hero is in combat mode, where the PC is blocked by him. Under the Original rule mode (`SegmentEndCritterEndsWalk`, LR11) a critter before a segment's last step stops the goal and the next update goes on approaching from where the companion stands (beyond the range it plans again, even within the start distance), so it pauses one frame and walks on (the original's 2 action points and random 0..300 ms wait are not modelled); Steamwoven walks on at once. An ordered goal stopped there ends, as the walk-here order's goal 4 does (LR5); the spread-out step would plan again in the original (goal 69). NOT READY: a companion may end its approach on a T0 NPC's or another companion's cell and stay there, since it separates only from the leader's cell (distance 0); the original's shared-cell step-away (C10) is not ported. No walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
 (ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
 follower of a follower, no unconscious-follower rule, no carried inventory payload), no combat orders, combat or turn-based cost, no
-refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)), and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
-the session hero. Distances and order are a reading of the original's functions, evidence level F0 (not checked
+refusal or warning line text (the loyalty step and the wait timer of ARC-WORLD-045 name their line ranges, [below](#loyalty-and-the-wait-timer-arc-world-045)). Since ARC-WORLD-067 the PC side of the follow check, the orders, the loyalty step and the wait timer is the
+session hero with `--hero` ([party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)); without one the
+labelled AREA diagnostic profile (charisma 8, level 1, no Persuasion) stands in. Distances and order are a reading of the original's functions, evidence level F0 (not checked
 in the executable) unless the [verification ledger](../research/original-verification-ledger.md) lists them;
 original executable parity is **NOT_VERIFIED**.
 
@@ -45,11 +46,14 @@ per frame and then `Drive` to the same frontier:
   re-check.
 - **Not following** (waiting or free): the goal stops (`FOLLOW_NOT_FOLLOWING`); a started step ends at its cell centre.
 - **Unreachable:** a goal that ends without arriving (`ROUTE_NOT_FOUND`, a denied step) is not planned again until
-  the follower or the leader stands on another cell, so a closed-off leader costs one plan, not one per frame.
+  the follower or the leader stands on another cell, so a closed-off leader costs one plan, not one per frame. An
+  approach stopped before a living critter at a segment's end (`ROUTE_SEGMENT_END_CRITTER`, Original, ARC-WORLD-075) is
+  not unreachable: it goes on approaching at the next update.
 - **Jump:** beyond 30 cells the update returns the leader's cell; the host stands the follower settled there. On
-  the shared cell the next decision steps it to the first Open neighbour in direction order (C10). That choice is
-  planned without the leader; if the leader is stepping into that neighbour the step is denied and the next frame
-  tries again (transient, no memory).
+  the shared cell the next decision steps it to the first Open neighbour in direction order that holds no living
+  critter (a project rule; the original's shared-cell step-away C10 is not ported). That choice is planned without the
+  leader; outside combat mode its step passes the leader (ARC-WORLD-075), in combat mode a step into the cell the leader
+  is entering is denied and the next frame tries again (transient, no memory).
 
 ## Live actors over T0 evidence (Terrain Viewer Core)
 
@@ -67,7 +71,8 @@ live actors on every directed step (project policy):
 `AreaGridSession.Occupancy` (read at each advance) and `AreaRouteSource(…, occupancy)` apply the same overlay, so a
 planned step is the step the runtime admits (FR-NAV-002). The evidence keeps the T0 assessment and adds `Live`, the
 verdict the step was admitted with, when the overlay changed it. The PC is admitted against the companions in combat mode (since ARC-WORLD-074 outside it the PC's steps pass them and every living critter, [click route](click-route-runtime.md#follower-routefollower)); each
-companion against the PC and the other companions, except that a companion **plans** toward the PC without the PC's
+companion against the PC and the other companions in combat mode (since ARC-WORLD-075 outside it its plan and steps pass them
+and T0 critters, `AreaCompanion.PassesCritters`), except that a companion **plans** toward the PC without the PC's
 cells (the goal is the PC's cell; with range ≥ 2 the route never enters it).
 
 `AreaCompanionGroup` holds the measured companions of one map (`AreaCompanionRoster`: Virgil only, matched by prototype
@@ -153,9 +158,9 @@ viewer (exterior, cave and map mode):
   `250 + 4750 × d / 30` ms (integer division, `d` its cell distance to the PC, counted as 30 when above; ledger CL8) after the
   last one, on the frames' simulation time (a clock that went back further than 5 s makes it due at once). A waiting or free
   companion has no tick. No tick runs while a turn-based round is active (the original's step is in the non-combat pass).
-- **Facts.** `AreaCompanionLoyalty.Facts`: the companion's follow facts against the diagnostic PC (or the hero, which the session
-  substitutes), the shown area's conversation state's PC alignment and the companion's effective reaction under its facts, and its
-  level now.
+- **Facts.** `AreaCompanionLoyalty.Facts`: the companion's follow facts against the PC side (the session hero, ARC-WORLD-067, else
+  the diagnostic PC with the shown area's conversation state's alignment), the companion's effective reaction under its facts, and
+  its level now.
 - **Follow-goal gate (decision D5, both settings as the original).** `AreaCompanion.FollowGoal` stands for the original's follow
   goal: an approach (walk, run or jump) starts it, and it lives after the companion arrives, as the original's goal does not end
   by itself (OL19); it ends when the companion stops following, when a conversation with it starts (`InterruptGoals`) and when
@@ -230,6 +235,5 @@ measured roster.
 ## Next
 
 The combat orders (stage A7; the out-of-combat orders are ARC-WORLD-046, [companion orders](companion-orders-runtime.md), the
-loyalty step and wait timer ARC-WORLD-045), a walk cycle for NPC bodies, the session hero as the PC side of the
-check, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
+loyalty step and wait timer ARC-WORLD-045), a walk cycle for NPC bodies, and the rest of the general map-change carry (followers of followers, unconscious followers, carried
 inventory).

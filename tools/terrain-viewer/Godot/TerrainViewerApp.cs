@@ -127,9 +127,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, menu)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk and census run.
+                        // walk, census and menu run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -144,6 +144,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-COMBAT-015: the combat stages after the cast (object attack, critical, line of fire, ranged shot), as the
                                 // map battery runs them last.
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                                // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
+                                if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);
@@ -896,7 +898,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

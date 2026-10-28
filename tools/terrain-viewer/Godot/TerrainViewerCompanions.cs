@@ -40,6 +40,8 @@ public partial class TerrainViewerApp
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         // ARC-WORLD-065: the companions step over what the session destroyed or switched off, as the PC does.
         _areaCompanions.Removed = AreaRemovedObjects;
+        // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.
+        _areaCompanions.Dead = AreaCritterDeadNow;
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
         if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
@@ -210,10 +212,22 @@ public partial class TerrainViewerApp
     /// <summary>Where a speaker stands now: a companion's live cell, else its T0 cell.</summary>
     private Func<AreaSpeaker, (long X, long Y)>? SpeakerCell => _areaCompanions is { } group ? group.WorldCell : null;
 
+    // ARC-WORLD-067: the PC side of the party rules for the HUD, read once per session revision.
+    private (GameSessionOwner Session, long Revision, string Label)? _partySideLabel;
+
+    private string PartySideLabel()
+    {
+        if (_areaSession is not { } session) return AreaCompanionRoster.PartySideLabel(null);
+        if (_partySideLabel is { } cached && ReferenceEquals(cached.Session, session) && cached.Revision == session.Version.Revision) return cached.Label;
+        var label = AreaCompanionRoster.PartySideLabel(session.QueryHeroPartySide());
+        _partySideLabel = (session, session.Version.Revision, label);
+        return label;
+    }
+
     private string CompanionStatus()
     {
         if (_conversationHost is not { PartyWired: true }) return "";
-        var text = _areaCompanions is { } group ? group.Status() : "companions: none";
+        var text = (_areaCompanions is { } group ? group.Status() : "companions: none") + " | " + PartySideLabel();
         var unbodied = (_unbodiedVisitors.Count == 0 ? "" : " | not talkable here (no body kept this run): " + string.Join(", ", _unbodiedVisitors))
             + (_pendingWalkOrder is null ? "" : " | walk order: click a tile (any key cancels)");
         return " | " + text + unbodied + (_companionNotice is { } notice ? " | " + notice : "");
@@ -393,6 +407,15 @@ public partial class TerrainViewerApp
                 "a waiting Virgil stays although the PC is farther than 4");
             GD.Print("ARC-WORLD-045 native-smoke loyalty PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Script = speaker.ScriptId, StepClearedMarks = true, GoalGated = true, WaitTimer = "none (index 6)", Parity = "NOT_VERIFIED" }));
+            // ARC-WORLD-067: the HUD names the PC side of the party rules; ARC-WORLD-075: a wiring check that out of combat mode his walk
+            // passes critters (the walk through a critter itself is covered by the Core tests).
+            RefreshAreaStatus();
+            var side = _areaSession.QueryHero() is null ? "PC side: diagnostic profile" : "PC side: hero (";
+            Require(_hud!.Text.Contains(side, StringComparison.Ordinal), $"the HUD names the PC side ('{side}')");
+            Require(companion.PassesCritters && !_areaSession.QueryCombatMode(SessionCombatant.Critter(companion.Entity)),
+                "out of combat mode Virgil's walk is set to pass critters");
+            GD.Print("ARC-WORLD-075 native-smoke companion pass PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Script = speaker.ScriptId, PassesCritters = "wired", PcSide = PartySideLabel(), Parity = "NOT_VERIFIED" }));
             GD.Print("ARC-WORLD-016 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Origin = new { speaker.WorldX, speaker.WorldY }, Pc = map.Chart.ToWorld(pc), Followed = world, Distance = FollowDistanceRules.Distance(cell, pc),
                 Plans = plans, Session = revision, Parity = "NOT_VERIFIED" }));
@@ -426,7 +449,7 @@ public partial class TerrainViewerApp
             var session = _areaSession!;
             var template = _companionTemplates.Single();
             var key = template.Key; var entity = template.Entity;
-            var facts = AreaCompanionRoster.Facts(template.Facts, 0, 50);
+            var facts = AreaCompanionRoster.Facts(template.Facts, 0, 50, hero: session.QueryHeroPartySide());
             Require(session.UnwaitParty(session.Version, entity, facts, false).Disposition == GameSessionDisposition.Changed, "unwait on the exterior");
             string group() => _areaCompanions?.Status() ?? "none";
             AreaCompanion Virgil() => _areaCompanions!.Companions.Single();
@@ -473,7 +496,7 @@ public partial class TerrainViewerApp
             EndConversation();
 
             // Waiting in the cave: the PC leaves alone; he stays, and the exterior has no T0 Virgil.
-            Require(session.WaitParty(session.Version, entity, AreaCompanionRoster.WaitFacts(template.Facts)).Disposition == GameSessionDisposition.Changed
+            Require(session.WaitParty(session.Version, entity, AreaCompanionRoster.WaitFacts(template.Facts, session.QueryHeroPartySide())).Disposition == GameSessionDisposition.Changed
                 && session.QueryWaitTimer(entity) is null, "wait in the cave, with no wait timer");
             // The smoke stands the PC next to the exit with a fresh session, which rebuilds the group from the session: his
             // cell is recorded first, as F7 or leaving the map would.

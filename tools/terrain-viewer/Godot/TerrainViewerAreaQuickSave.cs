@@ -139,7 +139,9 @@ public partial class TerrainViewerApp
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
     /// session and scene are unchanged and the HUD says why.</summary>
-    private bool LoadGame(GameSessionSaveSlot slot, string prefix)
+    /// <param name="heroTables">ARC-UI-011: a load from the main menu, whose placeholder session has no hero: the game-wide hero
+    /// tables a hero save takes (<see cref="AreaQuickSave.Load"/>), and the loaded hero's own tables are adopted with it.</param>
+    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null)
     {
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
@@ -153,7 +155,7 @@ public partial class TerrainViewerApp
             if (_mapTransfers?.Destinations.TryGetValue(placement.Map.RuntimeMap, out var destination) != true) return "map mode cannot open that map";
             elsewhere = destination; return null;
         }
-        var result = AreaQuickSave.Load(slot, _areaSession!, Refusal, MapSoundDefault);
+        var result = AreaQuickSave.Load(slot, _areaSession!, Refusal, MapSoundDefault, heroTables);
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
             Slot = System.IO.Path.GetFileName(slot.Path), Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
@@ -178,6 +180,7 @@ public partial class TerrainViewerApp
         }
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
         var from = " from " + System.IO.Path.GetFileNameWithoutExtension(slot.Path);
+        if (heroTables is not null) AdoptHeroTables(LoadedMenuHero(result.Owner));
         if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus(prefix + result.Status + from);
@@ -219,14 +222,15 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk)
+    /// <param name="reason">What brings the session, for the log (ARC-UI-011: a new game adopts its session the same way).</param>
+    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk, string reason = "quick load")
     {
         StopWorldRoute("QUICK_LOAD");
-        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
+        CancelAreaUseApproach(reason); CancelTalkApproach(reason); CancelInventoryApproach(reason); CancelAreaAttack(reason);
         // ARC-COMBAT-016: the flights of the replaced session are given up.
-        ClearAreaProjectiles("quick load");
-        if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
-        if (_mapTransfers?.Clear() is { } queued) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + queued.To.Name);
+        ClearAreaProjectiles(reason);
+        if (_areaTransitions?.Cancel() is { } dropped) GD.Print($"ARC-WORLD-011 {reason} dropped the queued transfer to=" + dropped.ToMap);
+        if (_mapTransfers?.Clear() is { } queued) GD.Print($"ARC-WORLD-038 {reason} dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
         var runtime = maps[actor.Map.RuntimeMap];
@@ -242,7 +246,7 @@ public partial class TerrainViewerApp
         PublishWorldSelection();
         if (_areaTransitions is not null)
             _areaUseStatus = InCave ? "in the cave: click the exit within 2 cells to return" : "cave: click the entrance within 2 cells";
-        GD.Print("ARC-WORLD-011 quick-load adopted " + System.Text.Json.JsonSerializer.Serialize(new {
+        GD.Print((reason == "quick load" ? "ARC-WORLD-011 quick-load" : "ARC-UI-011 " + reason) + " adopted " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = actor.Map.RuntimeMap, actor.Cell, Facing = actor.Facing.ToString(), Revision = loaded.Version.Revision }));
     }
 

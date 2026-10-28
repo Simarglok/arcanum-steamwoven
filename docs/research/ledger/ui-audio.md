@@ -128,6 +128,33 @@ row below is agreed. Every direct branch stays inside `.text`. The rows are F2.
 The original's file layout (`.gsi` metadata, `.tfaf`/`.tfai` archives) is not read or written: Steamwoven keeps its own
 snapshot, details and PNG files with the same list rules.
 
+## Main menu (ARC-UI-011)
+
+Source: the [main menu](../../rendering/terrain-viewer.md#main-menu-arc-ui-011),
+[FR-UI-001](../../requirements/ui-media-lifecycle.md#fr-ui-001) and
+[FR-LIFECYCLE-001](../../requirements/ui-media-lifecycle.md#fr-lifecycle-001). Question: which windows and buttons the
+original's main menu has before play, what their texts and keys are, how a button and Escape move between windows, and
+what "Last Save" does. Read on 2026-10-28 by this task and, independently, by a fresh agent that saw only the claims
+(method step 6). The second reader corrected two claims of the first (the "back" target is -2, not -1; Escape on the
+root window needs the counter at 2 or more and then exits the game); the rows below are the agreed reading. Every direct
+branch stays inside `.text`. The rows are F2.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| MM1 | window table (0x5C3A40), window open (0x541740), close and back (0x5417A0), back stack (0x5417E0, 0x541810) | The menu is a table of pointers to window descriptors indexed by the current window type. A descriptor names its background art, open and close functions, the first message of its labels in `mes\MainMenu.mes`, its button count and its buttons; a button names its position, art, target window (-2 goes back, 0 exits) and hotkey. Opening a window pushes the current one on a back stack; back closes the current window and opens the one below it. | Original (Steamwoven keeps the windows, buttons and back stack, not the art or positions) |
+| MM2 | window 2, 5 and 11 descriptors | Window 2 (main): Single Player, MultiPlayer, Options, Credits, Exit Game (messages 10–14), opening windows 5, 16, 6, 25 and exiting. Window 5 (single player): New Game, Load Game, Last Save, View Intro, Cancel (50–54), opening 11, 7, 9, 10 and going back. Window 11 (new game): Pick Character, New Character, Cancel (420–422), opening 13 (the pre-made browser, 0x545870) and 12 (the character editor, 0x5446F0) and going back. | Original; Steamwoven hides MultiPlayer, Options, Credits, View Intro and New Character (not built; FR-UI-001 shows only what is supported) and names them in the window |
+| MM3 | window build (0x546340) | A button's label is message base + i; its hotkey is the first character of message base + 10 + i, upper-cased, filled in when the window is built (-1 and a log line when the message is missing). | Original |
+| MM4 | Last Save (0x544440), latest save (0x403850), save info (0x404270), load (0x5432B0) | Window 9 looks up the newest save; with none it goes back to the window it came from without a message; otherwise it reads the save's info and, when that reads, shows "Loading Save Game..." (message 5) and loads it; an info failure returns without loading. | Original; Steamwoven also names "no save to continue from" in the window, and shows a failed load's reason |
+| MM5 | View Intro (0x5445F0) | Plays movies 1 and 7, then returns to window 5 (fixed, not from the back stack). | Not built (no movie playback, FR-MEDIA-001) |
+| MM6 | menu event handler (0x546EE0), key table (0x547DBC, index 0x547DE0) | A typed character is upper-cased and activates the first enabled button with that hotkey. Escape (scancode 1) goes back in windows 5, 11, 12 and 13. On window 2 Escape acts only when the menu's open counter (0x64C43C, only ever incremented, by window 2's open function) is 2 or more, that is when the main menu is open again after its first opening, and then exits the game as Exit Game does. | Original for the windows Steamwoven has; its menu opens once a run, so Escape on the root does nothing (as at the original's first opening) |
+| MM7 | button activation (mouse 0x54736C, hotkey 0x547BAD) | A button with a target above 0 runs the window's veto callback, closes the current window and opens the target; -2 goes back; 0 closes the menu and exits the game. | Original |
+
+The pre-made start is the existing ARC-WORLD-027 reading of 0x545B60 ([CC-07](../character-creation-evidence.md)); the start
+place is the map list's start of the start map (runtime map 1), where 0x5412E0 teleports a new game's PC. Steamwoven
+makes the new game's session as a fresh launch makes it (the module's clock, the map's start cell, its reputations) with
+the picked hero; the original's movies 1 and 7, fade, newspaper event and random-encounter schedule at the start are not
+modelled.
+
 ## Window key modifiers (ARC-INPUT-004)
 
 Source: the [WORLD keyboard route](../../input/diagnostic-palette.md) and

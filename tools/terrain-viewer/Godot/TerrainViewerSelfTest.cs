@@ -160,6 +160,8 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaLogbookAsync(host);
             Stage("AreaSaveList");
             await AssertAreaSaveListAsync(host);
+            Stage("AreaMainMenu");
+            await AssertAreaMainMenuAsync(host);
             Stage("AreaSchematics");
             await AssertAreaSchematicsAsync(host);
             Stage("AreaReading");

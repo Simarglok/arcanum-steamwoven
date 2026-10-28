@@ -132,9 +132,12 @@ PC has a background (the original's reader answers 0 for any other object), so a
   assembly completes, as in the original) and the unwield (`Unequip`, the item a swap in `Equip` or the best-items
   choice takes off: a worn technological item stays worn). All-or-nothing: the refusal comes from the insert check, before any
   effect. The session applies it where it knows the item's complexity (a seed item's facts, a worn item's equipment facts, a
-  product's component facts, 0 when the host gives none); a made item (looted from or given by an NPC, or dropped and taken back)
-  has no complexity in the session, so only the host's insert check answers for it (latent: a technological product a Technophobia
-  hero's assembly left on the tile can then be picked up, where the original would refuse it again; no hero can have 72 yet). The start kit enters without an insert check
+  product's component facts, 0 when the host gives none). Since ARC-WORLD-083 a made item keeps its complexity (`SessionMadeItem.Complexity`,
+  snapshot schema 41) through every move, as the original's object keeps field 0x60 (ledger MC1): an assembly product (the hero's or
+  an NPC crafter's) takes its prototype's from the host's facts, in the list, on the ground (`SessionPlacedItem.Complexity`) and in an
+  NPC's list, so a technological product a Technophobia hero's assembly left on the tile stays refused when picked up, and a made or
+  taken item given to an NPC is refused when taken back. A kit item, a made item the session adds through `AddItemToNpc` or a new
+  ammunition stack split off another still has none (0). The start kit enters without an insert check
   (as the host-free start of ARC-WORLD-015). The AREA viewer names the refusal in its inventory and schematic messages.
 
 Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): choosing a background at character

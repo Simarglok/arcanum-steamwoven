@@ -85,6 +85,8 @@ public partial class TerrainViewerApp
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
                 result.Hero, reputations.Catalog);
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+            // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
+            _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
         BindAreaInventory(arguments, result);
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
@@ -115,6 +117,7 @@ public partial class TerrainViewerApp
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         EndWorldMap(); _worldMapStatus = null;
+        EndMainMenuForTeardown();
         EndSaveList();
         UnbindAreaInventory();
         UnbindAreaCompanions();
@@ -125,6 +128,7 @@ public partial class TerrainViewerApp
             EndLevelMessages(_areaSession);
             _areaSession?.Dispose();
         }
+        _newGameRecipe = null;
         _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;

@@ -95,6 +95,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Reading window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-049, ARC-SCRIPT-020, ARC-TECHNOLOGY-009 |
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
+| NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |
@@ -106,12 +107,13 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC conversation | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-005, ARC-WORLD-043, ARC-WORLD-044 |
 | Walking and running | [World, maps and movement](status/world.md) | ARC-WORLD-020, ARC-WORLD-021 |
 | Window jump | [World, maps and movement](status/world.md) | ARC-WORLD-021, ARC-RES-049 |
-| Companion follow | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-016, ARC-WORLD-074, ARC-WORLD-020 |
+| Companion follow | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-016, ARC-WORLD-074, ARC-WORLD-020, ARC-WORLD-075 |
 | Wait timer and loyalty | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-045, ARC-WORLD-046 |
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |
 | NPC danger state | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-079, ARC-COMBAT-004, ARC-WORLD-026 |
 | NPC hostility and targets | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-080, ARC-WORLD-079, ARC-WORLD-078 |
+| NPC morale | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-082, ARC-WORLD-080, ARC-WORLD-079 |
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
