@@ -5,10 +5,11 @@ the player's original game data.
 
 **Status (main, 2026-10-28, through PR #525).** An early alpha for testing, not a finished game: every component is
 deliberately bounded, its original behaviour is read from the retail executable component by component, and parity with
-the original runtime as a whole is not verified. The [component catalogue](docs/project/status.md) lists each component's implemented scope, evidence and
-source links; the [coverage matrix](docs/requirements/coverage.md) gives each of the 191 functional requirements one
-status (4 implemented, 150 partly in the viewer, 13 rules without a host yet, 15 researched only, 9 not started, as its
-summary counts them; requirements differ in size, so this is not a percentage of the game).
+the original runtime as a whole is not verified. The [component catalogue](docs/project/status.md) lists each
+component's implemented scope, evidence and source links; the [coverage matrix](docs/requirements/coverage.md) gives
+each of the 191 functional requirements one status (4 implemented, 150 partly in the viewer, 13 rules without a host
+yet, 15 researched only, 9 not started, as its summary counts them; requirements differ in size, so this is not a
+percentage of the game).
 
 - **Packaged alpha** for macOS and Windows 11 ([how to build it](#how-to-build-the-alpha-for-a-player)): a launcher that
   finds the player's GOG Arcanum and picks the *Steamwoven* or *Original* rules, then the original main menu, character
@@ -59,7 +60,7 @@ from the exported developer builds, builds the player's alpha and puts every God
 ./arcanum package mac|win         # the player's alpha (below)
 ./arcanum run --kind window|headless|export|dotnet -- COMMAND   # any Godot run, export or dotnet build/test through the queue
 ./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones)
-./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle
+./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle, then the OriginalExe tests
 ./arcanum clean                   # which builds are protected and which may go (dry run; --apply removes only those)
 ```
 
@@ -139,7 +140,8 @@ copies, not the source of any instruction. Do not delete them by hand ([build re
 
 The launcher and the main menu show `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right
 corner; `BUILD.txt` beside the build has the full commit. While the debug mode is on, the main menu's line ends in
-`DEBUG MODE`. A build started from the source says `not a packaged build`. Every run also prints
+`DEBUG MODE`. A source run or a developer export (`./arcanum area`, `map`) says
+`not a packaged build`. Every run also prints
 `ARC-DEV-047 build <that line>` at start.
 
 ### Giving it to a player: signing
@@ -150,7 +152,7 @@ Both builds are signed for free only, so the first start of a copy that came fro
   AirDropped or mailed copy is refused first; then **System Settings → Privacy & Security → Open Anyway**
   ([player steps](docs/player/alpha-build.md#2-first-start-on-macos-open-anyway)).
 - **Windows 11** (unsigned): unpack the zip first, then on the blue SmartScreen window press **More info → Run anyway**,
-  or tick **Unblock** in the zip's Properties before unpacking. Smart App Control, when on, blocks the build outright
+  or tick **Unblock** in the zip's Properties before unpacking. Smart App Control, when on, may block the build outright
   ([player steps](docs/player/alpha-build.md#3-first-start-on-windows-11-unzip-then-run-anyway)).
 
 ### User data, debug mode and bug reports
@@ -163,9 +165,10 @@ Both builds are signed for free only, so the first start of a copy that came fro
   (stored until unticked); or for one start pass `-- --debug-mode` to the executable. The world map (**W**) then lists
   every area with **Teleport**, the diagnostic panel shows, and saves carry `[DEBUG]`
   ([details](docs/player/alpha-build.md#7-debug-mode)).
-- **Bug report**: **Ctrl+B** in play, in the main menu or over any window writes `report.md`, `log.txt` (the last 120 seconds), `screenshot.png` and a save
-  into a `reports/<date_time>/` folder next to the app (macOS) or the `.exe` (Windows), or into the user folder's
-  `reports/` when that place cannot be written. It holds content of the player's own copy of Arcanum: never commit it
+- **Bug report**: **Ctrl+B** in play, in the main menu or over any window writes `report.md`, `log.txt` (the last 120
+  seconds), `screenshot.png` and, when one can be taken, a save into a `reports/<date_time>/` folder next to the app
+  (macOS) or the `.exe` (Windows), or into the user folder's `reports/` when that place cannot be written. It holds
+  content of the player's own copy of Arcanum: never commit it
   ([details](docs/player/alpha-build.md#9-reporting-a-bug-ctrlb)).
 
 ## Hotkeys

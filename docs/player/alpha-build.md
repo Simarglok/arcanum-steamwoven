@@ -121,7 +121,7 @@ the game as on its first run. The game folder of Arcanum is only read.
 
 ## 6. Updating
 
-The build does not update itself. A newer build is made on the developer's Mac as the README says (section 1). On macOS
+The build does not update itself. A newer build is made on the developer's Mac as section 1 says. On macOS
 copy the new app over the old one; on Windows delete the old `Arcanum Steamwoven` folder and unpack the new zip in its place (do not unpack over it, or files of
 the old build may stay). Settings and saves stay in the folder above. A newer build loads the saves of older builds (from the first packaged
 build on); an older build refuses a save made by a newer one.
