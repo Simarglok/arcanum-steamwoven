@@ -95,7 +95,8 @@ public readonly record struct SessionDangerHook(DangerScriptPoint Point, Session
 /// What a danger call did. <see cref="Transition"/> is the setter's step when one ran (also for NoChange); <see cref="Hook"/>
 /// the script to run after the call; <see cref="LeftCombatMode"/> that a surrender's combat-mode exit acted (the bit then
 /// stays set in the Original setting, CL4); <see cref="Reaction"/> the rule-8 reaction change when one was decided;
-/// <see cref="Locked"/> that a target lock took hold.
+/// <see cref="Locked"/> that a target lock took hold; <see cref="StartsFleeGoal"/> that perform fleeing starts the flee goal away
+/// from the NPC's fleeing-from (ARC-WORLD-082).
 /// </summary>
 public sealed record SessionDangerResult(GameSessionDisposition Disposition, GameSessionFailure Failure, GameSessionVersion Version)
 {
@@ -104,6 +105,7 @@ public sealed record SessionDangerResult(GameSessionDisposition Disposition, Gam
     public bool LeftCombatMode { get; init; }
     public ReactionAdjustment? Reaction { get; init; }
     public bool Locked { get; init; }
+    public bool StartsFleeGoal { get; init; }
 }
 
 /// <summary>The danger domain of one owner.</summary>
