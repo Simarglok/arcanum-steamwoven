@@ -41,6 +41,41 @@ Never delete `artifacts/` or a build in it by hand: the launcher and the export 
 
 The launcher runs the newest exported build of each mode; the features above need a build exported from current `main`. See [the project launcher](docs/workflow/local-development.md#project-launcher).
 
+## How to build the alpha for a player
+
+The packaged alpha (the launcher and the original main menu, reading the player's own GOG Arcanum) is built on a Mac
+from a fresh commit of `origin/main`, never from local changes ([packaging](docs/workflow/packaging.md)).
+
+Prerequisites on the Mac:
+
+- .NET SDK **8.0.425** (pinned by `global.json`) in `~/.local/share/dotnet` or the folder `DOTNET_ROOT` names;
+- Godot **4.7.2 .NET** at `/Applications/Godot_mono.app`;
+- its export templates `4.7.2.stable.mono` (Godot: Editor → Manage Export Templates), which hold both the macOS and the
+  Windows templates;
+- this repository cloned with the `origin` remote (the command fetches `origin main` itself).
+
+Build:
+
+```sh
+./arcanum package mac    # Arcanum Steamwoven.app (universal, ad-hoc signed), launcher and menu smoke if the game is installed
+./arcanum package win    # Windows 11 x64: Arcanum Steamwoven.exe folder as one zip (unsigned, file checks only)
+./arcanum package mac --ref COMMIT   # another commit; --no-smoke, --keep-work, --verbose: see --help
+```
+
+The run goes through the launch queue and prints `PASS` or `FAIL` with the failed step and its log. Output, in the main
+checkout (also when run from a worktree):
+
+    artifacts/packages/macos/Arcanum Steamwoven.app
+    artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
+    artifacts/packages/<platform>/BUILD.txt     the full commit, its date, the product and the smoke result
+    artifacts/packages/<platform>/README.md     the player instruction
+    artifacts/packages/<platform>/previous/     the build before (the next build replaces it)
+
+Which commit a build is from: `BUILD.txt` beside it, and the line
+`Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of its launcher and main menu.
+Do not delete these folders by hand ([build retention](docs/workflow/build-retention.md)). Players install and start a
+build with [the player instruction](docs/player/alpha-build.md) (macOS "Open Anyway", Windows SmartScreen, GOG detection).
+
 ## Start here
 
 - [Documentation index](docs/README.md)

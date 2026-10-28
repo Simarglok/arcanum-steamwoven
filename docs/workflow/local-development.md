@@ -16,7 +16,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
     ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033), quiet unless --verbose (ARC-DEV-037)
     ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
-    ./arcanum package mac [--ref COMMIT] [--no-smoke]     # the packaged alpha for a player from a fresh origin/main into artifacts/packages/macos (ARC-DEV-047, docs/workflow/packaging.md)
+    ./arcanum package mac|win [--ref COMMIT] [--no-smoke] # the packaged alpha for a player from a fresh origin/main into artifacts/packages/macos|windows (ARC-DEV-047/048, docs/workflow/packaging.md)
 
 `area`, `world` and `map` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` and `map` try the universal ARC-DEV-015 build, then
