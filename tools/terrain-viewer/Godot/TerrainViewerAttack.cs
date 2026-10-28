@@ -455,11 +455,11 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-012: the line of fire from the tile <paramref name="from"/> (world cell) to the target's (0x4ADE00), from the
     /// tile's centre (the hero stands settled, so no pixel offset); null without the shown map's line-of-fire view or target cell.</summary>
-    private LineOfFireTrace<AreaObjectRecord>? TraceLineOfFire(CellCoord from, AreaObjectRecord target, bool reach = false) =>
+    // A target next to the hero is read as the Original setting reads it (owner decision 2026-10-28, LineOfFireRules.ReachTrace): the
+    // reach test, the redirect and the check read the same line.
+    private LineOfFireTrace<AreaObjectRecord>? TraceLineOfFire(CellCoord from, AreaObjectRecord target) =>
         target.WorldX is { } x && target.WorldY is { } y && AreaLineOfFireNow() is { } map && _areaSession is { } owner
-            ? reach ? LineOfFireRules.ReachTrace(from, 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat)
-                : LineOfFireRules.Trace(from, 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat)
-            : null;
+            ? LineOfFireRules.ReachTrace(from, 0, 0, new(checked((int)x), checked((int)y)), map, owner.Rules.Combat) : null;
 
     /// <summary>ARC-COMBAT-012: the line of fire from the hero's committed cell to <paramref name="target"/>, logged; the original strikes
     /// its blocker instead of the target (ledger RA4).</summary>
@@ -488,8 +488,7 @@ public partial class TerrainViewerApp
         var reach = HeroReach(hero);
         var distance = Chebyshev(target, (from.X, from.Y));
         if (distance > reach) return false;
-        // A target next to the hero is read as the Original setting reads it (owner decision 2026-10-28, LineOfFireRules.ReachTrace).
-        if (TraceLineOfFire(from, target, reach: true) is not { } trace) return true;
+        if (TraceLineOfFire(from, target) is not { } trace) return true;
         // The original compares object handles: the blocker is the target when it is the same row.
         return LineOfFireRules.InReach((int)distance, reach, trace, trace.Blocker is { } blocker && blocker.Key == target.Key ? blocker : target);
     }

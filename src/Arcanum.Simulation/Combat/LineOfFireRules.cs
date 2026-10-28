@@ -226,10 +226,12 @@ public static class LineOfFireRules
     }
 
     /// <summary>
-    /// The line the attack goal's reach test reads (ARC-COMBAT-015; owner decision 2026-10-28): <see cref="Trace{TObject}"/>, except that
-    /// a target next to the attacker is read as the Original setting reads it (<see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/>:
-    /// the side tiles' objects of the diagonal step into the target are skipped, AW14), so the Steamwoven fix of AW13/AW14 keeps
-    /// every longer line and does not refuse a diagonal melee attack past a companion, NPC or scenery on a side tile.
+    /// The hero's attack line (ARC-COMBAT-015; owner decision 2026-10-28): <see cref="Trace{TObject}"/>, except that a target next to the
+    /// attacker is read as the Original setting reads it (<see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/>: the side tiles'
+    /// objects of a corner step into the target are skipped, AW14), so the Steamwoven fix of AW13/AW14 keeps every longer line and does
+    /// not refuse or redirect an attack on an adjacent target past a companion, NPC or scenery on a side tile. Three of the four
+    /// adjacent diagonals are walked as one corner step; the screen-left one (x + 1, y − 1) is walked over the side tile (x + 1, y) as two
+    /// edge steps in both settings, so an object there still stops it, as in the original.
     /// </summary>
     public static LineOfFireTrace<TObject> ReachTrace<TObject>(CellCoord from, int offsetX, int offsetY, CellCoord to, ILineOfFireMap<TObject> map,
         CombatAnomalyProfile profile) where TObject : class

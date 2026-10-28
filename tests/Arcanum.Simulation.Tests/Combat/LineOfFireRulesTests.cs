@@ -227,7 +227,16 @@ public sealed class LineOfFireRulesTests
         var reach = LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(3, 3), map, CombatAnomalyProfile.Steamwoven);
         Assert.IsNull(reach.Blocker);
         Assert.IsTrue(LineOfFireRules.InReach(1, 1, reach, "target"));
-        var far = LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(5, 5), map, CombatAnomalyProfile.Steamwoven);
-        Assert.AreEqual(Trace(map, (2, 2), (5, 5)).Blocker, far.Blocker, "a longer line is the setting's own");
+        Assert.AreEqual(Trace(map, (2, 2), (3, 3), CombatAnomalyProfile.Original).Blocker,
+            LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(3, 3), map, CombatAnomalyProfile.Original).Blocker);
+        // A longer line keeps the fix: a post on a side tile of its last corner step stops Steamwoven's line and the reach line alike.
+        var longSteps = LineOfFireRules.Walk(new(2, 2), 0, 0, new(5, 5), _ => true)!;
+        var last = longSteps[^1];
+        Assert.AreEqual(0, last.Rotation % 2, "the last step is a corner step");
+        var lastSide = new Map().Step(last.From, (last.Rotation + 7) % 8)!.Value;
+        var longMap = new Map().With(lastSide.X, lastSide.Y, "post", Opaque);
+        Assert.AreEqual("post", Trace(longMap, (2, 2), (5, 5)).Blocker);
+        Assert.AreEqual("post", LineOfFireRules.ReachTrace(new CellCoord(2, 2), 0, 0, new CellCoord(5, 5), longMap, CombatAnomalyProfile.Steamwoven).Blocker);
+        Assert.IsNull(Trace(longMap, (2, 2), (5, 5), CombatAnomalyProfile.Original).Blocker);
     }
 }
