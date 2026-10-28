@@ -121,9 +121,13 @@ public readonly record struct SessionMadeItem(string Entity, SessionItemKind Kin
 /// ARC-WORLD-055: the items the session added to one NPC's inventory, keyed by the NPC's entity identity (the entity of its
 /// home map, so the list follows a companion that visits another map, as the original carries a follower with its items).
 /// The items are made items (<c>made:n</c>, numbered with the hero's), in the order they entered the NPC's list; in the NPC's
-/// list they follow its seed items.
+/// list they follow its seed items. ARC-WORLD-090: <see cref="Container"/> marks the list of a container instead (a merchant's substitute
+/// container, which the barter window fills): <see cref="Npc"/> is then the container's entity.
 /// </summary>
-public sealed record SessionNpcInventory(string Npc, IReadOnlyList<SessionMadeItem> Items);
+public sealed record SessionNpcInventory(string Npc, IReadOnlyList<SessionMadeItem> Items)
+{
+    public bool Container { get; init; }
+}
 
 /// <summary>
 /// ARC-WORLD-066: the units of an ammunition stack the session tracks: every ammunition item the hero holds or placed, and any
@@ -178,8 +182,10 @@ public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
-        SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null)
+        SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
+        string[]? identified = null)
     {
+        Identified = Array.AsReadOnly(identified ?? []);
         ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
@@ -212,6 +218,12 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionItemWeightRecord> Weights { get; }
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made.</summary>
     public IReadOnlyList<SessionJunkPile> JunkPiles { get; }
+    /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1, a barter window's open and sale), by entity in
+    /// ordinal order.</summary>
+    public IReadOnlyList<string> Identified { get; }
+
+    /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
+    public const int MaxIdentified = 16384;
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -273,6 +285,12 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// <see cref="SessionScriptPoint.Transfer"/>), so the item did not move; <see cref="Item"/> is null then, and the disposition is
     /// Changed only when that run wrote global flags.</summary>
     public int? DeclinedBy { get; init; }
+
+    private readonly IReadOnlyList<SessionItemTriggerResult>? _itemSpells;
+
+    /// <summary>ARC-MAGIC-022: what the item trigger host's executors did after the move (the pickup 0x4CBAA0 of an item the hero got,
+    /// the removal's steps of an item it gave away); empty without a host.</summary>
+    public IReadOnlyList<SessionItemTriggerResult> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerResult>(); init => _itemSpells = value; }
 }
 
 /// <summary>ARC-SCRIPT-041: one item script run of a transfer: the attachment point, the attachee's entity (the item, or
@@ -378,10 +396,17 @@ internal sealed class InventoryDomain
     internal List<SessionPcItem> Pc { get; } = [];
     internal List<SessionMadeItem> Made { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
-    /// <summary>ARC-WORLD-055: the made items added to each NPC, by NPC entity; a list is never empty.</summary>
+    /// <summary>ARC-WORLD-055: the made items added to each NPC, by NPC entity; a list is never empty. ARC-WORLD-090: and to each
+    /// container a barter window filled (its entity in <see cref="Containers"/>).</summary>
     internal SortedDictionary<string, List<SessionMadeItem>> Npcs { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>The made items added to NPCs (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
+    /// <summary>ARC-WORLD-090: the keys of <see cref="Npcs"/> that are containers.</summary>
+    internal HashSet<string> Containers { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1).</summary>
+    internal SortedSet<string> Identified { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The made items added to NPCs and containers (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
     internal int NpcHeld => Npcs.Values.Sum(list => list.Count);
 
     /// <summary>The NPC that holds the added made item, or null.</summary>
@@ -396,13 +421,20 @@ internal sealed class InventoryDomain
         list.Add(item);
     }
 
+    /// <summary>ARC-WORLD-090: an item at the end of a container's added list.</summary>
+    internal void AddToContainer(string container, SessionMadeItem item)
+    {
+        AddToNpc(container, item);
+        Containers.Add(container);
+    }
+
     /// <summary>Removes an added made item from whichever NPC holds it; an emptied list is dropped.</summary>
     internal bool RemoveFromNpc(string entity)
     {
         if (NpcOf(entity) is not { } npc) return false;
         var list = Npcs[npc];
         list.RemoveAll(item => item.Entity == entity);
-        if (list.Count == 0) Npcs.Remove(npc);
+        if (list.Count == 0) { Npcs.Remove(npc); Containers.Remove(npc); }
         return true;
     }
 
@@ -489,9 +521,9 @@ internal sealed class InventoryDomain
     }
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
-        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(), CaptureScriptSlots(),
-        Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray());
+        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray())) { Container = Containers.Contains(pair.Key) }).ToArray(),
+        Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
+        CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray());
 
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
     internal List<SessionJunkPile> JunkPiles { get; } = [];
@@ -564,8 +596,9 @@ internal sealed class InventoryDomain
         Func<string, CellCoord?> dropped) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), item.Cell!.Value))
+            // ARC-WORLD-090: the items a barter window sold into a container stay out of its spill (not modelled).
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
-                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped).Select(item => new SessionGroundItem(item, cell)) : []))
+                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), dropped(entity)!.Value))))
@@ -577,10 +610,11 @@ internal sealed class InventoryDomain
                 : Array.AsReadOnly(Current(seed, holder, dropped).ToArray()))).ToArray());
 
     /// <summary>The holder's list in its order without the taken and deleted items and the items a critical dropped
-    /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055).</summary>
-    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
+    /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055), a container's
+    /// by the items a barter window sold into it (ARC-WORLD-090) unless <paramref name="added"/> is false.</summary>
+    internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped, bool added = true) => holder.Items
         .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, WithAmmo(entity, seed.Items[entity].Facts)))
-        .Concat(holder.Kind == SessionHolderKind.Npc
+        .Concat(added && (holder.Kind == SessionHolderKind.Npc) != Containers.Contains(holder.Entity)
             ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, AddedFacts(item)))
             : []);
 

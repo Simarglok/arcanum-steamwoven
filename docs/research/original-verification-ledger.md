@@ -159,6 +159,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trap-devices-arc-technology-010"></a>[Trap devices (ARC-TECHNOLOGY-010)](ledger/technology.md#trap-devices-arc-technology-010) | [Technology](ledger/technology.md) | TP1–TP8 |
 | <a id="ammunition-arc-world-066"></a>[Ammunition (ARC-WORLD-066)](ledger/items.md#ammunition-arc-world-066) | [Items and inventory](ledger/items.md) | AM1–AM7 |
 | <a id="backgrounds-arc-world-069"></a>[Backgrounds (ARC-WORLD-069)](ledger/character.md#backgrounds-arc-world-069) | [Character](ledger/character.md) | BG1–BG8 |
+| <a id="background-table-arc-data-044"></a>[Background table (ARC-DATA-044)](ledger/character.md#background-table-arc-data-044) | [Character](ledger/character.md) | BD1–BD8 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="ranged-hero-attack-arc-combat-015"></a>[Ranged hero attack (ARC-COMBAT-015)](ledger/combat.md#ranged-hero-attack-arc-combat-015) | [Combat](ledger/combat.md) | RH1–RH7 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |
@@ -173,6 +174,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="made-item-complexity-arc-world-083"></a>[Made item complexity (ARC-WORLD-083)](ledger/items.md#made-item-complexity-arc-world-083) | [Items and inventory](ledger/items.md) | MC1 |
 | <a id="weight-and-encumbrance-arc-world-085"></a>[Weight and encumbrance (ARC-WORLD-085)](ledger/items.md#weight-and-encumbrance-arc-world-085) | [Items and inventory](ledger/items.md) | WE1–WE9 |
 | <a id="barter-arc-ui-050"></a>[Barter (ARC-UI-050)](ledger/items.md#barter-arc-ui-050) | [Items and inventory](ledger/items.md) | BT1–BT10 |
+| <a id="merchant-stock-arc-world-090"></a>[Merchant stock (ARC-WORLD-090)](ledger/items.md#merchant-stock-arc-world-090) | [Items and inventory](ledger/items.md) | BT11 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |

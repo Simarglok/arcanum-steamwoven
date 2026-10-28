@@ -1550,15 +1550,19 @@ button is disabled; a follower's window is free. A stack trades whole at the uni
 prints `sold …`/`bought … for N` with a reaction change, or `not enough money`, `won't buy (…)`, `the merchant cannot pay`, and requests
 the trade sound 8158. Like the schematic window it is modal (gate closed, clock paused, a walk stopped) and owns every key: `Escape`, a
 controller cancel or `Close` closes it. A quick load, a map change or a dead hero closes it. The inventory sources and every item
-prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal.
+prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal. ARC-WORLD-090: a
+merchant with a substitute container within 20 tiles of where it talked (no leader) shows the container's items (`(stock chest)` in
+the right header, the container's buy list in brackets after the merchant's); the open moves the container's coins onto the merchant
+and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken container leaves the merchant's own list, another refused
+open shows no window.
 
 **Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
-the follower menu and cycling, the substitute container (installed merchants keep their stock there, so they show only their own list),
-the identified flag and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+the follower menu and cycling and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
 with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
-`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, its quotes, `Escape` closes
-with nothing changed; one sale and one buy on a detached copy).
+`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
+its substitute container when no speaker buys itself, its quotes, the open is at most one revision, `Escape` closes with nothing changed;
+one sale and one buy on a detached copy, through the container when there is one).
 
 ### Reading window (ARC-UI-049)
 

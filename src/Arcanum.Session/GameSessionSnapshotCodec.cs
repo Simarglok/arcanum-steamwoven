@@ -70,8 +70,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
-    // ARC-WORLD-063 (schema 46): the junk piles the session made.
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles"];
+    // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items.
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
+        "identified"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] JunkPileFields = ["entity", "map", "x", "y", "items"];
@@ -80,7 +81,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] GivenFields = ["entity", "origin"];
     private static readonly string[] PileFields = ["entity", "coins"];
     private static readonly string[] PlacedItemFields = ["entity", "source", "origin", "map", "x", "y", "type", "prototype", "name", "description", "complexity"];
-    private static readonly string[] NpcInventoryFields = ["npc", "items"];
+    // ARC-WORLD-090 (schema 50): a container's list (a barter window's sales).
+    private static readonly string[] NpcInventoryFields = ["npc", "container", "items"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     // ARC-WORLD-083 (schema 41): a made item's complexity.
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
@@ -362,6 +364,7 @@ public static class GameSessionSnapshotCodec
             {
                 w.WriteStartObject();
                 w.WriteString("npc", npc.Npc);
+                w.WriteBoolean("container", npc.Container);
                 w.WriteStartArray("items");
                 foreach (var item in npc.Items) WriteMade(w, item);
                 w.WriteEndArray();
@@ -463,6 +466,10 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndArray();
                 w.WriteEndObject();
             }
+            w.WriteEndArray();
+            // ARC-WORLD-090: by entity in ordinal order.
+            w.WriteStartArray("identified");
+            foreach (var entity in snapshot.Inventory.Identified) w.WriteStringValue(entity);
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -1488,7 +1495,7 @@ public static class GameSessionSnapshotCodec
                 if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, itemPath + ".entity");
                 list[j] = new(entity, Kind(item, itemPath), Complexity(item, itemPath));
             }
-            npcs[i] = new(npc, System.Array.AsReadOnly(list));
+            npcs[i] = new(npc, System.Array.AsReadOnly(list)) { Container = Bool(row["container"], path + ".container") };
         }
         // ARC-WORLD-059: the hero's items placed on the ground share the hero's budget and its once-only rule; ARC-WORLD-081: the items
         // scripts created there have a budget of their own.
@@ -1604,7 +1611,16 @@ public static class GameSessionSnapshotCodec
             junkPiles[i] = new(Entity(row["entity"], path + ".entity"), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
                 new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)), System.Array.AsReadOnly(pileItems));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles);
+        // ARC-WORLD-090: the identified items by entity in strictly ascending ordinal order.
+        var identifiedRows = Array(f["identified"], p + ".identified", SessionInventoryState.MaxIdentified);
+        var identified = new string[identifiedRows.Length];
+        for (var i = 0; i < identifiedRows.Length; i++)
+        {
+            var path = $"{p}.identified[{i}]";
+            identified[i] = Entity(identifiedRows[i], path);
+            if (i > 0 && string.CompareOrdinal(identified[i], identified[i - 1]) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
