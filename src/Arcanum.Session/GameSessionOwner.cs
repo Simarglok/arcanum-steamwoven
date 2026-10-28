@@ -1892,6 +1892,22 @@ public sealed partial class GameSessionOwner : IDisposable
             lastGenerated = row;
             inventory.Generated.Add(row);
         }
+        // ARC-WORLD-103: the dressed NPCs by entity in ordinal order, within the bound: an NPC (an object of a map), its worn items in
+        // ascending slots, each item worn once and not deleted.
+        if (saved.NpcWorn.Count > SessionInventoryState.MaxNpcWorn) return GameSessionFailure.BudgetExceeded;
+        string? lastDressed = null;
+        var wornItems = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var npc in saved.NpcWorn)
+        {
+            if (npc?.Worn is null || !SessionEventKinds.RestockHolder(npc.Npc) || lastDressed is not null && string.CompareOrdinal(lastDressed, npc.Npc) >= 0)
+                return GameSessionFailure.InvalidSnapshot;
+            lastDressed = npc.Npc;
+            var record = new SortedDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, string>();
+            foreach (var worn in npc.Worn)
+                if (!Enum.IsDefined(worn.Slot) || !SessionValidation.Entity(worn.Item) || destroyed.Contains(worn.Item) || !wornItems.Add(worn.Item) ||
+                    !record.TryAdd(worn.Slot, worn.Item) || record.Keys.Last() != worn.Slot) return GameSessionFailure.InvalidSnapshot;
+            inventory.NpcWorn.Add(npc.Npc, record);
+        }
         // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
         // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
         if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;

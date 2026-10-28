@@ -229,6 +229,35 @@ Logs: `ARC-WORLD-101 container open` (outcome, generation, frame, the regenerati
 Native smoke: stage `container` (map mode with `--hero`; the map battery runs it before the junk pile stage), marker
 `ARC-WORLD-101 native-smoke container PASS`; `NONE` on a map without a standing, openable container with flag 0x200.
 
+## NPC best items after a regeneration (ARC-WORLD-103)
+
+At the end of an NPC's regeneration the original dresses it: 0x463E20 calls the best-items wield 0x4654F0 for an NPC (type 16) after
+the lines, with no target, whatever the lines made (an unreachable set's empty generation too); a source of 0 ends the regeneration
+before it (ledger RK15). 0x4654F0 is the call the pre-made hero's start makes: slots 1000 to 1008 in turn through 0x465170
+([best items](equipment-runtime.md#best-items-arc-world-034), WB1–WB8). Code: `GameSessionNpcWear.cs`; tests:
+[`NpcWearStateTests`](../../tests/Arcanum.Session.Tests/NpcWearStateTests.cs).
+
+| Step | Original | Session |
+| --- | --- | --- |
+| When | 0x463E20 at 0x464069..0x46407E | After `Regenerate` of an NPC plan whose outcome is `Regenerated` or `Cleared` (not `Unsupported`), before the container's regeneration of the same firing; part of the firing's one revision. `SessionRestockRegeneration.Wield` reports it (`SessionNpcWield`: a failure, or the steps as `EquipBest` reports them); null for a container. |
+| Facts | the NPC's object | `ISessionRestockWorld.RestockWielder(map, npc)` → `SessionNpcWielder`: the NPC as a wearer (race, gender, crippled arms in its life state), its chooser (damage bonus, aptitude, melee/bow/throwing levels, extraordinary intelligence; the session sets `IsPc` false and the ammunition from the NPC's first stack of each type), the wear facts of each item of its list (`SessionNpcWearableLookup`) and the art lookup. The default answers null: the NPC then wears what the clear left it (`EquipmentUnavailable`, Not ready). |
+| Start | the NPC's worn items after the clear | The items of its list that the session's list shows worn (persistent items keep their slots): the map data's inventory location, or the NPC's saved record once the session dressed it. |
+| Choice | 0x465170 per slot (WB1–WB5) | The hero's plan with the NPC's facts: a kept item that still passes the wear check is the worth to beat (not the weapon slot, which always starts empty); candidates in the NPC's list order (its seed items, then its added items); a tie goes to the later one (project substitute for the handle order, WB4). An item a step takes off goes through `RestockInsertCheck`. A choice with a move script or item spells is not wielded and a worn one with them stays (`Unsupported`, the session runs no item script or spell, as for the hero). |
+| Record | the NPC's inventory locations | On success the NPC's worn items are recorded (`inventory.npcWorn`, snapshot schema 57): for that NPC the record replaces its map data's inventory locations, so `QueryMapInventory`, the loot and barter windows and the crafter's deletion see a made item it wields as worn and a seed item it took off as in its pack (location −1). `QueryNpcWorn(npc)` answers the record's items still in its list; null for an NPC the session never dressed. |
+
+Refused before any change (the NPC keeps what the clear left it; nothing is recorded): no wielder (`EquipmentUnavailable`), a chooser
+outside the bounds the weapon score reads (skill levels 0..20, aptitude −100..100, damage bonus within ±1,000,000:
+`InvalidEquipment`), an item's invalid facts (`InvalidItem`), facts of another kind than the list's, or a worn item without wear facts
+or outside its own slot (`InventoryMismatch`), a host callback that changed the session (`StaleVersion`). The firing waits a minute
+when the dressed-NPC budget (4096) could not hold a new record. An item that leaves the NPC's list (to the hero, deleted, discarded by
+the next regeneration) leaves its record, so it is not worn when it comes back.
+
+The viewer's host (`AreaRestockHost.Wielder`, through `AreaEventWorld`) reads the NPC's combat values from the area's combat fields
+(`SessionCritterCombat.Wearer`, `Chooser`; its life state the session's, else the map data's), an item's wear facts from its object row
+on that map or, for an item the session made, from its prototype's stored fields, and answers the art lookup with yes (one diagnostic
+body art, as at the hero's start). Native observation: stage `barter`, marker `ARC-WORLD-103 native-smoke redress PASS` (the first
+living NPC of the shown map with a source of its own, scheduled through the window open's path; SKIP on a map without one).
+
 ## Not modelled (NOT READY)
 
 - **Container loot window limits** (ARC-WORLD-101): a trapped container (a native trap script at its use slot) and one with an unlock
@@ -241,9 +270,13 @@ Native smoke: stage `container` (map mode with `--hero`; the map battery runs it
   other partners do not. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
   zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 runs in the session
-  ([above](#session-generation-arc-world-100)) and at the viewer's first loot open ([above](#container-loot-window-arc-world-101)); an
-  NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
-  broken or destroyed holder, objects created in play) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
+  ([above](#session-generation-arc-world-100)) and at the viewer's first loot open ([above](#container-loot-window-arc-world-101)); the
+  callers of RK13–RK14 (summons, a broken or destroyed holder, objects created in play) are not modelled. The NPC's best-items wield
+  after a regeneration ([above](#npc-best-items-after-a-regeneration-arc-world-103)) takes no firearms level (a tech skill the map data's
+  basic skills do not hold: 0, so a firearm scores −1 unless the NPC's sheet was levelled), reads no NPC effects, spells or art (never
+  transformed, magick-allergic or unique), and the viewer's combat values of an NPC (its attack's weapon, its armour class) read only
+  its map data's items: they follow the session's worn slots, but an item the session made for it counts for nothing in a fight (a
+  later combat slice). Lines whose prototype is gold, a key or a key ring are skipped (the
   session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
   clear (not guarded).
