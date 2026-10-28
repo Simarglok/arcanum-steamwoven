@@ -69,14 +69,24 @@ public partial class TerrainViewerApp
         var listed = _inventoryPanel!.ViewForSelfTest!.Loot.Select(line => line.Entity).ToArray();
         Require(listed.Length == session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items.Count, "the window lists its current goods");
         Require(AreaEvents.LootWindowShowsContainer, "the open container holds the items' decay");
-        var takeable = listed.FirstOrDefault(entity => session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items
-            .Any(item => item.Entity == entity && item.Facts.Kind.Type is not SessionItemType.Gold and not SessionItemType.Key and not SessionItemType.KeyRing && !item.Facts.Worn
-                && item.Facts.ScriptPoints.Count == 0));
+        var current = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items;
+        var takeable = listed.FirstOrDefault(entity => current.Any(item => item.Entity == entity && item.Facts.Kind.Type is not SessionItemType.Gold
+            and not SessionItemType.Ammo and not SessionItemType.Key and not SessionItemType.KeyRing && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0));
         if (takeable is not null)
         {
             TakeFromBody(takeable);
             Require(session.QueryPcInventory().Any(item => item.Entity == takeable) || session.QueryMadeItems().Any(item => item.Entity == takeable),
                 $"{takeable} was taken: {_inventoryStatus}");
+        }
+        // The coin pile goes through the quantity window (ARC-UI-029), all of it.
+        var pile = done!.Pile;
+        var gold = session.QueryGold();
+        if (pile is not null && done.Coins > 1)
+        {
+            TakeFromBody(pile);
+            Require(_quantityMove is { } asked && asked.Item == pile, $"the coin pile asks how many: {_inventoryStatus}");
+            AcceptQuantity(done.Coins);
+            Require(session.QueryGold() == gold + done.Coins, $"the {done.Coins} coins were taken: {_inventoryStatus}");
         }
         EndInventory();
         Require(!InventoryOpen && !AreaEvents.LootWindowShowsContainer, "closed, the window holds nothing");
@@ -94,7 +104,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-101 native-smoke container PASS " + System.Text.Json.JsonSerializer.Serialize(new
         {
             Map = _readyMapName, Containers = containers.Length, Crate = crate.Entity, Before = before, done!.Outcome, done.Removed, done.Coins, Created = done.Created.Count,
-            done.Refused, done.Skipped, Listed = listed.Length, Taken = takeable, Opening = open.Opening, Locked = lockedResult,
+            done.Refused, done.Skipped, Listed = listed.Length, Taken = takeable, Gold = session.QueryGold() - gold, Opening = open.Opening, Locked = lockedResult,
             UseScript = open.UseScript is { } ran ? $"{ran.Outcome}/{ran.Run?.Outcome}" : "none",
             Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
         }));
