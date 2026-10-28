@@ -85,6 +85,9 @@ public sealed class CastEyeCandyAnimation
     public bool Ended { get; private set; }
     /// <summary>When the next step is due.</summary>
     public long DueMs => _due;
+    /// <summary>ARC-MAGIC-018: set by a release that launched a missile instead (0x429C40 → 0x4246E0, whose true step restarts the
+    /// goal with a pace's delay, ledger SM1): the next step then comes one pace after the release, not at once.</summary>
+    public bool PaceAfterRelease { get; set; }
 
     /// <summary>Runs the steps due at or before <paramref name="nowMs"/>. <paramref name="release"/> is the release frame (the target
     /// re-check and BEGIN): true when it passed. The gate (0x42CAA0) is whole here: the action flag without the release flag sets
@@ -124,6 +127,7 @@ public sealed class CastEyeCandyAnimation
                 var passed = release();
                 steps.Add(new(EyeCandyStepKind.Release, at, _frame, passed));
                 if (!passed) { End(steps, at); break; }
+                if (PaceAfterRelease) _due = at + _pace;
                 continue;
             }
             _due = at + _pace;

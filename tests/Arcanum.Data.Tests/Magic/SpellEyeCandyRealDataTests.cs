@@ -32,4 +32,22 @@ public sealed class SpellEyeCandyRealDataTests
             "two entries name an art without a part (nothing is placed)");
         Assert.AreEqual(64, withArt.Count(e => (e.Flags & SpellEyeCandyFlags.Forever) != 0));
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_missiles_match_the_census()
+    {
+        // ARC-MAGIC-018: the projectile entries (6·spell + 1) the casting goal launches as missiles (0x429C40); counts only.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in eye-candy check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var table = SpellEyeCandyTable.Open(stack).Table!;
+        var missiles = Enumerable.Range(0, SpellRecord.Count).Select(s => (Spell: s, Entry: table.Entry(s, SpellEyeCandyTable.Projectile)))
+            .Where(m => m.Entry.Art is not null).ToArray();
+        Assert.AreEqual((12, 6), (missiles.Length, missiles.Count(m => m.Spell < SpellRecord.CollegeSpells)), "12 missiles, 6 of college spells");
+        Assert.AreEqual("0,2,16,22,33,34", string.Join(',', missiles.Where(m => m.Spell < SpellRecord.CollegeSpells).Select(m => m.Spell)));
+        Assert.AreEqual((11, 1, 0), (missiles.Count(m => m.Entry.ProjectileSpeed == 0), missiles.Count(m => m.Entry.ProjectileSpeed == 4),
+            missiles.Count(m => m.Entry.ProjectileSpeed < 0)), "one speed of 4 steps, the rest take the default (4); none negative");
+        Assert.IsTrue(missiles.All(m => EyeCandyArt.IsEyeCandy(m.Entry.Art!.Value) && EyeCandyArt.Rotation(m.Entry.Art.Value) == 0
+            && EyeCandyArt.Number(m.Entry.Art.Value) + 3 < 0x200), "eye-candy arts whose four faced numbers fit");
+    }
 }

@@ -12,6 +12,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | --- | --- | --- |
 | DAT | [Data and formats](status/data.md) | — |
 | Resource precedence | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-011 |
+| Launcher settings and game folder | [Data and formats](status/data.md) | ARC-DEV-046 |
 | Object names and MES text | [Data and formats](status/data.md) | ARC-DATA-042, ARC-DATA-013, ARC-UI-005 |
 | Universal map catalogue | [Data and formats](status/data.md) | ARC-DATA-026, ARC-DATA-015, ARC-DATA-025 |
 | Whole-map plans | [Data and formats](status/data.md) | ARC-RENDER-021, ARC-RENDER-022, ARC-DATA-020 |
@@ -43,6 +44,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
 | Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
+| Spell missile and caster facing | [Magic](status/magic.md) | ARC-MAGIC-018 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |
