@@ -69,13 +69,14 @@ also on death (0x4B411C), and allows the hero's followers to attack when the her
 Budgets: `GameSessionLimits.MaxDangerRecords` (8,192, as life and reaction) and
 `MaxDangerEnemies` (65,536 entries of all lists together; the original's lists have no limit).
 
-## Snapshot schema 40
+## Snapshot schema 42
 
 `"danger":{"records":[{"entity","flags","focus","fleeingFrom","hitBy","enemies"}]}` after
 `concealment`, records in ordinal entity order, flag names in bit order, each handle the entity id,
 `""` for the hero (never a valid entity id) or `null` for none. Restore refuses a baseline record,
-an undefined bit, an invalid handle, a repeated enemy and the budgets; schemas 1..39 are refused, not
-migrated. Schema 40 (ARC-WORLD-082) adds the flag name `SpellFlee`.
+an undefined bit, an invalid handle, a repeated enemy and the budgets. Schema 40 (ARC-WORLD-082) adds the flag name
+`SpellFlee`, schema 42 (ARC-WORLD-084, [AI scheduler](ai-scheduler.md)) `CheckWeapon`; schemas 1..41 are refused, not
+migrated.
 
 ## Settings
 
@@ -86,10 +87,10 @@ migrated. Schema 40 (ARC-WORLD-082) adds the flag name `SpellFlee`.
 
 ## Not ready
 
-- **Callers.** No AI pass (slice I6) or follower order (I9) calls the setter yet (morale, I5, decides its flight requests), and nothing calls the danger
+- **Callers.** The AI pass (slice I6, [AI scheduler](ai-scheduler.md)) runs the danger update only as a host stage, and no host or follower order (I9) calls the setter yet (morale, I5, decides its flight requests), and nothing calls the danger
   update, attack event, reaction to an attack, kill-on-sight or scan rules of slice I4; the viewer shows nothing.
   The hosts run no enter or exit combat script: the hook is returned, and the dispatcher's combat
-  hooks (S7) are to carry it. The start and end combat points (15, 16) are I6's gate.
+  hooks (S7) are to carry it. The start and end combat points (15, 16) run in I6's gate through the host (`ISessionAiWorld.RunScript`).
 - **Hook order.** The host runs the hook after the call, so a script sees the focus and reaction
   already written; the original runs the enter-combat script before rules 8 and 9.
 - **Peace and stop attacking** (0x4AA300, 0x4AA4A0), the only writers of `NoAttack` besides a restore, FO7 and FO8 landed with
