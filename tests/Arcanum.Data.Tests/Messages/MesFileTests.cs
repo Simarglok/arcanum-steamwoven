@@ -160,4 +160,20 @@ public sealed class MesFileTests
         Assert.AreEqual(127, defined1251.Distinct().Count(), "Every defined code point is distinct.");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MesText.Decode("a"u8, (MesTextProfile)99));
     }
+
+    [TestMethod]
+    public void Encoding_is_the_strict_inverse_of_decoding()
+    {
+        foreach (var profile in new[] { MesTextProfile.Windows1252, MesTextProfile.Windows1251 })
+            for (var b = 0; b < 256; b++)
+                if (MesText.Decode(new[] { (byte)b }, profile).Text is { } text)
+                    CollectionAssert.AreEqual(new[] { (byte)b }, MesText.Encode(text, profile), $"{profile} byte {b:X2}");
+        CollectionAssert.AreEqual(new byte[] { 0x52, 0x65, 0x6E, 0xE9, 0x20, 0x52, 0x69, 0x6E, 0x67 },
+            MesText.Encode("Ren\u00e9 Ring", MesTextProfile.Windows1252));
+        Assert.IsNull(MesText.Encode("Ren\u00e9", MesTextProfile.Ascii), "no upper half in ASCII");
+        Assert.IsNull(MesText.Encode("\u041a", MesTextProfile.Windows1252), "a Cyrillic letter has no 1252 byte");
+        Assert.IsNull(MesText.Encode("\u20ac\u4e00", MesTextProfile.Windows1252));
+        CollectionAssert.AreEqual(Array.Empty<byte>(), MesText.Encode("", MesTextProfile.Ascii));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MesText.Encode("a", (MesTextProfile)99));
+    }
 }

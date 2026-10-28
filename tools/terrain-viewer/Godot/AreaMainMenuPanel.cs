@@ -40,6 +40,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     public event Action<AreaNewCharacterButton>? CreationPressed;
     /// <summary>ARC-UI-030: the new-character window's Accept.</summary>
     public event Action? AcceptRequested;
+    /// <summary>ARC-UI-033: a click on the new-character window's name field.</summary>
+    public event Action? NameClicked;
     public bool IsOpen => Visible;
     internal Vector2? ButtonCentreForSelfTest(int index) =>
         _buttons.Visible && _buttons.GetChildren().OfType<Button>().ElementAtOrDefault(index) is { } button ? button.GetGlobalRect().GetCenter() : null;
@@ -56,7 +58,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-030: the new-character window's rows as "label: value", then the background text.</summary>
     internal IReadOnlyList<string> CreationForSelfTest => _creation.Visible
         ? [.. _creation.GetChildren().OfType<HBoxContainer>().Where(row => row.Name.ToString().StartsWith("Creation", StringComparison.Ordinal))
-            .Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}"), _creationText.Text] : [];
+            .Select(row => row.GetChildren().OfType<Label>().ToArray())
+            .Select(labels => $"{labels[0].Text}: {(labels.Length > 1 ? labels[1].Text : NameFieldText)}"), _creationText.Text] : [];
+    private string NameFieldText => _creation.GetNodeOrNull<Button>("CreationName/Field")?.Text ?? "";
+    internal void NameClickForSelfTest() => NameClicked?.Invoke();
     internal void CreationPressForSelfTest(AreaNewCharacterButton button) => CreationPressed?.Invoke(button);
     internal void AcceptForSelfTest() => AcceptRequested?.Invoke();
 
@@ -168,8 +173,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ResizePanel();
     }
 
-    /// <summary>ARC-UI-030: the new-character window's rows (gender, race, background) with their arrows, the background's text, Accept
-    /// and Cancel; the controller's focus row is highlighted.</summary>
+    /// <summary>ARC-UI-030: the new-character window's rows (gender, race, background; ARC-UI-033: portrait, then the name field) with
+    /// their arrows, the background's text, Accept and Cancel; the controller's focus row is highlighted.</summary>
     private void RenderCreation(AreaMainMenu? menu, bool creating)
     {
         // The background text stays the window's own child (never orphaned); the rows and buttons are rebuilt around it.
@@ -183,6 +188,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
             ("Race", creation.Race.ToString(), AreaNewCharacterButton.RacePrevious, AreaNewCharacterButton.RaceNext),
             ("Background", (text?.Name is { Length: > 0 } title ? title : "?") + $" ({creation.Background})", AreaNewCharacterButton.BackgroundPrevious,
                 AreaNewCharacterButton.BackgroundNext),
+            // ARC-UI-033: the portrait as its image's name and id (the art is not drawn yet).
+            ("Portrait", $"{creation.PortraitText() ?? "?"} ({creation.Portrait})", AreaNewCharacterButton.PortraitPrevious, AreaNewCharacterButton.PortraitNext),
         };
         for (var i = 0; i < rows.Length; i++)
         {
@@ -202,12 +209,21 @@ public partial class AreaMainMenuPanel : CanvasLayer
             }
             _creation.AddChild(row);
         }
+        // ARC-UI-033: the name field, a click on it starts the typing (the caret marks it).
+        var nameRow = new HBoxContainer { Name = "CreationName", Modulate = rows.Length == menu.Focus ? new Color(1f, .85f, .6f) : Colors.White };
+        nameRow.AddChild(new Label { Text = "Name", CustomMinimumSize = new Vector2(120, 30), Modulate = new Color(.15f, .1f, .05f) });
+        var field = new Button { Name = "Field", Text = creation.NameText() + (creation.TypingName ? "|" : ""), FocusMode = Control.FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(318, 30), Alignment = HorizontalAlignment.Left, ClipText = true };
+        field.Pressed += () => NameClicked?.Invoke();
+        field.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
+        nameRow.AddChild(field);
+        _creation.AddChild(nameRow);
         _creationText.Text = text is { } shown ? shown.Body : "(the background table did not read)";
         _creation.MoveChild(_creationText, _creation.GetChildCount() - 1);
         var actions = new HBoxContainer { Name = "Actions" };
         foreach (var (name, label, row, action) in new (string, string, int, Action)[]
         {
-            ("Accept", "Accept", 3, () => AcceptRequested?.Invoke()), ("Cancel", "Cancel", 4, () => BackRequested?.Invoke()),
+            ("Accept", "Accept", rows.Length + 1, () => AcceptRequested?.Invoke()), ("Cancel", "Cancel", rows.Length + 2, () => BackRequested?.Invoke()),
         })
         {
             var button = new Button { Name = name, Text = label, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(130, 34),

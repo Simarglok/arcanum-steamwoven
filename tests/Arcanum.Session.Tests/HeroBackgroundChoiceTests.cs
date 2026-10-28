@@ -136,7 +136,7 @@ public sealed class HeroBackgroundChoiceTests
         using var owner = Owner();
         owner.SetHeroBackground(owner.Version, new(7, 1007, 86), Strong);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"background\":7,\"backgroundDescription\":1007}");
+        StringAssert.Contains(text, ",\"background\":7,\"backgroundDescription\":1007,\"playerName\":\"\",\"portrait\":0}");
         using var restored = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!, RestoreOptions()).Owner!;
         Assert.AreEqual(((int?)7, (int?)1007), Stored(restored));
         CollectionAssert.AreEqual(Effects(owner), Effects(restored));

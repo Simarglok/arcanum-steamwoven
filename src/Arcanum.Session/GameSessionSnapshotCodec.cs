@@ -61,7 +61,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -330,6 +330,8 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("armedFates", hero.Fate.Armed);
                 w.WriteNumber("background", hero.Background);
                 w.WriteNumber("backgroundDescription", hero.BackgroundDescription);
+                w.WriteString("playerName", Convert.ToHexString(hero.PlayerName.AsSpan()).ToLowerInvariant());
+                w.WriteNumber("portrait", hero.Portrait);
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -1400,7 +1402,17 @@ public static class GameSessionSnapshotCodec
             HeroAdvancement(f["advancement"], p + ".advancement"), InnateSkills(f["innateSkills"], p + ".innateSkills"),
             new FateState(Int(f["fatePoints"], p + ".fatePoints", int.MinValue, int.MaxValue),
                 Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)), Int(f["background"], p + ".background", int.MinValue, int.MaxValue),
-            Int(f["backgroundDescription"], p + ".backgroundDescription", int.MinValue, int.MaxValue));
+            Int(f["backgroundDescription"], p + ".backgroundDescription", int.MinValue, int.MaxValue), PlayerName(f["playerName"], p + ".playerName"),
+            Int(f["portrait"], p + ".portrait", int.MinValue, int.MaxValue));
+    }
+
+    // ARC-UI-033: the player name's bytes as lowercase hex (canonical); the length and the NUL byte are Restore's (InvalidHero).
+    private static ImmutableArray<byte> PlayerName(JsonElement element, string path)
+    {
+        var text = String(element, path);
+        if (text.Length % 2 != 0 || text.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+            throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        return [.. Convert.FromHexString(text)];
     }
 
     // Shapes only; the count, magnitudes and divisors are the hero's import (InvalidHero).
