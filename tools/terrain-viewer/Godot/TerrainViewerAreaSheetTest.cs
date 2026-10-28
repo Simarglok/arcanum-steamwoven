@@ -152,12 +152,12 @@ public partial class TerrainViewerApp
             Require(award?.LevelUps is { Count: 2 }, "an award to level 3 writes two levels");
             var posted = _levelMessagesPosted;
             LevelAreaFollowers(award);
-            Require(_levelMessagesPosted == posted + 2 && _messageWindow?.HistoryForSelfTest.Count == 2
-                && _messageWindow.ShownForSelfTest == new AreaMessageEntry("Level up", "Level 3", $"Unspent points: {_areaSession.QueryHero()!.UnspentPoints}"),
-                "two level-up entries, the newest shown: " + _messageWindow?.ShownForSelfTest);
+            Require(_levelMessagesPosted == posted + 2 && _messageLog.History.Count == 2
+                && _messageLog.Shown == new AreaMessageEntry(AreaMessageKind.LevelUp, "Level up", "Level 3", $"Unspent points: {_areaSession.QueryHero()!.UnspentPoints}"),
+                "two level-up entries, the newest shown: " + _messageLog.Shown);
             LevelAreaFollowers(_areaSession.AwardHeroExperience(_areaSession.Version, 169000 - 4000).Award);
-            Require(_levelMessagesPosted == posted + 13 && _messageWindow!.HistoryForSelfTest.Count == AreaMessageWindow.HistorySize
-                && _messageWindow.HistoryForSelfTest[0].Line == "Level 5" && _messageWindow.ShownForSelfTest?.Line == "Level 14",
+            Require(_levelMessagesPosted == posted + 13 && _messageLog.History.Count == AreaMessageLog.Capacity
+                && _messageLog.History[0].Line == "Level 5" && _messageLog.Shown?.Line == "Level 14",
                 "eleven more levels: the window keeps the last ten");
 
             // ARC-SKILLS-008: the palette's Prowl action conceals the hero; an untrained prowler's run becomes a walk, and off again.

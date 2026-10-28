@@ -6,11 +6,13 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-046: the hero's level-up messages (docs/rendering/terrain-viewer.md#level-up-messages-arc-ui-046; ledger OL27–OL28). Every
 // award passes here (LevelAreaFollowers: hits, kills and the dialogs' queued awards); each level it wrote posts one entry to the
-// message window and plays the level-up sound, as the original draws each entry with sound 3005. The texts are the player's MES files,
-// loaded in the background once per module.
+// message log, whose drawing plays the level-up sound 3005 as the original's does. The texts are the player's MES files, loaded in the
+// background once per module. ARC-UI-023: the entries go to the original's message log in the bottom strip (ledger ML1–ML8).
 public partial class TerrainViewerApp
 {
-    private AreaMessageWindow? _messageWindow;
+    private readonly AreaMessageLog _messageLog = new();
+    // The self-test moves the log's real-time clock forward to pass the quiet time after a stored entry (ML2) without waiting.
+    private long _messageClockShiftForSelfTest;
     private string? _levelTextsModule;
     private Task<(AreaLevelTextsStatus Status, AreaLevelTexts Texts, string Detail)>? _levelTextsTask;
     private AreaLevelTexts? _levelTexts;
@@ -59,15 +61,13 @@ public partial class TerrainViewerApp
         FlushEncumbranceMessage(wait);
         SyncLevelMessageSession();
         if (_pendingLevelUps.Count == 0 || LevelTexts(wait) is not { } texts) return;
-        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
         // Taken off the queue first: an entry is posted at most once.
         var batch = _pendingLevelUps.ToArray();
         _pendingLevelUps.Clear();
         foreach (var level in batch)
         {
-            _messageWindow.Post(AreaLevelMessages.Compose(level, texts));
+            PostMessage(AreaLevelMessages.Compose(level, texts), "level up");
             _levelMessagesPosted++;
-            PlayInterfaceSound(LevelUpSound, "level up");
             GD.Print($"ARC-UI-046 level-up level={level.Level} points={level.Points} scheme={(level.Scheme is not { } s ? "none" : !s.HasRule ? "no-rule"
                 : $"purchases={s.Purchases.Count} completed={s.Completed}")}");
         }
@@ -97,8 +97,7 @@ public partial class TerrainViewerApp
         SyncLevelMessageSession();
         if (LevelTexts(wait) is not { } texts) return;
         _encumbranceShown = (session, change.Sequence);
-        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        _messageWindow.Post(AreaLevelMessages.Encumbrance(change.Level, texts));
+        PostMessage(AreaLevelMessages.Encumbrance(change.Level, texts), "encumbrance");
         _encumbranceMessagesPosted++;
         GD.Print($"ARC-WORLD-087 encumbrance level={change.Level} entries={change.Entries} sequence={change.Sequence}");
     }
@@ -120,11 +119,23 @@ public partial class TerrainViewerApp
         _levelMessagesSession = null;
     }
 
-    /// <summary>Empties the window and drops the queued entries (another session, or the native smoke's own entries).</summary>
+    /// <summary>Empties the log and drops the queued entries (another session, or the native smoke's own entries).</summary>
     private void ClearLevelMessages()
     {
         _pendingLevelUps.Clear();
-        _messageWindow?.Clear();
+        _messageLog.Clear();
+        _gameBarPanel?.MessageLog.Render();
+    }
+
+    private long MessageLogNow => (long)Time.GetTicksMsec() + _messageClockShiftForSelfTest;
+
+    /// <summary>ARC-UI-023: posts an entry to the message log and plays the sound its drawing plays (ML5).</summary>
+    private AreaMessagePost PostMessage(AreaMessageEntry entry, string what)
+    {
+        var post = _messageLog.Post(entry, MessageLogNow);
+        if (post.Sound is { } sound) PlayInterfaceSound(sound, what);
+        _gameBarPanel?.MessageLog.Render();
+        return post;
     }
 }
 
@@ -145,7 +156,7 @@ public partial class TerrainViewerApp
         var (posted, played) = (_levelMessagesPosted, _interfaceSoundsPlayed);
         ShowLevelUps(award);
         Require(_levelMessagesPosted == posted + 2, "two entries posted");
-        var history = _messageWindow!.HistoryForSelfTest;
+        var history = _messageLog.History;
         var (points, schemed) = (history[^2], history[^1]);
         string Text(string path, int number) => texts.Text(path, number) ?? throw new InvalidOperationException($"ARC-UI-046 level message smoke: {path} {number} missing");
         Require(points.Title == Text(AreaLevelTexts.InterfacePath, AreaLevelMessages.TitleMessage)
@@ -156,7 +167,7 @@ public partial class TerrainViewerApp
             && schemed.Detail.Contains(Text(AreaLevelTexts.StatPath, 0) + " 9, ", StringComparison.Ordinal)
             && schemed.Detail.Contains(Text(AreaLevelTexts.TechPath, 0) + " " + Text(AreaLevelTexts.TechPath, AreaLevelMessages.FirstDegreeName + 1), StringComparison.Ordinal)
             && schemed.Detail.EndsWith(" " + Text(AreaLevelTexts.LevelPath, AreaLevelMessages.CompletedMessage), StringComparison.Ordinal)
-            && _messageWindow.ShownForSelfTest == schemed, "the scheme entry names the player's texts and is shown");
+            && _messageLog.Shown == schemed && schemed.Scheme, "the scheme entry names the player's texts and is shown");
         Require(_audio is null || _interfaceSoundsPlayed == played + 2, "each entry played the level-up sound: " + _cueNotice);
         // The entries were built here: the window empties so later stages see none of them.
         var shownHistory = history.Count;
@@ -181,9 +192,11 @@ public partial class TerrainViewerApp
         _areaSession!.AttachEncumbranceEffect(definition);
         var lines = Enumerable.Range(0, Arcanum.Simulation.Items.CarryRules.Levels).Count(level => texts.Text(AreaLevelTexts.CritterPath, AreaLevelMessages.EncumbranceMessage + level) is not null);
         Require(lines == Arcanum.Simulation.Items.CarryRules.Levels, $"critter.mes level lines {lines}/7");
-        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        _messageWindow.Post(AreaLevelMessages.Encumbrance(4, texts));
-        Require(_messageWindow.ShownForSelfTest?.Title == texts.Text(AreaLevelTexts.CritterPath, AreaLevelMessages.EncumbranceMessage + 4), "the level-4 entry is shown");
+        var played = _interfaceSoundsPlayed;
+        PostMessage(AreaLevelMessages.Encumbrance(4, texts), "encumbrance");
+        Require(_messageLog.Shown is { Kind: AreaMessageKind.Message } shown && shown.Title == texts.Text(AreaLevelTexts.CritterPath, AreaLevelMessages.EncumbranceMessage + 4),
+            "the level-4 entry is shown");
+        Require(_audio is null || _interfaceSoundsPlayed == played + 1, "the message entry played its sound (3004): " + _cueNotice);
         ClearLevelMessages();
         GD.Print("ARC-WORLD-087 native-smoke encumbrance PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Changes = definition.Changes.Length, Lines = lines, Level = _areaSession.QueryHeroCarry()?.Level, Parity = "NOT_VERIFIED" }));

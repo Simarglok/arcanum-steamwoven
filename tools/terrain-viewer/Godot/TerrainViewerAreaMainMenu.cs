@@ -76,7 +76,8 @@ public partial class TerrainViewerApp
     private void OpenMainMenu(AreaMainMenuTexts texts, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false)
     {
         // A menu waiting under the save list (or for its window to open) is not replaced.
-        if (!QuickKeysActive || MainMenuOpen || WorldModal || _mainMenu is not null) return;
+        // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
+        if (!QuickKeysActive || MainMenuOpen || (WorldModal && !HeroDeathCovering) || _mainMenu is not null) return;
         if (_mainMenuPanel is null)
         {
             _mainMenuPanel = new AreaMainMenuPanel(); AddChild(_mainMenuPanel);
@@ -136,6 +137,8 @@ public partial class TerrainViewerApp
     {
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return "a reset or reload is in progress";
         if (_mapHandoff is { Kind: not MapHandoffKind.Stream }) return "another map is loading";
+        // ARC-UI-026: a quit and a death (or two deaths) never load the start scene twice at once.
+        if (_sceneFlow is not null) return "the start scene is loading";
         if (StartSceneArguments(out var why) is not { } next) return why;
         _sceneFlow = new(kind, hero, next.AreaMapName);
         GD.Print("ARC-UI-012 scene flow " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -151,20 +154,30 @@ public partial class TerrainViewerApp
     {
         var flow = _sceneFlow;
         _arguments = next; _lastPublishedFailure = null;
-        if (_sceneLoadForSelfTest is { } load) await load(next);
-        else await StartLoadAsync(next, false);
-        // The start scene did not publish (a failure stays on screen with its stage): nothing runs on a later scene.
-        if (flow is not null && ReferenceEquals(_sceneFlow, flow))
+        try
         {
-            _sceneFlow = null;
-            GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
+            if (_sceneLoadForSelfTest is { } load) await load(next);
+            else await StartLoadAsync(next, false);
+        }
+        finally
+        {
+            // The start scene did not publish (a failure stays on screen with its stage, or the load threw): nothing runs on a later
+            // scene, and the next quit, new game or death may load it again.
+            if (flow is not null && ReferenceEquals(_sceneFlow, flow))
+            {
+                _sceneFlow = null;
+                GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
+            }
+            // ARC-UI-026: a death's black screen gives way to whatever is shown now (the reopened menu fades in already; a failure, or
+            // a load another one superseded, is not left under black).
+            HeroDeathSceneReady();
         }
     }
 
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
     private void ContinueSceneFlow(SceneFlowRequest flow)
     {
-        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); return; }
+        if (!QuickKeysActive || _arguments is null) { GD.Print("ARC-UI-012 scene flow: the start scene has no game session"); HeroDeathSceneReady(); return; }
         var texts = MainMenuTexts(_arguments);
         string? refused = null;
         if (flow.Kind == SceneFlowKind.NewGame)
@@ -181,6 +194,8 @@ public partial class TerrainViewerApp
         // A quit, or a new game the start scene refused: the main menu, opened again (its root Escape exits the game, MM6).
         OpenMainMenu(texts, AreaMenuWindow.Main, reopened: true);
         if (_mainMenu is not null && refused is not null) { _mainMenu.Notice = refused; RenderMainMenu(); }
+        // ARC-UI-026: after a death the main menu fades in from black (PD8).
+        HeroDeathSceneReady();
     }
 
     private void RenderMainMenu()
@@ -321,6 +336,7 @@ public partial class TerrainViewerApp
         _areaKitMissileArt = hero?.KitMissileArt;
         _areaKitThrowWeight = hero?.KitThrowWeight;
         _areaKitItemSpells = hero?.KitItemSpells;
+        _areaKitUse = hero?.KitUse;
         _menuTablesHero = hero?.Hero;
         if (_arguments is not null) _arguments = _arguments with { Hero = hero?.Hero };
     }

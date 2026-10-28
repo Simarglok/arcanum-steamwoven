@@ -262,6 +262,10 @@ public enum GameSessionFailure
     GridCellsTaken, InvalidGrid,
     // Hotkey bar (ARC-UI-022): a slot, entry or saved bar that does not fit; no hero to own a bar.
     InvalidHotkey, HotkeysUnavailable,
+    // Hero drop (ARC-UI-025): the item's no-drop flag (item flag 0x20, the remove check 0x466DA0); the hero's tile outside the drop's bounds.
+    ItemNotDroppable, DropTileUnfit,
+    // Hero background (ARC-WORLD-097): a choice outside the stored range or whose effect is not the one given.
+    InvalidBackground,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -438,8 +442,10 @@ public sealed class GameSessionSnapshot
     /// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022); schema 50 adds the identified items and the
     /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
     /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019); schema 53
-    /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022). Schemas 1..52 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 53;
+    /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022); schema 54 adds the hero's background description number to <see cref="Hero"/>
+    /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100). Schemas 1..54 are refused,
+    /// not migrated.</summary>
+    public const int CurrentSchemaVersion = 55;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

@@ -176,6 +176,9 @@ public partial class TerrainViewerApp
             _spellPane.Activated += spell => { RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell)); ActivateSpell(spell); };
             _spellPane.WeaponToggled += ToggleWeaponPane;
             _spellPane.ItemActivated += ActivateItemSlot;
+            // ARC-UI-027: a right press there starts a drag onto the hotkey bar.
+            _spellPane.SpellDragStarted += HotkeyPaneDrag;
+            _spellPane.ItemDragStarted += HotkeyWeaponPaneDrag;
         }
         AdoptSpellData();
         _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());
@@ -573,11 +576,9 @@ public partial class TerrainViewerApp
         PostSpellMessage(_spellNotice);
     }
 
-    private void PostSpellMessage(string text)
-    {
-        if (_messageWindow is null) { _messageWindow = new AreaMessageWindow(); AddChild(_messageWindow); }
-        _messageWindow.Post(new("Magic", text, ""));
-    }
+    // ARC-UI-023: the cast's lines go to the message log as a plain text entry (no sound), titled with the project's label: the
+    // original's own spell messages are not built.
+    private void PostSpellMessage(string text) => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Plain, "Magic\n" + text), "magic");
 
     private string SpellObjectName(string id) =>
         id == SessionSpellCaster.Hero ? "the hero"

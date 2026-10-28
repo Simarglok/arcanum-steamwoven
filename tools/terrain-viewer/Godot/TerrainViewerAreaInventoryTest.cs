@@ -149,12 +149,13 @@ public partial class TerrainViewerApp
             Require(_inventoryPanel.MessageForSelfTest.StartsWith("took ", StringComparison.Ordinal), "window message " + _inventoryPanel.MessageForSelfTest);
             // ARC-SKILLS-005: a healing line gets a use button that runs the heal through the app; the synthetic line names no item
             // the host knows (and this session has no hero), so the app finds no healing item and reports it.
-            _inventoryPanel.Render(new AreaInventoryView([new("syn:item", "bandage") { Healing = true }, new("syn:listed", "sword")], null, null, []), null);
-            Require(_inventoryPanel.UseButtonsForSelfTest.Count == 1, "one use button for the one healing line");
+            // ARC-UI-025: the Use button runs the original's item use; the synthetic item has no use facts the host knows.
+            _inventoryPanel.Render(new AreaInventoryView([new("syn:item", "bandage") { Healing = true, Usable = true }, new("syn:listed", "sword")], null, null, []), null);
+            Require(_inventoryPanel.UseButtonsForSelfTest.Count == 1 && _inventoryPanel.DropButtonsForSelfTest.Count == 2, "one use button for the one usable line, a drop button per line");
             _inventoryPanel.UseButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(_inventoryStatus == "not used: not a healing item the hero holds" && _inventoryPanel.UseButtonsForSelfTest.Count == 0,
-                "the use button ran the app's heal: " + _inventoryStatus);
+            Require(_inventoryStatus.EndsWith("'s use facts do not read here", StringComparison.Ordinal) && _inventoryPanel.UseButtonsForSelfTest.Count == 0,
+                "the use button ran the app's use: " + _inventoryStatus);
             // ARC-SKILLS-006: a lockpick line gets a Pick a lock button; lockpicks the host does not know are refused and the window stays.
             _inventoryPanel.Render(new AreaInventoryView([new("syn:picks", "lockpicks") { Lockpick = true }], null, null, []), null);
             Require(_inventoryPanel.PickButtonsForSelfTest.Count == 1 && _inventoryPanel.UseButtonsForSelfTest.Count == 0, "one pick button for the one lockpick line");
@@ -318,6 +319,7 @@ public partial class TerrainViewerApp
                 }
                 view = _inventoryPanel.ViewForSelfTest!;
                 (dragged, view) = await DragForSmoke(view);
+                view = await DropAndUseForSmoke();
             }
             // ARC_AREA_INVENTORY_CAPTURE saves an in-app readback of the open window to the caller's ignored path.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture)
@@ -379,5 +381,51 @@ public partial class TerrainViewerApp
         }
         GD.Print($"ARC-UI-019 native-smoke drag PASS dragged={dragged} grid={session.QueryHeroGrid().Items.Count} unplaced={session.QueryHeroGrid().Unplaced.Count}");
         return (dragged, _inventoryPanel.ViewForSelfTest!);
+    }
+
+    /// <summary>ARC-UI-025: a right press on a worn item does nothing; a usable item (when the hero holds one) is used; a taken item dragged
+    /// onto the drop icon lies on the hero's tile and is taken back. Returns the window's view after them.</summary>
+    private async Task<AreaInventoryView> DropAndUseForSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
+        var area = _inventoryPanel!.GridAreaForSelfTest;
+        var session = _areaSession!;
+        var view = _inventoryPanel.ViewForSelfTest!;
+        if (view.Doll.FirstOrDefault(slot => slot.Entity is not null) is { } worn)
+        {
+            var revision = session.Version.Revision;
+            area.RightPressAt(AreaInventoryGridArea.SlotCentre(worn.Slot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(LastItemUseForSelfTest is { Gate: AreaItemUseGate.Wearable } && session.Version.Revision == revision, "a right press on a worn item does nothing: " + _inventoryStatus);
+        }
+        var usable = view.Pc.Where(line => line.Usable).Select(line => line.Entity).ToArray();
+        string used = "-";
+        if (usable.FirstOrDefault(entity => view.Grid.Any(item => item.Entity == entity)) is { } entity)
+        {
+            area.RightPressAt(AreaInventoryGridArea.CellCentre(view.Grid.First(item => item.Entity == entity).Slot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(LastItemUseForSelfTest is { Gate: AreaItemUseGate.Use, Step: not null } last && last.Item == entity, "a usable item is used: " + _inventoryStatus);
+            used = LastItemUseForSelfTest!.Value.Step!.Value.ToString();
+            if (ReadingOpen) EndReading();
+            if (!InventoryOpen) InventoryKey(Key.I);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        var taken = session.QueryPcInventory().Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        var drop = _inventoryPanel.ViewForSelfTest!.Grid.FirstOrDefault(item => taken.Contains(item.Entity) && session.QueryAmmo(item.Entity) is not { Units: > 1 }
+            && _inventoryHost!.GridMoveItem(session, item.Entity, _areaKitGridMove) is { NoDrop: false, ScriptPoints.Count: 0 });
+        Require(drop is not null, "a taken item to drop");
+        area.PressAt(AreaInventoryGridArea.CellCentre(drop!.Slot));
+        area.ReleaseAt(AreaInventoryGridArea.IconCentre(AreaInventoryIcon.Drop));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var placed = session.QueryPlacedItems().FirstOrDefault(item => item.Entity == drop.Entity);
+        Require(LastGroundDropForSelfTest is { Disposition: GameSessionDisposition.Changed } && placed is not null && placed.Cell == session.QueryActor().Cell
+            && !session.QueryPcInventory().Any(item => item.Entity == drop.Entity), "the drop icon dropped the item on the hero's tile: " + _inventoryStatus);
+        var pile = session.QueryJunkPiles().FirstOrDefault(p => p.Items.Any(item => item.Entity == drop.Entity));
+        var back = pile is null ? _inventoryHost!.PickUp(session, drop.Entity) : _inventoryHost!.Loot(session, pile.Entity, drop.Entity);
+        Require(back.Disposition == GameSessionDisposition.Changed && session.QueryPcInventory().Any(item => item.Entity == drop.Entity), "taken back: " + back.Failure);
+        if (pile is not null) session.CloseJunkPile(session.Version, pile.Entity);
+        _inventoryPanel.Render(InventoryView(null), null);
+        GD.Print($"ARC-UI-025 native-smoke drop-use PASS used={used} usable={usable.Length} dropped=1 pile={pile is not null} cell={placed!.Cell}");
+        return _inventoryPanel.ViewForSelfTest!;
     }
 }

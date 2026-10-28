@@ -195,9 +195,9 @@ public sealed class BackgroundTable
 
     /// <summary>What the screen stores and adds when a button lands on <paramref name="background"/>: the description number
     /// (<c>atoi</c> of <c>10b+0</c>) and the effect (<c>atoi</c> of <c>10b+1</c>, cause 1). Only those two slots are read, as the
-    /// original reads them; null when the block does not exist or either slot is absent or refused.</summary>
+    /// original reads them; null when the block does not exist or either slot is absent or refused. The session stores and adds them
+    /// (<c>GameSessionOwner.SetHeroBackground</c>, ARC-WORLD-097).</summary>
     [OriginalFunction(0x4C24B0, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x4C25E0, OriginalFunctionScope.Partial)]
     public BackgroundChoice? Choice(int background)
     {
         if (!HasBlock(background)) return null;

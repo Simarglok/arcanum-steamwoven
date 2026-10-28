@@ -22,6 +22,11 @@ public enum SessionRestockSetStatus
 /// <see cref="Arcanum.Data.Characters.InventorySourceRules"/>).</summary>
 public sealed record SessionRestockSet(SessionRestockSetStatus Status, RestockSet? Set);
 
+/// <summary>ARC-WORLD-100: the host's part of a generated-once container's seed (0x463E20 with flag 0x200, ledger RK10): the container's
+/// tile x (the low 32 bits of its location, field 2) and the PC's player name bytes (field 0x10E as 0x441B60 copies it for the PC itself:
+/// the host's PC, else its prototype's; empty when unset). The PC's race, gender and background are the session hero's.</summary>
+public sealed record SessionGeneratedOnceFacts(int LocationX, IReadOnlyList<byte> PlayerName);
+
 /// <summary>What a basic prototype number of a set line creates (the prototype is the number + 20): its kind and, for ammunition, the
 /// type and the units its prototype carries.</summary>
 public readonly record struct SessionRestockItem(SessionItemKind Kind, int? AmmoType = null, int? Units = null);
@@ -51,6 +56,9 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// <summary>ARC-WORLD-096: whether the host can answer now (its object data and inventory sources loaded); while it cannot, a due
     /// restock event is postponed by <see cref="SessionEventKinds.RestockRetryDelayMs"/> as without a host.</summary>
     bool RestockReady => true;
+    /// <summary>ARC-WORLD-100: the host's part of the seed of a container with flag 0x200 (<see cref="SessionGeneratedOnceFacts"/>); null
+    /// when the host cannot give it, and the container then keeps its list (Not ready).</summary>
+    SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => null;
 }
 
 /// <summary>What one regeneration did (ARC-WORLD-094).</summary>
@@ -60,8 +68,8 @@ public enum SessionRestockOutcome
     Regenerated = 1,
     /// <summary>The inventory was cleared and nothing generated (<see cref="SessionRestockSetStatus.Unreachable"/>).</summary>
     Cleared = 2,
-    /// <summary>Nothing changed: a set the project does not admit, a holder the map's seed does not list as that kind, or a spilled
-    /// container (Not ready).</summary>
+    /// <summary>Nothing changed: a set the project does not admit, a holder the map's seed does not list as that kind, a spilled
+    /// container, or a container with flag 0x200 whose seed the host cannot give (Not ready).</summary>
     Unsupported = 3,
 }
 
@@ -97,7 +105,8 @@ public sealed partial class GameSessionOwner
     /// the shown object in every mode, RK2): with <paramref name="hasSource"/> (the host's: an NPC's or container's inventory source is
     /// not 0, <see cref="RestockRules.InventorySource"/>) the holder's pending restock event is replaced by one after a labelled
     /// <c>restock.delay</c> roll of <see cref="RestockRules.MinDelayMs"/>..<see cref="RestockRules.MaxDelayMs"/> game milliseconds
-    /// (single player); without one its pending event stays (<see cref="GameSessionDisposition.NoChange"/>). Refused before any effect:
+    /// (single player); without one its pending event stays (<see cref="GameSessionDisposition.NoChange"/>), as for a container the
+    /// session generated once (ARC-WORLD-100: its source is 0, RK12, whatever the host's data says). Refused before any effect:
     /// an entity that is not an object of a map (<see cref="GameSessionFailure.InvalidEvents"/>: the absent role, the player, a made
     /// item), the version, the revision, a full restock or event budget (<see cref="GameSessionFailure.EventBudgetExceeded"/>) and the
     /// roll's refusals. One revision.
@@ -107,7 +116,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionEventKinds.RestockHolder(holder)) return Reject(GameSessionFailure.InvalidEvents);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        if (!hasSource) return NoChange();
+        if (!hasSource || _inventory.Generated.Contains(new(_actor.Map, holder))) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         var failure = ScheduleRestockEvent(_actor.Map, holder);
         return failure == GameSessionFailure.None ? Changed() : Reject(failure);
@@ -165,7 +174,8 @@ public sealed partial class GameSessionOwner
             Report(decision, [], postponed: true, ScheduleRestockEvent(map, entity.Code, SessionEventKinds.RestockRetryDelayMs));
         var none = new RestockDecision(RestockStep.None, false);
         if (PassWorldAs<ISessionRestockWorld>() is not { RestockReady: true } world || !_inventory.Seeds.TryGetValue(map, out var seed)) return Postpone(none);
-        if (world.RestockFacts(map, entity.Code) is not { } holder || !Enum.IsDefined(holder.Kind)) return Report(none, []);
+        if (world.RestockFacts(map, entity.Code) is not { } facts || !Enum.IsDefined(facts.Kind)) return Report(none, []);
+        var holder = GeneratedFacts(map, entity.Code, facts);
         string? merchant = null;
         RestockHolder? merchantFacts = null;
         // Only an off-screen container that does not regenerate alone looks for its merchant (RK3).
@@ -181,15 +191,7 @@ public sealed partial class GameSessionOwner
         if (decision.Step == RestockStep.RegenerateMerchantAndContainer && decision.MerchantRegenerates)
             plans.Add(PlanRestock(world, map, seed, merchant!, merchantFacts!.Value));
         plans.Add(PlanRestock(world, map, seed, entity.Code, holder));
-        // A deletion of an item that is not a made one keeps a deleted-item record: without room for all of them nothing is cleared yet.
-        var records = plans.SelectMany(plan => plan.Deleted).Count(item => SessionMadeItem.Number(item) is null && !_durability.Records.ContainsKey(item));
-        if (_durability.Count + records > _limits.MaxDurabilityRecords) return Postpone(decision);
-        // The session-wide item, pile and stack budgets must hold every line and a pile after the clear, or the clear would leave an
-        // empty list: nothing is cleared yet.
-        var lines = plans.Sum(plan => plan.Set?.Lines.Count + 1 ?? 0);
-        var freed = plans.SelectMany(plan => plan.Deleted).Count(item => _inventory.NpcOf(item) is not null);
-        if (_inventory.NpcHeld - freed + lines > _limits.MaxNpcItems || _inventory.Piles.Count + plans.Count > _limits.MaxGoldRecords ||
-            _inventory.Ammo.Count + lines > _limits.MaxAmmoRecords) return Postpone(decision);
+        if (!RestockFits(plans)) return Postpone(decision);
         if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
         var done = plans.Select(plan => Regenerate(world, map, plan)).ToArray();
         if (done.Any(regeneration => regeneration.Outcome != SessionRestockOutcome.Unsupported)) Revise();
@@ -197,40 +199,88 @@ public sealed partial class GameSessionOwner
     }
 
     // What one regeneration will do: the holder's kind, its set (null for one that clears only), the items its clearing deletes and the
-    // ones that stay (persistent), or an unsupported holder or set that keeps everything.
+    // ones that stay (persistent), or an unsupported holder or set that keeps everything. ARC-WORLD-100: a container with flag 0x200 draws
+    // from the original generator at Seed, and with a source it is recorded as generated once (Generates).
     private sealed record RestockPlan(string Holder, SessionHolderKind Kind, SessionRestockOutcome Outcome, RestockSet? Set,
-        IReadOnlyList<string> Deleted, IReadOnlyList<SessionInventoryItem> Kept);
+        IReadOnlyList<string> Deleted, IReadOnlyList<SessionInventoryItem> Kept, int? Seed = null, bool Generates = false);
 
     private RestockPlan PlanRestock(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string holder, RestockHolder facts)
     {
         var kind = facts.Kind == RestockHolderKind.Npc ? SessionHolderKind.Npc : SessionHolderKind.Container;
         RestockPlan Unsupported() => new(holder, kind, SessionRestockOutcome.Unsupported, null, [], []);
         // A holder of the map's seed as that kind; a spilled container's items lie on the ground. A holder with a transfer script would
-        // refuse every created item here (the script is not run, NT2), and a container generated once (flag 0x200: its own seeded
-        // draws, then no source, RK4) is the first-open slice's: both keep their lists.
+        // refuse every created item here (the script is not run, NT2): both keep their lists.
         if (facts.Kind == RestockHolderKind.Other || !seed.Holders.TryGetValue(holder, out var row) || row.Kind != kind ||
-            kind == SessionHolderKind.Container && (SpillCell(map, seed, holder) is not null || (facts.ContainerFlags & RestockRules.GeneratedOnceFlag) != 0) ||
+            kind == SessionHolderKind.Container && SpillCell(map, seed, holder) is not null ||
             HolderHasScript(holder, kind, SessionScriptPoint.Transfer)) return Unsupported();
-        var read = world.RestockSet(RestockRules.InventorySource(facts));
-        if (read is null || !Enum.IsDefined(read.Status) || read.Status == SessionRestockSetStatus.Unsupported) return Unsupported();
-        if (read.Status == SessionRestockSetStatus.Read && (read.Set?.Lines is not { } lines || lines.Count > RestockRules.MaxLines)) return Unsupported();
+        // ARC-WORLD-100: a container with flag 0x200 (0x463E20, RK10) seeds its draws from the hero and the host's tile x and name bytes;
+        // without them it keeps its list.
+        var source = RestockRules.InventorySource(facts);
+        int? draws = null;
+        // A source of 0 draws nothing, so it needs no seed.
+        if (kind == SessionHolderKind.Container && (facts.ContainerFlags & RestockRules.GeneratedOnceFlag) != 0 && source != 0)
+        {
+            if (world.GeneratedOnceFacts(map, holder) is not { PlayerName: { } name } once) return Unsupported();
+            draws = RestockRules.GeneratedOnceSeed(GeneratedOncePc([.. name]), once.LocationX);
+        }
+        SessionRestockSet? read = null;
+        if (source != 0)
+        {
+            read = world.RestockSet(source);
+            if (read is null || !Enum.IsDefined(read.Status) || read.Status == SessionRestockSetStatus.Unsupported) return Unsupported();
+            if (read.Status == SessionRestockSetStatus.Read && (read.Set?.Lines is not { } lines || lines.Count > RestockRules.MaxLines)) return Unsupported();
+        }
         // The clear (0x463B30 with keep 1, RK5): every entry of the current list, worn items and gold included, but the persistent ones.
+        // A source of 0 (only a first open's container with flag 0x200 reaches here with one) ends the regeneration after it.
         var current = _inventory.Current(seed, row, item => DroppedCell(map, seed, item)).ToArray();
         var kept = current.Where(item => world.Persistent(map, item.Entity)).ToArray();
         var deleted = current.Where(item => !kept.Contains(item)).Select(item => item.Entity).ToArray();
-        return read.Status == SessionRestockSetStatus.Read
-            ? new(holder, kind, SessionRestockOutcome.Regenerated, read.Set, deleted, kept)
-            : new(holder, kind, SessionRestockOutcome.Cleared, null, deleted, kept);
+        // After the lines, and only with a source, the container's source and flag 0x200 are cleared (0x4EFDD0, RK10); an unreachable
+        // set (RK7) generates nothing but reaches that clearing too.
+        var generates = draws is not null && source != 0;
+        return read?.Status == SessionRestockSetStatus.Read
+            ? new(holder, kind, SessionRestockOutcome.Regenerated, read.Set, deleted, kept, draws, generates)
+            : new(holder, kind, SessionRestockOutcome.Cleared, null, deleted, kept, draws, generates);
     }
+
+    // Whether the session-wide budgets hold the plans; otherwise nothing is cleared yet. A deletion of an item that is not a made one keeps
+    // a deleted-item record; the item, pile and stack budgets must hold every line and a pile after the clear, or the clear would leave an
+    // empty list; and (ARC-WORLD-100) every container generated once is recorded.
+    private bool RestockFits(IReadOnlyCollection<RestockPlan> plans)
+    {
+        var records = plans.SelectMany(plan => plan.Deleted).Count(item => SessionMadeItem.Number(item) is null && !_durability.Records.ContainsKey(item));
+        if (_durability.Count + records > _limits.MaxDurabilityRecords) return false;
+        var lines = plans.Sum(plan => plan.Set?.Lines.Count + 1 ?? 0);
+        var freed = plans.SelectMany(plan => plan.Deleted).Count(item => _inventory.NpcOf(item) is not null);
+        return _inventory.NpcHeld - freed + lines <= _limits.MaxNpcItems && _inventory.Piles.Count + plans.Count <= _limits.MaxGoldRecords &&
+            _inventory.Ammo.Count + lines <= _limits.MaxAmmoRecords && _inventory.Generated.Count + plans.Count(plan => plan.Generates) <= SessionInventoryState.MaxGenerated;
+    }
+
+    // ARC-WORLD-100: the host's facts of a container the session generated once have no source and no flag 0x200 any more (RK10).
+    private RestockHolder GeneratedFacts(SessionMapId map, string holder, RestockHolder facts) =>
+        facts.Kind == RestockHolderKind.Container && _inventory.Generated.Contains(new(map, holder))
+            ? facts with { InventorySource = 0, ContainerFlags = facts.ContainerFlags & ~RestockRules.GeneratedOnceFlag }
+            : facts;
+
+    // ARC-WORLD-100: the PC of a generated-once seed (0x40DA50): the hero's race (stat 27, the source's index) and gender (stat 26: female
+    // 0, male 1), which no session effect changes, and its background (field 0x101), with the host's name bytes; none without a hero.
+    private RestockSeedPc? GeneratedOncePc(byte[] name) => _hero is not { } hero ? null
+        : new(HeroDomain.SourceRace(hero.State.Race), hero.State.Gender == Arcanum.Simulation.Character.CharacterGender.Female ? 0 : 1, hero.State.Background, name);
 
     // The regeneration (0x463E20, RK4–RK6): the clear, the coins (a new pile, or the kept pile's coins grow) and each line's item, created
     // and moved in; an item the holder's insert check refuses is destroyed. The NPC's wield of its best items is not modelled here.
+    // ARC-WORLD-100: a seeded plan draws from the original generator (RK10, RK11), not the session's, and a container generated once is
+    // recorded (its source and flag 0x200 cleared).
     private SessionRestockRegeneration Regenerate(ISessionRestockWorld world, SessionMapId map, RestockPlan plan)
     {
         if (plan.Outcome == SessionRestockOutcome.Unsupported) return new(plan.Holder, plan.Outcome, 0, 0, null, [], 0, 0);
         foreach (var item in plan.Deleted) Discard(item);
-        if (plan.Set is null) return new(plan.Holder, plan.Outcome, plan.Deleted.Count, 0, null, [], 0, 0);
-        var loot = RestockRules.Generate(plan.Set, new SessionRestockRolls(this));
+        if (plan.Set is null)
+        {
+            if (plan.Generates) _inventory.Generated.Add(new(map, plan.Holder));
+            return new(plan.Holder, plan.Outcome, plan.Deleted.Count, 0, null, [], 0, 0);
+        }
+        var loot = plan.Seed is { } draws ? RestockRules.GenerateOnce(plan.Set, draws) : RestockRules.Generate(plan.Set, new SessionRestockRolls(this));
         var insert = world.RestockInsertCheck(map, plan.Holder);
         var (refused, skipped) = (0, 0);
         var (coins, pile) = (0, (string?)null);
@@ -249,6 +299,7 @@ public sealed partial class GameSessionOwner
             else if (outcome == RestockCreation.Refused) refused++;
             else skipped++;
         }
+        if (plan.Generates) _inventory.Generated.Add(new(map, plan.Holder));
         return new(plan.Holder, plan.Outcome, plan.Deleted.Count, coins, pile, created.AsReadOnly(), refused, skipped);
     }
 

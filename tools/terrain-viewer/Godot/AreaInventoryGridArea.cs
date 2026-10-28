@@ -9,7 +9,9 @@ namespace Arcanum.TerrainViewer;
 /// (<see cref="AreaInventoryDrag"/>) scaled to fit. A left press puts the item under the pointer on the cursor (it stays in its place, not
 /// drawn there); the next left release asks the app to put it where it was released (<see cref="DropRequested"/>) and empties the cursor,
 /// unless the app puts a swapped occupant on it (<see cref="Hold"/>). A press while an item is held only waits for its release; a right
-/// press does nothing. Plain diagnostic shapes and text, no original art.
+/// press does nothing then. ARC-UI-025: a right press with nothing held asks the app to use the item under the pointer
+/// (<see cref="UseRequested"/>, IW5); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
+/// original art.
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -17,6 +19,8 @@ public partial class AreaInventoryGridArea : Control
     private float _scale = 1;
     private Vector2 _pointer;
     public event Action<AreaInventoryDrop>? DropRequested;
+    /// <summary>ARC-UI-025: a right press with nothing held on an item of the doll or the grid.</summary>
+    public event Action<AreaInventoryHeld>? UseRequested;
 
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
@@ -53,6 +57,13 @@ public partial class AreaInventoryGridArea : Control
     public override void _GuiInput(InputEvent @event)
     {
         if (@event is InputEventMouseMotion motion) { _pointer = motion.Position; if (Held is not null) QueueRedraw(); return; }
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } right)
+        {
+            _pointer = right.Position;
+            RightPressAt(right.Position / _scale);
+            AcceptEvent();
+            return;
+        }
         if (@event is not InputEventMouseButton { ButtonIndex: MouseButton.Left } button) return;
         _pointer = button.Position;
         if (button.Pressed) PressAt(button.Position / _scale);
@@ -67,6 +78,17 @@ public partial class AreaInventoryGridArea : Control
         Held = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
     }
+
+    /// <summary>ARC-UI-025: a right press at a point of the frame: with nothing held, the item under it is offered for use (IW5).</summary>
+    internal void RightPressAt(Vector2 frame)
+    {
+        if (Held is not null || _view is null || AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
+        Callable.From(() => UseRequested?.Invoke(item)).CallDeferred();
+    }
+
+    /// <summary>The frame point of an icon's centre (for the self-test).</summary>
+    internal static Vector2 IconCentre(AreaInventoryIcon icon) => new(AreaInventoryDrag.IconX + AreaInventoryDrag.IconPixels / 2,
+        (icon == AreaInventoryIcon.Drop ? AreaInventoryDrag.DropIconY : AreaInventoryDrag.UseIconY) + AreaInventoryDrag.IconPixels / 2);
 
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
@@ -106,6 +128,13 @@ public partial class AreaInventoryGridArea : Control
             DrawRect(rect, shown ? new Color(.25f, .22f, .14f) : new Color(.1f, .11f, .14f));
             DrawRect(rect, line, false);
             Label(rect, shown ? worn!.Name ?? "?" : AreaInventoryHost.SlotName(slot), shown ? text : new Color(.5f, .55f, .6f));
+        }
+        foreach (var (icon, y) in new[] { (AreaInventoryIcon.Drop, AreaInventoryDrag.DropIconY), (AreaInventoryIcon.Use, AreaInventoryDrag.UseIconY) })
+        {
+            var rect = Scaled(AreaInventoryDrag.IconX, y, AreaInventoryDrag.IconPixels, AreaInventoryDrag.IconPixels);
+            DrawRect(rect, new Color(.16f, .14f, .1f));
+            DrawRect(rect, line, false);
+            Label(rect, icon.ToString(), new Color(1f, .85f, .55f));
         }
         var grid = Scaled(AreaInventoryDrag.GridX, AreaInventoryDrag.GridY, AreaInventoryDrag.GridRight - AreaInventoryDrag.GridX,
             AreaInventoryDrag.GridBottom - AreaInventoryDrag.GridY);
