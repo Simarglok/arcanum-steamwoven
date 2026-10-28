@@ -226,6 +226,32 @@ public static class LineOfFireRules
     }
 
     /// <summary>
+    /// The hero's attack line (ARC-COMBAT-015; owner decision 2026-10-28): <see cref="Trace{TObject}"/>, except that a target next to the
+    /// attacker is read as the Original setting reads it (<see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/>: the side tiles'
+    /// objects of a corner step into the target are skipped, AW14), so the Steamwoven fix of AW13/AW14 keeps every longer line and does
+    /// not refuse or redirect an attack on an adjacent target past a companion, NPC or scenery on a side tile. Three of the four
+    /// adjacent diagonals are walked as one corner step; the screen-left one (x + 1, y − 1) is walked over the side tile (x + 1, y) as two
+    /// edge steps in both settings, so an object there still stops it, as in the original.
+    /// </summary>
+    public static LineOfFireTrace<TObject> ReachTrace<TObject>(CellCoord from, int offsetX, int offsetY, CellCoord to, ILineOfFireMap<TObject> map,
+        CombatAnomalyProfile profile) where TObject : class
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var adjacent = Math.Max(Math.Abs((long)to.X - from.X), Math.Abs((long)to.Y - from.Y)) == 1;
+        return Trace(from, offsetX, offsetY, to, map, adjacent && !profile.CornerStepCountsBothRoutes ? profile with { CornerStepCountsBothRoutes = true } : profile);
+    }
+
+    /// <summary>
+    /// The attack goal's reach test (0x429960, ledger EX8, RH1; ARC-COMBAT-015): the tile distance (0x4B96F0) at most the larger of the
+    /// wielded weapon's range and 1, and a clear shot (<see cref="ClearShot{TObject}"/>) on the line traced from the attacker to the
+    /// target, for every weapon (melee next to its target too). When it fails the goal approaches the target (ledger AP1–AP7). The
+    /// target's destroyed and off flags and the wielded item are the caller's.
+    /// </summary>
+    [OriginalFunction(0x429960, OriginalFunctionScope.Partial)]
+    public static bool InReach<TObject>(int distance, int range, LineOfFireTrace<TObject> trace, TObject target) where TObject : class =>
+        distance >= 0 && distance <= Math.Max(range, 1) && ClearShot(trace, target);
+
+    /// <summary>
     /// The step cost of one tile step with the projectile flags (0x43FDC0 → 0x43FE00, flags 0x0C, no mover): an edge step (odd
     /// rotation) prices the source tile's walls and portals on the crossed edge, then the neighbour (none: cost 1, the sum so far
     /// dropped), then the neighbour's walls and portals on the opposite edge and, unless <paramref name="intoTarget"/>, its other

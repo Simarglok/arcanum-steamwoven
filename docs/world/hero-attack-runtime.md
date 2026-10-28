@@ -45,7 +45,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
 | Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (the resistance getter 0x43D6D0, ledger EQ8); resistance effects are not applied. |
-| Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
+| Reach | The weapon's range, 1 bare-handed, and since ARC-COMBAT-015 a clear line of fire to the target for every weapon (the goal's reach test, ledger RH1, [below](#ranged-hero-attack-arc-combat-015): a target farther away without a clear shot is approached; a target next to the hero across a wall edge or cover worth 26 or more has no approach, so the goal ends at once, as the original's empty plan does, AP4); farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
 | Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
@@ -56,8 +56,8 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | Entry | Contract |
 | --- | --- |
 | `SessionCritterCombat.From(entity, fields, carried)` | One NPC's combat values from its ARC-DATA-021 fields and the fields of the items it carries (those in a wear slot count): life facts (pools, level, effective ST under each poison penalty, CN, WP, HealRate, PoisonRecovery, normal resistance, traits from the critter, object and spell flags), the loaded life state (hit-point and fatigue damage, poison, stun and injury flags), the experience worth and pool, and `Combatant(status, state, profile)` with its effective stats under its poison and crippled legs, armour class, resistances, dodge and backstab, light and conditions. Effective stats are the character owner's for the NPC's race and gender over its stored base stats, each clamped to the race's range first (monsters store values beyond it); its stored effects are not applied. Typed `SessionCritterCombatFailure`, never an exception for data. |
-| `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee only). Null without a hero. |
-| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..1 (`InvalidAttack`), a weapon that is not melee (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
+| `QueryHeroAttack()` | The hero's `Combatant`, its weapon (bare hands without one), the weapon's skill with its level and training (`QueryHeroSkills`, ARC-SKILLS-002; dodge and backstab too), weapon speed with that training, Speed, range and whether the attack is supported (melee; since ARC-COMBAT-015 bow and firearms too, [below](#ranged-hero-attack-arc-combat-015)). Null without a hero. |
+| `AttackCritter(expected, attack)` | Refused before any roll: no hero (`AttackUnavailable`), an invalid target, an aim at the torso or an undefined location, a distance outside 0..reach, for a bow or firearm 0..100,000, or a line-of-fire cost outside 0..100,000 (`InvalidAttack`), a throwing weapon (`AttackUnsupported`), the version, an exhausted revision (`RevisionExhausted`). Then the resolver on a trial copy of the session generator (`RandomExhausted` when it runs out), adopted once it ran; a resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. A fate the resolver used (the hero's armed critical hit, ARC-WORLD-054, [fate points](fate-points-runtime.md)) is cleared in a revision of its own, so such an attack is Changed even without damage. Then `ApplyDamage` on the target or, on a critical self-hit, the hero; then, with experience data, `RecordNpcDamage` for an NPC that is not stoned and `RecordNpcKill` on a death; last the attack's wear (`ApplyAttackWear` with the hero as attacker and the NPC as target, `SessionAttackResult.Wear`). Each step commits its own revision; a later refusal is `StepFailure` and leaves the earlier steps. `SessionAttack.HeroWorn` and `TargetWorn` carry the items in the two sides' wear slots with their durability baselines (the hero's exactly its worn items, else `InvalidWear` before any roll); null skips that side's items (the bare-handed hero's own wear still applies). |
 | Critical effects | ARC-COMBAT-009, [below](#critical-effects-arc-combat-009): the resolver runs with `OriginalCriticalEffects`; `SessionAttack.TargetCell` is where the NPC's dropped items go; `SessionAttackResult.Criticals` reports the item steps. |
 | `ApplyAttackWear(expected, wear)` | ARC-COMBAT-007, for any attacker and recipient (the NPC AI will call it for NPC attacks): in the original's order, the armour at the hit location of whoever took the damage (`DamageItem` + 10), that critter's wielded weapon on the critical "damage weapon" (+ 10) and "destroy/explode weapon" (`DestroyItem`) unless invulnerable, and the attacker's weapon (`DamageItem`) or, bare-handed, its own hit points (never the last one). Each step is reported (`SessionWearStep`: kind, slot, item, amount, skip reason, durability result or life outcome); a first break of the hero's item takes it off its slot (item durability), of an NPC's item is reported for the host. `SessionWearItem` carries an item's entity, durability baseline, invulnerable flag and weapon art subtype, all host data passed at each attack (`SessionWearItem.FromCombatFields`); the hero's attack takes its weapon's subtype from it. Refused before any change (`InvalidWear`): no attacker critter, the same critter on both sides, a hero side that is not exactly the hero's worn items, an NPC side naming one of the hero's items, items on an object side, an invalid entity, baseline or subtype, an NPC item a critical dropped (ARC-COMBAT-009), an item the session does not track or deleted (a host leaves out items an earlier attack deleted, `IsItemDestroyed`; the `ItemDeleted` skip is only for an item a step of the same wear deleted), armour or weapon steps on an object; then the version. A refused step ends the wear: `StepFailure` after changes, Rejected when nothing changed. |
 | `AttackObject(expected, attack)` | ARC-COMBAT-008: the hero's attack on a portal, container, scenery, trap or an item on the ground ([object damage](object-damage-runtime.md)). |
@@ -130,11 +130,12 @@ original's "an NPC without a PC leader spends nothing" has no caller yet (no NPC
 Viewer: `AreaLineOfFire` is the shown map as the line of fire reads it (built like `AreaDropMap`: the step evidence's tiles, the
 walls' pieces through `AreaWallPieces`, the session's doors and windows, the map's rows of the original's projectile mask less
 what is destroyed or switched off, the companions on their live cells). When the hero's reach is above 1, the hit traces the line
-from the hero's tile to the target's; a blocker is struck instead (`ARC-COMBAT-012 line-of-fire strikes …`), and a wall, a
-companion or an NPC without combat values as blocker ends the goal without a hit (not ready). Native smoke
-`ARC-COMBAT-012 native-smoke line-of-fire PASS` (map mode, last stage): the hero stands next to an NPC or attackable object that
+from the hero's tile to the target's; a blocker is struck instead (`ARC-COMBAT-012 line-of-fire strikes …`); since ARC-COMBAT-015
+a wall takes the shot ([below](#ranged-hero-attack-arc-combat-015)), and a companion or an NPC without combat values as blocker
+ends the goal without a hit (not ready). Native smoke
+`ARC-COMBAT-012 native-smoke line-of-fire PASS` (map mode): the hero stands next to an NPC or attackable object that
 stops the line to another NPC, attacks the farther NPC with a lent reach (no kit holds a reach weapon) and the hit goes to the
-nearer one; on `arcanum1-024-fixed` a scenery five cells short of the target took it.
+nearer one (since ARC-COMBAT-015 the stage starts the animation itself: the goal's reach test admits only a clear line); on `arcanum1-024-fixed` a scenery five cells short of the target took it.
 
 Limits:
 
@@ -151,15 +152,52 @@ Limits:
 ### Proposed split of true ranged combat (Not ready)
 
 Not part of ARC-COMBAT-012 (agreed scope); proposed tasks (the codes were free on 2026-10-21 and are confirmed when a task is
-taken), each to be checked against the requirements and read in the executable when taken:
+taken), each to be checked against the requirements and read in the executable when taken. ARC-COMBAT-015 is done
+([below](#ranged-hero-attack-arc-combat-015)); ledger RH1–RH7 already read parts of the later ones:
 
 | Task | Scope |
 | --- | --- |
-| ARC-COMBAT-015 Ranged hero attack | Bow, throwing and firearms skills in `QueryHeroAttack` and `AttackCritter`/`AttackObject`: the range limit and penalty and the line-of-fire difficulty (RA2) in the attack check, the ammunition spend of RA3 in play, the attack goal's clear-shot test (0x425590, 0x429960: cost below 26 and no other blocker, AW8) before shooting. |
-| ARC-COMBAT-016 Projectiles in flight | The projectile object of 0x4B39B0 (field 127): its flight, its timing of the hit on arrival, its drawing in the viewer, and what a miss does with it. |
-| ARC-COMBAT-017 Thrown weapons | The thrown item leaving the hand (the throwable and default-throws flags), its landing cell through the drop placement, picking it up again, and the auto-switch re-wield. |
-| ARC-COMBAT-018 Second projectile and scatter | A second projectile and the scatter of a missed shot, as the original's ranged path has them (not read yet), and their ammunition. |
-| ARC-COMBAT-019 Returning weapons | Weapons that come back to the thrower (boomerangs, the throwing skill's 0x40 flag) and their catch. |
+| ARC-COMBAT-016 Projectiles in flight | The projectile object of 0x4B39B0 (field 127, −1 none): its flight, its timing of the hit on arrival (0x4B2870), its drawing in the viewer, and what a miss does with it (the 1-in-3 stray hit on a critter it passes, RH3). |
+| ARC-COMBAT-017 Thrown weapons | The thrown item leaving the hand (weapon flag 0x200 "default throws" at the attack start 0x434B00, RH2; the session keeps no such flag yet), the throw goal 37 and script point 6, its landing cell, picking it up again, and the auto-switch re-wield. The throwing dagger (6072, melee skill, default throws) is today attacked with as a reach weapon that stays in the hand. |
+| ARC-COMBAT-018 Second projectile and scatter | The second projectile of a bow from expert and the scatter of a missed throw (RH2, RH3), and their ammunition. |
+| ARC-COMBAT-019 Returning weapons | Boomerangs (weapon flag 0x40, the throwing skill): the shot's thrown range (0x4622A0, RH4: strength and the item's weight, which the hero's equipment facts do not hold yet), the projectile's return and the "weapon away" bit (RH3), and their catch. |
+
+## Ranged hero attack (ARC-COMBAT-015)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (the ranged action's range, blocker and ammunition,
+partly), [FR-COMBAT-004](../requirements/combat-magic-tech.md#fr-combat-004) (the attack goal's reach) and
+[FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-combat-005) (the distance terms of the attack check). Read in the retail
+1.0.7.4 executable by two readers ([ledger RH1–RH7](../research/ledger/combat.md#ranged-hero-attack-arc-combat-015)); the check's
+distance terms are SC8 and RA2, the shot's ammunition RA3.
+
+| Rule | Value |
+| --- | --- |
+| Supported weapons | Melee, bow and firearms (`SessionHeroAttack.Supported`); a throwing-skill weapon (a boomerang) is `AttackUnsupported` until ARC-COMBAT-019 (its thrown range needs the item's weight, RH4). `RangedSkill` (bow, throwing, firearms: the check's distance terms) and `RangedPath` (the throwing skill or a range above 1: the line of fire may strike another object, RA1) tell the host which applies. |
+| Distance terms (SC8, RA2) | A bow or firearm: impossible (+1,000,000) beyond the weapon's range; 5 per tile beyond half the Perception below master; impossible when `SessionAttack.LineOfFire` is blocked, else its cost as cover. `SessionAttack.Distance` is the tile distance (0x4B96F0) and may lie beyond the range (refused only above 100,000): the original's goal shoots within range, but the check, not the session, refuses a target that moved since; such a shot misses and its ammunition is spent. A melee weapon must be within its reach (`InvalidAttack`) and ignores the line. |
+| Line of fire input | `SessionLineOfFire(Cost, Blocked)`: the host traces the line from the hero's tile to the struck object's (`LineOfFireRules.Trace`, 0x4ADE00) and passes its cost (0..100,000, else `InvalidAttack`) and whether any object stops it; null is an open line without cover. After a redirect the check measures the distance and traces the line to the struck object (RH7, SC5), so the host traces again and passes the distance to it. |
+| Ammunition (RA3) | A bow's or firearm's shot spends its per-shot count from the hero's stack of the weapon's type (`SessionAttackResult.Ammunition`), a hit or a miss; too few units refuse the shot after the hit location's roll. |
+| Reach test (RH1, `LineOfFireRules.InReach`, 0x429960) | The attack goal starts the attack when the tile distance is at most the wielded weapon's range (at least 1) and the line from the attacker to the target costs below 26 with no blocker but the target, for **every** weapon (a melee one next to its target too); otherwise it approaches. The line (in the viewer also the redirect's and the check's) is `LineOfFireRules.ReachTrace`: for a target next to the attacker it is read as the Original setting reads it in both rule modes (owner decision 2026-10-28), so the Steamwoven fix of AW13/AW14 does not let an object on a side tile of a corner step into the target (a companion, an NPC, scenery) refuse or redirect an attack the original allows; longer lines keep the fix. The screen-left diagonal (x + 1, y − 1) is walked over the side tile (x + 1, y) as two edge steps in both settings, so an object there still stops it, as in the original. |
+| Approach (EX9) | `CombatAnomalyProfile.RangedApproachSkipsClearShot` (Original): the walk goes on to the approach's tile next to the target, as the original's callback (0x425590) does while the attack is possible, and the reach is tested there. Steamwoven stops the walk at the first cell the hero commits to from which the reach test passes (the started step ends at its cell centre). Melee walks to the approach's tile in both settings. |
+| Wall (RH5) | A wall the line of fire struck takes the shot: `SessionObjectAttack.Wall` resolves it without a skill roll (the damage is rolled and prevented, `DamagePrevention.Wall`), spends the shot's ammunition and changes nothing else; no wear. The wall's and the weapon's scripts and the hit sound are not run. |
+| Follower (RH6) | The original attacks a follower on the line like any critter; the viewer's companions are not attack targets, so such a shot still ends the goal without a hit (not ready). |
+
+Viewer (AREA): the goal tests its reach with `InAttackReach` (the line from the hero's committed cell, the shown map's line-of-fire
+view), walks when it fails (`walking to attack: no clear shot` when within range), and under Steamwoven stops the walk at a clear
+shot (`ARC-COMBAT-015 clear-shot stop`). The hit passes the line to the struck NPC as `LineOfFire`; a wall blocker is struck
+(`ARC-COMBAT-015 line-of-fire strikes wall=…`, `wall-hit`). The hero is drawn with the bare-handed attack ART at the bare-handed rate
+whatever it wields (weapon attack ART not ready). Native smoke `ARC-COMBAT-015 native-smoke ranged PASS` (map mode after the
+line-of-fire stage, or alone with `ARC_AREA_MAP_SMOKE_ONLY=ranged`): no kit holds a bow, so the stage lends the wielded kit weapon a
+bow's values (range 10, no ammunition) and restores it; from a cell 3..6 tiles from an NPC with a clear shot the attack starts
+without a walk and the check carries the range penalty and the line's cost as cover; from a cell 12..16 tiles away under
+Steamwoven the walk stops at a clear shot (`clear-shot stop`) and the hit runs from 2..10 tiles. The stage `ranged` also runs the
+object-attack, critical and line-of-fire stages that follow the cast stage in the map battery. A wall struck on the line has no
+native observation: the goal's reach test admits only a clear line, so the viewer meets a wall blocker only when the line changed
+after it; the session tests cover the wall's shot.
+
+Not ready: thrown weapons (RH2, ARC-COMBAT-017; the throwing dagger keeps its ARC-COMBAT-012 reach behaviour), boomerangs (RH3, RH4,
+ARC-COMBAT-019), the projectile's flight and the hit on its arrival (RH3, ARC-COMBAT-016: the hit resolves on the action frame), a
+bow's second projectile (ARC-COMBAT-018), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
+bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
 
 ## Viewer (AREA)
 
@@ -185,7 +223,7 @@ taken), each to be checked against the requirements and read in the executable w
   `ARC-COMBAT-010 native-smoke drop-paths PASS`: the drop's path from the NPC's tile to the tile two steps away for each direction
   draw 0..8 (result/partial steps), and it checks that each item the NPC dropped lies on the ground at the reported cell. A dropped item is hidden from the NPC but not drawn on the ground (as a
   spilled container's items).
-- Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, last stage): a granted fate point arms the hero's critical
+- Native smoke `ARC-COMBAT-009 native-smoke critical PASS` (map mode, after the far-click stage): a granted fate point arms the hero's critical
   hit, the hero attacks the living NPC with the most hit points through the session as the viewer does (worn items, cell), and
   the stage checks the critical hit and that the tables drew; in the Crash Site cave a rat (body type 1) took a doubled torso hit.
 - Native smoke: `ARC-COMBAT-005 native-smoke attack PASS` (with `--hero`, after the combat-mode stage, on the exterior and in map
@@ -197,8 +235,9 @@ taken), each to be checked against the requirements and read in the executable w
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Ranged and thrown attacks (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a melee-skill weapon with reach,
-  the ammunition per shot and the line of fire are in since ARC-COMBAT-012), the "default throws" weapon, backstab (needs facing and
+- Thrown and returning weapons and projectile flight (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a melee-skill
+  weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots since
+  ARC-COMBAT-015), the "default throws" weapon, backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.

@@ -290,14 +290,32 @@ public sealed class SessionCritterCombat
 /// What the hero attacks with (<see cref="GameSessionOwner.QueryHeroAttack"/>): its <see cref="Combatant"/> under its life state,
 /// the weapon it strikes with (bare hands without one), the weapon's skill with its level and training, the weapon speed, the
 /// effective Speed stat (the attack animation's rate), the weapon's range (1 for bare hands) and whether the attack is one this
-/// session can run (melee only: no ammunition, projectile or throwing is modelled).
+/// session can run: melee, bow and firearms (ARC-COMBAT-015); a throwing weapon is not, as its throw leaving the hand is not modelled
+/// (ARC-COMBAT-017).
 /// </summary>
 public sealed record SessionHeroAttack(Combatant Combatant, CombatWeapon Weapon, CombatSkill Skill, int SkillLevel, SkillTraining Training,
-    int WeaponSpeed, int Speed, int Range, bool Supported);
+    int WeaponSpeed, int Speed, int Range, bool Supported)
+{
+    /// <summary>ARC-COMBAT-015: the skill takes the shared check's distance terms (RA2: bow, throwing, firearms): the range limit, the
+    /// range penalty and the line of fire's difficulty.</summary>
+    public bool RangedSkill => Skill is CombatSkill.Bow or CombatSkill.Throwing or CombatSkill.Firearms;
+
+    /// <summary>ARC-COMBAT-012/015: the attack takes the original's ranged path (RA1: the throwing skill or a range above 1), whose line
+    /// of fire may strike another object first (RA4).</summary>
+    public bool RangedPath => Skill == CombatSkill.Throwing || Range > 1;
+}
+
+/// <summary>
+/// ARC-COMBAT-015: the line of fire from the hero's tile to the struck object's as the host traced it (0x4ADE00,
+/// <see cref="LineOfFireRules.Trace{TObject}"/>): its summed <see cref="Cost"/> (the shared check's cover, SC8) and whether an object
+/// other than the struck one stops it (<see cref="Blocked"/>: the check's impossible +1,000,000).
+/// </summary>
+public readonly record struct SessionLineOfFire(int Cost, bool Blocked);
 
 /// <summary>
 /// One attack of the hero on an NPC (<see cref="GameSessionOwner.AttackCritter"/>). <see cref="Aim"/> is the aimed location (null:
-/// not aimed, rolled); <see cref="Distance"/> the Chebyshev distance to the target (a melee attack needs 1 or less).
+/// not aimed, rolled); <see cref="Distance"/> the tile distance to the target (the larger coordinate difference, 0x4B96F0): a melee
+/// weapon's must be within its reach, a bow's or firearm's may lie beyond its range, which the check makes impossible (SC8).
 /// <see cref="HeroWorn"/> and <see cref="TargetWorn"/> are the items in the hero's and the target's wear slots with their durability
 /// baselines, for the attack's wear (ARC-COMBAT-007, <see cref="GameSessionOwner.ApplyAttackWear"/>); the hero's must be exactly the
 /// items it wears. Null: the host passes no item data and that side's items take no wear (the bare-handed hero's own wear still
@@ -307,6 +325,9 @@ public sealed record SessionAttack(SessionCritterCombat Target)
 {
     public HitLocation? Aim { get; init; }
     public int Distance { get; init; } = 1;
+    /// <summary>ARC-COMBAT-015: the line of fire to the target, read by the bow and firearms skills only (RA2); null: an open line
+    /// without cover.</summary>
+    public SessionLineOfFire? LineOfFire { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
     /// <summary>The target's cell now, where a critical drops its items (ARC-COMBAT-009); null: its drops are not applied.</summary>
@@ -387,7 +408,7 @@ public sealed partial class GameSessionOwner
         var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);
         return new(combatant, equipment.Weapon, equipment.Skill, weaponSkill.Level, weaponSkill.Training, equipment.WeaponSpeed,
-            snapshot.GetEffective(CharacterStat.Speed), range, equipment.Skill == CombatSkill.Melee);
+            snapshot.GetEffective(CharacterStat.Speed), range, equipment.Skill is CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms);
     }
 
     /// <summary>
@@ -405,10 +426,12 @@ public sealed partial class GameSessionOwner
     /// the hero's weapon (with the art subtype its <see cref="SessionWearItem"/> carries) or bare hands by the NPC's material. Refused before any roll, in order: no hero
     /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a target whose values do not hold
     /// (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), wear items that do not hold (<see cref="GameSessionFailure.InvalidWear"/>), an
-    /// aim at the torso, a distance below 0 or beyond the weapon's reach, a target cell outside 0 .. 2^24 − 1
-    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded
-    /// weapon that is not melee (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision
-    /// (<see cref="GameSessionFailure.RevisionExhausted"/>).
+    /// aim at the torso, a distance below 0 or beyond the weapon's reach (a bow's or firearm's beyond 100,000), a line-of-fire cost
+    /// outside 0..100,000, a target cell outside 0 .. 2^24 − 1 (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing
+    /// weapon (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision
+    /// (<see cref="GameSessionFailure.RevisionExhausted"/>). A bow or firearm (ARC-COMBAT-015) is checked with the distance terms of
+    /// the shared check (SC8: impossible beyond its range, 5 per tile beyond half the Perception below master, impossible when
+    /// <see cref="SessionAttack.LineOfFire"/> is blocked, else its cost as cover) and spends its shot's ammunition (RA3).
     /// A resolver refusal (the hero cannot act, the target is dead) is NoChange with the resolution. The resolution's draws are spent
     /// once it ran; a fate the resolver used (ARC-WORLD-054) is cleared in a revision of its own, so such an attack is Changed even
     /// without damage; each later step commits on its own revision.
@@ -431,8 +454,8 @@ public sealed partial class GameSessionOwner
             hero = hero with { Weapon = hero.Weapon with { ArtSubtype = wielded.ArtSubtype } };
         var targetSide = new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn };
         if (!ValidWear(heroSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
-        if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || attack.Distance < 0 || attack.Distance > hero.Range ||
-            attack.TargetCell is { } cell && !DropCellFits(cell))
+        if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || !AttackDistanceFits(hero, attack.Distance) ||
+            attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell))
             return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
@@ -457,6 +480,8 @@ public sealed partial class GameSessionOwner
             Training = hero.Training,
             AimedLocation = attack.Aim,
             Distance = attack.Distance,
+            CoverRating = attack.LineOfFire?.Cost ?? 0,
+            LineOfFireBlocked = attack.LineOfFire?.Blocked ?? false,
             Difficulty = _difficulty,
             AmmunitionShort = ShotAmmunition() is { Short: true },
         };
@@ -521,6 +546,11 @@ public sealed partial class GameSessionOwner
             Ammunition = ammunition,
         };
     }
+
+    /// <summary>ARC-COMBAT-015: a melee weapon strikes within its reach; a bow or firearm also beyond its range, where the shared check's
+    /// range limit makes the shot impossible (SC8: the original's attack goal shoots within range, the target may have moved since).</summary>
+    private static bool AttackDistanceFits(SessionHeroAttack hero, int distance) =>
+        distance >= 0 && distance <= (hero.RangedSkill ? AttackResolver.MaxMagnitude : hero.Range);
 
     /// <summary>ARC-COMBAT-012 (A): the shot's ammunition of the hero's wielded weapon (the dispatcher's 0x4B65D0, ledger RA1–RA3): its
     /// ammunition type and per-shot consumption (fields 125 and 126), and whether the hero carries fewer units of that type; null for
