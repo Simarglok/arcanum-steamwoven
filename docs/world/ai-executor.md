@@ -92,7 +92,8 @@ follow the original in both settings.
 - **Run details.** The end nodes' animation clean-up, the priority interrupt test after a run and the subturn hook that follows a
   run's end in a round are the host's. The NO_FLEE in the critter's data is still the caller's fact for the hostility and morale
   rules; the host ORs the session bit into it.
-- **Orders.** The spread-out order (0x45F600), the attack and stop orders and the follower rules are slice I9's.
+- **Orders.** The attack, stop and curse orders and the follower rule are slice I9's ([AI followers](ai-followers.md)); the spread-out
+  order (0x45F600) that calls `StartSpreadOut` is the companions thread's.
 
 ## Tests
 

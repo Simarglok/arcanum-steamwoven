@@ -22,12 +22,17 @@ public sealed class DiagnosticGridActor
     /// attack frame); null otherwise. A moving actor is drawn by its movement whatever the pose says.</summary>
     public (int Octant, int Frame)? AttackPose { get; set; }
     private (int Octant, int Frame)? Pose => AttackPose is { } pose && Session?.State.Phase == MovementPhase.Settled ? pose : null;
+    /// <summary>ARC-MAGIC-018: the octant a settled actor was turned to in place (the casting goal's facing turn, 0x42C850) and the
+    /// movement facing it was turned from; drawn while the actor stays settled with that facing, dropped when it moves. Null otherwise.</summary>
+    public (int Octant, NeighborDirection From)? TurnedFacing { get; set; }
     private DiagnosticActorState Render(MovementState state) => Pose is { } pose && state.Phase == MovementPhase.Settled
-        ? RenderState(state) with { Facing = pose.Octant, Action = ActorDiagnosticAction.Attack } : RenderState(state);
+        ? RenderState(state) with { Facing = pose.Octant, Action = ActorDiagnosticAction.Attack }
+        : TurnedFacing is { } turned && state.Phase == MovementPhase.Settled && state.Facing == turned.From
+            ? RenderState(state) with { Facing = turned.Octant } : RenderState(state);
     public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
-        Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
     public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
@@ -43,9 +48,9 @@ public sealed class DiagnosticGridActor
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
         var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, CrittersPass = AreaCrittersPass, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait, StepCharge = AreaStepCharge };
-        Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
-    public void DisposeSession() { Session = null; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
+    public void DisposeSession() { Session = null; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
 
     public GridAdvance Advance(SimulationTime time, ReadOnlySpan<InputBatch> batches,
         Action<ActorDiagnosticPlacementInput>? validateSelection = null)
@@ -76,6 +81,8 @@ public sealed class DiagnosticGridActor
             validateSelection?.Invoke(Placement(session, state, trial.CurrentFrame));
         });
         if (result.Movement.Status == MovementStatus.Completed) _timeline = trial;
+        // ARC-MAGIC-018: a turn in place lasts until the actor moves.
+        if (session.State.Phase != MovementPhase.Settled || session.State.CommittedCell != previous.CommittedCell) TurnedFacing = null;
         return result;
     }
     public ActorDiagnosticPlacementInput Placement() => Session is AreaGridSession area
