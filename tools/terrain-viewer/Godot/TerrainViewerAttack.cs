@@ -229,6 +229,8 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, target.Row, null, target);
+            // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
+            if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
         FinishObjectHit(goal, target, result);
@@ -595,6 +597,8 @@ public partial class TerrainViewerApp
             if (result.Shot is { } shot)
             {
                 LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, blocker, null, null);
+                // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
+                if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
                 if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
             }
             _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
@@ -630,6 +634,8 @@ public partial class TerrainViewerApp
         if (result.Shot is { } shot)
         {
             LaunchProjectile(goal, shot, flight!.Value, result.Resolution!, struck.Row, struck, null);
+            // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
+            if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             // A critical miss turned on the hero at the shot; anything else waits for the strike.
             if (result.Life is null) { _lastCritterAttackForSelfTest = result; SyncAreaInventory(); RefreshAreaStatus(); return; }
         }

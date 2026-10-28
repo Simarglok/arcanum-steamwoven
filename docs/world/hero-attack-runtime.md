@@ -243,14 +243,15 @@ are boomerangs (ARC-COMBAT-019).
 
 | Rule | Value |
 | --- | --- |
-| Throw request (TW1) | `SessionAttack.Throw` / `SessionObjectAttack.Throw` = `SessionThrow(Weight)`: the host says the wielded weapon carries weapon flag 0x200 and passes its effective weight (0x461370; the session keeps no item weights, ARC-WORLD-085 owns the inventory weight, and the viewer passes the stored weight without its magic adjustment). A throw must fly (`Flight`), its weight lie in 0..1,000,000 and a weapon be wielded, else `InvalidAttack`. A weapon the remove check refuses (no drop) would stay in the hand and attack as without the flag; the session never wields one. |
+| Throw request (TW1) | `SessionAttack.Throw` / `SessionObjectAttack.Throw` = `SessionThrow(Weight)`: the host says the wielded weapon carries weapon flag 0x200 and passes its effective weight (0x461370; the session keeps no item weights, ARC-WORLD-085 owns the inventory weight, and the viewer passes the stored weight without its magic adjustment). A throw must fly (`Flight`), its weight lie in 0..1,000,000, a melee-skill weapon be wielded (the only installed one, the dagger; a bow's ammunition or a boomerang's return would follow other rules) and the target lie within the weapon's reach, else `InvalidAttack`. A weapon the remove check refuses (no drop) would stay in the hand and attack as without the flag; the session never wields one. |
 | Check (TW4, TW5) | The throwing skill's level and training replace the weapon's skill (a melee-skill dagger too); the weapon's range becomes the thrown range `ThrowRules.Range` (0x4622A0: `max(1, (50 × ST [+ half from expert throwing]) / max(1, W / 10) / 5)`), so the check is impossible beyond it and the range penalty applies as for any ranged skill. The reach test before the attack stays the weapon's range (RH1). The technology-failure and magick-cancel rolls are drawn and cannot succeed; the line of fire and its redirect are those of any ranged shot. No weapon wear (CW5: the throwing skill). |
 | Leaving the hand (TW1, TW3) | Unless the attack is refused, the weapon leaves its slot and the hero's list in a revision of its own and lies hidden on the hero's cell (`QueryItemInFlight`: not drawn, `PickUpItem` refuses it as `ItemNotAvailable`) without a decay event (0x4415C0); the attack's later steps find the hand empty (a critical miss's weapon effects act on no weapon). `QueryThrownShot(shot)` names the item and its thrown range. Nothing wields another weapon (TW3). |
 | Landing (TW6, PF9) | A thrown shot that struck (`LandShot`, `LandShotOnObject`) is not gone: it waits for `LandThrownItem(expected, shot, cell)`, which moves the item to the projectile's tile (the struck object's, or the last one beyond the thrown range or off the map), shows it again and ends the shot, one revision, with no decay event (0x4EDF20, ID9). The original lands it just before the hit (PF8); nothing of the hit reads it. `EndShot` gives the flight up (a map change, a reload): the item stays on the hero's cell. A snapshot taken during the flight keeps the item there, shown (shots are not saved). |
 | Throw script (TW3) | The item's throw script (point 6) may hand the item back in the original; no installed weapon carries one, and the session does not run it. |
 
 Viewer (AREA): a wielded kit weapon with the flag (`AreaStartingHero.KitThrowWeight`, its stored weight) is thrown by the action
-frame's hit, the line of fire's blocker and the wall shot (`ARC-COMBAT-016 projectile-launch … thrown=kit:N range=R`); the projectile
+frame's hit, the line of fire's blocker and the wall shot (`ARC-COMBAT-016 projectile-launch … thrown=kit:N range=R`), and the attack goal ends there (the throw is the
+original's throw goal, which nothing repeats, TW1); the projectile
 flies to the thrown range, the ground does not draw the item while it flies, and at the strike or the flight's end the item lands
 on the projectile's tile (`ARC-COMBAT-017 thrown-landing`) and is drawn there; a flight given up leaves it on the hero's cell. It is
 picked up as any placed kit item and wielded again by hand. Native smoke `ARC-COMBAT-017 native-smoke throw PASS` (in the ranged
@@ -259,7 +260,8 @@ each throw leaves the hand, lies hidden on the hero's cell while it flies, lands
 without decay, and is picked up and wielded again; at most 12 throws until one hits (a hit is reported, not required: the pre-made
 heroes barely train throwing, and the session's tests strike with one).
 
-Not ready: a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
+Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
+the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
 throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
 and the item event 0x800000 at the landing (PF10), boomerangs (ARC-COMBAT-019) and a missed throw's scatter (ARC-COMBAT-018).
 

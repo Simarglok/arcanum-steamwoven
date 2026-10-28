@@ -323,7 +323,8 @@ The rows refine EX8, SC8 and RA1–RA4.
 
 Anomalies: none new. Not implemented here: RH2 (the throw leaving the hand, ARC-COMBAT-017; the session does not keep weapon flag
 0x200), RH3's flight and return (ARC-COMBAT-016, ARC-COMBAT-019), RH4 (no item weight in the hero's equipment facts) and RH6 for a
-companion (the viewer's companions are not attack targets).
+companion (the viewer's companions are not attack targets). Since ARC-COMBAT-017 RH2 and RH4 are in for the throwing dagger
+([TW1–TW7](#thrown-weapons-arc-combat-017)); the scatter stays ARC-COMBAT-018's.
 
 ## Projectiles in flight (ARC-COMBAT-016)
 
@@ -356,7 +357,8 @@ projectile, no boomerang, no thrown item): PF1, PF2 (one projectile), PF3–PF6,
 the line of fire's step with flags 0x0C, so a closed door or window past the destination takes its cover test instead of stopping
 the shot), PF8's strike through the session (the alert, taunt, scripts, item event and attack end are not modelled), PF9's end, PF13
 and PF14. Not ready: the eye-candy speed column (always 4 steps), PF10 and the miss scripts, PF11, PF12, a companion struck (RH6), and
-the projectile across a save (the session keeps no projectile).
+the projectile across a save (the session keeps no projectile). PF12's thrown item is in since ARC-COMBAT-017
+([TW6](#thrown-weapons-arc-combat-017)).
 
 ## Thrown weapons (ARC-COMBAT-017)
 
@@ -382,4 +384,5 @@ range, the line of fire and the redirect as for any ranged shot), TW5 (the weigh
 item lands after its strike in the session (the original lands it just before the hit, PF8; nothing of the hit reads it), and a
 snapshot taken while it flies keeps it on the thrower's cell, shown (the session keeps no projectile). Not ready: a throw at a tile
 without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (PF11's scale arc), NPC throws (no
-AI), the struck object's alert and the item event 0x800000 at the landing (PF10).
+AI), the struck object's alert and the item event 0x800000 at the landing (PF10), a missed throw's scatter (RH2, ARC-COMBAT-018), and a
+"default throws" weapon of another skill than melee (none installed: the session refuses its throw).

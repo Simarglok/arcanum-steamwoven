@@ -176,6 +176,45 @@ public sealed class ThrowStateTests
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Throw = Dagger }).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = new(-1) }).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2, Throw = Dagger }).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(rat) { Distance = 16, Flight = true, Throw = Dagger }).Failure,
+            "the reach before a throw is the weapon's (RH1)");
         Assert.IsTrue(Wields(owner), "a refused throw keeps the dagger");
+    }
+
+    [TestMethod]
+    public void OnlyAMeleeWeaponIsThrownAndARefusedAttackKeepsIt()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        // The resolver refuses an attack on a dead target before any throw.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var corpse = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead, (SessionShot?)null), (corpse.Disposition, corpse.Resolution!.Refusal, corpse.Shot));
+        Assert.IsTrue(Wields(owner), "a refused attack throws nothing");
+
+        using var archer = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var bow = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Bow, Damage = DamageRanges.None with { Normal = new(2, 8) }, SpeedFactor = 10, Range = 10 },
+        };
+        Assert.AreEqual(GameSessionFailure.None, archer.Equip(archer.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, bow),
+            (_, _) => true, Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, archer.AttackCritter(archer.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger }).Failure,
+            "a bow is not thrown");
+    }
+
+    [TestMethod]
+    public void AStruckThrownShotStillCountsAgainstTheLimitUntilItLands()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var shot = ThrowUntil(owner, rat, hit: true).Shot!.Value;
+        Assert.AreEqual(GameSessionFailure.None, owner.LandShot(owner.Version, shot, new(rat)).Failure);
+        Assert.AreEqual(1, owner.QueryShotsInFlight().Count);
+        Assert.IsNotNull(owner.QueryThrownShot(shot));
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandShotOnObject(owner.Version, shot, new() { Wall = true }).Failure, "a shot strikes once");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, new CellCoord(3, 3)).Disposition);
+        Assert.AreEqual(0, owner.QueryShotsInFlight().Count);
     }
 }

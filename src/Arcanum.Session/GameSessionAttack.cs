@@ -439,7 +439,8 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), wear items that do not hold (<see cref="GameSessionFailure.InvalidWear"/>), an
     /// aim at the torso, a distance below 0 or beyond the weapon's reach (a bow's or firearm's beyond 100,000), a line-of-fire cost
     /// outside 0..100,000, a target cell outside 0 .. 2^24 − 1, a throw (<see cref="SessionAttack.Throw"/>) that does not fly, has a
-    /// weight outside 0..1,000,000 or no wielded weapon (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing-skill
+    /// weight outside 0..1,000,000, no wielded weapon or one of another skill than melee, or a distance beyond the weapon's reach
+    /// (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded throwing-skill
     /// weapon (<see cref="GameSessionFailure.AttackUnsupported"/>), the version, an exhausted revision
     /// (<see cref="GameSessionFailure.RevisionExhausted"/>). A bow or firearm (ARC-COMBAT-015) is checked with the distance terms of
     /// the shared check (SC8: impossible beyond its range, 5 per tile beyond half the Perception below master, impossible when
@@ -488,16 +489,18 @@ public sealed partial class GameSessionOwner
             hero = hero with { Weapon = hero.Weapon with { ArtSubtype = wielded.ArtSubtype } };
         var targetSide = new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn };
         if (!ValidWear(heroSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
-        string? thrown = null;
-        if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
-            return RejectAttack(throwFailure);
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || pending is null && !AttackDistanceFits(hero, attack.Distance) ||
             attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell))
             return RejectAttack(GameSessionFailure.InvalidAttack);
+        // ARC-COMBAT-017: the reach is the weapon's (RH1); a thrown weapon is then checked with the throwing skill and its thrown range.
+        string? thrown = null;
+        if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
+            return RejectAttack(throwFailure);
         if (pending is null && !hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (pending is null && attack.Flight && _shots.Count >= MaxShotsInFlight) return RejectAttack(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
-        if (_revision == long.MaxValue) return RejectAttack(GameSessionFailure.RevisionExhausted);
+        // A throw may take three revisions before the damage (the fate, the concealment, the item leaving the hand).
+        if (_revision >= long.MaxValue - (thrown is null ? 0 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
         // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).

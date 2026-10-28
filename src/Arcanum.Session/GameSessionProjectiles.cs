@@ -112,14 +112,15 @@ public sealed partial class GameSessionOwner
     /// (<paramref name="requested"/>) becomes a throw: the throwing skill's level and training, and the weapon's range the thrown range of
     /// its weight under the hero's effective strength (<see cref="ThrowRules.Range"/>); the reach test before it stays the weapon's
     /// (RH1). A weapon the remove check refuses (no drop, 0x466DA0) stays in the hand and attacks as without the flag (0x434B00).
-    /// Refused (<see cref="GameSessionFailure.InvalidAttack"/>): a throw that does not fly, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>
-    /// or no wielded weapon.
+    /// Refused (<see cref="GameSessionFailure.InvalidAttack"/>): a throw that does not fly, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>,
+    /// no wielded weapon, or one whose skill is not melee (the only installed "default throws" weapon, the throwing dagger 6072, is a
+    /// melee weapon; a bow's ammunition or a boomerang's return would follow other rules, TW7).
     /// </summary>
     private GameSessionFailure ThrowingHero(ref SessionHeroAttack hero, SessionThrow? requested, bool flight, out string? thrown)
     {
         thrown = null;
         if (requested is null) return GameSessionFailure.None;
-        if (!flight || requested.Weight is < 0 or > ThrowRules.MaxWeight || hero.Weapon.Kind != WeaponKind.Weapon
+        if (!flight || requested.Weight is < 0 or > ThrowRules.MaxWeight || hero.Weapon.Kind != WeaponKind.Weapon || hero.Skill != CombatSkill.Melee
             || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)) return GameSessionFailure.InvalidAttack;
         if (Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None)
             return GameSessionFailure.None;

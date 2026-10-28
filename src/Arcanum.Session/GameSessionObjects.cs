@@ -325,7 +325,7 @@ public sealed partial class GameSessionOwner
         if (pending is null && !hero.Supported) return RejectObject(GameSessionFailure.AttackUnsupported);
         if (pending is null && attack.Flight && _shots.Count >= MaxShotsInFlight) return RejectObject(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectObject(GameSessionFailure.StaleVersion);
-        if (_revision == long.MaxValue) return RejectObject(GameSessionFailure.RevisionExhausted);
+        if (_revision >= long.MaxValue - (thrown is null ? 0 : 1)) return RejectObject(GameSessionFailure.RevisionExhausted);
         if (attack.Target is { Baseline: { Kind: DamageableObjectKind.Scenery, Respawning: true } } && !RespawnFits())
             return RejectObject(GameSessionFailure.EventBudgetExceeded);
 
