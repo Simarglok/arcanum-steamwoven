@@ -264,13 +264,14 @@ public partial class AreaInventoryPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
-        var size = GetViewport().GetVisibleRect().Size;
+        // ARC-UI-018: inside the part the interface bars leave free.
+        var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         var width = Math.Max(1, Math.Min(960, size.X - 48));
         _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260)));
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
