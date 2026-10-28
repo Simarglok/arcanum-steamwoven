@@ -129,6 +129,20 @@ public static partial class AiExecutorRules
         return AiRunFlags.NearOccupied | (running && !mover.Pc && mover.Fatigue > RunFatigue ? AiRunFlags.Running : AiRunFlags.None);
     }
 
+    /// <summary>
+    /// The end nodes of every goal of <paramref name="run"/>, top first (as the end step runs them), for a run the host drops without
+    /// stepping it to its end: a run perform or a starter replaces (<see cref="AiPerformResult.Started"/> with another run), a run
+    /// killed, stopped by the node limit or by an overflow, or one the host forgets. The cast's attempt goals end their magic run
+    /// (0x429CD0), so its slot does not leak. In the original an object may hold several runs at once and a new run does not end the
+    /// old one; the executor's one run per object needs this call (inference).
+    /// </summary>
+    public static void EndRun(AiGoalRun run, IAiGoalWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        for (var i = run.Frames.Length - 1; i >= 0; i--) EndNode(run.Owner, run.Frames[i], world);
+    }
+
     // ---- the item use (0x462CC0) ----
 
     /// <summary>
@@ -380,6 +394,8 @@ public static partial class AiExecutorRules
 
     // Goal 37: the art (0x42BD40, animation 14), the turn to the tile (0x42C390) and the start (0x42CB10); at the action frame the throw
     // (0x42AB90); every path ends with 2 action points (0x433270) and the end step, so a round's pending cost is charged again (EX6).
+    // The world's BeginAction tests the art with the start, so the turn comes first: without the throw art the thrower still turns,
+    // where the original does not (the charges and the end are the same).
     private static Transition ThrowItemNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
     {
         if (goal.Item is not { } item || goal.Tile is not { } tile) return ChargedEnd(owner, world, AiExecutorReason.ObjectGone);

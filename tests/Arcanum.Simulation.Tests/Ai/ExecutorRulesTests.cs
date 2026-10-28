@@ -280,7 +280,7 @@ public sealed class ExecutorRulesTests
         world.PendingCost = 2;
         world.Points[Npc] = 5;
         var step = AiExecutorRules.Step(AttackRun(), world, Rolls, Original);
-        Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.AttackTargetGone), (step.End, step.Reason), "EX24: the attack goal pops");
+        Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.AttackTargetGone), (step.End, step.Reason), "AG2: the attack goal pops");
         Assert.AreEqual(5, world.Points[Npc], "no end step, so no EX6 charge");
 
         world = Arena(1);
@@ -647,6 +647,17 @@ public sealed class ExecutorRulesTests
         world.Throws = true;
         var thrown = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
         Assert.AreEqual((AiPerformKind.ThrowWeapon, AiGoalType.ThrowItem, "oid:dagger"), (thrown.Kind, thrown.Run!.Bottom.Goal, thrown.Run.Bottom.Item));
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 0;
+        world.Movers[Npc] = new(Fatigue: 1, MaxFatigue: 20);
+        world.InterruptFails = true;
+        var refusedThrow = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiPerformKind.ThrowWeapon, AiStartRefusal.Interrupt), (refusedThrow.Kind, refusedThrow.Refusal), "the weapon is off even so (AG13)");
+        world.Round = false;
+        world.Movers.Remove(Npc);
+        world.InterruptFails = false;
+        world.Calls.Remove("unwield oid:dagger");
         world.Throws = false;
         var running = AttackRun();
         var same = AiExecutorRules.StartAttack(world, Npc, Foe, null, running);

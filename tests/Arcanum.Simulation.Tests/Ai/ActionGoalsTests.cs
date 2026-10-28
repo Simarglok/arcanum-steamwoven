@@ -248,6 +248,41 @@ public sealed class ActionGoalsTests
         Assert.AreEqual("end cast", world.Calls[^1]);
     }
 
+    [TestMethod]
+    public void EndRunEndsTheMagicRunOfAReplacedCastOnce()
+    {
+        var world = Arena(3);
+        var playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
+        Assert.AreEqual(AiGoalType.AttemptSpell, playing.Top.Goal);
+        var attack = AiExecutorRules.StartAttack(world, Npc, Foe, null, playing);
+        Assert.IsTrue(attack.Started);
+        AiExecutorRules.EndRun(playing, world);
+        Assert.AreEqual(1, world.Calls.Count(c => c == "end cast"));
+
+        world = Arena(3);
+        AiExecutorRules.EndRun(CastRun(), world);
+        Assert.AreEqual(0, world.Calls.Count, "goal 26 has no magic end node");
+    }
+
+    [TestMethod]
+    public void PerformTakesTheActionsTargetFromTheChoice()
+    {
+        var world = Arena(3);
+        var self = AiExecutorRules.Perform(world, Npc, Foe, new AiPassChoice(AiPassAction.UseItem, -1, -1, Kit, Npc), null, null);
+        Assert.AreEqual(Npc, self.Run!.Bottom.Target);
+        var fallback = AiExecutorRules.Perform(world, Npc, Foe, new AiPassChoice(AiPassAction.UseItem, -1, -1, Kit, null), null, null);
+        Assert.AreEqual(Foe, fallback.Run!.Bottom.Target);
+    }
+
+    [TestMethod]
+    public void ASpreadOutRunWalksNearRunningAfterARunNear()
+    {
+        var world = Arena(6);
+        world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
+        AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Foe), AiRunFlags.Running), world, new NoRolls(), Steamwoven);
+        Assert.AreEqual("plan Near run", world.Calls[0], "AG16: the walk near keeps the run's gait");
+    }
+
     private static AiGoalRun CastRun(AiGoalType goal = AiGoalType.CastSpell) => new(Npc, new AiGoalFrame(goal, Foe) { SpellRun = Run });
 
     // ---- the item use ----
@@ -416,6 +451,7 @@ public sealed class ActionGoalsTests
         world.ActionSwing = new(AiActionStart.CannotStart);
         Assert.AreEqual(AiRunEnd.Finished, Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.AttemptPickLocks, Foe)), world, Steamwoven)[^1].End,
             "no loop left: the goal pops");
+        CollectionAssert.DoesNotContain(world.Calls, $"pick locks {Foe}", "no attempt without the loops");
     }
 
     // ---- the throw ----
@@ -445,7 +481,7 @@ public sealed class ActionGoalsTests
         foreach (var (set, thrown) in new (Action<World>, bool)[]
                  {
                      (_ => { }, true), (w => w.Faces = false, false), (w => w.ActionSwing = new(AiActionStart.NoArt), false),
-                     (w => w.Throws = false, false),
+                     (w => w.ActionSwing = new(AiActionStart.CannotStart), false), (w => w.Throws = false, false),
                  })
         {
             var world = Arena(3);

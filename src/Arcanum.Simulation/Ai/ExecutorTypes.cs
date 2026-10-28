@@ -447,7 +447,8 @@ public interface IAiGoalWorld
     AiMoverFacts Mover(string id);
     /// <summary>The first step from the object's tile toward <paramref name="toward"/> is clear (the step test of 0x425130, which the
     /// executor asks after its own "within the goal's range" test); with <paramref name="ignoreTarget"/> (0x425840, the flight's
-    /// test) the target's own tile is not blocking for the walker and nothing but the target blocks the step.</summary>
+    /// test) the target's own tile is not blocking for the walker and nothing but the target blocks the step. On the object's own tile
+    /// (distance 0: a pickup's item, an item used on oneself) there is no step and it answers true.</summary>
     bool FirstStepClear(string id, string toward, bool ignoreTarget);
     AiAttackFacts AttackFacts(string id, string target);
     AiReachFacts Reach(string id, string target);

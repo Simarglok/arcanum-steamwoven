@@ -141,7 +141,7 @@ public static partial class AiExecutorRules
     /// <paramref name="sound"/>, the object's current run <paramref name="current"/> (null: none). In a round nothing unless it is
     /// the NPC's turn; BACKING_OFF → the back-off run; a cast → the magic domain's cast and its casting goal (<see cref="StartCast"/>),
     /// an item → the item-use starter (<see cref="StartUseItem"/>), a skill → the skill starter (<see cref="StartUseSkill"/>), each with
-    /// the pass target; otherwise by the danger state: NONE → non-combat perform (0x4AC380), COMBAT_FOCUS → combat perform (0x4AC6E0:
+    /// the choice's target (the pass record's, which the chooser wrote; <paramref name="target"/> when the choice has none); otherwise by the danger state: NONE → non-combat perform (0x4AC380), COMBAT_FOCUS → combat perform (0x4AC6E0:
     /// back-off start, else the grenade step and its throw, else the attack starter), FLEE → perform fleeing and the flee goal,
     /// SURRENDER → perform surrender.
     /// </summary>
@@ -152,11 +152,13 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(npc);
         if (world.InRound && world.RoundActor != npc) return new(AiPerformKind.NotActor, current);
         if ((world.DangerBits(npc) & DangerFlags.BackingOff) != 0) return BackOff(world, npc, target, current);
+        // The chooser writes the pass record's target with its choice (SP6): the action's target is the choice's.
+        var actionTarget = choice?.Target ?? target;
         switch (choice?.Action ?? AiPassAction.None)
         {
-            case AiPassAction.Cast: return StartCast(world, npc, choice!, target, current);
-            case AiPassAction.UseItem: return StartUseItem(world, npc, target, choice!.Item, current);
-            case AiPassAction.UseSkill: return StartUseSkill(world, npc, target, choice!.Skill, choice.Item, current);
+            case AiPassAction.Cast: return StartCast(world, npc, choice!, actionTarget, current);
+            case AiPassAction.UseItem: return StartUseItem(world, npc, actionTarget, choice!.Item, current);
+            case AiPassAction.UseSkill: return StartUseSkill(world, npc, actionTarget, choice!.Skill, choice.Item, current);
         }
         switch (world.ReadDanger(npc))
         {
@@ -407,7 +409,7 @@ public static partial class AiExecutorRules
         switch (goal.Node)
         {
             case 1:
-                // 0x429450 fails → pop (EX24: no end step, so no EX6 charge; popping the bottom goal finishes the run).
+                // 0x429450 fails → pop (AG2: no end step, so no EX6 charge; popping the bottom goal finishes the run).
                 return target is not null && world.Tile(target) is not null && !world.DeadCritter(target) ? Next(2) : new(Move.Pop, Reason: AiExecutorReason.AttackTargetGone);
             case 2:
                 if (AttackPossible(world.AttackFacts(owner, target!))) return Next(3);
@@ -632,8 +634,8 @@ public static partial class AiExecutorRules
         var leader = goal.Target;
         if (leader is null || world.Tile(leader) is not { } there || world.Tile(owner) is not { } at) return End(AiExecutorReason.ObjectGone);
         if (Distance(at, there) <= goal.Range && world.FirstStepClear(owner, leader, false)) return new(Move.Pop, Reason: AiExecutorReason.FollowInRange);
-        // The run near runs unless encumbered; the walk near keeps the run's gait (an item-use, skill or pickup run an NPC above 8
-        // fatigue started runs; a follower's walks).
+        // The run near runs unless encumbered; the walk near keeps the run's gait (an item-use run an NPC above 8 fatigue started
+        // runs, AG16; a follower's walks; a spread-out run walks near running after a run near).
         var runNear = goal.Goal == AiGoalType.RunNear;
         var running = runNear ? world.Mover(owner).Encumbrance < RunRefusedEncumbrance : Running(world, owner, flags);
         var gait = runNear ? running ? flags | AiRunFlags.Running : flags & ~AiRunFlags.Running : flags;

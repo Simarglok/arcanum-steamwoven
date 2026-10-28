@@ -25,6 +25,9 @@ Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) (the NPC
 | Cast (1) | 0x4AC250 | `StartCast`: the magic domain builds the invocation (from the item when one is set, else the NPC), checks it and runs it (`IAiPerformWorld.Cast`, which also makes an item source's magic call and destroys a food or scroll); a run it started gets its casting goal, 26 when the record's casting animation is −1, else 82, with no start gate, replacing the object's run (AG3, AG14). No run, or a cast queued under a running cast (SU13), keeps the current run. |
 | Use item (2) | 0x4AC320 → 0x435450 | `StartUseItem` with the pass target and the item. |
 | Use skill (3) | 0x4AC350 → 0x4350F0 | `StartUseSkill` with the pass target, the skill and the tool item; pick locks (14) through 0x436220. |
+
+The pass target of these actions is the choice's (`AiPassChoice.Target`, which the chooser writes into the pass record, SP6); the
+`target` argument stands in when the choice has none.
 | Grenade | 0x4AC910 | Combat perform asks the host's grenade step (`IAiPerformWorld.Grenade`, i.e. `AiGroundRules.Grenade`); a throw runs `StartThrow` with the grenade at the target's tile, and perform goes no further whether the starter started or refused (AG13). |
 | Thrown weapon | 0x434B00 | The attack starter takes a removable "default throws" weapon off (`Unwield`, 0x466E00) and answers `StartThrow`'s answer; a refused throw leaves the weapon in the inventory (AG13). |
 
@@ -52,10 +55,12 @@ approach may end beside an occupied tile") is passed to the planners; running is
 | Skill attempt (34) | The turn (`FaceForAction`) and the art, else the end step; an animation that cannot start: 2 action points and the end step; at the action frame the attempt: a target destroyed or off, or 4 action points the consume refuses, end the run, else the skill invocation (`AttemptSkill`); the goal pops after the animation (AG7). |
 | Pickpocket (86) | The turn, then the attempt before any animation; a result that sets the run's flag 0x40000 pops at once, any other plays the skill animation (no art: the end step; cannot start: 2 and the end step) and pops (AG8). |
 | Pick locks (67) | The turn and the art, else the end step; the lock-pick loops (none left: the goal pops), then the attempt (`AttemptPickLocks`), which pays no action points, and a pop (AG9). |
-| Throw (37) | The art (14), the turn to the tile and the start; at the action frame the throw (`ThrowItem`, 0x4B3C00 inside). Every path, refusals included, charges 2 and takes the end step (AG10). |
+| Throw (37) | The turn to the tile, the art (14) and the start (the original tests the art before the turn: without the art the thrower here still turns); at the action frame the throw (`ThrowItem`, 0x4B3C00 inside). Every path, refusals included, charges 2 and takes the end step (AG10). |
 | Pickup (15, 16) | On the item's tile the attempt (16), else range 0 and the walk near (8) onto it; the attempt picks it up unless it is destroyed or off (`PickUp`; an item from a junk pile costs 1 action point there), then the end step either way (AG11). |
 
-The walk near (8) keeps the run's gait, so an item-use approach of a running run runs (AG16); the slice I7 code walked. The attack
+The walk near (8) keeps the run's gait, so an item-use approach of a running run runs (AG16), and a spread-out run whose run near
+(56) turned running on walks near running afterwards; the slice I7 code walked. A pickup run never runs (its starter sets no
+running), and the skill goal walks through goal 5. The attack
 goal's first node now pops for a gone or dead target instead of taking the end step, so no EX6 charge follows (AG2).
 
 ## The item use (`UseItemNow`, 0x462CC0)
@@ -83,6 +88,13 @@ subturn. `AiItemUseResult` names the branch, the charge and the spending.
 
 Nothing new: the runs are the host's and not saved (as in [slice I7](ai-executor.md#session-gamesessionowner)).
 
+## Replaced runs
+
+The executor keeps one run per object. When perform or a starter answers a started run while the object holds another, or when the
+host drops a run (killed, node limit, overflow, a map change), the host calls `AiExecutorRules.EndRun` on the old run: it runs the
+end nodes top first, so a cast's attempt goal ends its magic run (0x429CD0) instead of leaking the cast host's slot. In the original
+an object may hold several runs at once (inference: the call stands in for that).
+
 ## Not ready
 
 - **Host (slice I10).** No host implements the new world members (the animations and their timing, the cast host's
@@ -90,7 +102,10 @@ Nothing new: the runs are the host's and not saved (as in [slice I7](ai-executor
   the runs or calls `UseItemNow` for the chooser's AI-action item; the item search's `StartPickup` is the host's call of
   `AiExecutorRules.StartPickup`.
 - **Queued cast.** A cast the magic domain queues under the caster's running cast (SU13) is kept by the host, not by the run.
-- **Missiles.** A spell missile's flight and the release at its arrival are the missile flight's.
+- **Missiles.** A spell missile's flight and the release at its arrival are the missile flight's; the attempt goal ends its run
+  (`EndCast(refused: false)`) while the missile flies, so the host's `EndGoal` must keep a run whose missile is pending.
+- **Frame flag 0x80.** A refused release ends the play through 0x431A40, which takes the end step instead of the pop when the goal's
+  frame flag 0x80 is set; the executor always pops.
 - **Paths kept.** The skill and walk-near goals plan again on each return; the original's "path still valid" node (0x425740) is not
   modelled (as goal 8 in slice I7).
 - **Skill-with-item goal (40).** Started by the item use for a lockpick or a healing kit (0x4352C0), it is the world's.
@@ -104,4 +119,4 @@ node (also without a play, with EX6, and a refused or unturnable start); readine
 gate and flags, its goal's running approach and use; every branch of the item use with its charge; the skill starter's pick-locks
 branch, the heal skill's walk and attempt with its action points, a blocked approach, the attempt's refusals; pickpocket and pick
 locks; the throw starter and the throw goal's charges on every path; the grenade's throw from combat perform; the pickup starter and
-goal. `ExecutorRulesTests`: the attack goal's pop for a dead target (AG2) and the starters' throw of a default-throws weapon.
+goal; `EndRun` on a replaced cast; the choice's target; a spread-out run's walk near after a run near (AG16). `ExecutorRulesTests`: the attack goal's pop for a dead target (AG2) and the starters' throw of a default-throws weapon.
