@@ -127,7 +127,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
-                : options && !menu.QuitPending ? "the arrows or Left/Right change a value at once (it is saved as a user preference, not in a save); "
+                : options && !menu.QuitPending ? "Up/Down choose a control, the arrows or Left/Right change its value at once (it is saved as a user preference, not in a save); "
                     + "a page's letter shows it, Done closes the window" + (menu.Root == AreaMenuWindow.Main ? "" : " and the menu, as the O key does")
                     + "; Escape does nothing here, as in the original; options texts "
                     + (menu.OptionsTexts.FromGame ? "from the game" : "are the project's (" + menu.OptionsTexts.Detail + ")")

@@ -260,12 +260,14 @@ public sealed class AreaMainMenu
     /// <summary>ARC-UI-013: the host's values after it applied a change, or when the window opens.</summary>
     public void SetOptions(AreaGameOptions options) => Options = options ?? throw new ArgumentNullException(nameof(options));
 
-    /// <summary>ARC-UI-013: an arrow of the <paramref name="index"/>-th shown control: the change for the host to apply (OP3), or nothing
-    /// at a slider's end or before the values are known.</summary>
+    /// <summary>ARC-UI-013: an arrow of the <paramref name="index"/>-th shown control (which takes the focus): the change for the host
+    /// to apply (OP3), or nothing at a slider's end or before the values are known.</summary>
     public AreaMenuCommand Change(int index, int direction)
     {
         var controls = Controls;
         if (QuitPending || Options is not { } options || index < 0 || index >= controls.Count) return AreaMenuCommand.Nothing;
+        // A control's arrow takes the focus, so the keys go on with it.
+        OptionsFocus = index;
         var control = controls[index];
         if (options.Value(control.Option) is not { } value || control.Step(value, direction) is not { } next) return AreaMenuCommand.Nothing;
         Notice = null;

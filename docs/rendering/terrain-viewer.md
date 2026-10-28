@@ -1330,14 +1330,15 @@ project's.
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack and Always
-  Run. Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, or a controller's
-  confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
+  Run. Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
   slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
   hero it goes through the hero's turn-based switch (a hero in combat mode starts or ends a round; a refusal keeps the
-  value and names why), without one the setting changes alone. Auto Attack is the real-time attack repeat's setting
+  value and names why, where the original's setting keeps the new value, OP5), without one the setting changes alone;
+  a quick load that brings a round turns it on and saves it. Auto Attack is the real-time attack repeat's setting
   (ARC-COMBAT-005). Always Run and the three volumes are the palette's settings (ARC-WORLD-020, ARC-UI-044).
 - **Storage.** User preferences, never part of a save: difficulty, turn-based and auto attack in
   `user://game_settings_v1.json` (`{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}`; a missing or invalid file
@@ -1652,7 +1653,7 @@ never reads, writes or deletes the player's saved
 viewer files: the app marks the process automated before it reads any setting (`ViewerAutomatedStorage`). Each store
 then picks its path by `ViewerStoragePaths.Choose` (Core): an explicit test path wins
 (`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH`, `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`, and as before `ALWAYS_RUN_TEST_PATH`,
-`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
+`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `GAME_SETTINGS_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
 temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, deleted when
 the viewer app exits); only an ordinary run uses the `user://` file. Per setting:
 
@@ -1662,7 +1663,7 @@ the viewer app exits); only an ordinary run uses the `user://` file. Per setting
 | Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
 | Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
 | HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
-| Always run, visual profile, audio volumes | `user://` | none, as before (off, Legacy, defaults) |
+| Always run, visual profile, audio volumes, game settings `game_settings_v1.json` (ARC-UI-013) | `user://` | none, as before (off, Legacy, defaults) |
 | HD pack folders | discovered | not searched, as before |
 
 So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer

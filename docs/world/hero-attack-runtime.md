@@ -48,7 +48,7 @@ since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables 
 | Reach | The weapon's range, 1 bare-handed, and since ARC-COMBAT-015 a clear line of fire to the target for every weapon (the goal's reach test, ledger RH1, [below](#ranged-hero-attack-arc-combat-015): a target farther away without a clear shot is approached; a target next to the hero across a wall edge or cover worth 26 or more has no approach, so the goal ends at once, as the original's empty plan does, AP4); farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
-| Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
+| Repeat | Auto attack (the options window's setting, ARC-UI-013; on by default, as the original's) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
 | Dying pose (FA10) | A death-flag hit or a death of at most 20 hit points falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body keeps the last frame of that animation in its facing (group 0 for a single-rotation pose ART); a bloody death without its file falls (the original's missing-art repair). |
 
 ## Session API (`GameSessionOwner`)
@@ -317,8 +317,8 @@ and the item event 0x800000 at the landing (PF10), boomerangs (ARC-COMBAT-019) a
 - The pose ART is read from the archive the body's standing art came from, not through the whole content stack, so an override
   of the pose in another archive is not seen; the hero's facing returns to its movement facing after an attack; the cursor's
   attack shape is an OS cursor, not the original's.
-- The turn-based round in the viewer (an attack there costs AP and passes turns; the session supports the round but the viewer
-  has no turn-based setting).
+- The turn-based round in the viewer is [ARC-COMBAT-020](turn-based-round-runtime.md) (Space and the options window's
+  Default Combat Mode set it).
 - NPC stored effects (race, items, spells) in its effective stats; skill and resistance effects of the hero.
 - Since ARC-COMBAT-008 part 2 the viewer passes the hero's kit and the NPC's worn items with their durability values, so wear
   happens in play; it shows no item condition. Attacking objects is in the [object damage runtime](object-damage-runtime.md#viewer-arc-combat-008-part-2).

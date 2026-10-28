@@ -123,13 +123,15 @@ public sealed record AreaGameSettings
 {
     public const int MaxDifficulty = 2;
 
-    public AreaGameSettings(int difficulty, bool turnBased, bool autoAttack)
-    {
-        if (difficulty is < 0 or > MaxDifficulty) throw new ArgumentOutOfRangeException(nameof(difficulty));
-        (Difficulty, TurnBased, AutoAttack) = (difficulty, turnBased, autoAttack);
-    }
+    private readonly int _difficulty;
 
-    public int Difficulty { get; init; }
+    public AreaGameSettings(int difficulty, bool turnBased, bool autoAttack) => (Difficulty, TurnBased, AutoAttack) = (difficulty, turnBased, autoAttack);
+
+    public int Difficulty
+    {
+        get => _difficulty;
+        init => _difficulty = value is < 0 or > MaxDifficulty ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
+    }
     public bool TurnBased { get; init; }
     public bool AutoAttack { get; init; }
 

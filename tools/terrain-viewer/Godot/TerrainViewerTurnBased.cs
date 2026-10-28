@@ -218,10 +218,11 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>A replaced session (a quick load) keeps the setting, and a round it brings turns the setting on.</summary>
+    /// <summary>A replaced session (a quick load) keeps the setting, and a round it brings turns the setting on (and the saved
+    /// preference with it, ARC-UI-013: the original's save carries the setting and its settings file keeps it).</summary>
     private void SyncTurnBasedSetting(GameSessionOwner session)
     {
-        if (session.QueryCombatRound() is not null) _turnBasedSetting = true;
+        if (session.QueryCombatRound() is not null) { _turnBasedSetting = true; SaveGameSettings(_gameSettings with { TurnBased = true }); }
         _sectorEntries.Clear(); _sectorEntriesMap = null;
     }
 

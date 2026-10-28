@@ -95,6 +95,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { AreaOption.Effects, AreaOption.Voice, AreaOption.Music }, menu.Controls.Select(c => c.Option).ToArray());
         Assert.AreEqual(0, menu.HiddenNotes.Count(note => !note.StartsWith("Video:", StringComparison.Ordinal)), "the Sound page hides nothing");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Voice, Value: 6), menu.Change(1, 1));
+        Assert.AreEqual(1, menu.OptionsFocus, "a control's arrow takes the focus");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Music, Value: 4), menu.Change(2, -1));
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Change(3, 1), "no fourth control");
         menu.SetOptions(Values with { Effects = 10 });
@@ -171,5 +172,6 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(GameDifficulty.Normal, AreaGameSettings.Defaults.SessionDifficulty);
         Assert.AreEqual(GameDifficulty.Hard, settings.SessionDifficulty);
         Assert.Throws<ArgumentOutOfRangeException>(() => new AreaGameSettings(3, false, true));
+        Assert.Throws<ArgumentOutOfRangeException>(() => settings with { Difficulty = -1 });
     }
 }
