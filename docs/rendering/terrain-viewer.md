@@ -898,8 +898,8 @@ export), switching on other GPUs and handhelds.
 In `crash-site-area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
 follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walks after the PC on his own grid session
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
-Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode; Virgil is still
-admitted against the PC), and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
+Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode, and since ARC-WORLD-075
+he walks through the PC and other critters while the session has him out of combat mode, which nothing in the viewer changes yet), and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
 (no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
 session on F7 and when the PC leaves the map. HUD: `companion script 1324 <standing> at
 (x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
