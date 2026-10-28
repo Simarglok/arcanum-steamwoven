@@ -62,6 +62,30 @@ public static class MesText
         return new(MesDecodeStatus.Decoded, new string(chars));
     }
 
+    /// <summary>The bytes of <paramref name="text"/> under <paramref name="profile"/>, the strict inverse of <see cref="Decode(ReadOnlySpan{byte}, MesTextProfile)"/>
+    /// (ARC-UI-033: text the player types, stored as the original stores it); null when a character has no byte in the profile.</summary>
+    public static byte[]? Encode(string text, MesTextProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var upper = profile switch
+        {
+            MesTextProfile.Ascii => null,
+            MesTextProfile.Windows1252 => Upper1252,
+            MesTextProfile.Windows1251 => Upper1251,
+            _ => throw new ArgumentOutOfRangeException(nameof(profile)),
+        };
+        var bytes = new byte[text.Length];
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c < 0x80) { bytes[i] = (byte)c; continue; }
+            var at = upper is null ? -1 : upper.IndexOf(c, StringComparison.Ordinal);
+            if (at < 0) return null;
+            bytes[i] = (byte)(0x80 + at);
+        }
+        return bytes;
+    }
+
     public static MesDecodeResult Decode(MesMessage message, MesTextProfile profile)
     {
         ArgumentNullException.ThrowIfNull(message);

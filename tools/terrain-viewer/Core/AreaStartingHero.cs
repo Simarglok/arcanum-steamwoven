@@ -96,6 +96,13 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 
     /// <summary>ARC-UI-030: why <see cref="Backgrounds"/> is null for the new character, else null.</summary>
     public string? BackgroundsDetail { get; init; }
+
+    /// <summary>ARC-UI-033: for <see cref="AreaStartingHero.NewCharacter"/>, the portraits the new-character screen browses
+    /// (<see cref="PortraitCatalogue"/>, ARC-DATA-045); null for a pre-made hero or when it does not read (<see cref="PortraitsDetail"/>).</summary>
+    public PortraitCatalogue? Portraits { get; init; }
+
+    /// <summary>ARC-UI-033: why <see cref="Portraits"/> is null for the new character, else null.</summary>
+    public string? PortraitsDetail { get; init; }
 }
 
 /// <summary>
@@ -183,11 +190,17 @@ public static class AreaStartingHero
         int? flag = null;
         BackgroundTable? backgrounds = null;
         string? backgroundsDetail = null;
+        PortraitCatalogue? portraits = null;
+        string? portraitsDetail = null;
         if (hero.BasicPrototype == GenericPrototype)
         {
             var table = BackgroundTable.Load(stack);
             backgrounds = table.Table;
             if (backgrounds is null) backgroundsDetail = $"{table.Status} {table.File}";
+            // ARC-UI-033: and the portraits its portrait buttons browse, read at game start from the base sources (PO1).
+            var portraitLoad = PortraitCatalogue.Load(stack);
+            portraits = portraitLoad.Catalogue;
+            if (portraits is null) portraitsDetail = $"{portraitLoad.Status} {portraitLoad.File}";
         }
         else if (Flag(menu, hero) is not { } premadeFlag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
         else flag = premadeFlag;
@@ -206,6 +219,8 @@ public static class AreaStartingHero
             KitUse = KitUse(prototypes.Read, definition),
             Backgrounds = backgrounds,
             BackgroundsDetail = backgroundsDetail,
+            Portraits = portraits,
+            PortraitsDetail = portraitsDetail,
         };
     }
 
@@ -215,7 +230,8 @@ public static class AreaStartingHero
     /// (ledger NW3), as the pre-made reader reads them. Null with the reason when the load is not the new character's, the pair is not
     /// one the screen makes (<see cref="CharacterCreationRules.Allows"/>) or an effect does not read.
     /// </summary>
-    public static AreaHeroLoad? NewCharacterHero(AreaHeroLoad generic, CharacterRace race, CharacterGender gender, out string? detail)
+    /// <param name="portrait">ARC-UI-033: the portrait the screen chose (field 0xE7); null keeps the generic prototype's.</param>
+    public static AreaHeroLoad? NewCharacterHero(AreaHeroLoad generic, CharacterRace race, CharacterGender gender, out string? detail, int? portrait = null)
     {
         ArgumentNullException.ThrowIfNull(generic);
         detail = null;
@@ -228,7 +244,9 @@ public static class AreaStartingHero
         if (effects(EffectRules.RaceEffectBase + (int)race) is not { } raceEffect) { detail = $"effect {EffectRules.RaceEffectBase + (int)race} does not read"; return null; }
         EffectRule? genderEffect = null;
         if (gender == CharacterGender.Female && (genderEffect = effects(EffectRules.FemaleEffect)) is null) { detail = $"effect {EffectRules.FemaleEffect} does not read"; return null; }
-        var hero = read with { Race = (int)race, Gender = gender == CharacterGender.Female ? 0 : 1, RaceEffect = raceEffect, GenderEffect = genderEffect };
+        if (portrait < 0) { detail = $"portrait {portrait} is negative"; return null; }
+        var hero = read with { Race = (int)race, Gender = gender == CharacterGender.Female ? 0 : 1, RaceEffect = raceEffect, GenderEffect = genderEffect,
+            Portrait = portrait ?? read.Portrait };
         return generic with { Definition = Definition(hero, out var dropped), DroppedChanges = dropped };
     }
 
@@ -487,7 +505,11 @@ public static class AreaStartingHero
                 { Weight = new(item.Weight, item.MagicWeight, item.Complexity) })],
             Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0),
             // A scheme or background outside the session's range starts as 0 (none), as the pre-made data never has one (39..50 installed).
-            InnateSkills: skills, Background: hero.Background is >= SessionHeroLimits.MinBackground and <= SessionHeroLimits.MaxBackground ? hero.Background : 0);
+            InnateSkills: skills, Background: hero.Background is >= SessionHeroLimits.MinBackground and <= SessionHeroLimits.MaxBackground ? hero.Background : 0)
+        {
+            // ARC-UI-033: the prototype's portrait (field 0xE7); a negative one (never installed) starts as 0, as the portrait code refuses it (PO2).
+            Portrait = Math.Max(hero.Portrait, 0),
+        };
     }
 
     /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>
@@ -498,11 +520,14 @@ public static class AreaStartingHero
         return $"hero: {Name(hero)} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}, worn {session.QueryEquipment().Worn.Count}";
     }
 
-    /// <summary>The project's name of a session hero (the pre-made hero whose prototype it has), else its prototype number.
-    /// The session holds no player name.</summary>
+    /// <summary>The session hero's player name when it has one (ARC-UI-033), else the project's name of the pre-made hero whose
+    /// prototype it has, else its prototype number.</summary>
     public static string Name(SessionHeroState hero)
     {
         ArgumentNullException.ThrowIfNull(hero);
+        // ARC-UI-033: the player name the new-character window stored, decoded as the game's texts are.
+        if (!hero.PlayerName.IsEmpty && MesText.Decode(hero.PlayerName.AsSpan(), AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } name })
+            return name;
         return Premade.FirstOrDefault(p => p.BasicPrototype + PremadeHeroReader.PrototypeOffset == hero.Prototype)?.Name ?? $"prototype {hero.Prototype}";
     }
 }

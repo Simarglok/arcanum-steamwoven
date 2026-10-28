@@ -103,6 +103,8 @@ public sealed class AreaMainMenuTexts
         [4000] = "Game", [4001] = "Video", [4002] = "Sound", [4003] = "Done",
         [4010] = "G", [4011] = "V", [4012] = "S", [4013] = "D",
         [QuitQuestion] = "Quit the current game?",
+        // ARC-UI-033: the new-character window's default name and its refusal (project texts, not the game's).
+        [CharacterNameRules.DefaultNameMessage] = "Enter Name", [CharacterNameRules.RefusalMessage] = "Your character needs a name.",
     };
     private readonly Func<int, string?> _original;
 
@@ -176,7 +178,8 @@ public sealed class AreaMainMenuTexts
 /// ARC-UI-030: "New Character" (like "Pick Character", only where a new game can start) asks the host to make the new character
 /// (<see cref="AreaNewCharacter"/>) and opens its window (window 12, ledger NW1): gender, race and background buttons, Accept and
 /// Cancel; it has no letters (its buttons are art only), Escape and Cancel go back and drop the character, and Accept starts the game
-/// at once, as the name, portrait, character editor and opening shop the original's Accept leads to are not built.
+/// at once, as the character editor and opening shop the original's Accept leads to are not built. ARC-UI-033: portrait buttons and
+/// the name field (typed while it is being typed into; Enter ends it), and Accept refuses the default name (NW6).
 /// </summary>
 public sealed class AreaMainMenu
 {
@@ -184,7 +187,7 @@ public sealed class AreaMainMenu
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
     /// <summary>ARC-UI-030: what the new-character window's Accept leads to in the original and Steamwoven does not have yet.</summary>
-    public const string NoEditor = "the name, the portrait, the character editor and the opening shop are not built: Accept starts the game at once";
+    public const string NoEditor = "the character editor and the opening shop are not built: Accept starts the game at once";
     /// <summary>The quit box's fixed letters (the original's yes/no box, SF3).</summary>
     public const char YesLetter = 'Y', NoLetter = 'N';
     private readonly List<AreaMenuWindow> _back = [];
@@ -321,6 +324,12 @@ public sealed class AreaMainMenu
     /// <summary>A typed character: the shown button whose hotkey letter it is (upper-cased first, as the original), if any.</summary>
     public AreaMenuCommand Type(char typed)
     {
+        // ARC-UI-033: while the new-character window's name field is being typed into it takes the character (its letters choose nothing).
+        if (!QuitPending && Window == AreaMenuWindow.NewCharacter && Creation is { TypingName: true } typing)
+        {
+            Notice = typing.TypeName(typed);
+            return AreaMenuCommand.Nothing;
+        }
         var upper = char.ToUpperInvariant(typed);
         if (QuitPending) return upper == YesLetter ? Answer(true) : upper == NoLetter ? Answer(false) : AreaMenuCommand.Nothing;
         var shown = Shown;
@@ -404,8 +413,9 @@ public sealed class AreaMainMenu
     /// <summary>ARC-UI-030: the new character the window holds (null outside it).</summary>
     public AreaNewCharacter? Creation { get; private set; }
 
-    /// <summary>ARC-UI-030: the controller's rows in the new-character window: gender, race, background, Accept, Cancel.</summary>
-    public const int CreationRows = 5;
+    /// <summary>ARC-UI-030: the controller's rows in the new-character window: gender, race, background, portrait (ARC-UI-033), name
+    /// (ARC-UI-033), Accept, Cancel.</summary>
+    public const int CreationRows = 7;
 
     /// <summary>ARC-UI-030: opens the new-character window with the new character the host made (from the new game window only).</summary>
     public void OpenNewCharacter(AreaNewCharacter creation)
@@ -424,13 +434,38 @@ public sealed class AreaMainMenu
         Notice = creation.Press(button, rules);
     }
 
-    /// <summary>ARC-UI-030: the new-character window's Accept: a new game as the new character (the name, editor and shop the
-    /// original's Accept leads to are not built, <see cref="NoEditor"/>).</summary>
-    public AreaMenuCommand Accept() => Window == AreaMenuWindow.NewCharacter && Creation is not null && NewGameRefusal is null && !QuitPending
-        ? new(AreaMenuCommandKind.StartNewCharacter) : AreaMenuCommand.Nothing;
+    /// <summary>ARC-UI-030: the new-character window's Accept: a new game as the new character (the editor and shop the original's
+    /// Accept leads to are not built, <see cref="NoEditor"/>). ARC-UI-033: the press ends the name's typing as a click elsewhere does,
+    /// then the name check (NW6) refuses the default name with message 506 as the window's notice.</summary>
+    public AreaMenuCommand Accept()
+    {
+        if (Window != AreaMenuWindow.NewCharacter || Creation is not { } creation || NewGameRefusal is not null || QuitPending) return AreaMenuCommand.Nothing;
+        creation.EndName(enter: false);
+        if (!creation.AcceptName().Accepted) { Notice = Texts.Text(CharacterNameRules.RefusalMessage); return AreaMenuCommand.Nothing; }
+        Notice = null;
+        return new(AreaMenuCommandKind.StartNewCharacter);
+    }
 
-    /// <summary>ARC-UI-030: the controller's Confirm in the new-character window: a row's next button (gender, race, background),
-    /// Accept or Cancel.</summary>
+    /// <summary>ARC-UI-033: a click on the name field: it starts typing (cleared, the old text kept); a second click does nothing.</summary>
+    public void BeginName()
+    {
+        if (QuitPending || Window != AreaMenuWindow.NewCharacter || Creation is not { } creation) return;
+        creation.BeginName();
+        Notice = null;
+    }
+
+    /// <summary>ARC-UI-033: Backspace (true) or Enter (false) while the name is typed; false when the name is not being typed (the key
+    /// is then the window's).</summary>
+    public bool NameKey(bool backspace)
+    {
+        if (QuitPending || Window != AreaMenuWindow.NewCharacter || Creation is not { TypingName: true } creation) return false;
+        if (backspace) creation.BackspaceName(); else creation.EndName(enter: true);
+        Notice = null;
+        return true;
+    }
+
+    /// <summary>ARC-UI-030: the controller's Confirm in the new-character window: a row's next button (gender, race, background,
+    /// portrait), the name field (begins typing, or ends it as Enter does), Accept or Cancel.</summary>
     private AreaMenuCommand ConfirmCreation()
     {
         switch (Focus)
@@ -438,8 +473,10 @@ public sealed class AreaMainMenu
             case 0: PressCreation(AreaNewCharacterButton.GenderNext, Rules); return AreaMenuCommand.Nothing;
             case 1: PressCreation(AreaNewCharacterButton.RaceNext, Rules); return AreaMenuCommand.Nothing;
             case 2: PressCreation(AreaNewCharacterButton.BackgroundNext, Rules); return AreaMenuCommand.Nothing;
-            case 3: return Accept();
-            case 4: Back(); return AreaMenuCommand.Nothing;
+            case 3: PressCreation(AreaNewCharacterButton.PortraitNext, Rules); return AreaMenuCommand.Nothing;
+            case 4: if (!NameKey(backspace: false)) BeginName(); return AreaMenuCommand.Nothing;
+            case 5: return Accept();
+            case 6: Back(); return AreaMenuCommand.Nothing;
             default: return AreaMenuCommand.Nothing;
         }
     }

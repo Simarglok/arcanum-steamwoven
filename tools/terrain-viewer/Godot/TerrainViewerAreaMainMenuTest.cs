@@ -76,7 +76,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-030: a synthetic new-character start: the generic human man, race effects that raise constitution by the race
-    /// number, background block 0 for everyone (effect 86, +1 strength) and block 1 for a dwarf man.</summary>
+    /// number, background block 0 for everyone (effect 86, +1 strength) and block 1 for a dwarf man; ARC-UI-033: human men's portraits
+    /// 1000, 1003 and 1005 (the start), elf women's 1001 and 1004, an NPC's 1002 and 1006 for anyone.</summary>
     private static AreaHeroLoad SyntheticNewCharacter()
     {
         static Arcanum.Data.Messages.MesFile Mes(string text) =>
@@ -94,6 +95,7 @@ public partial class TerrainViewerApp
         {
             Backgrounds = Arcanum.Data.Characters.BackgroundTable.Create(Mes("{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{86}{12}{DWM}{13}{0}{14}{}"),
                 Mes("{1000}{Default\nplain}{1001}{Stout\nstub}")),
+            Portraits = Arcanum.Data.Characters.PortraitCatalogue.Create(Mes("{1000}{HUM1}{1001}{ELF1}{1002}{NPC1}{1003}{HUM2}{1004}{ELF2}{1005}{HUM3}{1006}{ANY1}")),
         };
     }
 
@@ -142,11 +144,13 @@ public partial class TerrainViewerApp
             // ARC-UI-030: New Character opens its window with the generic human man; its arrows change him; Escape goes back.
             Letter('n');
             Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter && Buttons().Length == 0
-                && _mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Human", "Background: Default (0)", "plain"]),
+                && _mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Human", "Background: Default (0)", "Portrait: HUM3 (1005)",
+                    "Name: Enter Name", "plain"]),
                 "the new-character window: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
-            Require(_mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Dwarf", "Background: Stout (1)", "stub"]),
+            Require(_mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Dwarf", "Background: Stout (1)", "Portrait: ANY1 (1006)",
+                    "Name: Enter Name", "stub"]),
                 "race and background arrows: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
             Letter('p');
             Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter, "the new-character window takes no letters");
@@ -193,6 +197,16 @@ public partial class TerrainViewerApp
             Letter('s'); Letter('n'); Letter('n');
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
+            // ARC-UI-033: Accept refuses the default name (506); a click on the field, typed letters, Backspace and Enter name him.
+            _mainMenuPanel.AcceptForSelfTest();
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.NewCharacter && _mainMenu.Notice == "Your character needs a name.",
+                "Accept refused the default name: " + _mainMenu?.Notice);
+            _mainMenuPanel.NameClickForSelfTest();
+            foreach (var letter in "Dainn") Letter(letter);
+            InventoryKey(Key.Backspace);
+            Require(_mainMenuPanel.CreationForSelfTest.Contains("Name: Dain|"), "typing shows the caret: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
+            InventoryKey(Key.Enter);
+            Require(_mainMenuPanel.CreationForSelfTest.Contains("Name: Dain") && _mainMenu!.Window == AreaMenuWindow.NewCharacter, "Enter ended the typing");
             var beforeCreation = _areaSession;
             _mainMenuPanel.AcceptForSelfTest();
             var made = _areaSession!.QueryHero();
@@ -200,7 +214,8 @@ public partial class TerrainViewerApp
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == 1 && _areaSession.QueryHeroBackgroundDescription() == 1001
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Number == 86 && e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
-                && _quickSaveStatus == "new game as a new Dwarf Male character", "Accept began a new game as the new character: " + _quickSaveStatus);
+                && made.Portrait == 1006 && AreaStartingHero.Name(made) == "Dain"
+                && _quickSaveStatus == "new game as Dain, a new Dwarf Male character", "Accept began a new game as the new character: " + _quickSaveStatus);
             Require(_menuTablesHero == AreaStartingHero.NewCharacter, "the new character's tables were adopted");
 
             // A controller: up to Exit Game (wrapping) and confirm. "Exit Game" exits (here only counted).
@@ -212,7 +227,8 @@ public partial class TerrainViewerApp
             Require(_mainMenuExitsForSelfTest == 1, "Exit Game exited");
             return "opened modal by --main-menu with the offered buttons, letters and Escape (not at the root), Last Save without a save stays, " +
                 "browser cycles, Start begins a new game as the hero, Last Save loads the newest, Load Game window over the waiting menu (back unused, ends on a load), " +
-                "New Character window (arrows, Escape back, Accept starts with the background and its effect), controller Exit";
+                "New Character window (arrows, Escape back, Accept starts with the background and its effect; portrait row, the default name refused, " +
+                "a typed name stored with the portrait), controller Exit";
         }
         finally
         {

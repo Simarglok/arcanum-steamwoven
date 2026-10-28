@@ -266,6 +266,8 @@ public enum GameSessionFailure
     ItemNotDroppable, DropTileUnfit,
     // Hero background (ARC-WORLD-097): a choice outside the stored range or whose effect is not the one given.
     InvalidBackground,
+    // Hero player name (ARC-UI-033): longer than the stored bound or holding a NUL byte.
+    InvalidPlayerName,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -443,9 +445,9 @@ public sealed class GameSessionSnapshot
     /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
     /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019); schema 53
     /// adds the hotkey bar (<see cref="Hotkeys"/>, ARC-UI-022); schema 54 adds the hero's background description number to <see cref="Hero"/>
-    /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100). Schemas 1..54 are refused,
-    /// not migrated.</summary>
-    public const int CurrentSchemaVersion = 55;
+    /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100); schema 56 adds the hero's
+    /// player name and portrait to <see cref="Hero"/> (ARC-UI-033). Schemas 1..55 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 56;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

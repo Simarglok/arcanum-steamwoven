@@ -67,7 +67,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Logbook | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-008 |
 | Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
-| New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030 |
+| New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030, ARC-UI-033 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
 | Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
 | Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018, ARC-UI-023 |
