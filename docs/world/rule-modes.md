@@ -185,8 +185,9 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   `PoisonRecoveryTwice` when it fires.
 - The AREA viewer's options window has a Rules line (ARC-UI-014) that switches the session between the two built-in
   modes in play and gives every session the viewer then makes or loads the chosen mode. The choice is not stored yet
-  and every run starts in Steamwoven: the launcher's settings file (ARC-DEV-046) will hold it, and the launcher screen
-  will choose it before the main menu. `RuleModeSettingCodec` is still not used. Custom per-switch mixes are not
+  and every run starts in Steamwoven: the launcher's settings file (ARC-DEV-046, `launcher_v1.json`, `rules.active`)
+  already holds a built-in mode, but no start or Rules line reads or writes it yet, and the launcher screen will
+  choose it before the main menu. `RuleModeSettingCodec` is still not used. Custom per-switch mixes are not
   offered (after alpha).
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
