@@ -323,7 +323,9 @@ project yet).
 | 5 | Packaged builds (the alpha's final task): macOS `.app` and Windows x64 presets, player folder name, icon, signing level, smoke on both OSes, player instruction for GOG on macOS and Windows | DEV | Mac (+ a Windows 11 machine for the smoke) | FR-PRODUCT-005, FR-LIFECYCLE-001 | 1, 2 |
 
 Task 1 is done as ARC-DEV-046 (the settings store, the locator and a viewer start without inputs from the stored
-folder; [viewer start](../rendering/terrain-viewer.md#start-without-inputs-arc-dev-046)). Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
+folder; [viewer start](../rendering/terrain-viewer.md#start-without-inputs-arc-dev-046)). Tasks 2 and 3 are done as
+ARC-UI-014 ([launcher screen](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014), the options window's Rules
+line and the stored mode), except applying the display at start. Tasks 1, 2 and 5 are on the alpha's path; 3 is small and can join 2; 4 can wait until after alpha.
 
 ## Questions for the owner
 

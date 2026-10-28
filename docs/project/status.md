@@ -65,6 +65,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
+| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |

@@ -176,6 +176,26 @@ public sealed class LauncherSettingsTests
     }
 
     [TestMethod]
+    public void Reset_replaces_any_file_with_the_defaults()
+    {
+        // ARC-UI-014: the player's reset is the one write that replaces a newer build's or a damaged file.
+        var path = Path.Combine(_root, "reset", LauncherSettingsFile.FileName);
+        Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Reset(path), "no file yet");
+        Assert.AreEqual((LauncherSettingsReadStatus.Read, LauncherSettings.Defaults), (LauncherSettingsFile.Load(path).Status, LauncherSettingsFile.Load(path).Settings));
+        foreach (var text in new[] { """{"schema":2,"gameRoot":"/x"}""", "not json", """{"schema":1,"future":true,"rules":{"active":"original"}}""" })
+        {
+            File.WriteAllText(path, text);
+            Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Reset(path), text);
+            var read = LauncherSettingsFile.Load(path);
+            Assert.AreEqual((LauncherSettingsReadStatus.Read, LauncherSettings.Defaults), (read.Status, read.Settings), text);
+            Assert.AreEqual(0, read.UnknownKeys.Count, "a reset keeps none of the file's keys");
+        }
+        CollectionAssert.AreEqual(new[] { LauncherSettingsFile.FileName }, Directory.EnumerateFiles(Path.GetDirectoryName(path)!).Select(Path.GetFileName).ToArray());
+        Directory.CreateDirectory(Path.Combine(_root, "dir.json"));
+        Assert.AreEqual(LauncherSettingsSaveStatus.Failed, LauncherSettingsFile.Reset(Path.Combine(_root, "dir.json")));
+    }
+
+    [TestMethod]
     public void A_start_opens_the_stored_folder_while_it_is_a_game_folder()
     {
         var game = Game(Path.Combine(_root, "Arcanum"));
