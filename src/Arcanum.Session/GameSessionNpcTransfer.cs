@@ -299,6 +299,23 @@ public sealed partial class GameSessionOwner
     /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs and that are still in an NPC's list, by entity in ordinal order.</summary>
     public IReadOnlyList<SessionGivenItem> QueryGivenItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Given.Values.ToArray()); }
 
+    /// <summary>
+    /// ARC-UI-036: every starting-kit item the session still knows, wherever it is: held by the hero (<see cref="QueryHeroKit"/>), placed
+    /// on the ground (<see cref="SessionPlacedSource.Kit"/>) or given to an NPC or a container (a given item without an origin), each with
+    /// its kind, in entity order. A host that rebuilds the kit's item facts by kit number reads it, so an item that comes back (picked up,
+    /// taken back) keeps its facts; only a destroyed item is gone.
+    /// </summary>
+    public IReadOnlyList<SessionKitItem> QueryKitItemsAnywhere()
+    {
+        ThrowIfDisposed();
+        var known = new SortedDictionary<string, SessionItemKind>(StringComparer.Ordinal);
+        foreach (var item in _inventory.Kit) known.TryAdd(item.Entity, item.Kind);
+        foreach (var item in _inventory.Placed) if (item.Source == SessionPlacedSource.Kit) known.TryAdd(item.Entity, item.Kind);
+        foreach (var item in _inventory.Npcs.Values.SelectMany(list => list))
+            if (_inventory.Given.TryGetValue(item.Entity, out var given) && given.Origin is null) known.TryAdd(item.Entity, item.Kind);
+        return Array.AsReadOnly(known.Select(pair => new SessionKitItem(pair.Key, pair.Value)).ToArray());
+    }
+
     // The units' move after the source checks: into an existing stack (its units grow), or into a new stack the creator makes after its
     // insert check (null: refused, its result returned). The source goes at exactly the count.
     private InventoryMutationResult MoveUnits(SessionAmmoRecord source, int count, SessionAmmoRecord? into, Func<(SessionMadeItem? Created, InventoryMutationResult? Refusal)>? create)

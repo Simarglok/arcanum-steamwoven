@@ -47,6 +47,16 @@ public sealed partial class GameSessionOwner
         var alignment = (int)Math.Clamp(next, SessionHeroLimits.MinAlignment, SessionHeroLimits.MaxAlignment);
         if (alignment == previous) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        SetHeroAlignment(alignment);
+        return Changed();
+    }
+
+    // The stored alignment's write with the followers' arming (OL17), without a revision of its own (ARC-SKILLS-010: a theft's change
+    // shares the attempt's revision).
+    private void SetHeroAlignment(int alignment)
+    {
+        var hero = _hero!;
+        var previous = hero.State.Alignment;
         foreach (var entity in _party.Order.ToArray())
         {
             var record = _party.Records[entity];
@@ -54,6 +64,5 @@ public sealed partial class GameSessionOwner
             if (armed != record) _party.Put(armed, false);
         }
         hero.Apply(hero.State.WithAlignment(alignment));
-        return Changed();
     }
 }

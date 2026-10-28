@@ -122,7 +122,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         {
             Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Text = _creation
-                ? "Return accepts, Escape cancels (back to the new-character window, which starts a new character) | PROJECT diagnostic window: stat, skill and spell points, no tech discipline buttons; the opening shop is not built; original UI parity NOT_VERIFIED"
+                ? "Return accepts (the opening shop), Escape cancels (back to the new-character window, which starts a new character) | PROJECT diagnostic window: stat, skill and spell points, no tech discipline buttons; original UI parity NOT_VERIFIED"
                 : "C, Escape or cancel closes | PROJECT diagnostic window: stat, skill and spell points (no tech discipline buttons); original UI parity NOT_VERIFIED",
         };
         var buttons = new HBoxContainer();

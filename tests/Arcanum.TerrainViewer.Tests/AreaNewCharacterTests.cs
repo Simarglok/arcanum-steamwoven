@@ -10,17 +10,19 @@ namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-030 (N10b): the new-character window (ledger NW1–NW5, BD4, BD10) over a synthetic generic hero and background table;
 /// ARC-UI-033: its portrait buttons (PO9) over a synthetic portrait file and its name field (NW6–NW8); ARC-UI-034: the character editor
-/// in creation mode (window 14, CM1–CM8) on a draft session and the replay of its presses.</summary>
+/// in creation mode (window 14, CM1–CM8) on a draft session and the replay of its presses. ARC-UI-036: the opening shop's tests
+/// (<see cref="AreaOpeningShopTests"/>) share this fixture.</summary>
 [TestClass]
 public sealed class AreaNewCharacterTests
 {
-    // Block 0 for everyone (effect 86), block 1 for a dwarf man (effect 87, no rule), block 2 for a human or elf woman (effect 86).
-    private const string Blocks = "{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{87}{12}{DWM}{13}{0}{14}{}\n{20}{1002}{21}{86}{22}{HUF,ELF}{23}{0}{24}{}";
+    // Block 0 for everyone (effect 86), block 1 for a dwarf man (effect 87, no rule), block 2 for a human or elf woman (effect 86, money 250,
+    // a weapon and a prototype the kit fixture lacks).
+    private const string Blocks = "{0}{1000}{1}{86}{2}{}{3}{400}{4}{}\n{10}{1001}{11}{87}{12}{DWM}{13}{0}{14}{}\n{20}{1002}{21}{86}{22}{HUF,ELF}{23}{250}{24}{6049 7000}";
     private const string Texts = "{1000}{Default\nplain}{1001}{Stout\nstub}{1002}{Lady\nfine}";
     // Human men 1000, 1003, 1005 (the generic start), elf women 1001, 1004, an NPC-only 1002, and 1006 for anyone.
     private const string Portraits = "{1000}{HUM1}{1001}{ELF1}{1002}{NPC1}{1003}{HUM2}{1004}{ELF2}{1005}{HUM3}{1006}{ANY1}";
 
-    private static MesFile Mes(string text)
+    internal static MesFile Mes(string text)
     {
         var parsed = MesFile.Parse(Encoding.Latin1.GetBytes(text));
         Assert.AreEqual(MesParseStatus.Parsed, parsed.Status, $"line {parsed.Line}");
@@ -28,7 +30,7 @@ public sealed class AreaNewCharacterTests
     }
 
     // Race effect 64 + race raises constitution by the race number, the female effect beauty by 1, background effect 86 strength by 1.
-    private static EffectRule? Effect(int number) => number switch
+    internal static EffectRule? Effect(int number) => number switch
     {
         >= 64 and <= 71 => new(number, true, [new(EffectAttributeKind.Stat, 2, EffectChangeOperator.Add, number - 64)]),
         330 => new(number, true, [new(EffectAttributeKind.Stat, 3, EffectChangeOperator.Add, 1)]),
@@ -36,7 +38,7 @@ public sealed class AreaNewCharacterTests
         _ => null,
     };
 
-    private static AreaHeroLoad Generic(bool backgrounds = true, bool portraits = true)
+    internal static AreaHeroLoad Generic(bool backgrounds = true, bool portraits = true, Func<int, PrototypeFile>? kit = null)
     {
         var read = new PremadeHero(AreaStartingHero.GenericPrototype, AreaStartingHero.GenericPrototype + PremadeHeroReader.PrototypeOffset, 0, 1, 0, 20, 1005, 0, 0,
             Effect(64)!, null, 0, 0, []);
@@ -47,10 +49,11 @@ public sealed class AreaNewCharacterTests
             BackgroundsDetail = backgrounds ? null : "FileMissing rules/backgrnd.mes",
             Portraits = portraits ? PortraitCatalogue.Create(Mes(Portraits)) : null,
             PortraitsDetail = portraits ? null : "FileMissing portrait/gameport.mes",
+            KitPrototypes = kit ?? AreaOpeningShopTests.KitFiles(),
         };
     }
 
-    private static readonly CharacterCreationRuleProfile Steamwoven = CharacterCreationRuleProfile.Steamwoven;
+    internal static readonly CharacterCreationRuleProfile Steamwoven = CharacterCreationRuleProfile.Steamwoven;
 
     [TestMethod]
     public void The_window_starts_as_the_generic_human_man_without_a_background_set()
@@ -300,7 +303,7 @@ public sealed class AreaNewCharacterTests
         Assert.AreEqual(AreaMenuWindow.NewCharacter, menu.Window);
         Assert.AreEqual(0, menu.Shown.Count, "art buttons only: no letters");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('x'));
-        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShop, "ARC-UI-034: Accept opens the editor");
+        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShopBarter, "ARC-UI-034: Accept opens the editor");
         menu.PressCreation(AreaNewCharacterButton.RaceNext, Steamwoven);
         Assert.AreEqual(CharacterRace.Dwarf, menu.Creation!.Race);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Accept(), "ARC-UI-033: the default name is refused");
@@ -340,9 +343,9 @@ public sealed class AreaNewCharacterTests
         Assert.AreEqual(AreaMenuWindow.NewGame, refused.Window, "no new game here: the window does not open");
     }
 
-    private static (AreaNewCharacter Creation, AreaHeroLoad Hero) ElfWoman()
+    internal static (AreaNewCharacter Creation, AreaHeroLoad Hero) ElfWoman(Func<int, PrototypeFile>? kit = null)
     {
-        var creation = new AreaNewCharacter(Generic());
+        var creation = new AreaNewCharacter(Generic(kit: kit));
         creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
         creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
         creation.Press(AreaNewCharacterButton.GenderNext, Steamwoven);
@@ -350,7 +353,7 @@ public sealed class AreaNewCharacterTests
         return (creation, creation.Hero(out var detail) ?? throw new AssertFailedException(detail ?? "hero"));
     }
 
-    private static GameSessionOwner Session(AreaHeroLoad hero) => AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(),
+    internal static GameSessionOwner Session(AreaHeroLoad hero) => AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(),
         Guid.NewGuid(), AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero).Owner ?? throw new AssertFailedException("session");
 
     [TestMethod]
@@ -440,10 +443,10 @@ public sealed class AreaNewCharacterTests
         menu.OpenCharacterEditor(editor);
         Assert.AreEqual((AreaMenuWindow.CharacterEditor, 0, 0), (menu.Window, menu.Shown.Count, menu.Focus));
         Assert.AreSame(editor, menu.Editor);
-        CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShop);
+        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShopBarter);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('a'), "no letters in the editor (CM7)");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Accept(), "Accept starts the game (no shop)");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Confirm(), "the controller's Accept row");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenShop), menu.Accept(), "ARC-UI-036: Accept asks for the opening shop");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenShop), menu.Confirm(), "the controller's Accept row");
         menu.Move(1);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "the Cancel row goes back");
         Assert.AreEqual(AreaMenuWindow.NewCharacter, menu.Window);

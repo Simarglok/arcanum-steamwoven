@@ -114,6 +114,12 @@ mismatched facts, a callback that moved the session. **Project policy:** a chose
 is not wielded (the session runs neither; the original wears it and runs them): its step names it, the slot keeps what it
 held when the call began (a weapon taken off for the choice goes back on) and the call goes on.
 
+ARC-UI-036: `GameSessionOwner.WieldStartBest(expected, items, artCheck, insertCheck)` is the new character's start (the original's
+menu close 0x5412E0 with the best-items flag, [ledger OS5](../research/ledger/character.md#opening-shop-arc-ui-036)): the same plan,
+refusals, policy and single revision, but only the weapon slot (1004) and then the body-armour slot (1006), each only when it is
+empty. `GameSessionOwner.CheckHeroWear(item, slot)` answers the wear rules above for an item the hero need not hold, with the hero's
+worn items (the opening shop's kit asks it for the clothes it made, OS3); the art lookup stays the caller's.
+
 The AREA viewer's pre-made start (`--hero`, ARC-WORLD-027) runs it after creating the session, with the kit's facts read
 from the hero's content prototypes and yes to the art and insert checks (one diagnostic body art, no grid); the HUD shows
 `worn N`. Installed original (opt-in, `ARC_AREA_CONVERSATION_GAME_ROOT`): every pre-made hero starts with a weapon, body

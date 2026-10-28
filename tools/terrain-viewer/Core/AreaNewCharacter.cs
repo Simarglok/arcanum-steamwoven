@@ -21,7 +21,8 @@ public enum AreaNewCharacterButton { GenderPrevious, GenderNext, RacePrevious, R
 /// PO9) and a race or gender change takes the first one it finds; the name field types at its end (<see cref="CharacterNameRules"/>,
 /// NW6–NW8), and <see cref="AcceptName"/> checks it as the original's Accept does. ARC-UI-034: the character editor that Accept
 /// opens (<see cref="AreaCreationEditor"/>) records its presses here (<see cref="Presses"/>), and <see cref="Apply"/> replays them on
-/// the started session; the opening shop is a later slice. Caller-serialized.
+/// the started session. ARC-UI-036: the opening shop's kit (<see cref="Kit"/>) is what the start gives the session
+/// (<see cref="StartHero"/>), and <see cref="WieldStart"/> wields its best weapon and body armour. Caller-serialized.
 /// </summary>
 public sealed class AreaNewCharacter
 {
@@ -222,6 +223,36 @@ public sealed class AreaNewCharacter
             return null;
         }
         finally { owner.CloseHeroEditor(); }
+    }
+
+    /// <summary>ARC-UI-036: the kit the opening shop (window 15) made, which the start gives the session; null before the shop opened
+    /// and again once its Back returned to the editor (the original's next opening destroys the inventory and makes the kit anew, OS3).</summary>
+    public AreaOpeningKit? Kit { get; private set; }
+
+    internal void TakeKit(AreaOpeningKit? kit) => Kit = kit;
+
+    /// <summary>ARC-UI-036: the hero the start makes the session from: the opening shop's kit hero (<see cref="AreaOpeningKit.Hero"/>);
+    /// null with the reason before the shop made one.</summary>
+    public AreaHeroLoad? StartHero(out string? detail)
+    {
+        detail = Kit is null ? "the opening shop made no kit yet" : null;
+        return Kit?.Hero;
+    }
+
+    /// <summary>
+    /// ARC-UI-036: the start of the new character's game after <see cref="Apply"/>: the original's menu close (0x5412E0) with the
+    /// best-items flag the window's Accept sets wields the best weapon and then the best body armour, each only into an empty slot
+    /// (<see cref="GameSessionOwner.WieldStartBest"/>, ledger OS5). <paramref name="wear"/> is the kit's wear facts by kit number
+    /// (<see cref="AreaHeroLoad.KitWear"/>); the art lookup and the insert check are answered yes, as the pre-made start answers them.
+    /// Null on success, else why the session refused it.
+    /// </summary>
+    public static string? WieldStart(GameSessionOwner owner, IReadOnlyList<SessionWearableItem?> wear)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(wear);
+        var worn = owner.WieldStartBest(owner.Version, entity => AreaStartingHero.KitIndex(entity) is { } index && index < wear.Count ? wear[index] : null,
+            (_, _) => true, _ => SessionInsertVerdict.Accepted);
+        return worn.Disposition == GameSessionDisposition.Rejected ? $"the start's best items were refused ({worn.Failure})" : null;
     }
 
     private void Take(CreationPress press)

@@ -7,8 +7,9 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-034 (N10b slice 3): the character editor in creation mode, the original's window 14 that the new-character window's Accept
 // opens (ledger CM1–CM8). It is the character sheet in its creation mode (AreaCharacterSheetPanel with Accept and Cancel) above the
 // main menu's backdrop, over a draft session of the new character (AreaCreationEditor): the stats, skills and spells pages' + and −
-// spend the five starting points and take them back down to the sheet the editor opened on. Accept (or Return) starts the game with
-// the presses replayed on the real session (the opening shop the original goes on to is not built); Cancel (or Escape) goes back to
+// spend the five starting points and take them back down to the sheet the editor opened on. Accept (or Return) opens the opening shop
+// (ARC-UI-036, window 15), whose Accept starts the game with the presses replayed on the real session and whose Back shows this
+// editor again on the same draft; Cancel (or Escape) goes back to
 // the new-character window, which starts a new character as the original's does. The menu owns the keys; the pages' buttons take
 // the pointer.
 public partial class TerrainViewerApp

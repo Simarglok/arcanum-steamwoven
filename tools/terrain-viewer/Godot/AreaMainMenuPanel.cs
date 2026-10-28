@@ -11,7 +11,8 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-013: the options window: the page's shown controls, each with its label, value and arrows, above the page and Done buttons.
 /// ARC-UI-030: the new-character window: gender, race and background rows with their arrows (the original's art buttons), the
 /// background's name and text from the game, Accept and Cancel. ARC-UI-034: the character editor (window 14) is the creation-mode
-/// character sheet the app shows above this backdrop; the menu's own panel is hidden there.
+/// character sheet the app shows above this backdrop; the menu's own panel is hidden there. ARC-UI-036: the opening shop (window 15):
+/// the kit the shop made (the host's text: gold and items), Accept and Back.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -23,6 +24,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private VBoxContainer _browser = null!;
     private VBoxContainer _creation = null!;
     private Label _creationText = null!;
+    private VBoxContainer _shop = null!;
+    private Label _shopText = null!;
     private Label _hero = null!;
     private Label _note = null!;
     private Label _notice = null!;
@@ -65,6 +68,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
     internal void NameClickForSelfTest() => NameClicked?.Invoke();
     internal void CreationPressForSelfTest(AreaNewCharacterButton button) => CreationPressed?.Invoke(button);
     internal void AcceptForSelfTest() => AcceptRequested?.Invoke();
+    /// <summary>ARC-UI-036: the opening shop's kit text (empty outside the shop).</summary>
+    internal string ShopForSelfTest => _shop.Visible ? _shopText.Text : "";
+    /// <summary>ARC-UI-036: the opening shop's Accept (true) or Back.</summary>
+    internal void ShopPressForSelfTest(bool accept) => (accept ? AcceptRequested : BackRequested)?.Invoke();
 
     public override void _Ready()
     {
@@ -100,27 +107,33 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _creation = new VBoxContainer { Name = "NewCharacter" };
         _creationText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.1f, .1f, .1f), CustomMinimumSize = new Vector2(320, 90) };
         _creation.AddChild(_creationText);
+        _shop = new VBoxContainer { Name = "Shop" };
+        _shopText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.1f, .1f, .1f), CustomMinimumSize = new Vector2(320, 120) };
+        _shop.AddChild(_shopText);
         _note = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.3f, .3f, .3f) };
         _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
         _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        foreach (var control in new Control[] { _header, _controls, _buttons, _browser, _creation, _notice, _note, _hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _header, _controls, _buttons, _browser, _creation, _shop, _notice, _note, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
-    /// <summary>The window for the menu's state; <paramref name="hero"/> is the browsed hero's description (browser only).</summary>
+    /// <summary>The window for the menu's state; <paramref name="hero"/> is the browsed hero's description (browser only), or the opening
+    /// shop's kit (ARC-UI-036, shop only).</summary>
     public void Render(AreaMainMenu menu, string hero)
     {
         ArgumentNullException.ThrowIfNull(menu);
         Show();
         var browser = menu.Window == AreaMenuWindow.PickCharacter;
         var creating = menu.Window == AreaMenuWindow.NewCharacter && menu.Creation is not null && !menu.QuitPending;
+        var shopping = menu.Window == AreaMenuWindow.Shop && !menu.QuitPending;
         _header.Text = menu.QuitPending ? menu.Texts.Text(AreaMainMenuTexts.QuitQuestion) : menu.Window switch
         {
             AreaMenuWindow.Main => "Main menu", AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => "Game menu",
             AreaMenuWindow.SinglePlayer => menu.Texts.Text(10), AreaMenuWindow.NewGame => menu.Texts.Text(50),
             AreaMenuWindow.Options => menu.Texts.Text(12) + ": " + menu.Texts.Text(4000 + (int)menu.Page),
-            AreaMenuWindow.NewCharacter => menu.Texts.Text(421), AreaMenuWindow.CharacterEditor => "Character editor", _ => menu.Texts.Text(420),
+            AreaMenuWindow.NewCharacter => menu.Texts.Text(421), AreaMenuWindow.CharacterEditor => "Character editor",
+            AreaMenuWindow.Shop => "Opening shop", _ => menu.Texts.Text(420),
         };
         // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
         _panel.Visible = menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending;
@@ -156,13 +169,16 @@ public partial class AreaMainMenuPanel : CanvasLayer
             _buttons.AddChild(button);
         }
         RenderCreation(menu, creating);
-        _buttons.Visible = !browser && !creating;
+        RenderShop(menu, shopping, hero);
+        _buttons.Visible = !browser && !creating && !shopping;
         _browser.Visible = browser;
         _hero.Text = browser ? hero : "";
         var hidden = menu.HiddenNotes;
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
+                : shopping ? "the kit the shop made for the character (the original's item_generate_inventory); Accept or Return starts the game "
+                    + "with it, Back or Escape returns to the character editor, where every point is still free; item names from the game when loaded"
                 : creating ? "the arrows change the gender, race and background (a race or gender change clears the background); Accept opens the character editor "
                     + "for this character, Escape or Cancel goes back; race and gender names are the project's, the background's text the game's"
                 : options && !menu.QuitPending ? "Up/Down choose a control, the arrows or Left/Right change its value at once (it is saved as a user preference, not in a save); "
@@ -240,6 +256,27 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _creation.AddChild(actions);
     }
 
+    /// <summary>ARC-UI-036: the opening shop's kit text and its Accept (right in the original) and Back buttons; the controller's focus
+    /// row (0 Accept, 1 Back) is highlighted.</summary>
+    private void RenderShop(AreaMainMenu? menu, bool shopping, string text)
+    {
+        foreach (var child in _shop.GetChildren()) { if (child == _shopText) continue; _shop.RemoveChild(child); child.QueueFree(); }
+        _shop.Visible = shopping;
+        _shopText.Text = shopping ? text : "";
+        if (!shopping || menu is null) return;
+        var actions = new HBoxContainer { Name = "ShopActions" };
+        foreach (var (name, row, action) in new (string, int, Action)[] { ("Back", 1, () => BackRequested?.Invoke()), ("Accept", 0, () => AcceptRequested?.Invoke()) })
+        {
+            var button = new Button { Name = name, Text = name, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(130, 34),
+                Modulate = row == menu.Focus ? new Color(1f, .85f, .6f) : Colors.White };
+            button.Pressed += action;
+            button.MouseEntered += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
+            button.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
+            actions.AddChild(button);
+        }
+        _shop.AddChild(actions);
+    }
+
     /// <summary>ARC-UI-013: the options window's controls of the shown page (none in other windows).</summary>
     private void RenderControls(AreaMainMenu menu)
     {
@@ -273,6 +310,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
+        RenderShop(null, false, "");
         GetViewport().GuiReleaseFocus();
     }
 

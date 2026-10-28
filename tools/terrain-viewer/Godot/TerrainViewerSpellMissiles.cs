@@ -16,6 +16,8 @@ namespace Arcanum.TerrainViewer;
 // out it waits one pace of its art; then on its destination with its target there (or a tile target) it arrives: the target re-check
 // and the BEGIN (SessionSpellCaster.ArriveMissile); a target that moved is followed on a new leg; a refused line, another map or
 // another session loses it (LoseMissile, MG44: its run is freed unpaid). The casting goal ends on its own eye candy meanwhile.
+// ARC-WORLD-105: an NPC's casting goal (the AI host) launches at the same node; its missile leaves the NPC's live tile and flies,
+// arrives and is lost the same way.
 public partial class TerrainViewerApp
 {
     /// <summary>One spell missile in flight: its run and host, its target (an object, or none for a tile), its destination, its faced
@@ -23,6 +25,7 @@ public partial class TerrainViewerApp
     private sealed class SpellMissile
     {
         public required SessionSpellCaster Caster { get; init; }
+        public required string CasterObject { get; init; }
         public required int Run { get; init; }
         public required int Spell { get; init; }
         public required int Map { get; init; }
@@ -57,22 +60,50 @@ public partial class TerrainViewerApp
     /// </summary>
     private bool LaunchSpellMissile(SessionSpellCaster caster, SpellCastGoal goal, uint art, long now)
     {
-        if (_areaSession is not { } owner || HeroWorldCell() is not { } start || !caster.LaunchMissile(goal.Run)) return false;
+        if (_areaSession is null || HeroWorldCell() is not { } start || !caster.LaunchMissile(goal.Run)) return false;
+        FlySpellMissile(caster, SessionSpellCaster.Hero, start, goal.Run, goal.Spell, goal.TargetObject, goal.TargetTile, art, now);
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-105: an NPC's launch, which the AI host's casting goal made at its play's action frame (0x429C40, the same node as the
+    /// hero's, AC8): the missile flies from the NPC's live tile as the hero's does. A missile that cannot fly here (no cell, no art, a
+    /// run gone) is lost at once (MG44: its run freed unpaid).
+    /// </summary>
+    private void LaunchNpcSpellMissile(AreaAiNotice notice, long now)
+    {
+        if (notice.Caster is not { } caster || !caster.MissileFlies(notice.Run)) return;
+        if (ReferenceEquals(caster.Owner, _areaSession) && _areaSession is { } owner && EyeCandyCell(owner, notice.Npc) is { } start
+            && SpellMissileArt(notice.Spell) is { } art && owner.QuerySpellRuns()[notice.Run] is { } run)
+        {
+            FlySpellMissile(caster, notice.Npc, start, notice.Run, notice.Spell, run.Target?.Id, run.TargetTile, art, now);
+            return;
+        }
+        var freed = caster.LoseMissile(notice.Run);
+        GD.Print($"ARC-WORLD-105 missile-not-flown npc={notice.Npc} run={notice.Run} spell={notice.Spell} freed={freed?.Disposition.ToString() ?? "nothing"}");
+    }
+
+    // The launch after the session's (0x429C40): the secondary cast eye candy on the caster (0x456E00) and the missile from the caster's
+    // tile to its target's (0x4248A0, goal 28).
+    private void FlySpellMissile(SessionSpellCaster caster, string casterObject, CellCoord start, int run, int spell, string? targetObject,
+        SpellLocation targetTile, uint art, long now)
+    {
+        var owner = caster.Owner;
         // A missile of an earlier run in the same slot (freed meanwhile) is gone: the run id is the missile's identity.
-        foreach (var stale in _spellMissiles.Where(m => m.Run == goal.Run).ToArray()) DropSpellMissile(stale, "its slot was reused");
-        PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run, now);
-        var destination = goal.TargetObject is { } target ? EyeCandyCell(owner, target) ?? start : new CellCoord(unchecked((int)goal.TargetTile.X), unchecked((int)goal.TargetTile.Y));
+        foreach (var stale in _spellMissiles.Where(m => m.Run == run).ToArray()) DropSpellMissile(stale, "its slot was reused");
+        PlayEyeCandy(casterObject, SpellEyeCandyRules.EntryIndex(spell, SpellEyeCandyRules.SecondaryCast), run, now);
+        var destination = targetObject is { } target ? EyeCandyCell(owner, target) ?? start : new CellCoord(unchecked((int)targetTile.X), unchecked((int)targetTile.Y));
         var direction = ProjectileRules.Direction(start, destination);
         var faced = ProjectileRules.FacedArt(art, direction) ?? art;
-        var entry = EyeCandyTable!.Entry(goal.Spell, SpellEyeCandyTable.Projectile);
+        var entry = EyeCandyTable!.Entry(spell, SpellEyeCandyTable.Projectile);
         var fps = ExtraArt()?.Load(faced).Frame?.FramesPerSecond;
         var leg = SpellMissileRules.Leg(start, destination);
-        GD.Print($"ARC-MAGIC-018 missile-launch run={goal.Run} spell={goal.Spell} from={start.X},{start.Y} to={destination.X},{destination.Y}"
-            + $" target={goal.TargetObject ?? "tile"} direction={direction} art=0x{faced:X8} speed={entry.ProjectileSpeed} leg={leg.Kind}");
-        _spellMissileLegs[goal.Run] = 1;
+        GD.Print($"ARC-MAGIC-018 missile-launch run={run} spell={spell} caster={casterObject} from={start.X},{start.Y} to={destination.X},{destination.Y}"
+            + $" target={targetObject ?? "tile"} direction={direction} art=0x{faced:X8} speed={entry.ProjectileSpeed} leg={leg.Kind}");
+        _spellMissileLegs[run] = 1;
         var missile = new SpellMissile
         {
-            Caster = caster, Run = goal.Run, Spell = goal.Spell, Map = CurrentAreaMap, Target = goal.TargetObject, Destination = destination, Art = faced,
+            Caster = caster, CasterObject = casterObject, Run = run, Spell = spell, Map = CurrentAreaMap, Target = targetObject, Destination = destination, Art = faced,
             StepsPerTick = SpellMissileRules.StepsPerTick(entry.ProjectileSpeed), PaceMs = SpellMissileRules.PaceMs(fps),
             // A missile that does not fly (already there, or a refused line) ends below and is never stepped or drawn.
             Flight = leg.Flight ?? new(start, start, [(0, 0)], 1, start, 0, 0, 0), LegStartMs = now,
@@ -84,7 +115,6 @@ public partial class TerrainViewerApp
             case SpellMissileLegKind.Refused: LoseSpellMissile(missile, "the line is too long"); break;
             default: _spellMissiles.Add(missile); SyncSpellMissileBodies(); break;
         }
-        return true;
     }
 
     /// <summary>Per frame: each missile takes its ticks' steps (stopping where a leg's steps run out), waits its pace after a leg and
@@ -160,7 +190,9 @@ public partial class TerrainViewerApp
         var begun = missile.Caster.ArriveMissile(missile.Run);
         Ended(missile, why, $"begun={begun?.Disposition.ToString() ?? "re-check failed"} failure={begun?.Failure}");
         FlushMissileLog(missile, mark, begun is null ? "the target is no longer valid" : null);
-        RefreshAreaStatus();
+        // ARC-WORLD-105: an NPC's missile hits as its release would.
+        if (missile.CasterObject != SessionSpellCaster.Hero && begun is not null) { _aiMissileArrivals++; AiSpellTook(); }
+        else RefreshAreaStatus();
     }
 
     /// <summary>The missile's goal ended without its release (0x429E70): the missile is destroyed and its run freed unpaid (MG44, fixed

@@ -184,6 +184,7 @@ public sealed class AreaResourceBoundaryTests
     [TestMethod]
     public void Path_replacement_after_open_fails_before_publication_and_disposes_handles()
     {
+        if (OperatingSystem.IsWindows()) Assert.Inconclusive("Windows refuses the rename of an open file (see the Windows binding tests).");
         var directory = Path.Combine(Environment.GetEnvironmentVariable("TMPDIR") ?? AppContext.BaseDirectory, "area-path-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory); var path = Path.Combine(directory,"module.dat");
         var bytes = Dat(("maps/test/67108865.sec",Sector())); File.WriteAllBytes(path,bytes);
@@ -197,6 +198,103 @@ public sealed class AreaResourceBoundaryTests
             Assert.IsNull(owner.PublishedSnapshot);
         }
         finally { File.Delete(path); File.Delete(path+".old"); Directory.Delete(directory); }
+    }
+
+    // ARC-DEV-049: the Windows binding uses managed calls only, so it runs on macOS and Linux too. On Windows the read-only share
+    // mode refuses the rename and rewrite these tests do (asserted there instead); elsewhere they show the size/write-time
+    // comparison catches them anyway.
+    [TestMethod]
+    public void Path_binding_is_unix_on_macos_and_linux_and_windows_on_windows()
+    {
+        var expected = OperatingSystem.IsWindows() ? AreaPathBinding.Windows : AreaPathBinding.Unix;
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
+        { Throws<PlatformNotSupportedException>(() => AreaPathStream.CurrentBinding()); return; }
+        Assert.AreEqual(expected, AreaPathStream.CurrentBinding());
+        Throws<ArgumentOutOfRangeException>(() => new AreaPathStream(Path.Combine(Path.GetTempPath(), "absent.dat"), (AreaPathBinding)7));
+        if (OperatingSystem.IsWindows())
+            Throws<PlatformNotSupportedException>(() => new AreaPathStream(Path.Combine(Path.GetTempPath(), "absent.dat"), AreaPathBinding.Unix));
+    }
+
+    [TestMethod]
+    public void Windows_path_binding_reads_and_publishes_like_the_unix_one()
+    {
+        var directory = TemporaryDirectory("area-windows-path-"); var path = Path.Combine(directory,"module.dat");
+        var bytes = Dat(("maps/test/67108865.sec",Sector())); File.WriteAllBytes(path,bytes);
+        var key = new AreaInputKey(AreaSourceRole.Module);
+        var plan = new AreaSourcePlan(1,1,new(1,1),2,"maps/test",[new(key,bytes.Length,Hash(bytes))],[]);
+        try
+        {
+            using var memory = AreaDataOwner.Open(new([new AreaInput(key,new MemoryStream(bytes))]),plan,new());
+            using var owner = AreaDataOwner.Open(new([new AreaInput(key,new AreaPathStream(path,AreaPathBinding.Windows))]),plan,new());
+            // The adapter's buffer is admitted as for the Unix binding.
+            Assert.AreEqual(65568L, owner.Usage.RetainedReserved - memory.Usage.RetainedReserved);
+            var expected = memory.Inspect(); var report = owner.Inspect();
+            Assert.AreEqual(expected.IsComplete, report.IsComplete);
+            CollectionAssert.AreEqual(expected.Issues.Select(i => i.Code).ToArray(), report.Issues.Select(i => i.Code).ToArray());
+            Assert.IsFalse(report.Issues.Any(i => i.Code == AreaErrorCode.InputChangedDuringRead));
+        }
+        finally { File.Delete(path); Directory.Delete(directory); }
+    }
+
+    [TestMethod]
+    public void Windows_path_binding_refuses_a_replaced_rewritten_or_removed_file()
+    {
+        var directory = TemporaryDirectory("area-windows-change-"); var path = Path.Combine(directory,"module.dat");
+        var bytes = Dat(("maps/test/67108865.sec",Sector()));
+        if (OperatingSystem.IsWindows())
+        {
+            // The share mode itself: no rename, delete or write of the open file.
+            try
+            {
+                File.WriteAllBytes(path,bytes);
+                using var open = new AreaPathStream(path,AreaPathBinding.Windows);
+                Throws<IOException>(() => File.Move(path,path+".old"));
+                Throws<IOException>(() => File.Delete(path));
+                Throws<IOException>(() => File.OpenWrite(path).Dispose());
+                open.Check();
+            }
+            finally { File.Delete(path); File.Delete(path+".old"); Directory.Delete(directory); }
+            return;
+        }
+        try
+        {
+            File.WriteAllBytes(path,bytes);
+            var plan = new AreaSourcePlan(1,1,new(1,1),2,"maps/test",[new(new(AreaSourceRole.Module),bytes.Length,Hash(bytes))],[]);
+            using (var owner = AreaDataOwner.Open(new([new AreaInput(new(AreaSourceRole.Module),new AreaPathStream(path,AreaPathBinding.Windows))]),plan,new()))
+            {
+                var written = File.GetLastWriteTimeUtc(path);
+                File.Move(path,path+".old"); File.WriteAllBytes(path,bytes); File.SetLastWriteTimeUtc(path,written.AddMinutes(1)); // same bytes, later write
+                var report = owner.Inspect(); Assert.IsFalse(report.IsComplete);
+                Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.InputChangedDuringRead));
+                Assert.IsNull(owner.PublishedSnapshot);
+            }
+            File.Delete(path); File.Move(path+".old",path);
+
+            using (var grown = new AreaPathStream(path,AreaPathBinding.Windows))
+            {
+                var written = File.GetLastWriteTimeUtc(path);
+                File.WriteAllBytes(path,[.. bytes, 0]); File.SetLastWriteTimeUtc(path,written); // longer file, same write time
+                Assert.AreEqual(AreaErrorCode.InputChangedDuringRead, Throws<AreaException>(() => grown.Check()).Issue.Code);
+            }
+            File.WriteAllBytes(path,bytes);
+
+            using (var removed = new AreaPathStream(path,AreaPathBinding.Windows))
+            {
+                File.Move(path,path+".old");
+                Assert.AreEqual(AreaErrorCode.InputChangedDuringRead, Throws<AreaException>(() => removed.Check()).Issue.Code);
+            }
+            File.Move(path+".old",path);
+
+            Assert.AreEqual(AreaErrorCode.MissingSource,
+                Throws<AreaException>(() => new AreaPathStream(Path.Combine(directory,"absent.dat"),AreaPathBinding.Windows)).Issue.Code);
+        }
+        finally { File.Delete(path); File.Delete(path+".old"); Directory.Delete(directory); }
+    }
+
+    private static string TemporaryDirectory(string prefix)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory); return directory;
     }
 
     private static void Reject(Fixture f, AreaErrorCode code)
