@@ -440,7 +440,9 @@ public sealed class SessionItemSpellTests
         var caster = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner), new Events(),
             id => id switch
             {
-                Coat => new SessionItemSpells(Coat, SessionSpellCaster.Hero, 7, [170, 10000, 10000, 10000, 10000], -1, 10),
+                // The lookup follows the move: once given, the coat is the merchant's.
+                Coat => new SessionItemSpells(Coat, owner.QueryHeroKit().Any(k => k.Entity == Coat) ? SessionSpellCaster.Hero : "merchant", 7,
+                    [170, 10000, 10000, 10000, 10000], -1, 10),
                 Wand => new SessionItemSpells(Wand, SessionSpellCaster.Hero, 5, [164, 10000, 10000, 10000, 10000], 5, 10),
                 _ => null,
             });

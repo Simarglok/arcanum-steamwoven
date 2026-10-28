@@ -160,7 +160,8 @@ public sealed partial class SessionSpellCaster
     /// is technological or has item triggers without a maintenance period (0x457450, <see cref="SessionSpellRunActionKind.Demaintain"/>);
     /// then the drop's withdrawal (0x4CC130, <see cref="WithdrawItemSpells"/> with <see cref="ItemSpellTriggerRules.Drop"/>) with the
     /// holder passed, as the original passes it and leaves the item's parent field unwritten: the item counts as the holder's while it
-    /// runs, so the lookup need only still know it. The runs the first step ends come first in the stopped list.
+    /// runs (<see cref="HeldAs"/>), so the lookup need only still know it. The runs the first step ends come first in the stopped list
+    /// (none when the session refused the step), each once.
     /// </summary>
     public (IReadOnlyList<int> Stopped, IReadOnlyList<SessionItemSpellStart> Spells) RemoveItemSpells(string item, string holder)
     {
@@ -169,14 +170,33 @@ public sealed partial class SessionSpellCaster
         // The runs 0x457450 ends (by event: an interrupt event, or freed before their BEGIN), as SpellRunSystem.Demaintain picks them.
         var ended = _owner.QuerySpellRuns().Runs.Where(run => run.Source?.Id == item && Record(run.Spell) is var r && !r.Technology &&
             (!r.ItemTriggers || r.MaintainPeriod > 0)).Select(run => run.Id).ToList();
-        Act(new(SessionSpellRunActionKind.Demaintain, Object: item));
+        using var held = HeldAs(item, holder);
+        if (Act(new(SessionSpellRunActionKind.Demaintain, Object: item)).Disposition == GameSessionDisposition.Rejected) ended.Clear();
+        var (stopped, spells) = WithdrawItemSpells(ItemSpellTriggerRules.Drop, item, holder);
+        return ([.. ended.Concat(stopped).Distinct()], spells);
+    }
+
+    /// <summary>ARC-MAGIC-022: until the scope ends, <paramref name="item"/> counts as <paramref name="holder"/>'s for this host (the item
+    /// lookup's holder is replaced), as an item the removal withdraws keeps its parent field (IU9). Scopes nest; each restores the one
+    /// before it.</summary>
+    public IDisposable HeldAs(string item, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(holder);
+        var previous = _heldBy;
         _heldBy = (item, holder);
-        try
+        return new HeldScope(this, previous);
+    }
+
+    private sealed class HeldScope(SessionSpellCaster caster, (string Item, string Holder)? previous) : IDisposable
+    {
+        private bool _done;
+        public void Dispose()
         {
-            var (stopped, spells) = WithdrawItemSpells(ItemSpellTriggerRules.Drop, item, holder);
-            return ([.. ended, .. stopped], spells);
+            if (_done) return;
+            _done = true;
+            caster._heldBy = previous;
         }
-        finally { _heldBy = null; }
     }
 
     // ARC-MAGIC-022: an item a removal is withdrawing counts as its former holder's (IU9: the parent field is not rewritten).
@@ -282,6 +302,8 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     public SessionItemTriggerResult Remove(string item, string holder)
     {
+        // The recast's goal plays while the item still counts as the holder's.
+        using var held = _caster.HeldAs(item, holder);
         var (stopped, spells) = _caster.RemoveItemSpells(item, holder);
         return Played(stopped, spells);
     }

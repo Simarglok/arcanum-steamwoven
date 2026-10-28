@@ -112,10 +112,13 @@ The hero's inventory moves take an optional `ISessionItemTriggers` like `Equip` 
 - **Removal** (0x467860, IU9): after `GiveItemToNpc` moved an item out, `ISessionItemTriggers.Remove` (`SessionSpellCaster.RemoveItemSpells`)
   ends by event the runs the item is the source of, unless technological or with item triggers and no maintenance period (0x457450),
   then runs the drop's withdrawal (0x4CC130) with the hero as holder: the item counts as the hero's while it runs, as the original
-  passes the holder and leaves the item's parent field. Without a host a give of an item that is the source of a run is refused
-  (`ItemEffectUnsupported`).
+  passes the holder and leaves the item's parent field (also while the recast's goal plays). Without a host a give of an item that is
+  the source of a run is refused (`ItemEffectUnsupported`), and so is a barter sale of one (`BarterSell` gives without a host). An
+  ammunition item merged into the NPC's stack is deleted before these steps (the original removes it first); no installed ammunition
+  carries item spells.
 - Without a host the moves run no executor; no installed record fires on a pickup or a drop (census), so only the removal's ending
-  of runs is visible in the installed game.
+  of runs is visible in the installed game. No viewer or dialog caller passes a host yet (the viewer's pickup and loot, the dialog
+  `IN` port).
 
 ## Installed data
 
@@ -141,9 +144,10 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 
 ## Not ready
 
-- The other inventory moves run no pickup or removal executor yet: barter, the throw and a landed item's pickup, a critical drop, the
-  placed and created items, the junk piles' own moves, the NPCs' inventories and items scripts move (their pickup and drop fire
-  nothing in the installed game; the removal's ending of runs is missing there).
+- The other inventory moves run no pickup or removal executor yet: barter (a sale of an item that sources a run is refused), the
+  throw, a critical drop, items placed or created on the ground by the session, the NPCs' own inventories and the items scripts move
+  (their pickup and drop fire nothing in the installed game; the removal's ending of runs is missing there). Picking such an item up
+  again through `PickUpItem` or `LootItem` fires its pickup.
 - The item use's other branches (reading, lockpick, healing kit, food and scroll spending without magic) are the host's own calls
   (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
   use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.

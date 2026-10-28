@@ -106,6 +106,9 @@ public sealed partial class GameSessionOwner
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
     /// The original's no-drop item flag and the NPC flag 0x40 (re-wield) are not modelled. One revision.
+    /// ARC-MAGIC-022: an item that is the source of a spell run needs <paramref name="triggers"/> (else
+    /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>); with one, the removal's spell steps run after the move
+    /// (<see cref="ISessionItemTriggers.Remove"/>, <see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
         ISessionItemTriggers? triggers = null)
@@ -187,7 +190,8 @@ public sealed partial class GameSessionOwner
     /// input, the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a holder that is not an NPC of
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// gold (<see cref="TakeGoldFromNpc"/>) or a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), and the rules of
-    /// <see cref="LootItem"/>. One revision.
+    /// <see cref="LootItem"/>. One revision. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
+    /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
         ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(TakeFromNpc(expected, npc, item, insertCheck, scripts), triggers);
