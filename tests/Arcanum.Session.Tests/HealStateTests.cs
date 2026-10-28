@@ -293,4 +293,80 @@ public sealed class HealStateTests
         Assert.AreNotEqual(text, destroyed);
         Assert.AreEqual(GameSessionFailure.InvalidDurability, GameSessionOwner.Restore(Decode(destroyed), RestoreOptions()).Failure);
     }
+
+    // ARC-WORLD-109: an NPC healer ("oid:healer") whose map data's sheet gives heal `points` with `training` and intelligence 20, and its
+    // pack's healing item ("oid:salve"), which the hero does not hold.
+    private const string Salve = "oid:salve";
+
+    private static SessionNpcHeal NpcHeal(int points, SkillTraining training, SessionLifeTarget target, LifeState? healer = null)
+    {
+        int[] basic = new int[12];
+        basic[(int)Skill.Heal] = points | (int)training << 6;
+        var sheet = new SessionNpcAdvancement("oid:healer", new(CharacterRace.Human, false, [8, 8, 8, 8, 20, 8, 8, 8], 0, 0, 1, 0,
+            [.. basic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0), 0);
+        return new(SessionLifeTarget.Critter("oid:healer", new LifeFacts(), healer ?? new LifeState(0, 0, 0, LifeConditions.None, 0)), sheet,
+            AdvancementModifiers.None, target, Item(bonus: 50) with { Entity = Salve });
+    }
+
+    [TestMethod]
+    public void AnNpcMasterHealsTheHeroWithItsOwnItemWithoutChargeOrFate()
+    {
+        using var owner = Healer(0, SkillTraining.None);
+        Hurt(owner, 25);
+        owner.GrantHeroFatePoint(owner.Version);
+        owner.ArmHeroFate(owner.Version, FateKind.Heal);
+        var world = HeroSubturn(owner);
+        var points = owner.QueryCombatRound()!.ActionPoints;
+        var before = owner.Version.Revision;
+        var result = owner.HealByNpc(owner.Version, NpcHeal(5, SkillTraining.Master, SessionLifeTarget.Hero));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.IsTrue(result.Check!.Success);
+        Assert.AreEqual(30, result.Heal!.Value.HitPoints, "heal 20 × 3 / 2 for the trained master, the maximum");
+        Assert.AreEqual(0, Damage(owner));
+        Assert.AreEqual((4, false, false, (SessionCombatResult?)null), (result.UsesLeft, result.ItemDestroyed, result.FateUsed, result.Charge));
+        Assert.AreEqual(before + 1, owner.Version.Revision, "one revision");
+        Assert.AreEqual(points, owner.QueryCombatRound()!.ActionPoints, "the attempt goal pays; the heal charges nothing");
+        Assert.IsTrue(owner.HeroFateArmed(FateKind.Heal), "the hero's heal fate is not the NPC's");
+        Assert.AreEqual(new SessionItemUses(Salve, 4), owner.QueryDurability().Uses.Single());
+        _ = world;
+    }
+
+    [TestMethod]
+    public void AnNpcHealsItselfThroughItsLifeRecordAndItsCrippledArmMakesTheCheckHarder()
+    {
+        using var owner = Healer(0, SkillTraining.None);
+        var hurt = new LifeState(6, 0, 0, LifeConditions.CrippledArmOne, 0);
+        var heal = NpcHeal(5, SkillTraining.Master, SessionLifeTarget.Critter("oid:healer", new LifeFacts(), hurt), hurt);
+        var result = owner.HealByNpc(owner.Version, heal);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        Assert.AreEqual(20, result.Check!.Difficulty.Injury, "the healer's own crippled arm");
+        Assert.IsTrue(result.Check.Success && result.Heal!.Value.Cure);
+        Assert.AreEqual(new LifeState(0, 0, 0, LifeConditions.None, 0), owner.QueryLifeRecord("oid:healer")!.Value.State);
+
+        var zero = owner.HealByNpc(owner.Version, NpcHeal(0, SkillTraining.None, SessionLifeTarget.Hero) with { Item = Item(uses: 1) with { Entity = "oid:rag" } });
+        Assert.IsFalse(zero.Check!.Success, "heal 0 always fails");
+        Assert.IsTrue(zero.ItemDestroyed && owner.IsItemDestroyed("oid:rag"), "its last use destroys the NPC's item");
+    }
+
+    [TestMethod]
+    public void AnNpcHealIsRefusedBeforeAnyRoll()
+    {
+        using var owner = Healer(5, SkillTraining.Master);
+        var draws = owner.QueryRandom().Draws;
+        void Refused(SessionHealResult result, GameSessionFailure failure)
+        {
+            Assert.AreEqual((GameSessionDisposition.Rejected, failure), (result.Disposition, result.Failure));
+            Assert.AreEqual((0L, draws), (owner.Version.Revision, owner.QueryRandom().Draws));
+        }
+        var good = NpcHeal(5, SkillTraining.Master, SessionLifeTarget.Hero);
+        Refused(owner.HealByNpc(owner.Version, good with { Healer = SessionLifeTarget.Hero }), GameSessionFailure.HealUnavailable);
+        Refused(owner.HealByNpc(owner.Version, good with { Loaded = good.Loaded with { Entity = "oid:other" } }), GameSessionFailure.HealUnavailable);
+        Refused(owner.HealByNpc(owner.Version, NpcHeal(5, SkillTraining.Master, SessionLifeTarget.Hero, new LifeState(1000, 0, 0, LifeConditions.None, 0))),
+            GameSessionFailure.HealUnavailable);
+        Refused(owner.HealByNpc(owner.Version, good with { Item = good.Item with { Flags = 0x02 } }), GameSessionFailure.InvalidHealingItem);
+        Refused(owner.HealByNpc(owner.Version, good with { Item = good.Item with { ScriptPoints = [SessionHealingItem.DestroyScript] } }),
+            GameSessionFailure.ItemScriptUnsupported);
+        Refused(owner.HealByNpc(owner.Version, good with { Item = Item() }), GameSessionFailure.ItemNotAvailable);
+        Refused(owner.HealByNpc(new(owner.Identity, 5), good), GameSessionFailure.StaleVersion);
+    }
 }

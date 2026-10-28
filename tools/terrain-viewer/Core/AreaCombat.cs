@@ -186,6 +186,18 @@ public sealed class AreaCombatHost : IAreaEventObjects
     }
 
     /// <summary>
+    /// ARC-WORLD-109: the fields of <paramref name="item"/> when the NPC <paramref name="holder"/> holds it now (its list as the session
+    /// shows it, as <see cref="Worn"/> reads it; never a destroyed item), else null; null too for an item without fields.
+    /// </summary>
+    public CombatFields? HeldItemFields(GameSessionOwner session, int runtimeMap, string holder, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(holder, out var inventory)
+            || inventory.Kind != SessionHolderKind.Npc || session.IsItemDestroyed(item)) return null;
+        return inventory.Items.FirstOrDefault(held => held.Entity == item) is { } found && ItemSource(map, found, out var fields) ? fields : null;
+    }
+
+    /// <summary>
     /// ARC-WORLD-106: an item's combat fields: its object row's on the map, else on another covered map (a taken item the hero gave
     /// away), else (an item the session made, an item a regeneration created, a hero kit item given away) its prototype's stored fields
     /// from <c>prototypes</c> (the item's kind names the prototype), as the regeneration's wielder reads such an item; null without any.
