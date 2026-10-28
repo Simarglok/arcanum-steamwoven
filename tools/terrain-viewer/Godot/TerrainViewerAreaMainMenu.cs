@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
         if (!QuickKeysActive || MainMenuOpen || (WorldModal && !HeroDeathCovering) || _mainMenu is not null) return;
         if (_mainMenuPanel is null)
         {
-            _mainMenuPanel = new AreaMainMenuPanel(); AddChild(_mainMenuPanel);
+            _mainMenuPanel = new AreaMainMenuPanel { DebugMode = DebugMode }; AddChild(_mainMenuPanel);
             _mainMenuPanel.ButtonPressed += index => MainMenuCommand(() => _mainMenu!.Activate(index));
             _mainMenuPanel.BrowseRequested += direction => MainMenuCommand(() => { _mainMenu!.Browse(direction); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.StartRequested += () => MainMenuCommand(() => _mainMenu!.Start());

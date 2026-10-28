@@ -1,11 +1,12 @@
 # Trap state (ARC-WORLD-076)
 
-Status: **Implemented** (Godot-free rules and session owner), slices 1 and 2 of the trap domain
-([FR-NAV-006](../requirements/world-travel-runtime.md#fr-nav-006)). No caller yet: the
-viewer's container window still refuses a trapped container, the walk does not look for
-traps, and the spot and disarm rolls (skills plan S10), the shot of script 30002 and the
-trap devices (ARC-TECHNOLOGY-011/012) are later slices. The effects of the other native
-trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-world-107)). The rules
+Status: **Implemented** (Godot-free rules and session owner), slices 1 to 3 of the trap domain
+([FR-NAV-006](../requirements/world-travel-runtime.md#fr-nav-006)). The effects of the other
+native trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-world-107)); the
+AREA viewer's PC meets traps on a use, before each step and on a step since ARC-WORLD-110
+([Viewer](#viewer-arc-world-110)). The spot and disarm rolls (skills plan S10), the shot of
+script 30002, the drawing of a spotted trap object, the attack's trap trigger in the viewer,
+NPC and companion steps and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. The rules
 follow the retail 1.0.7.4 executable as read in
 [ledger TT1–TT10](../research/ledger/technology.md#trap-state-arc-world-076) and
 [TT11–TT16](../research/ledger/technology.md#trap-effects-arc-world-107).
@@ -120,12 +121,56 @@ outcome, amount, damage step, hit points taken, shooter and spell run. The float
 the run are the host's. The effects add no session state of their own: the life, object and
 spell run owners record them.
 
+## Viewer (ARC-WORLD-110)
+
+The AREA viewer's trap host (`tools/terrain-viewer/Core/AreaTraps.cs`) meets the shown map's
+traps for the PC. A row's baseline is the use-script host's
+(`AreaUseScriptHost.TrapBaseline`): type 17 a trap object, any other type a trapped object;
+its use slot as the session's map changes hold it, the script file's header flags (0 for a
+script the content does not hold) and its object flags (slot 18). The trap object's entity
+is `AreaUseScriptHost.EntityId`, as for the object damage domain.
+
+- **Use.** `AreaUseScriptHost.Run` (a container's loot open, a guarded use site) asks the
+  trap host first: `TriggerTrap(Use, …)`. A trap spotted now, a native run fired (its effect
+  through the cast host; the trap code answers skip default) or a refused meeting ends the
+  use with no script run (`AreaScriptedUse.Trap`); the loot window then stays shut
+  (`TrapSpotted`, `TrapFired`, `TrapRefused`). An ordinary trap script that fired runs as
+  the use script; no trap goes on as before. The host's use slot (`Slot`) and `IsTrap` take
+  the trap state's removal, so a removed trap's script no longer runs.
+- **Walk.** Before each step the PC's step gate checks the next tile (0x427110, TT10): every
+  trap object there the player does not know gets a spot attempt; the first one spotted is
+  marked, the step is refused (`TRAP_SPOTTED`) and the walk ends (a mark the session refuses
+  lets the step go, so a full budget cannot block the tile for good), as the walk goal's
+  next-step check leads to its end node (ledger [EX20](../research/ledger/npc-ai.md)). The
+  check comes before the turn-based step charge, as the walk goal's check (0x4270B0) runs
+  before its step start (0x42E9B0).
+- **Step.** Each step the PC starts onto a tile meets the first trap object there
+  (`TriggerTrap(Step, …)`, 0x4305D0, TT9): the PC's spell flag 0x2 or 0x4 steps over it, a
+  known trap fires too; a trap spotted or fired ends the walk on that tile. The original
+  meets it on the arrival; the viewer meets it when the step starts, as it runs tile scripts,
+  so an advance that spans several steps (a very slow frame) may carry the PC past the tile
+  before the route stops. A trap object with an ordinary trap script is not met on a step
+  (its dispatch with the trap as attachee and extra object is a later slice).
+- **Spot.** The spot trap roll is not made (S10): an unknown trap is spotted only when the
+  player's spell flags hold 0x100 (TT3, the gate `Detected`); a gate that needs the roll
+  spots nothing, and the walk check logs it.
+- **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
+  map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
+  is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
+  step meets nothing), so no trap is consumed without its effect. A 30002 trap is not met
+  either until its shot is applied (the use is then refused as before). The floating line, the eye candy and the
+  damage effect are not shown; the status line names the outcome and the
+  `mes\trap.mes` line number.
+
 ## Not modelled here
 
 - The spot trap and disarm traps rolls, the spot modifier of the item at inventory
   location 1005 and the master's second roll (S10).
-- The walk's spot before each step (0x427110, ledger TT10) and the route cost of a known
-  trap (DC8): the walk is the host's.
+- The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
+  route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
+  steps of NPCs and companions onto trap objects, the attack's trap trigger in the viewer,
+  and the drawing of a spotted trap object (the area data resolves no body for a don't-draw
+  object yet).
 - The shot of script 30002 (TT15) with its draw and its spell (a found shooter applies
   nothing yet), and the shooter list's rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
   are the host's presentation.
@@ -140,6 +185,12 @@ spell run owners record them.
   again after a removal, a full change budget, snapshot round trip and refusals.
 - `tests/Arcanum.Simulation.Tests/Traps/TrapEffectRulesTests.cs`: the decoding, the shooter
   search, the damage source and the amount draw.
+- `tests/Arcanum.TerrainViewer.Tests/AreaTrapsTests.cs`: a row's baseline, a native trap on a
+  use (cancelled script, effect, repeat), a removal emptying the use slot, no cast host, the
+  detect flag's spot on a use, an ordinary trap script, the shot and 30007, the walk check
+  (roll not ready, detect flag, known traps skipped, destroyed trap objects) and the step
+  (stepped over, fired and removed, spotted); `AreaContainerLootTests.cs`: a trap met on the
+  use keeps the container shut.
 - `tests/Arcanum.Session.Tests/TrapEffectTests.cs`: victims (square and triggerer), one draw
   per victim, each damage type's slot, the damage source, an object victim, the spell with no
   caster, a damage's spell, the shot with and without a shooter, and 30007.

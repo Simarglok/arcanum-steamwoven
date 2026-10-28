@@ -47,6 +47,13 @@ public partial class AreaInventoryPanel : CanvasLayer
     private readonly List<Button> _quantityButtons = new();
     private QuantityBar? _bar;
     private string _quantityName = string.Empty;
+    // ARC-UI-051: the original look of the player's own window, the owner's choice of the diagnostic view instead, the button that
+    // switches between them and the panel's two backgrounds.
+    private AreaInventoryArtLook? _look;
+    private bool _diagnosticChosen;
+    private Button _lookToggle = null!;
+    private StyleBoxFlat _diagnosticStyle = null!;
+    private readonly StyleBoxEmpty _originalStyle = new();
     public event Action? CloseRequested;
     /// <summary>ARC-UI-029: the quantity window's Accept (or Enter) with the count shown, 0 too (QW4).</summary>
     public event Action<int>? QuantityAccepted;
@@ -99,16 +106,29 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal string MessageForSelfTest => _message.Text;
     internal string PcTextForSelfTest => _pc.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
+    internal Button LookToggleForSelfTest => _lookToggle;
+
+    /// <summary>ARC-UI-051: the window shows the original look: its art read, the player's own window (mode 0; looting, stealing and the
+    /// other modes keep the diagnostic window) and the diagnostic view not chosen.</summary>
+    public bool ArtMode => _look is not null && !_diagnosticChosen && _view is { Holder: null };
+
+    /// <summary>ARC-UI-051: sets the original look the window can show (null: the diagnostic window only).</summary>
+    public void SetArtLook(AreaInventoryArtLook? look)
+    {
+        _look = look;
+        if (_view is { } view && IsOpen) Render(view, _message.Text);
+    }
 
     public override void _Ready()
     {
         Layer = 4;
         _panel = new PanelContainer { Name = "AreaInventory", MouseFilter = Control.MouseFilterEnum.Stop };
-        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        _diagnosticStyle = new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .96f),
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
-        });
+        };
+        _panel.AddThemeStyleboxOverride("panel", _diagnosticStyle);
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.7f, .75f, .8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -151,7 +171,13 @@ public partial class AreaInventoryPanel : CanvasLayer
             button.Pressed += () => Callable.From(action).CallDeferred();
             _quantity.AddChild(button); _quantityButtons.Add(button);
         }
-        foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint }) contents.AddChild(control);
+        _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
+        _lookToggle.Pressed += () => Callable.From(() =>
+        {
+            _diagnosticChosen = !_diagnosticChosen;
+            if (_view is { } view) Render(view, _message.Text);
+        }).CallDeferred();
+        foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -190,6 +216,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear(); _dropButtons.Clear();
         _view = view;
         _area.Render(view);
+        ApplyLook();
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold} | {AmmoText(view.Ammo)}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
             + (view.Holder is null ? string.Empty : view.Steal ? " | picking a pocket" : " | looting a dead NPC");
         _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
@@ -321,15 +348,31 @@ public partial class AreaInventoryPanel : CanvasLayer
             + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map; original UI parity NOT_VERIFIED";
         // ARC-UI-029: a re-render while the quantity window is up keeps the rest of the window inert.
         if (_bar is not null) SetOthersDisabled(true);
+        _message.Visible = !ArtMode || _message.Text.Length > 0;
+        // ARC-UI-051: in the original look only the switch takes focus, so a pad or the keyboard can reach the diagnostic buttons.
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
+    }
+
+    /// <summary>ARC-UI-051: the original look hides the diagnostic lists, buttons and texts (their actions stay: the doll, the grid, the
+    /// boxes and a right click); the switch below the frame changes to the diagnostic window and back.</summary>
+    private void ApplyLook()
+    {
+        var art = ArtMode;
+        _area.SetLook(art ? _look : null);
+        foreach (var control in new Control[] { _header, _scroll, _close, _hint }) control.Visible = !art;
+        _lookToggle.Visible = _look is not null && _view is { Holder: null };
+        _lookToggle.Text = art ? "Diagnostic view" : "Original look";
+        _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
 
     private List<Button> Focusable()
     {
         // ARC-UI-029: while the quantity window asks only its buttons take focus.
         if (_bar is not null) return _quantityButtons.ToList();
+        // ARC-UI-051: the original look's diagnostic buttons are hidden; the switch to them is the one focusable control.
+        if (ArtMode) return [_lookToggle];
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
@@ -352,6 +395,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         SetOthersDisabled(true);
         ShowQuantity();
         _message.Text = message ?? string.Empty;
+        _message.Visible = !ArtMode || _message.Text.Length > 0;
         _quantityButtons[0].GrabFocus();
         ResizePanel();
     }
@@ -429,6 +473,24 @@ public partial class AreaInventoryPanel : CanvasLayer
         if (_panel is null) return;
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
+        if (ArtMode)
+        {
+            // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
+            // shows besides the frame (the switch, a message, the quantity row; PROJECT: the original prints no message in the window).
+            var frameWidth = 0f;
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var others = Math.Max(0, _panel.GetCombinedMinimumSize().Y - _area.CustomMinimumSize.Y);
+                var scale = Math.Max(.25f, Math.Min(size.X / AreaInventoryDrag.FrameWidth, (size.Y - others) / AreaInventoryDrag.FrameHeight));
+                _area.FitScale(scale);
+                frameWidth = AreaInventoryDrag.FrameWidth * scale;
+                _panel.Size = new(frameWidth, 0);
+            }
+            _panel.Size = new(frameWidth, 0);
+            _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, size.Y));
+            _panel.Position = new((size.X - frameWidth) / 2, top);
+            return;
+        }
         var width = Math.Max(1, Math.Min(960, size.X - 48));
         _area.Fit(Math.Min(width - 32, (size.Y - 300) * AreaInventoryDrag.FrameWidth / AreaInventoryDrag.FrameHeight));
         _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - _area.CustomMinimumSize.Y)));
