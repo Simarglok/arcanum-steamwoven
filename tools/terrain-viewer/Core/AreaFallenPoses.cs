@@ -63,12 +63,8 @@ public static class AreaFallenPoses
         try
         {
             using var archive = DatArchive.Open(archivePath, Options);
-            var standing = archive.Entries.Where(e => e.Ordinal == visual.Entry.Ordinal).ToArray();
-            if (standing.Length != 1 || standing[0].Flags != visual.Entry.Flags || standing[0].StoredSize != visual.Entry.StoredBytes ||
-                standing[0].DeclaredOutputSize != visual.Entry.DecodedBytes || standing[0].Offset != visual.Entry.Offset ||
-                Digest(standing[0].RawNameBytes.ToArray()) != visual.Entry.NameSha256)
-                return Refused(AreaFallenStatus.EntryMismatch, $"ordinal {visual.Entry.Ordinal}");
-            var name = Name(standing[0]);
+            if (StandingEntry(archive, visual) is not { } standing) return Refused(AreaFallenStatus.EntryMismatch, $"ordinal {visual.Entry.Ordinal}");
+            var name = Name(standing);
             var dot = name.LastIndexOf('.');
             if (dot < 4) return Refused(AreaFallenStatus.PoseMissing, "name");
             DatEntry? Find(int anim)
@@ -103,7 +99,17 @@ public static class AreaFallenPoses
         }
     }
 
-    private static string Name(DatEntry entry) => System.Text.Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0', ' ').Replace('\\', '/');
+    /// <summary>The archive's entry <paramref name="visual"/> was drawn from, when it is the one the published snapshot read
+    /// (ordinal, flags, sizes, offset, name digest); null otherwise.</summary>
+    internal static DatEntry? StandingEntry(DatArchive archive, AreaVisualRecord visual)
+    {
+        var standing = archive.Entries.Where(e => e.Ordinal == visual.Entry.Ordinal).ToArray();
+        return standing.Length != 1 || standing[0].Flags != visual.Entry.Flags || standing[0].StoredSize != visual.Entry.StoredBytes ||
+            standing[0].DeclaredOutputSize != visual.Entry.DecodedBytes || standing[0].Offset != visual.Entry.Offset ||
+            Digest(standing[0].RawNameBytes.ToArray()) != visual.Entry.NameSha256 ? null : standing[0];
+    }
+
+    internal static string Name(DatEntry entry) => System.Text.Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0', ' ').Replace('\\', '/');
 
     private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 

@@ -273,7 +273,7 @@ public partial class TerrainViewerApp
                         if (_camera.State != view) throw new InvalidOperationException($"AREA_LIGHTING_CAMERA_MOVED {view} {_camera.State}");
                         var channel = lighting.Channels[command.Visual];
                         var ambient = channel == AreaAmbientChannel.Indoor ? selection.Pair.Indoor : selection.Pair.Outdoor;
-                        if (!TryAreaPixel(command, area.Frames, _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
+                        if (!TryAreaPixel(command, AreaFramesOf(area), _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
                             _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
                             1, out _, out var diagnostics, ambient)) { rejections.Add(diagnostics.Rejections); continue; }
                         found = true; break;

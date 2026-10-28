@@ -1184,7 +1184,8 @@ follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walk
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
 Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode, and since ARC-WORLD-075
 he walks through the PC and other critters while the session has him out of combat mode, which nothing in the viewer changes yet), and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
-(no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
+(since ARC-WORLD-111 with his own walk or run cycle, turned to his step, and standing on frame 0 of his stand ART when he
+stops: [drawing the walk](../world/companion-follow-runtime.md#drawing-the-walk-arc-world-111)), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
 session on F7 and when the PC leaves the map. HUD: `companion script 1324 <standing> at
 (x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
 `ARC-WORLD-016 native-smoke follow PASS` (with the cave input, after the quick-save phase;

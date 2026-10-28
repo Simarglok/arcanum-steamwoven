@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaCombatTests
 {
-    private static readonly string Digest = new('a', 64);
+    internal static readonly string Digest = new('a', 64);
 
     [TestMethod]
     public void TheHeroFacesTheTargetsNeighbourDirection()
@@ -110,7 +110,7 @@ public sealed class AreaCombatTests
             AreaCombatHost.Criticals(Resolution(AttackOutcome.CriticalHit), steps));
     }
 
-    private static AreaObjectRecord Body(int scale = 100, uint flags = 0, int index = 7)
+    internal static AreaObjectRecord Body(int scale = 100, uint flags = 0, int index = 7)
     {
         var key = new AreaObjectKey(Digest, 5051, AreaSourceKind.Mobile, null, index, index * 100, Digest, 100);
         var fields = new[] { Field(18, flags), Field(8, 0), Field(9, 0xFFFFFF), Field(10, 255), Field(11, scale), Field(36, 0) };
@@ -120,7 +120,7 @@ public sealed class AreaCombatTests
 
     private static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 
-    private static AreaVisualRecord Visual(AreaObjectRecord body, AreaEntryIdentity entry, int width = 60, int height = 90, int hotX = 30, int hotY = 80,
+    internal static AreaVisualRecord Visual(AreaObjectRecord body, AreaEntryIdentity entry, int width = 60, int height = 90, int hotX = 30, int hotY = 80,
         int scale = 100, uint art = 0x20000000, int group = 5, string policy = "synthetic") =>
         new(new(body.Key.Kind, new(Digest, 5051, 0), body.Key.SourceIndex, Digest, Object: body.Key), art, art, entry, Digest, 100, 5, group, group, 0, 0, 0,
             false, width, height, hotX, hotY, 0, 0, 0, 0, scale, 1, width * height * 4, Digest, policy);
@@ -253,7 +253,7 @@ public sealed class AreaCombatTests
     }
 
     // A 1TAD archive of stored (uncompressed) named entries, in order.
-    private static byte[] Dat(IReadOnlyList<(string Name, byte[] Payload)> entries)
+    internal static byte[] Dat(IReadOnlyList<(string Name, byte[] Payload)> entries)
     {
         using var output = new MemoryStream();
         var offsets = new uint[entries.Count];

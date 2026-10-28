@@ -148,7 +148,7 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
 - **Scripts and routines.** No SCR runs at the AI points (heartbeat, start and end combat), no waypoints, standpoints or day
   routines; the danger hooks are not run.
 - **Back-off.** The away path (0x41F3C0) is not walked: a back-off ends at once.
-- **Drawing.** NPC walk and attack ART are not drawn (the T0 frame slides); attack sounds of NPCs are not played; the hero's fall
+- **Drawing.** NPC attack ART is not drawn (since ARC-WORLD-111 a step draws the walk or run cycle, see [companion follow](companion-follow-runtime.md#drawing-the-walk-arc-world-111)); attack sounds of NPCs are not played; the hero's fall
   and death after an NPC's hit are not drawn.
 - **Positions.** Walked NPCs are not saved; the companions' own overlay does not see them; a talk approach goes to a walked NPC's
   map data's cell.
