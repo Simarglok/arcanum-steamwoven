@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 // a function key would need Fn on a Mac) opens it in the WORLD and AREA modes, in play, in the main menu and over any other window.
 // The key's moment is kept first: the screen as drawn (before the report window), the last 120 s of the log
 // (BugReportLog.Process, which the engine logger fills from the start and the session-event lines below add to) and, in a game, a
-// save taken as F7 takes it (the actor's placement, the companions' cells); then the window opens modal over everything (the
+// save taken as F7 takes it (the actor's placement, the companions' cells; unlike F7 also under an open window, whose own state, such
+// as an open dialog, is not in the save); then the window opens modal over everything (the
 // game clock pauses as under the game's own windows, a walk stops, the shade takes every click). Send writes the folder
 // (BugReportWriter): beside the .app or the exe of a packaged game, else (or when that folder cannot be written) in the user
 // folder's reports; an automated run writes into its isolated folder. Cancel or Escape drops it. No upload.
@@ -26,6 +27,8 @@ public partial class TerrainViewerApp
     private object? _bugReportEventStamp;
     // The key whose press closed the report: its release is the report's too, so it reaches no window or game key (Escape acts on release).
     private Key? _bugReportClosingKey;
+    // The control that had the keyboard under the report (a window's field or button), given back when it closes.
+    private Control? _bugReportFocus;
     private bool BugReportOpen => _bugReportPanel?.IsOpen == true;
 
     private static bool IsBugReportChord(InputEventKey key) =>
@@ -85,6 +88,7 @@ public partial class TerrainViewerApp
             _bugReportPanel.CancelRequested += CancelBugReport;
             _bugReportPanel.CloseRequested += () => EndBugReport("closed");
         }
+        _bugReportFocus = GetViewport().GuiGetFocusOwner();
         // A key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("BUG_REPORT");
@@ -218,15 +222,12 @@ public partial class TerrainViewerApp
         if (_bugReportPanel is null || !_bugReportPanel.IsOpen) return;
         GD.Print("ARC-DEV-051 bug report " + how);
         _bugReportPanel.CloseView(); _bugReport = null;
+        if (_bugReportFocus is { } focus && IsInstanceValid(focus) && focus.IsVisibleInTree()) focus.GrabFocus();
+        _bugReportFocus = null;
         QuarantineWorld(); _quickKeys.Reset(); RefreshReadyStatus();
     }
 
-    private void SyncBugReport()
-    {
-        // A scene that is no longer a world (a reload into another mode) has no report window to keep.
-        if (BugReportOpen && !IsWorld) EndBugReport("closed with the world");
-        if (IsWorld) RecordBugReportEvents();
-    }
+    private void SyncBugReport() => RecordBugReportEvents();
 
     // Native observation (ARC-DEV-051, map battery and ARC_AREA_MAP_SMOKE_ONLY=report): Ctrl+B opens the report over the game and over
     // an open window, pauses the world (modal), keeps the key's moment, and Send writes the folder (the run's isolated reports folder)

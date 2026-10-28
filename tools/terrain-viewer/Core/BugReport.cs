@@ -165,6 +165,7 @@ public static class BugReportLocation
     {
         ArgumentException.ThrowIfNullOrEmpty(userReports);
         if (!packaged) return new(null, null, userReports);
+        if (string.IsNullOrEmpty(executablePath)) return new(null, "the game's folder is not known", userReports);
         if (executablePath.Contains("/AppTranslocation/", StringComparison.Ordinal))
             return new(null, "macOS runs this app from a read-only translocated copy (move the app to another folder once, or remove its quarantine mark)", userReports);
         var launch = LaunchFolder(executablePath);
@@ -245,8 +246,17 @@ public static class BugReportWriter
                 Directory.CreateDirectory(path);
                 // Some read-only or protected places let a folder be listed but not a file be written: prove it now.
                 var probe = Path.Combine(path, ".write-test");
-                System.IO.File.WriteAllBytes(probe, []);
-                System.IO.File.Delete(probe);
+                try
+                {
+                    System.IO.File.WriteAllBytes(probe, []);
+                    System.IO.File.Delete(probe);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    // Leave nothing behind in a place that cannot take the report.
+                    try { Directory.Delete(path, recursive: true); } catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+                    throw;
+                }
                 return path;
             }
             refusal = $"{MaxSameSecond} reports in the same second";
@@ -310,7 +320,7 @@ public static class BugReportWriter
         builder.Append($"- `{ScreenshotFile}`: ").Append(written.Contains(ScreenshotFile) ? "the screen as it was when the key was pressed (before the report window opened)."
             : "missing: " + (content.ScreenshotMissing ?? "not written") + ".").Append('\n');
         builder.Append(saveName is not null
-            ? $"- `{SaveFolder}/{saveName}.json` (with `{saveName}.meta.json` and `{saveName}.png`): the game saved when the key was pressed, a save of the ordinary save list. To load it, copy the files into the game's save folder (`saves/map/` in the packaged game) under a free slot number and choose it in Load Game.\n"
+            ? $"- `{SaveFolder}/{saveName}.json` (with `{saveName}.meta.json` and `{saveName}.png`): the game saved when the key was pressed, a save of the ordinary save list. A window open then (see Windows above) is not in the save: a save holds the game, not an open dialog, barter or map window. To load it, copy the files into the game's save folder (`saves/map/` in the packaged game) under a free slot number and choose it in Load Game.\n"
             : $"- `{SaveFolder}/`: no save: {content.SaveMissing ?? "not written"}.\n");
         if (fallbackReason is not null) builder.Append(CultureInfo.InvariantCulture, $"\nThis folder is in the user folder because the folder beside the game could not be used: {fallbackReason}.\n");
         if (failed.Count > 0)
@@ -324,7 +334,7 @@ public static class BugReportWriter
         return builder.ToString();
     }
 
-    private static string Cell(string text) => BugReportLog.Clean(text, 1_000).Replace("|", "\\|", StringComparison.Ordinal);
+    private static string Cell(string text) => BugReportLog.Clean(text, 1_000).Replace("\\", "\\\\", StringComparison.Ordinal).Replace("|", "\\|", StringComparison.Ordinal);
 }
 
 /// <summary>ARC-DEV-051: the save a report takes when its key is pressed.</summary>

@@ -182,7 +182,9 @@ that place cannot be written (a protected Windows folder such as `C:\Program Fil
 from a downloaded copy that macOS runs from a hidden read-only place), the report goes to the user folder of section 5
 instead, `Arcanum Steamwoven Game/reports/YYYY-MM-DD_HH-MM-SS/`, and the window says so and why. (On a Mac, moving the app
 to another folder once, or removing its quarantine mark as in section 2, lets reports go beside it.) A build started from
-the source writes into its own user folder's `reports`.
+the source writes into its own user folder's `reports`. On a Mac, an app kept in Downloads, Desktop or Documents makes
+macOS ask once, on the first Send, whether Arcanum Steamwoven may use that folder (again after a new build replaces the
+app); if you refuse, the report goes to the user folder as above.
 
 **What the folder holds.**
 
@@ -191,7 +193,7 @@ the source writes into its own user folder's `reports`.
 | `report.md` | Your text; the build (commit and date); the time; the rules mode; the map; the hero's position (map, cell, facing, sector); the combat state (combat mode, turn-based round); the open windows; the game time; the platform. It also lists what is missing and why (for example no save in the main menu before a game). |
 | `log.txt` | The last 120 seconds before the key press, one line each: UTC time, seconds before the key, `log`, `error` or `event`, text. |
 | `screenshot.png` | The screen as it was when the key was pressed, before the report window opened. |
-| `save/slot0000.json` (with `slot0000.meta.json` and `slot0000.png`) | The game saved at that moment, exactly as F7 saves it, as a save of the ordinary save list. There is no save in the main menu before a game, and none in the moments F7 refuses (a map change or a cast in progress); `report.md` then says why. |
+| `save/slot0000.json` (with `slot0000.meta.json` and `slot0000.png`) | The game saved at that moment the way F7 saves it, as a save of the ordinary save list. Unlike F7 it is also taken while a window is open, but a save holds the game, not the window: an open dialog, barter or map window is closed after loading it. There is no save in the main menu before a game, and none while a map change, a cast or a spell missile is under way; `report.md` then says why. |
 
 The folder contains pictures and texts of your own copy of Arcanum. Keep it to yourself and the developers; never publish it
 or put it into the project's repository.

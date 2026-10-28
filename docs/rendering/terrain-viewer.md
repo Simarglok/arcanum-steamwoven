@@ -1535,7 +1535,9 @@ original window art, sorting or paging options, a text cursor of the original's 
 death screen included), in both rules modes; it is no key of the original (B has no binding and a Ctrl letter is
 silenced, ARC-INPUT-004), and a function key would need Fn on a Mac. The key's moment is kept first: the frame on
 screen as PNG (before the report window is drawn; none in a headless run), the last 120 s of the log, and in a game a
-save taken as F7 takes it (none in the main menu before a game or while F7 refuses: a map change, a cast or a missile).
+save taken as F7 takes it, also under an open window that F7 waits for (the window's own state, such as an open dialog, is not
+in the save; none in the main menu before a game, during a map change, a cast or a missile). The control that had the
+keyboard under the report gets it back when the report closes.
 Then the modal window opens above every other window (canvas layer 20): one text field, Send (Ctrl+Enter) and Cancel
 (Escape); the gate closes, the game clock pauses, a walk stops, the shade takes every click; after Send it shows the
 folder and Close. What the viewer steps on the wall clock under any modal window (NPC goal runs, flights in progress)
