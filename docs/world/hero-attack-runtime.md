@@ -160,7 +160,7 @@ taken), each to be checked against the requirements and read in the executable w
 | ARC-COMBAT-016 Projectiles in flight | Done ([below](#projectiles-in-flight-arc-combat-016)): the projectile of 0x4B39B0 (field 127, −1 none), its flight, the hit on arrival (0x4B2870), its drawing in the viewer and a miss's stray strike (ledger PF1–PF14). |
 | ARC-COMBAT-017 Thrown weapons | Done ([below](#thrown-weapons-arc-combat-017)): the "default throws" weapon (the throwing dagger 6072) leaves the hand at the attack, is checked with the throwing skill and its thrown range, flies hidden and lands where its projectile ends (ledger TW1–TW7); the original wields nothing again afterwards (TW3). |
 | ARC-COMBAT-018 Second projectile and scatter | Done ([below](#second-projectile-and-scatter-arc-combat-018)): a bow shot from expert training flies as two projectiles for one arrow, and a missed throw scatters from its target location (ledger PS1–PS6). |
-| ARC-COMBAT-019 Returning weapons | Boomerangs (weapon flag 0x40, the throwing skill): the shot's thrown range (0x4622A0, RH4: strength and the item's weight, which the hero's equipment facts do not hold yet), the projectile's return and the "weapon away" bit (RH3), and their catch. |
+| ARC-COMBAT-019 Returning weapons | Done ([below](#boomerangs-arc-combat-019)): a boomerang stays in the hand, is checked with the thrown range of its own weight, keeps the hero from attacking while it is away, turns back at its first end, flies back striking nothing and is back where the hero stood at the turn; then the hero attacks again with auto attack (ledger BR1–BR7). |
 
 ## Ranged hero attack (ARC-COMBAT-015)
 
@@ -263,8 +263,8 @@ heroes barely train throwing, and the session's tests strike with one).
 Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
 the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
 throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
-and the item event 0x800000 at the landing (PF10) and boomerangs (ARC-COMBAT-019); a missed throw's scatter is in since
-[ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018).
+and the item event 0x800000 at the landing (PF10); a missed throw's scatter is in since
+[ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018), boomerangs since [ARC-COMBAT-019](#boomerangs-arc-combat-019).
 
 ## Second projectile and scatter (ARC-COMBAT-018)
 
@@ -294,6 +294,35 @@ the session's tests.
 
 Not ready: the hit script and item event of a scattered throw's end (PS5, as PF9 and PF10), and what the original's flight does
 when a scatter walks back onto the thrower's own tile (not read; Steamwoven lands the item there at once).
+
+## Boomerangs (ARC-COMBAT-019)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (projectiles and throws resolved by weapon type,
+partly). Read in the retail 1.0.7.4 executable by this task ([ledger BR1–BR7](../research/ledger/combat.md#boomerangs-arc-combat-019),
+refining RH3, RT7, PF9, PF12 and PS5). No rule-mode switch; no snapshot change (shots and the mark are not saved).
+
+| Rule | Value |
+| --- | --- |
+| Weapon | A wielded throwing-skill weapon (weapon flag 0x40, 0x465D80; the installed boomerangs 6184–6191, TW7) is now `SessionHeroAttack.Supported`. It stays in the hand: nothing leaves it, nothing lands, and it never scatters (PS3). |
+| Check range (BR7) | The reach before the attack is the weapon's range (RH1, `SessionHeroAttack.Range`); the check measures the thrown range `ThrowRules.Range(strength, throwing training, weight)` (RH4), the weight 0x461370 of the wielded item from the session's weight row (ARC-WORLD-085, `CarryRules.ItemWeight` with the hero as holder; none weighs 0). The outward flight's range end is the weapon's range (PF9). |
+| Away (BR1, BR2) | A boomerang's shot in flight marks the hero (`QueryBoomerangInFlight`, the original's field 219 bit 0x4): `AttackCritter` and `AttackObject` refuse any new attack with `GameSessionFailure.WeaponInFlight` before any roll, and the viewer's real-time repeat (RT7's `UsingBoomerang`) does not repeat. `QueryShotReturns(shot)`: the shot will still turn back. |
+| Turn (BR3, BR4) | At its first end the shot turns back instead of ending: a strike (`LandShot`, `LandShotOnObject`) turns it itself; at the end of its range or the destination of a shot without a target the host calls `ReturnShot(shot)`. `ProjectileRules.TurnBack(flight, shot, thrower)` gives the new line from the tile being left to the hero's tile now, the shot `Returning` (flag 0x2000) with its outcome, range and facing kept; on the hero's own tile there is no line and the boomerang is back at once (Steamwoven). |
+| Return (BR5) | `ProjectileRules.Cross` with a returning shot strikes nothing, meets no obstruction and has no range end; leaving its destination ends it (`DestinationEnd`). A returning shot refuses a strike (`InvalidAttack`). |
+| Back (BR3, BR6) | `EndShot` is the second end: the shot is gone and so is the mark; a flight given up (a map change, a reload) is back in the hand too, as the original's flight goal end passes no turn. |
+
+Viewer (AREA): a boomerang's projectile (`projectile-launch … boomerang range=8`) turns at its first end (`ARC-COMBAT-019
+boomerang-turn shot=… from=… to=…`; the strike or range end is logged as `projectile-end … turned back` first) and flies back to
+the hero's tile at the turn; its end there is `projectile-end … strike=DestinationEnd … back in the hero's hand` (notice "the
+boomerang is back"). Then (0x4A9AD0, `boomerang-back … reattack=…`) the hero takes up combat mode if it left it and, in real time
+with the auto-attack default and no attack goal running, starts a new attack goal on the shot's struck NPC or object, not aimed. A
+click while the boomerang is away says "the boomerang is still in flight". Native smoke in the ranged stage: `ARC-COMBAT-019
+native-smoke boomerang PASS` (the lent kit weapon with a boomerang's values and the bow's projectile art: it stays wielded, a second
+attack is refused while it flies, it turns at its first end, flies back to the hero's tile and ends there, the mark clears and the
+auto re-attack starts).
+
+Not ready: the return's hit script and item event (BR5, as PS5), the turn-based round's join and the hook of BR6 and its goal-slot
+tests, the re-attack after a flight given up, NPC boomerangs (no AI), the struck object's alert, and a boomerang across a save (the
+session keeps neither the shot nor the mark: a restored hero has it in the hand).
 
 ## Viewer (AREA)
 
@@ -331,10 +360,10 @@ when a scatter walks back onto the thrower's own tile (not read; Steamwoven land
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
   focus and taunts; the exit gate's threats are still empty.
-- Returning weapons (the [proposed split](#proposed-split-of-true-ranged-combat-not-ready); a
+- The [proposed split](#proposed-split-of-true-ranged-combat-not-ready) is done: a
   melee-skill weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots
   since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016, the "default throws" weapon since ARC-COMBAT-017, a bow's second projectile and a
-  missed throw's scatter since ARC-COMBAT-018), backstab (needs facing and
+  missed throw's scatter since ARC-COMBAT-018, boomerangs since ARC-COMBAT-019. Still not ready: backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
@@ -368,7 +397,9 @@ and range end; the shot decided at once and struck on arrival, the forced hit, t
 ARC-COMBAT-018 the bow's projectile count, the end of a shot without a target, an expert bow's two shots for one arrow, the second on
 a corpse and the limit for two), `tests/Arcanum.Simulation.Tests/Combat/ThrowRulesTests.cs` and
 `tests/Arcanum.Session.Tests/ThrowStateTests.cs` (ARC-COMBAT-017 and ARC-COMBAT-018's scatter tiles, walk, map edge and target
-location), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
+location), `tests/Arcanum.Session.Tests/BoomerangStateTests.cs` and the boomerang cases of `ProjectileRulesTests.cs`
+(ARC-COMBAT-019: the boomerang kept in the hand and checked with its thrown range, the mark and the refused attack, the turn at a
+strike or a range end, the harmless return, its end and no mark after a restore), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
 an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
