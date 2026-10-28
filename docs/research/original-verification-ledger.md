@@ -158,6 +158,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="template-sector-scripts-arc-res-073"></a>[Template sector scripts (ARC-RES-073)](ledger/scripts.md#template-sector-scripts-arc-res-073) | [Scripts and events](ledger/scripts.md) | PG1–PG10 |
 | <a id="turn-based-host-arc-combat-020"></a>[Turn-based host (ARC-COMBAT-020)](ledger/combat.md#turn-based-host-arc-combat-020) | [Combat](ledger/combat.md) | CT1–CT6 |
 | <a id="save-list-arc-ui-010"></a>[Save list (ARC-UI-010)](ledger/ui-audio.md#save-list-arc-ui-010) | [Interface windows and audio](ledger/ui-audio.md) | SL1–SL8 |
+| <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 
 ## Decisions to revisit
 

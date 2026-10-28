@@ -168,6 +168,16 @@ def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
     return values
 
 
+def main_menu_arguments(main_menu: bool, hero: str | None) -> list[str]:
+    """ARC-UI-011: `--main-menu true` opens the main menu over the AREA scene once it is ready; the menu picks the hero, so it is
+    refused with `--hero`."""
+    if not main_menu:
+        return []
+    if hero is not None:
+        raise ValueError("--main-menu picks the hero in the menu; drop --hero")
+    return ["--main-menu", "true"]
+
+
 def hero_arguments(hero: str | None) -> list[str]:
     """ARC-WORLD-027: the optional `--hero NAME` pair; None keeps the diagnostic PC profile."""
     if hero is None:
@@ -191,7 +201,7 @@ def sector_argument(sector: str | None) -> list[str]:
     return ["--area-map-sector", f"{int(parts[0])},{int(parts[1])}"]
 
 
-def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None) -> list[str]:
+def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None, main_menu: bool = False) -> list[str]:
     """ARC-RENDER-017: the explicit argument set for one map in crash-site-area map mode. ARC-RENDER-024: a map too large
     to load whole (the main world map) opens as a window around `sector`, else around its map-list start."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
@@ -205,7 +215,8 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, se
                          + "; run ./arcanum setup again)")
     arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
-                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector)]
+                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector),
+                 *main_menu_arguments(main_menu, hero)]
     assert_ordinary(arguments)
     return arguments
 
@@ -243,7 +254,7 @@ def pinned_roles(mode: str, task: str | None = None) -> tuple[str, ...]:
 
 
 def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None,
-                      hero: str | None = None, verified: Any = None) -> list[str]:
+                      hero: str | None = None, verified: Any = None, main_menu: bool = False) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
     Inputs are revalidated on every launch because local configuration is not a
@@ -256,6 +267,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
         raise ValueError("unsupported terrain diagnostic mode")
     if hero is not None and mode != "crash-site-area":
         raise ValueError("--hero applies to crash-site-area only")
+    if main_menu and mode != "crash-site-area":
+        raise ValueError("--main-menu applies to crash-site-area only")
     if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
     task_roles = TASK_ROLES.get(task, ()) if isinstance(task, str) and TASK_MODES.get(task) == mode else ()
@@ -287,6 +300,7 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     for role in task_roles:
         arguments.extend((ROLE_FLAGS[role], local_file(role)))
     arguments.extend(hero_arguments(hero))
+    arguments.extend(main_menu_arguments(main_menu, hero))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

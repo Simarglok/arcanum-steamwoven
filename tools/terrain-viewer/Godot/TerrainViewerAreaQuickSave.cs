@@ -218,12 +218,13 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk)
+    /// <param name="reason">What brings the session, for the log (ARC-UI-011: a new game adopts its session the same way).</param>
+    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk, string reason = "quick load")
     {
         StopWorldRoute("QUICK_LOAD");
-        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
-        if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
-        if (_mapTransfers?.Clear() is { } queued) GD.Print("ARC-WORLD-038 quick load dropped the queued transfer to=" + queued.To.Name);
+        CancelAreaUseApproach(reason); CancelTalkApproach(reason); CancelInventoryApproach(reason); CancelAreaAttack(reason);
+        if (_areaTransitions?.Cancel() is { } dropped) GD.Print($"ARC-WORLD-011 {reason} dropped the queued transfer to=" + dropped.ToMap);
+        if (_mapTransfers?.Clear() is { } queued) GD.Print($"ARC-WORLD-038 {reason} dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
         var runtime = maps[actor.Map.RuntimeMap];
@@ -239,7 +240,7 @@ public partial class TerrainViewerApp
         PublishWorldSelection();
         if (_areaTransitions is not null)
             _areaUseStatus = InCave ? "in the cave: click the exit within 2 cells to return" : "cave: click the entrance within 2 cells";
-        GD.Print("ARC-WORLD-011 quick-load adopted " + System.Text.Json.JsonSerializer.Serialize(new {
+        GD.Print((reason == "quick load" ? "ARC-WORLD-011 quick-load" : "ARC-UI-011 " + reason) + " adopted " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = actor.Map.RuntimeMap, actor.Cell, Facing = actor.Facing.ToString(), Revision = loaded.Version.Revision }));
     }
 

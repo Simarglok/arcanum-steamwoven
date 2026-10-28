@@ -33,6 +33,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// <summary>ARC-WORLD-027: start the AREA session as this original pre-made hero (<see cref="AreaStartingHero.Premade"/>);
     /// absent, the session has no hero and dialogs use the diagnostic PC profile.</summary>
     public AreaPremadeHero? Hero { get; init; }
+    /// <summary>ARC-UI-011: <c>--main-menu true</c> opens the main menu over the AREA scene once it is ready (new game, last save,
+    /// load); refused with <see cref="Hero"/>, as the menu picks the hero.</summary>
+    public bool MainMenu { get; init; }
     /// <summary>Longest <c>--area-map</c> folder name (the launcher's <c>MAX_MAP_NAME</c>).</summary>
     public const int MaxAreaMapName = 128;
     public static TerrainViewerArguments Parse(IReadOnlyList<string> args)
@@ -40,7 +43,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         ArgumentNullException.ThrowIfNull(args);
         string? module = null, resource = null, sourceId = null, prototypes = null, moduleHash = null, resourceHash = null,
             actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null, areaCaveMobile = null,
-            gameRoot = null, areaMap = null, hero = null, areaMapSector = null;
+            gameRoot = null, areaMap = null, hero = null, areaMapSector = null, mainMenu = null;
         long? actorMapX = null, actorMapY = null, actorOriginX = null, actorOriginY = null;
         int? actorOffsetX = null, actorOffsetY = null, actorScale = null, actorFacing = null, actorFrame = null;
         ActorDiagnosticRenderBranch? actorBranch = null;
@@ -74,6 +77,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--area-map": areaMap = Unique(areaMap, value); break;
                 case "--area-map-sector": areaMapSector = Unique(areaMapSector, value); break;
                 case "--hero": hero = Unique(hero, value); break;
+                case "--main-menu": mainMenu = Unique(mainMenu, value is "true" or "false" ? value : throw new ArgumentException("Usage")); break;
                 case "--expect-actor-resource-sha256": actorResourceHash = Unique(actorResourceHash, ValidateHash(value)); break;
                 case "--actor-map-x": actorMapX = Unique(actorMapX, ParseInt64(value)); break;
                 case "--actor-map-y": actorMapY = Unique(actorMapY, ParseInt64(value)); break;
@@ -107,6 +111,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (areaMap is null && (gameRoot is not null || areaMapSector is not null))
             || (mode == TerrainViewerMode.CrashSiteArea && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
             || (hero is not null && (mode != TerrainViewerMode.CrashSiteArea || AreaStartingHero.Find(hero) is null))
+            || (mainMenu is "true" && (mode != TerrainViewerMode.CrashSiteArea || hero is not null))
             || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
             throw new ArgumentException("Usage");
         ActorDiagnosticPlacementInput? actor = null;
@@ -121,7 +126,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile,
-            GameRoot = gameRoot, AreaMapName = areaMap, Hero = hero is null ? null : AreaStartingHero.Find(hero),
+            GameRoot = gameRoot, AreaMapName = areaMap, Hero = hero is null ? null : AreaStartingHero.Find(hero), MainMenu = mainMenu is "true",
             AreaMapSector = areaMapSector is null ? null : ParseSector(areaMapSector) };
     }
 

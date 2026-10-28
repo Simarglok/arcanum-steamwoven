@@ -42,7 +42,7 @@ Keyboard/mouse и gamepad передают семантические коман
 
 | Ввод | Требуемое действие оригинала | Наблюдение по адресам и границы |
 | --- | --- | --- |
-| Escape | Главное игровое меню; во вложенном main menu — возврат к предыдущему окну. | Up: возврат к MAIN из части режимов либо in-play/locked menu. Locked применяется при dialog, world map или чужом TB-ходе. K1 (0x401560) |
+| Escape | Главное игровое меню; во вложенном main menu — возврат к предыдущему окну. | Up: возврат к MAIN из части режимов либо in-play/locked menu. Locked применяется при dialog, world map или чужом TB-ходе. K1 (0x401560). В окнах главного меню (Single Player, New Game, браузер героев) Escape — назад; в корневом окне — ничего при первом открытии, при повторном — выход из игры; буква кнопки (сообщение подписи + 10 в `MainMenu.mes`) выбирает её ([MM6](../research/ledger/ui-audio.md#main-menu-arc-ui-011), ARC-UI-011). |
 | F1 | Приказать всем Followers идти к выбранной точке. | Up: broadcast index 0, локация под указателем. M дополнительно PDF 74–75 / печатные 74–75. K2 (0x54DE50), K12 (0x4C3B90, 0x4C3BE0) |
 | F2 | Приказать всем Followers атаковать выбранную цель. | Up: broadcast index 1; тот же source/target context. K2 (0x54DE50) |
 | F3 | Followers следуют ближе. | Up: broadcast index 2. Это не свободный overlay hotkey. K2 (0x54DE50) |

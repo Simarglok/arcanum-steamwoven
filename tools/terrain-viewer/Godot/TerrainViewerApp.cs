@@ -141,6 +141,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("cast")) await RunAreaCastSmokeAsync(result);
                                 // ARC-COMBAT-020: the turn-based round alone (the map battery runs it too).
                                 if (Stage("turn-based")) await RunAreaTurnBasedSmokeAsync(result);
+                                // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
+                                if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);
@@ -893,7 +895,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
             case AreaSaveCommandKind.Load:
                 // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
-                if (LoadGame(slot, "Load ")) { EndSaveList(); return; }
+                if (LoadGame(slot, "Load ")) { EndSaveList(loaded: true); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Delete:
@@ -121,12 +121,14 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    private void EndSaveList()
+    /// <param name="loaded">True when a load closes it (ARC-UI-011: the main menu waiting under it then ends).</param>
+    private void EndSaveList(bool loaded = false)
     {
         if (_saveListPanel is null || !_saveListPanel.IsOpen) return;
         GD.Print("ARC-UI-010 save list closed");
         _saveListPanel.CloseView(); _saveList = null; _saveListThumbnail = null; _saveListPreview = null;
         QuarantineWorld(); RefreshReadyStatus();
+        SaveListClosedUnderMainMenu(loaded);
     }
 
     /// <summary>Per frame while open: a session that is gone (map mode left, a reset) closes the window.</summary>
