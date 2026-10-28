@@ -1287,8 +1287,15 @@ public sealed partial class GameSessionOwner : IDisposable
             failure = _events.RelocateEntities(SessionEventKinds.ScriptCall, _actor.Map.RuntimeMap, to.RuntimeMap,
                 entity => entity.Code == SessionEventKinds.PlayerEntity || followers.Contains(entity.Code)).Failure;
         // ARC-WORLD-084: the AI ticks of the map left go (the followers' too, which the relocation carried); the host's sector
-        // fold wakes the new map's NPCs.
-        if (failure == GameEventFailure.None) _events.RemoveAll(SessionEventKinds.AiTick, _ => true);
+        // fold wakes the new map's NPCs. So do the danger records that hold only the gate's check bits: the fold's wake-up sets
+        // "check wield" again, whose full re-wield covers "check weapon" too, so dropping them changes nothing an NPC does and
+        // keeps the danger budget from filling with NPCs woken on earlier maps.
+        if (failure == GameEventFailure.None)
+        {
+            _events.RemoveAll(SessionEventKinds.AiTick, _ => true);
+            foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
+                _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
+        }
         return failure switch
         {
             GameEventFailure.None => GameSessionFailure.None,

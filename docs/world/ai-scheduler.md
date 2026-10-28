@@ -11,7 +11,8 @@ No host implements `ISessionAiWorld` yet: the viewer schedules no tick and still
 
 ## Rules (`AiSchedulerRules`)
 
-Every world member is called at the position of the original's call, so a host answers from the state the previous calls left.
+World members are called in the original's order (the far path asks whether the sector is loaded before the catch-up's facts,
+as the original computes it first), so a host answers from the state the previous calls left.
 Ids are the host's critter ids; `AiSchedulerRules.Pc` (`"pc"`) names the PC as leader, triggerer and round actor.
 
 | Rule | Original | What it decides |
@@ -35,24 +36,27 @@ pass's combat scripts changed in it; Steamwoven clears only the recovered bits o
 
 | Operation | Original | What it does |
 | --- | --- | --- |
-| `ScheduleAiTick(request)` | 0x4AD6E0, 0x4AD790 | One revision: the NPC's tick on the actor's map, replacing its pending one. `WakeUp` (a sector fold) is due 1 ms from now with the marker; `Delayed` (a placed, created or resurrected NPC) after `TickDelayMs(request.DistanceToPc)`. Refused inside an event pass and when the queue has no room. |
+| `ScheduleAiTick(request)` | 0x4AD6E0, 0x4AD790 | One revision: the NPC's tick on the actor's map, replacing its pending one (never the PC's). `WakeUp` (a sector fold) is due 1 ms from now with the marker; `Delayed` (a placed, created or resurrected NPC) after `TickDelayMs(request.DistanceToPc)`. Refused inside an event pass and when the queue has no room. |
 | `QueryAiTick(entity)` | | The NPC's pending tick: deadline and marker. |
-| `ProcessEvents(world)` | (0x4AD200) | A due `ai.tick` runs `Tick` when the pass's host is an `ISessionAiWorld` and the tick is on the actor's map, then schedules the tick it names (one revision; a tick that does not fit is lost and reported as `EventBudgetExceeded`); `SessionEventPassResult.AiTicks` lists each firing. Another script host consumes it without running it (`Tick` null), and nothing follows. |
+| `ProcessEvents(world)` | (0x4AD200) | A due `ai.tick` runs `Tick` when the pass's host is an `ISessionAiWorld` and the tick is on the actor's map, then schedules the tick it names (one revision; a tick that does not fit the queue, or whose spawner delay exceeds the bound, is lost and reported as `EventBudgetExceeded`, and as `RevisionExhausted` at the revision limit); `SessionEventPassResult.AiTicks` lists each firing. Another script host consumes it without running it (`Tick` null), and nothing follows. |
 | `RunAiPass(entity, world)` | (0x4A84F0) | One `Pass` of an NPC, as an attack, a follower order or the host asks for it. |
-| `RunAiSubturnHook(critter, world)` | (0x4B7010) | The hook for a round participant; the subturn's end is `EndCombatTurn`. |
+| `RunAiSubturnHook(critter, world)` | (0x4B7010) | The hook for a round participant; the subturn's end is `EndCombatTurn`, whose result (`SessionAiResult.Round`: the next subturn's start or the round's end, for the host to run their hooks) is returned and whose refusal is the `WriteFailure`. |
 | `AiRolls` | | Adds the labels `ai.TickWakeUpJitter`, `ai.GateBlindRecovery` and `ai.GateCrippleRecovery`. |
 
 The session answers death, unconsciousness and stoning from the NPC's life record over the host's loaded state
 (`ISessionAiWorld.AiLifeTarget`; a gone NPC counts as dead), the round and its actor, combat mode, the danger record and its
 source, the critter-flags parts it holds, and a recorded companion's waiting. Each gate write is its own revision: the danger
 bits through the danger records, the critter flags (life conditions, the danger bits of the word, combat mode, concealment) in
-one write; a write a budget refuses is reported as `WriteFailure`. Concealment is held only for the hero's followers, so a
+one write; a write a budget refuses is reported as `WriteFailure` and the gate goes on (as the original's writes cannot fail), so
+the actions before it stay done: a re-wield whose bit clear is refused runs again on the next pass. Concealment is held only for the hero's followers, so a
 stale write that would conceal another NPC stores nothing.
 
 **State.** `ai.tick` (game time, active map only, one per NPC; entity: the NPC; values: the game time it was scheduled at, its
 delay of 1 ms up to the deferred call's bound, the wake-up marker) is saved with the queue (registry version 1 unchanged). A
 map change removes every tick, the followers' too: the host's fold wakes the new map's NPCs, so the original's carry-over of a
-follower's tick (P3 of the event queue study) does not happen. A restore refuses a tick off the saved actor's map or with a
+follower's tick (P3 of the event queue study) does not happen. It also drops the danger records that hold only "check wield"
+and "check weapon": the fold's wake-up sets "check wield" again and its full re-wield covers the weapon, so no NPC acts
+differently, and the danger budget does not fill with the NPCs woken on earlier maps. A tick never names the PC. A restore refuses a tick off the saved actor's map or with a
 deadline its delay does not give. Under the Original setting (OQ2, `GameEventQueueProfile.RebuildOnLoad`) the restore rebuilds
 each saved tick as a wake-up tick 1 ms after the restored clock, as the original's load folds the sectors in; Steamwoven keeps
 the saved timing. The new danger bit CHECK_WEAPON (`DangerFlags.CheckWeapon`, NPC flag 0x80) moves the snapshot to schema 42

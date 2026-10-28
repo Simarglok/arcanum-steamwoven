@@ -101,6 +101,7 @@ public sealed class AiSchedulerTests
 
         Assert.AreEqual(GameSessionFailure.InvalidEvents, owner.ScheduleAiTick(owner.Version, new() { Entity = "bad id" }).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidEvents, owner.ScheduleAiTick(owner.Version, new() { Entity = "-" }).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, owner.ScheduleAiTick(owner.Version, new() { Entity = AiSchedulerRules.Pc }).Failure, "never the PC");
         Assert.AreEqual(GameSessionFailure.InvalidEvents,
             owner.ScheduleAiTick(owner.Version, new() { Entity = Wolf, Start = (SessionAiTickStart)7 }).Failure);
         Assert.AreEqual(GameSessionFailure.StaleVersion,
@@ -123,6 +124,8 @@ public sealed class AiSchedulerTests
             GameSessionOwner.Restore(Decode(text.Replace("[{\"map\":79,\"entity\":\"oid:wolf\"}]", "[{\"map\":80,\"entity\":\"oid:wolf\"}]")), RestoreOptions()).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidEvents,
             GameSessionOwner.Restore(Decode(text.Replace($"\"deadlineMs\":{T0 + 1833}", $"\"deadlineMs\":{T0 + 1834}")), RestoreOptions()).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidEvents,
+            GameSessionOwner.Restore(Decode(text.Replace("\"entity\":\"oid:dog\"", "\"entity\":\"pc\"")), RestoreOptions()).Failure, "never the PC");
     }
 
     [TestMethod]
@@ -261,5 +264,27 @@ public sealed class AiSchedulerTests
         Assert.AreEqual((true, true), (done.Hook!.EndsSubturn, done.Pass!.Performed));
         CollectionAssert.AreEqual(new[] { "script 19 oid:wolf oid:wolf", "heal oid:wolf", "danger update oid:wolf", "perform oid:wolf" }, world.Calls);
         Assert.AreNotEqual(SessionCombatant.Critter(Wolf), owner.QueryCombatRound()!.Actor);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (done.Round!.Disposition, done.WriteFailure));
+        Assert.IsTrue(done.Round.Events.Any(e => e.Kind == SessionCombatEventKind.SubturnStarted), "the next subturn's start reaches the host");
+        Assert.IsNull(busy.Round);
+    }
+
+    [TestMethod]
+    public void AMapChangeDropsDangerRecordsThatHoldOnlyTheCheckBits()
+    {
+        using var owner = Owner();
+        var world = new World { Distance = 45 }.With(Wolf).With(Dog);
+        // Two far wake-ups: "check wield" set, no pass to clear it; the dog also fights the wolf.
+        Schedule(owner, Wolf);
+        Schedule(owner, Dog);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version,
+            new SessionDangerRequest { Entity = Dog, State = DangerState.CombatFocus, Target = SessionCombatant.Critter(Wolf) }).Disposition);
+        Advance(owner, 1);
+        Assert.AreEqual(2, owner.ProcessEvents(world).AiTicks.Count);
+        Assert.AreEqual(DangerFlags.CheckWield, owner.QueryDanger(Wolf).Flags);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        Assert.AreEqual(DangerFlags.None, owner.QueryDanger(Wolf).Flags, "the next fold's wake-up sets it again");
+        Assert.IsFalse(GameSessionSnapshotCodec.Encode(owner.Capture()).Contains("\"entity\":\"oid:wolf\",\"flags\""), "no record left");
+        Assert.IsTrue(owner.QueryDanger(Dog).Flags.HasFlag(DangerFlags.CheckWield), "a record with more than the check bits stays whole");
     }
 }

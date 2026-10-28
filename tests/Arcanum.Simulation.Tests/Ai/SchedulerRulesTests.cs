@@ -324,6 +324,18 @@ public sealed class SchedulerRulesTests
     }
 
     [TestMethod]
+    public void Cl5TheOriginalStaleWriteKeepsAnEarlierRecoveryOfTheSamePass()
+    {
+        foreach (var profile in new[] { Steamwoven, Original })
+        {
+            var world = new World { Flags = new(LifeConditions.Blinded | LifeConditions.Stunned, DangerFlags.None, false, false) };
+            var gate = AiSchedulerRules.Gate(world, Npc, (DangerState.None, null), new Rolls(1), profile);
+            Assert.AreEqual(AiGateSteps.BlindnessCleared | AiGateSteps.StunCleared, gate.Steps, profile.Name);
+            Assert.AreEqual(LifeConditions.None, world.Flags.Conditions, profile.Name);
+        }
+    }
+
+    [TestMethod]
     public void Cl2TheFullReWieldClearsBothCheckFlagsAndDemaintainNeedsAnIdleLeader()
     {
         var world = new World { Bits = DangerFlags.CheckWield | DangerFlags.CheckWeapon };

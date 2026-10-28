@@ -281,8 +281,11 @@ public static class SessionEventKinds
 
     // Scheduled at a game time, a delay of 1 ms up to the longest, a wake-up marker, naming an NPC.
     internal static bool AiTickPayload(GameEventPayload payload) =>
-        payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxAiTickDelayMs && payload.Values[2] is 0 or 1 &&
-        payload.Entities[0].Code != AbsentRole;
+        payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxAiTickDelayMs && payload.Values[2] is 0 or 1 && AiTickNpc(payload.Entities[0].Code);
+
+    // An AI tick names an NPC: a session entity id that is neither the absent role nor the player.
+    internal static bool AiTickNpc(string? entity) =>
+        SessionValidation.Entity(entity) && entity != AbsentRole && entity != PlayerEntity;
 
     /// <summary>The original's wait-event predicate (0x4AAA30): whether the event names the NPC.</summary>
     [Arcanum.Simulation.OriginalFunction(0x4AAA30, Arcanum.Simulation.OriginalFunctionScope.Full)]

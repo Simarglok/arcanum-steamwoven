@@ -50,10 +50,16 @@ public sealed record SessionAiResult(GameSessionFailure Failure, GameSessionVers
     public AiPassResult? Pass { get; init; }
     public AiSubturnHookResult? Hook { get; init; }
     public GameSessionFailure WriteFailure { get; init; }
+    /// <summary>The subturn's end (<see cref="GameSessionOwner.EndCombatTurn"/>) when the hook ended it: the next participant's
+    /// subturn start or the round's end are among its events, for the host to run their hooks.</summary>
+    public SessionCombatResult? Round { get; init; }
 }
 
 public sealed partial class GameSessionOwner
 {
+    // The gate's check bits, which a map change drops from records that hold nothing else.
+    private const DangerFlags CheckBits = DangerFlags.CheckWield | DangerFlags.CheckWeapon;
+
     /// <summary>
     /// Schedules the NPC's AI tick on the actor's map (0x4AD790, 0x4AD6E0), replacing its pending one: a wake-up 1 ms from now with
     /// the marker, a delayed tick after <see cref="AiSchedulerRules.TickDelayMs"/>. One revision. Refused during an event pass
@@ -65,7 +71,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(request);
-        if (!SessionValidation.Entity(request.Entity) || request.Entity == SessionEventKinds.AbsentRole || !Enum.IsDefined(request.Start))
+        if (!SessionEventKinds.AiTickNpc(request.Entity) || !Enum.IsDefined(request.Start))
             return Reject(GameSessionFailure.InvalidEvents);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_passWorld is not null) return Reject(GameSessionFailure.InvalidEventPass);
@@ -115,7 +121,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return new(GameSessionFailure.StaleVersion, Version);
         var adapter = new SessionAiAdapter(this, world);
         var hook = AiSchedulerRules.SubturnHook(adapter, critter.Entity ?? AiSchedulerRules.Pc, AiRolls, _rules.Combat);
-        return new(GameSessionFailure.None, Version) { Pass = hook.Pass, Hook = hook, WriteFailure = adapter.WriteFailure };
+        return new(GameSessionFailure.None, Version) { Pass = hook.Pass, Hook = hook, WriteFailure = adapter.WriteFailure, Round = adapter.Round };
     }
 
     // The tick handler: the rules run through the pass's host when it is an AI host, and the tick they name is scheduled. Another
@@ -137,12 +143,15 @@ public sealed partial class GameSessionOwner
             // The NPC may have left the map in its pass (a teleport): its tick stays with the map it fired on, which a map change
             // clears. A delay beyond the bound or a full queue loses the tick; the next fold wakes the NPC again.
             var delay = Math.Max(tick.DelayMs, 1);
-            if (delay <= SessionEventKinds.MaxAiTickDelayMs && AiTickFits(entity.Code, firing.NowMs, delay) && _revision < long.MaxValue)
+            // A spawner delay beyond the bound counts as a budget failure too.
+            var refused = delay > SessionEventKinds.MaxAiTickDelayMs || !AiTickFits(entity.Code, firing.NowMs, delay) ? GameSessionFailure.EventBudgetExceeded
+                : _revision == long.MaxValue ? GameSessionFailure.RevisionExhausted : GameSessionFailure.None;
+            if (refused == GameSessionFailure.None)
             {
                 ScheduleTick(entity.Map, entity.Code, firing.NowMs, delay, false);
                 _revision++;
             }
-            else if (failure == GameSessionFailure.None) failure = GameSessionFailure.EventBudgetExceeded;
+            else if (failure == GameSessionFailure.None) failure = refused;
         }
         _passAiTicks?.Add(new(firing.Event, entity.Code, wakeUp, tick) { WriteFailure = failure });
         return GameEventHandlerOutcome.Completed;
@@ -223,8 +232,14 @@ public sealed partial class GameSessionOwner
 
         public void WriteCritterFlags(string npc, AiCritterFlags flags) => Fail(owner.WriteAiCritterFlags(npc, flags, Life(npc)));
 
-        public void EndSubturn(string npc) =>
-            owner.EndCombatTurn(owner.Version, npc == AiSchedulerRules.Pc ? SessionCombatant.Hero : SessionCombatant.Critter(npc), host);
+        /// <summary>The subturn's end the hook made.</summary>
+        internal SessionCombatResult? Round { get; private set; }
+
+        public void EndSubturn(string npc)
+        {
+            Round = owner.EndCombatTurn(owner.Version, npc == AiSchedulerRules.Pc ? SessionCombatant.Hero : SessionCombatant.Critter(npc), host);
+            Fail(Round.Failure);
+        }
 
         public AiCatchUpFacts CatchUp(string npc) => owner._party.Records.TryGetValue(npc, out var companion)
             ? host.CatchUp(npc) with { Waiting = companion.Standing == CompanionStanding.Waiting }
