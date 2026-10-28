@@ -42,6 +42,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell damage and heal | [Magic](status/magic.md) | ARC-MAGIC-012 |
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
+| Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |

@@ -15,6 +15,8 @@ public enum SpellRollPurpose
     Damage,
     /// <summary>A Heal component's amount in its <c>Dmg:</c> range (0x4521A0).</summary>
     Heal,
+    /// <summary>An item spell's chance flag (0x4CB830, ARC-MAGIC-020): d100, fires at or below the flag's percentage.</summary>
+    ItemTriggerChance,
 }
 
 /// <summary>

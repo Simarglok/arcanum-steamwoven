@@ -291,9 +291,11 @@ Agreed through the coordinator on 2026-10-20:
 ## Outside this plan
 
 - **Item spells** (FR-MAGIC-011): the item trigger executor (0x4CB830) and its callers (0x4CB720–0x4CC160), on use,
-  wear, unwear, hit and death, with item spell charges and LM7, serve magic and technology items alike. They need a
-  short research item first (open question O6), then one shared slice after MT9a; equipment now refuses items with
-  spells, and that refusal lifts there.
+  wear, unwear, hit and death, with item spell charges and LM7, serve magic and technology items alike. Read with O6 by
+  ARC-MAGIC-020 ([ledger IT1–IT9](ledger/spell-runs.md#item-spell-triggers-arc-magic-020)), which runs the wear and unwear
+  through the cast host and lifts the equipment's refusal where a trigger host is given ([contract](../world/item-spell-triggers.md)).
+  Left as slices of their own: pickup, drop and item use with saved charges; the combat and life events; the item spell
+  pane, inventory-target spells and hotkeys (0x57C040, 0x57C080).
 - **Technology runtime**: the technology lane above.
 - **Spell visuals**: `SpellEyeCandy.mes`, the cast, release and component eye candy and the cast's timing are done
   ([ARC-MAGIC-017](../world/spell-cast-host.md#eye-candy-arc-magic-017)); the missile's art and flight (goal 28) remain.
