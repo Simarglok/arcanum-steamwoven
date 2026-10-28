@@ -127,8 +127,9 @@ public sealed class SnapshotRestoreTests
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
         Fails(With("\"schemaVersion\":57,\"world\"", "\"schemaVersion\":58,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        // ARC-WORLD-103: schema 56 keeps no dressed NPCs in the inventory and is refused, not migrated.
-        Fails(With("\"schemaVersion\":57,\"world\"", "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[]", ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        // ARC-WORLD-103: schema 56 keeps no dressed NPCs in the inventory; since ARC-UI-037 it is upgraded (SnapshotUpgradeTests),
+        // and a schema 56 text that does carry them is refused.
+        Fails(With("\"schemaVersion\":57,\"world\"", "\"schemaVersion\":56,\"world\""), SnapshotDecodeFailure.UnknownField, "$.inventory.npcWorn");
         // ARC-UI-033: schema 55 keeps no player name or portrait in the hero (null here) and is refused, not migrated.
         Fails(With("\"schemaVersion\":57,\"world\"", "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // ARC-WORLD-100: schema 54 keeps no generated-once containers in the inventory and is refused, not migrated.

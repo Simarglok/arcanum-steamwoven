@@ -33,7 +33,7 @@ public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, Snapsho
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
 /// needs the kind registry) stays with <see cref="GameSessionOwner.Restore"/>.
 /// </summary>
-public static class GameSessionSnapshotCodec
+public static partial class GameSessionSnapshotCodec
 {
     public const string Format = "arcanum-steamwoven-session";
     /// <summary>ARC-DATA-029: a policy cap on one snapshot's text (and save file). It holds a change for every object
@@ -925,6 +925,12 @@ public static class GameSessionSnapshotCodec
         catch (ArgumentException) { return new(null, SnapshotDecodeFailure.MalformedJson, "$"); }
         using (document)
         {
+            // ARC-UI-037: an older schema this build reads is upgraded to the current one first, then decoded as any current text.
+            if (UpgradableVersion(document.RootElement) is { } older)
+            {
+                try { return TryDecode(Upgrade(text, older)); }
+                catch (DecodeException e) { return new(null, e.Failure, e.Path); }
+            }
             try { return new(Root(document.RootElement), SnapshotDecodeFailure.None, null); }
             catch (DecodeException e) { return new(null, e.Failure, e.Path); }
         }
