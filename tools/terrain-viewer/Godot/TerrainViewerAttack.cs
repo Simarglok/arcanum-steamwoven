@@ -246,7 +246,7 @@ public partial class TerrainViewerApp
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
         _attackNotice = AreaObjectTargets.Describe(result);
-        FloatObjectAttack(result, target.Entity);
+        FloatObjectAttack(result, target.Entity, target.Row);
         GD.Print($"ARC-COMBAT-008 object-attack-hit target={target.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
@@ -615,6 +615,7 @@ public partial class TerrainViewerApp
                 if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
             }
             _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
+            FloatObjectAttack(result, $"wall:{blocker.Key.SourceIndex}", null);
             GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
             if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");

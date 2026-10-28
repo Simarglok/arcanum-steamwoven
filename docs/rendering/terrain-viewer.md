@@ -750,7 +750,8 @@ CH10–CH12](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); `AreaCombat
 results into them.
 
 - **What floats.** Every attack the viewer runs through the session: the hero's on an NPC or an object (also a
-  projectile's strike), and an NPC's or a companion's (the AI host). In the original's order, over the critter the
+  projectile's strike, and a wall the line of fire struck, which floats only a critical self-hit's lines), and an NPC's
+  or a companion's (the AI host). In the original's order, over the critter the
   step is about (the target, or the attacker of a critical self-hit): the critical miss or hit, its multiplier, the
   stun (whenever the stun bit meets a critter that was not stunned, without a knockdown bit), unconsciousness or the
   knockdown, the scar (at the scar limit too), blinding, the crippled arm with the weapon and shield it drops, crippled
@@ -759,7 +760,8 @@ results into them.
   answer); a dodge floats over the target. The attacker's weapon worn on a hard target floats its damage or break over
   it at every level. At "text floaters" 2 also the damage line (`N HT`, ` N FT` added for fatigue, only the fatigue part
   without hit-point damage), the poison increase (`Poison level +N`), an object's damage (`HT N`, never below 0) and a
-  bare-handed attacker's own loss. A target dead before the hit, a refused attack, a plain miss and a prevented hit float
+  bare-handed attacker's own loss. The numbers are the step's amounts after resistance, difficulty and the multiplier,
+  before the life rules adjust them (a poison an undead ignores still floats), as the original prints them. A target dead before the hit, a refused attack, a plain miss and a prevented hit float
   nothing; healing never floats (the original's healing makes no floater). The texts are the player's
   `mes\combat.mes` 0–24 (read once a module, at game start as the original's combat init; the project's English text
   where a line does not read).
@@ -771,7 +773,7 @@ results into them.
   the top. A line fades in from 4h to 2.5h, is opaque to 1.5h and fades out to the top (the original's integer
   formula). The box is centred over the object, its bottom 90 px (at the view's zoom) above the tile centre; the text
   keeps the screen's pixels at any zoom. The hero's box follows its committed cell, a companion's and a walking NPC's
-  their live cells. A new scene drops every line.
+  their live cells, an object's its map cell (no draw offset). A new scene drops every line.
 - **Settings.** The [options window](#options-window-arc-ui-013)'s Video page offers Floats (Never, Minimal, Verbose:
   0–2, default 1) and Float Speed (0–10, default 2). Level 0 draws nothing (the lines are still made and rise, as the
   original's). Both are saved at once in `user://game_settings_v1.json` (version 2; a version 1 file reads with their
@@ -787,7 +789,8 @@ from the game's file, the critical-hit message first, stacked from 4h one height
 smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the NPC then attacks the hero until a hit
 lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
 it prints `ARC-UI-021 native-smoke floaters PASS`. Not done: spell, trap and script damage and the other damage steps
-without an attack (spell blinding included), the hero's draw offset while walking, the original's font art 229, text
+without an attack (spell blinding included), the draw offsets of the boxes' objects (the hero's while walking), the
+original's font art 229, text
 bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)

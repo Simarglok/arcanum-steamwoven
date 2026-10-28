@@ -28,7 +28,8 @@ public static class FloaterRules
     /// <summary>The box is 200 px wide and <see cref="BoxLines"/> line heights high; a new line starts <see cref="StartLines"/>
     /// line heights below its top (CH11).</summary>
     public const int BoxWidth = 200, BoxLines = 5, StartLines = 4;
-    /// <summary>The box's bottom stands 90 px above the object's tile centre (its draw offset included), centred on it (CH11).</summary>
+    /// <summary>The box's bottom stands 90 px above the object's tile centre (the original adds the object's draw offset), centred on
+    /// it (CH11).</summary>
     public const int BoxRise = 90;
 
     /// <summary>A floater font's colour (font art 229 tinted, 0x4D4E20).</summary>

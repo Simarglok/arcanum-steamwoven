@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
@@ -59,9 +60,12 @@ public partial class TerrainViewerApp
         Float(hit, attacker, result.Recipient == Arcanum.Simulation.Combat.DamageRecipient.Attacker ? attacker : target);
     }
 
-    /// <summary>The floaters of the hero's attack on an object.</summary>
-    private void FloatObjectAttack(SessionObjectAttackResult result, string target)
+    /// <summary>The floaters of the hero's attack on an object (a door, window, container, scenery, trap or item; a wall without a
+    /// row), its lines over the object's cell.</summary>
+    private void FloatObjectAttack(SessionObjectAttackResult result, string target, AreaObjectRecord? row)
     {
+        // A portal's or scenery's entity names no inventory row: its cell comes from its map row.
+        if (row is { WorldX: not null, WorldY: not null }) _floaterCells[target] = LiveWorldCell(row);
         var hit = AreaCombatFloaters.Of(result, FloaterSide.Pc);
         Float(hit, HeroFloater, result.Life is null ? target : HeroFloater);
     }
@@ -72,6 +76,7 @@ public partial class TerrainViewerApp
         var floaters = CombatFloaters.Of(hit, _gameSettings.Floats, CombatTexts().Text);
         if (floaters.Count == 0) return;
         var layer = FloaterLayer();
+        DropFloatersOfOldScene(layer);
         foreach (var floater in floaters)
         {
             var owner = floater.Over == FloaterOver.Attacker ? attacker : struck;
@@ -87,15 +92,24 @@ public partial class TerrainViewerApp
         if (_floaters is { } layer) return layer;
         _floaters = new AreaFloaterLayer { Anchor = FloaterAnchor };
         AddChild(_floaters);
+        // First among the app's children: on its layer it draws under the diagnostic HUD.
+        MoveChild(_floaters, 0);
         _floaterScene = _readyArea;
         return _floaters;
+    }
+
+    /// <summary>A new scene drops the lines of the old one (and the cells kept for them).</summary>
+    private void DropFloatersOfOldScene(AreaFloaterLayer layer)
+    {
+        if (ReferenceEquals(_floaterScene, _readyArea)) return;
+        layer.Field.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw();
     }
 
     /// <summary>Each frame: a new scene drops the lines; otherwise they rise (every 50 ms or more) and are drawn where their objects are.</summary>
     private void TickFloaters()
     {
         if (_floaters is not { } layer) return;
-        if (!ReferenceEquals(_floaterScene, _readyArea)) { layer.Field.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw(); }
+        DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;
         if (layer.Field.Count == 0) return;
         if (!_floaterClockForSelfTest) layer.Field.Advance((long)Time.GetTicksMsec(), _gameSettings.FloatSpeed);

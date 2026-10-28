@@ -72,11 +72,13 @@ public partial class TerrainViewerApp
             Require(result.Disposition == GameSessionDisposition.Changed && result.Resolution?.Outcome == AttackOutcome.CriticalHit,
                 $"a critical hit ({result.Disposition} {result.Failure} {result.Resolution?.Outcome})");
             if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned)) EndStun(session, combat!.Target, entity);
+            // A clean field: lines and a clock of earlier stages would move these.
+            if (_floaters is { } earlier) { earlier.Field.Clear(); _floaterCells.Clear(); }
             FloatCritterAttack(result, HeroFloater, entity);
             var layer = _floaters;
             Require(layer is not null, "the floater layer exists");
             var h = layer!.LineHeight;
-            var lines = layer.Field.Lines(entity);
+            var lines = layer.Field.Lines(entity).ToArray();
             var expected = CombatFloaters.Of(AreaCombatFloaters.Of(result, FloaterSide.Pc, FloaterSide.Other)!, FloaterRules.Numbers, texts.Text)
                 .Where(f => f.Over == FloaterOver.Struck).ToArray();
             Require(lines.Select(l => (l.Text, l.Color)).SequenceEqual(expected.Select(f => (f.Text, f.Color))),
@@ -143,7 +145,7 @@ public partial class TerrainViewerApp
                 && added < expected.Length, $"level 1 drops the numbers ({added} of {expected.Length})");
             layer.Level = FloaterRules.Never;
             Require(layer.DrawnForSelfTest().Count == 0, "level 0 draws nothing");
-            GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Count} heroLines={heroLines}"
+            GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Length} heroLines={heroLines}"
                 + $" hero={landed.Resolution!.Outcome} texts={texts.Detail} first='{lines[0].Text}' Parity=NOT_VERIFIED");
         }
         finally

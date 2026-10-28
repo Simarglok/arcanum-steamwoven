@@ -92,7 +92,9 @@ public static class AreaCombatFloaters
             WeaponDestroyed = destroyed,
             AmmunitionLost = Attempted(SessionCriticalStepKind.DestroyAmmo) || Attempted(SessionCriticalStepKind.LoseAmmo),
             WeaponDropped = Attempted(SessionCriticalStepKind.DropWeapon),
-            HitPoints = life.HitPointDamage,
+            // The original prints the step's amounts (after resistance, difficulty and the multiplier) before the life setters
+            // adjust them (CH12): the packet's, not the life outcome's.
+            HitPoints = damage.HitPointDamage,
             Fatigue = damage.FatigueDamage,
             Poison = damage.PoisonDamage,
         };
