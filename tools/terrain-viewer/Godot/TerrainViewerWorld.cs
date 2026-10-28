@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -344,6 +344,7 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
+        if (HeroDeathCovering) { HandleHeroDeathPulse(intent); return; }
         if (ConversationOpen) { HandleConversationPulse(intent); return; }
         if (InventoryOpen) { HandleInventoryPulse(intent); return; }
         if (SheetOpen) { HandleSheetPulse(intent); return; }
@@ -748,6 +749,8 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
+        // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.
+        if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
         if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)

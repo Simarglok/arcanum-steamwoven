@@ -159,8 +159,9 @@ call-ex (81) and the conditions identified (47) and items being rewielded (50); 
 wield-off scripts are admitted, the other counts stay.
 
 **Not ready.** The wield-on and wield-off events of `EquipBest` and the rewield (`Equip` and `Unequip` run them since
-ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event (no drop command and no
-installed drop script; the critical drops of [placed items](#placed-items-arc-world-059) run no script); the buy event (no barter);
+ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)); the drop event of the critical drops of
+[placed items](#placed-items-arc-world-059) (no installed drop script; the player's drop runs it since ARC-UI-025,
+[hero drop](#hero-drop-and-inventory-use-arc-ui-025)); the buy event (no barter);
 the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 
 ## Dialog seam
@@ -339,7 +340,7 @@ each decay event (one item on a map, set no later than the saved clock, the deca
 event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
 Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
-into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). Not ready: the player's own drop command (ARC-WORLD-064); the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
+into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
 counter), so only an open pile delays a decay; the item flag of the hero's kit and made items is not known (no
 installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
 whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
@@ -746,8 +747,29 @@ a kit or made item's 1 × 1; the inventory art's size is not read yet, so every 
 **Not ready.** The inventory art's size of an item (a size is taken when the item takes a slot; a worn or waiting item whose seed is
 not attached then counts as 1 × 1); the room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
-that its insert check refuses (IW15); the drop to the ground and the use icon;
-the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
+that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
+
+## Hero drop and inventory use (ARC-UI-025)
+
+Source: alpha item N6 part 3, [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) with the drop's
+rows PI1–PI3 and the item use's AG15, TP1 and IU1.
+
+- **Drop.** `DropHeroItem` drops one of the hero's items (kit, taken or made, listed or worn) on the actor's tile, as the window's drop
+  icon does (0x461A70: the drop 0x461AB0 with distance 0). In order: input, version, an item the hero holds and has not placed
+  (`ItemNotAvailable`), its saved kind (`InventoryMismatch`), item event scripts without a host (`ItemScriptUnsupported`: drop 5,
+  remove item 28 and, worn, wield off 25; a taken item's attached origin seed answers the drop script too), item spells without a
+  trigger host (`ItemEffectUnsupported`), the drop script (its skip default keeps the item, `DeclinedBy` 5, its effects applied), the
+  no-drop flag (`ItemNotDroppable`; a worn item's own record answers too), the tile (`DropTileUnfit`), then the removal's wield-off and
+  remove-item events and the placement (`PlaceHeroItem`: a junk pile on the tile or a new one, then the decay timer). One revision;
+  with a trigger host a worn item's unwear executor and the removal's spell steps follow. A refusal after the drop script drops its
+  writes (session policy, as the pickup's). No action points (IW8). The caller places the actor on the hero's tile first. A stack
+  drops whole: the quantity window that splits it first (IW7) is the host's (the viewer refuses a stack of more than one unit).
+- **Use.** `AiExecutorRules.UseItemNow` (0x462CC0) now reads an `IItemUseWorld`, the part of `IAiGoalWorld` the use needs, so the
+  inventory window runs the same use as the NPC executor (see [terrain viewer](../rendering/terrain-viewer.md)).
+- **No snapshot change.** A dropped item is a placed item (schema 32 and later).
+
+**Not ready.** The quantity window before a stack's drop (IW7); the map drop and the throw of an arbitrary held item (IW18); the item
+targeting cursor of an item that needs a target (lockpicks excepted) and a trap device's use from the window.
 
 ## Next steps
 

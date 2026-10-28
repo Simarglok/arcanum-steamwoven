@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Randomness;
+
 namespace Arcanum.Simulation.Items;
 
 /// <summary>The object a restock event names, by its type field (0x14F): an NPC (type 16), a container (type 2) or anything else (a PC
@@ -46,13 +48,30 @@ public interface IRestockRolls
     int Roll(RestockRoll purpose, int min, int max);
 }
 
+/// <summary>
+/// The PC that seeds a generated-once container's draws (0x463E20, RK10): its race and gender (stats 27 and 26 as the stat getter
+/// 0x4B0490 gives them), its background (field 0x101, 0x4C2690) and the bytes of its player name (field 0x10E as 0x441B60 copies it for
+/// the PC itself; the name ends at its first zero byte, and an unset name is empty).
+/// </summary>
+public sealed record RestockSeedPc(int Race, int Gender, int Background, IReadOnlyList<byte> PlayerName);
+
+/// <summary>The original generator behind <see cref="IRestockRolls"/> (ARC-WORLD-098): every roll is one range draw (0x4CEF00) of
+/// <paramref name="random"/>, so equal bounds draw nothing and the sequence is the original's for the same seed.</summary>
+public sealed class OriginalRestockRolls(OriginalRandom random) : IRestockRolls
+{
+    private readonly OriginalRandom _random = random ?? throw new ArgumentNullException(nameof(random));
+
+    public int Roll(RestockRoll purpose, int min, int max) => _random.Between(min, max);
+}
+
 /// <summary>What a generation creates: the coins of the new gold pile (0 is none) and the basic prototype numbers of the items, in the order
 /// they are created and moved in.</summary>
 public sealed record RestockLoot(int Coins, IReadOnlyList<int> BasicPrototypes);
 
 /// <summary>
 /// ARC-WORLD-093: the original's inventory restock (time event type 0x16; 0x4640C0, 0x464150, 0x464180, 0x4641A0, 0x463C60, 0x463E20,
-/// 0x463B30, read in the retail 1.0.7.4 executable, ledger "Merchant restock" RK1–RK8). Every opening of the inventory window on an
+/// 0x463B30, read in the retail 1.0.7.4 executable, ledger "Merchant restock" RK1–RK8; ARC-WORLD-098 the generated-once
+/// containers' seed, RK10–RK14). Every opening of the inventory window on an
 /// object with an inventory source (re)sets its event 12 to 24 game hours on; when it fires, a living NPC without a PC leader, or a
 /// container that regenerates on its own or whose merchant is near and alive, has its inventory cleared (persistent items stay) and
 /// generated again from its <c>rules\InvenSource.mes</c> set.
@@ -119,6 +138,29 @@ public static class RestockRules
     /// <see cref="PersistentItemFlag"/>; every other entry of the list, worn items and gold included, is removed and destroyed.</summary>
     [OriginalFunction(0x463B30, OriginalFunctionScope.Partial)]
     public static bool Keeps(uint itemFlags) => (itemFlags & PersistentItemFlag) != 0;
+
+    /// <summary>
+    /// The seed of a generated-once container's draws (0x463E20 with flag 0x200, RK10): the low 32 bits of the container's location
+    /// (its tile x) plus, with a PC (0x40DA50), race × background + gender and, for each pair of name bytes in order, the product of the
+    /// two bytes as signed chars (an odd name's last byte pairs with the terminating zero). Every sum and product wraps at 32 bits.
+    /// Without a PC the seed is the tile x alone.
+    /// </summary>
+    public static int GeneratedOnceSeed(RestockSeedPc? pc, int locationX)
+    {
+        if (pc is null) return locationX;
+        ArgumentNullException.ThrowIfNull(pc.PlayerName);
+        var length = 0;
+        while (length < pc.PlayerName.Count && pc.PlayerName[length] != 0) length++;
+        var seed = unchecked(pc.Gender + locationX + pc.Race * pc.Background);
+        for (var i = 0; i < length; i += 2)
+            seed = unchecked(seed + (sbyte)pc.PlayerName[i] * (i + 1 < length ? (sbyte)pc.PlayerName[i + 1] : 0));
+        return seed;
+    }
+
+    /// <summary>A generated-once container's generation (0x463E20 with flag 0x200, RK10, RK11): <see cref="Generate"/> drawing from the
+    /// original generator seeded with <paramref name="seed"/> (<see cref="GeneratedOnceSeed"/>). The clear before it, and the clearing of
+    /// the container's source and flag 0x200 after it, are the caller's.</summary>
+    public static RestockLoot GenerateOnce(RestockSet set, int seed) => Generate(set, new OriginalRestockRolls(new OriginalRandom(seed)));
 
     /// <summary>
     /// The generation of a regeneration (0x463E20) after the clearing: the coins are one draw in the set's range (0x4CEF00 swaps reversed
