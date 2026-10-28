@@ -144,9 +144,30 @@ PC has a background (the original's reader answers 0 for any other object), so a
   ammunition stack split off another still has none (0). The start kit enters without an insert check
   (as the host-free start of ARC-WORLD-015). The AREA viewer names the refusal in its inventory and schematic messages.
 
-Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): choosing a background at character
-creation, its effect line (stats, skills, resistances and so on), the start kit's gold and items, the low-intelligence speech, dark
-sight, the time- and place-dependent stat changes, Educator and the container seed.
+### Setting and clearing the background (ARC-WORLD-097)
+
+N10a, FR-CHAR-005, read in the executable ([ledger BD9–BD11](../research/ledger/character.md#hero-background-in-the-session-arc-world-097)).
+The hero also keeps the background's description number (`SessionHeroState.BackgroundDescription`, the original's field 0x102,
+snapshot schema 54; 0 for none and for a pre-made hero, whose field is not read yet); `QueryHeroBackgroundDescription()` gives it.
+
+- **`SetHeroBackground(expected, choice, effect)`** (`background_set` 0x4C25E0): stores `choice.Background` and `choice.Description`
+  (a `BackgroundChoice` of the [background table](../requirements/characters-skills.md#fr-char-005)) and adds one entry of `effect`,
+  the rule of `choice.Effect`, with the background cause, in one revision. It clears nothing first: two sets keep two entries, as in
+  the original. Refused, in order: no hero (`InvalidHero`); a background outside 0..999 or a rule of another number (`InvalidBackground`);
+  then the refusals of `AddHeroEffect` (a rule it does not admit, an innate number, a rule that differs from the one in use, the
+  version, the capacity, the bounds, the revision).
+- **`ClearHeroBackground(expected)`** (0x4C2650): zeroes both numbers and removes the first entry with the background cause, whatever
+  its number (0x4EA2E0), in one revision; `NoChange` when both numbers are 0 and no entry has that cause. Refused without a hero
+  (`InvalidHero`), on a stale version and with the other refusals of an effect change (the revision).
+
+The creation screen (N10b, not built) clears and then sets on each background button, and clears on a race or gender change (BD10),
+so a choice pressed again keeps one entry. The background's effect line enters the effect list like any other entry; only the changes
+the session models (stats, maxima, reactions) change values. Not modelled: a second writer of the two fields that adds no effect
+(BD11), the background of any object but the hero.
+
+Out of scope (ledger BG2, BG5–BG8; [characters and skills](../requirements/characters-skills.md)): the character creation screen,
+the start kit's gold and items, the low-intelligence speech, dark sight, the time- and place-dependent stat changes, Educator and
+the container seed.
 
 ## Wield events (ARC-SCRIPT-042)
 
