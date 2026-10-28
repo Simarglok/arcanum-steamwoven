@@ -48,6 +48,9 @@ public interface ISessionRestockWorld : ISessionEventWorld
     SessionItemKind RestockPileKind { get; }
     /// <summary>The insert check of the holder (0x466510) for the items its regeneration creates.</summary>
     SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder);
+    /// <summary>ARC-WORLD-096: whether the host can answer now (its object data and inventory sources loaded); while it cannot, a due
+    /// restock event is postponed by <see cref="SessionEventKinds.RestockRetryDelayMs"/> as without a host.</summary>
+    bool RestockReady => true;
 }
 
 /// <summary>What one regeneration did (ARC-WORLD-094).</summary>
@@ -161,7 +164,7 @@ public sealed partial class GameSessionOwner
         GameEventHandlerOutcome Postpone(RestockDecision decision) =>
             Report(decision, [], postponed: true, ScheduleRestockEvent(map, entity.Code, SessionEventKinds.RestockRetryDelayMs));
         var none = new RestockDecision(RestockStep.None, false);
-        if (_passWorld is not ISessionRestockWorld world || !_inventory.Seeds.TryGetValue(map, out var seed)) return Postpone(none);
+        if (PassWorldAs<ISessionRestockWorld>() is not { RestockReady: true } world || !_inventory.Seeds.TryGetValue(map, out var seed)) return Postpone(none);
         if (world.RestockFacts(map, entity.Code) is not { } holder || !Enum.IsDefined(holder.Kind)) return Report(none, []);
         string? merchant = null;
         RestockHolder? merchantFacts = null;

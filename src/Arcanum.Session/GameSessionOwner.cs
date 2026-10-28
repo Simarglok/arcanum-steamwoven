@@ -48,6 +48,8 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly GameEventQueue _events;
     // Set only while a pass runs: the host's answers for the timers it fires and the life steps they made.
     private ISessionEventWorld? _passWorld;
+    // ARC-WORLD-096: the pass world as T, or the host world a spell host's pass world wraps as T.
+    private T? PassWorldAs<T>() where T : class => _passWorld as T ?? (_passWorld as ISessionWrappingEventWorld)?.Wrapped as T;
     private List<SessionLifeFiring>? _passFirings;
     private List<SessionScriptCallFiring>? _passCalls;
     private List<SessionEffectFiring>? _passEffects;

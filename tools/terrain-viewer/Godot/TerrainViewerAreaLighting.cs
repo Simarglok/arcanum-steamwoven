@@ -19,10 +19,10 @@ public partial class TerrainViewerApp
     private AreaAmbientDriver? _areaAmbient;
     // ARC-WORLD-039: the event world the clock's pump asks; it reads the viewer's current combat and conversation hosts.
     private AreaEventWorld? _areaEventWorld;
-    // ARC-WORLD-092: its AI ticks run through the shown map's AI host.
+    // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost,
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
-        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null);
+        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
     private void StartAreaAmbient(AreaLoadResult area)
     {
@@ -205,6 +205,12 @@ public partial class TerrainViewerApp
                 + $" retried={last.Decays.Count(d => d.Step == Arcanum.Simulation.Items.ItemDecayStep.Retry)}");
             SyncAreaInventory();
         }
+        // ARC-WORLD-096: a restock changes a holder's list (an open loot or barter window is modal, the clock stands while it is open).
+        foreach (var restock in last.Restocks)
+            GD.Print($"ARC-WORLD-096 restock fired holder={restock.Holder} step={restock.Decision.Step} merchantRegenerates={restock.Decision.MerchantRegenerates}"
+                + $" postponed={restock.Postponed} schedule={restock.ScheduleFailure} regenerations="
+                + string.Join(",", restock.Regenerations.Select(r => $"{r.Outcome}:removed {r.Removed}:coins {r.Coins}:created {r.Created.Count}:refused {r.Refused}:skipped {r.Skipped}")));
+        if (last.Restocks.Any(r => r.Regenerations.Count > 0)) SyncAreaInventory();
         var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
         _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"

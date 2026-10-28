@@ -133,6 +133,15 @@ public sealed class PremadeHeroTests
             InventorySourceRules.Read(MesFile.Parse(Encoding.Latin1.GetBytes("{1}{aé: 1,1}{2}{b: 1,1}")).File!, null, 1, Any).Status);
     }
 
+    // ARC-WORLD-096: the coin pair an emptied set keeps (RK6): the loot line's first pair; none when the line failed before it.
+    [TestMethod]
+    public void AnEmptiedSetKeepsTheCoinPairItsLootLineReadFirst()
+    {
+        foreach (var (set, coins) in new (int, (int, int)?)[] { (6, (1, 1)), (8, (1, 1)), (12, (1, 1)), (3, (5, 50)), (10, null), (4, null), (5, null), (9, null), (0, null), (15, null) })
+            Assert.AreEqual(coins, InventorySourceRules.LootCoins(Sources, set), set.ToString());
+        Assert.IsNull(InventorySourceRules.LootCoins(Mes("{1}{a: 385,385\n100,6029}"), 1), "text the source would read otherwise");
+    }
+
     // ---------------------------------------------------------------- synthetic v119 prototypes
     private const int PcType = 15;
 

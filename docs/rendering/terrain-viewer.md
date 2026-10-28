@@ -1655,12 +1655,17 @@ and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken conta
 open shows no window.
 
 **Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
-the follower menu and cycling and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+the follower menu and cycling ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). ARC-WORLD-096: every open schedules
+the restock of the window's container (else the merchant), logged as `ARC-WORLD-096 restock schedule`, and a loot open schedules the
+looted holder's; the event world runs the restock through the viewer's restock host ([barter runtime](../world/barter-runtime.md#restock-in-the-viewer-arc-world-096)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
 with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
-its substitute container when no speaker buys itself, its quotes, the open is at most one revision, `Escape` closes with nothing changed;
-one sale and one buy on a detached copy, through the container when there is one).
+its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
+restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
+one); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
+screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the
+window opened again shows the new wares.
 
 ### Reading window (ARC-UI-049)
 

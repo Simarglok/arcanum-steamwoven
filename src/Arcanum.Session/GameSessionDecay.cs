@@ -70,7 +70,7 @@ public sealed partial class GameSessionOwner
     {
         var entity = firing.Event.Payload.Entities[0];
         var map = new SessionMapId(entity.Map);
-        var shows = _passWorld is ISessionLootWindowWorld loot && loot.LootWindowShowsContainer;
+        var shows = PassWorldAs<ISessionLootWindowWorld>() is { LootWindowShowsContainer: true };
         var loose = LiesLoose(map, entity.Code);
         var decays = loose != false && ItemDecayRules.Decays(false, NoDecay(entity.Code) ? ItemDecayRules.NoDecayFlag : 0, ItemDecayPlace.Loose);
         var step = ItemDecayRules.Fire(shows, decays);

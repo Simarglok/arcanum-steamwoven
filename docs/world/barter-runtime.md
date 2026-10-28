@@ -14,7 +14,7 @@ container, its coins move onto the merchant at the open, the dealer test tries t
 merchant's and the container's goods (snapshot schema 50: the identified items and the containers' added lists). ARC-UI-050 itself changed
 no schema: a trade is a move of items and coins the inventory section already saves.
 Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade, price and payment),
-[FR-ITEM-014](../requirements/items-economy.md#fr-item-014) (stock: the substitute container; restock not yet),
+[FR-ITEM-014](../requirements/items-economy.md#fr-item-014) (stock: the substitute container; restock in the session and the viewer),
 [FR-UI-003](../requirements/ui-media-lifecycle.md#fr-ui-003) (dialog → trade), [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019)
 (haggle used).
 
@@ -84,7 +84,7 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
 
 `Arcanum.Simulation.Items.RestockRules` holds the original's restock event as pure rules (ledger
 [RK1–RK8](../research/ledger/items.md#merchant-restock-arc-world-093), one reading, F1); the session runs it as an event
-([below](#restock-event-arc-world-094)); the viewer comes in a later slice.
+([below](#restock-event-arc-world-094)) and the AREA viewer schedules and hosts it ([below](#restock-in-the-viewer-arc-world-096)).
 
 | API | Original | Rule |
 | --- | --- | --- |
@@ -132,12 +132,43 @@ not hold every line and a pile after the clear; nothing is cleared then. A postp
 (a full event budget) reports it in `SessionRestockFiring.ScheduleFailure`. With a host that checks objects (`ISessionScriptWorld`)
 a restock event of a missing holder is dropped by the queue, which is the same "nothing" as RK3.
 
+## Restock in the viewer (ARC-WORLD-096)
+
+The AREA viewer (exterior, cave and `--area-map`) schedules the event and answers the session's restock questions. Code:
+[`AreaRestock.cs`](../../tools/terrain-viewer/Core/AreaRestock.cs) (`AreaRestockHost`, `AreaPixelRect`, `IAreaRestockScreen`),
+`AreaEventWorld` (the `ISessionRestockWorld` port), `TerrainViewerAreaRestock.cs`; tests:
+[`AreaRestockHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaRestockHostTests.cs). The executable was read again for the shown
+object and the merchant search: ledger [RK9](../research/ledger/items.md#merchant-restock-arc-world-093) (one reading, F1).
+
+| Part | Original | Viewer |
+| --- | --- | --- |
+| Schedule | 0x5733A9 schedules the shown object 0x6813A8 at every open; in the barter mode 0x573042 sets it to the merchant's substitute container, or to the merchant when it has none (RK9) | `AreaRestockHost.Schedule` after every barter open the session accepted (the window's container, else the merchant) and every loot open (the looted holder), with the seed holder's T0 inventory source as `hasSource`; a junk pile or another object that is no seed holder of the actor's map asks nothing. Log `ARC-WORLD-096 restock schedule`. |
+| Holder facts | 0x4641A0, 0x45D8D0, 0x45DDA0, field 0x38 (RK1, RK3) | The seed holder's kind and its T0 source and container flags (`AreaInventoryMap.RestockSeed`), death (`QueryNpcDead`) and a PC leader (`QueryCompanion`) from the session. |
+| Screen test | 0x43DFD0 against 0x5E8808..0x5E8814, strict on every side (RK3) | The union of the container's drawn T0 body rectangles (`TerrainCanvas.AreaBodyRect`) against the game window: the viewport's visible rectangle through the canvas transform, in area pixels (what the viewer shows at its zoom). A container of a map that is not shown is off screen. |
+| Merchant search | 0x440FC0 with the NPC mask, then 0x45F650 per NPC (RK3, RK9) | The tile rectangle that holds the tiles under the four corners of a window-sized screen rectangle centred on the container's tile (`AreaRestockHost.Vicinity`; about 26 × 26 tiles for 800 × 600 pixels), the seed's NPCs in their T0 order and at their T0 cells, the first whose substitute container (T0 leader none and field 0x126, not led by the hero in the session, within 20 tiles) is the container. |
+| Persistent flag | item field 0x57, flag 0x2000 (RK5) | The seed item's flags (`AreaInventoryMap.Persistent`); an item the session made has none. |
+| Sets and items | 0x4BF5D0, 0x4ED8B0 (RK6, RK7) | `InventorySourceRules.Read` over the barter data: `Parsed` reads, `Emptied` reads the loot line's first coin pair (`InventorySourceRules.LootCoins`; none: `Unreachable`), `Unreachable` stays, `Malformed` and `InvalidText` are `Unsupported`; a line's item is the prototype (basic + 20) the barter data read, with its type, name, description and an ammunition prototype's type and units; the pile is gold prototype 9076. |
+| Insert check | 0x466510 | The viewer's diagnostic check (every item fits), as the barter window's. |
+
+The host is ready once the barter data (the inventory sources and item prototypes) has loaded; before that a due event waits a minute
+(`ISessionRestockWorld.RestockReady`). A pass through the cast host (`SessionSpellCaster.ProcessEvents`, while the viewer has one) wraps
+the event world; the session asks the wrapped world for the restock host and the loot window (the latter was lost behind the cast host
+before, so an item's decay did not wait for an open junk pile then). A restock that fired prints `ARC-WORLD-096 restock fired` with the
+step and each regeneration's counts, and the inventory views are refreshed.
+
+Native smoke (stage `barter`, `--area-map "wheel clan" --hero dwarf-male`, first observation 2026-10-28): the barter open scheduled the
+merchant's container (due in about 19 game hours); a jump to the event with the container on screen scheduled it again; with the camera
+panned until the container was off screen the next event found the merchant (no source of its own) and regenerated the container: 28
+items removed, 934 coins and 26 new wares (none refused or skipped); the window opened again with 26 wares and the merchant's gold
+631 → 1565 (the container's new coins moved at the open). Marker `ARC-WORLD-096 native-smoke restock PASS`.
+
 ## Not modelled (NOT READY)
 
-- **Restock in play**: the session event exists (ARC-WORLD-094, above), but the viewer does not schedule it at its window opens yet and
-  has no restock host (screen test, merchant search, persistent flag, set reading, `AreaEventWorld` port): next slice. The first-open
-  generation of containers with flag 0x200 (RK4, RK8; 116 installed), an NPC's best-items wield after a regeneration (0x4654F0) and the
-  other callers of 0x463E20 and 0x463C60 (RK8) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
+- **Restock limits**: the viewer's loot window opens only on dead NPCs and junk piles (no container loot window yet), so only the barter
+  window schedules a container. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
+  sector list order (it matters only for two merchants of one container). The game window is the viewer's whole view at its zoom, not
+  the original's fixed window. The first-open generation of containers with flag 0x200 (RK4, RK8; 116 installed), an NPC's best-items
+  wield after a regeneration (0x4654F0) and the other callers of 0x463E20 and 0x463C60 (RK8) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
   session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
   clear (not guarded).

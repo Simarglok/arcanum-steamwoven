@@ -758,10 +758,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         id != Hero && _map.Critter(id) is not null ? [.. _map.WornItems(id).OrderBy(item => item.Slot).Select(item => item.Id)] : null;
 
     // The pass world: this host for the magic-tech events, the host's event world for the rest (its party facts when it has them; a
-    // world without them answers none, as the pass then does).
-    private class PassWorld(SessionSpellCaster caster, ISessionEventWorld events) : ISessionSpellWorld, ISessionPartyEventWorld
+    // world without them answers none, as the pass then does; ARC-WORLD-096: the session asks the wrapped world for the loot window
+    // and the restock host).
+    private class PassWorld(SessionSpellCaster caster, ISessionEventWorld events) : ISessionSpellWorld, ISessionPartyEventWorld, ISessionWrappingEventWorld
     {
         public ISpellRunHost SpellRuns => caster;
+        public ISessionEventWorld Wrapped => events;
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => events.CritterFacts(map, entity);
         public ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => (events as ISessionPartyEventWorld)?.ReactionNpcFacts(map, entity);
         public ReactionPcFacts? ReactionPcFacts() => (events as ISessionPartyEventWorld)?.ReactionPcFacts();

@@ -75,6 +75,27 @@ public static class InventorySourceRules
         return new(InventorySourceStatus.Parsed, new(set, values[0].First, values[0].Second, Array.AsReadOnly(items)));
     }
 
+    /// <summary>
+    /// ARC-WORLD-096: the coin pair the loot line of set <paramref name="set"/> reads first (its first <c>a,b</c> pair after the colon),
+    /// which a set the load emptied (<see cref="InventorySourceStatus.Emptied"/>) keeps (RK6); null when the set is unreachable, its text
+    /// is not printable ASCII, or the pair is not two digit runs (the original's pair would be uninitialised then).
+    /// </summary>
+    public static (int Min, int Max)? LootCoins(MesFile sources, int set)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        if (set < 1 || set > sources.Count) return null;
+        for (var number = 1; number <= set; number++)
+            if (sources.Messages[number - 1].Number != number) return null;
+        var text = sources.Messages[set - 1].Bytes.Span;
+        foreach (var b in text)
+            if (b is < 0x20 or > 0x7e) return null;
+        var entry = System.Text.Encoding.ASCII.GetString(text);
+        var colon = entry.IndexOf(':');
+        if (colon is < 1 or > MaxNameCharacters) return null;
+        var first = entry[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Split(',');
+        return first is { Length: 2 } && Digits(first[0], out var min) && Digits(first[1], out var max) ? (min, max) : null;
+    }
+
     private static bool Digits(string token, out int value)
     {
         value = 0;

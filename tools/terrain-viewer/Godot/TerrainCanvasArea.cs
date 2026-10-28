@@ -124,6 +124,21 @@ public partial class TerrainCanvas
         _areaHidden = hidden; _areaView = null; QueueRedraw();
     }
     internal IReadOnlySet<AreaObjectKey>? AreaHidden => _areaHidden;
+
+    /// <summary>ARC-WORLD-096: the union of the drawn rectangles of an object's T0 body in the published plan (canvas space), or null
+    /// when the plan draws none for it (the restock's screen test, 0x43DFD0).</summary>
+    internal Rect2? AreaBodyRect(AreaObjectKey key)
+    {
+        if (_area is null) return null;
+        Rect2? union = null;
+        foreach (var command in _area.Commands)
+            if (command.Identity == key)
+            {
+                var rect = new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height);
+                union = union is { } sum ? sum.Merge(rect) : rect;
+            }
+        return union;
+    }
     /// <summary>ARC-RENDER-022: the roof state from the next submission (null = no roofs).</summary>
     public void SetAreaRoofs(IReadOnlyList<(AreaDrawCommand Command, Vector4? Corners)>? roofs, IReadOnlyList<AreaDrawCommand>? coveredTiles,
         IReadOnlySet<AreaObjectKey>? coveredBodies)
