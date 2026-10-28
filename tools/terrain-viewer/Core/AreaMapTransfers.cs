@@ -41,7 +41,10 @@ public sealed class AreaMapTransfers
     /// <summary>Every map map mode can open, by runtime number (ARC-WORLD-038: a quick load to another map).</summary>
     public IReadOnlyDictionary<int, AreaMapDestination> Destinations { get; }
 
-    public AreaMapTransfers(AreaMapRuntime map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
+    /// <param name="templateScripts">ARC-WORLD-081: the sector scripts of a window's template sectors
+    /// (<see cref="MapTransitions.TemplateSectorScripts"/>), which run on entry as an own sector's does.</param>
+    public AreaMapTransfers(AreaMapRuntime map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations,
+        IEnumerable<MapPlacedScript>? templateScripts = null)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(transitions); ArgumentNullException.ThrowIfNull(destinations);
         if (transitions.Entry is not { } entry || entry.Runtime != map.RuntimeMap) throw new ArgumentException("AREA_MAP_TRANSFERS_MAP_MISMATCH");
@@ -75,7 +78,7 @@ public sealed class AreaMapTransfers
             if (row is null || row.Key.ObjectIdSha256 != owner.OwnIdSha256 || row.WorldX is null || row.WorldY is null || _uses.ContainsKey(row.Key)) continue;
             _scripted.TryAdd(row.Key, (site, row));
         }
-        foreach (var placed in transitions.Placed)
+        foreach (var placed in transitions.Placed.Concat(templateScripts ?? []))
             if (placed.Trigger == MapTransitionTrigger.TileEntry) _tiles.TryAdd(new(placed.Location.X, placed.Location.Y), placed);
             else if (placed.Trigger == MapTransitionTrigger.SectorEntry) _sectors.TryAdd(placed.Sector, placed);
     }

@@ -48,6 +48,24 @@ public partial class TerrainViewerApp
         return _extraArt;
     }
 
+    // ARC-WORLD-081: the item prototypes scripts create, read from the same module's content stack on first use.
+    private AreaPrototypeItems? _prototypeItems;
+    private string? _prototypeItemsModule;
+
+    /// <summary>ARC-WORLD-081: the item prototypes of the module the area was read from, opened on first use; null when its content stack
+    /// does not open (said once).</summary>
+    private AreaPrototypeItems? PrototypeItems()
+    {
+        var module = _arguments?.ModulePath;
+        if (module is null) return null;
+        if (_prototypeItemsModule == module) return _prototypeItems;
+        _prototypeItems?.Dispose(); _prototypeItems = null; _prototypeItemsModule = module;
+        var found = AreaContentRoot.Discover(module);
+        if (found.Status == AreaContentRootStatus.Ready && ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _prototypeItems = new(stack);
+        GD.Print($"ARC-WORLD-081 prototype-items {(_prototypeItems is null ? "unavailable " + found.Status : "ready")}");
+        return _prototypeItems;
+    }
+
     /// <summary>
     /// The shown map's bodies drawn from extra art, recomputed when the session or the map changes: a scenery or trap the session
     /// busted takes its destroyed ART (field 24) at its own anchor, and every item lying on the map's ground away from a T0 body
@@ -106,9 +124,12 @@ public partial class TerrainViewerApp
                 // A T0 body standing on the item's own cell already draws it.
                 if (row is not null && row.Key.RuntimeMap == area.Snapshot.RuntimeMap && overlay.Bodies.ContainsKey(row.Key)
                     && row.WorldX == ground.Cell.X && row.WorldY == ground.Cell.Y) continue;
-                // ARC-WORLD-070: a made item (an assembly product left on the tile) takes its prototype's art from the schematic data.
+                // ARC-WORLD-070: a made item (an assembly product left on the tile) takes its prototype's art from the schematic data;
+                // ARC-WORLD-081: an item a script created takes its prototype's own art.
+                var placedItem = row is null ? placedItems.FirstOrDefault(p => p.Entity == entity) : null;
                 uint? aid = row is not null ? Number(row, CurrentArtSlot) : KitArt(entity)
-                    ?? (placedItems.FirstOrDefault(p => p.Entity == entity) is { Source: SessionPlacedSource.Made } made ? _schematicData?.Data?.ArtOf(made.Kind.Prototype) : null);
+                    ?? (placedItem is { Source: SessionPlacedSource.Made } made ? _schematicData?.Data?.ArtOf(made.Kind.Prototype) : null)
+                    ?? (placedItem is { Source: SessionPlacedSource.Created } created ? PrototypeItems()?.Item(created.Kind.Prototype)?.Art : null);
                 if (aid is not { } art)
                 {
                     if (_groundReported.Add("noart:" + entity)) GD.Print($"ARC-RENDER-033 ground-item entity={entity} not drawn: no ground art known");

@@ -151,14 +151,17 @@ public readonly record struct SessionGoldRecord(string Entity, int Quantity);
 /// </summary>
 public readonly record struct SessionGivenItem(string Entity, SessionMapId? Origin);
 
-/// <summary>Which of the hero's lists a placed item came from, and goes back to when it is picked up (ARC-WORLD-059).</summary>
-public enum SessionPlacedSource { Kit, Pc, Made }
+/// <summary>Which of the hero's lists a placed item came from, and goes back to when it is picked up (ARC-WORLD-059). ARC-WORLD-081:
+/// <see cref="Created"/> is an item a script created on the ground (create object, action 52); it was in no list and joins the made items
+/// when picked up.</summary>
+public enum SessionPlacedSource { Kit, Pc, Made, Created }
 
 /// <summary>
 /// One of the hero's items the session placed on the ground (ARC-WORLD-059): its entity and kind, the hero's list it came from
 /// (<see cref="Origin"/>, the map whose seed lists it, for an item the PC took from the world), and the map and cell it lies on.
 /// ARC-WORLD-083: a made item keeps its <see cref="SessionMadeItem.Complexity"/> on the ground (0 for any other source, whose seed
-/// answers for a taken item).
+/// answers for a taken item). ARC-WORLD-081: a created item (<see cref="SessionPlacedSource.Created"/>, numbered <c>made:n</c> with the made
+/// items) keeps its prototype's complexity; created items have their own budget and no hero is needed for them.
 /// </summary>
 public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, SessionMapId Map,
     CellCoord Cell, int Complexity = 0);
@@ -409,7 +412,10 @@ internal sealed class InventoryDomain
 
     /// <summary>Items the PC owns: the kit, the taken and the made items, and (ARC-WORLD-059) those it placed on the ground, which
     /// can come back (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
-    internal int Held => Kit.Count + Pc.Count + Made.Count + Placed.Count;
+    internal int Held => Kit.Count + Pc.Count + Made.Count + Placed.Count(item => item.Source != SessionPlacedSource.Created);
+
+    /// <summary>ARC-WORLD-081: the items scripts created on the ground that lie there still.</summary>
+    internal int Created => Placed.Count(item => item.Source == SessionPlacedSource.Created);
 
     /// <summary>The placed item with this entity, or null.</summary>
     internal SessionPlacedItem? PlacedItem(string entity) => Placed.Find(item => item.Entity == entity);

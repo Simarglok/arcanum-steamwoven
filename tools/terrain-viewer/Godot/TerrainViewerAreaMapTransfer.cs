@@ -92,13 +92,18 @@ public partial class TerrainViewerApp
             _areaUseStatus = $"map {arguments.AreaMapName}: transitions not read ({result.MapTransitionsFailure ?? "no map list row"})";
             return;
         }
-        _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
+        _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations, result.MapTemplateScripts);
         // ARC-SCRIPT-015: a guarded use site runs its use script on the session; the hosts are read at the click.
         _mapTransfers.ScriptRunner = (_, row, refusal) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.Run(row, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
-        // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
-        _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
-            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way. ARC-WORLD-081: an item a script
+        // creates has its prototype's weight (not saved, so attached before each run).
+        _mapTransfers.PlacedRunner = (placed, refusal) =>
+        {
+            if (UseScriptHost(area.Snapshot) is not { } host) return new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+            _areaSession!.AttachItemWeights(prototype => PrototypeItems()?.Item(prototype)?.Weight);
+            return Awarded(host, host.RunPlaced(placed, _areaSession.Rules.Scripts, refusal));
+        };
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
@@ -166,6 +171,10 @@ public partial class TerrainViewerApp
     private AreaScriptedUse Awarded(AreaUseScriptHost host, AreaScriptedUse ran)
     {
         foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
+        // ARC-WORLD-081: the items the run created (or did not, at the Steamwoven limit or a refusal) are logged.
+        foreach (var created in host.TakeCreations())
+            GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { created.Prototype, Near = created.Near.Code,
+                Disposition = created.Result.Disposition.ToString(), Failure = created.Result.Failure.ToString(), created.Result.Item }));
         return ran;
     }
 
@@ -175,9 +184,21 @@ public partial class TerrainViewerApp
         var content = _conversationContent?.Load.Content;
         if (_useScriptHost is { } cached && ReferenceEquals(cached.Snapshot, snapshot) && ReferenceEquals(cached.Session, owner)
             && ReferenceEquals(cached.Content, content) && ReferenceEquals(cached.Inventory, _inventoryHost)) return cached.Host;
-        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content);
+        // ARC-WORLD-081: the world actions read the live actor, the session's removed objects, the module's prototypes and the shown map.
+        var world = new AreaScriptWorld(
+            () => _worldActor.Session is AreaGridSession grid ? LiveCell(grid) : null,
+            row => _areaSession is { } now && ObjectTargets()?.Gone(now).Contains(row.Key) == true,
+            number => PrototypeItems()?.ScriptItem(number),
+            AreaDropMapNow);
+        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
         return host;
+    }
+
+    private static CellCoord? LiveCell(AreaGridSession grid)
+    {
+        var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+        return new CellCoord(checked((int)cell.X), checked((int)cell.Y));
     }
 
     // ARC-SCRIPT-015: the floating lines the last scripted use printed (shown on the status line).

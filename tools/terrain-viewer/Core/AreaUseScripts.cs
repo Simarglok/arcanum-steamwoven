@@ -4,8 +4,22 @@ using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 
 namespace Arcanum.TerrainViewer.Core;
+
+/// <summary>
+/// ARC-WORLD-081: what the world actions of a use, tile or sector script read from the viewer (set S15): the PC's live cell (the session's
+/// actor placement follows the walking actor only at a save or a map change), whether a shown row is destroyed or switched off in the session
+/// (the original's object lists skip it), the item a script's prototype number names (<see cref="AreaPrototypeItems.ScriptItem"/>), and the
+/// shown map as the create action's placement reads it (null when there is none).
+/// </summary>
+public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap);
+
+/// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
+/// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
+public sealed record AreaScriptCreation(int Prototype, ScrObjectRef Near, InventoryMutationResult Result);
 
 /// <summary>What a scripted use did: ran with a teleport of the player (<see cref="Teleport"/>), ran without one, was refused
 /// by the dispatcher or by the session, found no script content, or asked for a teleport the caller cannot take (then
@@ -27,7 +41,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -39,15 +53,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
     /// without the dialog action (a use click does not open a conversation here), plus the reading actions of
     /// <see cref="ScrAdmissionSet.S10"/> (ARC-UI-049: a plaque, book or picture a use, tile or sector script shows), plus call script,
     /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018), plus the quest,
-    /// area, rumor and reputation actions of <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
+    /// area, rumor and reputation actions of <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019), plus the world actions of
+    /// <see cref="ScrAdmissionSet.S15"/> (ARC-WORLD-081): random, loop for and loop end over the scenery in the vicinity, create object and a
+    /// counter operand with any index.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story", ScrAdmissionSet.S4.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions,
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
-                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation]),
-        ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds.Append(ScrFocusKind.LocalObject));
+                ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
+                ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject]),
+        ScrAdmissionSet.S4.ValueKinds,
+        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
+        counterIndexWraps: true);
+
+    /// <summary>ARC-WORLD-081: the label of a script's random draws on the session's generator.</summary>
+    public const string RandomLabel = "scr.random";
 
     private readonly List<ScrReadingRequest> _readings = [];
 
@@ -86,22 +108,70 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         return awards;
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
+    // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity.
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [];
+    private readonly AreaScriptWorld? _world;
+    private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
+
+    /// <summary>ARC-WORLD-081: the create objects of the runs applied since the last call, in order.</summary>
+    public IReadOnlyList<AreaScriptCreation> TakeCreations()
+    {
+        var created = _created.ToArray();
+        _created.Clear();
+        return created;
+    }
 
     /// <param name="shownMap">The shown map's runtime number.</param>
     /// <param name="shown">The shown map's object rows (its snapshot's): any of them can be the attachee or a guard's object.</param>
     /// <param name="maps">The loaded maps' inventory rows (items and holders), for objects of other maps.</param>
     /// <param name="content">The game's scripts; null when they could not be loaded. The host borrows it.</param>
+    /// <param name="world">ARC-WORLD-081: the viewer's answers for the world actions; without it the vicinity is empty, a create object is
+    /// not applied (the run's effects are refused) and random still draws.</param>
     public AreaUseScriptHost(GameSessionOwner session, int shownMap, IEnumerable<AreaObjectRecord> shown, IReadOnlyCollection<AreaInventoryMap> maps,
-        ScriptContent? content)
+        ScriptContent? content, AreaScriptWorld? world = null)
     {
+        _world = world;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentNullException.ThrowIfNull(shown);
         _maps = maps ?? throw new ArgumentNullException(nameof(maps));
         _content = content;
         _shownMap = shownMap;
         // A mobile id repeated by several rows keeps the first; the clicked row answers for its own (Run).
-        foreach (var row in shown) _shown.TryAdd(EntityId(row), row);
+        foreach (var row in shown)
+        {
+            _shown.TryAdd(EntityId(row), row);
+            if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
+        }
+    }
+
+    private const int SceneryType = 3;
+
+    /// <summary>
+    /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
+    /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre)
+    {
+        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        return _scenery.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
+                && _world?.Gone(s.Row) != true)
+            .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
+    }
+
+    /// <summary>ARC-WORLD-081 (PG5): a draw from the session's generator, labelled <see cref="RandomLabel"/>.</summary>
+    public int Random(int low, int high)
+    {
+        var roll = _session.Roll(RandomLabel, low, high);
+        return roll.Roll?.Value ?? throw new InvalidOperationException($"AREA_USE_SCRIPT_RANDOM_REFUSED {roll.Failure}");
+    }
+
+    // An object's tile: the PC's live cell (the session's placement without a world), a row's world cell.
+    private CellCoord? Place(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _world?.PcCell() ?? _session.QueryActor().Cell;
+        return Row(obj) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+            ? new CellCoord((int)x, (int)y) : null;
     }
 
     public ScrObjectRef Pc => new(_session.QueryActor().Map.RuntimeMap, AreaScriptHost.PcCode);
@@ -328,6 +398,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
             var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
             if (printed.Status == ScrPrintedLineStatus.Shown) lines.Add(printed.Text);
         }
+        // ARC-WORLD-081: a create object the viewer cannot apply (no world, a prototype that is no item, an object without a place on the shown
+        // map) leaves the whole run unapplied.
+        if (Creatable(effects) is { } refusedCreation)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: create object {refusedCreation}");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         var teleport = effects.Teleports.FirstOrDefault();
         return teleport is null
@@ -360,7 +434,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries
         // ARC-UI-049: a reading action shows its document to the PC only; it changes no session state.
         foreach (var request in effects.Readings)
             if (IsPc(request.Viewer)) _readings.Add(request);
+        // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
+        // at the limit takes no more (no change).
+        foreach (var request in effects.Creations)
+        {
+            var item = _world!.Item(request.Prototype)!;
+            var result = _session.CreateGroundItem(_session.Version, item.Kind, new SessionMapId(_shownMap), Place(request.Near)!.Value, _world.DropMap()!);
+            _created.Add(new(request.Prototype, request.Near, result));
+            if (result.Disposition == GameSessionDisposition.Rejected) return false;
+        }
         return effects.Writeback is not { } writeback || writeSlot(writeback);
+    }
+
+    // The first create object of the run the viewer cannot apply, named; null when every one can be.
+    private string? Creatable(ScrEffects effects)
+    {
+        if (effects.Creations.Count == 0) return null;
+        if (_world is null || _world.DropMap() is null) return "needs the shown map";
+        foreach (var request in effects.Creations)
+        {
+            if (_world.Item(request.Prototype) is null) return $"{request.Prototype}: no item prototype";
+            if (request.Near.Map != _shownMap || Place(request.Near) is null) return $"{request.Prototype}: {request.Near.Code} has no place on the shown map";
+        }
+        return null;
     }
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)

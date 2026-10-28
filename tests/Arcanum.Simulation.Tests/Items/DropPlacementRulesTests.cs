@@ -93,4 +93,31 @@ public sealed class DropPlacementRulesTests
         Assert.AreEqual(edge, DropPlacementRules.Place(edge, 3, DropOwner.PcSide, still, new Rolls(8)));
         Assert.AreEqual((edge, edge, DropOwner.PcSide), still.Asked.Single());
     }
+    [TestMethod]
+    public void ACreatedObjectDrawsADistanceOneToThreeInEachTryThenTheDirection()
+    {
+        // ARC-WORLD-081, PG1: try 1 draws distance 3 and direction 1 (x − 1), which leaves the 10×10 map from x 1; try 2 draws distance 1
+        // and direction 5 (x + 1), whose one-step path is walked.
+        var near = new CellCoord(1, 5);
+        var map = new Map(new() { [new(2, 5)] = new(1, 0, [5]) });
+        var rolls = new Rolls(3, 1, 1, 5);
+        Assert.AreEqual(new CellCoord(2, 5), DropPlacementRules.PlaceCreated(near, map, rolls));
+        CollectionAssert.AreEqual(new[] { (DropRoll.Distance, 1, 3), (DropRoll.Direction, 0, 8), (DropRoll.Distance, 1, 3), (DropRoll.Direction, 0, 8) }, rolls.Made);
+        Assert.AreEqual((near, new CellCoord(2, 5), DropOwner.Object), map.Asked.Single(), "the object it is created next to is no critter owner");
+        // Ten failed tries give the object's own tile; a distance outside 1..3 is a broken roll source.
+        var edge = new CellCoord(0, 0);
+        Assert.AreEqual(edge, DropPlacementRules.PlaceCreated(edge, new Map([]), new Rolls(Enumerable.Repeat(new[] { 1, 0 }, 10).SelectMany(p => p).ToArray())));
+        Assert.ThrowsExactly<InvalidOperationException>(() => DropPlacementRules.PlaceCreated(near, map, new Rolls(4)));
+    }
+
+    [TestMethod]
+    public void CreatedItemsAreCappedNearTheirObjectOnlyUnderSteamwoven()
+    {
+        var anchor = new CellCoord(100, 100);
+        var lying = new[] { new CellCoord(97, 103), new CellCoord(103, 97), new CellCoord(104, 100), new CellCoord(100, 96) };
+        Assert.AreEqual(CreatedItemRules.Limit - 2, CreatedItemRules.Room(anchor, lying, unbounded: false), "two lie within 3 tiles on both axes");
+        Assert.AreEqual(0, CreatedItemRules.Room(anchor, Enumerable.Repeat(anchor, CreatedItemRules.Limit + 1), unbounded: false));
+        Assert.IsNull(CreatedItemRules.Room(anchor, Enumerable.Repeat(anchor, 100), unbounded: true));
+    }
 }
+

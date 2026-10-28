@@ -1067,6 +1067,8 @@ public partial class TerrainViewerApp : Node
         DisposeAudio();
         // ARC-RENDER-033: the extra art's content stack.
         _extraArt?.Dispose(); _extraArt = null;
+        // ARC-WORLD-081: the created items' prototypes.
+        _prototypeItems?.Dispose(); _prototypeItems = null;
         _cache.Dispose();
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
