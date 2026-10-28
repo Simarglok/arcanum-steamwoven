@@ -137,6 +137,10 @@ def command_launch(args: argparse.Namespace) -> None:
     if args.hero is not None and (tool != "terrain" or args.mode != "crash-site-area"
                                or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
         raise ValueError(f"--hero requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the hero start")
+    # ARC-UI-011: the main menu over the AREA scene; only AREA builds exported with it accept --main-menu.
+    if args.main_menu and (tool != "terrain" or args.mode != "crash-site-area"
+                           or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
+        raise ValueError(f"--main-menu requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the main menu")
     # ARC-RENDER-024: a map's opening sector; map mode only.
     if args.area_map_sector is not None and args.area_map is None:
         raise ValueError("--area-map-sector requires --area-map")
@@ -146,9 +150,9 @@ def command_launch(args: argparse.Namespace) -> None:
         inputs = conf.get("inputs", {})
         # ARC-DEV-015: a pinned mode needs its pinned roles verified by setup's installation record (absent for older or
         # explicit configurations, whose inputs keep their earlier meaning).
-        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero, args.area_map_sector) if args.area_map is not None
+        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map, args.hero, args.area_map_sector, args.main_menu) if args.area_map is not None
                 else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task"), hero=args.hero,
-                                              verified=launch.verified_roles(conf)))]
+                                              verified=launch.verified_roles(conf), main_menu=args.main_menu))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
                       dry_run=args.dry_run, show_paths=args.show_paths))
 
@@ -229,6 +233,7 @@ def parser() -> argparse.ArgumentParser:
     launcher.add_argument("--area-map")
     launcher.add_argument("--area-map-sector", help="X,Y: the sector the map opens at (map mode; the main world map opens as a window there)")
     launcher.add_argument("--hero", choices=launch.PREMADE_HEROES)
+    launcher.add_argument("--main-menu", action="store_true", help="open the main menu over the AREA scene (ARC-UI-011)")
     for option in launch.ACTOR_DEFAULTS:
         launcher.add_argument("--" + option.replace("_", "-"))
     launcher.set_defaults(func=command_launch)

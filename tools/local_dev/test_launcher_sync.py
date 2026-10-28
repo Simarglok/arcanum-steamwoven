@@ -58,6 +58,7 @@ class LauncherSyncTests(unittest.TestCase):
         passed |= {token for token in argv if token.startswith("--")}
         passed |= {token for token in launch.map_arguments(self.inputs(), "Arcanum1-024-fixed", sector="1452,1290") if token.startswith("--")}
         passed |= {token for token in launch.terrain_arguments(self.inputs(), "crash-site-area", hero="elf-male") if token.startswith("--")}
+        passed |= {token for token in launch.map_arguments(self.inputs(), "Arcanum1-024-fixed", main_menu=True) if token.startswith("--")}
         self.assertTrue({launch.ROLE_FLAGS[role] for role in launch.MAP_ROLES} <= set(argv))
         self.assertEqual(viewer, passed | NON_LAUNCHER_FLAGS,
                          "a viewer flag was added or removed: update GAME_ROLES/MODE_ROLES/ROLE_FLAGS and terrain_arguments")
@@ -129,6 +130,23 @@ class LauncherSyncTests(unittest.TestCase):
                 launch.map_arguments(inputs, "void", bad)
         with self.assertRaises(ValueError):
             launch.terrain_arguments(inputs, "world-diagnostic", hero="elf-male")
+
+    def test_the_main_menu_is_passed_to_the_area_mode_without_a_hero(self):
+        # ARC-UI-011: `--main-menu true` opens the menu over the AREA scene; the menu picks the hero, so --hero is refused with it.
+        inputs = self.inputs()
+        self.assertNotIn("--main-menu", launch.terrain_arguments(inputs, "crash-site-area"))
+        self.assertEqual(launch.terrain_arguments(inputs, "crash-site-area", main_menu=True)[-2:], ["--main-menu", "true"])
+        self.assertEqual(launch.map_arguments(inputs, "Arcanum1-024-fixed", main_menu=True)[-4:], ["--area-map", "Arcanum1-024-fixed", "--main-menu", "true"])
+        with self.assertRaisesRegex(ValueError, "drop --hero"):
+            launch.map_arguments(inputs, "Arcanum1-024-fixed", "elf-male", main_menu=True)
+        with self.assertRaisesRegex(ValueError, "drop --hero"):
+            launch.terrain_arguments(inputs, "crash-site-area", hero="elf-male", main_menu=True)
+        with self.assertRaisesRegex(ValueError, "crash-site-area only"):
+            launch.terrain_arguments(inputs, "world-diagnostic", main_menu=True)
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        for command in (["area", "--main-menu"], ["map", "Arcanum1-024-fixed", "--main-menu"]):
+            self.assertTrue(project["parser"]().parse_args(command).main_menu, command)
+        self.assertIn('launcher.add_argument("--main-menu"', (REPO / "tools/arcanum-local").read_text())
 
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()

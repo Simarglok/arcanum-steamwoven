@@ -33,6 +33,29 @@ public sealed class AreaQuickSaveTests
 
     private GameSessionSaveSlot Slot() => GameSessionSaveSlot.QuickSave(_directory);
 
+    // ARC-UI-011: the main menu's placeholder session has no hero tables; a hero save loaded from the menu takes the game-wide
+    // experience data of a ready hero load, a save without a hero does not, and a running session's own tables win.
+    [TestMethod]
+    public void A_hero_save_loaded_under_a_heroless_session_takes_the_menus_experience_tables()
+    {
+        var experience = SessionExperienceRules.Create(Arcanum.Simulation.Character.ExperienceTable.Create(Enumerable.Range(1, 51).Select(level => 1000 * (level - 1)).ToArray()),
+            new Dictionary<int, int>(), new Dictionary<int, int>())!;
+        var definition = new SessionHeroDefinition(16089, Arcanum.Simulation.Character.CharacterRace.HalfElf, Arcanum.Simulation.Character.CharacterGender.Male,
+            [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, []);
+        var tables = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic", experience);
+        using (var hero = AreaTransitionCoordinator.CreateSession(Clock(), Guid.NewGuid(), Module, new AreaStepCell(92928, 82560), 1, tables).Owner!)
+            Assert.IsTrue(AreaQuickSave.Save(hero, Outside, Slot()).Saved);
+        using var placeholder = Session();
+        Assert.IsNull(placeholder.Experience);
+        using (var plain = AreaQuickSave.Load(Slot(), placeholder, _ => null).Owner!)
+            Assert.IsNull(plain.Experience, "without the menu's tables a load keeps the running session's (none)");
+        using (var menu = AreaQuickSave.Load(Slot(), placeholder, _ => null, heroTables: tables).Owner!)
+            Assert.AreSame(experience, menu.Experience);
+        Assert.IsTrue(AreaQuickSave.Save(placeholder, Outside, Slot()).Saved);
+        using var heroless = AreaQuickSave.Load(Slot(), placeholder, _ => null, heroTables: tables).Owner!;
+        Assert.IsNull(heroless.Experience, "a save without a hero takes no hero tables");
+    }
+
     // ARC-SCRIPT-006: dialog consequences are session state, so the quick-save file carries them.
     [TestMethod]
     public void DialogConsequencesComeBackWithAQuickLoad()
