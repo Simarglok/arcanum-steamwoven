@@ -10,27 +10,29 @@ viewer work is split into the slices at the end, each its own task and pull requ
 
 ## What the original shows
 
-- **Combat mode.** No separate mode indicator: the turn-based panel (CH1) exists only while a round runs, so its presence is
-  the turn-based cue; in real time there is none. The viewer's status line already names the mode (ARC-COMBAT-004).
-- **Action points** (CH2–CH4). A row of 20 lamps in four groups of five under the interface bar, lit from the left. The lamps
+- **Combat mode.** The combat interface adds no mode indicator: its turn-based panel (CH1) exists only while a round runs,
+  so its presence is the turn-based cue (the main interface bar's own controls were not read here). The viewer's status
+  line already names the mode (ARC-COMBAT-004).
+- **Action points** (CH2–CH4). A row of 20 lamps in four groups of five just above the interface bar, lit from the left. The lamps
   show the points left after the hovered action, then that action's cost, then the part of the cost the points do not cover,
   each in its own art; more than 20 points show 20. Every action-point check (the cost preview of the cursor's action) and
-  every charge redraws them, so the player sees the price before acting and the remainder after (with the last
-  checked cost still previewed, CH4). With the interface bar
+  every charge redraws them, so the player sees the price before acting and the remainder after (with the last checked cost still
+  previewed, CH4). With the interface bar
   hidden the same three shares are a 120 px bar on a 25-point scale: green, orange and red.
 - **Whose turn** (CH5, CH6). On another participant's subturn the lamps show a running light (three lamps, seven apart,
-  one step every 100 ms, a round of the 20 lamps every 2 s); on the PC's own subturn the points. There is no turn order, no list of participants and no name
-  of whoever acts. The end-turn button sits on the lamp panel (CT5).
+  one step every 100 ms, a round of the 20 lamps every 2 s); on the PC's own subturn the points. The combat interface shows
+  no turn order, no list of participants and no name of whoever acts. The end-turn button sits on the lamp panel (CT5).
 - **Health and fatigue.** The PC: two vertical gauges in the interface bar with the current values printed, health in its
   poisoned art and the poison level when poisoned (CH7). A hovered critter: health and fatigue bars on the interface bar's
   description line, with "current/maximum" for the PC and its followers and a percentage for everyone else (CH8). The
   followers: health and fatigue bars under each portrait on the left edge, the face tinted red below 20 % health (CH9).
-- **Floating text** (CH10–CH12). Lines rise over the object they belong to: 4 line heights in steps of speed + 1 px every
-  50 ms (60 px a second at the default speed 2), fading in and out over 1.5 line heights, a new line stacking one line
+- **Floating text** (CH10–CH12). Lines rise over the object they belong to: 4 line heights in steps of speed + 1 px at most
+  every 50 ms (up to 60 px a second at the default speed 2), fading in and out over 1.5 line heights, a new line stacking one line
   below a line that has just started. The "text floaters" setting chooses none (0), messages only (1, the default) or
-  messages and numbers (2). Numbers are the damage (health and fatigue together in one line) and poison changes; messages
-  are dodges, criticals, the damage multipliers and the critical effects. Colours mark the side: red for the PC, yellow
-  for the PC's followers, white for anyone else, green for poison. Healing floats nothing.
+  messages and numbers (2). Numbers are the damage (health and fatigue together in one line) and poison increases; messages
+  are dodges, criticals, the damage multipliers and the critical effects. Colours mostly mark the side: red for the PC, yellow
+  for the PC's followers, white for anyone else, green for poison (a dodge is always white). The healing function creates
+  no floater (CH12).
 
 ## Steamwoven design for the viewer
 
@@ -63,5 +65,5 @@ Each slice is its own task code, thread and pull request (owner rule 2026-10-28)
    options window; FR-UI-005.
 
 Slice 2 depends on the viewer's turn-based host (ARC-COMBAT-020) and on the NPC fighting host (ARC-WORLD-092) for other
-participants' subturns; slices 3 and 4 can start at once. All three touch the viewer's screen layout, so they must keep
-clear of the inventory window (ARC-UI-015) and the item spell pane (ARC-UI-016).
+participants' subturns; slices 3 and 4 can start at once. Slices 2–4 all touch the viewer's screen layout, so they must keep
+clear of the inventory window (ARC-UI-015, merged) and the item spell pane (ARC-UI-016).
