@@ -170,7 +170,7 @@ screen is not part of the original's menu: it comes before it, has its own look,
 | Setting | In-game Options (original menu) | Launcher |
 | --- | --- | --- |
 | The original's options (difficulty, default combat mode, auto attack, Always Run, volumes; later the Video page) and their files | **Owner** (ARC-UI-013, done) | not shown |
-| Rule mode Steamwoven/Original | optional line or toggle, not built by ARC-UI-013 (D8 says the settings menu may switch it in play; alpha plan N9 lists "rule mode") | **Owner**: full choice incl. custom profiles |
+| Rule mode Steamwoven/Original | optional line or toggle, not built by ARC-UI-013 (D8 says the settings menu may switch it in play; alpha plan N9 lists "rule mode"); the Rules line added by ARC-UI-014 | **Owner**: full choice incl. custom profiles |
 | Per-switch custom profile | shows the active profile's name only | **Owner** (editor) |
 | Game folder, module | — | **Owner** (applies at once before the main menu; a change after content is loaded needs a restart) |
 | Display mode, monitor, UI scale | — (the original has none) | **Owner** |
@@ -318,7 +318,7 @@ project yet).
 | --- | --- | --- | --- | --- | --- |
 | 1 | Launcher settings store and game-folder locator: `launcher_v1.json` codec (Godot-independent), OS folders, Windows registry and fixed candidates, `Discover` + identity check, typed results, synthetic tests | DEV | Mac (dotnet) | FR-CONTENT-001, FR-LIFECYCLE-004, FR-PRODUCT-005 | — |
 | 2 | Launcher screen in the game app: first-run and invalid-folder flows, native folder dialog, rule mode (built-in), display at start, Play; the app reads the folder instead of command-line roles when started without them; launcher sync in `tools/local_dev` and docs | UI | Mac (Godot) | FR-LIFECYCLE-001, FR-UI-006, FR-LIFECYCLE-004 | 1 |
-| 3 | Rule mode in play: wire the stored mode to session start and `SelectRules`, and the in-game Options line (ARC-UI-013 did not add one); close the "no settings menu" item of the rule modes contract | UI | Mac | FR-PRODUCT-006, FR-UI-006 | 1, ARC-UI-013 |
+| 3 | Rule mode in play: wire the stored mode to session start and `SelectRules`, and the in-game Options line (ARC-UI-013 did not add one); close the "no settings menu" item of the rule modes contract. ARC-UI-014 added the Options line and the session wiring; the stored mode is left | UI | Mac | FR-PRODUCT-006, FR-UI-006 | 1, ARC-UI-013 |
 | 4 | Switch catalogue and custom profiles: catalogue with player texts, `GameRules.Custom`, codec schema 2, contract change, launcher editor | WORLD + UI (two tasks) | Mac | FR-PRODUCT-006 | 2, owner's decision |
 | 5 | Packaged builds (the alpha's final task): macOS `.app` and Windows x64 presets, player folder name, icon, signing level, smoke on both OSes, player instruction for GOG on macOS and Windows | DEV | Mac (+ a Windows 11 machine for the smoke) | FR-PRODUCT-005, FR-LIFECYCLE-001 | 1, 2 |
 

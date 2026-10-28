@@ -22,7 +22,8 @@ public enum AreaOption
     Rules,
 }
 
-/// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number).</param>
+/// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
+/// project list's last index).</param>
 /// <param name="Limit">Steamwoven's highest value: <see cref="Max"/>, or lower where the higher values are not built.</param>
 /// <param name="ValueTable">The list's value file (its message numbers are the values, OP3); null for a slider.</param>
 /// <param name="Setting">The original's <c>arcanum.cfg</c> setting name.</param>
