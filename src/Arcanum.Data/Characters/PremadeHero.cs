@@ -162,25 +162,42 @@ public static class PremadeHeroReader
             gold = set.Set.MinCoins;
             foreach (var entry in set.Set.Items)
             {
-                if (entry.BasicPrototype > 999_999 - PrototypeOffset) return new(PremadeHeroFailure.ItemPrototypeMissing, null, entry.BasicPrototype);
-                var itemNumber = entry.BasicPrototype + PrototypeOffset;
-                var status = Prototype(sources, itemNumber, out var item);
-                if (status != PrototypeFileStatus.Found)
-                    return new(status == PrototypeFileStatus.Missing ? PremadeHeroFailure.ItemPrototypeMissing
-                        : status == PrototypeFileStatus.Ambiguous ? PremadeHeroFailure.ItemPrototypeAmbiguous : PremadeHeroFailure.ItemPrototypeInvalid,
-                        null, itemNumber);
-                if (item!.Type is < 5 or > 14 || item.Type == GoldType) return new(PremadeHeroFailure.ItemTypeUnsupported, null, itemNumber);
-                // An attachment with script number 0 is no script (word 2 of the 12-byte element).
-                if (item.Fields[ScriptsSlot].Elements.Any(e => e.Key is GetScript or InsertItemScript && e.Words.Count == 3 && e.Words[2] != 0))
-                    return new(PremadeHeroFailure.ItemScriptUnsupported, null, itemNumber);
-                items.Add(new(entry.BasicPrototype, itemNumber, item.Type, Int(item.Fields[NameSlot]), Int(item.Fields[DescriptionSlot]))
-                    { Weight = Int(item.Fields[ItemWeightSlot]), MagicWeight = Int(item.Fields[ItemMagicWeightSlot]), Complexity = Int(item.Fields[ItemComplexitySlot]) });
+                var failure = ReadItem(sources.Prototype, entry.BasicPrototype, out var item, out var itemNumber);
+                if (failure != PremadeHeroFailure.None) return new(failure, null, itemNumber);
+                items.Add(item!);
             }
         }
 
         return new(PremadeHeroFailure.None, new(basicPrototype, number, race, gender, stats.GetValueOrDefault(AlignmentStat),
             stats.GetValueOrDefault(AgeStat), Int(f[PortraitSlot]), Int(f[BackgroundSlot]), Int(f[SchemeSlot]), raceEffect.Rule, genderEffect,
             setNumber, gold, items.AsReadOnly()) { PlayerName = Array.AsReadOnly((f[PlayerNameSlot].Text ?? []).TakeWhile(b => b != 0).ToArray()) });
+    }
+
+    /// <summary>
+    /// One kit item from its basic prototype number (the prototype file is <paramref name="basicPrototype"/> + <see cref="PrototypeOffset"/>,
+    /// <paramref name="number"/>): the item's type, name class, description number and weight facts. Refused: a number past the
+    /// prototype range or a file that is missing, ambiguous or invalid, a type that is not an item or is gold (the PC holds coins), and an
+    /// item with a get or insert-item script, which the transfer to the PC runs and nothing here does. ARC-UI-036: the opening shop's
+    /// kit (background items, clothes, lockpicks, bandages) reads its items with this too.
+    /// </summary>
+    public static PremadeHeroFailure ReadItem(Func<int, PrototypeFile> prototypes, int basicPrototype, out PremadeHeroItem? item, out int number)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        item = null;
+        number = basicPrototype;
+        if (basicPrototype is < 0 or > 999_999 - PrototypeOffset) return PremadeHeroFailure.ItemPrototypeMissing;
+        number = basicPrototype + PrototypeOffset;
+        var status = PrototypeRecords.Read(prototypes, number, out var record);
+        if (status != PrototypeFileStatus.Found)
+            return status == PrototypeFileStatus.Missing ? PremadeHeroFailure.ItemPrototypeMissing
+                : status == PrototypeFileStatus.Ambiguous ? PremadeHeroFailure.ItemPrototypeAmbiguous : PremadeHeroFailure.ItemPrototypeInvalid;
+        if (record!.Type is < 5 or > 14 || record.Type == GoldType) return PremadeHeroFailure.ItemTypeUnsupported;
+        // An attachment with script number 0 is no script (word 2 of the 12-byte element).
+        if (record.Fields[ScriptsSlot].Elements.Any(e => e.Key is GetScript or InsertItemScript && e.Words.Count == 3 && e.Words[2] != 0))
+            return PremadeHeroFailure.ItemScriptUnsupported;
+        item = new(basicPrototype, number, record.Type, Int(record.Fields[NameSlot]), Int(record.Fields[DescriptionSlot]))
+            { Weight = Int(record.Fields[ItemWeightSlot]), MagicWeight = Int(record.Fields[ItemMagicWeightSlot]), Complexity = Int(record.Fields[ItemComplexitySlot]) };
+        return PremadeHeroFailure.None;
     }
 
     /// <summary>

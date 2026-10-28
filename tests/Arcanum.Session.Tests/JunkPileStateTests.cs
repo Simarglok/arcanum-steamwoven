@@ -41,6 +41,21 @@ public sealed class JunkPileStateTests
     private static string Text(GameSessionOwner owner) => GameSessionSnapshotCodec.Encode(owner.Capture());
 
     [TestMethod]
+    public void TheKitItemsAnywhereListHeldPlacedAndPiledKitItemsButNoTakenOne()
+    {
+        // ARC-UI-036: the host rebuilds the kit's facts by kit number from this list, so a dropped kit item keeps its facts.
+        using var owner = Owner();
+        var all = owner.QueryKitItemsAnywhere().Select(item => item.Entity).ToArray();
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:2", "kit:3" }, all);
+        owner.PlaceHeroItem("kit:2", There);
+        owner.PlaceHeroItem("kit:3", Beside);
+        CollectionAssert.AreEqual(new[] { "kit:1" }, owner.QueryHeroKit().Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(all, owner.QueryKitItemsAnywhere().Select(item => item.Entity).ToArray(), "placed kit items are still listed");
+        Assert.AreEqual(owner.QueryKitItemsAnywhere()[1].Kind, Kit[1].Kind);
+        Assert.IsFalse(owner.QueryKitItemsAnywhere().Any(item => item.Entity == "apple"), "an item taken from the world is not a kit item");
+    }
+
+    [TestMethod]
     public void ASecondDropOnACellGathersBothIntoAPileAndALaterOneJoinsIt()
     {
         using var owner = Owner();

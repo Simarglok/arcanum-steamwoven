@@ -67,17 +67,19 @@ public partial class TerrainViewerApp
             _areaUseStatus = $"map {arguments.AreaMapName}: not in the map list (no runtime number), no session; " + _areaUseStatus;
             return;
         }
-        _areaEffectRules = result.Hero?.Effects;
-        _areaKitHealing = result.Hero?.KitHealing;
-        _areaKitLockpicks = result.Hero?.KitLockpicks;
-        _areaKitDurability = result.Hero?.KitDurability;
-        _areaKitWear = result.Hero?.KitWear;
-        _areaKitGridMove = result.Hero?.KitGridMove;
-        _areaKitArt = result.Hero?.KitArt;
-        _areaKitMissileArt = result.Hero?.KitMissileArt;
-        _areaKitThrowWeight = result.Hero?.KitThrowWeight;
-        _areaKitItemSpells = result.Hero?.KitItemSpells;
-        _areaKitUse = result.Hero?.KitUse;
+        // ARC-UI-036: a carried new character's kit tables come from the session's own kit (the load read the generic start again).
+        var heroTables = carried is null ? result.Hero : SessionKitTables(result.Hero, carried);
+        _areaEffectRules = heroTables?.Effects;
+        _areaKitHealing = heroTables?.KitHealing;
+        _areaKitLockpicks = heroTables?.KitLockpicks;
+        _areaKitDurability = heroTables?.KitDurability;
+        _areaKitWear = heroTables?.KitWear;
+        _areaKitGridMove = heroTables?.KitGridMove;
+        _areaKitArt = heroTables?.KitArt;
+        _areaKitMissileArt = heroTables?.KitMissileArt;
+        _areaKitThrowWeight = heroTables?.KitThrowWeight;
+        _areaKitItemSpells = heroTables?.KitItemSpells;
+        _areaKitUse = heroTables?.KitUse;
         if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); SyncTurnBasedSetting(carried); }
         else
         {

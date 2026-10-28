@@ -5,6 +5,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Skills;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -96,6 +97,11 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 
     /// <summary>ARC-UI-030: why <see cref="Backgrounds"/> is null for the new character, else null.</summary>
     public string? BackgroundsDetail { get; init; }
+
+    /// <summary>ARC-UI-036: for <see cref="AreaStartingHero.NewCharacter"/>, the prototype files (by file number) the opening shop's kit
+    /// can make, read once from the base sources: every background's items, the clothes, the jackets, the lockpicks and the bandages
+    /// (<see cref="OpeningKitRules"/>); any other number answers missing. Null for a pre-made hero.</summary>
+    public Func<int, PrototypeFile>? KitPrototypes { get; init; }
 
     /// <summary>ARC-UI-033: for <see cref="AreaStartingHero.NewCharacter"/>, the portraits the new-character screen browses
     /// (<see cref="PortraitCatalogue"/>, ARC-DATA-045); null for a pre-made hero or when it does not read (<see cref="PortraitsDetail"/>).</summary>
@@ -192,6 +198,7 @@ public static class AreaStartingHero
         string? backgroundsDetail = null;
         PortraitCatalogue? portraits = null;
         string? portraitsDetail = null;
+        Func<int, PrototypeFile>? kitPrototypes = null;
         if (hero.BasicPrototype == GenericPrototype)
         {
             var table = BackgroundTable.Load(stack);
@@ -201,6 +208,8 @@ public static class AreaStartingHero
             var portraitLoad = PortraitCatalogue.Load(stack);
             portraits = portraitLoad.Catalogue;
             if (portraits is null) portraitsDetail = $"{portraitLoad.Status} {portraitLoad.File}";
+            // ARC-UI-036: and the prototypes its opening shop's kit makes, read now (the stack closes with this load).
+            kitPrototypes = KitPrototypeCache(prototypes.Read, backgrounds);
         }
         else if (Flag(menu, hero) is not { } premadeFlag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
         else flag = premadeFlag;
@@ -221,8 +230,122 @@ public static class AreaStartingHero
             BackgroundsDetail = backgroundsDetail,
             Portraits = portraits,
             PortraitsDetail = portraitsDetail,
+            KitPrototypes = kitPrototypes,
         };
     }
+
+    /// <summary>ARC-UI-036: the files <see cref="AreaHeroLoad.KitPrototypes"/> answers, read through <paramref name="read"/> while the
+    /// stack is open: the items of every block of <paramref name="backgrounds"/> that reads (none when the table did not read), the six
+    /// clothes, the three jackets, the lockpicks and the bandages.</summary>
+    private static Func<int, PrototypeFile> KitPrototypeCache(Func<int, PrototypeFile> read, BackgroundTable? backgrounds)
+    {
+        var basics = new SortedSet<int> { OpeningKitRules.Lockpicks, OpeningKitRules.Bandages };
+        foreach (var size in new[] { ArmorSizes.Small, ArmorSizes.Medium, ArmorSizes.Large })
+        {
+            basics.Add(OpeningKitRules.Clothes(CharacterGender.Male, size)!.Value);
+            basics.Add(OpeningKitRules.Clothes(CharacterGender.Female, size)!.Value);
+            basics.Add(OpeningKitRules.Jacket(size)!.Value);
+        }
+        if (backgrounds is not null)
+            for (var block = 0; block < backgrounds.Count; block++)
+                if (backgrounds.Block(block).Block is { } listed) basics.UnionWith(listed.Items);
+        var files = new Dictionary<int, PrototypeFile>();
+        foreach (var basic in basics)
+            if (basic is >= 0 and <= 999_999 - PremadeHeroReader.PrototypeOffset) files[basic + PremadeHeroReader.PrototypeOffset] = read(basic + PremadeHeroReader.PrototypeOffset);
+        var missing = new PrototypeFile(PrototypeFileStatus.Missing, null);
+        return number => files.GetValueOrDefault(number, missing);
+    }
+
+    /// <summary>
+    /// ARC-UI-036: the new character's hero (<see cref="NewCharacterHero"/>) with the opening shop's kit: <paramref name="gold"/> and the
+    /// items of <paramref name="items"/> (basic prototype numbers in creation order, <see cref="OpeningKitRules.Items"/>) read from
+    /// <see cref="AreaHeroLoad.KitPrototypes"/>, with the kit's tables (wear, healing, lockpicks, durability, art, item spells, grid,
+    /// use) built from the same files. An item whose prototype is missing is skipped, as the original's failed creation skips it
+    /// (<paramref name="skipped"/> counts them); any other refusal of the item reader fails it. Null with the reason when the load is not
+    /// the new character's or an item is refused.
+    /// </summary>
+    public static AreaHeroLoad? WithKit(AreaHeroLoad hero, int gold, IReadOnlyList<int> items, out int skipped, out string? detail)
+    {
+        ArgumentNullException.ThrowIfNull(hero);
+        ArgumentNullException.ThrowIfNull(items);
+        skipped = 0;
+        detail = null;
+        if (hero is not { Status: AreaHeroStatus.Ready, Definition: { } definition, KitPrototypes: { } prototypes } || hero.Hero.BasicPrototype != GenericPrototype)
+        {
+            detail = "not the new character's ready load";
+            return null;
+        }
+        if (gold < 0) { detail = $"gold {gold} is negative"; return null; }
+        var kit = new List<SessionHeroKitItem>();
+        foreach (var basic in items)
+        {
+            var failure = PremadeHeroReader.ReadItem(prototypes, basic, out var item, out var number);
+            if (failure == PremadeHeroFailure.ItemPrototypeMissing) { skipped++; continue; }
+            if (failure != PremadeHeroFailure.None) { detail = $"kit prototype {number} {failure}"; return null; }
+            kit.Add(new(new((SessionItemType)item!.Type, item.Prototype, item.Name, item.Description)) { Weight = new(item.Weight, item.MagicWeight, item.Complexity) });
+        }
+        return Tables(hero, prototypes, definition with { Gold = gold, Kit = kit.AsReadOnly() }, out detail);
+    }
+
+    /// <summary>
+    /// ARC-UI-036: the new character's tables for the kit items a session knows (<see cref="GameSessionOwner.QueryKitItemsAnywhere"/>:
+    /// held, placed on the ground or given), by kit number: a map transfer or a load reads the generic start again, whose kit is empty,
+    /// so its tables are rebuilt from the session's own kit items (their prototypes from <see cref="AreaHeroLoad.KitPrototypes"/>). A
+    /// number not listed (a destroyed item) has no facts. The load itself when it is not the new character's or the list is empty; null
+    /// with the reason when an item's facts do not read.
+    /// </summary>
+    public static AreaHeroLoad? WithSessionKit(AreaHeroLoad hero, IReadOnlyList<SessionKitItem> kit, out string? detail)
+    {
+        ArgumentNullException.ThrowIfNull(hero);
+        ArgumentNullException.ThrowIfNull(kit);
+        detail = null;
+        if (hero is not { Status: AreaHeroStatus.Ready, Definition: { } definition, KitPrototypes: { } prototypes } || kit.Count == 0) return hero;
+        var numbered = new Dictionary<int, SessionItemKind>();
+        foreach (var item in kit)
+        {
+            if (KitIndex(item.Entity) is not { } index || index >= SessionKitLimit) { detail = $"kit item {item.Entity} has no kit number"; return null; }
+            numbered[index] = item.Kind;
+        }
+        var count = numbered.Keys.Max() + 1;
+        // A number the session no longer holds takes another item's kind, so the tables keep their positions; its facts are dropped.
+        var filler = numbered[numbered.Keys.Min()];
+        var full = Enumerable.Range(0, count).Select(i => new SessionHeroKitItem(numbered.GetValueOrDefault(i, filler))).ToArray();
+        if (Tables(hero, prototypes, definition with { Kit = full }, out detail) is not { } tables) return null;
+        IReadOnlyList<T?>? Held<T>(IReadOnlyList<T?>? list) => list?.Select((value, i) => numbered.ContainsKey(i) ? value : default).ToArray();
+        return tables with
+        {
+            KitWear = Held(tables.KitWear), KitHealing = Held(tables.KitHealing), KitLockpicks = Held(tables.KitLockpicks),
+            KitDurability = Held(tables.KitDurability), KitArt = Held(tables.KitArt), KitMissileArt = Held(tables.KitMissileArt),
+            KitThrowWeight = Held(tables.KitThrowWeight), KitItemSpells = Held(tables.KitItemSpells), KitGridMove = Held(tables.KitGridMove),
+            KitUse = Held(tables.KitUse),
+        };
+    }
+
+    // The most kit numbers a session's kit is rebuilt for (the pre-made kits and the opening shop's hold a handful).
+    private const int SessionKitLimit = 4096;
+
+    private static AreaHeroLoad? Tables(AreaHeroLoad hero, Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition, out string? detail)
+    {
+        if (KitWear(prototypes, definition, out detail) is not { } wear) return null;
+        return hero with
+        {
+            Definition = definition, KitWear = wear,
+            KitHealing = KitHealing(prototypes, definition),
+            KitLockpicks = KitLockpicks(prototypes, definition),
+            KitDurability = KitDurability(prototypes, definition),
+            KitArt = KitArt(prototypes, definition),
+            KitMissileArt = KitMissileArt(prototypes, definition),
+            KitThrowWeight = KitThrowWeight(prototypes, definition),
+            KitItemSpells = KitItemSpells(prototypes, definition),
+            KitGridMove = KitGridMove(prototypes, definition),
+            KitUse = KitUse(prototypes, definition),
+        };
+    }
+
+    // kit:1 is the first kit item.
+    internal static int? KitIndex(string entity) =>
+        entity.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(entity.AsSpan(4), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1 ? number - 1 : null;
 
     /// <summary>
     /// ARC-UI-030: the new character as the screen leaves it: the generic hero's load (<see cref="NewCharacter"/>, ready) with the

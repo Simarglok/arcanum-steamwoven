@@ -183,6 +183,10 @@ public partial class TerrainViewerApp
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
         var from = " from " + System.IO.Path.GetFileNameWithoutExtension(slot.Path);
         if (heroTables is not null) AdoptHeroTables(LoadedMenuHero(result.Owner));
+        // ARC-UI-036: a new character's save loaded in play brings its own kit (the opening shop's, by background and gender): its tables
+        // are rebuilt from the loaded session, not kept from the running one.
+        else if (result.Owner.QueryHero()?.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset)
+            AdoptHeroTables(LoadedMenuHero(result.Owner));
         if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus(prefix + result.Status + from);
