@@ -167,6 +167,20 @@ public partial class TerrainViewerApp
                 && placed.Fatigue.Position.IsEqualApprox(origin + new Vector2(754, 473) * factor), $"vial places {placed} at factor {factor}");
             CheckGauges("in the bars");
             await Capture("bars");
+            // A window the bars stay over (the inventory, by its key) keeps the gauges in the vials.
+            void InventoryKey()
+            {
+                InputWorld(new InputEventKey { Keycode = Key.I, PhysicalKeycode = Key.I, Unicode = 'i', Pressed = true });
+                InputWorld(new InputEventKey { Keycode = Key.I, PhysicalKeycode = Key.I, Unicode = 'i', Pressed = false });
+            }
+            InventoryKey();
+            for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            RefreshFollowerPortraits();
+            Require(InventoryOpen && _gameBarPanel is { Visible: true } && _heroGauges.ShownForSelfTest && _heroGauges.PlacementForSelfTest.InBars,
+                $"with the inventory open the gauges stay in the vials (inventory {InventoryOpen}, bars {_gameBarPanel?.Visible})");
+            InventoryKey();
+            for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!InventoryOpen, "the inventory closed");
             _gameBarForSelfTest = false;
             for (var i = 0; i < 120 && _gameBarPanel is { Visible: true }; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

@@ -80,7 +80,8 @@ public partial class AreaHeroGauges : CanvasLayer
 
     public override void _Ready()
     {
-        _root = new Control { Name = "HeroGauges", MouseFilter = Control.MouseFilterEnum.Ignore };
+        // Nearest, as the bars' strips: the numbers are scaled with them by the whole factor.
+        _root = new Control { Name = "HeroGauges", MouseFilter = Control.MouseFilterEnum.Ignore, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
         AddChild(_root);
         _panel = new PanelContainer { Name = "Back", MouseFilter = Control.MouseFilterEnum.Ignore, Size = new Vector2(110, 120) };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .85f) });
@@ -135,10 +136,11 @@ public partial class AreaHeroGauges : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         var inBars = _bars is { Visible: true } && AreaGameBarPanel.BottomInset > 0;
         // Over the bars (layer 5) in their vials; under the windows (layer 4) in the panel.
-        Layer = inBars ? 6 : 3;
+        // In the panel under the hover tooltip (layer 3), which may flip into the bottom right corner.
+        Layer = inBars ? 6 : 2;
         _panel.Visible = !inBars;
         _health.DrawEmpty = _fatigue.DrawEmpty = !inBars;
-        foreach (var label in new[] { _healthNumber, _fatigueNumber, _poison }) label.AddThemeFontSizeOverride("font_size", inBars ? 10 : 14);
+        foreach (var label in new[] { _healthNumber, _fatigueNumber, _poison }) label.AddThemeFontSizeOverride("font_size", inBars ? 9 : 14);
         if (inBars)
         {
             // The bars' own placement: the 800 × 600 screen centred at the whole factor, its bottom strip at the window's bottom.
@@ -147,7 +149,12 @@ public partial class AreaHeroGauges : CanvasLayer
             _root.Position = new(left, size.Y - AreaGameBarLayout.ScreenHeight * factor);
             _root.Scale = new(factor, factor);
             Put(_health, HealthGauge); Put(_fatigue, FatigueGauge);
-            Put(_healthNumber, HealthNumber); Put(_fatigueNumber, FatigueNumber); Put(_poison, PoisonNumber);
+            // A label is at least its line high: each grows around the middle of the original's 12 px slot.
+            foreach (var (label, slot) in new[] { (_healthNumber, HealthNumber), (_fatigueNumber, FatigueNumber), (_poison, PoisonNumber) })
+            {
+                var height = Math.Max(slot.Size.Y, label.GetCombinedMinimumSize().Y);
+                Put(label, new Rect2(slot.Position.X, slot.Position.Y + (slot.Size.Y - height) / 2, slot.Size.X, height));
+            }
             return;
         }
         _root.Scale = Vector2.One;

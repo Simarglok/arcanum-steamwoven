@@ -11,8 +11,6 @@ public static class LifeBarRules
 {
     /// <summary>The height of the PC's gauges in the original's 800 × 600 interface (CH7).</summary>
     public const int GaugeHeight = 88;
-    /// <summary>The width of the hovered-critter bars in the original's interface (CH8).</summary>
-    public const int HoverBarWidth = 291;
     /// <summary>A follower's portrait turns red below this health percent (CH9).</summary>
     public const int PortraitTintBelow = 20;
 

@@ -735,7 +735,7 @@ smoke stage `life` (map mode with `--hero`, only when named: `ARC_AREA_MAP_SMOKE
 lev 2`; `ARC_AREA_LIFE_CAPTURE=<ignored path prefix>` saves readbacks): the gauges match the rules before and after a
 poison packet, a speaker that joins shows its portrait bars and turns red after a hit to 15 % of its maximum, hovering it
 reads `current/maximum` (`15/100` on that map), hovering another living NPC reads a percent, with the bars drawn the gauges
-sit in the vials at the original's places, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
+sit in the vials at the original's places and stay there with the inventory open, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
 (the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the original's fill art in the vials, the
 hovered panel's level line and its place on the bars' description line, portrait art, the PC as a hover target (the
 viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4). Original visual parity
