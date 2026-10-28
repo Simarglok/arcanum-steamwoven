@@ -857,7 +857,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
-            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(made.Kind, made.Complexity))), true, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.AddedFacts(made)), true, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), true, insertCheck, scripts);
@@ -1474,7 +1474,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var revision = _revision;
         // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; ARC-WORLD-083: a made item the one it was
         // placed with (the original's drop and pickup leave field 0x60 alone, ledger MC1); a kit item has none in the session (0).
-        var complexity = placed.Source == SessionPlacedSource.Pc ? listed?.Facts.Complexity ?? 0 : placed.Complexity;
+        var complexity = _inventory.PlacedComplexity(placed);
         var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity)))),
             complexity);
         ThrowIfDisposed();
@@ -1733,7 +1733,8 @@ public sealed partial class GameSessionOwner : IDisposable
                 var pile = item.Kind.Type == SessionItemType.Gold && inventory.Piles.ContainsKey(item.Entity);
                 if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type) && !pile) return GameSessionFailure.InvalidItem;
                 var given = inventory.Given.ContainsKey(item.Entity);
-                if ((SessionMadeItem.Number(item.Entity) is null) != given || pile && given ||
+                // ARC-WORLD-083: only a made item keeps a complexity of its own (a given item's seed answers; a pile has none).
+                if ((SessionMadeItem.Number(item.Entity) is null) != given || pile && given || (given || pile) && item.Complexity != 0 ||
                     given && !InventoryDomain.KitAdmitted(item.Kind.Type) && HeroDomain.KitNumber(item.Entity) is not null ||
                     destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                     return GameSessionFailure.InvalidSnapshot;

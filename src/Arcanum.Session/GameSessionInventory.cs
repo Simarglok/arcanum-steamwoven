@@ -400,6 +400,21 @@ internal sealed class InventoryDomain
     /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>
     internal static SessionItemFacts MadeFacts(SessionItemKind kind, int complexity = 0) => new(kind, 0, complexity, -1, null, []);
 
+    /// <summary>ARC-WORLD-083: an item's complexity in an NPC's added list: a given taken item's from its origin seed (0 while that seed
+    /// is not attached), any other its own.</summary>
+    internal int AddedComplexity(SessionMadeItem item) =>
+        Given.TryGetValue(item.Entity, out var given) && given.Origin is { } origin ? SeedComplexity(origin, item.Entity) : item.Complexity;
+
+    /// <summary>ARC-WORLD-083: a placed item's complexity: a taken item's from its origin seed (0 while that seed is not attached), a
+    /// made item's its own, a kit item's 0.</summary>
+    internal int PlacedComplexity(SessionPlacedItem item) => item.Origin is { } origin ? SeedComplexity(origin, item.Entity) : item.Complexity;
+
+    /// <summary>ARC-WORLD-083: the facts of an item in an NPC's added list, with its complexity and tracked units.</summary>
+    internal SessionItemFacts AddedFacts(SessionMadeItem item) => WithAmmo(item.Entity, MadeFacts(item.Kind, AddedComplexity(item)));
+
+    private int SeedComplexity(SessionMapId map, string entity) =>
+        Seeds.TryGetValue(map, out var seed) && seed.Items.TryGetValue(entity, out var row) ? row.Facts.Complexity : 0;
+
     /// <summary>ARC-WORLD-066: an item's facts with its tracked ammunition units (a made or placed stack's type and units, a seed
     /// stack's changed units); any other item's facts unchanged.</summary>
     internal SessionItemFacts WithAmmo(string entity, SessionItemFacts facts) =>
@@ -421,7 +436,7 @@ internal sealed class InventoryDomain
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), dropped(entity)!.Value))))
-            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, item.Complexity))), item.Cell)))
+            .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, PlacedComplexity(item)))), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
@@ -433,7 +448,7 @@ internal sealed class InventoryDomain
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped) => holder.Items
         .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => new SessionInventoryItem(entity, WithAmmo(entity, seed.Items[entity].Facts)))
         .Concat(holder.Kind == SessionHolderKind.Npc
-            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, item.Complexity))))
+            ? AddedTo(holder.Entity).Select(item => new SessionInventoryItem(item.Entity, AddedFacts(item)))
             : []);
 
     /// <summary>Checks a seed's structure and copies it, so later changes to the caller's lists cannot reach the

@@ -122,7 +122,7 @@ public sealed partial class GameSessionOwner
             (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
                 worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        // ARC-WORLD-083: the item keeps its complexity in the NPC's list (a taken item its seed's), so taking it back can refuse it.
+        // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
         var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
             ? seedRow.Facts.Complexity : held.Complexity;
         var facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(held.Kind, complexity));
@@ -156,7 +156,7 @@ public sealed partial class GameSessionOwner
             _inventory.Pc.RemoveAll(entry => entry.Entity == item);
             _inventory.Made.RemoveAll(entry => entry.Entity == item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
-            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, complexity));
+            _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
             if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
         }
         _revision++;
@@ -183,7 +183,7 @@ public sealed partial class GameSessionOwner
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
-            return Take(seed, new(item, _inventory.WithAmmo(item, InventoryDomain.MadeFacts(added.Kind, added.Complexity))), true, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.AddedFacts(added)), true, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), true, insertCheck, scripts);

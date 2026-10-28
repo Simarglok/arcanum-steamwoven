@@ -33,10 +33,13 @@ public sealed class MadeItemComplexityStateTests
         Product = new(Array.AsReadOnly(new[] { 2300 }), 1), Quantity = quantity, MissingLines = Array.AsReadOnly(new bool[7]),
     };
 
+    // The smith holds two parts; a dead stranger holds nothing; a technological cog (complexity −3) lies on the ground.
     private static SessionMapInventorySeed SmithSeed()
     {
         var facts = new SessionItemFacts(Part, 5, 0, 10, null, []);
-        return new([new("smith", SessionHolderKind.Npc, false, false, [], ["s1", "s2"])], [new("s1", facts, null), new("s2", facts, null)]);
+        return new([new("smith", SessionHolderKind.Npc, false, false, [], ["s1", "s2"]), new("corpse", SessionHolderKind.Npc, true, false, [], [])],
+            [new("s1", facts, null), new("s2", facts, null),
+                new("cog", new(new(SessionItemType.Generic, 5600, 7, 8), 1, -3, 0, null, []), new CellCoord(101, 200))]);
     }
 
     private static GameSessionOwner Hero(int background)
@@ -53,7 +56,9 @@ public sealed class MadeItemComplexityStateTests
     // The owner saved and restored with another background (no character creation sets one), the smith's seed attached again.
     private static GameSessionOwner AsTechnophobe(GameSessionOwner owner)
     {
-        var text = GameSessionSnapshotCodec.Encode(owner.Capture()).Replace(",\"background\":0}", ",\"background\":72}", StringComparison.Ordinal);
+        var saved = GameSessionSnapshotCodec.Encode(owner.Capture());
+        Assert.AreEqual(1, saved.Split(",\"background\":0}").Length - 1, "one hero background");
+        var text = saved.Replace(",\"background\":0}", ",\"background\":72}", StringComparison.Ordinal);
         var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, SmithSeed()).Disposition);
         return restored;
@@ -107,11 +112,38 @@ public sealed class MadeItemComplexityStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AssembleSchematic(owner.Version, Schematic(1), InBag, TechFacts, Kinds, Accept).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "made:1", Accept).Disposition);
         CollectionAssert.AreEqual(new[] { new SessionMadeItem("made:1", Product, -5) }, owner.QueryNpcInventory("smith").ToArray());
-        Assert.AreEqual(-5, owner.QueryMapInventory(Exterior)!.Holders.Single().Items.Single(i => i.Entity == "made:1").Facts.Complexity);
+        Assert.AreEqual(-5, owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "smith").Items.Single(i => i.Entity == "made:1").Facts.Complexity);
         using var technophobe = AsTechnophobe(owner);
         Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, technophobe.TakeItemFromNpc(technophobe.Version, "smith", "made:1", Accept).Verdict);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.TakeItemFromNpc(owner.Version, "smith", "made:1", Accept).Disposition);
         CollectionAssert.AreEqual(new[] { new SessionMadeItem("made:1", Product, -5) }, owner.QueryMadeItems().ToArray(), "back with it");
+    }
+
+    [TestMethod]
+    public void A_taken_tech_item_given_to_an_npc_is_answered_by_its_seed_and_refused_when_taken_back()
+    {
+        using var owner = Hero(SessionBackgrounds.None);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "cog", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "cog", Accept).Disposition);
+        StringAssert.Contains(GameSessionSnapshotCodec.Encode(owner.Capture()), "\"entity\":\"cog\",\"type\":\"Generic\",\"prototype\":5600,\"name\":7,\"description\":8,\"complexity\":0}",
+            "the seed answers for a given taken item");
+        Assert.AreEqual(-3, owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "smith").Items.Single(i => i.Entity == "cog").Facts.Complexity);
+        using var technophobe = AsTechnophobe(owner);
+        Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, technophobe.TakeItemFromNpc(technophobe.Version, "smith", "cog", Accept).Verdict);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.TakeItemFromNpc(owner.Version, "smith", "cog", Accept).Disposition);
+        Assert.AreEqual("cog", owner.QueryPcInventory().Single().Entity, "back among the taken items");
+    }
+
+    [TestMethod]
+    public void A_technophobe_cannot_loot_or_be_given_a_made_tech_item_a_dead_npc_holds()
+    {
+        using var owner = Hero(SessionBackgrounds.None);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AssembleSchematic(owner.Version, Schematic(1), InBag, TechFacts, Kinds, Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "corpse", "made:1", Accept).Disposition);
+        using var technophobe = AsTechnophobe(owner);
+        Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, technophobe.LootItem(technophobe.Version, "corpse", "made:1", Accept).Verdict, "loot");
+        Assert.AreEqual(SessionInsertVerdict.TechnologyRefused, technophobe.GiveItemToPc(technophobe.Version, "corpse", 5, Accept).Verdict, "negative IN");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", "made:1", Accept).Disposition);
     }
 
     [TestMethod]
@@ -145,5 +177,16 @@ public sealed class MadeItemComplexityStateTests
         }
         Fails("\"description\":6,\"complexity\":-5}", "\"description\":6}", SnapshotDecodeFailure.MissingField, "$.inventory.made[0].complexity");
         Fails("\"description\":2,\"complexity\":0}", "\"description\":2,\"complexity\":-1}", SnapshotDecodeFailure.NotCanonical, "$.inventory.placed[0].complexity");
+
+        // In an NPC's list: required, and only a made item keeps its own (a given item's seed answers).
+        using var giver = Hero(SessionBackgrounds.None);
+        Assert.AreEqual(GameSessionDisposition.Changed, giver.AssembleSchematic(giver.Version, Schematic(1), InBag, TechFacts, Kinds, Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, giver.GiveItemToNpc(giver.Version, "smith", "made:1", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, giver.GiveItemToNpc(giver.Version, "smith", "kit:3", Accept).Disposition);
+        text = GameSessionSnapshotCodec.Encode(giver.Capture());
+        Fails("\"description\":6,\"complexity\":-5}", "\"description\":6}", SnapshotDecodeFailure.MissingField, "$.inventory.npcs[0].items[0].complexity");
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(text), RestoreOptions()).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(text.Replace("\"description\":2,\"complexity\":0}",
+            "\"description\":2,\"complexity\":-1}", StringComparison.Ordinal)), RestoreOptions()).Failure, "a given kit item");
     }
 }
