@@ -98,7 +98,7 @@ public sealed class CarryStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"weights\":[{\"entity\":\"cells\",\"weight\":8,\"magicWeight\":0,\"complexity\":0}," +
             "{\"entity\":\"charm\",\"weight\":100,\"magicWeight\":-40,\"complexity\":50}," +
-            "{\"entity\":\"kit:1\",\"weight\":1000,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"kit:2\",\"weight\":500,\"magicWeight\":0,\"complexity\":0}]}");
+            "{\"entity\":\"kit:1\",\"weight\":1000,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"kit:2\",\"weight\":500,\"magicWeight\":0,\"complexity\":0}],\"junkPiles\":[]}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryHeroCarry(), restored.QueryHeroCarry());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

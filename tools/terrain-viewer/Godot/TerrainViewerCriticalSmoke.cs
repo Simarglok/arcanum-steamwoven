@@ -82,9 +82,11 @@ public partial class TerrainViewerApp
             || undead && defender.CriticalBody != OriginalCriticalEffects.KnockdownBody, "the critical-effect tables drew");
         if (result.Life is { } life && life.Events.HasFlag(LifeEvents.Stunned))
             EndStun(session, result.Recipient == DamageRecipient.Target ? combat.Target : SessionLifeTarget.Hero, entity);
-        var ground = session.QueryMapInventory(mapId)!.Ground;
+        // ARC-WORLD-063: a drop where items lie gathers them into a junk pile on that cell.
+        var current = session.QueryMapInventory(mapId)!;
         foreach (var drop in result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped && step.Whose == DamageRecipient.Target))
-            Require(ground.Any(g => g.Item.Entity == drop.Entity && g.Cell == drop.Cell), $"the dropped {drop.Entity} lies on {drop.Cell}");
+            Require(current.Ground.Any(g => g.Item.Entity == drop.Entity && g.Cell == drop.Cell)
+                || current.JunkPiles.Any(p => p.Cell == drop.Cell && p.Items.Any(item => item.Entity == drop.Entity)), $"the dropped {drop.Entity} lies on {drop.Cell}");
         SyncAreaCombatBodies();
         SyncAreaInventory();
         GD.Print($"ARC-COMBAT-010 native-smoke drop-paths PASS map={_readyMapName} from={npcCell} paths={string.Join(",", paths)}"

@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Messages;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -112,6 +113,30 @@ public sealed class AreaInventoryHostTests
         var plain = host.View(session, null, 1);
         Assert.IsNull(plain.Holder);
         Assert.AreEqual("[food: name unavailable] (food, weight 5)", plain.Pc[0].Text, "without the description tables only the type is named");
+    }
+
+    [TestMethod]
+    public void AJunkPileOpensAsAContainerAndItsItemsAreLootedFromIt()
+    {
+        // ARC-WORLD-063: a save whose junk pile holds the apple lying on its cell (the pile a drop there would have made).
+        using var made = ConversationSessionFixture.Create();
+        var text = GameSessionSnapshotCodec.Encode(made.Capture()).Replace("\"junkPiles\":[]",
+            "\"junkPiles\":[{\"entity\":\"junk:1\",\"map\":1,\"x\":10,\"y\":20,\"items\":[{\"entity\":\"" + Entity(0) + "\",\"slot\":0,\"width\":1,\"height\":1}]}]");
+        var snapshot = GameSessionSnapshotCodec.TryDecode(text).Snapshot!;
+        using var session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
+        var host = new AreaInventoryHost([Map()]);
+        Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+        Assert.IsNull(host.Target(session, 1, Key(0)), "the apple lies in the pile, not on the ground");
+        var view = host.View(session, Catalog, 1, "junk:1");
+        Assert.AreEqual(AreaInventoryHost.JunkPileTitle, view.HolderTitle);
+        CollectionAssert.AreEqual(new[] { "Synthetic Apple (food, weight 5)" }, view.Loot.Select(l => l.Text).ToArray());
+        var world = new AreaEventWorld(() => null, () => null, lootShowsContainer: () => true);
+        Assert.IsTrue(world.LootWindowShowsContainer, "an item's decay waits while the window shows the pile");
+        Assert.IsFalse(new AreaEventWorld(() => null, () => null).LootWindowShowsContainer);
+        Assert.AreEqual(GameSessionDisposition.Changed, host.Loot(session, "junk:1", Entity(0)).Disposition);
+        Assert.AreEqual(0, host.View(session, Catalog, 1, "junk:1").Loot.Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.CloseJunkPile(session.Version, "junk:1").Disposition);
+        Assert.AreEqual(0, session.QueryJunkPiles().Count);
     }
 
     [TestMethod]
