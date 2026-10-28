@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
         catch (Exception error) when (error is not OperationCanceledException)
         {
             GD.PrintErr($"ARC-UI-014 game folder start FAILED: {error.GetType().Name}: {error.Message}");
-            ShowStatus("Diagnostic mode unresolved | failure stage=GameFolder code=StartFailed | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+            ShowFailure("Diagnostic mode unresolved | failure stage=GameFolder code=StartFailed | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
             if (_nativeSmoke) GetTree().Quit(1);
         }
     }
@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
         try { StartWithArguments(arguments); }
         catch (ArgumentException)
         {
-            ShowStatus("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+            ShowFailure("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
         }
     }
 
