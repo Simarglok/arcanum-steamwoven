@@ -1,6 +1,7 @@
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Character;
 
 namespace Arcanum.Session;
 
@@ -157,8 +158,10 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
 public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
-        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null)
+        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
+        SessionItemScriptSlot[]? scriptSlots = null)
     {
+        ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
         Given = Array.AsReadOnly(given ?? []);
         Piles = Array.AsReadOnly(piles ?? []);
@@ -181,6 +184,8 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionGivenItem> Given { get; }
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity in ordinal order.</summary>
     public IReadOnlyList<SessionGoldRecord> Piles { get; }
+    /// <summary>ARC-SCRIPT-042: the item script slots runs changed, by entity in ordinal order and then by point.</summary>
+    public IReadOnlyList<SessionItemScriptSlot> ScriptSlots { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -270,20 +275,49 @@ public sealed record SessionPrintedLine(SessionPrintedLineStatus Status, string 
 public interface ISessionItemScriptHost : IScrHost
 {
     SessionPrintedLine PrintedLine(int script, int line);
+
+    /// <summary>ARC-SCRIPT-042: the rule of an effect number an add-effect action names (<see cref="SessionEffectDefinition.FromRule"/> of
+    /// the module's effect rule), or null when the host has none; the session then refuses the move.</summary>
+    SessionEffectDefinition? EffectDefinition(int number) => null;
+
+    /// <summary>ARC-SCRIPT-042: the identified test of an object (<see cref="IScrItemQueries.IsIdentified"/>), or null when the host does
+    /// not know it; the session then refuses the move.</summary>
+    bool? IsIdentified(ScrObjectRef obj) => null;
 }
 
-/// <summary>ARC-SCRIPT-013: how a transfer runs an item's insert-item script.</summary>
+/// <summary>ARC-SCRIPT-013: how a transfer runs an item's insert-item script; ARC-SCRIPT-042: and an equipment move its item events.</summary>
 public static class SessionItemScripts
 {
     /// <summary>
-    /// The commands an insert-item script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
+    /// The commands an item event's script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
     /// conversation starts from a transfer), the story-state actions (the session has no story-state number) and the
-    /// deferred calls (not applied from a transfer yet). A script outside it refuses the transfer.
+    /// deferred calls (not applied from a transfer yet); ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
+    /// the identified and rewielding conditions, add and remove effect, call-ex, the magick-tech adjustment, play script eye candy and play
+    /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play). A script outside it refuses the move.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S6-item", ScrAdmissionSet.S6.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S14-item",
+        ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
         ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
-            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall)),
+            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall))
+            .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
+                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound]),
         ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
+
+    /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
+    /// all eight item event points each).</summary>
+    public const int MaxStoredSlots = GameSessionLimits.PolicyMaxPcItems * 8;
+
+    /// <summary>
+    /// ARC-SCRIPT-042, WE1: the cause an add-effect action names, as the original numbers its causes (race 0, bless 3, curse 4 and
+    /// gender 9 read in the executable's callers of the effect add; the others in the same order: background 1, class 2, item 5,
+    /// spell 6, injury 7, tech 8); null for any other number.
+    /// </summary>
+    public static EffectCause? Cause(int code) => code switch
+    {
+        0 => EffectCause.Race, 1 => EffectCause.Background, 2 => EffectCause.Class, 3 => EffectCause.Bless, 4 => EffectCause.Curse,
+        5 => EffectCause.Item, 6 => EffectCause.Spell, 7 => EffectCause.Injury, 8 => EffectCause.Tech, 9 => EffectCause.Gender,
+        _ => null,
+    };
 }
 
 /// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list, and the made items added to
@@ -301,6 +335,11 @@ internal sealed class InventoryDomain
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
+    /// <summary>ARC-SCRIPT-042: the item script slots runs changed, by item entity and attachment point.</summary>
+    internal Dictionary<(string Entity, int Point), ScrSlot> ScriptSlots { get; } = [];
+
+    internal SessionItemScriptSlot[] CaptureScriptSlots() => [.. ScriptSlots.OrderBy(pair => pair.Key.Entity, StringComparer.Ordinal).ThenBy(pair => pair.Key.Point)
+        .Select(pair => new SessionItemScriptSlot(pair.Key.Entity, pair.Key.Point, pair.Value.Script, pair.Value.LocalFlags, pair.Value.Counters))];
     /// <summary>Moves on every seed attach; a seed is not state, so it moves no revision, but a transfer that called the host must
     /// see that the seeds it read are still the same.</summary>
     internal long SeedGeneration { get; set; }
@@ -407,7 +446,7 @@ internal sealed class InventoryDomain
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray());
+        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(), CaptureScriptSlots());
 
     /// <summary>The facts of a made item: its kind, no weight, location (-1, in the bag) or scripts; the host knows the prototype's
     /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>

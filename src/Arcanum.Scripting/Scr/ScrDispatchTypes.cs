@@ -136,6 +136,38 @@ public interface IScrSkillQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-042: the item questions of set <see cref="ScrAdmissionSet.S14"/> (ledger WE rows). A host whose admission set holds the
+/// identified or rewielding condition or the magick-tech adjustment implements this interface; the interpreter asks only for the
+/// objects the clauses name.
+/// </summary>
+public interface IScrItemQueries
+{
+    /// <summary>Whether the object is identified as the original's test (0x464370) reads it: an item whose type has a complexity of 0 or
+    /// less, or an item with the identified item flag (0x1); null when the host does not know the object (the run then stops as for an
+    /// absent object).</summary>
+    bool? IsIdentified(ScrObjectRef obj);
+    /// <summary>The item's effective power ratio for its owner (0x461540, ledger EQ9): 100 for a neutral item or an owner that is not a
+    /// critter, else <c>100 × power / complexity</c>; null when the host does not know the item or the owner (the run stops).</summary>
+    int? PowerRatio(ScrObjectRef item, ScrObjectRef owner);
+    /// <summary>Whether the worn items are being rewielded (0x4655C0, the global the rewield 0x465530 sets around its runs).</summary>
+    bool ItemsBeingRewielded();
+}
+
+/// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
+public enum ScrEffectChange { Add, Remove }
+
+/// <summary>
+/// ARC-SCRIPT-042: an add-effect (77) or remove-effect (78) action for one object of its object operand (ledger WE1): add appends
+/// <paramref name="Effect"/> with <paramref name="Cause"/> (0x4E9F70), remove takes away the first entry of the number whatever its
+/// cause (0x4EA100, <paramref name="Cause"/> 0). Both values are as read; the host decides what the object is.
+/// </summary>
+public readonly record struct ScrEffectRequest(ScrEffectChange Change, ScrObjectRef Object, int Effect, int Cause = 0);
+
+/// <summary>ARC-SCRIPT-042: a play-script-eye-candy action (120, ledger WE4): the entry of the script eye-candy table and the object it
+/// plays on. Presentation only; the host shows it.</summary>
+public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object);
+
+/// <summary>
 /// ARC-SKILLS-009: a use-item-with-skill action (79, ledger SX3, SX4) as the run asks for it: the source, the item (absent for a use
 /// without one), the target, the skill number and the modifier, as read. The original only queues the source's use-item-with-skill goal
 /// (0x4352C0), which runs the shared skill check later with the modifier as the invocation modifier (counted twice, SC12) and no flags;
@@ -212,6 +244,9 @@ public enum ScrStop
     /// runs together executed more than <see cref="ScrRunOptions.MaxCallDepth"/> × <see cref="ScrRunOptions.MaxExecutedLines"/>
     /// lines (the original has no bound but its stack; project bounds); the dispatch ends with skip default and applies nothing.</summary>
     CallDepth,
+    /// <summary>ARC-SCRIPT-042: a call-ex (81) names an attachment point outside 0..35 or the dialog-override slot; the dispatch ends with skip
+    /// default and applies nothing (the original would index past the object's script array).</summary>
+    CallExPoint,
 }
 
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
@@ -314,9 +349,13 @@ public sealed class ScrEffects
     internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null,
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
-        IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null)
+        IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
+        IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null)
     {
         States = states ?? Array.Empty<ScrStateRequest>();
+        EffectChanges = effectChanges ?? Array.Empty<ScrEffectRequest>();
+        EyeCandies = eyeCandies ?? Array.Empty<ScrEyeCandy>();
+        SlotWrites = slotWrites ?? Array.Empty<ScrWriteback>();
         Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
         Calls = calls ?? Array.Empty<ScrCallRequest>();
         Lines = lines ?? Array.Empty<ScrPrintLine>();
@@ -353,8 +392,19 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrSkillUse> SkillUses { get; }
     /// <summary>ARC-SCRIPT-019: the quest, area, rumor and reputation requests in action order.</summary>
     public IReadOnlyList<ScrStateRequest> States { get; }
+    /// <summary>ARC-SCRIPT-042: the effect adds and removals in action order, one per object (ledger WE1).</summary>
+    public IReadOnlyList<ScrEffectRequest> EffectChanges { get; }
+    /// <summary>ARC-SCRIPT-042: the script eye candy to show, in action order (ledger WE4).</summary>
+    public IReadOnlyList<ScrEyeCandy> EyeCandies { get; }
+    /// <summary>
+    /// ARC-SCRIPT-042: the slots the dispatch's call-ex runs (81, ledger WE3) changed, in the order the runs ended, each the object's
+    /// slot for the point as that run left it. The caller stores them in this order and then <see cref="Writeback"/>, so the event's
+    /// own slot wins over a call-ex run of the same slot, as the original's outer run writes its copy back last.
+    /// </summary>
+    public IReadOnlyList<ScrWriteback> SlotWrites { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
-        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0;
+        && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
+        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -381,7 +431,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S13"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S14"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -402,7 +452,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S13)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S13.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S14)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S14.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -413,5 +463,7 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with a guard condition or get object type needs a host that implements IScrObjectQueries.", nameof(Admission));
         if (host is not IScrSkillQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetSkill))
             throw new ArgumentException("A set with get skill needs a host that implements IScrSkillQueries.", nameof(Admission));
+        if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
+            throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
     }
 }

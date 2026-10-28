@@ -464,19 +464,51 @@ public sealed partial class GameSessionOwner
     private SessionEffectResult Commit(EffectStep[] steps, SessionEffectDefinition? added, (int Number, int Count, long Duration)? timed,
         GameEvent? cancel, Action<long>? apply = null)
     {
-        var hero = _hero!;
-        var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
-            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
-            hero.State.Advancement, hero.State.InnateSkills)!;
         var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions);
         if (added is not null) definitions[added.Number] = added;
+        var failure = PrepareEffects(steps, definitions, timed is null ? 0 : 1, out var prepared);
+        if (failure != GameSessionFailure.None) return RejectEffect(failure);
+        if (timed is not null && _events.QueryPending().Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) >= SessionEffectLimits.MaxTimedEffects)
+            return RejectEffect(GameSessionFailure.EventBudgetExceeded);
+        if (_revision == long.MaxValue) return RejectEffect(GameSessionFailure.RevisionExhausted);
+
+        ApplyEffects(prepared!);
+        var now = prepared!.Now;
+        long? sequence = null;
+        if (timed is { } t)
+        {
+            var scheduled = _events.ScheduleAfter(SessionEventKinds.HeroEffectEnd, GameEventPayload.Of([], now, t.Duration, t.Number, t.Count),
+                t.Duration, new(0, now, 0));
+            if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("END scheduling failed after admission.");
+            sequence = scheduled.Event!.Sequence;
+        }
+        if (cancel is not null) _events.RemoveFirst(cancel.Kind, e => e.Sequence == cancel.Sequence);
+        apply?.Invoke(now);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Length, prepared.LifeChanged ? _life.Hero : null, sequence,
+            new(_identity, _revision));
+    }
+
+    /// <summary>A checked change of the hero's effect list (ARC-SCRIPT-042 split it from <see cref="Commit"/>, so an item move can apply it
+    /// with its other changes in one revision): the steps, the rules of every number they and the list use, the hero's life state after
+    /// them and its timers.</summary>
+    private sealed record PreparedEffects(EffectStep[] Steps, Dictionary<int, SessionEffectDefinition> Definitions, LifeState State, bool LifeChanged,
+        (string Kind, GameEventPayload Payload)[] Timers, long Now);
+
+    // The trial: the steps on a character owner built from the hero, each moving the damage by the change of a maximum (the effect add
+    // 0x4E9F70 and the internal removal 0x4EA520; damage never goes below 0), then the life facts and the event budget for the timers and
+    // extraEvents more. Nothing is written.
+    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, out PreparedEffects? prepared)
+    {
+        prepared = null;
+        var trial = TrialHero();
         var entries = new List<SessionEffect>(_effects.Entries);
         var ids = new List<AppliedEffectId?>();
         foreach (var entry in entries) ids.Add(ApplyStats(trial.Stats, entry, definitions));
         var before = _life.Hero!.Value;
         var state = before.State;
         var facts = TrialFacts(trial, entries, definitions, state);
-        if (facts is null) return RejectEffect(GameSessionFailure.InvalidEffect);
+        if (facts is null) return GameSessionFailure.InvalidEffect;
         foreach (var step in steps)
         {
             if (step.Add is { } entry)
@@ -491,9 +523,8 @@ public sealed partial class GameSessionOwner
                     throw new InvalidOperationException("Trial effect removal failed.");
                 ids.RemoveAt(step.RemoveAt);
             }
-            // The effect add (0x4E9F70) and the internal removal (0x4EA520): each maximum's change moves its damage, which never goes below 0.
             var next = TrialFacts(trial, entries, definitions, state);
-            if (next is null) return RejectEffect(GameSessionFailure.InvalidEffect);
+            if (next is null) return GameSessionFailure.InvalidEffect;
             state = state with
             {
                 HitPointDamage = Shift(state.HitPointDamage, LifeRules.MaxHitPoints(next, state.PoisonLevel) - (long)LifeRules.MaxHitPoints(facts, state.PoisonLevel)),
@@ -502,24 +533,30 @@ public sealed partial class GameSessionOwner
             facts = next;
         }
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        var lifeChanged = state != before.State;
         var timers = Timers(true, before.State, state, null).Select(timer => TimerEvent(timer, SessionLifeTarget.Hero, 0, now, 1))
             .Where(pending => !IsPending(pending.Kind, null)).ToArray();
-        var events = timers.Length + (timed is null ? 0 : 1);
-        if (timed is not null && _events.QueryPending().Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) >= SessionEffectLimits.MaxTimedEffects)
-            return RejectEffect(GameSessionFailure.EventBudgetExceeded);
+        var events = timers.Length + extraEvents;
         if (events > 0 && (_events.Count > _events.Limits.MaxPending - events || _events.NextSequence > long.MaxValue - events ||
             now > long.MaxValue - Math.Max(SessionEffectLimits.MaxDurationMs, SessionEventKinds.RestingDelayMs)))
-            return RejectEffect(GameSessionFailure.EventBudgetExceeded);
-        if (_revision == long.MaxValue) return RejectEffect(GameSessionFailure.RevisionExhausted);
+            return GameSessionFailure.EventBudgetExceeded;
+        prepared = new(steps, definitions, state, state != before.State, timers, now);
+        return GameSessionFailure.None;
 
-        // Commit: the live character owner takes the same steps; the trial already showed each of them is admitted.
-        foreach (var step in steps)
+        static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);
+    }
+
+    // The live character owner takes the prepared steps (the trial already showed each of them is admitted); the rules kept are those of
+    // the numbers still in the list; the life state and its timers follow. No revision.
+    private void ApplyEffects(PreparedEffects prepared)
+    {
+        var hero = _hero!;
+        var before = _life.Hero!.Value;
+        foreach (var step in prepared.Steps)
         {
             if (step.Add is { } entry)
             {
                 _effects.Entries.Add(entry);
-                _effects.Applied.Add(ApplyStats(hero.Stats, entry, definitions));
+                _effects.Applied.Add(ApplyStats(hero.Stats, entry, prepared.Definitions));
             }
             else
             {
@@ -530,26 +567,20 @@ public sealed partial class GameSessionOwner
             }
         }
         _effects.Definitions.Clear();
-        foreach (var number in _effects.Entries.Select(e => e.Number).Distinct()) _effects.Definitions[number] = definitions[number];
-        if (lifeChanged) _life.Hero = before with { State = state };
-        foreach (var (kind, payload) in timers)
-            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
+        foreach (var number in _effects.Entries.Select(e => e.Number).Distinct()) _effects.Definitions[number] = prepared.Definitions[number];
+        if (prepared.LifeChanged) _life.Hero = before with { State = prepared.State };
+        foreach (var (kind, payload) in prepared.Timers)
+            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, prepared.Now, 0)).Disposition != GameEventScheduleDisposition.Added)
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
-        long? sequence = null;
-        if (timed is { } t)
-        {
-            var scheduled = _events.ScheduleAfter(SessionEventKinds.HeroEffectEnd, GameEventPayload.Of([], now, t.Duration, t.Number, t.Count),
-                t.Duration, new(0, now, 0));
-            if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("END scheduling failed after admission.");
-            sequence = scheduled.Event!.Sequence;
-        }
-        if (cancel is not null) _events.RemoveFirst(cancel.Kind, e => e.Sequence == cancel.Sequence);
-        apply?.Invoke(now);
-        _revision++;
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Length, lifeChanged ? _life.Hero : null, sequence,
-            new(_identity, _revision));
+    }
 
-        static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);
+    // A character owner built from the hero's saved fields, for trials.
+    private HeroDomain TrialHero()
+    {
+        var hero = _hero!;
+        return HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
+            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
+            hero.State.Advancement, hero.State.InnateSkills)!;
     }
 
     // The hero's life facts under a trial list, or null when the life rules refuse the maxima it gives.
