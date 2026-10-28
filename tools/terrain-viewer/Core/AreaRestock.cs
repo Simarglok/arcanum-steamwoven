@@ -40,13 +40,18 @@ public sealed class AreaRestockHost
     private readonly AreaInventoryHost _inventory;
     private readonly AreaBarterData? _data;
     private readonly IAreaRestockScreen _screen;
+    private readonly Func<IReadOnlyList<byte>?>? _playerName;
 
-    public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData? data, IAreaRestockScreen screen)
+    /// <param name="playerName">ARC-WORLD-101: the session hero's player name bytes (field 0x10E, without the terminating zero), or null
+    /// when the viewer does not know it (a generated-once container then keeps its list); null: never known.</param>
+    public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData? data, IAreaRestockScreen screen,
+        Func<IReadOnlyList<byte>?>? playerName = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _data = data;
         _screen = screen ?? throw new ArgumentNullException(nameof(screen));
+        _playerName = playerName;
     }
 
     public GameSessionOwner Session => _session;
@@ -119,6 +124,19 @@ public sealed class AreaRestockHost
             .Select(corner => AreaCellPicking.Pick(new Vec2(middle.X + corner.Item1 * window.Width / 2, middle.Y + corner.Item2 * window.Height / 2)) ?? center)
             .ToArray();
         return (corners.Min(cell => cell.X), corners.Min(cell => cell.Y), corners.Max(cell => cell.X), corners.Max(cell => cell.Y));
+    }
+
+    /// <summary>
+    /// ARC-WORLD-101: the host's part of a generated-once container's seed (0x463E20 with flag 0x200, RK10): the container's T0 tile x (the
+    /// low 32 bits of its location) and the hero's player name bytes (0x441B60 on field 0x10E). A session without a hero seeds from the
+    /// tile x alone, so its name is empty. Null for an object that is no container of that map's seed, a tile outside 32 bits, or a hero
+    /// whose name the viewer does not know (the container then keeps its list).
+    /// </summary>
+    public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container)
+    {
+        if (Holder(map.RuntimeMap, container) is not { Holder.Kind: SessionHolderKind.Container } found || Cell(found.Map, container) is not { } at) return null;
+        var name = _session.QueryHero() is null ? Array.Empty<byte>() : _playerName?.Invoke();
+        return name is null ? null : new(at.X, Array.AsReadOnly(name.ToArray()));
     }
 
     /// <summary>Whether a seed item carries the persistent flag 0x2000 (RK5); an item the session made carries none.</summary>

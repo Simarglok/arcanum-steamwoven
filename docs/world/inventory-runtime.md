@@ -48,14 +48,14 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | Call | Source path (S) | Admitted here |
 | --- | --- | --- |
 | `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → the item transfer (0x4617F0) of an unparented item: item `SAP_GET`, insert check, the object pickup (0x4417A0), the item insert (0x466640; item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
-| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)) |
+| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)); since ARC-WORLD-101 an item in the current list of a container of the seed that has not spilled (its seed items, the items a barter or a regeneration put into it); the host admits the open first ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)) |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
 
 - pickup: `ItemNotAvailable` (not on that map's ground, or already taken);
-- loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container: chest contents are generated on first open
-  from the created PC and are not modelled), `HolderScriptUnsupported` (a holder `SAP_USE` script), `ItemNotAvailable`
+- loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container that spilled when it broke; before ARC-WORLD-101 every
+  container), `HolderScriptUnsupported` (a holder `SAP_USE` script), `ItemNotAvailable`
   (not in that holder's current list);
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
@@ -340,8 +340,8 @@ each decay event (one item on a map, set no later than the saved clock, the deca
 event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
 Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
-into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
-counter), so only an open pile delays a decay; the item flag of the hero's kit and made items is not known (no
+into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows the session's junk piles and (ARC-WORLD-101) the map's containers (a dead NPC it loots does not count, as in the original's
+counter), so only an open pile or container delays a decay; the item flag of the hero's kit and made items is not known (no
 installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
 whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
 original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
@@ -400,7 +400,8 @@ chest of 3 (one with the no-decay flag), all 3 in the pile.
 **Not ready.**
 
 - The map data's own junk piles (15 on 10 interiors, census) take nothing: a drop on their tile ignores them (it may make a session
-  pile beside them), and they are not opened as piles (chests are not lootable in the session).
+  pile beside them); since ARC-WORLD-101 they open as containers of the map (the attempt always admits a junk pile, LK8), but they do
+  not dissolve on closing.
 - The tile's list order is the session's ground order (seed items, spilled, dropped, then placed items), not the original's object list
   order, which was not read; it decides only the order in a new pile and its slots.
 - The scripts the original runs on the way: the get script of a swept item and the insert-item event of every insertion. An item whose

@@ -159,7 +159,8 @@ public sealed class PremadeHeroTests
     private const int PcType = 15;
 
     /// <summary>A v119 prototype: every slot of the type in order. Values: int for an int32 slot, a key→value map for an
-    /// int32 array or a script array (attachment point → script number), an int count for an object-id array, true for a present object id; every other slot is absent.</summary>
+    /// int32 array or a script array (attachment point → script number), an int count for an object-id array, true for a present object id,
+    /// the bytes (without the terminating zero) for a string; every other slot is absent.</summary>
     internal static byte[] Prototype(int number, int type, IReadOnlyDictionary<int, object>? values = null)
     {
         values ??= new Dictionary<int, object>();
@@ -182,6 +183,9 @@ public sealed class PremadeHeroTests
                 case StaticObjectLoader.WireKind.ArrScript when value is IReadOnlyDictionary<int, int> scripts:
                     Array(bytes, 12, scripts.OrderBy(pair => pair.Key)
                         .Select(pair => (pair.Key, (byte[])[.. new byte[8], .. BitConverter.GetBytes(pair.Value)])).ToArray());
+                    break;
+                case StaticObjectLoader.WireKind.OptString when value is byte[] text:
+                    bytes.Add(1); I32(bytes, text.Length); bytes.AddRange(text); bytes.Add(0);
                     break;
                 case StaticObjectLoader.WireKind.ArrObjectId when value is int count:
                     Array(bytes, 24, Enumerable.Range(0, count).Select(key => (key, IdBytes(2, 90 + key))).ToArray());
@@ -261,6 +265,18 @@ public sealed class PremadeHeroTests
         stored[46] = new Dictionary<int, int> { [0] = 67, [1] = 330 };
         stored[47] = new Dictionary<int, int> { [0] = 0, [1] = 9 };
         Assert.AreEqual(PremadeHeroFailure.None, PremadeHeroReader.Read(Inputs(Files(stored)), 16069).Failure);
+    }
+
+    [TestMethod]
+    public void The_player_name_is_the_string_field_s_bytes_up_to_its_terminating_zero()
+    {
+        // ARC-WORLD-101: field 0x10E (slot 86), the generated-once seed's name bytes; unset reads as empty.
+        Assert.AreEqual(0, PremadeHeroReader.Read(Inputs(Files()), 16069).Hero!.PlayerName.Count);
+        var pc = Pc();
+        pc[86] = new byte[] { (byte)'S', (byte)'y', (byte)'n', 0xE9 };
+        CollectionAssert.AreEqual(new byte[] { (byte)'S', (byte)'y', (byte)'n', 0xE9 }, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.PlayerName.ToArray());
+        pc[86] = System.Array.Empty<byte>();
+        Assert.AreEqual(0, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.PlayerName.Count);
     }
 
     [TestMethod]

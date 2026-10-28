@@ -268,6 +268,27 @@ public sealed class GeneratedOnceStateTests
         }
     }
 
+    [TestMethod]
+    public void The_generated_goods_and_the_kept_items_are_looted_from_the_container()
+    {
+        // ARC-WORLD-101: the window's loot after the first open takes the created items and the persistent ring; the destroyed seed
+        // items and the gold pile (gold is not modelled) do not move.
+        using var owner = Owner();
+        var opened = owner.GenerateContainerOnce(owner.Version, "crate", new World()).Regeneration!;
+        Assert.IsTrue(opened.Created.Count > 0);
+        var created = opened.Created[0];
+        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "crate", created, _ => SessionInsertVerdict.Accepted).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "crate", "ring", _ => SessionInsertVerdict.Accepted).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, "crate", "axe", _ => SessionInsertVerdict.Accepted).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, "crate", created, _ => SessionInsertVerdict.Accepted).Failure, "taken once");
+        Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.LootItem(owner.Version, "crate", opened.Pile!, _ => SessionInsertVerdict.Accepted).Failure);
+        CollectionAssert.DoesNotContain(Items(owner, "crate").Select(item => item.Entity).ToArray(), created);
+        CollectionAssert.Contains(owner.QueryMadeItems().Select(item => item.Entity).ToArray(), created);
+        CollectionAssert.Contains(owner.QueryPcInventory().Select(item => item.Entity).ToArray(), "ring");
+        // The plain chest of the same seed is lootable too, though empty.
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, "chest", "ring", _ => SessionInsertVerdict.Accepted).Failure);
+    }
+
     private static SessionEventPassResult Fire(GameSessionOwner owner, ISessionEventWorld world)
     {
         Assert.AreEqual(ClockMutationDisposition.Changed,

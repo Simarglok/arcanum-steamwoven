@@ -38,6 +38,11 @@ an item whose prototype attaches a `SAP_GET` or `SAP_INSERT_ITEM` script is refu
 the PC's insert check (carry weight, room) is **NOT evaluated**; a refused item would be destroyed in the original. For the
 twelve installed sets no item is refused (D), and the heaviest-kit check against ST 8 is NOT_VERIFIED.
 
+ARC-WORLD-101: `PremadeHero.PlayerName` is the prototype's player name (field 0x10E, the PC block's one string field, v119 slot 86) as
+its stored bytes up to the terminating zero (empty when unset); every installed pre-made prototype stores one (`RealData` test). The
+viewer gives it as the hero's name to the seed of a generated-once container
+([container loot window](barter-runtime.md#container-loot-window-arc-world-101)); the session does not hold it.
+
 Typed refusals (`PremadeHeroFailure`, fail-closed): missing, ambiguous or invalid prototype (size, wire, trailing bytes,
 number); not a PC; race outside 0..10 or gender outside 0/1; prototype state a new PC would carry that is not modelled
 (skills, experience, inventory, gold object, bank money, an effect whose cause is neither race nor gender, more than one

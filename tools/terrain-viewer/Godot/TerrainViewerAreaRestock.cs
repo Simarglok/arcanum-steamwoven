@@ -24,8 +24,15 @@ public partial class TerrainViewerApp
         var data = loaded.Data;
         if (_restockHost is { } host && ReferenceEquals(host.Session, session) && ReferenceEquals(host.Inventory, inventory) && ReferenceEquals(host.Data, data))
             return host;
-        return _restockHost = new AreaRestockHost(session, inventory, data, new RestockScreen(this));
+        return _restockHost = new AreaRestockHost(session, inventory, data, new RestockScreen(this), () => _areaHeroPlayerName);
     }
+
+    /// <summary>ARC-WORLD-101: the hero's player name bytes for a generated-once container's seed: the pre-made hero's prototype name
+    /// (field 0x10E) of the hero load the session came with; null for the new character (its typed name is not modelled) or no load.</summary>
+    private IReadOnlyList<byte>? _areaHeroPlayerName;
+
+    private static IReadOnlyList<byte>? HeroPlayerName(AreaHeroLoad? hero) =>
+        hero is { Hero.BasicPrototype: not AreaStartingHero.GenericPrototype } ? hero.Read?.Hero?.PlayerName : null;
 
     /// <summary>The restock schedule of a window open on <paramref name="shown"/> (0x5733A9): logged; nothing for an object that is no
     /// seed holder of the shown map.</summary>

@@ -69,7 +69,7 @@ public sealed class AreaInventoryHostTests
     }
 
     [TestMethod]
-    public void TargetsAreGroundItemsAndDeadNpcsOnly()
+    public void TargetsAreGroundItemsDeadNpcsAndContainers()
     {
         using var session = ConversationSessionFixture.Create();
         var host = new AreaInventoryHost([Map()]);
@@ -77,7 +77,8 @@ public sealed class AreaInventoryHostTests
         Assert.AreEqual((AreaInventoryTargetKind.GroundItem, Entity(0)), Pair(host.Target(session, 1, Key(0))));
         Assert.AreEqual((AreaInventoryTargetKind.DeadNpc, Entity(3)), Pair(host.Target(session, 1, Key(3))));
         Assert.IsNull(host.Target(session, 1, Key(4)), "a living NPC is talked to or walked past, never looted");
-        Assert.IsNull(host.Target(session, 1, Key(6)), "chest contents are generated on first open and not modelled");
+        // ARC-WORLD-101: a standing container opens its loot window (its admission and generation are AreaContainerLoot's).
+        Assert.AreEqual((AreaInventoryTargetKind.Container, Entity(6)), Pair(host.Target(session, 1, Key(6))));
         Assert.IsNull(host.Target(session, 1, Key(1)), "a listed item is not drawn in the world");
         Assert.IsNull(host.Target(session, 1, Key(8)), "an object outside the seed");
         Assert.IsNull(host.Target(session, 79, Key(0)), "a map without a seed");

@@ -873,7 +873,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// Loot (a click on a dead critter opens it as a container; the moved item runs 0x4617F0 to the PC): an item
     /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead, or one
-    /// that died in this session (ARC-COMBAT-005, <see cref="QueryNpcKilled"/>), is lootable here: chests (generated on first open) are not. Refused before any effect, beyond the item rules of
+    /// that died in this session (ARC-COMBAT-005, <see cref="QueryNpcKilled"/>), is lootable here; since ARC-WORLD-101 a container of the
+    /// seed that did not spill is too (its seed items, the items a barter or a regeneration put into it), whose open the host admits
+    /// (lock, unlock script: the window's admission 0x572370) and generates first (<see cref="GenerateContainerOnce"/>). Refused before any effect, beyond the item rules of
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script without a host. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled without a host (the
     /// session has no PC object); since ARC-SCRIPT-041 that slot runs through <paramref name="scripts"/>, with the item's remove-item script.
@@ -893,8 +895,12 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.JunkPile(holder) is { } pile && pile.Map == _actor.Map) return LootJunkPile(pile, item, insertCheck, scripts);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
-        if (row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder)) return RejectItem(GameSessionFailure.HolderNotLootable);
+        // ARC-WORLD-101: a container that did not spill is looted as its window shows it (0x572370 admits it in loot mode 2).
+        var container = row.Kind == SessionHolderKind.Container;
+        if (container ? SpillCell(_actor.Map, seed, holder) is not null : row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder))
+            return RejectItem(GameSessionFailure.HolderNotLootable);
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        if (container) return TakeFromContainer(holder, item, false, 0, default, insertCheck, scripts);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
             return Take(seed, new(item, _inventory.AddedFacts(made)), holder, insertCheck, scripts);

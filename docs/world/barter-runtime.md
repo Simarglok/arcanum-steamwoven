@@ -167,8 +167,8 @@ items removed, 934 coins and 26 new wares (none refused or skipped); the window 
 
 A container with flag 0x200 (116 installed, all with a source) is generated once, the first time something reaches its whole list,
 from draws the original makes reproducible (ledger [RK10–RK14](../research/ledger/items.md#generated-once-containers-arc-world-098),
-one reading, F1). Simulation holds the rules; the session runs them (ARC-WORLD-100, [below](#session-generation-arc-world-100)); no
-viewer window calls the session's first-open generation yet.
+one reading, F1). Simulation holds the rules; the session runs them (ARC-WORLD-100, [below](#session-generation-arc-world-100)); the
+viewer's container loot window calls the first-open generation (ARC-WORLD-101, [below](#container-loot-window-arc-world-101)).
 
 | API | Original | Rule |
 | --- | --- | --- |
@@ -205,14 +205,44 @@ a nested `GenerateContainerOnce` on the same container would find it not yet rec
 session effect changes, and its background (field 0x101); a session without a hero seeds from the tile x alone. Tests:
 [`GeneratedOnceStateTests`](../../tests/Arcanum.Session.Tests/GeneratedOnceStateTests.cs).
 
+## Container loot window (ARC-WORLD-101)
+
+The AREA viewer (exterior, cave and `--area-map`) opens a container's inventory in loot mode, as the original's open 0x572240 in mode 2
+does (ledger [LW1–LW4](../research/ledger/items.md#container-loot-window-arc-world-101), one reading, F1). Code:
+[`AreaContainerLoot.cs`](../../tools/terrain-viewer/Core/AreaContainerLoot.cs) (`Open`, `Close`, `Lootable`), the container target of
+`AreaInventoryHost.Target`, `AreaRestockHost.GeneratedOnceFacts`, Godot `TerrainViewerAreaContainerLoot.cs`; session `LootItem` on a
+container; data `PremadeHero.PlayerName`. Tests: [`AreaContainerLootTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaContainerLootTests.cs),
+[`GeneratedOnceStateTests`](../../tests/Arcanum.Session.Tests/GeneratedOnceStateTests.cs) (the loot of generated goods),
+[`PremadeHeroTests`](../../tests/Arcanum.Data.Tests/Characters/PremadeHeroTests.cs).
+
+| Step | Original | Viewer |
+| --- | --- | --- |
+| Target | object click → use-container goal; use range 1, 2 action points first (AP6, CT3) | A left press on a container of the map's seed that has not broken (`AreaInventoryTargetKind.Container`) walks within reach 1 and, in a turn-based round, charges 2 action points, as a body's loot. A broken container spilled its items (ARC-COMBAT-008) and is no target. |
+| Admission | 0x572370: the player's open attempt 0x4AED80 (LK8); 0 runs the use script, whose skip default refuses with the locked sound; another code shows `inven_ui.mes` line *code* and plays the locked sound (LW1) | The session's `AttemptOpen` at its hour over the container's T0 lock baseline (flags field 0x38, key field 0x3A) and its recorded lock state; the session holds no keys, so a locked container stays shut. Locked, jammed or magically held: the container's locked sound (SN25, + 2), the viewer's own text, no window. Then the container's use script (SAP 1) runs through the viewer's use-script host with the PC as the triggerer (the S4 set and its additions, [SCR dispatcher](../scripting/scr-dispatcher-runtime.md#teleports-and-guards-arc-script-014-set-s4)): skip default plays the locked sound and refuses; a run the host refuses or a teleport it asks for refuses without effect. A native trap script (30000..30007), which the original's trap code handles on the use (not read), is not run: a trapped container does not open (the elven ruins' only 0x200 container is one). A container with an unlock script (SAP 3) is not opened (the attempt's script is not run). |
+| Open frame | 0x572640: a container on frame 0 opens one frame with its open sound (LW2) | A container whose recorded frame is 0 steps to frame 1 in the session (`SetOpenableFrame`; an ART of one frame keeps 0) and plays its open sound (+ 0). The frame is not drawn yet: the canvas draws the T0 frame. |
+| Generation | 0x572640 → 0x463E20 for flag 0x200 (RK12) | `GenerateContainerOnce` for a container with flag 0x200 at T0 that the session has not generated, before the frame write (they do not read each other, and a refusal then changes nothing). A refusal (the restock host not ready, a full budget) shows no window; a container the session cannot regenerate keeps its list and opens. |
+| Seed facts | 0x463E20: field 2's tile x, 0x441B60 field 0x10E | `AreaRestockHost.GeneratedOnceFacts`: the container's T0 tile x and the hero's player name bytes: the pre-made hero's prototype name (`PremadeHero.PlayerName`, v119 slot 86) of the hero load the session came with. A session without a hero gives an empty name (the seed is then the tile x alone); the new character, whose typed name the viewer does not have, gives no facts, so its generated-once containers keep their lists. |
+| Window | 0x5727B0: the restock schedule (RK2), the loot counter (ID6) | The loot window on the container's current list; its restock schedule after the generation finds no source for a generated container. While it is open an item's decay waits (`ISessionLootWindowWorld.LootWindowShowsContainer`). Items are taken with the session's `LootItem` (gold, keys, worn items and scripted items as for a body). |
+| Close | 0x573440: a container on frame 1 without flag 0x100 closes with its close sound (LW3) | `AreaContainerLoot.Close` on the window's close: the recorded frame 1 steps back to 0 and the close sound (+ 1) plays. |
+
+Logs: `ARC-WORLD-101 container open` (outcome, generation, frame, the regeneration's counts) and `ARC-WORLD-101 container close`.
+Native smoke: stage `container` (map mode with `--hero`; the map battery runs it before the junk pile stage), marker
+`ARC-WORLD-101 native-smoke container PASS`; `NONE` on a map without a standing, openable container with flag 0x200.
+
 ## Not modelled (NOT READY)
 
-- **Restock limits**: the viewer's loot window opens only on dead NPCs and junk piles (no container loot window yet), so only the barter
-  window schedules a container. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
+- **Container loot window limits** (ARC-WORLD-101): a trapped container (a native trap script at its use slot) and one with an unlock
+  script do not open; the session holds no keys, so every locked container stays shut; the refusal text is the viewer's, not the
+  `inven_ui.mes` line; the facing turn and the sight test of the admission are not made; the open frame is recorded but not drawn and no
+  open or close animation plays; a body's loot plays no sound 3007; the map data's own junk piles do not dissolve when their window
+  closes (only the session's do); the steal mode (3) and the second container view (4) do not exist in the viewer.
+
+- **Restock limits**: since ARC-WORLD-101 the loot window opens on containers too and schedules them; the steal mode and the window's
+  other partners do not. NPC positions in the merchant search are their T0 cells, and the order is the seed's, not the original's
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
   zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 runs in the session
-  ([above](#session-generation-arc-world-100)), but no viewer window opens a container in loot mode and the viewer's restock host gives
-  no seed facts (the tile x and the player name), so the viewer generates none yet; an NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
+  ([above](#session-generation-arc-world-100)) and at the viewer's first loot open ([above](#container-loot-window-arc-world-101)); the
+  new character's player name is not known, so its generated-once containers keep their lists; an NPC's best-items wield after a regeneration (0x4654F0) and the callers of RK13–RK14 (summons, a
   broken or destroyed holder, objects created in play) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
   session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
   (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the

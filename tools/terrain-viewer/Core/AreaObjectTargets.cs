@@ -97,9 +97,7 @@ public sealed class AreaObjectTargets
             SessionOpenableBaseline? openable = found.Kind switch
             {
                 DamageableObjectKind.Portal when _portals.TryGetValue(key, out var portal) => portal.Baseline,
-                DamageableObjectKind.Container => new SessionOpenableBaseline(OpenableKind.Container, unchecked((int)Field(found.Row, TypeFlagsSlot)),
-                    unchecked((int)Field(found.Row, KeySlot)), (int)((fields.Object.CurrentArt >> 14) & 31),
-                    fields.Object.Prototype == SessionObjectFacts.JunkPilePrototypeFile),
+                DamageableObjectKind.Container => ContainerBaseline(found.Row, fields),
                 _ => null,
             };
             return SessionObjectFacts.FromCombatFields(fields, cell, openable, trapped?.Invoke(found.Row) == true) is { } baseline
@@ -172,6 +170,16 @@ public sealed class AreaObjectTargets
         ObjectBreak.SceneryBusted or ObjectBreak.TrapBusted => "busted",
         _ => kind.ToString(),
     };
+
+    /// <summary>A container's lock baseline: its flags (field 0x38) and lock key (field 0x3A), its current ART's frame and whether it is a
+    /// junk pile (ARC-WORLD-101: the loot window's open attempt reads the same baseline as an attack).</summary>
+    public static SessionOpenableBaseline ContainerBaseline(AreaObjectRecord row, CombatBreakableFields fields)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(fields);
+        return new(OpenableKind.Container, unchecked((int)Field(row, TypeFlagsSlot)), unchecked((int)Field(row, KeySlot)),
+            (int)((fields.Object.CurrentArt >> 14) & 31), fields.Object.Prototype == SessionObjectFacts.JunkPilePrototypeFile);
+    }
 
     private static long Field(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number ?? 0;
