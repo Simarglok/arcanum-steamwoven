@@ -50,6 +50,9 @@ public sealed partial class GameSessionOwner
     {
         /// <summary>ARC-COMBAT-017: the thrown item and its thrown range; null for a shot of a weapon that stays in the hand.</summary>
         public SessionThrownShot? Thrown { get; init; }
+        /// <summary>ARC-MAGIC-023: the projectile's item (field 0x50, the strike's context weapon): the thrown item, or the weapon the
+        /// hero wielded at the shot; null bare-handed.</summary>
+        public string? WeaponItem { get; init; }
         /// <summary>ARC-COMBAT-017: the thrown shot struck already and waits for its item's landing.</summary>
         public bool Struck { get; init; }
         /// <summary>ARC-COMBAT-019: the shot of a boomerang that stays in the hand (attack flag 0x1000, 0x4B24F0).</summary>

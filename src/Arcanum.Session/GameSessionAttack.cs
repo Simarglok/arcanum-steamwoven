@@ -2,6 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
 
@@ -344,6 +345,10 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// <summary>The actor's map as the original's drop reads it (ARC-COMBAT-010): with it a drop draws its distance and directions and
     /// lands where the original's placement puts it; null: on the holder's cell, without draws.</summary>
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-MAGIC-023: the trigger host the damage step's item events fire through (stunned, going unconscious, target going
+    /// unconscious, dying, parent hit, damages opponent and target hit: <see cref="SessionAttackResult.ItemSpells"/>), a host of this
+    /// session; null: they fire nothing, as before ARC-MAGIC-023.</summary>
+    public ISessionItemTriggers? ItemTriggers { get; init; }
 }
 
 /// <summary>
@@ -377,6 +382,11 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     /// <summary>The critical item steps (ARC-COMBAT-009) of whoever took the damage, in the original's order: the arm-hit drops, the
     /// helmet and weapon drops and the ammunition effects; empty when the attack had none.</summary>
     public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
+    private readonly IReadOnlyList<SessionItemTriggerFiring>? _itemSpells;
+
+    /// <summary>ARC-MAGIC-023: the executor calls of the damage step's item events, in order (<see cref="SessionAttack.ItemTriggers"/>);
+    /// empty without a host or without damage to the target; none from a refused experience or item step on.</summary>
+    public IReadOnlyList<SessionItemTriggerFiring> ItemSpells { get => _itemSpells ?? Array.Empty<SessionItemTriggerFiring>(); init => _itemSpells = value; }
 }
 
 public sealed partial class GameSessionOwner
@@ -586,12 +596,17 @@ public sealed partial class GameSessionOwner
         var scatter = scatterRotation is { } rotation ? ScatterThrow(scatterFrom!.Value, hero.SkillLevel, rotation, attack.DropMap) : (Arcanum.Simulation.Movement.CellCoord?)null;
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown) }, ShotProjectiles(hero)) : [];
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
+                ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };
 
         var recipient = resolution.Damage!.Recipient;
+        // ARC-MAGIC-023: the hero's worn items and the context's weapon (0x4B2210: the wielded weapon, or the projectile's item) for the
+        // damage step's item events, as they are before the step.
+        var heroWorn = _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity).ToArray();
+        var contextWeapon = pending is null ? WieldedEntity() : pending.WeaponItem;
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
@@ -617,9 +632,24 @@ public sealed partial class GameSessionOwner
         }
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
+        // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and
+        // the range of the weapon the swing or shot carries (0x465E30): the reach, which a throw keeps (its thrown range is the weapon's
+        // Range only for the check).
+        var striker = pending?.Hero ?? hero;
+        var itemSteps = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None && attack.ItemTriggers is not null
+            ? ItemSpellTriggerRules.DamageStep(facts!, damage, outcome, attacker: true, killer: true,
+                ItemSpellTriggerRules.MeleeHit(attackEntry: true, striker.Weapon.Kind == WeaponKind.Unarmed ? null : striker.Range))
+            : [];
+        var npcWorn = attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
+        // The stun's and the knockdown's walks come before the step's drops and wear (IC3), the others after them.
+        var itemSpells = FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => BeforeItemSteps(step, outcome)), target.Entity, npcWorn,
+            heroWorn, contextWeapon).ToList();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
                 attack.TargetCell, attack.DropMap, criticals);
+        if (stepFailure == GameSessionFailure.None)
+            itemSpells.AddRange(FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => !BeforeItemSteps(step, outcome)), target.Entity,
+                StillWorn(npcWorn, wear, criticals), heroWorn, contextWeapon));
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
@@ -627,8 +657,11 @@ public sealed partial class GameSessionOwner
             Ammunition = ammunition,
             Shots = flying,
             Scatter = scatter,
+            ItemSpells = itemSpells,
         };
     }
+
+    private string? WieldedEntity() => _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Entity : null;
 
     /// <summary>ARC-COMBAT-015: a melee weapon strikes within its reach; a bow or firearm also beyond its range, where the shared check's
     /// range limit makes the shot impossible (SC8: the original's attack goal shoots within range, the target may have moved since).</summary>
