@@ -152,8 +152,7 @@ The original's goals 26 and 82 (`ag_throw_spell`, with the record's casting anim
 5. **End (`EndGoal`, 0x429CD0).** A goal that ends before its release frame frees the run with its BEGIN cost charged (0x456FA0:
    the run cost with mastery, applied). After the release frame (the goal's frame flag 0x8), or for a run whose BEGIN ran, the end
    frees nothing; the host forgets the release when the run is freed or a new goal starts for its slot, since the slot is reused.
-   A goal starts once (`StartGoal`) for the run it was made for: a caller must not start a second goal for a run the original
-   keeps after a failed release (MG41, Original), since the new start forgets that release and the end would then free the run.
+   A goal starts once (`StartGoal`) for the run it was made for (a failed release frees its run in both settings, MG41).
 
 ## The viewer (ARC-MAGIC-015)
 
@@ -258,7 +257,7 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
    tile cast, it arrives; a target that moved is followed on a new leg from the missile's tile; elsewhere it flies its line again.
    A missile already on its destination at the launch (a cast at the caster's own tile) arrives at once.
 4. **The arrival (`ArriveMissile`, SM3; SM6 for a failed re-check).** The release: the target re-check and the BEGIN, as the casting goal's (`Release`); a
-   failed re-check keeps the run in the original and frees it unpaid in Steamwoven (MG41's switch). The missile is destroyed.
+   failed re-check frees the run unpaid in both settings (MG41, owner decision 2026-10-28). The missile is destroyed.
 5. **A lost missile (`LoseMissile`, MG44).** A leg whose line is refused (more than 100 steps), a point off the map, another
    map or session ends the missile's goal without its release: the original destroys the missile and frees nothing, so the run
    keeps its slot, never begun; both rule modes free it unpaid (owner decision 2026-10-28: fixed without a switch).
@@ -421,7 +420,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | --- | --- | --- |
 | A goal refused before its animation (action points, the pre-animation check, or a target destroyed or off) frees the run with its BEGIN charged: the caster pays for a cast that never started (MG39). | The run is freed unpaid. | `MagicAnomalyProfile.GoalRefusalChargesBegin` (owner decision 2026-10-27: fix) |
 | The charge of a run freed before its BEGIN ignores the free flag, the technology flag and `ChargeBeginCost: 0` (MG40). | Charged only when its BEGIN would have paid. | `MagicAnomalyProfile.GoalEndChargesAnyRun` (owner decision 2026-10-27: fix) |
-| A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | `MagicAnomalyProfile.ReleaseRefusalKeepsRun` (owner decision 2026-10-27: fix) |
+| A failed target re-check at the release frame leaves the run in its slot (MG41). | The run is freed unpaid. | No switch since ARC-WORLD-108: a slot leak, fixed in both settings (owner decision 2026-10-28; before, `ReleaseRefusalKeepsRun`) |
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |

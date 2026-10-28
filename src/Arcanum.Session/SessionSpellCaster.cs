@@ -446,8 +446,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// The casting goal's release frame (0x429C80): the target is checked again (0x456A90, <see cref="TargetStillValid"/>); then the
-    /// run's BEGIN is processed (0x456F70) and its notes applied. A failed re-check begins nothing: in the original the run keeps its
-    /// slot (MG41), in Steamwoven it is freed unpaid; null answers then.
+    /// run's BEGIN is processed (0x456F70) and its notes applied. A failed re-check begins nothing and frees the run unpaid in both settings
+    /// (MG41: the original keeps it in its slot until the game ends, a slot leak; owner decision 2026-10-28, ARC-WORLD-108); null answers then.
     /// </summary>
     [OriginalFunction(0x429C80, OriginalFunctionScope.Partial)]
     public SessionSpellRunResult? Release(int run)
@@ -466,7 +466,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private SessionSpellRunResult? ReleaseRun(SpellRun r)
     {
         if (TargetStillValid(r)) return Act(new(SessionSpellRunActionKind.Begin, r.Id));
-        if (!Profile.ReleaseRefusalKeepsRun) Act(new(SessionSpellRunActionKind.Free, r.Id));
+        Act(new(SessionSpellRunActionKind.Free, r.Id));
         return null;
     }
 
@@ -487,7 +487,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// ARC-MAGIC-018: the missile arrived (goal 28's release, 0x429C80): the target re-check and the run's BEGIN, as the casting goal's
-    /// release does; a failed re-check keeps the run in the original (MG41) and frees it unpaid in Steamwoven. A BEGIN the session
+    /// release does; a failed re-check frees the run unpaid in both settings (MG41). A BEGIN the session
     /// rejected leaves no goal to free the run: it is freed as a lost missile's is. Null when no missile of the run flies or the run
     /// no longer waits.
     /// </summary>

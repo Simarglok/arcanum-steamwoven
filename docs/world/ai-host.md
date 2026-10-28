@@ -162,8 +162,7 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   launch; the hero's missile is the same): whether the round's "a run runs" test counts the missile's goal 28 (0x423300) is not
   read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
-  and its goal's end (a map change) forgets the release: in the Original setting a run kept by a refused re-check (MG41) is then
-  freed charged by the goal's end; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
+  and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
 - **Followers in combat.** Companions keep their follow goal; the follower rule, the attack order's target and pass, the comment
   lines and the world-map travel's stop and allow calls are I9's host part.
 - **NPC ranged attacks** (bow, throw, firearm, missile) are refused by the hit step (`AttackUnsupported`).

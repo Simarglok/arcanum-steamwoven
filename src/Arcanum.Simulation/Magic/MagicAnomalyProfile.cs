@@ -123,13 +123,6 @@ public sealed record MagicAnomalyProfile
     public bool GoalEndChargesAnyRun { get; init; }
 
     /// <summary>
-    /// MG41 (ARC-MAGIC-014, owner decision 2026-10-27: fix): when the target re-check at the release frame (0x456A90) fails, the
-    /// release gate has already marked the frame handled, so the goal's end frees nothing and the run keeps its slot until the game
-    /// ends. Steamwoven frees it, unpaid.
-    /// </summary>
-    public bool ReleaseRefusalKeepsRun { get; init; }
-
-    /// <summary>
     /// MG46 (ARC-MAGIC-024; owner decision 2026-10-28, ARC-MAGIC-025: the narrow fix): a run an item event started takes its parent,
     /// the item's holder, as the attacker of its damage step (DH1), whose wrappers walk the worn items again (IC2, IC9), and the
     /// executor has no guard, so an item fires again on the damage of its own run or of a run it caused: a weapon whose
@@ -160,7 +153,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ReleaseRefusalKeepsRun = true, ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true,
+        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true,
     };
 
     /// <summary>Both settings, default first.</summary>

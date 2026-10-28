@@ -898,7 +898,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The release (0x429C80, <see cref="SessionSpellCaster.Release"/>): the target re-check and the run's BEGIN; false when the
-    /// re-check refused it (the original keeps the run, MG41; Steamwoven frees it) or the frame was released before.</summary>
+    /// re-check refused it (the run freed unpaid in both settings, MG41) or the frame was released before.</summary>
     public bool ReleaseCast(string id, int run)
     {
         _noRelease.Remove(run);
