@@ -70,9 +70,10 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
-    // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items.
+    // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-UI-019 (schema 51):
+    // the hero's inventory grid.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified"];
+        "identified", "grid"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] JunkPileFields = ["entity", "map", "x", "y", "items"];
@@ -470,6 +471,18 @@ public static class GameSessionSnapshotCodec
             // ARC-WORLD-090: by entity in ordinal order.
             w.WriteStartArray("identified");
             foreach (var entity in snapshot.Inventory.Identified) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            // ARC-UI-019: the hero's grid in slot order.
+            w.WriteStartArray("grid");
+            foreach (var item in snapshot.Inventory.Grid)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("slot", item.Slot);
+                w.WriteNumber("width", item.Width);
+                w.WriteNumber("height", item.Height);
+                w.WriteEndObject();
+            }
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -1620,11 +1633,26 @@ public static class GameSessionSnapshotCodec
             identified[i] = Entity(identifiedRows[i], path);
             if (i > 0 && string.CompareOrdinal(identified[i], identified[i - 1]) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified);
+        // ARC-UI-019: the hero's grid in strictly ascending slot order; who holds each item, bounds and overlaps are checked on restore.
+        var gridRows = Array(f["grid"], p + ".grid", GameSessionLimits.PolicyMaxPcItems);
+        var grid = new SessionHeroGridItem[gridRows.Length];
+        for (var i = 0; i < gridRows.Length; i++)
+        {
+            var path = $"{p}.grid[{i}]";
+            var item = Fields(gridRows[i], path, JunkPileItemFields);
+            grid[i] = new(Entity(item["entity"], path + ".entity"), Int(item["slot"], path + ".slot", 0, MaxHeroGridSlot),
+                Int(item["width"], path + ".width", 1, Arcanum.Simulation.Items.InventoryGridRules.Columns),
+                Int(item["height"], path + ".height", 1, Arcanum.Simulation.Items.InventoryGridRules.CritterRows));
+            if (i > 0 && grid[i].Slot <= grid[i - 1].Slot) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".slot");
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified, grid);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
     private const int MaxJunkSlot = Arcanum.Simulation.Items.InventoryGridRules.ContainerRows * Arcanum.Simulation.Items.InventoryGridRules.Columns - 1;
+
+    // A hero grid item's slot lies in the critter grid (ARC-UI-019).
+    private const int MaxHeroGridSlot = Arcanum.Simulation.Items.InventoryGridRules.CritterRows * Arcanum.Simulation.Items.InventoryGridRules.Columns - 1;
 
     // ARC-WORLD-083: a made or placed item's magick/tech complexity, any 32-bit value (the original's field 0x60 is one).
     private static int Complexity(Dictionary<string, JsonElement> item, string path) => Int(item["complexity"], path + ".complexity", int.MinValue, int.MaxValue);

@@ -52,10 +52,12 @@ public sealed partial class GameSessionOwner
         return _encumbranceChange;
     }
 
-    // Every change of the session's state passes here: the revision, then the level's recalculation where the original has one.
+    // Every change of the session's state passes here: the revision, the hero's grid (ARC-UI-019), then the level's recalculation where the
+    // original has one.
     private void Revise()
     {
         _revision++;
+        SettleHeroGrid();
         SettleEncumbrance();
     }
 

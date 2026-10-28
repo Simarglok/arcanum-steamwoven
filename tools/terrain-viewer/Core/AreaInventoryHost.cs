@@ -164,6 +164,9 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public IReadOnlyList<EquipmentSlot> WearSlots { get; init; } = Array.Empty<EquipmentSlot>();
 }
 
+/// <summary>ARC-UI-019: one item of the hero's grid as the window draws it: its entity, slot (row × 10 + column), size in cells and name.</summary>
+public sealed record AreaGridItem(string Entity, int Slot, int Width, int Height, string Name);
+
 /// <summary>ARC-UI-015: one wear slot of the paper doll: the slot and the worn item's entity and name, or none.</summary>
 public sealed record AreaDollSlot(EquipmentSlot Slot, string? Entity, string? Name);
 
@@ -176,6 +179,10 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     public IReadOnlyList<AreaDollSlot> Doll { get; init; } = Array.Empty<AreaDollSlot>();
     /// <summary>ARC-UI-015: the hero's carried weight, carry weight and encumbrance level (null without a hero).</summary>
     public SessionHeroCarry? Carry { get; init; }
+    /// <summary>ARC-UI-019: the PC's grid items in slot order.</summary>
+    public IReadOnlyList<AreaGridItem> Grid { get; init; } = Array.Empty<AreaGridItem>();
+    /// <summary>ARC-UI-019: the names of held items that are neither worn nor in the grid (no room), in list order.</summary>
+    public IReadOnlyList<string> Unplaced { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -315,7 +322,12 @@ public sealed class AreaInventoryHost
             .Select(slot => wornBySlot.TryGetValue(slot, out var entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
             .ToArray();
         var carry = session.QueryHeroCarry();
-        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold, Doll = doll, Carry = carry };
+        // ARC-UI-019: the grid in slot order, with the items that found no room.
+        var heroGrid = session.QueryHeroGrid();
+        var grid = heroGrid.Items.Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
+        var unplaced = heroGrid.Unplaced.Select(entity => ItemName(session, entity, catalog)).ToArray();
+        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>())
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
         var current = session.QueryMapInventory(new(runtimeMap));
         // ARC-WORLD-063: a junk pile the session made lists its items in the pile's order.
         var pile = current?.JunkPiles.FirstOrDefault(p => p.Entity == holder);
@@ -327,7 +339,8 @@ public sealed class AreaInventoryHost
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (item.Facts.AmmoType is not null ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
-        return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold, Doll = doll, Carry = carry };
+        return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
     }
@@ -350,6 +363,36 @@ public sealed class AreaInventoryHost
             if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionEquipmentFacts.Wearable(taken.Kind, fields);
         return null;
     }
+
+    /// <summary>
+    /// ARC-UI-019: the facts of an item the PC holds for a move in its grid (<see cref="GameSessionOwner.MoveHeroItem"/>): a kit item's from
+    /// <paramref name="kitMove"/> (the hero load's, by kit number), a taken item's from its object row's fields with the saved kind, a made
+    /// item's kind with no no-drop flag and no scripts (its prototype's facts are not read here: NOT READY). Null for an item the session no
+    /// longer has or whose facts do not read.
+    /// </summary>
+    public SessionGridMoveItem? GridMoveItem(GameSessionOwner session, string entity, IReadOnlyList<SessionGridMoveItem?>? kitMove)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity))
+            return KitNumber(entity) is { } number && kitMove is not null && number <= kitMove.Count ? kitMove[number - 1] : null;
+        var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);
+        if (made.Entity is not null) return new(made.Kind, false, []);
+        var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
+        if (taken.Entity is null) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return GridMoveFacts(taken.Kind, fields);
+        return null;
+    }
+
+    /// <summary>ARC-UI-019: an item's grid move facts from its combat fields: the no-drop item flag (0x20) and its script points.</summary>
+    public static SessionGridMoveItem GridMoveFacts(SessionItemKind kind, CombatFields fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        return new(kind, fields.Item is { } stored && (stored.Flags & NoDropFlag) != 0, fields.Object.ScriptPoints);
+    }
+
+    private const uint NoDropFlag = 0x20;
 
     /// <summary>ARC-UI-015: the slots an item can be put into: its wear location (<see cref="EquipmentRules.WearSlot"/>), for a ring
     /// either ring slot (the original's doll has two ring locations, 1001 and 1002, and the wear check maps both to the ring's).</summary>
@@ -393,6 +436,18 @@ public sealed class AreaInventoryHost
         if (result.Disposition == GameSessionDisposition.Rejected) return $"not {(takeOff ? "taken off" : "worn")}: {WearRefusal(result)}{printed}";
         if (takeOff) return $"took off {name}{printed}";
         return $"wore {name} as {SlotName(slot)}" + (result.Displaced is { } displaced ? $"; {nameOf(displaced)} went back to the pack" : string.Empty) + printed;
+    }
+
+    /// <summary>ARC-UI-019: plain text for a grid move or a take-off into a grid cell: where the item went, or why it stayed (a refused
+    /// release leaves it where it was).</summary>
+    public static string GridText(EquipmentMutationResult result, string name, int slot)
+    {
+        var printed = result.Messages.Count == 0 ? string.Empty : " — " + string.Join(" ", result.Messages.Select(message => message.Text.Trim()));
+        var cell = $"row {slot / SessionHeroGrid.Columns + 1}, column {slot % SessionHeroGrid.Columns + 1}";
+        if (result.RolledBack) return $"{name} stayed where it was: {Refusal(GameSessionFailure.InsertRefused, result.Verdict)}{printed}";
+        if (result.Disposition == GameSessionDisposition.NoChange) return $"{name} is already at {cell}{printed}";
+        if (result.Disposition == GameSessionDisposition.Changed) return $"moved {name} to {cell}{printed}";
+        return $"{name} stayed where it was: " + (result.Failure == GameSessionFailure.GridCellsTaken ? $"no room for it at {cell}" : WearRefusal(result)) + printed;
     }
 
     private static string WearRefusal(EquipmentMutationResult result) => result.Failure switch
@@ -531,6 +586,7 @@ public sealed class AreaInventoryHost
     {
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TooHeavy => "the PC cannot carry that much weight",
+        GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.NoRoom => "no free room in the grid",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",

@@ -134,6 +134,8 @@ public sealed partial class GameSessionOwner : IDisposable
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
         { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
+        // ARC-UI-019: the kit takes its grid slots in kit order.
+        owner.SettleHeroGrid();
         owner.MarkEncumbranceOfNewHero();
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -171,6 +173,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportEquipment(snapshot.Equipment, inventory, hero is not null, out var equipment);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportWornConditions(equipment, durability);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportHeroGrid(snapshot.Inventory.Grid, inventory, equipment);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
         if (failure != GameSessionFailure.None) return Rejected(failure);

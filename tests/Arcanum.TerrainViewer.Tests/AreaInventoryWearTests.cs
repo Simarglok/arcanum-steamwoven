@@ -110,4 +110,65 @@ public sealed class AreaInventoryWearTests
             new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring }, HitPoints = 1, MaxHitPoints = 1 });
         CollectionAssert.AreEqual(new[] { EquipmentSlot.Ring1, EquipmentSlot.Ring2 }, AreaInventoryHost.WearSlots(ring).ToArray(), "a ring offers both ring slots");
     }
+    [TestMethod]
+    public void ADragOnTheGridAndTheDollRunsTheSessionsMovesAndAnOccupantComesOntoTheCursor()
+    {
+        using var session = HeroSession();
+        var host = Host();
+        Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, host.PickUp(session, Entity(1)).Disposition);
+        var view = host.View(session, null, 1, kitWear: KitWear);
+        Assert.AreEqual((Entity(1), 0, 1, 1), view.Grid.Select(item => (item.Entity, item.Slot, item.Width, item.Height)).Single(), "the worn kit torch has no cell");
+
+        // A grid item picked at its cell and released on another cell moves there.
+        var held = AreaInventoryDrag.Press(view, new(0, null))!;
+        Assert.AreEqual(new AreaInventoryHeld(Entity(1), null, 0), held);
+        var drop = AreaInventoryDrag.Release(held, new(25, null));
+        Assert.AreEqual((AreaInventoryDropKind.GridMove, (int?)25), (drop.Kind, drop.GridSlot));
+        var facts = host.GridMoveItem(session, Entity(1), null)!;
+        Assert.IsFalse(facts.NoDrop);
+        var moved = session.MoveHeroItem(session.Version, Entity(1), 25, facts, host.InsertCheck);
+        Assert.AreEqual("moved torch to row 3, column 6", AreaInventoryHost.GridText(moved, "torch", 25));
+        view = host.View(session, null, 1, kitWear: KitWear);
+        Assert.AreEqual(25, view.Grid.Single().Slot);
+
+        // A worn item released on a taken cell stays worn; on a free cell it comes off there.
+        held = AreaInventoryDrag.Press(view, new(null, EquipmentSlot.Shield))!;
+        Assert.AreEqual(new AreaInventoryHeld("kit:1", EquipmentSlot.Shield, 0), held);
+        drop = AreaInventoryDrag.Release(held, new(25, null));
+        Assert.AreEqual(AreaInventoryDropKind.TakeOffTo, drop.Kind);
+        var taken = session.Unequip(session.Version, EquipmentSlot.Shield, host.InsertCheck, gridSlot: 25);
+        Assert.AreEqual("torch stayed where it was: no room for it at row 3, column 6", AreaInventoryHost.GridText(taken, "torch", 25));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.Unequip(session.Version, EquipmentSlot.Shield, host.InsertCheck, gridSlot: 0).Disposition);
+
+        // The taken torch into the empty shield slot, then the kit torch onto it: the taken one lands in the first free cell, on the cursor.
+        Assert.AreEqual(AreaInventoryDropKind.Wear, AreaInventoryDrag.Release(new(Entity(1), null, 0), new(null, EquipmentSlot.Shield)).Kind);
+        Assert.AreEqual(GameSessionDisposition.Changed, Wear(session, host, Entity(1), EquipmentSlot.Shield).Disposition);
+        var swap = Wear(session, host, "kit:1", EquipmentSlot.Shield);
+        Assert.AreEqual(Entity(1), swap.Displaced);
+        Assert.AreEqual(0, host.View(session, null, 1, kitWear: KitWear).Grid.Single(item => item.Entity == Entity(1)).Slot, "the cell kit:1 left");
+    }
+
+    [TestMethod]
+    public void TheHitTestFollowsTheOriginalFrameAndAReleaseOutsideOrOnItsOwnSlotPutsTheItemBack()
+    {
+        Assert.AreEqual(new AreaInventoryHit(null, EquipmentSlot.Ring1), AreaInventoryDrag.HitTest(250, 110));
+        Assert.AreEqual(new AreaInventoryHit(null, EquipmentSlot.Boots), AreaInventoryDrag.HitTest(150, 394));
+        Assert.AreEqual(new AreaInventoryHit(0, null), AreaInventoryDrag.HitTest(368, 8));
+        Assert.AreEqual(new AreaInventoryHit(119, null), AreaInventoryDrag.HitTest(368 + 319.9f, 8 + 383.9f));
+        Assert.AreEqual(AreaInventoryHit.None, AreaInventoryDrag.HitTest(368 + 320, 8));
+        Assert.AreEqual(AreaInventoryHit.None, AreaInventoryDrag.HitTest(10, 10));
+
+        // A 2 × 3 item at slot 3 grabbed in its lower right cell keeps that offset; a target above the grid's first row puts it back.
+        var view = new AreaInventoryView([], null, null, []) { Grid = [new AreaGridItem("crate", 3, 2, 3, "crate")] };
+        var held = AreaInventoryDrag.Press(view, new(24, null))!;
+        Assert.AreEqual(21, held.Offset);
+        Assert.AreEqual(19, AreaInventoryDrag.Release(held, new(40, null)).GridSlot, "a plain subtraction in grid locations");
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaInventoryDrag.Release(held, new(15, null)).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaInventoryDrag.Release(held, AreaInventoryHit.None).Kind);
+        Assert.IsNull(AreaInventoryDrag.Press(view, new(0, null)), "an empty cell");
+        Assert.IsNull(AreaInventoryDrag.Press(view, new(null, EquipmentSlot.Helmet)), "an empty slot");
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaInventoryDrag.Release(new("ring", EquipmentSlot.Ring1, 0), new(null, EquipmentSlot.Ring1)).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.Wear, AreaInventoryDrag.Release(new("ring", EquipmentSlot.Ring1, 0), new(null, EquipmentSlot.Ring2)).Kind);
+    }
 }

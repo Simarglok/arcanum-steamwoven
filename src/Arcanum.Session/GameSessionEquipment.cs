@@ -328,13 +328,23 @@ public sealed partial class GameSessionOwner
         refusal = EquipmentRules.CheckRemove(item.Item);
         if (refusal == EquipmentRefusal.None && current is not null) refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
+        // ARC-UI-019: into an empty slot the item's own move (0x5788C0) runs the insert check (IW12, IW13): the hero's load above its carry
+        // weight refuses it, and a worn item moved to another slot needs a free grid slot under the Original setting (IWA1). A grid item
+        // always has room (its own cells). The original puts the item back with no message.
+        if (current is null)
+        {
+            var moved = HeroInsertVerdict(HeroOverloaded() ? SessionInsertVerdict.TooHeavy : SessionInsertVerdict.Accepted, item.Item.MagickTechComplexity,
+                room: _equipment.SlotOf(entity) is null || !_rules.Items.WornMoveNeedsRoom || HeroGridRoom(entity, null));
+            if (moved != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: moved);
+        }
         if (scripts is not null && (points.Count > 0 || current?.ScriptPoints.Count > 0))
             return EquipWithScripts(entity, slot, item, points, current, insertCheck, scripts, revision, item.HasItemSpells && triggers is not null);
         SessionInsertVerdict? verdict = null;
         if (current is not null)
         {
-            verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
-                current.Item.MagickTechComplexity);
+            verdict = HeroInsertVerdict(HeroOverloaded(entity) ? SessionInsertVerdict.TooHeavy
+                : insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+                current.Item.MagickTechComplexity, room: HeroGridRoom(current.Entity, entity));
             ThrowIfDisposed();
             if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
             if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
@@ -369,8 +379,9 @@ public sealed partial class GameSessionOwner
             ThrowIfDisposed();
             if (Stale()) return Refused(GameSessionFailure.StaleVersion);
             if (runs.Failure != GameSessionFailure.None) return Refused(runs.Failure);
-            verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
-                current.Item.MagickTechComplexity);
+            verdict = HeroInsertVerdict(HeroOverloaded(entity) ? SessionInsertVerdict.TooHeavy
+                : insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+                current.Item.MagickTechComplexity, room: HeroGridRoom(current.Entity, entity));
             ThrowIfDisposed();
             if (Stale()) return Refused(GameSessionFailure.StaleVersion, verdict);
             if (verdict == SessionInsertVerdict.Accepted)
@@ -431,22 +442,26 @@ public sealed partial class GameSessionOwner
     /// ARC-MAGIC-020: an item whose spells run (a run with it as source) needs <paramref name="triggers"/>, else
     /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>; after the move the host's unwear executor runs (0x4CBFC0,
     /// <see cref="EquipmentMutationResult.ItemSpells"/>), in the original inside the unwield before its light and scripts.
+    /// ARC-UI-019: with <paramref name="gridSlot"/> the item goes to that slot of the hero's grid (the window's release of a worn item on the
+    /// grid, ledger IW4): a slot outside the grid is <see cref="GameSessionFailure.InvalidItem"/>, and after the no-drop refusal its rectangle
+    /// must lie inside the grid on cells no other item holds (<see cref="GameSessionFailure.GridCellsTaken"/>); without it the item takes the
+    /// first free slot (<see cref="QueryHeroGrid"/>).
     /// </summary>
     [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
-        ISessionItemTriggers? triggers = null)
+        ISessionItemTriggers? triggers = null, int? gridSlot = null)
     {
-        var result = UnequipMove(expected, slot, insertCheck, scripts, triggers);
+        var result = UnequipMove(expected, slot, insertCheck, scripts, triggers, gridSlot);
         if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Displaced is not { } item) return result;
         return result with { ItemSpells = [triggers.Withdraw(ItemSpellTriggerRules.Unwear, item, SessionEventKinds.PlayerEntity)], Version = Version };
     }
 
     private EquipmentMutationResult UnequipMove(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
-        ISessionItemTriggers? triggers)
+        ISessionItemTriggers? triggers, int? gridSlot)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
-        if (!Enum.IsDefined(slot)) return RejectWear(GameSessionFailure.InvalidItem);
+        if (!Enum.IsDefined(slot) || gridSlot is < 0 or >= SessionHeroGrid.Slots) return RejectWear(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectWear(GameSessionFailure.StaleVersion);
         if (_hero is null) return RejectWear(GameSessionFailure.EquipmentUnavailable);
         if (!_equipment.Worn.TryGetValue(slot, out var current))
@@ -455,10 +470,13 @@ public sealed partial class GameSessionOwner
         if (triggers is null && (current.ItemSpells || HasItemRuns(current.Entity))) return RejectWear(GameSessionFailure.ItemEffectUnsupported);
         var refusal = EquipmentRules.CheckRemove(current.Item);
         if (refusal != EquipmentRefusal.None) return RejectWear(GameSessionFailure.WearRefused, refusal);
+        var (width, height) = GridSize(current.Entity);
+        if (gridSlot is { } at && !GridCellsFree(new(at, width, height), null)) return RejectWear(GameSessionFailure.GridCellsTaken);
         if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
-            current.Item.MagickTechComplexity);
+        var verdict = HeroInsertVerdict(HeroOverloaded() ? SessionInsertVerdict.TooHeavy
+            : insertCheck(new SessionInventoryItem(current.Entity, CarriedFacts(current.Entity, current.Item.MagickTechComplexity))),
+            current.Item.MagickTechComplexity, room: gridSlot is not null || HeroGridRoom(current.Entity, null));
         ThrowIfDisposed();
         if (_revision != revision) return RejectWear(GameSessionFailure.StaleVersion, verdict: verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectWear(GameSessionFailure.InsertRefused, verdict: verdict);
@@ -476,11 +494,13 @@ public sealed partial class GameSessionOwner
             if (runs.Failure != GameSessionFailure.None) return RejectWear(runs.Failure, verdict: verdict) with { Scripts = runs.Runs };
             runs.Commit();
             _equipment.Worn.Remove(slot);
+            if (gridSlot is { } into) _inventory.Grid[current.Entity] = new(current.Entity, into, width, height);
             Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version)
                 { Scripts = runs.Runs, Messages = runs.Messages };
         }
         _equipment.Worn.Remove(slot);
+        if (gridSlot is { } target) _inventory.Grid[current.Entity] = new(current.Entity, target, width, height);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, current.Entity, verdict, Version);
     }

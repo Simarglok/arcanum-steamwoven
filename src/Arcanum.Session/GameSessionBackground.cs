@@ -35,12 +35,15 @@ public sealed partial class GameSessionOwner
     /// weight refusal counts as well. Between weight and room the session refuses a technological item for a Technophobia hero
     /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A wear move
     /// passes no incoming item: the item is in the hero's list already, and the original's weight test on an unwield is not read yet
-    /// (not ready).
+    /// (not ready). ARC-UI-019: <paramref name="room"/> false (the hero's grid has no free slot for the item, ledger IW11) refuses an
+    /// accepted item as <see cref="SessionInsertVerdict.NoRoom"/>; the wear and grid moves answer it, items entering from outside leave the
+    /// room to the host (not ready).
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x466510, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null)
+    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null, bool room = true)
     {
         if (host == SessionInsertVerdict.TooHeavy || incoming is { } item && !HeroFits(item)) return SessionInsertVerdict.TooHeavy;
-        return _hero is null || !SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity) ? host : SessionInsertVerdict.TechnologyRefused;
+        if (_hero is not null && SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity)) return SessionInsertVerdict.TechnologyRefused;
+        return host == SessionInsertVerdict.Accepted && !room ? SessionInsertVerdict.NoRoom : host;
     }
 }

@@ -13,7 +13,7 @@ public sealed class AreaBackgroundRefusalTests
     {
         Assert.AreEqual("the hero's Technophobia refuses technological items",
             AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, SessionInsertVerdict.TechnologyRefused));
-        Assert.AreEqual("the PC cannot take it", AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, SessionInsertVerdict.NoRoom));
+        Assert.AreEqual("no free room in the grid", AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused, SessionInsertVerdict.NoRoom));
         Assert.AreEqual("the PC cannot take it", AreaInventoryHost.Refusal(GameSessionFailure.InsertRefused));
         SessionAssemblyResult Refused(SessionInsertVerdict? verdict) =>
             new(GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, null, [], [], default) { Verdict = verdict };
@@ -28,7 +28,7 @@ public sealed class AreaBackgroundRefusalTests
         SessionAssemblyResult Done(SessionInsertVerdict? verdict, params string[] ground) =>
             new(GameSessionDisposition.Changed, GameSessionFailure.None, null, [], [], default) { Verdict = verdict, OnGround = ground };
         Assert.AreEqual("", AreaSchematics.OnGroundText(Done(null)));
-        Assert.AreEqual(" — the PC cannot take it: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1")));
+        Assert.AreEqual(" — no free room in the grid: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1")));
         Assert.AreEqual(" — the hero's Technophobia refuses technological items: 2 products lie on the ground",
             AreaSchematics.OnGroundText(Done(SessionInsertVerdict.TechnologyRefused, "made:1", "made:2")));
         Assert.AreEqual(" — the NPC cannot take it: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1"), npc: true));

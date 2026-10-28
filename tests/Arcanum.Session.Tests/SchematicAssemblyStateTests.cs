@@ -127,7 +127,7 @@ public sealed class SchematicAssemblyStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AssembleSchematic(owner.Version, Schematic([2100], [2100]), InBag, Facts, Kinds, Accept).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, "made:1", new(10, 0, 0, false)).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[]},");
+        StringAssert.Contains(text, ",\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"grid\":[");
         var restored = GameSessionOwner.Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(GameSessionFailure.None, restored.Failure);
         using var back = restored.Owner!;
@@ -137,7 +137,7 @@ public sealed class SchematicAssemblyStateTests
         using var again = Owner();
         again.AssembleSchematic(again.Version, Schematic([2100], [2100]), InBag, Facts, Kinds, Accept);
         var saved = GameSessionSnapshotCodec.Encode(again.Capture());
-        StringAssert.Contains(saved, ",\"made\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[]},");
+        StringAssert.Contains(saved, ",\"made\":[{\"entity\":\"made:1\",\"type\":\"Generic\",\"prototype\":2320,\"name\":5,\"description\":6,\"complexity\":0}],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"grid\":[");
         GameSessionFailure Restore(string json) => GameSessionOwner.Restore(Decode(json), RestoreOptions()).Failure;
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restore(saved.Replace("\"made:1\"", "\"made:0\"", StringComparison.Ordinal)));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restore(saved.Replace("\"made:1\"", "\"forged\"", StringComparison.Ordinal)));
