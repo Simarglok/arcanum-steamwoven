@@ -14,7 +14,8 @@ namespace Arcanum.TerrainViewer.Tests;
 /// ARC-WORLD-092 (NPC AI slice I10, first fight): the AI host's movers (synthetic) and, on the installed original (opt-in,
 /// <c>ARC_AREA_CONVERSATION_GAME_ROOT</c> and the cave's mobile folder in <c>ARC_CAVE_MOBILE</c>), the first fight in the Crash Site
 /// cave: the hero hits an animal, which reacts, focuses the hero through the AI tick's danger update, starts its attack run and bites
-/// back through the session's NPC hit step. Numbers only; no original text is asserted or printed.
+/// back through the session's NPC hit step; in a turn-based round (ARC-WORLD-095) it does so in its own subturns, paying action points.
+/// Numbers only; no original text is asserted or printed.
 /// </summary>
 [TestClass]
 public sealed class AreaAiHostTests
@@ -85,8 +86,11 @@ public sealed class AreaAiHostTests
     [TestMethod, TestCategory("RealData")]
     public void In_the_cave_an_animal_hit_from_afar_walks_up_and_bites() => Fight(4);
 
+    private sealed record Cave(GameSessionOwner Session, AreaAiHost Host, AreaCombatHost Combat, int Map, string Rat, AreaObjectRecord RatRow,
+        CellCoord Hero, AreaCombatWorld Round);
+
     // The hero stands `distance` tiles from the first living animal that has such a free admitted cell (straight along an axis).
-    private static void Fight(int distance)
+    private static Cave Open(int distance)
     {
         var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
         var cave = Environment.GetEnvironmentVariable("ARC_CAVE_MOBILE");
@@ -134,9 +138,20 @@ public sealed class AreaAiHostTests
             LineOfFire = () => new AreaLineOfFire(steps, snapshot.Objects, host!.Movers.Moved.ToHashSet(), new Dictionary<CellCoord, AreaObjectRecord>(),
                 _ => false, row => combat.Entity(map, row.Key) is { } e && session.QueryNpcKilled(e), _ => null),
         };
-        host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(map, () => [], _ => null));
+        // The round's scan: the hero and every NPC of the cave where it stands now, with its stored facts in its session life state.
+        var round = new AreaCombatWorld(map,
+            () => AreaCombatScan.Critters(npcs.Select(n => (n.Entity, n.Row.Key)), hero, e => host!.Tile(e), new AreaSectorEntries()),
+            e => combat.Build(map, e).Combat is { } c && combat.Fields(map, e) is { } fields
+                ? AreaCombatWorld.Facts(c, fields, session.QueryLife(c.Target).View?.Record.State ?? c.Loaded) : null);
+        host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), round);
         Assert.AreEqual(0, host.ScheduleTicks(), "every living NPC of the cave gets its delayed tick");
         Assert.IsNotNull(session.QueryAiTick(rat));
+        return new(session, host, combat, map, rat, ratRow, hero, round);
+    }
+
+    private static void Fight(int distance)
+    {
+        var (session, host, combat, map, rat, _, hero, _) = Open(distance);
 
         // The hero's hit and its attack event: the animal reacts and fights (or flees) the hero.
         if (distance == 1)
@@ -177,6 +192,71 @@ public sealed class AreaAiHostTests
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(rat)), "the attempt puts the attacker into combat mode (goal 19 node 5)");
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Hero), "and its PC target");
         Trace($"distance {distance} steps {notices.Count(n => n.Kind == AreaAiNoticeKind.Step)} bite {bite.Resolution!.Outcome} damage {bite.Life?.HitPointDamage} hero damage {session.QueryHeroLife()!.Record.State.HitPointDamage}");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void In_a_turn_based_round_the_animal_walks_up_and_bites_in_its_own_subturns()
+    {
+        var (session, host, _, _, rat, _, hero, world) = Open(4);
+        var critter = SessionCombatant.Critter(rat);
+        host.HeroAttacked(rat);
+        var danger = session.QueryDanger(rat);
+        if (danger.State != DangerState.CombatFocus) Assert.Inconclusive($"this animal does not fight the hero: {danger.State}");
+        // The hero enters combat mode with the turn-based setting: the round begins, the animal first (the party goes last).
+        var began = session.SetCombatMode(session.Version, SessionCombatant.Hero, true, new SessionCombatModeContext { TurnBased = true, World = world });
+        Assert.AreEqual(GameSessionFailure.None, began.Failure);
+        Assert.IsNotNull(session.QueryCombatRound(), "the round began");
+        Assert.IsTrue(session.QueryCombatRound()!.Participants.Contains(critter), "the animal takes part");
+
+        var pump = new AreaEventPump(session, host);
+        var notices = new List<AreaAiNotice>();
+        var events = new List<SessionCombatEvent>();
+        var held = 0; var heroTurns = 0; var paid = false; var offTurn = false; var pending = false; var pendingAtHero = new List<int>();
+        int? lastPoints = null;
+        AreaAiNotice? bite = null;
+        for (var frame = 0; frame < 4000 && bite is null; frame++)
+        {
+            pump.Advance(8 * 50);
+            var actorBefore = session.QueryCombatRound()?.Actor;
+            host.Pump(50L * frame);
+            var drained = host.DrainNotices().Where(n => n.Npc == rat).ToArray();
+            // The animal moves and swings only in its own subturn (a swing that began in it may land after it, as an animation does).
+            offTurn |= drained.Any(n => n.Kind is AreaAiNoticeKind.Step or AreaAiNoticeKind.Swing) && actorBefore != critter;
+            notices.AddRange(drained);
+            bite ??= drained.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Hit);
+            events.AddRange(host.DrainRoundEvents());
+            var step = AreaTurnBased.Step(session, world, heroIdle: true, host);
+            Assert.AreEqual(GameSessionFailure.None, step.Failure, $"frame {frame}");
+            events.AddRange(step.Events);
+            var now = session.QueryCombatRound() ?? throw new AssertFailedException($"the round ended at frame {frame}");
+            if (now.Actor == critter)
+            {
+                if (host.RunOf(rat) is not null) held++;
+                pending |= host.PendingCost > 0;
+                paid |= lastPoints is { } before && now.ActionPoints < before;
+                lastPoints = now.ActionPoints;
+            }
+            else lastPoints = null;
+            if (now.Actor.IsHero)
+            {
+                // The hero passes its subturn at once; the pending cost the animal's checks wrote reads 0 in it.
+                heroTurns++;
+                pendingAtHero.Add(host.PendingCost);
+                Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, SessionCombatant.Hero, world).Failure);
+            }
+        }
+        Console.WriteLine($"ARC-WORLD-095 turn-based: frames held {held} hero turns {heroTurns} steps {notices.Count(n => n.Kind == AreaAiNoticeKind.Step)} bite {bite?.Result?.Resolution?.Outcome} round {session.QueryCombatRound()?.Turn}");
+        Assert.IsNotNull(bite, "the animal bites in a later subturn of the round");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, bite!.Result!.Disposition, $"the session resolves the bite: {bite.Result.Failure}");
+        Assert.AreEqual(1, AiExecutorRules.Distance(host.Tile(rat)!.Value, hero), "it bites from the tile next to the hero");
+        Assert.IsTrue(notices.Count(n => n.Kind == AreaAiNoticeKind.Step) >= 3, "it walked up tile by tile");
+        Assert.IsFalse(offTurn, "it never walked or swung on another participant's subturn");
+        Assert.IsTrue(held >= 2, "its goal run held its subturn over frames");
+        Assert.IsTrue(paid, "its steps and its attack paid the round's action points");
+        Assert.IsTrue(heroTurns >= 1, "its subturns passed on to the hero's");
+        Assert.IsTrue(pending, "its checks wrote the pending cost");
+        Assert.IsTrue(pendingAtHero.All(p => p == 0), "the pending cost reads 0 after a subturn start");
+        Assert.IsTrue(events.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended");
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-092 " + line);

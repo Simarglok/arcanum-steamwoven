@@ -183,6 +183,9 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Lockpick { get; init; }
     /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
     public bool Repairable { get; init; }
+    /// <summary>ARC-UI-025: a right press on the item would use it: a held item, not worn and without a wear location, with
+    /// <c>OIF_CAN_USE_BOX</c> (IW5); the turn rule is the app's.</summary>
+    public bool Usable { get; init; }
     /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item
     /// that is worn now, worn nowhere, or whose wear facts the viewer does not have.</summary>
     public IReadOnlyList<EquipmentSlot> WearSlots { get; init; } = Array.Empty<EquipmentSlot>();
@@ -320,7 +323,8 @@ public sealed class AreaInventoryHost
     /// that holder's current list.</summary>
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
         IReadOnlyList<SessionHealingItem?>? kitHealing = null, IReadOnlyList<SessionLockpick?>? kitLockpicks = null,
-        IReadOnlyList<SessionWearItem?>? kitDurability = null, IReadOnlyList<SessionWearableItem?>? kitWear = null)
+        IReadOnlyList<SessionWearItem?>? kitDurability = null, IReadOnlyList<SessionWearableItem?>? kitWear = null,
+        IReadOnlyList<AreaItemUseFacts?>? kitUse = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
@@ -331,10 +335,10 @@ public sealed class AreaInventoryHost
         string Units(string entity) => session.QueryAmmo(entity) is { } stack ? $" ×{stack.Units}" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) })
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) })
             .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Units(item.Entity) + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) }))
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
             .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
@@ -367,6 +371,24 @@ public sealed class AreaInventoryHost
             { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
+        bool Usable(string entity) => !worn.Contains(entity) && UseFacts(session, entity, kitUse) is { CanUseBox: true, Wearable: false };
+    }
+
+    /// <summary>
+    /// ARC-UI-025: the use facts of an item the PC holds (listed or worn): a kit item's from <paramref name="kitUse"/> (the hero load's, by
+    /// kit number), a taken item's from its object row's fields (<see cref="AreaItemUseFacts.From"/>). Null for a made item (its prototype's
+    /// facts are not read here: NOT READY), an item the session no longer has or whose fields do not read.
+    /// </summary>
+    public AreaItemUseFacts? UseFacts(GameSessionOwner session, string entity, IReadOnlyList<AreaItemUseFacts?>? kitUse)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity))
+            return KitNumber(entity) is { } number && kitUse is not null && number <= kitUse.Count ? kitUse[number - 1] : null;
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaItemUseFacts.From(entity, fields);
+        return null;
     }
 
     /// <summary>

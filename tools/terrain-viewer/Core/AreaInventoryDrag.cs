@@ -3,8 +3,12 @@ using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>ARC-UI-019: a point of the inventory window's doll-and-grid area: a grid cell (row × 10 + column), a wear slot, or neither.</summary>
-public readonly record struct AreaInventoryHit(int? Cell, EquipmentSlot? Slot)
+/// <summary>ARC-UI-025: the inventory window's drop and use icons (the player's own window; IW6).</summary>
+public enum AreaInventoryIcon { Drop, Use }
+
+/// <summary>ARC-UI-019: a point of the inventory window's doll-and-grid area: a grid cell (row × 10 + column), a wear slot, or neither;
+/// ARC-UI-025: or one of the icons.</summary>
+public readonly record struct AreaInventoryHit(int? Cell, EquipmentSlot? Slot, AreaInventoryIcon? Icon = null)
 {
     public static AreaInventoryHit None => default;
 }
@@ -13,10 +17,10 @@ public readonly record struct AreaInventoryHit(int? Cell, EquipmentSlot? Slot)
 /// grid locations (the press cell minus the item's slot; 0 for a worn item and for an occupant a swap put on the cursor).</summary>
 public sealed record AreaInventoryHeld(string Entity, EquipmentSlot? Worn, int Offset);
 
-public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear }
+public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon }
 
 /// <summary>ARC-UI-019: what a release does with the held item: put it back, move it in the grid, take it off into a grid slot, or put it
-/// into a wear slot.</summary>
+/// into a wear slot; ARC-UI-025: drop it on the hero's tile (the drop icon) or use it (the use icon).</summary>
 public sealed record AreaInventoryDrop(AreaInventoryDropKind Kind, AreaInventoryHeld Held, int? GridSlot = null, EquipmentSlot? Slot = null);
 
 /// <summary>
@@ -29,8 +33,11 @@ public static class AreaInventoryDrag
     public const int CellPixels = 32;
     public const float GridX = 368, GridY = 8;
     public const float GridRight = GridX + SessionHeroGrid.Columns * CellPixels, GridBottom = GridY + SessionHeroGrid.Rows * CellPixels;
-    /// <summary>The frame's size: the grid's right edge and the boots' bottom edge (331 + 64).</summary>
-    public const float FrameWidth = GridRight, FrameHeight = 395;
+    /// <summary>ARC-UI-025: the icons' top-left corners in the frame (the original's 703, 385 and 703, 331 on the window, 41 lower than the
+    /// frame: IW6, IW14). Their size is the frame size of their interface art (0xE0, 0x156), which the viewer does not read: PROJECT 32.</summary>
+    public const float IconX = 703, DropIconY = 385 - 41, UseIconY = 331 - 41, IconPixels = 32;
+    /// <summary>The frame's size: the icons' right edge and the boots' bottom edge (331 + 64).</summary>
+    public const float FrameWidth = IconX + IconPixels, FrameHeight = 395;
 
     /// <summary>The wear slots' rectangles (x, y, width, height) in the frame, the original's table 0x5CAC58.</summary>
     public static IReadOnlyDictionary<EquipmentSlot, (float X, float Y, float Width, float Height)> SlotRects { get; } =
@@ -41,11 +48,16 @@ public static class AreaInventoryDrag
             [EquipmentSlot.Armor] = (119, 171, 128, 160), [EquipmentSlot.Gauntlets] = (55, 107, 64, 64), [EquipmentSlot.Boots] = (150, 331, 64, 64),
         };
 
-    /// <summary>The slot or cell under a point of the frame: the wear slots first, then the grid; neither outside both.</summary>
+    /// <summary>The slot or cell under a point of the frame: the wear slots first, then the grid, then the icons; none outside all.</summary>
     public static AreaInventoryHit HitTest(float x, float y)
     {
         foreach (var (slot, rect) in SlotRects)
             if (x >= rect.X && x < rect.X + rect.Width && y >= rect.Y && y < rect.Y + rect.Height) return new(null, slot);
+        if (x >= IconX && x < IconX + IconPixels)
+        {
+            if (y >= DropIconY && y < DropIconY + IconPixels) return new(null, null, AreaInventoryIcon.Drop);
+            if (y >= UseIconY && y < UseIconY + IconPixels) return new(null, null, AreaInventoryIcon.Use);
+        }
         if (x < GridX || y < GridY || x >= GridRight || y >= GridBottom) return AreaInventoryHit.None;
         return new((int)((y - GridY) / CellPixels) * SessionHeroGrid.Columns + (int)((x - GridX) / CellPixels), null);
     }
@@ -60,7 +72,8 @@ public static class AreaInventoryDrag
     }
 
     /// <summary>A left press with nothing held (IW2): the item under the point goes on the cursor; a grid item keeps the grab's offset, a worn
-    /// item none. Null over an empty cell or slot or outside both. No check runs on the press.</summary>
+    /// item none. Null over an empty cell or slot or outside both. No check runs on the press. ARC-UI-025: a right press with nothing held
+    /// names the same item (IW5), which the app may use.</summary>
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaInventoryHit hit)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -77,6 +90,8 @@ public static class AreaInventoryDrag
     public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaInventoryHit hit)
     {
         ArgumentNullException.ThrowIfNull(held);
+        // ARC-UI-025: the drop icon drops the item on the hero's tile, the use icon uses it (IW6); the app decides the rest.
+        if (hit.Icon is { } icon) return new(icon == AreaInventoryIcon.Drop ? AreaInventoryDropKind.DropToGround : AreaInventoryDropKind.UseIcon, held);
         if (hit.Cell is { } cell)
         {
             var target = cell - held.Offset;

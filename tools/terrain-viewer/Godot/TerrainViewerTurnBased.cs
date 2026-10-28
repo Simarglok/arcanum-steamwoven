@@ -12,10 +12,11 @@ namespace Arcanum.TerrainViewer;
 // turn-based setting (on only for an active hero, ledger RT4; off by default, as the original's setting); with the hero in combat
 // mode the toggle starts or ends a round, and R entering combat mode with the setting on starts one. In a round each step the hero
 // starts, its attack, a pickup, a loot, a door's use, a cast, a heal and a lock pick charge its action points; a refused charge stops
-// the action and passes the turn on (ledger TB9, CT1–CT3). E on the hero's own subturn, with the hero idle, ends it (CT5). An NPC's
-// subturn ends at once (no AI yet: the original's no-animation path, TB5), so the round runs back to the hero, one game second
-// later per round; the event pump fires the recovery timers then. The hero's other commands wait for its own subturn; companions
-// stand while a round runs.
+// the action and passes the turn on (ledger TB9, CT1–CT3). E on the hero's own subturn, with the hero idle, ends it (CT5). With the
+// map's AI host (ARC-WORLD-095) an NPC acts in its own subturn: its subturn hook asks its AI, its goal run walks and attacks while
+// paying action points, and the subturn passes on when it starts nothing more; without one (automated runs keep the AI off) an
+// NPC's subturn ends at once (the original's no-animation path, TB5). Each round end moves the clock one game second; the event pump
+// fires the recovery timers then. The hero's other commands wait for its own subturn; companions stand while a round runs.
 public partial class TerrainViewerApp
 {
     // The original's turn-based setting (default off); a user preference since ARC-UI-013, set on when a quick load brings a round.
@@ -98,9 +99,10 @@ public partial class TerrainViewerApp
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
         var session = _areaSession!;
         PlaceHeroForRound();
-        var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound());
+        var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow());
         LogRound(step.Events);
         if (step.Failure != GameSessionFailure.None) { _turnBasedNotice = "round step refused: " + step.Failure; GD.Print($"ARC-COMBAT-020 round-step failure={step.Failure}"); }
+        if (step.WriteFailure != GameSessionFailure.None) GD.Print($"ARC-WORLD-095 subturn-hook write-failure={step.WriteFailure}");
         if (step.Events.Count > 0) RefreshAreaStatus();
     }
 
