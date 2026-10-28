@@ -268,6 +268,8 @@ public enum GameSessionFailure
     InvalidBackground,
     // Hero player name (ARC-UI-033): longer than the stored bound or holding a NUL byte.
     InvalidPlayerName,
+    // Trap state (ARC-WORLD-076): an object id, carrier or use script out of range.
+    InvalidTrap,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
