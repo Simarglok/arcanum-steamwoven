@@ -70,7 +70,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
-    // ARC-WORLD-063 (schema 45): the junk piles the session made.
+    // ARC-WORLD-063 (schema 46): the junk piles the session made.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
@@ -2071,10 +2071,10 @@ public static class GameSessionSnapshotCodec
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
     /// <summary>Wire names of <see cref="DangerFlags"/> by bit, in flag order (ARC-WORLD-079; SpellFlee ARC-WORLD-082; CheckWeapon
-    /// ARC-WORLD-084).</summary>
+    /// ARC-WORLD-084; NoFlee ARC-WORLD-086).</summary>
     private static readonly string[] DangerFlagNames =
         ["Fighting", "CheckWield", "CheckGrenade", "BackingOff", "DemaintainSpells", "NoAttack", "Fleeing", "Surrendered", "TargetLocked",
-            "SpellFlee", "CheckWeapon"];
+            "SpellFlee", "CheckWeapon", "NoFlee"];
     /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
     private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>

@@ -30,7 +30,7 @@ Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md
 `"concealment":{"hero":bool,"npcs":[entity]}`: the hero's flag (false without a hero) and its concealed followers in strictly
 ascending ordinal order. The decoder refuses a missing or unknown field, a repeated or unordered entity (`NotCanonical`); Restore
 refuses the hero's flag without a hero, a concealed NPC without a hero, and an entity the hero does not lead (following or waiting: a waiting NPC keeps the state it had when it began waiting) (`InvalidConcealment`). Schema
-34 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-45)).
+34 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-46)).
 
 ## Viewer
 

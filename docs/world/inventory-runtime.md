@@ -372,12 +372,12 @@ nor looted from it.
 | Decay (JP7) | An item that decays in a pile leaves it, and (no container shown in the loot window, or the decay would have waited) a pile left with one item or none dissolves at once, the remaining item's two days starting over. |
 | Bounds | At most 4,096 piles and 8,192 items in them (`SessionJunkPile.MaxPiles`, `MaxItems`, project bounds; the original has none): beyond them a drop lies loose. |
 
-**Snapshot schema 45.** `"inventory":{…,"junkPiles":[{"entity","map","x","y","items":[{"entity","slot","width","height"}]}]}` in the
+**Snapshot schema 46.** `"inventory":{…,"junkPiles":[{"entity","map","x","y","items":[{"entity","slot","width","height"}]}]}` in the
 order the piles were made. Decoding refuses a width outside 1..10, a height outside 1..96, a slot outside 0..959 and a cell coordinate
 outside 0..2^24 − 1 (`OutOfRange`) and more than the bounds (`BudgetExceeded`); restore refuses a pile entity that is not `junk:n` or
 repeats, an item in two piles, a rectangle past the grid or overlapping another, a placed item away from its pile's map and cell, a
 deleted item, an item the hero holds or an NPC's added item (`InvalidSnapshot`). An attached seed must list every item of a pile on its
-map that is no placed item, and no seed of another map may (`InventoryMismatch`). Schemas 1..44 are refused, not migrated.
+map that is no placed item, and no seed of another map may (`InventoryMismatch`). Schemas 1..45 are refused, not migrated.
 
 **Viewer.** The AREA viewer draws each pile at its cell from the pile prototype's current art (prototype 3043, read through the
 object field reader; flat, as every placed pile of the interiors carries `OF_FLAT`) instead of its items, picks it as a junk pile
