@@ -186,4 +186,31 @@ public sealed class AreaRestockHostTests
         Assert.IsTrue(session.IsItemDestroyed(Entity(2)), "the old coins are destroyed");
         Assert.AreEqual(0, session.QueryRestocks().Count);
     }
+
+    [TestMethod]
+    public void An_npcs_wield_facts_come_from_its_combat_values_and_its_items_rows_or_prototypes()
+    {
+        var (session, _, host, _) = Host();
+        using var owned = session;
+        var map = new SessionMapId(1);
+        var stats = new int[28];
+        for (var i = 0; i < 8; i++) stats[i] = 8;
+        stats[17] = 1; stats[25] = 20;
+        var fields = new CombatFields(CombatFieldOrigin.AreaObject, new CombatObjectFields(16, 17102, 0, 0, 0, 0, 0, 1, 2, 0, 4, [0, 0, 0, 0, 0], 0),
+            null, null, null, null, null, new CombatCritterFields(0x100, 0, stats, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], new int[4], new int[25], 0, 0, 0, 1, 0, 0),
+            new CombatNpcFields(0, 0, 0, 0, 0, 0, 0, [new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)]));
+        var combat = SessionCritterCombat.From(Entity(0), fields).Combat!;
+        Assert.IsNull(host.Wielder(map, Entity(0), null), "no combat values");
+        Assert.IsNull(host.Wielder(map, Entity(1), combat), "a container");
+        Assert.IsNull(host.Wielder(new(2), Entity(0), combat), "a map without a seed");
+        var wielder = host.Wielder(map, Entity(0), combat)!;
+        Assert.AreEqual(combat.Wearer(Arcanum.Simulation.Combat.LifeConditions.CrippledArmOne), wielder.Wearer, "its crippled arm from the map data's life state");
+        Assert.AreEqual((false, combat.Chooser(combat.Loaded).MeleeLevel), (wielder.Chooser.IsPc, wielder.Chooser.MeleeLevel));
+        Assert.IsTrue(wielder.ArtCheck(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, null!), "one diagnostic body art");
+        var axe = new SessionItemKind(SessionItemType.Weapon, Axe, 3005, 33005);
+        Assert.AreEqual(SessionEquipmentFacts.Wearable(axe, Data().Prototype(Axe)!), wielder.Items(new("made:1", Facts(SessionItemType.Weapon, Axe) with { Kind = axe })),
+            "an item without a row reads its prototype");
+        Assert.IsNull(wielder.Items(new("made:2", Facts(SessionItemType.Weapon, 4021))), "no prototype");
+        Assert.IsNull(wielder.Items(new(Entity(3), Facts(SessionItemType.Armor, 2805))), "a row without item fields is worn nowhere");
+    }
 }

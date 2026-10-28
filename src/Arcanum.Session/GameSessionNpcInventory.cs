@@ -99,7 +99,8 @@ public sealed partial class GameSessionOwner
     /// deleted (<see cref="IsItemDestroyed"/>). No item script runs. Refused before any effect: an invalid input
     /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know
     /// (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// a worn item (<see cref="GameSessionFailure.WornItemUnsupported"/>: unequipping an NPC is not modelled), a full durability
+    /// a worn item (<see cref="GameSessionFailure.WornItemUnsupported"/>: unequipping an NPC is not modelled; ARC-WORLD-103: worn as the
+    /// session's lists show it, a dressed NPC's record over its map data), a full durability
     /// budget (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision.
     /// </summary>
     public InventoryMutationResult RemoveItemFromNpc(GameSessionVersion expected, string npc, string item)
@@ -113,8 +114,10 @@ public sealed partial class GameSessionOwner
         {
             var listed = SeedListing(npc, item);
             if (listed is null) return RejectItem(GameSessionFailure.ItemNotAvailable);
-            if (listed.Facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
+            if (NpcWears(npc, item, listed.Facts)) return RejectItem(GameSessionFailure.WornItemUnsupported);
         }
+        // ARC-WORLD-103: a made item a regeneration's wield put on.
+        else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return RejectItem(GameSessionFailure.WornItemUnsupported);
         if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         Delete(item);

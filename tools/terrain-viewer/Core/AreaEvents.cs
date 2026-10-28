@@ -178,6 +178,8 @@ public interface IAreaEventObjects
     LifeFacts? Facts(int runtimeMap, string entity);
     bool HasObject(int runtimeMap, string entity);
     int? HomeMap(string entity);
+    /// <summary>ARC-WORLD-103: the NPC's combat values from its fields on that map (its wearer and best-items chooser), or null.</summary>
+    SessionCritterCombat? Critter(int runtimeMap, string entity) => null;
 }
 
 /// <summary>
@@ -236,6 +238,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) => AreaInventoryHost.DiagnosticInsertCheck;
     // ARC-WORLD-101: a generated-once container's tile x and the hero's player name.
     public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => Restock?.GeneratedOnceFacts(map, container);
+    /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
+    public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(map.RuntimeMap, npc));
 
     private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 

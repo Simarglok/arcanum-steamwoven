@@ -72,9 +72,11 @@ public static class GameSessionSnapshotCodec
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
     // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
     // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
-    // generated-once containers.
+    // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified", "lastDiscardedMade", "grid", "generated"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
+    private static readonly string[] NpcWearFields = ["npc", "worn"];
+    private static readonly string[] NpcWornItemFields = ["slot", "item"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] JunkPileFields = ["entity", "map", "x", "y", "items"];
@@ -500,6 +502,24 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteNumber("map", row.Map.RuntimeMap);
                 w.WriteString("entity", row.Entity);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-103: the dressed NPCs by entity in ordinal order, each with its worn items in slot order.
+            w.WriteStartArray("npcWorn");
+            foreach (var npc in snapshot.Inventory.NpcWorn)
+            {
+                w.WriteStartObject();
+                w.WriteString("npc", npc.Npc);
+                w.WriteStartArray("worn");
+                foreach (var worn in npc.Worn)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("slot", (int)worn.Slot);
+                    w.WriteString("item", worn.Item);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1736,8 +1756,29 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && (generated[i - 1].Map.RuntimeMap > generated[i].Map.RuntimeMap || generated[i - 1].Map == generated[i].Map &&
                 string.CompareOrdinal(generated[i - 1].Entity, generated[i].Entity) >= 0)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
+        // ARC-WORLD-103: the dressed NPCs by entity in strictly ascending ordinal order, each with its worn items in strictly ascending slots.
+        var npcWornRows = Array(f["npcWorn"], p + ".npcWorn", SessionInventoryState.MaxNpcWorn);
+        var npcWorn = new SessionNpcWear[npcWornRows.Length];
+        for (var i = 0; i < npcWornRows.Length; i++)
+        {
+            var path = $"{p}.npcWorn[{i}]";
+            var row = Fields(npcWornRows[i], path, NpcWearFields);
+            var npc = Entity(row["npc"], path + ".npc");
+            var wornRows = Array(row["worn"], path + ".worn", Enum.GetValues<Arcanum.Simulation.Equipment.EquipmentSlot>().Length);
+            var worn = new SessionNpcWornItem[wornRows.Length];
+            for (var j = 0; j < wornRows.Length; j++)
+            {
+                var at = $"{path}.worn[{j}]";
+                var item = Fields(wornRows[j], at, NpcWornItemFields);
+                worn[j] = new((Arcanum.Simulation.Equipment.EquipmentSlot)Int(item["slot"], at + ".slot",
+                    (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet, (int)Arcanum.Simulation.Equipment.EquipmentSlot.Boots), Entity(item["item"], at + ".item"));
+                if (j > 0 && worn[j - 1].Slot >= worn[j].Slot) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".slot");
+            }
+            npcWorn[i] = new(npc, System.Array.AsReadOnly(worn));
+            if (i > 0 && string.CompareOrdinal(npcWorn[i - 1].Npc, npc) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".npc");
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated);
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

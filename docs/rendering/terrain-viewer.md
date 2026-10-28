@@ -2039,7 +2039,10 @@ its substitute container when no speaker buys itself, its quotes, the open is at
 restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
 one); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
 screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the
-window opened again shows the new wares.
+window opened again shows the new wares; then `ARC-WORLD-103 native-smoke redress PASS`: the first living NPC of the map with an
+inventory source of its own whose set the project admits and combat values is scheduled through the window open's path, its event regenerates it and it wields its
+best items through the production event world, and the session's list shows the slots its record names (SKIP on a map without such an
+NPC; [NPC best items](../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
 ### Reading window (ARC-UI-049)
 

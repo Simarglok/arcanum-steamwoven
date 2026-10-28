@@ -33,6 +33,8 @@ public sealed class AreaRestockCensusTests
         foreach (var set in new[] { 5, 7, 19, 105 })
             Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(data.Sources, data.Buy, set, data.Existing.Contains).Status, $"merchant set {set}");
         var merchants = new List<string>();
+        // ARC-WORLD-103: the maps whose NPCs regenerate on their own (a source of their own), for the redress observation.
+        var npcSources = new SortedDictionary<string, int>(StringComparer.Ordinal);
         int cont = 0, contSrc = 0, c200 = 0, c400 = 0, c200src = 0, c400src = 0, npcs = 0, npcSrc = 0, persistent = 0, items = 0;
         foreach (var map in WorldCatalog.Open(stack).Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
@@ -51,7 +53,7 @@ public sealed class AreaRestockCensusTests
                 if (h.Type == Arcanum.Data.Inventory.AreaInventoryHolderType.Npc)
                 {
                     npcs++;
-                    if (h.InventorySource != 0) npcSrc++;
+                    if (h.InventorySource != 0) { npcSrc++; npcSources[map.Name] = npcSources.GetValueOrDefault(map.Name) + 1; }
                     var container = h.SubstituteInventory?.SourceIndex is { } index && inventory.TryGetHolder(index, out var found) ? found : null;
                     if (container is not null && data.BuyList(container.InventorySource).Status is InventorySourceBuyStatus.Listed or InventorySourceBuyStatus.Everything)
                         merchants.Add($"{map.Name}: own source {h.InventorySource}, container source {container.InventorySource} flags 0x{container.ContainerFlags:X}");
@@ -67,6 +69,7 @@ public sealed class AreaRestockCensusTests
         }
         Console.WriteLine($"containers {cont} with source {contSrc}; 0x200 {c200} ({c200src} with source); 0x400 {c400} ({c400src} with source); npcs {npcs} with source {npcSrc}; items {items} persistent {persistent}");
         Console.WriteLine("merchants: " + string.Join("; ", merchants));
+        Console.WriteLine("npcs with a source by map: " + string.Join("; ", npcSources.Select(p => $"{p.Key} {p.Value}")));
         Assert.AreEqual((423, 136, 116, 116, 0, 0), (cont, contSrc, c200, c200src, c400, c400src), "the census changed: update the restock contract");
         Assert.AreEqual((1985, 238, 2172, 39), (npcs, npcSrc, items, persistent), "the census changed: update the restock contract");
         // The four merchants (wheel clan 3, shopmap 1) have no source of their own and containers without either restock flag.

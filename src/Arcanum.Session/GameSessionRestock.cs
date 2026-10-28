@@ -59,6 +59,9 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// <summary>ARC-WORLD-100: the host's part of the seed of a container with flag 0x200 (<see cref="SessionGeneratedOnceFacts"/>); null
     /// when the host cannot give it, and the container then keeps its list (Not ready).</summary>
     SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => null;
+    /// <summary>ARC-WORLD-103: the facts of an NPC's best-items wield after its regeneration (<see cref="SessionNpcWielder"/>); null when the
+    /// host cannot give them, and the NPC then wears only what the clear left it (Not ready).</summary>
+    SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => null;
 }
 
 /// <summary>What one regeneration did (ARC-WORLD-094).</summary>
@@ -78,7 +81,12 @@ public enum SessionRestockOutcome
 /// refused (destroyed, as in the original) and how many lines the session could not create (a type the lists do not admit, a prototype
 /// the host does not know, a transfer script, a full budget: Not ready).</summary>
 public sealed record SessionRestockRegeneration(string Holder, SessionRestockOutcome Outcome, int Removed, int Coins, string? Pile,
-    IReadOnlyList<string> Created, int Refused, int Skipped);
+    IReadOnlyList<string> Created, int Refused, int Skipped)
+{
+    /// <summary>ARC-WORLD-103: an NPC's best-items wield after the regeneration (RK15); null for a container and for a regeneration that
+    /// changed nothing.</summary>
+    public SessionNpcWield? Wield { get; init; }
+}
 
 /// <summary>A restock event that came due (ARC-WORLD-094, ledger RK3): the object, its map, the rules' decision and the regenerations it
 /// made (the merchant's first, then the container's). <see cref="Postponed"/>: the session could not run it yet (no restock host, the
@@ -193,7 +201,9 @@ public sealed partial class GameSessionOwner
         plans.Add(PlanRestock(world, map, seed, entity.Code, holder));
         if (!RestockFits(plans)) return Postpone(decision);
         if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
-        var done = plans.Select(plan => Regenerate(world, map, plan)).ToArray();
+        // ARC-WORLD-103: an NPC wields its best items at the end of its own regeneration, before the container's (RK15).
+        var done = plans.Select(plan => Regenerate(world, map, plan) is var regeneration && plan.Kind == SessionHolderKind.Npc &&
+            regeneration.Outcome != SessionRestockOutcome.Unsupported ? regeneration with { Wield = WieldNpcBest(world, map, seed, plan.Holder) } : regeneration).ToArray();
         if (done.Any(regeneration => regeneration.Outcome != SessionRestockOutcome.Unsupported)) Revise();
         return Report(decision, Array.AsReadOnly(done));
     }
@@ -253,7 +263,10 @@ public sealed partial class GameSessionOwner
         var lines = plans.Sum(plan => plan.Set?.Lines.Count + 1 ?? 0);
         var freed = plans.SelectMany(plan => plan.Deleted).Count(item => _inventory.NpcOf(item) is not null);
         return _inventory.NpcHeld - freed + lines <= _limits.MaxNpcItems && _inventory.Piles.Count + plans.Count <= _limits.MaxGoldRecords &&
-            _inventory.Ammo.Count + lines <= _limits.MaxAmmoRecords && _inventory.Generated.Count + plans.Count(plan => plan.Generates) <= SessionInventoryState.MaxGenerated;
+            _inventory.Ammo.Count + lines <= _limits.MaxAmmoRecords && _inventory.Generated.Count + plans.Count(plan => plan.Generates) <= SessionInventoryState.MaxGenerated &&
+            // ARC-WORLD-103: and the record of every NPC its wield dresses.
+            _inventory.NpcWorn.Count + plans.Count(plan => plan.Kind == SessionHolderKind.Npc && plan.Outcome != SessionRestockOutcome.Unsupported &&
+                !_inventory.NpcWorn.ContainsKey(plan.Holder)) <= SessionInventoryState.MaxNpcWorn;
     }
 
     // ARC-WORLD-100: the host's facts of a container the session generated once have no source and no flag 0x200 any more (RK10).
@@ -268,7 +281,8 @@ public sealed partial class GameSessionOwner
         : new(HeroDomain.SourceRace(hero.State.Race), hero.State.Gender == Arcanum.Simulation.Character.CharacterGender.Female ? 0 : 1, hero.State.Background, name);
 
     // The regeneration (0x463E20, RK4–RK6): the clear, the coins (a new pile, or the kept pile's coins grow) and each line's item, created
-    // and moved in; an item the holder's insert check refuses is destroyed. The NPC's wield of its best items is not modelled here.
+    // and moved in; an item the holder's insert check refuses is destroyed. ARC-WORLD-103: the NPC's wield of its best items follows it
+    // (WieldNpcBest).
     // ARC-WORLD-100: a seeded plan draws from the original generator (RK10, RK11), not the session's, and a container generated once is
     // recorded (its source and flag 0x200 cleared).
     private SessionRestockRegeneration Regenerate(ISessionRestockWorld world, SessionMapId map, RestockPlan plan)
