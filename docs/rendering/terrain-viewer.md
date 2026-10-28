@@ -105,11 +105,12 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); "Show this screen at every start"; Play, Reset settings and Quit. The project's own look, not a
+  after alpha); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
 - **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
-  detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode and "show
-  at start", then starts map mode on the main map with the main menu from that folder, as a start without the screen
+  detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode, "show
+  at start" and the debug mode (`debugMode`, which turns the run's debug mode on, as `--debug-mode` does), then starts map mode on the main map with the main menu from that folder, as a start without the screen
   does. A save the file refuses (a newer build's or an unreadable file) does not stop the start: the choices apply to
   it and the file is kept.
 - **Reset settings** writes the defaults over the file (`LauncherSettingsFile.Reset`, the one write that replaces a
@@ -984,6 +985,19 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
   stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first and stay with it).
+- **Original look (ARC-UI-051).** With the game's art the player's own window (no loot, steal or barter partner) shows the
+  original window instead of the diagnostic panel ([plan](../ui/original-windows.md#inventory-window-done-arc-ui-051),
+  [ledger IW20–IW25](../research/ledger/ui-audio.md#inventory-window-art-arc-ui-051); `AreaInventoryArtLayout`, `AreaInventoryArtContent`):
+  the 800 × 400 frame at its place between the interface bars, scaled to the free part, with the paper doll (223) and pack (221)
+  arts, a cover art on every empty wear slot (241–249), each item's inventory art (field 0x5D) centred in its slot or cells
+  (scaled down when larger, since items are 1 × 1), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
+  areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
+  18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
+  grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
+  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. NOT READY: item sizes from their
+  art, the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
+  toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
+  art read, every grid and worn item's art read, three lines).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1003,7 +1017,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop, the doll's art), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout, the fonts and item sizes are not the original's), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 

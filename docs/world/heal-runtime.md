@@ -51,6 +51,15 @@ an event pass when its timers are on another map; both worst-case checks also re
 critical, amount) come from the session generator. The answer carries the check, the outcome, the life outcome, the uses left or
 the destruction, and whether the heal fate was used.
 
+ARC-WORLD-109: `HealByNpc(version, SessionNpcHeal)` is an NPC's heal with a healing item it holds, the heal case of the skill
+invocation that the AI's skill attempt (goal 34) reaches ([AI host](ai-host.md#skill-goals-arc-world-109)); the heal case reads no
+player test (ledger [AK3](../research/ledger/npc-ai.md#npc-ai-skill-goals-host-arc-world-109)). The check, outcome, life write and
+item uses are the same step as above, with the healer's own heal level and training (its saved sheet when the session levelled it,
+else the host's map-data sheet under its effects' modifiers), its extraordinary intelligence and its own blindness and crippled arms;
+no local-PC difficulty term, no fate and no action points (the goal paid its own). It refuses before any roll: a hero as healer, a
+sheet that is not the healer's or does not hold, a dead healer (`HealUnavailable`); the item refusals above, except that the item must
+not be the hero's (the host vouches that the NPC holds it); an invalid target; the version.
+
 ## Snapshot schema 31
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,

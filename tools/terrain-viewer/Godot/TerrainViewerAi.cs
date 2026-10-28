@@ -26,6 +26,8 @@ public partial class TerrainViewerApp
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
     private int _aiFidgets;
+    // ARC-WORLD-109: the NPC skill attempts seen (the ai-skill smoke reads it).
+    private int _aiSkills;
     // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
     private int _aiCasts, _aiCastReleases, _aiMissiles, _aiMissileArrivals;
     private string? _aiNotice;
@@ -79,6 +81,8 @@ public partial class TerrainViewerApp
             Spells = SpellCasterNow,
             CastEyeCandy = NpcCastEyeCandy,
             MissileArt = spell => SpellMissileArt(spell) is not null,
+            // ARC-WORLD-109: an NPC's skills for its skill attempts.
+            NpcSheet = AreaFollowerSheet,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -148,6 +152,15 @@ public partial class TerrainViewerApp
                     break;
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
+                    break;
+                case AreaAiNoticeKind.Skill:
+                    // ARC-WORLD-109: a skill attempt at its action frame; a heal changes a body's life and the healer's item.
+                    _aiSkills++;
+                    _aiNotice = $"{AiName(notice.Npc)} uses skill {notice.Skill}" + (notice.Heal is { } heal
+                        ? $": {(heal.Check?.Success == true ? $"heals {heal.Heal?.HitPoints}" : heal.Disposition == GameSessionDisposition.Changed ? "fails" : $"refused ({heal.Failure})")}" : "");
+                    GD.Print($"ARC-WORLD-109 ai-skill npc={notice.Npc} skill={notice.Skill} target={notice.Target} disposition={notice.Heal?.Disposition.ToString() ?? "none"}"
+                        + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
+                    if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
                     break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.

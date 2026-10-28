@@ -66,9 +66,15 @@ public partial class TerrainViewerApp
         _launcherPanel.ChooseForSelfTest(game);
         _launcherPanel.RulesForSelfTest(RuleMode.Original);
         _launcherPanel.ShowAtStartForSelfTest(true);
-        Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on",
-            "a game folder, Original and show at start: " + string.Join(" | ", Lines()));
+        // ARC-DEV-050: the debug mode is off until ticked; Play stores it and turns the run's debug mode on.
+        Require(Lines()[6] == "Debug mode: off", "the debug mode is off by default: " + Lines()[6]);
+        _launcherPanel.DebugModeForSelfTest(true);
+        var debugBefore = DebugMode;
+        Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on"
+                && Lines()[6] == "Debug mode: on", "a game folder, Original, show at start and debug mode: " + string.Join(" | ", Lines()));
         _launcherPanel.PlayForSelfTest();
+        Require(DebugMode && Stored().DebugMode, "Play stored the debug mode and turned it on");
+        DebugMode = debugBefore;
         Require(started?.GameRoot is { } root && System.IO.Path.GetFullPath(root) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen,
             "Play started the chosen folder's map mode: " + started?.GameRoot);
         var stored = Stored();
