@@ -61,6 +61,7 @@ public sealed class ItemSpellCensusRealDataTests
         Assert.AreEqual("8168:168:-1:0 8169:168:-1:0 8170:168:-1:0 8207:182:-1:0", string.Join(" ", slots.Where(s => (s.Triggers & 0x60000000) != 0)
             .Select(s => $"{s.Prototype}:{s.Spell}:{s.Charges}:{scripts[s.Prototype]}")), "the wear items: unlimited charges, no move scripts, slot 0");
     }
+
     [TestMethod, TestCategory("RealData")]
     public void The_installed_item_uses_match_the_census()
     {

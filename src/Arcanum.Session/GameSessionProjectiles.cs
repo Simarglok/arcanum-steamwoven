@@ -178,6 +178,8 @@ public sealed partial class GameSessionOwner
             return GameSessionFailure.None;
         // ARC-SCRIPT-042: the throw's removal (0x466E00) would run the weapon's wield-off and remove-item scripts, which this path does not.
         if (wielded.ScriptPoints.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
+        // ARC-MAGIC-022: nor does it run a marked weapon's unwear (0x4CBFC0).
+        if (wielded.ItemSpells) return GameSessionFailure.ItemEffectUnsupported;
         var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
         var range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, requested.Weight);
         hero = hero with

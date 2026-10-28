@@ -60,9 +60,14 @@ slices (see [Not ready](#not-ready)).
   asked (a cost check) for an item with charges; that is not visible, because an item can only reach 0 charges by a spend that
   sets the flag, and the flag is read only at 0 charges (the use's spell path, the AI's fail-chance predictor RS6).
 - **Mark.** A worn item that carries item spells and was worn through a trigger host keeps the mark `SessionWornItem.ItemSpells`;
-  without a host `Equip` and `Unequip` refuse a move of a marked item (`ItemEffectUnsupported`), so a loaded game (whose runs are not
-  saved, MT9b) still takes the item off through a host and runs its unwear. The best-items start never marks: it skips items with
-  spells.
+  without a host `Equip` and `Unequip` refuse a move of a marked item or occupant (`ItemEffectUnsupported`), so a loaded game (whose
+  runs are not saved, MT9b) still takes the item off through a host and runs its unwear. The other ways a worn item leaves run no
+  executor yet and refuse a marked item: giving it to an NPC and the throw (`ItemEffectUnsupported`), the best-items start's take-off
+  and wield (it never marks, skipping items with spells) and a critical drop (step `ItemSpellsUnsupported`). A first break still
+  takes it off without its unwear (not ready).
+- **Batches.** The notes of an event pass are applied after the pass, so two charge payments of one pass are both made against the
+  count before it; one that then finds no charge left spends nothing, where the original would refuse it. A spend the session
+  refuses (a full record budget) is logged as `ChargeNotSaved`.
 - Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-49)): `durability.charges` (`entity`,
   `charges` 0..1,000,000, ordinal order, within the durability budget) and each worn item's `itemSpells`.
 
@@ -92,5 +97,6 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 - The combat and life events (parent hit, stunned, going unconscious, dying, attacks, damages, target hit) and the global attacker.
 - The item spell pane and hotkeys (0x57C040, 0x57C080, IT9), and spells aimed at an inventory item.
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.
+- A first break of a marked worn item takes it off without its unwear (0x4CBFC0), and its runs keep the item as source.
 - The viewer has no equip action, so nothing calls these executors there yet; the session's runs are not saved (MT9b), so a loaded
   game wears its items without their runs.

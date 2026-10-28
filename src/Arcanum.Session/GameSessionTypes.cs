@@ -431,8 +431,8 @@ public sealed class GameSessionSnapshot
     /// bit (ARC-WORLD-086); schema 46 adds the junk piles to <see cref="Inventory"/> (ARC-WORLD-063); schema 47 adds the
     /// LookForAmmo, LookForWeapon and LookForArmor danger bits (ARC-WORLD-088); schema 48 adds the items scripts created on the ground to
     /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081); schema 49 adds the items' spent spell charges to
-/// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022). Schemas 1..48 are refused, not
-/// migrated.</summary>
+    /// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022). Schemas 1..48 are refused, not
+    /// migrated.</summary>
     public const int CurrentSchemaVersion = 49;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,

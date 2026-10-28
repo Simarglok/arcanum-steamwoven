@@ -174,6 +174,55 @@ public sealed class SessionItemSpellTests
     }
 
     [TestMethod]
+    public void Charge_rows_are_canonical_belong_to_live_items_and_go_with_a_deleted_item()
+    {
+        var (owner, _, _) = Session();
+        using var _ = owner;
+        owner.SpendItemCharge(owner.Version, Coat, 4);
+        owner.SpendItemCharge(owner.Version, Ring, 2);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        const string Listed = "\"charges\":[{\"entity\":\"kit:2\",\"charges\":3},{\"entity\":\"kit:3\",\"charges\":1}]";
+        StringAssert.Contains(text, Listed);
+        void Fails(string to, SnapshotDecodeFailure failure) =>
+            Assert.AreEqual(failure, GameSessionSnapshotCodec.TryDecode(text.Replace(Listed, to, StringComparison.Ordinal)).Failure, to);
+        Fails("\"charges\":[{\"entity\":\"kit:3\",\"charges\":1},{\"entity\":\"kit:2\",\"charges\":3}]", SnapshotDecodeFailure.NotCanonical);
+        Fails("\"charges\":[{\"entity\":\"kit:2\",\"charges\":3},{\"entity\":\"kit:2\",\"charges\":1}]", SnapshotDecodeFailure.NotCanonical);
+        Fails("\"charges\":[{\"entity\":\"kit:2\"}]", SnapshotDecodeFailure.MissingField);
+        Fails("\"charges\":[{\"entity\":\"kit:2\",\"charges\":3,\"extra\":1}]", SnapshotDecodeFailure.UnknownField);
+        Fails("\"charges\":[{\"entity\":\"kit:2\",\"charges\":1000001}]", SnapshotDecodeFailure.OutOfRange);
+        var destroyed = text.Replace("\"destroyed\":[]", "\"destroyed\":[\"kit:2\"]", StringComparison.Ordinal);
+        Assert.AreNotEqual(text, destroyed);
+        Assert.AreEqual(GameSessionFailure.InvalidDurability, GameSessionOwner.Restore(Decode(destroyed), SessionFixtures.RestoreOptions()).Failure,
+            "a charge row of a deleted item");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, Coat, new(20, 0, 0, false)).Disposition);
+        Assert.IsNull(owner.QueryItemCharges(Coat), "the row goes with the item");
+        Assert.AreEqual(new SessionItemCharges(Ring, 1), owner.QueryDurability().Charges.Single());
+        Assert.IsNull(owner.QueryItemCharges(""));
+    }
+
+    [TestMethod]
+    public void A_marked_ring_moves_only_through_a_host()
+    {
+        var (owner, caster, triggers) = Session();
+        using var _ = owner;
+        SessionWearableItem Band() => new(Kit[2].Kind, [], true, new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring, Sizes = ArmorSizes.None },
+        });
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, Ring, EquipmentSlot.Ring1, Band(), Drawn, Accept, triggers: triggers).Disposition);
+        // The run ends (its source cleared), so only the mark keeps the ring's moves on the host.
+        foreach (var run in Runs(owner)) caster.Act(new(SessionSpellRunActionKind.ClearSource, run.Id));
+        Assert.AreEqual(0, Runs(owner).Count(r => r.Source is not null));
+        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, owner.Equip(owner.Version, Ring, EquipmentSlot.Ring2, Band(), Drawn, Accept).Failure,
+            "the marked ring itself");
+        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, owner.Unequip(owner.Version, EquipmentSlot.Ring1, Accept).Failure);
+        var moved = owner.Equip(owner.Version, Ring, EquipmentSlot.Ring2, Band(), Drawn, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, moved.Disposition, $"{moved.Failure}");
+        Assert.IsTrue(owner.QueryEquipment().Worn.Single().ItemSpells, "the mark moves with the ring");
+    }
+
+    [TestMethod]
     public void Wearing_starts_the_wear_spell_with_the_item_as_source_and_unwearing_stops_it_and_casts_the_unwear()
     {
         var (owner, caster, triggers) = Session();

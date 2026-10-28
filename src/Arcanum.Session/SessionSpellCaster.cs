@@ -95,6 +95,9 @@ public enum SpellCastEventKind
     EyeCandyRemoved,
     /// <summary>ARC-MAGIC-022: a payment spent a charge of the item <see cref="SpellCastEvent.Object"/>; the value is the charges left.</summary>
     ChargeSpent,
+    /// <summary>ARC-MAGIC-022: the session refused to save a payment's spent charge of the item <see cref="SpellCastEvent.Object"/>
+    /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
+    ChargeNotSaved,
 }
 
 /// <summary>
@@ -672,13 +675,17 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     private void Pay(int run, string payer, SpellPayment payment)
     {
-        // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved.
-        if (payment.ChargeSpent && Item(payer) is { Charges: > 0 } item)
+        // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved. The notes of an event pass are applied
+        // after the pass, so two payments of one pass were both made against the count before it: one that finds no charge left
+        // spends nothing (the original refuses the second, NoCharges). A spend the session refuses (a full record budget) is logged.
+        if (payment.ChargeSpent)
         {
-            // The item's own count is the baseline until the session holds one.
-            var baseline = Math.Max(1, _items!(payer)!.Charges);
-            if (_owner.SpendItemCharge(_owner.Version, payer, baseline).Disposition == GameSessionDisposition.Changed)
-                _log.Add(new(SpellCastEventKind.ChargeSpent, run, item.Charges - 1, payer));
+            if (_items?.Invoke(payer) is not { } raw || raw.Entity != payer) return;
+            var left = _owner.QueryItemCharges(payer) ?? raw.Charges;
+            if (left <= 0) return;
+            var spent = _owner.SpendItemCharge(_owner.Version, payer, Math.Max(1, raw.Charges));
+            _log.Add(spent.Disposition == GameSessionDisposition.Changed ? new(SpellCastEventKind.ChargeSpent, run, left - 1, payer)
+                : new(SpellCastEventKind.ChargeNotSaved, run, (int)spent.Failure, payer));
             return;
         }
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
