@@ -70,8 +70,10 @@ public sealed class LauncherScreenTests
         Assert.AreEqual("First start: confirm the game folder and the rules.", screen.ReasonText);
         screen.SelectRules(RuleMode.Original);
         screen.SetShowAtStart(true);
+        Assert.IsFalse(screen.Settings.DebugMode, "ARC-DEV-050: the debug mode is off by default");
+        screen.SetDebugMode(true);
         var played = screen.Play()!;
-        Assert.AreEqual((detected, RuleMode.Original, true, GameSource.Other), (played.GameRoot, played.Rules, played.ShowAtStart, played.GameSource));
+        Assert.AreEqual((detected, RuleMode.Original, true, GameSource.Other, true), (played.GameRoot, played.Rules, played.ShowAtStart, played.GameSource, played.DebugMode));
         Assert.IsTrue(played.GameIdentity!.SameAs(startup.Folder!.Identity), "Play stores the identity, so a later change is noticed");
         Assert.AreEqual(LauncherSettings.Defaults.Display, played.Display, "the display at start is kept as stored");
         Assert.Throws<ArgumentOutOfRangeException>(() => screen.SelectRules((RuleMode)7));

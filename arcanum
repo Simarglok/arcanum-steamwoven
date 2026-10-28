@@ -33,6 +33,8 @@ AREA_MAP = "Arcanum1-024-fixed"
 # ARC-UI-012: `area` opens the main menu first, as the game does; builds exported before the menu (ARC-UI-011, merged in
 # this commit) refuse its argument, so such a build is refused here with the way out.
 MAIN_MENU_COMMIT = "309d1236ba3a0a9ed554bc86c696090c3e661d8b"
+# ARC-DEV-050: the debug mode's `--debug-mode` (added in this commit); older builds refuse it as an argument.
+DEBUG_MODE_COMMIT = "33748757d4aaf24ebccb41c1842c27b3a0626797"
 
 
 def main_checkout() -> Path:
@@ -70,17 +72,27 @@ def main_menu_requested(args: argparse.Namespace) -> bool:
     return args.mode == "area" and not getattr(args, "no_main_menu", False) and not getattr(args, "hero", None)
 
 
-def build_has_main_menu(manifest: dict) -> bool:
-    """True when the build's commit contains the main menu (ARC-UI-011) in this checkout's history."""
+def build_holds(manifest: dict, change: str) -> bool:
+    """True when the build's commit contains `change` in this checkout's history (an unknown commit is not trusted)."""
     try:
         commit = manifests.manifest_candidate(manifest)
     except ValueError:
         return False
     try:
-        return subprocess.call(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MAIN_MENU_COMMIT, commit],
+        return subprocess.call(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", change, commit],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
     except OSError:
         return False
+
+
+def build_has_main_menu(manifest: dict) -> bool:
+    """True when the build's commit contains the main menu (ARC-UI-011) in this checkout's history."""
+    return build_holds(manifest, MAIN_MENU_COMMIT)
+
+
+def build_has_debug_mode(manifest: dict) -> bool:
+    """True when the build's commit contains the debug mode's argument (ARC-DEV-050) in this checkout's history."""
+    return build_holds(manifest, DEBUG_MODE_COMMIT)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -89,7 +101,8 @@ def run(args: argparse.Namespace) -> int:
     main_menu = args.mode in ("map", "area") and main_menu_requested(args)
     extra = (("--area-map", name) if args.mode in ("map", "area") else ()) + (("--hero", args.hero) if getattr(args, "hero", None) else ()) \
         + (("--area-map-sector", args.sector) if getattr(args, "sector", None) else ()) \
-        + (("--main-menu",) if main_menu else ())
+        + (("--main-menu",) if main_menu else ()) \
+        + (("--debug-mode",) if getattr(args, "debug_mode", False) else ())
     roots = config.load_config().get("artifactRoots", {})
     if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
         print("Run ./arcanum setup first.", file=sys.stderr)
@@ -108,6 +121,11 @@ def run(args: argparse.Namespace) -> int:
               "commit this checkout does not hold) and may not open it: export a fresh "
               f"{launch.UNIVERSAL_TASK} build, or run ./arcanum {args.mode} with --no-main-menu"
               + (" (or without --main-menu)" if args.mode == "map" else "") + ".", file=sys.stderr)
+        return 2
+    if getattr(args, "debug_mode", False) and not build_has_debug_mode(manifest):
+        print("The current build was not exported from a commit that holds the debug mode (ARC-DEV-050; an older build, or a "
+              f"commit this checkout does not hold) and may not accept it: export a fresh {launch.UNIVERSAL_TASK} build, or run "
+              f"./arcanum {args.mode} without --debug-mode.", file=sys.stderr)
         return 2
     candidate = f"{ROOT_ID}:{task}:{manifest_path.parent.name}"
     # A real run leaves the terrain launch selection on this build (as `tools/arcanum-local configure
@@ -269,6 +287,7 @@ def parser() -> argparse.ArgumentParser:
     menu = command.add_mutually_exclusive_group()
     menu.add_argument("--main-menu", action="store_true", help="open the main menu first (the default without --hero; ARC-UI-012); not with --hero")
     menu.add_argument("--no-main-menu", action="store_true", help="start playing at once with the diagnostic PC profile, without the main menu")
+    command.add_argument("--debug-mode", action="store_true", help="debug mode (ARC-DEV-050): the world map (W) lists every area and teleports there; not gameplay")
     command.add_argument("--dry-run", action="store_true")
     command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
     command.set_defaults(func=run, mode="area")
@@ -278,6 +297,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--sector", help="X,Y: open the map at this sector (default: the transfer arrival or the map-list start)")
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
     command.add_argument("--main-menu", action="store_true", help="open the main menu first (new game with a pre-made hero, last save, load); not with --hero")
+    command.add_argument("--debug-mode", action="store_true", help="debug mode (ARC-DEV-050): the world map (W) lists every area and teleports there; not gameplay")
     command.add_argument("--dry-run", action="store_true")
     command.add_argument("--no-queue", action="store_true", help="start at once instead of taking the launch queue's Godot slot")
     command.set_defaults(func=run, mode="map")
