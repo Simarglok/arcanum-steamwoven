@@ -86,6 +86,11 @@ public static class AreaContainerLoot
             case OpenAttempt.MagicallyHeld: return new(AreaContainerOpenOutcome.MagicallyHeld, null, false, "attempt=MagicallyHeld");
             case not OpenAttempt.Opens: return new(AreaContainerOpenOutcome.Unavailable, null, false, $"attempt={attempt}");
         }
+        // A container to generate needs the restock host; while it loads, the open is refused before the use script runs, so a retry does
+        // not run the script twice.
+        var generate = (map.RestockSeed(container).ContainerFlags & Arcanum.Simulation.Items.RestockRules.GeneratedOnceFlag) != 0 &&
+            !session.QueryContainerGenerated(openable.Map, container);
+        if (generate && !world.RestockReady) return new(AreaContainerOpenOutcome.GenerationRefused, null, false, "generation: the restock host is not ready");
         AreaScriptedUse? ran = null;
         if (holder.ScriptPoints.Contains(SessionScriptPoint.Use))
         {
@@ -101,8 +106,7 @@ public static class AreaContainerLoot
         // Only a container with flag 0x200 (its T0 field 0x38) the session has not generated asks the session: any other opens while the
         // restock host still loads.
         SessionGenerateOnceResult? generation = null;
-        if ((map.RestockSeed(container).ContainerFlags & Arcanum.Simulation.Items.RestockRules.GeneratedOnceFlag) != 0 &&
-            !session.QueryContainerGenerated(openable.Map, container))
+        if (generate)
         {
             generation = session.GenerateContainerOnce(session.Version, container, world);
             if (generation.Disposition == GameSessionDisposition.Rejected)

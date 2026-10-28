@@ -75,7 +75,8 @@ public sealed record PremadeHero(int BasicPrototype, int Prototype, int Race, in
 {
     public const int StartPrimaryStat = 8, StartLevel = 1, StartUnspentPoints = 5;
     /// <summary>ARC-WORLD-101: the prototype's player name (field 0x10E, the PC's only string field, v119 slot 86) as its stored bytes up
-    /// to the terminating zero; empty when the field is unset. The generated-once seed reads it (0x441B60, ledger RK10).</summary>
+    /// to the first zero (where the original's string ends); empty when the field is unset. The generated-once seed reads it (0x441B60,
+    /// ledger RK10).</summary>
     public IReadOnlyList<byte> PlayerName { get; init; } = Array.Empty<byte>();
 }
 
@@ -179,7 +180,7 @@ public static class PremadeHeroReader
 
         return new(PremadeHeroFailure.None, new(basicPrototype, number, race, gender, stats.GetValueOrDefault(AlignmentStat),
             stats.GetValueOrDefault(AgeStat), Int(f[PortraitSlot]), Int(f[BackgroundSlot]), Int(f[SchemeSlot]), raceEffect.Rule, genderEffect,
-            setNumber, gold, items.AsReadOnly()) { PlayerName = Array.AsReadOnly(f[PlayerNameSlot].Text?.ToArray() ?? []) });
+            setNumber, gold, items.AsReadOnly()) { PlayerName = Array.AsReadOnly((f[PlayerNameSlot].Text ?? []).TakeWhile(b => b != 0).ToArray()) });
     }
 
     /// <summary>

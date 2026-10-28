@@ -268,13 +268,15 @@ public sealed class PremadeHeroTests
     }
 
     [TestMethod]
-    public void The_player_name_is_the_string_field_s_bytes_up_to_its_terminating_zero()
+    public void The_player_name_is_the_string_field_s_bytes_up_to_its_first_zero()
     {
         // ARC-WORLD-101: field 0x10E (slot 86), the generated-once seed's name bytes; unset reads as empty.
         Assert.AreEqual(0, PremadeHeroReader.Read(Inputs(Files()), 16069).Hero!.PlayerName.Count);
         var pc = Pc();
         pc[86] = new byte[] { (byte)'S', (byte)'y', (byte)'n', 0xE9 };
         CollectionAssert.AreEqual(new byte[] { (byte)'S', (byte)'y', (byte)'n', 0xE9 }, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.PlayerName.ToArray());
+        pc[86] = new byte[] { (byte)'A', 0, (byte)'B' };
+        CollectionAssert.AreEqual(new byte[] { (byte)'A' }, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.PlayerName.ToArray(), "the string ends at its first zero");
         pc[86] = System.Array.Empty<byte>();
         Assert.AreEqual(0, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.PlayerName.Count);
     }

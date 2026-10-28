@@ -678,7 +678,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   Original rule mode (its far click does not move); the *walk to …* actions of far objects do
   not read the mode yet (hover and use reach are ARC-WORLD-068's). The search itself is not run on hover, so
   a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
-  is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
+  is *pick up* within reach 1, else *walk to pick up*, and a dead NPC (since ARC-WORLD-101 also a standing container) is *loot* or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
   forbidden for no route, help (question arrow) for talk, pointing hand for use, pickup and
   loot, arrow otherwise. A use or talk that is then refused (blocked step, no standable cell) is
@@ -845,7 +845,7 @@ bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 ### Inventory window, pickup and loot (ARC-UI-004)
 
 In `crash-site-area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
-is wired to the viewer: items can be picked up from the ground and taken from dead NPCs, and
+is wired to the viewer: items can be picked up from the ground and taken from dead NPCs (since ARC-WORLD-101 also from containers), and
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
 [`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.

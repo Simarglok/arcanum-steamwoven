@@ -59,6 +59,26 @@ public sealed class MerchantStockStateTests
     }
 
     [TestMethod]
+    public void A_container_s_loot_window_takes_a_named_gold_pile_ammunition_units_and_items()
+    {
+        // ARC-WORLD-101: a standing container is a holder of TakeGoldFromNpc (the pile given) and TakeAmmoFromNpc, as its loot window
+        // takes from it; a container's use script ran at the window's admission, so it refuses no loot.
+        var seed = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "chest" ? h with { ScriptPoints = [SessionScriptPoint.Use] } : h)] };
+        using var owner = Hero(seed);
+        var gold = owner.QueryGold();
+        Changed(owner.TakeGoldFromNpc(owner.Version, "chest", 5, "gold-b"), "gold-b");
+        Assert.AreEqual(gold + 5, owner.QueryGold());
+        Changed(owner.TakeGoldFromNpc(owner.Version, "chest", 30), "gold-a");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.TakeGoldFromNpc(owner.Version, "chest", 1, "purse").Failure, "the smith's pile is not the chest's");
+        Assert.AreEqual(GameSessionFailure.GoldShort, owner.TakeGoldFromNpc(owner.Version, "chest", 8, "gold-b").Failure, "7 coins are left");
+        Changed(owner.TakeAmmoFromNpc(owner.Version, "chest", "bullets", 15, Bullets, Accept));
+        Assert.AreEqual(5, owner.QueryAmmo("bullets")!.Value.Units);
+        Changed(owner.LootItem(owner.Version, "chest", "amulet", Accept), "amulet");
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.TakeGoldFromNpc(owner.Version, "ghost", 1).Failure);
+        CollectionAssert.AreEqual(new[] { "gold-zero", "axe", "gold-b", "bullets" }, List(owner, "chest"));
+    }
+
+    [TestMethod]
     public void The_open_moves_the_containers_coins_onto_the_merchant_and_identifies_both_lists()
     {
         using var owner = Hero();

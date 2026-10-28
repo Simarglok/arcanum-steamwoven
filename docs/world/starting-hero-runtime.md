@@ -39,9 +39,9 @@ the PC's insert check (carry weight, room) is **NOT evaluated**; a refused item 
 twelve installed sets no item is refused (D), and the heaviest-kit check against ST 8 is NOT_VERIFIED.
 
 ARC-WORLD-101: `PremadeHero.PlayerName` is the prototype's player name (field 0x10E, the PC block's one string field, v119 slot 86) as
-its stored bytes up to the terminating zero (empty when unset); every installed pre-made prototype stores one (`RealData` test). The
-viewer gives it as the hero's name to the seed of a generated-once container
-([container loot window](barter-runtime.md#container-loot-window-arc-world-101)); the session does not hold it.
+its stored bytes up to the first zero (empty when unset); every installed pre-made prototype stores one (`RealData` test). The viewer's
+`CreateSession` makes it the session hero's name (`SetHeroPlayerName`, ARC-UI-033; a refusal fails the start), which seeds the
+generated-once containers ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)).
 
 Typed refusals (`PremadeHeroFailure`, fail-closed): missing, ambiguous or invalid prototype (size, wire, trailing bytes,
 number); not a PC; race outside 0..10 or gender outside 0/1; prototype state a new PC would carry that is not modelled

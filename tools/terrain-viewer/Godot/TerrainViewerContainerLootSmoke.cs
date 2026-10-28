@@ -62,7 +62,7 @@ public partial class TerrainViewerApp
         Require(open is { Outcome: AreaContainerOpenOutcome.Opened }, $"the crate opens ({open?.Outcome} {open?.Detail})");
         var done = open!.Generation?.Regeneration;
         Require(open.Generation?.Disposition == GameSessionDisposition.Changed && done?.Outcome is SessionRestockOutcome.Regenerated or SessionRestockOutcome.Cleared,
-            $"the first open generated it ({open.Generation?.Disposition}/{done?.Outcome}; the hero's name is {(_areaHeroPlayerName is null ? "unknown" : "known")})");
+            $"the first open generated it ({open.Generation?.Disposition}/{done?.Outcome}; the hero's name has {session.QueryHero()!.PlayerName.Length} bytes)");
         Require(session.QueryContainerGenerated(mapId, crate.Entity), "the session records it as generated");
         Require(!session.QueryRestocks().Any(r => r.Holder == crate.Entity), "the window's schedule set no restock (its source is 0 now)");
         Require(InventoryOpen && _inventoryPanel!.Holder == crate.Entity, "the loot window shows the crate");

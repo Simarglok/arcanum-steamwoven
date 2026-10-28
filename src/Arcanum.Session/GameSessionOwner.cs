@@ -875,7 +875,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead, or one
     /// that died in this session (ARC-COMBAT-005, <see cref="QueryNpcKilled"/>), is lootable here; since ARC-WORLD-101 a container of the
     /// seed that did not spill is too (its seed items, the items a barter or a regeneration put into it), whose open the host admits
-    /// (lock, unlock script: the window's admission 0x572370) and generates first (<see cref="GenerateContainerOnce"/>). Refused before any effect, beyond the item rules of
+    /// (lock, use script: the window's admission 0x572370, so a container's use script is no refusal here) and generates first
+    /// (<see cref="GenerateContainerOnce"/>). Refused before any effect, beyond the item rules of
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script without a host. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled without a host (the
     /// session has no PC object); since ARC-SCRIPT-041 that slot runs through <paramref name="scripts"/>, with the item's remove-item script.
@@ -899,8 +900,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var container = row.Kind == SessionHolderKind.Container;
         if (container ? SpillCell(_actor.Map, seed, holder) is not null : row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder))
             return RejectItem(GameSessionFailure.HolderNotLootable);
-        if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // A container's use script ran at its window's admission (the host's, 0x572370); a body's is not run (not modelled).
         if (container) return TakeFromContainer(holder, item, false, 0, default, insertCheck, scripts);
+        if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
             return Take(seed, new(item, _inventory.AddedFacts(made)), holder, insertCheck, scripts);

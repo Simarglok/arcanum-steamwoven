@@ -514,7 +514,7 @@ Since ARC-WORLD-063 a junk pile is drawn in place of its items ([junk piles](#ju
   by the viewer's conversation host, runs node 1's `IN -2804` through the session port and the ring (1714) enters the
   PC's list, leaving his weapon and worn armor. Without script content five of the six dead-NPC items loot and 2527 is
   refused for its `SAP_INSERT_ITEM` script; with the content (ARC-SCRIPT-013) it loots too, script 1341 prints line 1 of
-  its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
+  its DLG and writes no flag, and once global flag 1085 is set it returns at once and prints nothing. All 37 core ground items pick up. Virgil is not lootable; a chest is (since ARC-WORLD-101), but only for its own items. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
 
 ## Ammunition (ARC-WORLD-066)

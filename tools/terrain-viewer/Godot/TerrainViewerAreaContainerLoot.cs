@@ -18,6 +18,8 @@ public partial class TerrainViewerApp
 {
     // The session whose container the loot window shows (its close runs against that session only).
     private GameSessionOwner? _containerLootSession;
+    // The runtime map of that container (its close finds it there after a map change).
+    private int _containerLootMap;
 
     /// <summary>The last container open's result, for the smoke.</summary>
     private AreaContainerOpen? _lastContainerOpen;
@@ -45,6 +47,7 @@ public partial class TerrainViewerApp
         if (open.Opening) PlayContainerSound(target.Row, OpenableSoundAction.Open);
         if (open.Generation?.Disposition == GameSessionDisposition.Changed) SyncAreaInventory();
         _containerLootSession = _areaSession;
+        _containerLootMap = map.RuntimeMap;
         OpenInventory(target.Entity);
     }
 
@@ -60,7 +63,7 @@ public partial class TerrainViewerApp
     {
         var session = _containerLootSession;
         _containerLootSession = null;
-        if (holder is null || session is null || !ReferenceEquals(session, _areaSession) || _inventoryHost?.Map(CurrentAreaMap) is not { } map) return;
+        if (holder is null || session is null || !ReferenceEquals(session, _areaSession) || _inventoryHost?.Map(_containerLootMap) is not { } map) return;
         var closed = AreaContainerLoot.Close(session, map, holder);
         GD.Print($"ARC-WORLD-101 container close entity={holder} closed={closed}");
         if (closed && map.TryGetRow(holder, out var row)) PlayContainerSound(row, OpenableSoundAction.Close);

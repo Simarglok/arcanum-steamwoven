@@ -41,7 +41,8 @@ public sealed class AreaContainerLootTests
     private static SessionItemFacts Facts(SessionItemType type, int prototype) => new(new(type, prototype, 4200, 34200), 10, 0, 0, null, []);
 
     // 0 a chest at (100,100) holding 9 a ring; 1 a locked chest; 2 a jammed one; 3 one with a use script; 4 one with an unlock script;
-    // 5 a crate with flag 0x200 and source 5 at (107,100) holding 10 an axe and 11 a persistent amulet.
+    // 5 a crate with flag 0x200 and source 5 at (107,100) holding 10 an axe and 11 a persistent amulet; 6 a magically held chest; 7 one
+    // with flag 0x100 (it stays open).
     private static AreaInventoryMap Map()
     {
         var seed = new SessionMapInventorySeed(
@@ -52,6 +53,8 @@ public sealed class AreaContainerLootTests
                 new(Entity(3), SessionHolderKind.Container, false, false, [SessionScriptPoint.Use], []),
                 new(Entity(4), SessionHolderKind.Container, false, false, [3], []),
                 new(Entity(5), SessionHolderKind.Container, false, false, [], [Entity(10), Entity(11)]),
+                new(Entity(6), SessionHolderKind.Container, false, false, [], []),
+                new(Entity(7), SessionHolderKind.Container, false, false, [], []),
             ],
             [
                 new(Entity(9), Facts(SessionItemType.Armor, 2805), null),
@@ -61,7 +64,8 @@ public sealed class AreaContainerLootTests
         var rows = new[]
         {
             Container(0, 100), Container(1, 101, LockRules.LockedBit), Container(2, 102, LockRules.JammedBit), Container(3, 103, script: SessionScriptPoint.Use),
-            Container(4, 104, script: 3), Container(5, CrateX, RestockRules.GeneratedOnceFlag), Item(9, 7, 100), Item(10, 5, CrateX), Item(11, 7, CrateX),
+            Container(4, 104, script: 3), Container(5, CrateX, RestockRules.GeneratedOnceFlag), Container(6, 108, LockRules.MagicallyHeldBit),
+            Container(7, 109, AreaContainerLoot.StaysOpenFlag), Item(9, 7, 100), Item(10, 5, CrateX), Item(11, 7, CrateX),
         }.ToDictionary(row => Entity(row.Key.SourceIndex));
         return new(1, seed, rows, restock: new Dictionary<string, AreaRestockSeed> { [Entity(5)] = new(CrateSource, RestockRules.GeneratedOnceFlag) },
             persistent: [Entity(11)]);
@@ -90,20 +94,26 @@ public sealed class AreaContainerLootTests
 
     private static readonly byte[] Name = [(byte)'S', (byte)'y', (byte)'n'];
 
-    private static AreaHeroLoad Hero() => new(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!,
-        new(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
-            new(67, [new(CharacterStat.Dexterity, StatModifierOperator.Add, 1)]), null, 0, []) { Background = 41 }, 2352, 0, null, "synthetic");
+    // A pre-made hero load whose prototype read carries a player name (or none).
+    private static AreaHeroLoad Hero(IReadOnlyList<byte>? name = null)
+    {
+        var read = new PremadeHero(16069, 16089, 3, 1, 0, 20, 1032, 41, 0, new(67, true, []), null, 0, 0, []) { PlayerName = name ?? [] };
+        return new(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!,
+            new(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
+                new(67, [new(CharacterStat.Dexterity, StatModifierOperator.Add, 1)]), null, 0, []) { Background = 41 }, 2352, 0,
+            new PremadeHeroRead(PremadeHeroFailure.None, read), "synthetic");
+    }
 
     private static (GameSessionOwner Session, AreaInventoryMap Map, AreaInventoryHost Inventory, AreaEventWorld World) Start(bool hero = false,
         IReadOnlyList<byte>? name = null, bool ready = true)
     {
         var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
-            AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero ? Hero() : null);
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero ? Hero(name) : null);
         var session = created.Owner ?? throw new InvalidOperationException("SESSION_" + created.Failure);
         var map = Map();
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
-        var host = new AreaRestockHost(session, inventory, Data(), new Screen(), () => name);
+        var host = new AreaRestockHost(session, inventory, Data(), new Screen());
         return (session, map, inventory, new AreaEventWorld(() => null, () => null, restock: () => ready ? host : null));
     }
 
@@ -138,6 +148,10 @@ public sealed class AreaContainerLootTests
         Assert.IsTrue(AreaContainerLoot.Close(session, map, Entity(0)));
         Assert.AreEqual(0, session.QueryOpenable(openable, baseline).Frame);
         Assert.IsFalse(AreaContainerLoot.Close(session, map, Entity(0)));
+        // A container with flag 0x100 opens but stays open when its window closes.
+        Assert.IsTrue(AreaContainerLoot.Open(session, map, Entity(7), 2, world).Opening);
+        Assert.IsFalse(AreaContainerLoot.Close(session, map, Entity(7)));
+        Assert.AreEqual(1, session.QueryOpenable(new(new(1), Entity(7)), new(OpenableKind.Container, AreaContainerLoot.StaysOpenFlag, 0, 0)).Frame);
         // An ART of one frame keeps frame 0, though the open sound plays.
         var single = AreaContainerLoot.Open(session, map, Entity(0), frameCount: 1, world);
         Assert.AreEqual((AreaContainerOpenOutcome.Opened, true), (single.Outcome, single.Opening));
@@ -152,7 +166,7 @@ public sealed class AreaContainerLootTests
         var revision = session.Version.Revision;
         foreach (var (index, outcome, sound) in new[]
         {
-            (1, AreaContainerOpenOutcome.Locked, true), (2, AreaContainerOpenOutcome.Jammed, true),
+            (1, AreaContainerOpenOutcome.Locked, true), (2, AreaContainerOpenOutcome.Jammed, true), (6, AreaContainerOpenOutcome.MagicallyHeld, true),
             (3, AreaContainerOpenOutcome.UseScriptUnsupported, false), (4, AreaContainerOpenOutcome.UnlockScriptUnsupported, false),
         })
         {
@@ -195,26 +209,38 @@ public sealed class AreaContainerLootTests
         // The kept amulet and the new goods are looted; the destroyed axe is gone.
         Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(5), Entity(11)).Disposition);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, inventory.Loot(session, Entity(5), Entity(10)).Failure);
-        if (done.Created.Count > 0) Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(5), done.Created[0]).Disposition);
+        Assert.IsTrue(loot.BasicPrototypes.Count > 0, "the fixture's seed creates at least one axe");
+        Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(5), done.Created[0]).Disposition);
+        Assert.AreEqual(GameSessionFailure.GoldUnavailable, session.TakeGoldFromNpc(session.Version, Entity(5), 1, done.Pile).Failure, "no hero holds gold");
     }
 
     [TestMethod]
-    public void The_hero_s_name_comes_from_the_viewer_and_without_it_the_container_keeps_its_list()
+    public void A_pre_made_hero_starts_with_its_prototype_name_which_seeds_the_generation()
     {
+        // ARC-WORLD-101: CreateSession sets the session hero's player name from the pre-made prototype (field 0x10E); the restock host
+        // gives the session's name; a hero without one gives an empty name, so the seed has no name term.
         var (session, map, _, world) = Start(hero: true, name: Name);
         using (session)
         {
+            CollectionAssert.AreEqual(Name, session.QueryHero()!.PlayerName.ToArray());
             CollectionAssert.AreEqual(Name, world.GeneratedOnceFacts(new(1), Entity(5))!.PlayerName.ToArray());
-            Assert.AreEqual(SessionRestockOutcome.Regenerated, AreaContainerLoot.Open(session, map, Entity(5), 2, world).Generation!.Regeneration!.Outcome);
+            var done = AreaContainerLoot.Open(session, map, Entity(5), 2, world).Generation!.Regeneration!;
+            Assert.AreEqual(SessionRestockOutcome.Regenerated, done.Outcome);
+            // Its coin pile moves through the quantity window's gold take with the pile given.
+            Assert.IsNotNull(done.Pile);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.TakeGoldFromNpc(session.Version, Entity(5), done.Coins, done.Pile).Disposition);
+            Assert.AreEqual(done.Coins, session.QueryGold());
         }
-        var (unnamed, unnamedMap, _, unnamedWorld) = Start(hero: true, name: null);
+        var (unnamed, _, _, unnamedWorld) = Start(hero: true, name: null);
         using (unnamed)
         {
-            Assert.IsNull(unnamedWorld.GeneratedOnceFacts(new(1), Entity(5)));
-            var open = AreaContainerLoot.Open(unnamed, unnamedMap, Entity(5), 2, unnamedWorld);
-            Assert.AreEqual((AreaContainerOpenOutcome.Opened, SessionRestockOutcome.Unsupported), (open.Outcome, open.Generation!.Regeneration!.Outcome));
-            Assert.IsFalse(unnamed.QueryContainerGenerated(new(1), Entity(5)));
+            Assert.AreEqual(0, unnamed.QueryHero()!.PlayerName.Length);
+            Assert.AreEqual((CrateX, 0), (unnamedWorld.GeneratedOnceFacts(new(1), Entity(5))!.LocationX, unnamedWorld.GeneratedOnceFacts(new(1), Entity(5))!.PlayerName.Count));
         }
+        // A name the session refuses (over 64 bytes) fails the start.
+        var refused = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, Hero(Enumerable.Repeat((byte)'A', SessionHeroLimits.MaxPlayerNameBytes + 1).ToArray()));
+        Assert.AreEqual((null, GameSessionFailure.InvalidPlayerName), (refused.Owner, refused.Failure));
     }
 
     [TestMethod]
@@ -224,8 +250,12 @@ public sealed class AreaContainerLootTests
         using var owned = session;
         var revision = session.Version.Revision;
         var open = AreaContainerLoot.Open(session, map, Entity(5), 2, world);
-        Assert.AreEqual((AreaContainerOpenOutcome.GenerationRefused, GameSessionFailure.InventoryUnavailable), (open.Outcome, open.Generation!.Failure));
+        Assert.AreEqual((AreaContainerOpenOutcome.GenerationRefused, (SessionGenerateOnceResult?)null), (open.Outcome, open.Generation));
         Assert.AreEqual(revision, session.Version.Revision, "no frame was written");
+        // Refused before the use script: a retry does not run it twice.
+        var runs = 0;
+        AreaContainerLoot.Open(session, map, Entity(5), 2, world, _ => { runs++; return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic"); });
+        Assert.AreEqual(0, runs);
         // A container without flag 0x200 still opens: the generation changes nothing there.
         Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(0), 2, world).Outcome);
     }
