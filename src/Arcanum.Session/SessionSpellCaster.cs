@@ -98,6 +98,10 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-022: the session refused to save a payment's spent charge of the item <see cref="SpellCastEvent.Object"/>
     /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
     ChargeNotSaved,
+    /// <summary>ARC-MAGIC-024: this many item events were dropped unfired (<see cref="SessionSpellCaster.FireItemEvents"/>): beyond
+    /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing, or refused by the session (the
+    /// <see cref="GameSessionFailure"/> in <see cref="SpellCastEvent.Detail"/>).</summary>
+    ItemEventsDropped,
 }
 
 /// <summary>
@@ -125,6 +129,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // Whose charge cells a payment spends: the payer the rules asked for last (only the hero's are modelled). The rules ask the payer
     // before the cells of every payment; a run without a source asks neither and pays nothing.
     private string? _cellsPayer;
+    // ARC-MAGIC-024: the item events this host's life steps called for, not fired yet, and whether a firing is under way (the runs its
+    // executor calls start add theirs to the end).
+    private readonly List<SessionItemEvent> _itemEvents = [];
+    private bool _firingItems;
 
     /// <summary>A host over <paramref name="map"/>; with <paramref name="items"/> (ARC-MAGIC-020) the items a critter of the map holds
     /// are objects too (<see cref="Item"/>), so their spells can run with the item as source.</summary>
@@ -144,6 +152,19 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>What the casts so far left for the host, in order.</summary>
     public IReadOnlyList<SpellCastEvent> Log => _log;
+
+    /// <summary>
+    /// ARC-MAGIC-024: the item spell executors this host fires the item events of its own life steps through: a spell's damage step
+    /// (DH1: the run's parent the attacker, its other object or else its parent the damage source), a payment's fatigue (0x450420) and
+    /// the life steps of its event passes (the fatigue setter's going unconscious, IC4). They fire after the run's pass, once the
+    /// notes are applied (<see cref="Act"/>, <see cref="ProcessEvents"/>), since the session refuses a run start while the run rules
+    /// act. None: nothing fires and the events are dropped.
+    /// </summary>
+    public ISessionItemTriggers? ItemTriggers { get; set; }
+
+    /// <summary>ARC-MAGIC-024: the item events one firing walks at most, those the runs it starts call for included (a technical bound:
+    /// the goals of those runs play at once, so a chain the original spreads over frames would not end here, MG46).</summary>
+    public const int MaxItemEventsPerFiring = 64;
 
     private MagicAnomalyProfile Profile => _owner.Rules.Magic;
 
@@ -643,6 +664,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var before = _owner.QuerySpellRuns();
         var result = _owner.ActOnSpellRun(_owner.Version, this, action);
         Apply(result.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        FirePendingItems();
         return result;
     }
 
@@ -655,9 +677,74 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         var before = _owner.QuerySpellRuns();
         var pass = _owner.ProcessEvents(_events is ISessionScriptWorld scripts ? new ScriptPassWorld(this, scripts) : new PassWorld(this, _events), budget);
+        // ARC-MAGIC-024: the pass's life steps call for theirs too (the encumbrance drain, a poison death fires nothing without a killer).
+        foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
         foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        FirePendingItems();
         return pass;
     }
+
+    /// <summary>
+    /// ARC-MAGIC-024: fires <paramref name="events"/> (a life step's <see cref="SessionLifeResult.ItemEvents"/> the host made itself:
+    /// a run step's fatigue, the overexertion, a script's damage or kill) after any this host has not fired yet, through
+    /// <see cref="ItemTriggers"/> (<see cref="GameSessionOwner.FireItemEvents"/> with the map's worn items of an NPC), in order; the
+    /// events the started runs' life steps call for follow, up to <see cref="MaxItemEventsPerFiring"/> in all (the rest are dropped
+    /// and logged). During a firing the events only join it. Nothing without <see cref="ItemTriggers"/>: the events are dropped.
+    /// </summary>
+    public IReadOnlyList<SessionItemTriggerFiring> FireItemEvents(IEnumerable<SessionItemEvent> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        _itemEvents.AddRange(events);
+        return FirePendingItems();
+    }
+
+    /// <summary>ARC-MAGIC-024: the dying animation of <paramref name="critter"/> ended (0x42FF40, IC5): its dying with no other object
+    /// when it is dead (<see cref="GameSessionOwner.QueryDyingEndItemEvents"/>), fired as <see cref="FireItemEvents"/> does.</summary>
+    public IReadOnlyList<SessionItemTriggerFiring> DyingAnimationEnded(string critter)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        return FireItemEvents(LifeTarget(critter) is { } target ? _owner.QueryDyingEndItemEvents(target) : []);
+    }
+
+    private IReadOnlyList<SessionItemTriggerFiring> FirePendingItems()
+    {
+        if (_firingItems) return [];
+        if (ItemTriggers is not { } triggers)
+        {
+            _itemEvents.Clear();
+            return [];
+        }
+        var fired = new List<SessionItemTriggerFiring>();
+        _firingItems = true;
+        try
+        {
+            for (var walked = 0; _itemEvents.Count > 0; walked++)
+            {
+                if (walked == MaxItemEventsPerFiring)
+                {
+                    _log.Add(new(SpellCastEventKind.ItemEventsDropped, -1, _itemEvents.Count));
+                    _itemEvents.Clear();
+                    break;
+                }
+                var next = _itemEvents[0];
+                _itemEvents.RemoveAt(0);
+                var result = _owner.FireItemEvents(triggers, [next], WornItemIds);
+                if (result.Failure != GameSessionFailure.None)
+                {
+                    _log.Add(new(SpellCastEventKind.ItemEventsDropped, -1, _itemEvents.Count + 1, null, (int)result.Failure));
+                    _itemEvents.Clear();
+                    break;
+                }
+                fired.AddRange(result.Firings);
+            }
+        }
+        finally { _firingItems = false; }
+        return fired;
+    }
+
+    // An NPC's worn items in slot order (the map's), or null for an entity that is no NPC of the map.
+    private IReadOnlyList<string>? WornItemIds(string id) =>
+        id != Hero && _map.Critter(id) is not null ? [.. _map.WornItems(id).OrderBy(item => item.Slot).Select(item => item.Id)] : null;
 
     // The pass world: this host for the magic-tech events, the host's event world for the rest (its party facts when it has them; a
     // world without them answers none, as the pass then does).
@@ -731,6 +818,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
         var result = _owner.PaySpellFatigue(_owner.Version, target, payment.FatigueDamageAdded);
         if (result.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.FatiguePaid, run, payment.FatigueDamageAdded, payer));
+        _itemEvents.AddRange(result.ItemEvents);
     }
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
@@ -740,8 +828,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         {
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
-                var applied = _owner.ApplyDamage(_owner.Version, who, life);
+                // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
+                var applied = _owner.ApplyDamage(_owner.Version, who, life, new(run.Parent?.Id, (run.Other ?? run.Parent)?.Id, run.Triggers != 0));
                 if (applied.Outcome is { } outcome) _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
+                _itemEvents.AddRange(applied.ItemEvents);
             }
             else if (step.Life is null && step.Damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, step.Damage))
                 _log.Add(new(SpellCastEventKind.Damaged, run.Id, step.Damage.HitPointDamage, step.Object));
@@ -754,6 +844,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var before = _owner.QueryLife(who).View?.Status.HitPoints ?? 0;
         // The raise script (point 0x12) runs no SCR yet: it allows the raise.
         var healed = _owner.Heal(_owner.Version, who, SpellLifeComponents.Heal(data, run, Rolls), () => true);
+        _itemEvents.AddRange(healed.ItemEvents);
         if (healed.Disposition == GameSessionDisposition.Changed)
             _log.Add(new(SpellCastEventKind.Healed, run.Id, (_owner.QueryLife(who).View?.Status.HitPoints ?? 0) - before, target.Id));
     }

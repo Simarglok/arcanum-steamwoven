@@ -465,6 +465,26 @@ the landing tile and destroy themselves.
 range, read by the parent hit; RH1 reads it the same way), 0x405BC0 (a handle test that reads as "is a prototype") and 0x441980's
 point 12 (the dying script).
 
+## Life item triggers outside the attack (ARC-MAGIC-024)
+
+Source: the [item spell triggers](../../world/item-spell-triggers.md) contract (its life events section), the fourth part of the
+shared item trigger slice of [FR-MAGIC-011](../../requirements/combat-magic-tech.md#fr-magic-011). Read on 2026-10-28 by this task
+and, independently, by a second reader that saw only the questions (method step 6): the fatigue setter (0x45D5A0), the dying
+animation's end (0x42FF40), the spell's damage component (0x4518D0) with the context builder (0x4B2210), the damage step's hooks
+(0x4B4390 at 0x4B5379..0x4B53C0), the damages opponent wrapper (0x4CBE70) and the executor (0x4CB800, 0x4CB830). Both agree on every
+row. It agrees with IC1–IC5, IT1, IT4 and DH1.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| IC7 | fatigue setter (0x45D5A0), dying animation end (0x42FF40) | The setter calls going unconscious (0x4CBBF0, mask 0x8000000 per worn item) with no other object and the critter as parent only for a PC or NPC, a value written that is not 0, a critter that is no prototype (0x405BC0), conscious before (0x45D800) and unconscious after; IC4's callers reach it the same way. 0x42FF40 reads the goal's object (+0xD00; none asserts and exits) and calls dying (0x4CBC60, mask 0x100000) with no other object when the goal's flags (+0x0C) lack 0x200 and the critter is dead (0x45D8D0). | Original |
+| IC8 | spell damage step (0x4518D0 → 0x4B4390) | 0x4B2210 writes the run's parent as the attacker (+0x08) and clears the flags; the run's other object, when set, becomes the damage source (+0x30); the flags gain 0x280 and never 0x40000. In the step only a null attacker skips the parent hit (0x4CBAD0, with the context) and the damages opponent (0x4CBE70), whose weapon is the context's only with flag 0x40000, so none for a spell: no melee bit and no damages opponent with the item. The flags word is tested nowhere on that path; the step's earlier exits (no target, the network gate, the taking-damage script, object flags 0x400001, a dead or non-critter target) skip both calls. | Original |
+| IC9 | the same, an item run's damage | An executor's run has the item's holder as its parent (IT4), so its damage step's attacker is the holder; 0x4CBE70 gives every worn item 0x10000 then 0x40000 (`Target_Hit`), and the executor has no recursion or re-entrancy guard and does not test whether the item sources a running run (its exits: a network client, slot 10000, a mask that shares no bit, a failed chance roll, no target). So a `Target_Hit` item whose spell damages the opponent fires again on its own damage, and two wearers of `Parent_Hit` armour aimed at the attacker answer each other, each round a new goal 73 run, until the target dies or the item's charge runs out. | Original bug (MG46) |
+| MG46 | IC9 | An on-hit item spell repeats itself on its own damage: installed weapon 6130 (record 147, `Target_Hit\|Target_Attacker`, damage with cells) spends its cells or kills on one hit, armour 8215 (record 87, `Parent_Hit\|Target_Attacker`) worn on both sides ping-pongs. | Original bug (gameplay, the owner's bug rule of 2026-10-28: the original behind the Original switch, `MagicAnomalyProfile.ItemRunDamageFiresHooks`; Steamwoven fires no parent hit and no damages opponent for the damage step of a run an item event started) |
+
+**F0 facts raised:** 0x45D5A0's going unconscious and 0x42FF40's dying (F2, registered as partial methods); the spell context's attacker
+and damage source and the hooks' gate (F2). Left at F0: 0x405BC0 (still read as "is a prototype") and what the host does with the
+goal flag 0x200.
+
 ## Spell missile and caster facing (ARC-MAGIC-018)
 
 Source: [the spell cast host's missile](../../world/spell-cast-host.md#the-missile-arc-magic-018) and its casting goal's facing turn,

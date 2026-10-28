@@ -980,13 +980,17 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Applies one damage packet (<see cref="LifeRules.ApplyDamage"/>; build it from an attack with
     /// <see cref="LifeDamage.FromAttack"/>). The knockout and second-arm rolls come from the session generator
     /// (<c>combat.KnockoutFatigue</c>, <c>combat.CrippleBothArms</c>). A death stamps the record with the current game time.
+    /// ARC-MAGIC-024: with <paramref name="parties"/> (a spell's damage step, DH1) the result's item events are the step's wrapper
+    /// calls (<see cref="ItemSpellTriggerRules.SpellDamageStep"/>); without them only the fatigue setter's going unconscious, whose
+    /// call needs no context (IC4).
     /// </summary>
-    public SessionLifeResult ApplyDamage(GameSessionVersion expected, SessionLifeTarget target, LifeDamage damage)
+    public SessionLifeResult ApplyDamage(GameSessionVersion expected, SessionLifeTarget target, LifeDamage damage, SessionDamageParties? parties = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(damage);
-        var valid = LifeRules.IsValid(damage);
-        return Life(expected, target, valid, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls));
+        var valid = LifeRules.IsValid(damage) && (parties is null || parties.Valid);
+        return Life(expected, target, valid, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls),
+            damageStep: parties is null ? null : (damage, parties));
     }
 
     /// <summary>A kill (<see cref="LifeRules.Kill"/>), such as a script's; a death stamps the current game time.</summary>
@@ -1926,7 +1930,8 @@ public sealed partial class GameSessionOwner : IDisposable
     // adopts the trial copy, so it draws nothing.
     private SessionLifeResult Life(GameSessionVersion expected, SessionLifeTarget target, bool validInput,
         Func<LifeState, LifeFacts, ICombatRollSource, LifeOutcome> step,
-        Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handlerTimers = null, int eventMap = 0, int recoveryCopies = 1)
+        Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handlerTimers = null, int eventMap = 0, int recoveryCopies = 1,
+        (LifeDamage Damage, SessionDamageParties Parties)? damageStep = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         var failure = Resolve(target, out var record, out var facts, out var recorded);
@@ -1966,7 +1971,8 @@ public sealed partial class GameSessionOwner : IDisposable
             var scheduled = _events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0));
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("Timer scheduling failed after admission.");
         }
-        if (!changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision));
+        var itemEvents = LifeItemEvents(target, facts!, outcome, damageStep);
+        if (!changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
@@ -1974,7 +1980,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
         if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
     }
 
     private static (string Kind, GameEventPayload Payload) TimerEvent(LifeTimer timer, SessionLifeTarget target, int map, long now,
