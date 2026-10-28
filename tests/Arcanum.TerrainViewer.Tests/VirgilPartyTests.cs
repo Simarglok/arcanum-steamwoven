@@ -119,6 +119,45 @@ public sealed class VirgilPartyTests
         Assert.AreEqual(CompanionStanding.Free, session.QueryCompanion(entity).Standing);
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void Original_virgil_joins_the_session_hero_as_the_pc_side()
+    {
+        // ARC-WORLD-067: with a pre-made hero from the installation the follow check reads the hero (its charisma with effects, level,
+        // alignment, Persuasion and max followers), not the diagnostic facts the port is given.
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
+        string P(string relative) => Path.Combine(root, relative);
+        using var data = AreaOriginalValidator.OpenFiles(P("modules/Arcanum.dat"), P("arcanum1.dat"), P("arcanum2.dat"), P("modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), P("data/proto"));
+        var snapshot = data.LoadStrict();
+        var document = VirgilDialog(P("arcanum3.dat"));
+        var load = AreaStartingHero.Load(P("modules/Arcanum.dat"), AreaStartingHero.Find("human-male")!);
+        Assert.AreEqual(AreaHeroStatus.Ready, load.Status, load.Detail);
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), snapshot.RuntimeMap, load).Owner!;
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session);
+        var speaker = host.Speakers.Single();
+        var entity = AreaConversationState.EntityId(speaker.Row);
+        Assert.IsTrue(host.Begin(host.Nearest(speaker.WorldX, speaker.WorldY)).Conversation!.Close());
+
+        var side = session.QueryHeroPartySide()!;
+        var stats = session.QueryHeroStats(new(0))!.Value.Snapshot!;
+        Assert.AreEqual((stats.GetEffective(Arcanum.Simulation.Character.CharacterStat.Charisma), session.QueryHero()!.Level, session.QueryHero()!.Alignment),
+            (side.Charisma, side.Level, side.Alignment));
+        Assert.AreEqual(side.Alignment, host.State.Alignment, "the conversation reads the hero's alignment");
+        var facts = AreaCompanionRoster.Facts(AreaCompanionRoster.Virgil, host.State.Alignment, host.State.Reaction(0), hero: side);
+        Assert.AreEqual((side.Charisma, side.Level, side.MaxFollowers), (facts.PcCharisma, facts.PcLevel, facts.MaxFollowers));
+
+        // The first talk joins him through the session party with the hero as the PC side.
+        var party = Port(session, host, entity);
+        var first = Start(document, host, session, party, 1, 4);
+        Walk(first);
+        Assert.AreEqual(DialogCommandAttemptOutcome.Applied, first.Effects.Single(effect => effect.Command is JoinCommand).Outcome);
+        Assert.AreEqual(CompanionStanding.Following, session.QueryCompanion(entity).Standing);
+        // The walk's AL raised the hero's own alignment.
+        Assert.IsTrue(session.QueryHero()!.Alignment > side.Alignment, "the dialog's AL wrote the hero's alignment");
+    }
+
     private static PartyConsentFacts Facts(AreaConversationHost host, int speaker) => new(
         MindControlledByPc: false, PcPersuasion: PersuasionTraining.None, PcCharisma: 8, PcAlignment: host.State.Alignment, PcLevel: 1,
         OtherLeaderCharisma: null, Reaction: host.State.Reaction(speaker), Thresholds: Row5, NpcAlignment: 1, NpcLevel: 1,

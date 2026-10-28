@@ -44,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-36)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-39)).
 
 ## Viewer host
 
@@ -60,8 +60,9 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
   dodge); the map path reads poison.
 - The character sheet's max followers is the character-stats value (charisma / 4 with effects), without the expert
   persuasion bonus the follow check adds (AP4); the sheet does not read the session's value yet.
-- Backstab and ranged attacks of the hero are not modelled (the hero attacks in melee only), so their skills are read but
-  unused; NPCs read map skills except a levelled follower's.
+- Backstab and thrown attacks of the hero are not modelled (since ARC-COMBAT-015 the hero attacks in melee and with bows and
+  firearms, [ranged hero attack](hero-attack-runtime.md#ranged-hero-attack-arc-combat-015)), so the backstab and throwing skills are
+  read but unused; NPCs read map skills except a levelled follower's.
 
 ## Checks
 

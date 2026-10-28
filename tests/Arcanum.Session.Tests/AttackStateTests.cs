@@ -238,7 +238,7 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
-    public void AnAimedAttackKeepsItsLocationAndARangedWeaponIsNotSupported()
+    public void AnAimedAttackKeepsItsLocationAndAThrowingWeaponIsNotSupported()
     {
         using var owner = Owner();
         var rat = Combat();
@@ -247,12 +247,13 @@ public sealed class AttackStateTests
         Assert.AreEqual(HitLocation.Head, aimed.Resolution!.HitLocation);
         Assert.IsTrue(aimed.Resolution.Aimed || aimed.Resolution.Outcome == AttackOutcome.CriticalMiss);
 
-        var bow = new EquipmentItem
+        // ARC-COMBAT-015: a bow or firearm is supported (RangedAttackStateTests); a throw leaving the hand is not (ARC-COMBAT-017).
+        var thrown = new EquipmentItem
         {
             Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
-            Weapon = new EquipmentWeapon { Skill = CombatSkill.Bow, Damage = DamageRanges.None with { Normal = new(2, 8) }, SpeedFactor = 10, Range = 10 },
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Throwing, Damage = DamageRanges.None with { Normal = new(2, 8) }, SpeedFactor = 10, Range = 8 },
         };
-        var equipped = owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, bow), (_, _) => true, Accept);
+        var equipped = owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, thrown), (_, _) => true, Accept);
         Assert.AreEqual(GameSessionFailure.None, equipped.Failure);
         Assert.IsFalse(owner.QueryHeroAttack()!.Supported);
         Assert.AreEqual(GameSessionFailure.AttackUnsupported, owner.AttackCritter(owner.Version, new(rat)).Failure);

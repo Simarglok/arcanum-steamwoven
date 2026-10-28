@@ -48,7 +48,7 @@ public static class AreaCompanionOrders
             if (session.QueryCompanion(companion.Entity).Standing == CompanionStanding.Free) continue;
             if (AreaCompanionLoyalty.Facts(session, companion, state) is not { } consent) continue;
             facts.Add(new(companion.Entity, name(companion), FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pc), false, consent,
-                AreaCompanionRoster.WaitFacts(companion.Facts)));
+                AreaCompanionRoster.WaitFacts(companion.Facts, session.QueryHeroPartySide())));
         }
         return facts;
     }

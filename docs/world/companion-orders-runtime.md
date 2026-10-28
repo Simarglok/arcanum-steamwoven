@@ -87,7 +87,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
-  the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`.
+  the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`. The PC side
+  of both is the session hero with `--hero` (ARC-WORLD-067, [party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)),
+  else the labelled diagnostic profile.
 - **Goals**: walk here and the spread-out step are ordered goals of the companion's `CompanionFollower` (`WalkTo`): following does not
   replace them, and once they end the companion decides again from where it stands (beyond the start distance it approaches, OL9).
   The spread-out step walks 3 cells straight away from the PC (`AreaCompanionOrders.SpreadStep`), a project approximation of the
