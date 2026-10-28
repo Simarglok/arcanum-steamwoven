@@ -915,12 +915,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// beneath it (<see cref="SessionSpellCaster.Queue"/>, the run's current index as its depth): inserted at the bottom of the run,
     /// so the queued goals play in the order they were cast, each when the goals above it have popped. A depth of 4 or more or a
     /// turn-based round refuses, freeing the run. Either way no run starts and perform keeps the current one.
-    /// NOT READY: a choice with an item (the item's spells and AI actions are not listed yet) starts no run.
+    /// NOT READY: a choice with an item (the item's spells and AI actions are not listed yet), and a cast while goal 82 or 83 is at
+    /// the run's bottom, which the original starts as a second run beside it (AC5; the host holds one run per NPC): neither starts a run.
     /// </summary>
     public AiCastStart Cast(string npc, AiPassChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
         if (choice.Item is not null || _scene.Spells?.Invoke() is not { } caster) return new(null);
+        if (RunOf(npc)?.Bottom.Goal is AiGoalType.CastSpellWithAnimation or AiGoalType.AttemptSpellWithAnimation)
+        {
+            Trace(npc).Cast = $"cast {choice.Spell} not started (goal 82 or 83 plays: a second run)";
+            return new(null);
+        }
         var attempt = caster.CastByAi(npc, choice.Spell, choice.Target);
         Trace(npc).Cast = $"cast {choice.Spell} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);

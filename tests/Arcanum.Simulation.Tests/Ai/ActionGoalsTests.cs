@@ -268,7 +268,8 @@ public sealed class ActionGoalsTests
         queued = playing with { Frames = playing.Frames.Insert(0, new AiGoalFrame(AiGoalType.CastSpell, Foe) { SpellRun = 8 }) };
         var refused = Drive(queued, world, Steamwoven)[^1];
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.CastRefused), (refused.End, refused.Reason));
-        Assert.AreEqual("end cast refused", world.Calls[^1]);
+        CollectionAssert.AreEqual(new[] { "play cast", "action frame", "end cast", "start cast 8", "end cast refused" }, world.Calls.Skip(2).ToArray(),
+            "the playing goal played and ended before the queued goal's refused start");
     }
 
     [TestMethod]

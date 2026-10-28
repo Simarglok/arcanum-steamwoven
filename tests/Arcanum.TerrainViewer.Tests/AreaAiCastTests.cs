@@ -253,7 +253,7 @@ public sealed class AreaAiCastTests
         for (var i = 0; i < 2; i++)
         {
             var start = host.Cast(npc, choice);
-            Trace($"queue {i}: {host.TraceOf(npc)?.Cast}");
+            Trace104($"queue {i}: {host.TraceOf(npc)?.Cast}");
             Assert.IsTrue(start.Queued, "queued beneath the playing goal (SU13)");
             Assert.IsNull(start.Run, "no run starts: perform keeps the current one");
             queued.Add(host.RunOf(npc)!.Bottom.SpellRun!.Value);
@@ -272,7 +272,7 @@ public sealed class AreaAiCastTests
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         var plays = notices.Where(n => n.Kind == AreaAiNoticeKind.Cast).Select(n => n.Run).ToArray();
-        Trace($"plays after the first: {string.Join(",", plays)}; releases {string.Join(",", notices.Where(n => n.Kind == AreaAiNoticeKind.Release).Select(n => $"{n.Run}:{n.Released}"))}");
+        Trace104($"plays after the first: {string.Join(",", plays)}; releases {string.Join(",", notices.Where(n => n.Kind == AreaAiNoticeKind.Release).Select(n => $"{n.Run}:{n.Released}"))}");
         CollectionAssert.AreEqual(queued.ToArray(), plays, "the queued goals play in the order they were cast");
         foreach (var id in queued)
             Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Release && n.Run == id && n.Released), $"queued run {id} was released");
@@ -293,7 +293,7 @@ public sealed class AreaAiCastTests
             Assert.IsTrue(host.Cast(npc, choice).Queued, $"depth {depth} queues: {host.TraceOf(npc)?.Cast}");
         var before = RunsOf(session, npc);
         var refused = host.Cast(npc, choice);
-        Trace($"depth 4: {host.TraceOf(npc)?.Cast}");
+        Trace104($"depth 4: {host.TraceOf(npc)?.Cast}");
         Assert.IsFalse(refused.Queued);
         Assert.IsNull(refused.Run);
         Assert.AreEqual(SpellUiRules.QueueRefusedFromDepth + 1, host.RunOf(npc)!.Frames.Length, "nothing was inserted");
@@ -312,7 +312,7 @@ public sealed class AreaAiCastTests
             new SessionCombatModeContext { TurnBased = true, World = round.Round }).Failure);
         var held = RunsOf(round.Session, round.Npc);
         var inRound = round.Host.Cast(round.Npc, new AiPassChoice(AiPassAction.Cast, first.Spell, 0, null, AiSchedulerRules.Pc));
-        Trace($"in a round: {round.Host.TraceOf(round.Npc)?.Cast}");
+        Trace104($"in a round: {round.Host.TraceOf(round.Npc)?.Cast}");
         Assert.IsFalse(inRound.Queued);
         CollectionAssert.AreEquivalent(held, RunsOf(round.Session, round.Npc), "the run was freed");
         Assert.AreEqual(1, round.Host.RunOf(round.Npc)!.Frames.Length);
@@ -341,7 +341,7 @@ public sealed class AreaAiCastTests
             host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
-        Trace($"step {host.TraceOf(npc)?.Step}; notices {string.Join(" ", notices.Select(n => $"{n.Kind}:{n.Run}"))}");
+        Trace104($"step {host.TraceOf(npc)?.Step}; notices {string.Join(" ", notices.Select(n => $"{n.Kind}:{n.Run}"))}");
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Release && n.Run == firstQueued), "the first queued goal released at once");
         Assert.IsFalse(notices.Any(n => n.Kind == AreaAiNoticeKind.Cast && n.Run == secondQueued), "the second queued goal never played");
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd && n.Run == secondQueued && n.SpellRun is not null), "its run was freed");
@@ -349,4 +349,5 @@ public sealed class AreaAiCastTests
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-102 " + line);
+    private static void Trace104(string line) => Console.WriteLine("ARC-WORLD-104 " + line);
 }
