@@ -8,12 +8,26 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>Transactional presentation of one owned authoritative grid session.</summary>
 public sealed class DiagnosticGridActor
 {
-    private AnimationTimeline _timeline = Timeline(ActorDiagnosticAction.Idle);
+    private AnimationTimeline _timeline = Timeline(ActorDiagnosticProfile.HumanFixedArea, ActorDiagnosticAction.Idle);
     public IGridSession? Session { get; private set; }
     /// <summary>The bounded single-sector WORLD session, when that profile is configured.</summary>
     public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
     // ARC-WORLD-020: the human with its run resource (the WORLD diagnostic never selects Run; facing tables are shared).
-    public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixedArea;
+    // ARC-UI-039: the AREA hero's own body replaces it (<see cref="UseProfile"/>).
+    public ActorDiagnosticProfile Profile { get; private set; } = ActorDiagnosticProfile.HumanFixedArea;
+    /// <summary>ARC-UI-039: draws the actor with another profile of the same actions (the hero's body) and steps it with that body's
+    /// gait timing, in the AREA session now and in every one this actor configures. The current action's clock restarts from frame 0
+    /// on the new ART, whose frame count may differ.</summary>
+    public void UseProfile(ActorDiagnosticProfile profile, GaitTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(profile); ArgumentNullException.ThrowIfNull(timing);
+        if (profile.Run is null || profile.Vault is null || profile.Attack is null) throw new ArgumentException("ACTOR_PROFILE_ACTIONS", nameof(profile));
+        AreaGaitTiming = timing;
+        if (Session is AreaGridSession { Timing: not null } area) area.Timing = timing;
+        if (ReferenceEquals(profile, Profile)) return;
+        Profile = profile; AttackPose = null;
+        _timeline = Timeline(Session is { } session ? RenderState(session.State).Action : ActorDiagnosticAction.Idle);
+    }
     public int CurrentFrame => Pose is { } pose ? pose.Frame : _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
     public DiagnosticActorState State => Session is { } session ? Render(session.State)
@@ -122,10 +136,17 @@ public sealed class DiagnosticGridActor
     };
     public static ActorDiagnosticPlacementInput Placement(MovementState state, int frame) =>
         DiagnosticActorMotion.ToPlacement(RenderState(state), frame); // pure geometry ONLY
-    private static AnimationTimeline Timeline(ActorDiagnosticAction action)
+    // ARC-UI-039: a walk or run plays at the gait's rate (research L6, equal to the human's ART rate at Speed 8).
+    private AnimationTimeline Timeline(ActorDiagnosticAction action) => Timeline(Profile, action, action switch
     {
-        var resource = ActorDiagnosticProfile.HumanFixedArea.Resource(action);
-        var timeline = new AnimationTimeline(resource.FramesPerGroup, resource.RawFramesPerSecond);
+        ActorDiagnosticAction.Walk => AreaGaitTiming?.ArtRate(MovementGait.Walk),
+        ActorDiagnosticAction.Run => AreaGaitTiming?.ArtRate(MovementGait.Run),
+        _ => null,
+    });
+    private static AnimationTimeline Timeline(ActorDiagnosticProfile profile, ActorDiagnosticAction action, int? rate = null)
+    {
+        var resource = profile.Resource(action);
+        var timeline = new AnimationTimeline(resource.FramesPerGroup, rate ?? resource.RawFramesPerSecond);
         // The vault plays once over its step (it stops on the last frame); walk and run cycles loop.
         timeline.SetMode(action == ActorDiagnosticAction.Vault ? PlaybackMode.Once : PlaybackMode.Loop);
         if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Vault) timeline.Play();

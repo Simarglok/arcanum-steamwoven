@@ -174,6 +174,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="new-character-name-and-portrait-arc-ui-033"></a>[New-character name and portrait (ARC-UI-033)](ledger/character.md#new-character-name-and-portrait-arc-ui-033) | [Character](ledger/character.md) | NW7–NW9 |
 | <a id="character-editor-in-creation-mode-arc-ui-034"></a>[Character editor in creation mode (ARC-UI-034)](ledger/character.md#character-editor-in-creation-mode-arc-ui-034) | [Character](ledger/character.md) | CM1–CM8 |
 | <a id="opening-shop-arc-ui-036"></a>[Opening shop (ARC-UI-036)](ledger/character.md#opening-shop-arc-ui-036) | [Character](ledger/character.md) | OS1–OS6 |
+| <a id="hero-body-arc-ui-039"></a>[Hero body (ARC-UI-039)](ledger/character.md#hero-body-arc-ui-039) | [Character](ledger/character.md) | HB1–HB4 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="ranged-hero-attack-arc-combat-015"></a>[Ranged hero attack (ARC-COMBAT-015)](ledger/combat.md#ranged-hero-attack-arc-combat-015) | [Combat](ledger/combat.md) | RH1–RH7 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |

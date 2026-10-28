@@ -29,6 +29,8 @@ public partial class TerrainViewerApp
         _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed);
         _readyArea = area; _readyMapName = arguments.AreaMapName; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
+        // ARC-UI-039: the fixed human's frames, which the hero body swaps back to when the session has no hero of another body.
+        _humanActorFrames = result.ActorPlan.Catalog.Values.ToArray();
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         // The plan's chart: the exterior chart for the Crash Site, the whole-map chart for --area-map (ARC-RENDER-017).

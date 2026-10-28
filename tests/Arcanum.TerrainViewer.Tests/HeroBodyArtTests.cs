@@ -1,0 +1,113 @@
+using Arcanum.Data;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Movement;
+using Arcanum.TerrainViewer.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>ARC-UI-039: the hero is drawn with its race and gender's body, not the fixed human woman.</summary>
+[TestClass]
+public sealed class HeroBodyArtTests
+{
+    // The twelve pre-made heroes (main-menu order) and the body label their prototypes' art ids name (ARC-RES-027 SH-04).
+    private static readonly (string Name, CharacterRace Race, CharacterGender Gender, string Label)[] Premade =
+    [
+        ("halfling-male", CharacterRace.Halfling, CharacterGender.Male, "GHM"), ("gnome-male", CharacterRace.Gnome, CharacterGender.Male, "GHM"),
+        ("half-elf-male", CharacterRace.HalfElf, CharacterGender.Male, "HMM"), ("half-ogre-male", CharacterRace.HalfOgre, CharacterGender.Male, "HGM"),
+        ("elf-male", CharacterRace.Elf, CharacterGender.Male, "EFM"), ("human-male", CharacterRace.Human, CharacterGender.Male, "HMM"),
+        ("half-orc-male", CharacterRace.HalfOrc, CharacterGender.Male, "HMM"), ("dwarf-male", CharacterRace.Dwarf, CharacterGender.Male, "DFM"),
+        ("human-female", CharacterRace.Human, CharacterGender.Female, "HMF"), ("elf-female", CharacterRace.Elf, CharacterGender.Female, "HMF"),
+        ("half-orc-female", CharacterRace.HalfOrc, CharacterGender.Female, "HMF"), ("half-elf-female", CharacterRace.HalfElf, CharacterGender.Female, "HMF"),
+    ];
+
+    [TestMethod]
+    public void EveryPremadeHeroHasItsPrototypesBody()
+    {
+        CollectionAssert.AreEqual(AreaStartingHero.Premade.Select(hero => hero.Name).ToArray(), Premade.Select(hero => hero.Name).ToArray());
+        foreach (var (name, race, gender, label) in Premade)
+            Assert.AreEqual(label, HeroBody.For(race, gender)!.Value.Label, name);
+        // The elf man is no longer the fixed human woman (the reported bug).
+        Assert.AreNotEqual(HeroBody.HumanFemale, HeroBody.For(CharacterRace.Elf, CharacterGender.Male));
+        Assert.AreEqual(HeroBody.HumanFemale, HeroBody.For(CharacterRace.Human, CharacterGender.Female));
+    }
+
+    [TestMethod]
+    public void TheBodyRewritesOnlyTheBodyAndGenderBitsOfTheHumanSelectors()
+    {
+        var elf = HeroBody.For(CharacterRace.Elf, CharacterGender.Male)!.Value;
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        // SH-04: the elf man's art id is 0x2C002000 (body 4, male); the same animation and weapon bits as the human's.
+        Assert.AreEqual(0x2C000000u, elf.Selector(human.Idle.Selector));
+        Assert.AreEqual(0x2C000501u, elf.Selector(human.Attack!.Selector));
+        Assert.AreEqual(human.Walk.Selector, HeroBody.HumanFemale.Selector(human.Walk.Selector));
+        Assert.AreEqual("art/critter/EFM/EFMUWXAa.art", elf.ArtPath(elf.Selector(human.Idle.Selector)));
+        Assert.AreEqual("art/critter/EFM/EFMUWXBu.art", elf.ArtPath(elf.Selector(human.Attack.Selector)));
+        Assert.AreEqual("art/critter/DFM/DFMUWXAg.art", HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male)!.Value.ArtPath(0x29000180));
+        // The armour part (for the worn-armour slice): leather on an elf man, plate on a halfling man (the dwarf's sexless art, N1).
+        var leather = HeroBody.For(CharacterRace.Elf, CharacterGender.Male, 2)!.Value;
+        Assert.AreEqual(("art/critter/EFM/EFMLAXAb.art", 0x2C200040u), (leather.ArtPath(leather.Selector(human.Walk.Selector)), leather.Selector(human.Walk.Selector)));
+        var plate = HeroBody.For(CharacterRace.Halfling, CharacterGender.Male, 4)!.Value;
+        Assert.AreEqual(("DFX", 4), (plate.Label, plate.GaitRateBonus));
+        Assert.IsNull(HeroBody.For(CharacterRace.Human, CharacterGender.Male, 9));
+        // The palette (bits 4..5) the worn body armour's use art sets (0x465AE0, for ARC-WORLD-112).
+        Assert.AreEqual(0x2C200060u, HeroBody.For(CharacterRace.Elf, CharacterGender.Male, 2, 2)!.Value.Selector(human.Walk.Selector));
+        Assert.IsNull(HeroBody.For(CharacterRace.Human, CharacterGender.Male, 0, 4));
+        // Races outside the creation table have no body here.
+        Assert.IsNull(HeroBody.For(CharacterRace.Ogre, CharacterGender.Male));
+    }
+
+    [TestMethod]
+    public void DwarfAndHalflingBodiesWalkAndRunFourFramesFaster()
+    {
+        Assert.AreEqual(4, HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male)!.Value.GaitRateBonus);
+        Assert.AreEqual(4, HeroBody.For(CharacterRace.Gnome, CharacterGender.Male)!.Value.GaitRateBonus);
+        Assert.AreEqual(4, HeroBody.For(CharacterRace.Halfling, CharacterGender.Male)!.Value.GaitRateBonus);
+        Assert.AreEqual(0, HeroBody.For(CharacterRace.HalfOgre, CharacterGender.Male)!.Value.GaitRateBonus);
+        Assert.AreEqual(0, HeroBody.For(CharacterRace.Elf, CharacterGender.Male)!.Value.GaitRateBonus);
+        // Research L6: walk 17+4 at Speed 8, run 8+4..30+4.
+        Assert.AreEqual(21, GaitTiming.FramesPerSecond(MovementGait.Walk, 8, 4));
+        Assert.AreEqual(12, GaitTiming.FramesPerSecond(MovementGait.Run, 0, 4));
+        Assert.AreEqual(34, GaitTiming.FramesPerSecond(MovementGait.Run, 40, 4));
+        Assert.AreEqual(17, GaitTiming.FramesPerSecond(MovementGait.Walk, 8));
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        var fast = new GaitTiming(human.Walk.Stride!, human.Run!.Stride!, GaitTiming.BaseSpeed, rateBonus: 4);
+        Assert.IsTrue(fast.For(MovementGait.Walk, NeighborDirection.XPlus).Value < GaitTiming.HumanFixed.For(MovementGait.Walk, NeighborDirection.XPlus).Value);
+        Assert.Throws<ArgumentException>(() => new GaitTiming(human.Walk.Stride!, human.Run.Stride!, 8, rateBonus: 3));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void EveryCreatableBodyLoadsFromTheInstalledArt()
+    {
+        // Opt-in: ARC_AREA_ORIGINAL=1 and ARC_AREA_RESOURCE1 (arcanum1.dat).
+        if (Environment.GetEnvironmentVariable("ARC_AREA_ORIGINAL") != "1") { Assert.Inconclusive("ARC_AREA_ORIGINAL=1 runs the original hero body check."); return; }
+        var path = Environment.GetEnvironmentVariable("ARC_AREA_RESOURCE1") ?? throw new AssertFailedException("ARC_AREA_RESOURCE1 is required");
+        using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        // The human woman read by name is the pinned fixed human: same files, frames, rates, strides and every frame's bytes.
+        var woman = HeroBodyArt.Load(archive, HeroBody.HumanFemale);
+        foreach (var action in human.Actions)
+        {
+            var (pinned, read) = (human.Resource(action), woman.Profile.Resource(action));
+            Assert.AreEqual((pinned.Ordinal, pinned.Selector, pinned.FramesPerGroup, pinned.RawFramesPerSecond, pinned.ActionFrame, pinned.Stride),
+                (read.Ordinal, read.Selector, read.FramesPerGroup, read.RawFramesPerSecond, read.ActionFrame, read.Stride), action.ToString());
+        }
+        Assert.AreEqual((human.DistinctKeys, human.OriginalRgbaBytes!.Value), (woman.Textures.Count, woman.RgbaBytes));
+        Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Run, NeighborDirection.XPlusYPlus), woman.Timing.For(MovementGait.Run, NeighborDirection.XPlusYPlus));
+        var report = new List<string>();
+        foreach (var body in Premade.Select(hero => HeroBody.For(hero.Race, hero.Gender)!.Value)
+            .Concat(Enumerable.Range(0, CharacterCreationRules.RaceCount).SelectMany(race => new[] { CharacterGender.Male, CharacterGender.Female }
+                .Where(gender => CharacterCreationRules.Allows((CharacterRace)race, gender)).Select(gender => HeroBody.For((CharacterRace)race, gender)!.Value))).Distinct())
+        {
+            var load = HeroBodyArt.Load(archive, body);
+            Assert.AreEqual(load.Profile.DistinctKeys, load.Textures.Count, body.Label);
+            Assert.AreEqual(ActorDiagnosticProfileId.HeroBody, load.Profile.Id);
+            var plan = load.Plan(new ActorDiagnosticPlacementInput(6, 1, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached,
+                100, false, ActorDiagnosticAction.Idle, 5, 0, 0, 0, 0, 0, 0, 0));
+            Assert.AreEqual(load.Profile.Idle.Selector, plan.Current.TextureKey.Selector, body.Label);
+            report.Add($"{body.Label} keys={load.Textures.Count} bytes={load.RgbaBytes} " + string.Join(" ", load.Profile.Actions.Select(a =>
+                $"{a}:{load.Profile.Resource(a).FramesPerGroup}f/{load.Profile.Resource(a).RawFramesPerSecond}fps")) + $" walk={load.Profile.Walk.Stride} run={load.Profile.Run!.Stride}");
+        }
+        Console.WriteLine(string.Join("\n", report));
+    }
+}

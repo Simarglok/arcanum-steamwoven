@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
         + $"next ground click {(EffectiveAlwaysRun(false) ? "runs" : "walks")} (Ctrl {(EffectiveAlwaysRun(true) ? "runs" : "walks")}), object clicks run; "
         + $"current gait {_worldGait} ({_gaitOrigin}){StealthSummary()}{(_prowlNotice is null ? "" : " | " + _prowlNotice)}";
 
-    private string GaitHudStatus() => $"Gait: {GaitSummary()}";
+    private string GaitHudStatus() => $"Gait: {GaitSummary()} | Hero body: {_heroBodyStatus}";
 }
 
 /// <summary>The Always Run option (ARC-WORLD-020), following <see cref="VisualProfileSettingsStore"/>:

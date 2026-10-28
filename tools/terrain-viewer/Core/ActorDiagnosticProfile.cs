@@ -4,7 +4,7 @@ using Arcanum.Data;
 
 namespace Arcanum.TerrainViewer.Core;
 
-public enum ActorDiagnosticProfileId { HumanFixed, MonsterRegression }
+public enum ActorDiagnosticProfileId { HumanFixed, MonsterRegression, HeroBody }
 public enum ActorDiagnosticClock { ArtMetadata, LegacyOverride }
 public sealed record ActorDiagnosticResource(ActorDiagnosticAction Action, uint Selector, int Ordinal, int Palette,
     int PhysicalGroups, int FramesPerGroup, int RawFramesPerSecond, int DiagnosticFramesPerSecond)
@@ -49,6 +49,12 @@ public sealed class ActorDiagnosticProfile
     /// the AREA game view only. The WORLD diagnostic and its sealed human validation keep the 55-key <see cref="HumanFixed"/>.</summary>
     public static ActorDiagnosticProfile HumanFixedArea { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
         HumanIdle, HumanWalk, HumanRun, HumanVault, HumanAttack, 195, 1705144);
+    /// <summary>ARC-UI-039: the AREA hero drawn with its own body (<see cref="HeroBodyArt"/>): the same five actions and facing table as
+    /// <see cref="HumanFixedArea"/>, resources read from the body's ART headers, with no metadata commitment (the archive identity is
+    /// authenticated by the load).</summary>
+    internal static ActorDiagnosticProfile ForHeroBody(ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource run,
+        ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys) =>
+        new(ActorDiagnosticProfileId.HeroBody, ActorDiagnosticClock.ArtMetadata, idle, walk, run, vault, attack, keys, null);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
         new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, null, 184, null);
@@ -72,7 +78,12 @@ public sealed class ActorDiagnosticProfile
     public int DistinctKeys { get; }
     public long? OriginalRgbaBytes { get; }
     public int? ModuleOrdinal => Id == ActorDiagnosticProfileId.MonsterRegression ? 643 : null;
-    public string Provenance => Id == ActorDiagnosticProfileId.HumanFixed ? "mapping-only type2/body0 female fixed underwear0 single-layer" : "direct module ordinal643 single-layer monster";
+    public string Provenance => Id switch
+    {
+        ActorDiagnosticProfileId.HumanFixed => "mapping-only type2/body0 female fixed underwear0 single-layer",
+        ActorDiagnosticProfileId.HeroBody => $"hero body type2/body{(Idle.Selector >> 24) & 7} {(((Idle.Selector >> 27) & 1) != 0 ? "male" : "female")} underwear0 single-layer",
+        _ => "direct module ordinal643 single-layer monster",
+    };
 
     public static ActorDiagnosticProfile ForMode(TerrainViewerMode mode) => mode == TerrainViewerMode.WorldDiagnostic ? HumanFixed : MonsterRegression;
     public ActorDiagnosticResource Resource(ActorDiagnosticAction action) => action switch
