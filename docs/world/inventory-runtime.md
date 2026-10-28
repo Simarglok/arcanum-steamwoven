@@ -257,7 +257,7 @@ not migrated.
 | --- | --- |
 | Changes are saved with the map the NPC stands on (NI1–NI3). | Changes are saved by NPC identity; the visible result is the same because the NPC carries its items (NI4). |
 | A reference to an item no longer found is kept as a null list element with the count unchanged (NI2). | The list holds only items it has; a deleted item is gone from it. |
-| Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1). | Not modelled (no barter); added items stay. |
+| Closing a barter window restocks a non-follower NPC with an inventory source after 12–24 game hours, destroying items without the persistent flag (NI6, F1; corrected by BT4 and RK2: the timer is set at every open). | The restock event (ARC-WORLD-094, [barter runtime](barter-runtime.md#restock-event-arc-world-094)); the AREA viewer schedules it at every barter and loot open (ARC-WORLD-096). |
 | A teleport clears an NPC's substitute-inventory link; an insert makes the NPC re-equip its best items (NI7, F1). | Not modelled. |
 | Any object type can enter an NPC's list. | Gold, keys and key rings are refused, as for the PC's lists; ammunition merges into the NPC's stack of its prototype (ARC-WORLD-066). |
 
@@ -602,7 +602,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers. The barter window's trades
   (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); since ARC-WORLD-090 they move
   items out of and into a merchant's substitute container (its added list in the NPC store, marked as a container), and the barter open
-  moves the container's coins onto the merchant; restock is not modelled.
+  moves the container's coins onto the merchant; ARC-WORLD-094 and ARC-WORLD-096 restock it ([barter runtime](barter-runtime.md#restock-in-the-viewer-arc-world-096)).
 
 ## Made item complexity (ARC-WORLD-083)
 

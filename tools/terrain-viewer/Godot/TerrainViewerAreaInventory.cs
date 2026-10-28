@@ -224,6 +224,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-063: a junk pile's window closes against the session it was opened on.
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         _inventoryPanel.Open(InventoryView(holder));
+        // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
+        if (holder is not null) ScheduleRestock(holder, "loot");
         GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
     }
