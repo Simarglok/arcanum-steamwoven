@@ -738,8 +738,60 @@ reads `current/maximum` (`15/100` on that map), hovering another living NPC read
 sit in the vials at the original's places and stay there with the inventory open, and the palette hides the gauges; it prints `ARC-UI-020 native-smoke life PASS`
 (the stage leaves the hero poisoned and the NPC joined and wounded). Not done: the original's fill art in the vials, the
 hovered panel's level line and its place on the bars' description line, portrait art, the PC as a hover target (the
-viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4). Original visual parity
+viewer's actor is not pickable), action points and the turn cue (slice 2), floating text (slice 4, [ARC-UI-021](#floating-text-arc-ui-021)). Original visual parity
 NOT VERIFIED.
+
+### Floating text (ARC-UI-021)
+
+Slice 4 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-005), in `crash-site-area`, drawn with the
+viewer's font under every interface layer (no original font art). The rules are `FloaterRules`, `FloaterField` and
+`CombatFloaters` in `Arcanum.Presentation.Hud`, read in the 1.0.7.4 executable ([ledger
+CH10–CH12](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); `AreaCombatFloaters` turns the session's attack
+results into them.
+
+- **What floats.** Every attack the viewer runs through the session: the hero's on an NPC or an object (also a
+  projectile's strike, and a wall the line of fire struck, which floats only a critical self-hit's lines), and an NPC's
+  or a companion's (the AI host). In the original's order, over the critter the
+  step is about (the target, or the attacker of a critical self-hit): the critical miss or hit, its multiplier, the
+  stun (whenever the stun bit meets a critter that was not stunned, without a knockdown bit), unconsciousness or the
+  knockdown, the scar (at the scar limit too), blinding, the crippled arm with the weapon and shield it drops, crippled
+  legs, the armour damaged or broken, the dropped helmet, the weapon damaged, broken or destroyed, the lost ammunition and
+  the dropped weapon (a drop floats whether it lands or is refused, as the original's message comes before the drop's
+  answer); a dodge floats over the target. The attacker's weapon worn on a hard target floats its damage or break over
+  it at every level. At "text floaters" 2 also the damage line (`N HT`, ` N FT` added for fatigue, only the fatigue part
+  without hit-point damage), the poison increase (`Poison level +N`), an object's damage (`HT N`, never below 0) and a
+  bare-handed attacker's own loss. The numbers are the step's amounts after resistance, difficulty and the multiplier,
+  before the life rules adjust them (a poison an undead ignores still floats), as the original prints them. A target dead before the hit, a refused attack, a plain miss and a prevented hit float
+  nothing; healing never floats (the original's healing makes no floater). The texts are the player's
+  `mes\combat.mes` 0–24 (read once a module, at game start as the original's combat init; the project's English text
+  where a line does not read).
+- **Colours.** Red for the PC, yellow for an NPC the PC leads, white for anyone else, by the critter the step is about;
+  a dodge and an object's damage white, poison green, the attacker's own wear red.
+- **Motion.** A line starts 4 line heights below the top of a 200 px box (line height = the font's text height + 2), or
+  one height below the object's newest line while that has risen less than a height, so lines stack. At most every
+  50 ms of wall time every line rises by the Float Speed + 1 px (60 px a second at the default 2) and is removed above
+  the top. A line fades in from 4h to 2.5h, is opaque to 1.5h and fades out to the top (the original's integer
+  formula). The box is centred over the object, its bottom 90 px (at the view's zoom) above the tile centre; the text
+  keeps the screen's pixels at any zoom. The hero's box follows its committed cell, a companion's and a walking NPC's
+  their live cells, an object's its map cell (no draw offset). A new scene drops every line.
+- **Settings.** The [options window](#options-window-arc-ui-013)'s Video page offers Floats (Never, Minimal, Verbose:
+  0–2, default 1) and Float Speed (0–10, default 2). Level 0 draws nothing (the lines are still made and rise, as the
+  original's). Both are saved at once in `user://game_settings_v1.json` (version 2; a version 1 file reads with their
+  defaults).
+
+Checks: `FloatersTests` (colours, start offsets and stacking, the fade at its edges, the box and line positions, the
+field's 50 ms step and removal, the attack's lines in order at levels 1 and 2, the damage-line formats, dodges, objects
+and the attacker's lines), `AreaCombatFloatersTests` (the message conditions from session results, the texts) and the
+native smoke stage `floaters` (map mode with `--hero`, only when named: `ARC_AREA_MAP_SMOKE_ONLY=floaters`, observed on
+`bates mansion lev 2`; `ARC_AREA_FLOATERS_CAPTURE=<ignored path prefix>` saves readbacks): at level 2 the hero's
+critical hit (a granted fate) on the living NPC with the most hit points floats the rules' lines with all 25 texts
+from the game's file, the critical-hit message first, stacked from 4h one height apart, the damage line in white; the
+smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the NPC then attacks the hero until a hit
+lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
+it prints `ARC-UI-021 native-smoke floaters PASS`. Not done: spell, trap and script damage and the other damage steps
+without an attack (spell blinding included), the draw offsets of the boxes' objects (the hero's while walking), the
+original's font art 229, text
+bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -803,7 +855,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no drop or stacks (ARC-UI-015 added the paper doll and the weight line, ARC-UI-019 the grid and the drag); the
+  diagnostic window: no stacks (ARC-UI-015 added the paper doll and the weight line, ARC-UI-019 the grid and the drag, ARC-UI-025 the drop and the use); the
   host's insert check accepts every item (the room for an item entering from outside is NOT READY; the session answers it for the
   window's moves, ARC-UI-019); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
   and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
@@ -821,8 +873,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): dropping on the ground or the use icon, right-click use, stack
-  splitting and the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Not built yet (follow-up slices): stack splitting and the gold drag. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -841,6 +892,23 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   kit item's no-drop flag and scripts come from the hero load (`AreaHeroLoad.KitGridMove`), a taken item's from its object row; a made
   item has none here (NOT READY). The native smoke drags a grid item to a free cell and back and the first worn item off into a free
   cell and back onto its slot (`ARC-UI-019 native-smoke drag PASS dragged=4`).
+- **Drop and use (ARC-UI-025).** Right of the grid the window draws the original's drop and use icons at their corners (703, 385 and
+  703, 331 on the window; plain 32-pixel squares, the icons' art size is not read; [ledger IW16–IW19](../research/ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025)).
+  A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
+  ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
+  events and the placement into a junk pile or loose with its decay; a stack of more than one unit is refused ("the quantity window is
+  NOT READY", IW7). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
+  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
+  map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
+  (`AiExecutorRules.UseItemNow`) over the window's world: a scroll the hero is not clever enough for stops; an item that needs a target
+  and has none opens the targeting cursor (lockpicks arm the lock pick, as *Pick a lock* does; any other item's cursor is NOT READY);
+  a trap device's use is NOT READY; the item's use script (a taken item's) may stop the use; an item with spell charges or the magical
+  flag casts its slot-0 spell through the map's cast host (`SessionItemTriggers.UseItem`); otherwise a written item opens the reading
+  window, a healing kit heals the hero, food and scrolls are spent; 4 action points on the hero's turn of a round. Log lines
+  `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-presses
+  a worn item (nothing), uses the first usable grid item when the hero holds one, drags a taken item onto *Drop* and takes it back
+  (`ARC-UI-025 native-smoke drop-use PASS`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1469,16 +1537,16 @@ The original's options window (its window 6, [ledger OP1–OP8](../research/ledg
 in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
 project's.
 
-- **Pages.** The buttons Game, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
-  letters G, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
+- **Pages.** The buttons Game, Video, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
+  letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
   rule modes; the original's options window ignores them (an original bug: its hotkey path runs such buttons only in
-  the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The original's Video page (Brightness, Text
-  Duration, Floats, Float Speed, Combat Taunts) is hidden with its reason, as Steamwoven has no gamma control,
-  floating text or combat taunts; so is its V letter.
+  the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The Video page (ARC-UI-021) shows Floats and
+  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed; its Brightness, Text Duration and Combat
+  Taunts are hidden with their reasons (no gamma control, text bubbles or combat taunts).
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
-  Run and the project's Rules line (ARC-UI-014, below). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
   slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
@@ -1487,7 +1555,8 @@ project's.
   hero it goes through the hero's turn-based switch (a hero in combat mode starts or ends a round; a refusal keeps the
   value and names why, where the original's setting keeps the new value, OP5), without one the setting changes alone;
   a quick load that brings a round turns it on and saves it. Auto Attack is the real-time attack repeat's setting
-  (ARC-COMBAT-005). Always Run and the three volumes are the palette's settings (ARC-WORLD-020, ARC-UI-044).
+  (ARC-COMBAT-005). Floats and Float Speed are the floating text's level and step (ARC-UI-021). Always Run and the three
+  volumes are the palette's settings (ARC-WORLD-020, ARC-UI-044).
 - **Rules (ARC-UI-014).** A line the original's table does not have, after its eight Game slots, with project texts
   only (the label and values never come from the game's files): Steamwoven (default) or Original, the two built-in
   [rule modes](../world/rule-modes.md); custom mixes come after alpha (owner, 2026-10-28). A change switches the
@@ -1495,24 +1564,25 @@ project's.
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based and auto attack in
-  `user://game_settings_v1.json` (`{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}`; a missing or invalid file
-  reads as the original's defaults 1, off, on), Always Run and the volumes in their own files. Each change is saved at
+- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack and the floaters in
+  `user://game_settings_v1.json` (`{"version":2,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S}`;
+  a version 1 file without the last two reads with their defaults; a missing or invalid file reads as the original's
+  defaults 1, off, on, 1, 2), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
 Self-test `ARC-UI-013 self-test PASS synthetic options window` (the production app over the synthetic area owner
-launched without the menu, no preference file): in-play Options opening the window at its Game page with the Video
-page hidden and named, each arrow applying the difficulty (on the session), the turn-based setting, auto attack,
-Always Run and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
+launched without the menu, no preference file): in-play Options opening the window at its Game page, each arrow
+applying the difficulty (on the session), the turn-based setting, auto attack, Always Run, the floaters' level and
+speed on the Video page (its hidden controls named) and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
 from play, Done going back from the main menu, the Rules line switching the session to Original and back. Native smoke on the original data, map mode on the start map with
 `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=options` prints `ARC-UI-013 native-smoke options PASS` (all 27 option
 texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
 Done back to the main menu, a new game as the first hero beginning under the Original rules, then in play a difficulty
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
-Steamwoven on the session, the O key closing the menu). Not done: the Video page's settings, Module,
+Steamwoven on the session, the O key closing the menu). Not done: Brightness, Text Duration, Combat Taunts, Module,
 Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
 button sounds.
 
@@ -1544,7 +1614,7 @@ the palette, the menu or the world map is open the bars are hidden, and they com
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. The rest of the bottom strip (hot-key slots, recent
-actions) and the top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+actions; their keys work, [hotkey bar](#hotkey-bar-arc-ui-022)) and the top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the
@@ -1602,6 +1672,16 @@ drawn with the background, its icon and 3004; a repeat not stored and sounding a
 GUI; Character's name withheld within 3 s and drawn after, leaving it showing the entry again; Spells taking the window, an entry
 taking it back, a move over the strip returning it, a move above the strip giving it to the log, Spells up showing the entry; a
 long text drawn wide).
+
+### Hotkey bar (ARC-UI-022)
+
+With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries (on the press, not during another critter's turn of a turn-based round) and `A` the latest
+recent action ([contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
+ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). The bar's hot-key slots and recent-action buttons are not
+drawn as working yet, so keys stand in for its drag and drop: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
+spell pane, or the palette's Prowl action) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
+inventory window holds an item drops the item on the entry (it leaves the grid). The status line lists the entries and the latest
+action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`.
 
 ### Logbook (ARC-UI-008)
 
@@ -1700,12 +1780,17 @@ and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken conta
 open shows no window.
 
 **Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
-the follower menu and cycling and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+the follower menu and cycling ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). ARC-WORLD-096: every open schedules
+the restock of the window's container (else the merchant), logged as `ARC-WORLD-096 restock schedule`, and a loot open schedules the
+looted holder's; the event world runs the restock through the viewer's restock host ([barter runtime](../world/barter-runtime.md#restock-in-the-viewer-arc-world-096)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
 with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
-its substitute container when no speaker buys itself, its quotes, the open is at most one revision, `Escape` closes with nothing changed;
-one sale and one buy on a detached copy, through the container when there is one).
+its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
+restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
+one); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
+screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the
+window opened again shows the new wares.
 
 ### Reading window (ARC-UI-049)
 

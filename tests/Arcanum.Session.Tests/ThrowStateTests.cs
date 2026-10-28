@@ -87,6 +87,20 @@ public sealed class ThrowStateTests
             "nothing is wielded to throw now");
     }
 
+    // ARC-MAGIC-025 (IC12, IC14): the thrown item is the projectile's item of its location event; its strike is its end.
+    [TestMethod]
+    public void AThrownShotsLocationEventNamesTheThrownItemUntilItStrikes()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var shot = ThrowUntil(owner, rat, hit: true);
+        var tile = new CellCoord(Start.Cell.X + 3, Start.Cell.Y);
+        Assert.AreEqual("kit:1", owner.QueryShotEndItemEvents(shot.Shot!.Value, tile).Single().Item);
+        Assert.AreEqual(GameSessionFailure.None, owner.LandShot(owner.Version, shot.Shot.Value, new(rat)).Failure);
+        Assert.AreEqual(0, owner.QueryShotEndItemEvents(shot.Shot.Value, tile).Count, "struck: the landing the session splits off fires nothing more");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot.Shot.Value, tile).Disposition);
+    }
+
     [TestMethod]
     public void ThrowIsCheckedWithTheThrowingSkillAndTheThrownRange()
     {

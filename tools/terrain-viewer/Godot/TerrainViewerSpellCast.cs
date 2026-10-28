@@ -172,7 +172,8 @@ public partial class TerrainViewerApp
         if (_spellPane is null)
         {
             _spellPane = new AreaSpellPane(); AddChild(_spellPane);
-            _spellPane.Activated += spell => ActivateSpell(spell);
+            // ARC-UI-022: the press becomes the latest recent action first (0x57EFA0), then the activation.
+            _spellPane.Activated += spell => { RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell)); ActivateSpell(spell); };
             _spellPane.WeaponToggled += ToggleWeaponPane;
             _spellPane.ItemActivated += ActivateItemSlot;
         }

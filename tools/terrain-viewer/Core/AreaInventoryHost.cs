@@ -18,6 +18,10 @@ public enum AreaInventoryMapStatus { Ready, InventoryRefused, PcRecordPresent }
 /// area): its entity, its inventory source (container field 0x3D, whose buy line the dealer test retries, BT8) and its cell.</summary>
 public sealed record AreaSubstituteContainer(string Entity, int InventorySource, CellCoord Cell);
 
+/// <summary>ARC-WORLD-096: a holder's restock fields at T0: its inventory source (NPC field 0xEF, container field 0x3D; 0 is none) and a
+/// container's flags (field 0x38; 0 for an NPC).</summary>
+public readonly record struct AreaRestockSeed(int InventorySource, uint ContainerFlags);
+
 /// <summary>
 /// The session inventory seed of one loaded area map (ARC-WORLD-014) with the object rows the AREA viewer needs to
 /// find, place and name its items and holders (ARC-UI-004). <see cref="Build"/> uses the conversation host's entity ids
@@ -29,15 +33,26 @@ public sealed class AreaInventoryMap
     private readonly Dictionary<AreaObjectKey, string> _entities;
 
     private readonly Dictionary<string, AreaSubstituteContainer> _substitutes;
+    private readonly Dictionary<string, AreaRestockSeed> _restock;
+    private readonly HashSet<string> _persistent;
 
     /// <param name="rows">The object row of every seed entity (exactly those); one row per entity.</param>
     /// <param name="substitutes">ARC-WORLD-090: the substitute container of each NPC entity that has one, a container of the seed.</param>
+    /// <param name="restock">ARC-WORLD-096: the restock fields of seed holders (a holder left out has no source and no flags).</param>
+    /// <param name="persistent">ARC-WORLD-096: the seed items whose item flags carry the persistent flag 0x2000.</param>
     public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0,
-        int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null)
+        int npcsWithoutEvidence = 0, IReadOnlyDictionary<string, AreaSubstituteContainer>? substitutes = null,
+        IReadOnlyDictionary<string, AreaRestockSeed>? restock = null, IEnumerable<string>? persistent = null)
     {
         ArgumentNullException.ThrowIfNull(seed);
         ArgumentNullException.ThrowIfNull(rows);
         _substitutes = new(substitutes ?? new Dictionary<string, AreaSubstituteContainer>(), StringComparer.Ordinal);
+        _restock = new(restock ?? new Dictionary<string, AreaRestockSeed>(), StringComparer.Ordinal);
+        _persistent = new(persistent ?? [], StringComparer.Ordinal);
+        if (!_restock.Keys.ToHashSet(StringComparer.Ordinal).IsSubsetOf(seed.Holders.Select(holder => holder.Entity)))
+            throw new ArgumentException("AREA_INVENTORY_RESTOCK_NOT_IN_SEED", nameof(restock));
+        if (!_persistent.IsSubsetOf(seed.Items.Select(item => item.Entity)))
+            throw new ArgumentException("AREA_INVENTORY_PERSISTENT_NOT_IN_SEED", nameof(persistent));
         if (_substitutes.Any(pair => !seed.Holders.Any(holder => holder.Entity == pair.Key && holder.Kind == SessionHolderKind.Npc) ||
                 !seed.Holders.Any(holder => holder.Entity == pair.Value.Entity && holder.Kind == SessionHolderKind.Container)))
             throw new ArgumentException("AREA_INVENTORY_SUBSTITUTE_NOT_IN_SEED", nameof(substitutes));
@@ -61,6 +76,11 @@ public sealed class AreaInventoryMap
     public AreaSubstituteContainer? Substitute(string npc) => _substitutes.GetValueOrDefault(npc);
     /// <summary>ARC-WORLD-090: the NPCs with a substitute container.</summary>
     public int Substitutes => _substitutes.Count;
+    /// <summary>ARC-WORLD-096: the restock fields of a seed holder (none: no source, no flags).</summary>
+    public AreaRestockSeed RestockSeed(string holder) => _restock.GetValueOrDefault(holder);
+    /// <summary>ARC-WORLD-096: whether a seed item carries the persistent item flag 0x2000 (field 0x57).</summary>
+    public bool Persistent(string item) => _persistent.Contains(item);
+
     public bool TryGetRow(string entity, out AreaObjectRecord row) => _rows.TryGetValue(entity, out row!);
     public bool TryGetEntity(AreaObjectKey key, out string entity) => _entities.TryGetValue(key, out entity!);
 
@@ -109,7 +129,11 @@ public sealed class AreaInventoryMap
             if (npc.SubstituteInventory?.SourceIndex is { } index && inventory.TryGetHolder(index, out var box) && box.Type == AreaInventoryHolderType.Container &&
                 box.WorldX is { } x && box.WorldY is { } y)
                 substitutes[Id(npc.Key)] = new(Id(box.Key), box.InventorySource, new(checked((int)x), checked((int)y)));
-        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes),
+        // ARC-WORLD-096: the restock fields and the persistent items (RK1, RK5).
+        var restock = inventory.Holders.Where(holder => holder.InventorySource != 0 || holder.ContainerFlags is > 0)
+            .ToDictionary(holder => Id(holder.Key), holder => new AreaRestockSeed(holder.InventorySource, holder.ContainerFlags ?? 0), StringComparer.Ordinal);
+        var persistent = inventory.Items.Where(item => RestockRules.Keeps(item.ItemFlags)).Select(item => Id(item.Key));
+        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes, restock, persistent),
             $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence");
     }
 
@@ -159,6 +183,9 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     public bool Lockpick { get; init; }
     /// <summary>ARC-SKILLS-007: the item is damaged or broken, so the hero's Repair skill has something to do.</summary>
     public bool Repairable { get; init; }
+    /// <summary>ARC-UI-025: a right press on the item would use it: a held item, not worn and without a wear location, with
+    /// <c>OIF_CAN_USE_BOX</c> (IW5); the turn rule is the app's.</summary>
+    public bool Usable { get; init; }
     /// <summary>ARC-UI-015: the wear slots the item can be put into (its wear location; a ring either ring slot); empty for an item
     /// that is worn now, worn nowhere, or whose wear facts the viewer does not have.</summary>
     public IReadOnlyList<EquipmentSlot> WearSlots { get; init; } = Array.Empty<EquipmentSlot>();
@@ -296,7 +323,8 @@ public sealed class AreaInventoryHost
     /// that holder's current list.</summary>
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
         IReadOnlyList<SessionHealingItem?>? kitHealing = null, IReadOnlyList<SessionLockpick?>? kitLockpicks = null,
-        IReadOnlyList<SessionWearItem?>? kitDurability = null, IReadOnlyList<SessionWearableItem?>? kitWear = null)
+        IReadOnlyList<SessionWearItem?>? kitDurability = null, IReadOnlyList<SessionWearableItem?>? kitWear = null,
+        IReadOnlyList<AreaItemUseFacts?>? kitUse = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
@@ -307,10 +335,10 @@ public sealed class AreaInventoryHost
         string Units(string entity) => session.QueryAmmo(entity) is { } stack ? $" ×{stack.Units}" : string.Empty;
         var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) })
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) })
             .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Units(item.Entity) + Worn(item.Entity))
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
-              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity) }))
+              Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) }))
             // ARC-WORLD-055: the items the hero made or took from an NPC that held made items follow, named by their kind.
             .Concat(session.QueryMadeItems().Select(item => new AreaInventoryLine(item.Entity, Line(KindName(item.Kind, catalog), item.Kind.Type, null) + Units(item.Entity) + " (made)" + Worn(item.Entity))
             { Written = item.Kind.Type == SessionItemType.Written }))
@@ -343,6 +371,24 @@ public sealed class AreaInventoryHost
             { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced };
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
+        bool Usable(string entity) => !worn.Contains(entity) && UseFacts(session, entity, kitUse) is { CanUseBox: true, Wearable: false };
+    }
+
+    /// <summary>
+    /// ARC-UI-025: the use facts of an item the PC holds (listed or worn): a kit item's from <paramref name="kitUse"/> (the hero load's, by
+    /// kit number), a taken item's from its object row's fields (<see cref="AreaItemUseFacts.From"/>). Null for a made item (its prototype's
+    /// facts are not read here: NOT READY), an item the session no longer has or whose fields do not read.
+    /// </summary>
+    public AreaItemUseFacts? UseFacts(GameSessionOwner session, string entity, IReadOnlyList<AreaItemUseFacts?>? kitUse)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.IsItemDestroyed(entity)) return null;
+        if (session.QueryHeroKit().Any(item => item.Entity == entity))
+            return KitNumber(entity) is { } number && kitUse is not null && number <= kitUse.Count ? kitUse[number - 1] : null;
+        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaItemUseFacts.From(entity, fields);
+        return null;
     }
 
     /// <summary>

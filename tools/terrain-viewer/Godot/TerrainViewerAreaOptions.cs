@@ -31,12 +31,12 @@ public partial class TerrainViewerApp
         LauncherSettingsRead();
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -79,6 +79,12 @@ public partial class TerrainViewerApp
                 else SaveGameSettings(_gameSettings with { TurnBased = turnBased });
                 break;
             case AreaOption.AutoAttack: SaveGameSettings(_gameSettings with { AutoAttack = value == 1 }); break;
+            // ARC-UI-021: the floating text's level and speed (CH10); lines in flight keep moving at the new speed.
+            case AreaOption.Floats or AreaOption.FloatSpeed:
+                var floater = AreaOptionTable.Of(option);
+                if (value < 0 || value > floater.Limit) { refused = "out of range"; break; }
+                SaveGameSettings(option == AreaOption.Floats ? _gameSettings with { Floats = value } : _gameSettings with { FloatSpeed = value });
+                break;
             case AreaOption.AlwaysRun: SetAlwaysRun(value == 1); break;
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;
             case AreaOption.Voice: PaletteVolumeChanged(AudioChannel.Voice, value); break;
@@ -114,7 +120,7 @@ public partial class TerrainViewerApp
         _gameSettings = settings;
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} saved={saved}");
     }
 }
 

@@ -153,9 +153,10 @@ public static partial class AiExecutorRules
     /// points; then an item without spell charges and without the magical flag pays 4 action points and is read (written), used as a
     /// lockpick or healing kit with its skill (generic) or spent (food, scroll); an item with either casts its slot-0 spell without a
     /// charge and a food or scroll is spent. The action points are the consume's (0x4B7CD0): only in a round, on the user's subturn.
+    /// ARC-UI-025: the player's inventory window runs the same use through its own <see cref="IItemUseWorld"/>.
     /// </summary>
     [OriginalFunction(0x462CC0, OriginalFunctionScope.Partial)]
-    public static AiItemUseResult UseItemNow(IAiGoalWorld world, string user, string item, string? target)
+    public static AiItemUseResult UseItemNow(IItemUseWorld world, string user, string item, string? target)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(user);
@@ -190,7 +191,7 @@ public static partial class AiExecutorRules
         }
     }
 
-    private static bool Spend(IAiGoalWorld world, AiItemKind kind, string item)
+    private static bool Spend(IItemUseWorld world, AiItemKind kind, string item)
     {
         if (kind is not (AiItemKind.Food or AiItemKind.Scroll)) return false;
         world.SpendItem(item);
@@ -198,7 +199,7 @@ public static partial class AiExecutorRules
     }
 
     // The item use's 4 action points (0x4B7CD0): true when they were charged on the user's subturn.
-    private static bool Charge(IAiGoalWorld world, string user)
+    private static bool Charge(IItemUseWorld world, string user)
     {
         if (!world.InRound || world.RoundActor != user) return false;
         world.Consume(user, TurnBasedRules.UseItemCost);

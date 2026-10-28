@@ -89,6 +89,25 @@ public static class InventorySourceBuyRules
         return false;
     }
 
+    /// <summary>
+    /// ARC-WORLD-096: the coin pair the loot-line parse (0x4BF7B0) reads first, which a set it later empties keeps (RK6): the pair after the
+    /// name, each side through <c>atoi</c> (leading white space and a sign allowed, digits up to the first other character).
+    /// <see cref="InventorySourceCoinsStatus.Undefined"/> when the parse fails before the pair (a line of 2000 or more characters, no name,
+    /// a name of 70 or more characters, no pair or a pair without its right side: the original's pair is uninitialised);
+    /// <see cref="InventorySourceCoinsStatus.Unsupported"/> when a side overflows (undefined in C, not modelled).
+    /// </summary>
+    public static InventorySourceCoins LootLineCoins(ReadOnlySpan<byte> line)
+    {
+        var undefined = new InventorySourceCoins(InventorySourceCoinsStatus.Undefined, 0, 0);
+        if (line.Length > MaxLineCharacters) return undefined;
+        var tokens = new CTokenizer(System.Text.Encoding.Latin1.GetString(line));
+        if (tokens.Next(":") is not { } name || name.Length >= 70) return undefined;
+        if (tokens.Next(",") is not { } left || tokens.Next(" ") is not { } right) return undefined;
+        static string Lead(string token) => token.TrimStart(' ', '\t', '\n', '\v', '\f', '\r');
+        return Atoi(Lead(left)) is { } min && Atoi(Lead(right)) is { } max
+            ? new(InventorySourceCoinsStatus.Read, min, max) : new(InventorySourceCoinsStatus.Unsupported, 0, 0);
+    }
+
     // The C runtime's strtok over one string: each call skips leading delimiters, takes the token up to the next delimiter and
     // continues after it; null when nothing is left.
     private sealed class CTokenizer(string text)

@@ -21,6 +21,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     private readonly List<Button> _useButtons = new();
     private readonly List<Button> _pickButtons = new();
     private readonly List<Button> _repairButtons = new();
+    private readonly List<Button> _dropButtons = new();
     private Label _doll = null!;
     private VBoxContainer _wear = null!;
     private readonly List<Button> _wearButtons = new();
@@ -40,7 +41,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? CloseRequested;
     public event Action<string>? TakeRequested;
     public event Action? TakeAllRequested;
-    /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC.</summary>
+    /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right press on
+    /// it does (the item use 0x462CC0 with the hero as user and target, IW5).</summary>
     public event Action<string>? UseRequested;
     /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>
     public event Action<string>? ReadRequested;
@@ -62,6 +64,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal IReadOnlyList<Button> UseButtonsForSelfTest => _useButtons;
     internal IReadOnlyList<Button> PickButtonsForSelfTest => _pickButtons;
     internal IReadOnlyList<Button> RepairButtonsForSelfTest => _repairButtons;
+    internal IReadOnlyList<Button> DropButtonsForSelfTest => _dropButtons;
     internal IReadOnlyList<Button> WearButtonsForSelfTest => _wearButtons;
     internal IReadOnlyList<Button> TakeOffButtonsForSelfTest => _takeOffButtons;
     internal IReadOnlyList<(string Entity, EquipmentSlot Slot)> WearTargetsForSelfTest => _wearTargets;
@@ -108,6 +111,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _hint = new Label { Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _area = new AreaInventoryGridArea { Name = "DollAndGrid" };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
+        _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
         foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -120,6 +124,9 @@ public partial class AreaInventoryPanel : CanvasLayer
 
     /// <summary>ARC-UI-019: puts an item on the cursor (a wear move's occupant).</summary>
     public void Hold(AreaInventoryHeld? held) => _area.Hold(held);
+
+    /// <summary>ARC-UI-022: the item held on the cursor, or null (a key 1..0 drops it on a hotkey entry).</summary>
+    public AreaInventoryHeld? Held => _area.Held;
 
     public void CloseView()
     {
@@ -138,8 +145,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         _buttons.Clear();
         foreach (var button in _useButtons.Concat(_pickButtons).Concat(_repairButtons)) { _use.RemoveChild(button); button.QueueFree(); }
         _useButtons.Clear(); _pickButtons.Clear(); _repairButtons.Clear();
-        foreach (var button in _takeOffButtons.Concat(_wearButtons)) { _wear.RemoveChild(button); button.QueueFree(); }
-        _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear();
+        foreach (var button in _takeOffButtons.Concat(_wearButtons).Concat(_dropButtons)) { _wear.RemoveChild(button); button.QueueFree(); }
+        _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear(); _dropButtons.Clear();
         _view = view;
         _area.Render(view);
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
@@ -169,13 +176,25 @@ public partial class AreaInventoryPanel : CanvasLayer
                 wear.Pressed += () => Callable.From(() => WearRequested?.Invoke(entity, wearSlot)).CallDeferred();
                 _wear.AddChild(wear); _wearButtons.Add(wear); _wearTargets.Add((entity, wearSlot));
             }
+        // ARC-UI-025: the drop icon for the keyboard and the controller: one button per held item (a worn one from its slot).
+        foreach (var line in view.Pc)
+        {
+            var held = new AreaInventoryHeld(line.Entity, view.Doll.FirstOrDefault(slot => slot.Entity == line.Entity)?.Slot, 0);
+            var drop = new Button
+            {
+                Name = $"Drop{_dropButtons.Count + 1}", Text = "Drop on the ground: " + line.Text, Alignment = HorizontalAlignment.Left,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
+            };
+            drop.Pressed += () => Callable.From(() => DropRequested?.Invoke(new(AreaInventoryDropKind.DropToGround, held))).CallDeferred();
+            _wear.AddChild(drop); _dropButtons.Add(drop);
+        }
         _pc.Text = view.Pc.Count == 0 ? "(nothing taken yet)" : string.Join("\n", view.Pc.Select((line, index) => $"{index + 1}. {line.Text}"));
-        foreach (var line in view.Pc.Where(line => line.Healing))
+        foreach (var line in view.Pc.Where(line => line.Usable))
         {
             var entity = line.Entity;
             var use = new Button
             {
-                Name = $"Use{_useButtons.Count + 1}", Text = "Use on self: " + line.Text, Alignment = HorizontalAlignment.Left,
+                Name = $"Use{_useButtons.Count + 1}", Text = "Use: " + line.Text, Alignment = HorizontalAlignment.Left,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
             };
             use.Pressed += () => Callable.From(() => UseRequested?.Invoke(entity)).CallDeferred();
@@ -235,14 +254,14 @@ public partial class AreaInventoryPanel : CanvasLayer
         }
         _message.Text = message ?? string.Empty;
         _hint.Text = (looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
-            + (view.Pc.Any(line => line.Healing) ? "Use on self heals the hero with a healing item | " : string.Empty)
+            + (_useButtons.Count > 0 ? "Use (or a right click) uses an item on the hero; the Use icon uses a held item (Shift: on the hero) | " : string.Empty)
             + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
             + (_pickButtons.Count > 0 ? "Pick a lock closes the window; then press a door or window | " : string.Empty)
             + (_repairButtons.Count > 0 ? "Repair uses the hero's Repair skill on a damaged item | " : string.Empty)
             + (_wearButtons.Count + _takeOffButtons.Count > 0 ? "Wear puts an item into a slot (an occupant goes back to the pack); Take off moves it to the pack | " : string.Empty)
-            + "Mouse: press an item of the doll or grid and release it on a grid cell or a slot (an occupant comes onto the cursor)"
+            + "Mouse: press an item of the doll or grid and release it on a grid cell or a slot (an occupant comes onto the cursor), on Drop to drop it on the hero's tile or on Use to use it"
             + (view.Unplaced.Count > 0 ? $" | no room in the grid: {string.Join(", ", view.Unplaced)}" : string.Empty)
-            + " | I, Escape or cancel closes | PROJECT diagnostic window: no drop to the ground, no stacks; original UI parity NOT_VERIFIED";
+            + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map, no stacks; original UI parity NOT_VERIFIED";
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
@@ -253,7 +272,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
-        list.AddRange(_takeOffButtons.Concat(_wearButtons));
+        list.AddRange(_takeOffButtons.Concat(_wearButtons).Concat(_dropButtons));
         list.Add(_close);
         return list;
     }
