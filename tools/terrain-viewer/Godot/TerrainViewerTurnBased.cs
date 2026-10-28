@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer;
 // stand while a round runs.
 public partial class TerrainViewerApp
 {
-    // The original's turn-based setting (default off); kept by the viewer, set on when a quick load brings a round.
+    // The original's turn-based setting (default off); a user preference since ARC-UI-013, set on when a quick load brings a round.
     private bool _turnBasedSetting;
     private string _turnBasedNotice = "Space toggles turn-based";
     private readonly AreaSectorEntries _sectorEntries = new();
@@ -54,6 +54,8 @@ public partial class TerrainViewerApp
         // The original refuses while the PC runs an animation it cannot interrupt; the viewer counts an attack and a cast as such.
         var result = session.SwitchTurnBased(session.Version, _turnBasedSetting, requested, AreaCombatWorldNow(), !AttackPlaying && _spellGoal is null);
         if (result.Store) _turnBasedSetting = requested;
+        // ARC-UI-013: the same setting as the options window's default combat mode, kept as a user preference.
+        if (result.Store) SaveGameSettings(_gameSettings with { TurnBased = requested });
         LogRound(result.Round?.Events ?? []);
         if (result.Round is { Disposition: GameSessionDisposition.Changed } && session.QueryCombatRound() is not null) InterruptForRound();
         _turnBasedNotice = result switch

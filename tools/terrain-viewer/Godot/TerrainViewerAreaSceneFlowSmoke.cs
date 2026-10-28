@@ -64,7 +64,7 @@ public partial class TerrainViewerApp
 
             // In play: Escape opens the in-play window; Save Game saves and ends it.
             Key(Godot.Key.Escape);
-            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && _mainMenu.Shown.Select(button => button.Message).SequenceEqual([30, 31, 33, 34]),
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && _mainMenu.Shown.Select(button => button.Message).SequenceEqual([30, 31, 32, 33, 34]),
                 "Escape opened the in-play window");
             Choose(30);
             for (var frame = 0; frame < 30 && !SaveListOpen; frame++) await Frames(1);
