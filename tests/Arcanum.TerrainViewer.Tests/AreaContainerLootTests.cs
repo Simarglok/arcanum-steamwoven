@@ -42,7 +42,7 @@ public sealed class AreaContainerLootTests
 
     // 0 a chest at (100,100) holding 9 a ring; 1 a locked chest; 2 a jammed one; 3 one with a use script; 4 one with an unlock script;
     // 5 a crate with flag 0x200 and source 5 at (107,100) holding 10 an axe and 11 a persistent amulet; 6 a magically held chest; 7 one
-    // with flag 0x100 (it stays open).
+    // with flag 0x100 (it stays open); 8 a second crate with flag 0x200 and a use script.
     private static AreaInventoryMap Map()
     {
         var seed = new SessionMapInventorySeed(
@@ -55,6 +55,7 @@ public sealed class AreaContainerLootTests
                 new(Entity(5), SessionHolderKind.Container, false, false, [], [Entity(10), Entity(11)]),
                 new(Entity(6), SessionHolderKind.Container, false, false, [], []),
                 new(Entity(7), SessionHolderKind.Container, false, false, [], []),
+                new(Entity(8), SessionHolderKind.Container, false, false, [SessionScriptPoint.Use], []),
             ],
             [
                 new(Entity(9), Facts(SessionItemType.Armor, 2805), null),
@@ -65,9 +66,10 @@ public sealed class AreaContainerLootTests
         {
             Container(0, 100), Container(1, 101, LockRules.LockedBit), Container(2, 102, LockRules.JammedBit), Container(3, 103, script: SessionScriptPoint.Use),
             Container(4, 104, script: 3), Container(5, CrateX, RestockRules.GeneratedOnceFlag), Container(6, 108, LockRules.MagicallyHeldBit),
-            Container(7, 109, AreaContainerLoot.StaysOpenFlag), Item(9, 7, 100), Item(10, 5, CrateX), Item(11, 7, CrateX),
+            Container(7, 109, AreaContainerLoot.StaysOpenFlag), Container(8, 110, RestockRules.GeneratedOnceFlag, script: SessionScriptPoint.Use), Item(9, 7, 100), Item(10, 5, CrateX), Item(11, 7, CrateX),
         }.ToDictionary(row => Entity(row.Key.SourceIndex));
-        return new(1, seed, rows, restock: new Dictionary<string, AreaRestockSeed> { [Entity(5)] = new(CrateSource, RestockRules.GeneratedOnceFlag) },
+        return new(1, seed, rows, restock: new Dictionary<string, AreaRestockSeed>
+            { [Entity(5)] = new(CrateSource, RestockRules.GeneratedOnceFlag), [Entity(8)] = new(CrateSource, RestockRules.GeneratedOnceFlag) },
             persistent: [Entity(11)]);
     }
 
@@ -254,8 +256,17 @@ public sealed class AreaContainerLootTests
         Assert.AreEqual(revision, session.Version.Revision, "no frame was written");
         // Refused before the use script: a retry does not run it twice.
         var runs = 0;
-        AreaContainerLoot.Open(session, map, Entity(5), 2, world, _ => { runs++; return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic"); });
+        AreaScriptedUse Count(AreaObjectRecord row) { runs++; return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "synthetic"); }
+        Assert.AreEqual(AreaContainerOpenOutcome.GenerationRefused, AreaContainerLoot.Open(session, map, Entity(8), 2, world, Count).Outcome);
+        Assert.AreEqual(AreaContainerOpenOutcome.GenerationRefused, AreaContainerLoot.Open(session, map, Entity(8), 2, world, Count).Outcome);
         Assert.AreEqual(0, runs);
+        // Once the host is ready, the crate's script runs once and the open goes on.
+        var (readySession, readyMap, _, readyWorld) = Start();
+        using (readySession)
+        {
+            Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(readySession, readyMap, Entity(8), 2, readyWorld, Count).Outcome);
+            Assert.AreEqual(1, runs);
+        }
         // A container without flag 0x200 still opens: the generation changes nothing there.
         Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(0), 2, world).Outcome);
     }

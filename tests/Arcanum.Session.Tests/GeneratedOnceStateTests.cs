@@ -272,7 +272,7 @@ public sealed class GeneratedOnceStateTests
     public void The_generated_goods_and_the_kept_items_are_looted_from_the_container()
     {
         // ARC-WORLD-101: the window's loot after the first open takes the created items and the persistent ring; the destroyed seed
-        // items and the gold pile (gold is not modelled) do not move.
+        // items do not move, nor does the gold pile through LootItem (a container's coins go through TakeGoldFromNpc).
         using var owner = Owner();
         var opened = owner.GenerateContainerOnce(owner.Version, "crate", new World()).Regeneration!;
         Assert.IsTrue(opened.Created.Count > 0);

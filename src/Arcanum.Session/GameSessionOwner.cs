@@ -877,7 +877,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// seed that did not spill is too (its seed items, the items a barter or a regeneration put into it), whose open the host admits
     /// (lock, use script: the window's admission 0x572370, so a container's use script is no refusal here) and generates first
     /// (<see cref="GenerateContainerOnce"/>). Refused before any effect, beyond the item rules of
-    /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
+    /// <see cref="PickUpItem"/>: a body with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script without a host. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled without a host (the
     /// session has no PC object); since ARC-SCRIPT-041 that slot runs through <paramref name="scripts"/>, with the item's remove-item script.
     /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move (<see cref="InventoryMutationResult.ItemSpells"/>).

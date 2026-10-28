@@ -55,7 +55,7 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
 
 - pickup: `ItemNotAvailable` (not on that map's ground, or already taken);
 - loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container that spilled when it broke; before ARC-WORLD-101 every
-  container), `HolderScriptUnsupported` (a holder `SAP_USE` script), `ItemNotAvailable`
+  container), `HolderScriptUnsupported` (a body's `SAP_USE` script; a container's ran at its window's admission and refuses nothing), `ItemNotAvailable`
   (not in that holder's current list);
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
@@ -572,7 +572,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
 
 - **Gold (NT1).** An NPC's gold is its first gold pile in list order (its seed piles still in its list, then the piles the session added):
   `QueryNpcGold(npc)` gives its coins (the seed's `Quantity`, or the tracked count), 0 without a pile, null for an NPC the session does not
-  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count)` moves coins to the hero's gold: fewer coins refuse with nothing changed (`GoldShort`),
+  know; a second pile (a made pile added while a seed with its own pile was not attached) is not counted until the first is gone. `TakeGoldFromNpc(expected, npc, count, pile)` moves coins to the hero's gold (from the named pile of the holder's current list, `ItemNotAvailable` when it holds none such; without one its first pile; since ARC-WORLD-101 the holder may be a standing container, whose loot window takes its coins): fewer coins refuse with nothing changed (`GoldShort`),
   exactly the count destroys the pile (the durability deletion), more leave the rest. `GiveGoldToNpc(expected, npc, count, pileKind,
   insertCheck)` moves the hero's coins to the NPC: its pile grows with no insert check; without one a new `made:n` pile of `pileKind` (the
   gold prototype 9056, the host's) enters the end of its list after the host's insert check. Gold needs a hero (`GoldUnavailable`); a pile
@@ -588,7 +588,7 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
   32) refuses a given item and a new pile or stack moved into it (`HolderScriptUnsupported`; an existing pile or stack grows without it, NT1), as does a taken item whose origin seed shows a remove-item, insert-item or (worn)
   wield-off script (`ItemScriptUnsupported`).
 - **Ammunition units (AM4).** `TakeAmmoFromNpc` and `GiveAmmoToNpc(expected, npc, stack, count, newStackKind, insertCheck)` move units of
-  one named stack: fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
+  one named stack (since ARC-WORLD-101 `TakeAmmoFromNpc` also from a standing container's stack): fewer units refuse (`AmmoShort`), exactly the count deletes the source stack (a deletion, so a seed stack's remove-item
   script does not run or refuse, as for an emptied pile), more leave the rest; the destination's
   first stack of the same type grows with no insert check, or a new `made:n` stack of `newStackKind` (the type's base prototype, the
   host's) enters its list after its insert check (the hero's with the Technophobia refusal, no complexity).
@@ -788,7 +788,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
   ammunition `InvalidAmmo`), version, a stack the hero holds (`ItemNotAvailable`), a count of 0 (`NoChange`, as the original's request
   returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the durability record of an emptied stack, the ammunition, item and
   made-number budgets (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
-- **Takes from a dead NPC** use `TakeGoldFromNpc` and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
+- **Takes from a dead NPC** (since ARC-WORLD-101 also from a container) use `TakeGoldFromNpc` (the pile given) and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter

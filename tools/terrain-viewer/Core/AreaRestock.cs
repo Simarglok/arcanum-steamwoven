@@ -40,6 +40,7 @@ public sealed class AreaRestockHost
     private readonly AreaInventoryHost _inventory;
     private readonly AreaBarterData? _data;
     private readonly IAreaRestockScreen _screen;
+
     public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData? data, IAreaRestockScreen screen)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));

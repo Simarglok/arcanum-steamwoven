@@ -48,7 +48,9 @@ public partial class TerrainViewerApp
             Require(view.Gold == definition.Gold, "window gold " + view.Gold);
         }
         RefreshAreaStatus();
-        Require(GetSelfTestSnapshot().Hud.Contains("hero: " + hero.Hero.Name + " level ", StringComparison.Ordinal), "HUD hero line");
+        // ARC-WORLD-101: a pre-made hero starts with its prototype's player name, which the HUD shows (ARC-UI-033).
+        Require(hero.Read?.Hero is not { } premade || state!.PlayerName.SequenceEqual(premade.PlayerName), "the prototype's player name");
+        Require(GetSelfTestSnapshot().Hud.Contains("hero: " + AreaStartingHero.Name(state!) + " level ", StringComparison.Ordinal), "HUD hero line");
         GD.Print("ARC-WORLD-027 native-smoke hero PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             hero.Hero.Name, definition.Prototype, Flag = flag, definition.Gold, Kit = definition.Kit.Count, hero.DroppedChanges,
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
@@ -241,7 +243,8 @@ public partial class TerrainViewerApp
             var shown = _sheetPanel!.ViewForSelfTest!;
             var experience = session.QueryHeroExperience()!;
             var life = session.QueryHeroLife()!.Status;
-            Require(shown.Name == hero.Hero.Name && shown.Level == experience.Level && shown.ToNextLevel == experience.ToNextLevel && shown.ToNextLevel is > 0
+            // ARC-WORLD-101: the sheet names the session hero (its player name since the pre-made start sets one, ARC-UI-033).
+            Require(shown.Name == AreaStartingHero.Name(session.QueryHero()!) && shown.Level == experience.Level && shown.ToNextLevel == experience.ToNextLevel && shown.ToNextLevel is > 0
                 && shown.UnspentPoints == experience.UnspentPoints && shown.MaxHitPoints == life.MaxHitPoints && shown.MaxFatigue == life.MaxFatigue
                 && shown.Stats.Count == 8 && shown.Secondary.Count == 8 && shown.Resistances.Count == 5
                 && shown.Stats.Select(v => v.Value).SequenceEqual(order.Select(stats.GetEffective)), "the sheet shows the session hero");
