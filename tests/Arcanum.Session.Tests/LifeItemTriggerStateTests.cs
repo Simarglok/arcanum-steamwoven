@@ -28,9 +28,13 @@ public sealed class LifeItemTriggerStateTests
         public List<(uint Mask, string Item, string Holder, string? Other)> Calls { get; } = [];
         public bool Supports(string item) => true;
 
-        public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null)
+        public List<(SpellLocation Tile, string? RunOther)> Contexts { get; } = [];
+
+        public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null, SpellLocation tile = default,
+            string? runOther = null)
         {
             Calls.Add((eventMask, item, holder, other));
+            Contexts.Add((tile, runOther));
             return SessionItemTriggerResult.None;
         }
 
@@ -98,7 +102,7 @@ public sealed class LifeItemTriggerStateTests
     }
 
     [TestMethod]
-    public void A_spell_damage_step_calls_for_the_hooks_with_its_parties_and_the_setting_decides_an_item_run_s()
+    public void A_spell_damage_step_calls_for_the_hooks_with_its_parties()
     {
         using var owner = Owner();
         var hit = new LifeDamage { HitPoints = 1 };
@@ -111,10 +115,7 @@ public sealed class LifeItemTriggerStateTests
         using (var other = Owner())
             CollectionAssert.AreEqual(new[] { new SessionItemEvent(ItemTriggerEvent.ParentGoingUnconscious, Golem, null) },
                 other.ApplyDamage(other.Version, GolemTarget, new LifeDamage { Fatigue = 10_000 }).ItemEvents.ToArray(), "the setter's needs no parties");
-        Assert.AreEqual(0, owner.ApplyDamage(owner.Version, GolemTarget, hit, new(Hero, Hero, ItemRun: true)).ItemEvents.Count, "MG46 fixed");
         Assert.AreEqual(GameSessionDisposition.Rejected, owner.ApplyDamage(owner.Version, GolemTarget, hit, new("", Hero)).Disposition);
-        owner.SelectRules(RuleMode.Original);
-        Assert.AreEqual(2, owner.ApplyDamage(owner.Version, GolemTarget, hit, new(Hero, Hero, ItemRun: true)).ItemEvents.Count, "MG46 kept");
 
         // The walks: the golem's items with the hero, then the hero's blade with the golem; no melee bit and no weapon (DH1).
         var host = new Recorder();
@@ -187,7 +188,8 @@ public sealed class LifeItemTriggerStateTests
         using var owner = Owner();
         var caster = Caster(owner);
         var start = new SessionItemEvent(ItemTriggerEvent.ParentDamagesOpponent, Hero, Hero);
-        // Steamwoven (MG46 fixed): the blade's run damages its holder, and its damage step fires no hooks: one run.
+        // Steamwoven (MG46 fixed, ARC-MAGIC-025's narrow fix): the blade's run damages its holder, and its damage step's walks skip the
+        // blade, whose run it is: one run.
         var fixedChain = caster.FireItemEvents([start]);
         Assert.AreEqual(1, Started(fixedChain));
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.Damaged), "the run's damage step ran");

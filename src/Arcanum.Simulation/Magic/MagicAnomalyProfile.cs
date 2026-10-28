@@ -130,11 +130,14 @@ public sealed record MagicAnomalyProfile
     public bool ReleaseRefusalKeepsRun { get; init; }
 
     /// <summary>
-    /// MG46 (ARC-MAGIC-024, the owner's bug rule of 2026-10-28: a gameplay bug keeps the original here): a run an item event started
-    /// takes its parent, the item's holder, as the attacker of its damage step (DH1), whose parent hit and damages opponent walk the
-    /// worn items again (IC2), so a weapon whose <c>Target_Hit</c> spell damages the opponent fires it once more on its own damage,
-    /// and two wearers of <c>Parent_Hit</c> armour answer each other, until the target dies or the charge runs out (installed:
-    /// weapon 6130, armour 8215). Steamwoven fires no parent hit and no damages opponent for such a run's damage step.
+    /// MG46 (ARC-MAGIC-024; owner decision 2026-10-28, ARC-MAGIC-025: the narrow fix): a run an item event started takes its parent,
+    /// the item's holder, as the attacker of its damage step (DH1), whose wrappers walk the worn items again (IC2, IC9), and the
+    /// executor has no guard, so an item fires again on the damage of its own run or of a run it caused: a weapon whose
+    /// <c>Target_Hit</c> spell damages the opponent fires it once more on its own damage, and two wearers of <c>Parent_Hit</c> armour
+    /// answer each other, until the target dies or the charge runs out (installed: weapon 6130, armour 8215). Steamwoven keeps every
+    /// walk but lets each item fire at most once in such a chain: a walk of a damage step of a run an item event started skips the
+    /// items that started that run or a run before it in its chain (<see cref="ItemSpellTriggerRules.ChainSkips"/>), so the first
+    /// answer of another item stays.
     /// </summary>
     public bool ItemRunDamageFiresHooks { get; init; }
 
