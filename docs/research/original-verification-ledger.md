@@ -115,7 +115,8 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="cast-host-and-casting-goal-arc-magic-014"></a>[Cast host and casting goal (ARC-MAGIC-014)](ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014) | [Magic: casting and spell runs](ledger/spell-runs.md) | CG1–CG8, MG39–MG41 |
 | <a id="spell-ui-arc-magic-015"></a>[Spell UI (ARC-MAGIC-015)](ledger/spell-runs.md#spell-ui-arc-magic-015) | [Magic: casting and spell runs](ledger/spell-runs.md) | SU1–SU14, MG42 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
-| <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX20 |
+| <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
+| <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |
 | <a id="dialog-skill-gates-arc-skills-004"></a>[Dialog skill gates (ARC-SKILLS-004)](ledger/skills.md#dialog-skill-gates-arc-skills-004) | [Skills](ledger/skills.md) | DS1–DS5 |
 | <a id="skill-check-arc-skills-003"></a>[Skill check (ARC-SKILLS-003)](ledger/skills.md#skill-check-arc-skills-003) | [Skills](ledger/skills.md) | SC1–SC17 |
 | <a id="fate-points-arc-world-054"></a>[Fate points (ARC-WORLD-054)](ledger/skills.md#fate-points-arc-world-054) | [Skills](ledger/skills.md) | FT1–FT8 |

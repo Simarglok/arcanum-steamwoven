@@ -91,10 +91,9 @@ line, the critter mask and the threshold, with counts by threshold. It prints no
 
 ## Not ready
 
-- **Goals (slice I8b).** The casting goals (26, 82) with the magic cast host, the item-use goal (39), the skill goal (33) with the
-  heal skill, the throw goal (37) of a grenade and the pickup goals (15, 16) are the world's starters; perform's cast, item and
-  skill actions (`IAiPerformWorld.Cast`, `UseItem`, `UseSkill`, `ThrowGrenade`) still answer from the host. The immediate item use
-  of an AI-action entry (0x462CC0, its action points in a round, EX4) is the host's.
+- **Goals (slice I8b, done).** The casting, item-use, skill, throw and pickup goals, their starters and perform's actions are the
+  [action goals](ai-action-goals.md) (ARC-WORLD-089); the host calls `AiExecutorRules.UseItemNow` for an AI-action entry used at
+  once (0x462CC0, EX4) and `AiExecutorRules.StartPickup` from the item search.
 - **Host (slice I10).** No host implements `IAiSupportWorld`, `IAiItemSearchWorld`, `IAiGrenadeWorld` or `IAiRedirectWorld`, holds
   the list cache or calls `Heal`, `SearchItems`, `ChooseSpell` or `Grenade` from the scheduler's stages and perform; the magic
   predicates (cast cost, maintenance count, fail chances, under the influence) come from the magic domain through the host.

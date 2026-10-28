@@ -11,9 +11,10 @@ namespace Arcanum.Simulation.Ai;
 /// back-off run and following out in real time and in a turn-based round, as drivers over an <see cref="IAiPerformWorld"/> and an
 /// <see cref="IAiGoalWorld"/>. A run is an immutable <see cref="AiGoalRun"/> the host keeps per object and steps after each
 /// <see cref="AiGoalStepResult.DelayMs"/>; the planners, the step walker, the attack animation and resolution, and the action-point
-/// owner are the world's.
+/// owner are the world's. The action goals (casting, item use, skills, throws and pickups) and their starters are slice I8b
+/// (ARC-WORLD-089, <c>ExecutorActionGoals.cs</c>).
 /// </summary>
-public static class AiExecutorRules
+public static partial class AiExecutorRules
 {
     /// <summary>A run holds at most this many goals; a push beyond ends it.</summary>
     public const int MaxDepth = 8;
@@ -136,25 +137,26 @@ public static class AiExecutorRules
 
     /// <summary>
     /// Perform (0x4AC180), the pass's last step, for <paramref name="npc"/> with the pass record's <paramref name="target"/>,
-    /// <paramref name="action"/> and alerted <paramref name="sound"/>, the object's current run <paramref name="current"/> (null:
-    /// none). In a round nothing unless it is the NPC's turn; BACKING_OFF → the back-off run; a cast, an item or a skill action →
-    /// the world's; otherwise by the danger state: NONE → non-combat perform (0x4AC380), COMBAT_FOCUS → combat perform (0x4AC6E0:
-    /// back-off start, else a grenade, else the attack starter), FLEE → perform fleeing and the flee goal, SURRENDER → perform
-    /// surrender.
+    /// <paramref name="choice"/> (the action, spell, skill and item the support rules wrote; null: action 0) and alerted
+    /// <paramref name="sound"/>, the object's current run <paramref name="current"/> (null: none). In a round nothing unless it is
+    /// the NPC's turn; BACKING_OFF → the back-off run; a cast → the magic domain's cast and its casting goal (<see cref="StartCast"/>),
+    /// an item → the item-use starter (<see cref="StartUseItem"/>), a skill → the skill starter (<see cref="StartUseSkill"/>), each with
+    /// the pass target; otherwise by the danger state: NONE → non-combat perform (0x4AC380), COMBAT_FOCUS → combat perform (0x4AC6E0:
+    /// back-off start, else the grenade step and its throw, else the attack starter), FLEE → perform fleeing and the flee goal,
+    /// SURRENDER → perform surrender.
     /// </summary>
     [OriginalFunction(0x4AC180, OriginalFunctionScope.Partial)]
-    public static AiPerformResult Perform(IAiPerformWorld world, string npc, string? target, AiPassAction action, int? sound, AiGoalRun? current)
+    public static AiPerformResult Perform(IAiPerformWorld world, string npc, string? target, AiPassChoice? choice, int? sound, AiGoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
-        if (!Enum.IsDefined(action)) throw new ArgumentOutOfRangeException(nameof(action));
         if (world.InRound && world.RoundActor != npc) return new(AiPerformKind.NotActor, current);
         if ((world.DangerBits(npc) & DangerFlags.BackingOff) != 0) return BackOff(world, npc, target, current);
-        switch (action)
+        switch (choice?.Action ?? AiPassAction.None)
         {
-            case AiPassAction.Cast: world.Cast(npc); return new(AiPerformKind.Cast, current);
-            case AiPassAction.UseItem: world.UseItem(npc); return new(AiPerformKind.UseItem, current);
-            case AiPassAction.UseSkill: world.UseSkill(npc); return new(AiPerformKind.UseSkill, current);
+            case AiPassAction.Cast: return StartCast(world, npc, choice!, target, current);
+            case AiPassAction.UseItem: return StartUseItem(world, npc, target, choice!.Item, current);
+            case AiPassAction.UseSkill: return StartUseSkill(world, npc, target, choice!.Skill, choice.Item, current);
         }
         switch (world.ReadDanger(npc))
         {
@@ -167,7 +169,9 @@ public static class AiExecutorRules
                 return follow with { Kind = AiPerformKind.Follow };
             case DangerState.CombatFocus:
                 if (world.StartBackOff(npc, target)) return new(AiPerformKind.BackOffStart, current);
-                if (world.ThrowGrenade(npc, target)) return new(AiPerformKind.Grenade, current);
+                // The grenade step (0x4AC910) answers "thrown" once it called the throw starter, whatever the starter did.
+                if (target is not null && world.Grenade(npc, target) is { Throws: true, Grenade: { } grenade })
+                    return StartThrow(world, npc, grenade, world.Tile(target), current) with { Kind = AiPerformKind.Grenade };
                 return StartAttack(world, npc, target, sound, current);
             case DangerState.Flee:
                 var fleeing = world.PerformFleeing(npc);
@@ -195,7 +199,8 @@ public static class AiExecutorRules
 
     /// <summary>
     /// The attack starter (0x434B00) of <paramref name="attacker"/> on <paramref name="target"/>: an attack on oneself is refused; a
-    /// "default throws" weapon that can be unwielded is thrown at the target's tile instead; then the start gate with the weapon's
+    /// "default throws" weapon that can be unwielded is taken off (0x466E00) and the throw starter runs with it at the target's tile
+    /// (<see cref="StartThrow"/>, whose answer is the starter's) instead; then the start gate with the weapon's
     /// attack cost, Body of Air without the elemental flag, an attack on the same target already queued, an interrupt of the
     /// lower-priority animations that fails and a boomerang in flight refuse (asking the critters sharing the tile to step apart);
     /// a run whose attack is already swinging counts as queued too. An attack run approaching another target restarts as an attack
@@ -209,7 +214,11 @@ public static class AiExecutorRules
         ArgumentNullException.ThrowIfNull(attacker);
         if (target is null) return new(AiPerformKind.Attack, current, AiStartRefusal.NoObject);
         if (target == attacker) return new(AiPerformKind.Attack, current, AiStartRefusal.Self);
-        if (world.ThrowsWieldedWeapon(attacker)) { world.ThrowWeapon(attacker, target); return new(AiPerformKind.ThrowWeapon) { Started = true }; }
+        if (world.ThrowableWeapon(attacker) is { } weapon)
+        {
+            world.Unwield(attacker, weapon);
+            return StartThrow(world, attacker, weapon, world.Tile(target), current) with { Kind = AiPerformKind.ThrowWeapon };
+        }
         if (!StartGate(world, attacker, world.AttackCost(attacker))) return new(AiPerformKind.Attack, current, AiStartRefusal.Gate);
         var facts = world.AttackFacts(attacker, target);
         var refusal = facts.BodyOfAir && !facts.Elemental ? AiStartRefusal.BodyOfAir : AiStartRefusal.None;
@@ -337,7 +346,12 @@ public static class AiExecutorRules
                 case Move.Pop:
                 case Move.PopTwo:
                     var pops = t.Move == Move.Pop ? 1 : 2;
-                    for (var i = 0; i < pops && frames.Count > 0; i++) frames.RemoveAt(frames.Count - 1);
+                    for (var i = 0; i < pops && frames.Count > 0; i++)
+                    {
+                        // The pop runs the popped goal's end node (0x423D10): the cast's attempt goals end their magic run (0x429CD0).
+                        EndNode(run.Owner, frames[^1], world);
+                        frames.RemoveAt(frames.Count - 1);
+                    }
                     if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, reason);
                     frames[^1] = frames[^1] with { Node = 1 };
                     break;
@@ -350,6 +364,8 @@ public static class AiExecutorRules
                     return new(run with { Frames = frames.ToImmutable(), Flags = flags, Reason = reason }, Math.Max(t.Delay, 0), AiRunEnd.Running, nodes, reason);
                 case Move.End:
                     if (profile.EndStepRechargesPendingCost && world.PendingCost > 0 && !world.Mover(run.Owner).Pc) Consume(world, run.Owner, world.PendingCost);
+                    // Then the end node of every goal of the run (0x4239F9), the top first.
+                    for (var i = frames.Count - 1; i >= 0; i--) EndNode(run.Owner, frames[i], world);
                     return new(null, 0, AiRunEnd.EndStep, nodes, reason);
                 default:
                     return new(null, 0, AiRunEnd.Killed, nodes, reason);
@@ -370,6 +386,16 @@ public static class AiExecutorRules
         AiGoalType.RunToTile => RunToTileNode(owner, top, flags, world),
         AiGoalType.Follow or AiGoalType.SpreadOut => FollowNode(owner, top, world),
         AiGoalType.MoveNear or AiGoalType.RunNear => MoveNearNode(owner, top, flags, world),
+        AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation => CastNode(owner, top, world),
+        AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation => AttemptSpellNode(owner, top, world),
+        AiGoalType.UseSkill => UseSkillNode(owner, top, flags, world),
+        AiGoalType.AttemptSkill => AttemptSkillNode(owner, top, world),
+        AiGoalType.AttemptPickpocket => AttemptPickpocketNode(owner, top, world),
+        AiGoalType.AttemptPickLocks => AttemptPickLocksNode(owner, top, world),
+        AiGoalType.ThrowItem => ThrowItemNode(owner, top, world),
+        AiGoalType.UseItem => UseItemNode(owner, top, world),
+        AiGoalType.PickupItem => PickupNode(owner, top, world),
+        AiGoalType.AttemptPickup => AttemptPickupNode(owner, top, world),
         _ => PauseNode(top),
     };
 
@@ -381,7 +407,8 @@ public static class AiExecutorRules
         switch (goal.Node)
         {
             case 1:
-                return target is not null && world.Tile(target) is not null && !world.DeadCritter(target) ? Next(2) : End(AiExecutorReason.AttackTargetGone);
+                // 0x429450 fails → pop (EX24: no end step, so no EX6 charge; popping the bottom goal finishes the run).
+                return target is not null && world.Tile(target) is not null && !world.DeadCritter(target) ? Next(2) : new(Move.Pop, Reason: AiExecutorReason.AttackTargetGone);
             case 2:
                 if (AttackPossible(world.AttackFacts(owner, target!))) return Next(3);
                 if (world.InRound && world.RoundActor == owner) world.EndSubturn(owner);
@@ -605,9 +632,12 @@ public static class AiExecutorRules
         var leader = goal.Target;
         if (leader is null || world.Tile(leader) is not { } there || world.Tile(owner) is not { } at) return End(AiExecutorReason.ObjectGone);
         if (Distance(at, there) <= goal.Range && world.FirstStepClear(owner, leader, false)) return new(Move.Pop, Reason: AiExecutorReason.FollowInRange);
-        var running = goal.Goal == AiGoalType.RunNear && world.Mover(owner).Encumbrance < RunRefusedEncumbrance;
-        var gait = running ? flags | AiRunFlags.Running : flags & ~AiRunFlags.Running;
-        var path = Plan(world, owner, new(AiPathKind.Near, leader, null, goal.Range, false, running));
+        // The run near runs unless encumbered; the walk near keeps the run's gait (an item-use, skill or pickup run an NPC above 8
+        // fatigue started runs; a follower's walks).
+        var runNear = goal.Goal == AiGoalType.RunNear;
+        var running = runNear ? world.Mover(owner).Encumbrance < RunRefusedEncumbrance : Running(world, owner, flags);
+        var gait = runNear ? running ? flags | AiRunFlags.Running : flags & ~AiRunFlags.Running : flags;
+        var path = Plan(world, owner, new(AiPathKind.Near, leader, null, goal.Range, false, running) { NearOccupied = (flags & AiRunFlags.NearOccupied) != 0 });
         if (path is null) return NoPath(owner, world, AiExecutorReason.NoPath);
         return new(Move.Push, Frame: Child(AiGoalType.MeleeApproach, goal) with { Path = path.Steps, PlannedTargetTile = there }, Flags: gait,
             Reason: running ? AiExecutorReason.FollowRun : AiExecutorReason.FollowWalk);
@@ -636,7 +666,7 @@ public static class AiExecutorRules
     }
 
     private static AiGoalFrame Child(AiGoalType goal, AiGoalFrame parent) =>
-        new(goal, parent.Target, parent.Tile, parent.Range, parent.Sound);
+        new(goal, parent.Target, parent.Tile, parent.Range, parent.Sound) { Item = parent.Item, Skill = parent.Skill, SpellRun = parent.SpellRun };
 
     private static bool Within(IAiGoalWorld world, string owner, string? target, int range) =>
         target is not null && world.Tile(target) is { } there && world.Tile(owner) is { } at && Distance(at, there) <= range;
