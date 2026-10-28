@@ -21,7 +21,10 @@ exe rows [AC5–AC7](../research/ledger/npc-ai.md#npc-ai-queued-cast-arc-world-1
 hosts the skill goals 33, 34, 86 and 67: the turn, the skill animation and the attempt, whose heal is the session's NPC heal
 ([below](#skill-goals-arc-world-109); exe rows [AK1–AK3](../research/ledger/npc-ai.md#npc-ai-skill-goals-host-arc-world-109), one
 reader, F1); it covers the NPC's skill use of [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002) and
-[FR-CHAR-019](../requirements/characters-skills.md#fr-char-019).
+[FR-CHAR-019](../requirements/characters-skills.md#fr-char-019). ARC-WORLD-113 (I10 part 3g, first slice) hosts the throw goal 37 of a
+"default throws" weapon: the attack starter's throw, the throw animation and the session's NPC throw, decided and landed at once
+([below](#throw-arc-world-113); exe rows [TA1–TA2](../research/ledger/npc-ai.md#npc-ai-throw-host-arc-world-113), one reader, F1); it
+covers the NPC's thrown weapons of [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002).
 
 ## Session: the NPC hit step (`GameSessionOwner.AttackByNpc`)
 
@@ -139,6 +142,22 @@ What chooses a skill: only the heal ladder's heal-skill rung (`AiSupportRules.He
 item), which the item half of I10 (ARC-WORLD-108) wires with the NPC's items; until then `AreaAiHost.PerformSkill` (a test and smoke
 seam) starts a skill run as that choice would. No new state, no new switch.
 
+## Throw (ARC-WORLD-113)
+
+The attack starter of an NPC that wields a "default throws" weapon (TW1, the throwing dagger 6072 in the installed game) starts the
+throw goal 37 at its target's tile instead of an attack ([action goals](ai-action-goals.md), AG10, AG12, AG13), and the host plays it.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Throwable weapon | 0x434B00 (TA2, TW1) | `ThrowableWeapon` answers the item the NPC wears in its weapon slot as the session shows it (`AreaCombatHost.Worn`) when it is a weapon with weapon flag 0x200 and no no-drop flag (the remove check 0x466DA0). |
+| Unwield | 0x466E00 (TA1) | The original takes the weapon out of the NPC's inventory here, before the goal runs, and loses it when the goal never reaches its throw (a refused start, an interrupt, a replacement, the NPC's death). A lost object (owner rule on technical bugs): in both rule modes `Unwield` changes nothing and the weapon stays wielded until the throw removes it. |
+| Animation | 0x42BD40, 0x42C390, 0x42CB10 (AG10) | `FaceForAction` turns the NPC to the tile; `BeginAction` plays the throw animation (14) with the skill animation's stand-in (the fixed human attack ART's 9 frames, action frame 6, 15 per second: the throw 400 ms after the start, the end 200 ms later; NPC ART is not read). Goal 37 has priority 3. |
+| Throw | 0x42AB90 → 0x4B3C00, 0x4B3170 (TW2–TW6) | At the action frame `ThrowItem` needs an item the NPC still holds (the session's view; else the throw fails, AG10), weighs it as the thrower holds it (0x461370 with the thrower: its stored weight and its magic adjustment under the thrower's aptitude, TW5) and names the struck critter (TW4): the first object the line of fire to the tile stops at, when it is a living walked NPC or companion, else the living critter on the tile (the hero, a walked NPC, a companion). Then the session's `ThrowByNpc` (below) and, for a resolved attack, the attack event on the struck critter (the projectile's end alerts it, PF8). A `Throw` notice tells the viewer, which logs `ARC-WORLD-113 ai-throw` and treats a struck critter's attack as an NPC hit (status line, floaters, stun, fall, the bodies and the inventory). Goal 37 then charges 2 and takes the end step on every path (AG10, EX6). |
+| Session throw | 0x4B3C00 (TW3, TW4, RH2, RH4, PS3, TW6) | `GameSessionOwner.ThrowByNpc(SessionNpcThrow)`: with a struck critter, `AttackByNpc`'s attack with the thrower's throwing level and training (skill 3; `SessionCritterCombat.SkillValues`), the item's thrown range (`ThrowRules.Range`: the check's range, impossible beyond it) and the line's cover, without the reach test; a hit lands the item on the struck critter's cell, a miss scatters it from the tile (`(20 − throwing level) / 5 + 1` tiles at most the distance, a rotation drawn after the check). The item leaves the NPC (worn no more) and lies on the landing cell as its seed item's ground map change, in a revision of its own before the damage, moved there without the drop's placement: no junk pile, no decay (TW6, ID9). The damage, experience, critical and wear steps follow with the thrower's hand empty. Without a struck critter nothing is rolled and the item lands on the tile. Refused before any roll: no hero, cells outside the packing, a weight outside 0..1,000,000, a struck critter without its cell, an item not in the NPC's seed list on the hero's map (or dropped, thrown or destroyed), an item with any script point (the throw script 6 and the removal's scripts are not run), an item that is not the wielded melee weapon, a no-drop item, then `AttackByNpc`'s refusals. A resolver refusal throws nothing. |
+
+No new state: the thrown item's ground cell is a map change (`item.dropped`, as a critical's drop), which the snapshot already
+carries; the schema stays 57.
+
 ## Settings
 
 No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rules they belong to.
@@ -158,7 +177,12 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
 - **Skill goals.** An NPC's pickpocket (goal 86) and pick locks (goal 67) reach their attempts, which do nothing (the session's pick
   pocket and lock picking are the hero's); any skill but heal does nothing either. The skill animation is the fixed stand-in (NPC ART
   is not read) and is not drawn; the record's flag 0x2 from the goal frame's flag 0x1 is not read (AK2, F0).
-- **Action goals.** Item use, throws and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
+- **Throws.** The thrown item does not fly (ARC-WORLD-113 lands it at once): no projectile is drawn, a miss strikes no critter on
+  the tiles it passes (PF6), no item event fires at its end (PF10) and the item is never hidden while it flies; a scenery or wall
+  first on the line is not struck (the item lands on the tile); only the wielded "default throws" weapon is thrown (no generic
+  items or grenades: the grenade step answers no grenade), only a seed item of the NPC's list (not one the session added to it);
+  the throw and remove-item scripts are not run and the item spells' unwear (0x4CBFC0) is not run.
+- **Action goals.** Item use and pickups (I8b's goals), grenades and goal 40: the host's calls refuse or do nothing;
   heal and item search choose nothing. ARC-WORLD-102: the NPCs' items are not listed (no hexed weapon, inventory or item entry), so
   no item spell or AI-action item is chosen;
   an NPC's spell missile still in flight does not hold its subturn in a turn-based round (the NPC's run ends one pace after the
@@ -169,7 +193,8 @@ No new switch. EX6, EX9, EX12, CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the mora
   freed charged by the goal's end; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
 - **Followers in combat.** Companions keep their follow goal; the follower rule, the attack order's target and pass, the comment
   lines and the world-map travel's stop and allow calls are I9's host part.
-- **NPC ranged attacks** (bow, throw, firearm, missile) are refused by the hit step (`AttackUnsupported`).
+- **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
+  throws" weapon is thrown through goal 37 (ARC-WORLD-113).
 - **Scripts and routines.** No SCR runs at the AI points (heartbeat, start and end combat), no waypoints, standpoints or day
   routines; the danger hooks are not run.
 - **Back-off.** The away path (0x41F3C0) is not walked: a back-off ends at once.
@@ -200,8 +225,14 @@ end frees nothing, the arrival after it begins the run, a run dropped mid-rest l
 goal's end neither frees nor charges it (ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
 ARC-WORLD-105). `AreaAiSkillTests` (viewer Core, synthetic rows): an NPC's heal skill on itself walks goal 33 into 34 at priority
 3 and at the action frame heals through the session, spending a use of its held item; a heal without a held healing item changes
-nothing; pickpocket and pick locks reach goals 86 and 67, whose attempts are not ready; the stand-in animation's timing, the throw that
-cannot start and the turn (ARC-WORLD-109). `HealStateTests` (Session): an NPC master heals the hero with its own item, charging
+nothing; pickpocket and pick locks reach goals 86 and 67, whose attempts are not ready; the stand-in animation's timing (since ARC-WORLD-113 the throw's
+too) and the turn (ARC-WORLD-109). `AreaAiThrowTests` (viewer
+Core, synthetic rows, ARC-WORLD-113): the attack starter of an NPC wielding a "default throws" dagger starts goal 37 at the hero's tile
+without changing the session, the throw at the action frame strikes the hero and the dagger lands on its cell or its scattered tile,
+leaving the NPC; a weapon without the flag attacks; an item the NPC does not hold fails; a throw at an empty tile lands the dagger
+there without a roll. `NpcThrowStateTests` (Session, ARC-WORLD-113): a throw at the hero checks with the throwing skill and lands the
+dagger on the hero (a hit) or within the scatter (a miss), takes it out of the NPC's list, schedules no decay and cannot be thrown
+again; a throw at an empty location rolls nothing; a throw at another NPC; the refusals before any roll. `HealStateTests` (Session): an NPC master heals the hero with its own item, charging
 nothing and leaving the hero's heal fate; an NPC heals itself through its life record, its crippled arm making the check harder, and
 its last use destroys its item; the refusals before any roll (ARC-WORLD-109). `ActionGoalsTests` (Simulation): a queued goal 26 at the bottom plays once the goals above it have popped, and one
 refused at its start takes the end step (ARC-WORLD-104). `SessionSpellCasterAiTests` (Session): the NPC's book from its fields with its mastery halving
