@@ -29,8 +29,10 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, AreaConversationHost Host, string Entity, int Speaker)? _barterPending;
     // The trade sounds requested, newest last (the self-test reads them; the audio may be absent).
     private readonly Queue<int> _barterSounds = new();
+    // ARC-UI-038: the window is the opening shop's (its session is the shop's, the menu owns the keys).
+    private bool _barterInShop;
     private bool BarterOpen => _barterPanel?.IsOpen == true;
-    private bool BarterActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool BarterActive => _barterInShop ? ShopBarterActive : _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Starts loading the barter data for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaBarter(TerrainViewerArguments arguments)
@@ -93,7 +95,6 @@ public partial class TerrainViewerApp
     /// the open's session part (ARC-WORLD-090: the container's coins, the identification); a refused open shows no window.</summary>
     private void OpenBarterWindow(AreaBarter barter)
     {
-        var session = _areaSession!;
         var opened = barter.Open();
         // ARC-WORLD-090: a substitute container an attack broke is gone (0x45F650 finds no object): the merchant trades from its own list.
         if (opened is { Disposition: GameSessionDisposition.Rejected, Failure: GameSessionFailure.UnknownHolder } && barter.Merchant.Container is not null)
@@ -101,7 +102,6 @@ public partial class TerrainViewerApp
             barter = barter.WithoutContainer();
             opened = barter.Open();
         }
-        var merchant = barter.Merchant;
         if (opened.Disposition == GameSessionDisposition.Rejected)
         {
             _barterStatus = "open refused: " + opened.Failure;
@@ -109,6 +109,17 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        // ARC-WORLD-096: the open schedules the shown object's restock: the substitute container, else the merchant (0x573042, RK9).
+        ScheduleRestock(barter.Merchant.Container ?? barter.Merchant.Entity, "barter");
+        ShowBarterWindow(barter, _areaSession!, opened, shop: false);
+    }
+
+    /// <summary>The window over <paramref name="session"/> for <paramref name="barter"/> after its open (<paramref name="opened"/>).
+    /// ARC-UI-038: <paramref name="shop"/>, the opening shop's: the window sits above the shop's buttons, which stay the menu's, and has no
+    /// Close of its own (the shop's Back closes it, OS1).</summary>
+    private void ShowBarterWindow(AreaBarter barter, GameSessionOwner session, SessionBarterOpenResult opened, bool shop)
+    {
+        var merchant = barter.Merchant;
         _barter = barter;
         if (_barterPanel is null)
         {
@@ -119,9 +130,9 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
-        // ARC-WORLD-096: the open schedules the shown object's restock: the substitute container, else the merchant (0x573042, RK9).
-        ScheduleRestock(merchant.Container ?? merchant.Entity, "barter");
-        _barterMessage = null; _barterStatus = null; _barterSession = session;
+        _barterMessage = null; _barterStatus = null; _barterSession = session; _barterInShop = shop;
+        _barterPanel.Docked = shop;
+        _mainMenuPanel?.SetDockedBelow(shop);
         var view = _barter.View();
         _barterPanel.Open(view);
         _barterRevision = session.Version.Revision;
@@ -136,7 +147,7 @@ public partial class TerrainViewerApp
 
     private void Trade(string entity, bool sell)
     {
-        if (!BarterOpen || _barter is null) return;
+        if (!BarterOpen || _barter is null || !BarterActive) return;
         var trade = sell ? _barter.Sell(entity) : _barter.Buy(entity);
         _barterMessage = trade.Text;
         GD.Print($"ARC-UI-050 barter {(sell ? "sell" : "buy")} item={entity} moved={trade.Moved} count={trade.Count} total={trade.Total} reaction={trade.ReactionChange} failure={trade.Result.Failure} text={trade.Text}");
@@ -157,6 +168,7 @@ public partial class TerrainViewerApp
         if (_barterPanel is null || !_barterPanel.IsOpen) return;
         GD.Print("ARC-UI-050 barter closed");
         _barterPanel.CloseView(); _barter = null; _barterSession = null; _barterRevision = -1;
+        if (_barterInShop) { _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false); }
         QuarantineWorld(); RefreshReadyStatus();
     }
 
@@ -166,8 +178,8 @@ public partial class TerrainViewerApp
     {
         TakeDialogBarter();
         if (!BarterOpen) { AdoptBarterData(); return; }
-        if (!BarterActive || !ReferenceEquals(_barterSession, _areaSession) || !AreaBarter.HeroCanTrade(_areaSession!)) { EndBarter(); return; }
-        var revision = _areaSession!.Version.Revision;
+        if (!BarterActive || !_barterInShop && !ReferenceEquals(_barterSession, _areaSession) || !AreaBarter.HeroCanTrade(_barterSession!)) { EndBarter(); return; }
+        var revision = _barterSession!.Version.Revision;
         if (!force && revision == _barterRevision) return;
         _barterRevision = revision;
         _barterPanel!.Render(_barter!.View(), _barterMessage);
@@ -176,12 +188,16 @@ public partial class TerrainViewerApp
     /// <summary>While the window is open it owns every key: Escape closes it on a fresh press.</summary>
     private void HandleBarterKey(InputEventKey key)
     {
+        // ARC-UI-038: in the opening shop the menu keeps its keys (Return accepts, Escape goes back and closes the window, OS1).
+        if (_barterInShop) { HandleMainMenuKey(key); return; }
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (key.Pressed && !key.Echo && routed == Key.Escape) CloseBarterByPlayer();
     }
 
     private void HandleBarterPulse(IntentFrame intent)
     {
+        // ARC-UI-038: in the opening shop a controller moves over the shop's Accept and Back; the wares take the pointer.
+        if (_barterInShop) { HandleMainMenuPulse(intent); return; }
         if (intent.Cancel) CloseBarterByPlayer();
         else if (intent.MenuPressedDirection != 0) _barterPanel!.Navigate(intent.MenuPressedDirection);
         else if (intent.Confirm) _barterPanel!.Confirm();

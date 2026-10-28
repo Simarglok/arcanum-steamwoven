@@ -6,6 +6,8 @@ using Arcanum.Data.Scripts;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
@@ -221,6 +223,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-029: the hero's ammunition counts by type (arrows, bullets, charge cells, fuel): its first stack of each type,
     /// 0 without one, as the original's window prints them after the gold (ledger IW9).</summary>
     public IReadOnlyList<int> Ammo { get; init; } = new int[SessionAmmoRecord.AmmoTypes];
+    /// <summary>ARC-UI-051: the hero's effective speed (stat 11), the window's third line (IW24); null without a hero or when the
+    /// stats do not read.</summary>
+    public int? Speed { get; init; }
 }
 
 /// <summary>
@@ -337,6 +342,16 @@ public sealed class AreaInventoryHost
         return "[unknown object]";
     }
 
+    /// <summary>ARC-UI-051: the hero's effective speed as the character sheet reads it (poison and both crippled legs count); null
+    /// without a hero or a living record, or when the stats do not read.</summary>
+    internal static int? HeroSpeed(GameSessionOwner session)
+    {
+        if (session.QueryHero() is null || session.QueryHeroLife() is not { } life) return null;
+        var state = life.Record.State;
+        var query = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));
+        return query?.Snapshot is { } stats ? stats.GetEffective(CharacterStat.Speed) : null;
+    }
+
     /// <summary>The window's lines: the PC's list in order and, for <paramref name="holder"/> on <paramref name="runtimeMap"/>,
     /// that holder's current list.</summary>
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null,
@@ -378,8 +393,9 @@ public sealed class AreaInventoryHost
         // ARC-UI-029: the four ammunition counts follow the gold (IW9: the stack each type's critter field names, the first here).
         var heroAmmo = session.QueryHeroAmmo();
         var ammo = Enumerable.Range(0, SessionAmmoRecord.AmmoTypes).Select(type => heroAmmo.FirstOrDefault(stack => stack.AmmoType == type).Units).ToArray();
+        var speed = HeroSpeed(session);
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>())
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo };
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed };
         var current = session.QueryMapInventory(new(runtimeMap));
         // ARC-WORLD-063: a junk pile the session made lists its items in the pile's order.
         var pile = current?.JunkPiles.FirstOrDefault(p => p.Entity == holder);
@@ -393,7 +409,7 @@ public sealed class AreaInventoryHost
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
             { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo };
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
         static bool Stack(SessionItemFacts facts) => facts.AmmoType is not null || facts.Kind.Type == SessionItemType.Gold && facts.Quantity is not null;

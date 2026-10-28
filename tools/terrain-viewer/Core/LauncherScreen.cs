@@ -85,7 +85,10 @@ public sealed class LauncherScreen
 
     public void SetShowAtStart(bool show) { Settings = Settings with { ShowAtStart = show }; Notice = null; }
 
-    /// <summary>The settings to store and open: the ready folder with its source and identity, the rule mode and "show at start";
+    /// <summary>ARC-DEV-050: the debug mode (every world-map area open to a teleport; never gameplay), stored by Play.</summary>
+    public void SetDebugMode(bool on) { Settings = Settings with { DebugMode = on }; Notice = null; }
+
+    /// <summary>The settings to store and open: the ready folder with its source and identity, the rule mode, "show at start" and the debug mode;
     /// null (with the notice) when no ready folder is chosen.</summary>
     public LauncherSettings? Play()
     {

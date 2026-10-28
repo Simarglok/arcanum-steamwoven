@@ -1,0 +1,161 @@
+using Arcanum.Data.Area;
+using Arcanum.Session;
+using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Traps;
+
+namespace Arcanum.TerrainViewer.Core;
+
+/// <summary>
+/// ARC-WORLD-110: the cast host's side of a trap the viewer meets: the effect of a fired native run (<see cref="Apply"/>: the row of the
+/// trapped object, the run, the use script's counters and the trap state's object flags; the viewer builds the
+/// <see cref="SessionTrapFiring"/> with the cast map's ids and calls <see cref="SessionSpellCaster.ApplyTrapEffect"/>) and the player's
+/// spell flags (field 0x14), which the spot gate and the step trigger read.
+/// </summary>
+public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult> Apply, int PlayerSpellFlags);
+
+/// <summary>
+/// ARC-WORLD-110: one meeting of the PC with a trap through the object entry point (a use, or a step onto a trap object): the trap's row,
+/// the cause, the session's answer (<see cref="GameSessionOwner.TriggerTrap"/>) and the effect of a fired native run (null when none
+/// was applied: no run, or 30007).
+/// </summary>
+public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Cause, SessionTrapResult Result, SessionTrapEffectResult? Effect)
+{
+    public SessionTrapOutcome Outcome => Result.Outcome;
+    public bool Rejected => Result.Mutation.Disposition == GameSessionDisposition.Rejected;
+
+    /// <summary>The use stops here (skip default): the trap was spotted now, a native run fired (the trap code answers skip default,
+    /// TT8), or the session refused the meeting. An ordinary trap script that fired (no native run) runs as the use script.</summary>
+    public bool Cancels => Rejected || Outcome == SessionTrapOutcome.Spotted || Outcome == SessionTrapOutcome.Fired && Result.Run is not null;
+
+    /// <summary>A step's walk ends on the tile (TT9): the trap was spotted now or fired.</summary>
+    public bool EndsWalk => !Rejected && Outcome is SessionTrapOutcome.Spotted or SessionTrapOutcome.Fired;
+
+    /// <summary>Identifiers, outcomes and numbers only.</summary>
+    public string Describe()
+    {
+        if (Rejected) return $"refused by the session ({Result.Mutation.Failure})";
+        var what = Outcome switch
+        {
+            SessionTrapOutcome.Spotted => "spotted" + (Result.PlayerLine ? $" (mes\\trap.mes {AreaTraps.SpottedLine})" : ""),
+            SessionTrapOutcome.Fired when Result.Run is { } run => $"script {run.Script} went off (mes\\trap.mes {TrapEffectRules.FiredLine})"
+                + (Result.State.Removed ? ", removed" : ""),
+            SessionTrapOutcome.Fired => $"ordinary trap script {Result.State.Script} runs",
+            _ => Outcome.ToString(),
+        };
+        if (Effect is { Victims.Count: > 0 } effect)
+            what += "; " + string.Join(", ", effect.Victims.Select(v => $"{v.Entity} {v.Hit}{(v.HitPointDamage > 0 ? $" -{v.HitPointDamage} HP" : "")}"
+                + (v.SpellRun is { } run ? $" spell run {run}" : "")));
+        return what;
+    }
+}
+
+/// <summary>What the walk check before one step found (TT10): the trap object it spotted (null: none, the step goes), the session's
+/// mark, and how many unknown traps on the tile needed the spot trap roll, which the viewer does not make (skills plan S10).</summary>
+public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutationResult? Mark, int RollsNotReady);
+
+/// <summary>
+/// ARC-WORLD-110: the AREA viewer's trap host for the PC (docs/world/trap-state-runtime.md, ledger TT3, TT9, TT10, EX20): the use of a
+/// trapped object (<see cref="Use"/>, which the use-script host asks before the use script), the walk's check of the next tile
+/// (<see cref="WalkCheck"/>) and the step onto a trap object (<see cref="Step"/>). Each asks the session's trap state with the row's
+/// baseline from <see cref="AreaUseScriptHost.TrapBaseline"/>; a fired native run's effect is the cast host's
+/// (<see cref="AreaTrapEffects"/>). The spot attempt of an unknown trap spots without a roll only when the player's spell flags hold
+/// 0x100 (TT3); the spot trap roll itself is not made (S10), so a trap whose spot needs it is not spotted. No trap is consumed without
+/// its effect: without a cast host (<paramref name="effects"/> answering null), for a 30002 shot (its shooter search is a later slice)
+/// and for an ordinary trap script on a step (the step's dispatch with the trap as attachee and extra object is a later slice) the trap
+/// is not met at all, so a use goes on as before (the dispatcher stops at a native trap script) and a step meets nothing. Only the PC
+/// meets traps here.
+/// </summary>
+public sealed class AreaTraps
+{
+    /// <summary>The line of <c>mes\trap.mes</c> the player gets for a trap spotted (TT4).</summary>
+    public const int SpottedLine = 0;
+    private const int TrapObjectType = 17;
+    private readonly GameSessionOwner _session;
+    private readonly AreaUseScriptHost _host;
+    private readonly Func<AreaObjectRecord, bool> _gone;
+    private readonly Func<AreaTrapEffects?> _effects;
+    private readonly Dictionary<(long X, long Y), List<AreaObjectRecord>> _trapObjects = [];
+
+    /// <param name="shown">The shown map's rows (its snapshot's): its trap objects (type 17) in snapshot order are the ones a step meets.</param>
+    /// <param name="gone">Whether the session destroyed or switched off a row (a removed trap object is destroyed).</param>
+    /// <param name="effects">The cast host's side now, or null while there is none.</param>
+    public AreaTraps(GameSessionOwner session, AreaUseScriptHost host, IEnumerable<AreaObjectRecord> shown, Func<AreaObjectRecord, bool> gone,
+        Func<AreaTrapEffects?> effects)
+    {
+        _session = session ?? throw new ArgumentNullException(nameof(session));
+        _host = host ?? throw new ArgumentNullException(nameof(host));
+        ArgumentNullException.ThrowIfNull(shown);
+        _gone = gone ?? throw new ArgumentNullException(nameof(gone));
+        _effects = effects ?? throw new ArgumentNullException(nameof(effects));
+        foreach (var row in shown)
+            if (row.Type == TrapObjectType && row.WorldX is { } x && row.WorldY is { } y)
+            {
+                if (!_trapObjects.TryGetValue((x, y), out var list)) _trapObjects[(x, y)] = list = [];
+                list.Add(row);
+            }
+    }
+
+    /// <summary>The shown map's trap objects on the tile that the session has not destroyed or switched off, in snapshot order.</summary>
+    public IReadOnlyList<AreaObjectRecord> TrapObjectsOn(CellCoord cell) =>
+        _trapObjects.TryGetValue((cell.X, cell.Y), out var list) ? list.Where(row => !_gone(row)).ToArray() : [];
+
+    /// <summary>
+    /// The PC uses the object (0x441980 through the object entry point, TT7): null when it carries no trap now or no cast host is there;
+    /// otherwise the meeting (<see cref="GameSessionOwner.TriggerTrap"/> with cause Use), whose <see cref="AreaTrapMeeting.Cancels"/>
+    /// says whether the use script still runs.
+    /// </summary>
+    public AreaTrapMeeting? Use(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return Meet(row, SessionTrapCause.Use);
+    }
+
+    /// <summary>
+    /// The walk check before the PC steps onto <paramref name="next"/> (0x427110, TT10): every trap object there the player does not know
+    /// gets a spot attempt; the first one spotted is marked and blocks the step, which ends the walk (EX20). Known traps are skipped.
+    /// Nothing without a cast host; a mark the session refuses lets the step go (<see cref="AreaTrapWalk.Mark"/> says so).
+    /// </summary>
+    public AreaTrapWalk WalkCheck(CellCoord next)
+    {
+        if (_effects() is not { } effects) return new(null, null, 0);
+        var rolls = 0;
+        foreach (var row in TrapObjectsOn(next))
+        {
+            if (_host.TrapBaseline(row) is not { } baseline) continue;
+            var trapped = AreaUseScriptHost.Trapped(row);
+            if (!_session.QueryTrap(trapped, baseline).Trapped || _session.TrapKnownTo(trapped, baseline, TrapObserver.Player)) continue;
+            switch (_session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags))
+            {
+                case TrapSpotGate.Detected:
+                    // A mark the session refuses (a full budget) blocks nothing: the trap would stay unknown and block the tile for good.
+                    var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
+                    return new(mark.Disposition == GameSessionDisposition.Rejected ? null : row, mark, rolls);
+                case TrapSpotGate.Roll: rolls++; break;
+            }
+        }
+        return new(null, null, rolls);
+    }
+
+    /// <summary>
+    /// The PC's step arrives on <paramref name="cell"/> (0x4305D0, TT9): the first trap object there meets the PC through the object entry
+    /// point (cause Step: the PC's spell flag 0x2 or 0x4 steps over it; a known trap fires too). Null when the tile holds no trap object
+    /// or no cast host is there; <see cref="AreaTrapMeeting.EndsWalk"/> says whether the walk ends on the tile.
+    /// </summary>
+    public AreaTrapMeeting? Step(CellCoord cell) => TrapObjectsOn(cell) is [var first, ..] ? Meet(first, SessionTrapCause.Step) : null;
+
+    private AreaTrapMeeting? Meet(AreaObjectRecord row, SessionTrapCause cause)
+    {
+        if (_effects() is not { } effects || _host.TrapBaseline(row) is not { } baseline) return null;
+        var trapped = AreaUseScriptHost.Trapped(row);
+        var state = _session.QueryTrap(trapped, baseline);
+        if (!state.Trapped) return null;
+        var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
+        if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
+        // The spot attempt (E2, TT3): only the player's detect-traps flag spots without a roll; the roll itself is S10's.
+        var spotted = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags) == TrapSpotGate.Detected;
+        var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
+            cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);
+        if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null);
+        return new(row, cause, result, effects.Apply(row, run, baseline.Counters, result.State.ObjectFlags));
+    }
+}

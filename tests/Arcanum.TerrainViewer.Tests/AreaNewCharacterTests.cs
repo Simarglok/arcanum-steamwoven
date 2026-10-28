@@ -303,7 +303,7 @@ public sealed class AreaNewCharacterTests
         Assert.AreEqual(AreaMenuWindow.NewCharacter, menu.Window);
         Assert.AreEqual(0, menu.Shown.Count, "art buttons only: no letters");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('x'));
-        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShopBarter, "ARC-UI-034: Accept opens the editor");
+        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.ShopLoading, "ARC-UI-034: Accept opens the editor");
         menu.PressCreation(AreaNewCharacterButton.RaceNext, Steamwoven);
         Assert.AreEqual(CharacterRace.Dwarf, menu.Creation!.Race);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Accept(), "ARC-UI-033: the default name is refused");
@@ -443,7 +443,7 @@ public sealed class AreaNewCharacterTests
         menu.OpenCharacterEditor(editor);
         Assert.AreEqual((AreaMenuWindow.CharacterEditor, 0, 0), (menu.Window, menu.Shown.Count, menu.Focus));
         Assert.AreSame(editor, menu.Editor);
-        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShopBarter);
+        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.ShopLoading);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('a'), "no letters in the editor (CM7)");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenShop), menu.Accept(), "ARC-UI-036: Accept asks for the opening shop");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenShop), menu.Confirm(), "the controller's Accept row");

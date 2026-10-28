@@ -121,7 +121,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The location a save names: the map mode's map, else the Crash Site or its cave.</summary>
-    private string SaveLocation() => _readyMapName ?? (InCave ? "Crash Site cave" : "Crash Site");
+    // ARC-DEV-050: a save made in debug mode says so in its location.
+    private string SaveLocation() => ViewerDebugMode.MarkLocation(_readyMapName ?? (InCave ? "Crash Site cave" : "Crash Site"), DebugMode);
 
     /// <summary>A PNG of the frame on screen fitted into the original's fixed 468×300 preview (SL8), or null when the frame cannot be
     /// read (a headless run).</summary>
@@ -129,7 +130,13 @@ public partial class TerrainViewerApp
     {
         if (DisplayServer.GetName() == "headless") return null;
         var image = GetViewport().GetTexture()?.GetImage();
-        if (image is null || image.IsEmpty()) return null;
+        return image is null || image.IsEmpty() ? null : SaveThumbnail(image);
+    }
+
+    /// <summary>The preview PNG of a frame (ARC-DEV-051 takes it from the frame it keeps; the image is resized in place), or null when
+    /// it breaks the save list's limit.</summary>
+    private byte[]? SaveThumbnail(Image image)
+    {
         var scale = Math.Min(468.0 / image.GetWidth(), 300.0 / image.GetHeight());
         image.Resize(Math.Max(1, (int)(image.GetWidth() * scale)), Math.Max(1, (int)(image.GetHeight() * scale)), Image.Interpolation.Bilinear);
         var png = image.SavePngToBuffer();

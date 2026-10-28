@@ -333,10 +333,32 @@ public sealed class SessionCritterCombat
         var combatant = Combatant(status, state, profile) with { Worn = CombatantRules.WornItems(worn.Keys) };
         var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
             state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
-        var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
         var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var wielded = worn.TryGetValue(EquipmentSlot.Weapon, out var item) ? item : null;
         var skill = wielded?.Weapon?.Skill ?? CombatSkill.Melee;
+        var (level, training) = SkillOf(skill, snapshot);
+        var equipment = EquipmentRules.Evaluate(worn, aptitude, training);
+        var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
+        var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
+        return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
+            range, skill == CombatSkill.Melee);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-113: the level and training of the NPC's combat <paramref name="skill"/> in this life state, as
+    /// <see cref="AttackValues"/> reads its weapon's skill: the stored basic skill (melee, bow, throwing; melee 20 and the tiers for a
+    /// monstrous critter) under its effective dexterity, firearms from its stored tech skill, or the sheet it was levelled to. The
+    /// throw of an NPC (<see cref="GameSessionOwner.ThrowByNpc"/>) checks with its throwing skill (TW3: skill 3).
+    /// </summary>
+    public (int Level, SkillTraining Training) SkillValues(CombatSkill skill, LifeState state)
+    {
+        if (!Enum.IsDefined(skill)) throw new ArgumentOutOfRangeException(nameof(skill));
+        return SkillOf(skill, _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
+            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!);
+    }
+
+    private (int Level, SkillTraining Training) SkillOf(CombatSkill skill, CharacterStatsSnapshot snapshot)
+    {
         BasicCombatSkill? basic = skill switch
         {
             CombatSkill.Melee => BasicCombatSkill.Melee,
@@ -344,20 +366,14 @@ public sealed class SessionCritterCombat
             CombatSkill.Throwing => BasicCombatSkill.Throwing,
             _ => null,
         };
-        int level; SkillTraining training;
-        if (_sheetSkills is { } sheet) (level, training) = (sheet[SkillRules.Of(skill)].Level, sheet[SkillRules.Of(skill)].Training);
-        else if (basic is { } stored)
+        if (_sheetSkills is { } sheet) return (sheet[SkillRules.Of(skill)].Level, sheet[SkillRules.Of(skill)].Training);
+        if (basic is { } stored)
         {
-            level = CombatSkillRules.Level(stored, _basicSkills[(int)stored], dexterity, Monstrous);
-            training = CombatSkillRules.Training(stored, _basicSkills[(int)stored], Monstrous, level, Level);
+            var level = CombatSkillRules.Level(stored, _basicSkills[(int)stored], snapshot.GetEffective(CharacterStat.Dexterity), Monstrous);
+            return (level, CombatSkillRules.Training(stored, _basicSkills[(int)stored], Monstrous, level, Level));
         }
         // ARC-WORLD-106: the firearms skill is the NPC's stored tech skill (0x4C65E0, 0x4C67F0).
-        else (level, training) = (FirearmsLevel(snapshot), SkillRules.Training(Skill.Firearms, _techSkills[FirearmsTech], false, 0, Level));
-        var equipment = EquipmentRules.Evaluate(worn, aptitude, training);
-        var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
-        var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
-        return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
-            range, skill == CombatSkill.Melee);
+        return (FirearmsLevel(snapshot), SkillRules.Training(Skill.Firearms, _techSkills[FirearmsTech], false, 0, Level));
     }
 
     // The tech index of firearms (repair 0, firearms 1, pick locks 2, disarm traps 3).

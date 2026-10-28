@@ -8,9 +8,9 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # find the game's inputs, record their identities, register artifacts/world-builds as root "world"
-    ./arcanum area [--hero NAME | --no-main-menu] [--sector X,Y] [--dry-run]  # the main menu first (ARC-UI-012), then the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
+    ./arcanum area [--hero NAME | --no-main-menu] [--sector X,Y] [--debug-mode] [--dry-run]  # the main menu first (ARC-UI-012), then the main world map at the Crash Site in map mode (= map Arcanum1-024-fixed), any installation, a build exported after ARC-RENDER-024 (ARC-RENDER-028)
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
-    ./arcanum map NAME [--hero NAME | --main-menu] [--sector X,Y] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
+    ./arcanum map NAME [--hero NAME | --main-menu] [--sector X,Y] [--debug-mode] [--dry-run]  # one map (a maps/ folder name) in map mode, from the ARC-DEV-015 build, else ARC-RENDER-008; any installation; the main world map (Arcanum1-024-fixed) opens as a window that moves with the actor, at --sector or the new-game start (a build exported after ARC-RENDER-024)
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
@@ -62,7 +62,10 @@ argument, so `--hero` needs a new export. `--main-menu` (ARC-UI-011, [main menu]
 opens the original's main menu over the scene first (a new game as a pre-made hero picked in the menu, the last save,
 the load window, exit); it is refused with `--hero`, reaches the viewer as `--main-menu true` through
 `tools/arcanum-local launch terrain ... --main-menu`, and needs a build exported after ARC-UI-011 (an older build
-refuses the argument). ARC-UI-012 ([scene flow](../rendering/terrain-viewer.md#scene-flow-arc-ui-012)): `./arcanum area`
+refuses the argument). `--debug-mode` (ARC-DEV-050, `area` and `map`; [debug mode](../rendering/area-map-mode.md#debug-mode-arc-dev-050))
+turns the viewer's debug mode on: the world map (W) lists every area and teleports there, from any map; it reaches the
+viewer as the lone `--debug-mode` through `tools/arcanum-local launch terrain ... --debug-mode` (map mode only), and
+`./arcanum` refuses a build whose commit does not hold it (`DEBUG_MODE_COMMIT`), as for the main menu. ARC-UI-012 ([scene flow](../rendering/terrain-viewer.md#scene-flow-arc-ui-012)): `./arcanum area`
 opens the main menu by default, as the game starts with it; `--no-main-menu` starts playing at once with the diagnostic
 PC profile, and `--hero` starts as that hero without the menu. `map NAME` opens the menu only with `--main-menu`. Before
 launching with the menu, `./arcanum` checks that the build's commit holds the main menu (`MAIN_MENU_COMMIT`, the

@@ -70,6 +70,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030, ARC-UI-033 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
 | Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
+| Debug mode | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-050 |
 | Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018, ARC-UI-023 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
@@ -144,6 +145,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
 | Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043 |
 | Packaged alpha build (macOS, Windows) | [Verification and tools](status/tools.md) | ARC-DEV-047, ARC-DEV-048, ARC-DEV-049 |
+| In-game bug report | [Verification and tools](status/tools.md) | ARC-DEV-051 |
 
 ## Merged research, not production runtime
 

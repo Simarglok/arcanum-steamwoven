@@ -63,6 +63,8 @@ public partial class TerrainViewerApp
         _mainMenuDirectoryForSelfTest = System.IO.Directory.CreateTempSubdirectory("arc-ui-011-").FullName;
         _saveLibraryForSelfTest = new(_mainMenuDirectoryForSelfTest);
         _heroLoaderForSelfTest = SyntheticHero;
+        // ARC-UI-038: the synthetic menu has no shop map: the opening shop is the kit alone, with the reason.
+        _shopMapForSelfTest = () => new(AreaShopMapStatus.Failed, null, "synthetic: no shop map"); _shopMapModule = null; _shopMap = null;
         _mainMenuExitForSelfTest = () => _mainMenuExitsForSelfTest++;
     }
 
@@ -246,7 +248,8 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Shop && !CharacterEditorShown && _mainMenuPanel.ShopForSelfTest.StartsWith("gold 120 (background 1)", StringComparison.Ordinal)
                 && _mainMenu.Creation!.Kit is { Gold: 120, Skipped: 1, Clothes: 8065, Jacket: false } && _mainMenu.Creation.Kit.Kit.Count == 0,
                 "Return opened the shop: " + _mainMenu?.Notice + " " + _mainMenuPanel.ShopForSelfTest);
-            Require(_mainMenuPanel.NoteForSelfTest.Contains(AreaMainMenu.NoShopBarter, StringComparison.Ordinal), "the shop names the merchant it lacks");
+            Require(_mainMenuPanel.NoteForSelfTest.Contains(AreaMainMenu.ShopUnavailable("synthetic: no shop map"), StringComparison.Ordinal) && !BarterOpen,
+                "the shop names the merchant it lacks: " + _mainMenuPanel.NoteForSelfTest);
             _mainMenuPanel.ShopPressForSelfTest(accept: false);
             Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "Back returned to the editor");
             _editorPanel!.StatMinusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
@@ -284,6 +287,7 @@ public partial class TerrainViewerApp
             if (SaveListOpen) EndSaveList();
             if (_mainMenu is not null) EndMainMenu("self-test end");
             _saveLibraryForSelfTest = null; _quickKeys.Reset(); _heroLoaderForSelfTest = null; _mainMenuExitForSelfTest = null;
+            _shopMapForSelfTest = null; _shopMapModule = null; _shopMap = null;
             _worldFocusSimulationForSelfTest = simulatedFocus;
             System.IO.Directory.Delete(_mainMenuDirectoryForSelfTest, recursive: true);
             _mainMenuDirectoryForSelfTest = null;

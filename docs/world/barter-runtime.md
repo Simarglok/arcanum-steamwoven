@@ -259,10 +259,22 @@ body art, as at the hero's start). Since ARC-WORLD-106 the NPC fights with what 
 ([NPC wear in combat](equipment-runtime.md#npc-wear-in-combat-arc-world-106)). Native observation: stage `barter`, marker `ARC-WORLD-103 native-smoke redress PASS` (the first
 living NPC of the shown map with a source of its own whose set the project admits, scheduled through the window open's path; SKIP on a map without one).
 
+## Direct regeneration (ARC-UI-038)
+
+The opening shop asks for 0x463E20 directly on its merchant and then on the merchant's substitute container (0x545F1D, 0x545F34,
+ledger [OS8](../research/ledger/character.md#opening-shop-merchant-arc-ui-038)), without the restock event's tests.
+`GameSessionOwner.RegenerateInventory(expected, holder, world)` does it for a holder of the actor's map: the clear (persistent items
+stay, RK5), also for a source of 0, which then ends it (no wield, RK15); otherwise the generation from the set with the session's
+labelled rolls (a container with flag 0x200 seeded and recorded as at its first open) and, for an NPC, the best-items wield. A holder
+the session cannot regenerate keeps its list (`Unsupported`, no change). Refused before any effect: an invalid entity, the version, a
+host not ready or no seed for the actor's map, an object the seed or the host does not list as that kind of holder, a full budget and
+the revision. One revision. The viewer's caller is the [opening shop merchant](../rendering/terrain-viewer.md#opening-shop-merchant-arc-ui-038).
+
 ## Not modelled (NOT READY)
 
-- **Container loot window limits** (ARC-WORLD-101): a trapped container (a native trap script at its use slot) and one with an unlock
-  script do not open; the session holds no keys, so every locked container stays shut; the refusal text is the viewer's, not the
+- **Container loot window limits** (ARC-WORLD-101): a container with an unlock script does not open; a trapped one meets its trap
+  first (ARC-WORLD-110, [trap state](trap-state-runtime.md#viewer-arc-world-110)) and stays shut when the trap is spotted or goes off,
+  or without a cast host; the session holds no keys, so every locked container stays shut; the refusal text is the viewer's, not the
   `inven_ui.mes` line; the facing turn and the sight test of the admission are not made; the open frame is recorded but not drawn and no
   open or close animation plays; a body's loot plays no sound 3007; the map data's own junk piles do not dissolve when their window
   closes (only the session's do); the steal mode (3) and the second container view (4) do not exist in the viewer.

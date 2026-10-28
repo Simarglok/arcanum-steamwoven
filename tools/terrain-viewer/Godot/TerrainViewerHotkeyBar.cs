@@ -164,7 +164,8 @@ public partial class TerrainViewerApp
 
     private void HotkeyDragReleased(MouseButton button, Vector2I point)
     {
-        if (_hotkeyDrag is not { } drag || _areaSession is not { } session) return;
+        // ARC-DEV-051: a release over the bug report's shade drops nothing (the bar view sees the mouse before the app).
+        if (_hotkeyDrag is not { } drag || _areaSession is not { } session || BugReportOpen) return;
         var target = HotkeyBarRules.EntryAt(point.X, point.Y);
         var drop = HotkeyBarRules.Drop(drag.Kind, drag.Entry, target, button == MouseButton.Left, false);
         if (drop.Kind == HotkeyDropKind.Continue) return;

@@ -197,9 +197,10 @@ public sealed class AreaMainMenu
     public const string NoNetworkPlay = "network play is not built";
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
-    /// <summary>ARC-UI-036: what the opening shop does in the original and Steamwoven does not have yet (ledger OS2).</summary>
-    public const string NoShopBarter = "the shop map's merchant is not built: the original opens barter with the first NPC of the shop map here; "
-        + "Accept starts the game with the kit";
+    /// <summary>ARC-UI-038: the opening shop's note while its merchant's barter is not open yet (the shop map loads behind the menu).</summary>
+    public const string ShopLoading = "the shop map's merchant is loading; Accept starts the game with the kit";
+    /// <summary>ARC-UI-038: the opening shop's note when the project could not open its merchant's barter (the shop is the kit alone).</summary>
+    public static string ShopUnavailable(string why) => $"the shop map's merchant is not available ({why}); Accept starts the game with the kit";
     /// <summary>The quit box's fixed letters (the original's yes/no box, SF3).</summary>
     public const char YesLetter = 'Y', NoLetter = 'N';
     private readonly List<AreaMenuWindow> _back = [];
@@ -270,11 +271,15 @@ public sealed class AreaMainMenu
     /// <summary>The hidden buttons of the window with the reason, for its note; in the options window also the page's hidden controls
     /// and the values a shown control does not offer; in the opening shop what it skips.</summary>
     public IReadOnlyList<string> HiddenNotes => Buttons.Where(button => !button.Shown).Select(button => $"{Texts.Text(button.Message)}: {button.Unavailable}")
-        .Concat(Window == AreaMenuWindow.Shop ? [NoShopBarter] : [])
+        .Concat(Window == AreaMenuWindow.Shop && ShopNote is { } shopNote ? [shopNote] : [])
         .Concat(Window != AreaMenuWindow.Options ? [] : AreaOptionTable.Page(Page)
             .Where(control => !control.Shown || control.LimitNote is not null)
             .Select(control => $"{OptionsTexts.Label(control)}: {control.Unavailable ?? control.LimitNote}"))
         .ToArray();
+
+    /// <summary>ARC-UI-038: why the opening shop shows no merchant's barter (<see cref="ShopLoading"/>, <see cref="ShopUnavailable"/>); null
+    /// once the barter is open. Each opening of the shop starts with <see cref="ShopLoading"/>.</summary>
+    public string? ShopNote { get; set; }
 
     /// <summary>ARC-UI-013: the options texts (labels and values); the project's until the host gives the game's.</summary>
     public AreaOptionsTexts OptionsTexts { get; set; } = AreaOptionsTexts.Project("not read");
@@ -507,6 +512,7 @@ public sealed class AreaMainMenu
         if (QuitPending || Window != AreaMenuWindow.CharacterEditor || Creation is not { } creation || Editor is null || NewGameRefusal is not null
             || !ReferenceEquals(kit.Creation, creation)) return;
         creation.TakeKit(kit);
+        ShopNote = ShopLoading;
         Open(AreaMenuWindow.Shop);
     }
 
@@ -517,6 +523,9 @@ public sealed class AreaMainMenu
         Editor?.Dispose();
         Editor = null;
     }
+
+    /// <summary>ARC-UI-038: disposes the opening shop's session (the host calls it whenever the menu ends without the game taking it).</summary>
+    public void DropShop() => Creation?.DropShop();
 
     /// <summary>ARC-UI-033: a click on the name field: it starts typing (cleared, the old text kept); a second click does nothing.</summary>
     public void BeginName()

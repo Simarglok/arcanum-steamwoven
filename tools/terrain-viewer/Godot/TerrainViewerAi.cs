@@ -26,6 +26,8 @@ public partial class TerrainViewerApp
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
     private int _aiFidgets;
+    // ARC-WORLD-109: the NPC skill attempts seen (the ai-skill smoke reads it).
+    private int _aiSkills;
     // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
     private int _aiCasts, _aiCastReleases, _aiMissiles, _aiMissileArrivals;
     private string? _aiNotice;
@@ -79,6 +81,8 @@ public partial class TerrainViewerApp
             Spells = SpellCasterNow,
             CastEyeCandy = NpcCastEyeCandy,
             MissileArt = spell => SpellMissileArt(spell) is not null,
+            // ARC-WORLD-109: an NPC's skills for its skill attempts.
+            NpcSheet = AreaFollowerSheet,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -149,6 +153,19 @@ public partial class TerrainViewerApp
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
                     break;
+                case AreaAiNoticeKind.Skill:
+                    // ARC-WORLD-109: a skill attempt at its action frame; a heal changes a body's life and the healer's item.
+                    _aiSkills++;
+                    _aiNotice = $"{AiName(notice.Npc)} uses skill {notice.Skill}" + (notice.Heal is { } heal
+                        ? $": {(heal.Check?.Success == true ? $"heals {heal.Heal?.HitPoints}" : heal.Disposition == GameSessionDisposition.Changed ? "fails" : $"refused ({heal.Failure})")}" : "");
+                    GD.Print($"ARC-WORLD-109 ai-skill npc={notice.Npc} skill={notice.Skill} target={notice.Target} disposition={notice.Heal?.Disposition.ToString() ?? "none"}"
+                        + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
+                    if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
+                    break;
+                case AreaAiNoticeKind.Throw:
+                    AiThrow(notice);
+                    redraw = true;
+                    break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
                     _aiFidgets++;
@@ -182,6 +199,24 @@ public partial class TerrainViewerApp
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
+        SyncAreaCombatBodies();
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    // ARC-WORLD-113: an NPC's throw at its action frame: a struck critter's attack reaches the status line and the bodies as a hit's;
+    // the item lies where it landed (the inventory and the ground).
+    private void AiThrow(AreaAiNotice notice)
+    {
+        var thrown = notice.Throw!;
+        GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
+            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}");
+        if (notice.Target is not null && notice.Result is not null)
+        {
+            AiHit(notice);
+            return;
+        }
+        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

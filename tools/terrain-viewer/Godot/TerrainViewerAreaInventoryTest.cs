@@ -393,6 +393,7 @@ public partial class TerrainViewerApp
                 (dragged, view) = await DragForSmoke(view);
                 view = await DropAndUseForSmoke();
                 view = await QuantityForSmoke();
+                ArtForSmoke();
             }
             // ARC_AREA_INVENTORY_CAPTURE saves an in-app readback of the open window to the caller's ignored path.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture)
@@ -402,13 +403,15 @@ public partial class TerrainViewerApp
                 using var image = GetViewport().GetTexture().GetImage();
                 if (image.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_INVENTORY_CAPTURE_FAILED");
             }
+            var artShown = _inventoryPanel?.ArtMode ?? false;
             InventoryKey(Key.I);
             Require(!InventoryOpen, "I closed the window");
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-004 native-smoke inventory PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
                 PrintedLines = printed, WornCycled = wornCycled, Dragged = dragged, Grid = _areaSession.QueryHeroGrid().Items.Count,
-                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no original art)" }));
+                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count,
+                Parity = artShown ? "original art and layout (ARC-UI-051); fonts, item sizes and paper-doll art NOT_VERIFIED" : "NOT_VERIFIED (diagnostic window, no original art)" }));
         }
         finally
         {
@@ -417,6 +420,23 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    /// <summary>ARC-UI-051: with the game's art the player's own window shows the original look: every window art read, every grid and worn
+    /// item's inventory art read, and the switch to the diagnostic view and back.</summary>
+    private void ArtForSmoke()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
+        var panel = _inventoryPanel!;
+        Require(panel.ArtMode && panel.GridAreaForSelfTest.Look is { } look && look.Art.Count == AreaInventoryArtLayout.ArtNumbers.Distinct().Count(),
+            "the original look shows with every window art");
+        var view = panel.ViewForSelfTest!;
+        var items = view.Grid.Select(item => item.Entity).Concat(view.Doll.Where(slot => slot.Entity is not null).Select(slot => slot.Entity!)).ToArray();
+        var drawn = items.Count(item => panel.GridAreaForSelfTest.Look!.ItemArt(item) is not null);
+        Require(items.Length > 0 && drawn == items.Length, $"every item's inventory art reads ({drawn}/{items.Length})");
+        var lines = panel.GridAreaForSelfTest.Look!.Texts.Lines(view.Carry, view.Speed);
+        Require(lines.All(line => line.Length > 0), "the weight, encumbrance and speed lines: " + string.Join(" | ", lines));
+        GD.Print($"ARC-UI-051 native-smoke inventory-art PASS art={AreaInventoryArtLayout.ArtNumbers.Distinct().Count()} items={drawn}/{items.Length} lines=\"{string.Join(" | ", lines)}\"");
     }
 
     /// <summary>ARC-UI-019: drags with the mouse's press and release on the window's grid area: a grid item to a free cell and back, the
