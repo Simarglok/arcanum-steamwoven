@@ -373,10 +373,10 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_thirty_seven_functions_with_their_own_code_first(self):
+    def test_the_registry_names_thirty_eight_functions_with_their_own_code_first(self):
         self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4518D0, 0x4521A0, 0x452F20, 0x453410, 0x4534E0, 0x4537B0,
                                                               0x453B20, 0x453D40, 0x453EE0, 0x453FA0, 0x4545E0, 0x454700, 0x455250, 0x455550,
-                                                              0x456430, 0x456A10, 0x457110, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790,
+                                                              0x456430, 0x456A10, 0x457110, 0x461F80, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790,
                                                               0x4B5810, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4CC380, 0x4F2D20,
                                                               0x4F40B0, 0x4F5090, 0x4F50C0, 0x4F51B0, 0x4F5270])
         for address, spec in oracle_functions.FUNCTIONS.items():
@@ -386,6 +386,32 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual(oracle_functions.parse_address("0x4a6900"), 0x4A6900)
         with self.assertRaises(ValueError):
             oracle_functions.parse_address("0x401000")
+
+    def test_the_price_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
+        rng = random.Random(7)
+        cases = [oracle_functions.draw_price_case(rng) for _ in range(10_000)]
+        self.assertEqual({c.sell for c in cases}, {0, 1})
+        self.assertEqual({c.type for c in cases}, set(range(5, 15)))
+        self.assertEqual({c.training for c in cases}, {0, 1, 2, 3})
+        self.assertTrue(all(c.maximum >= 1 for c in cases) and any(c.current < c.maximum for c in cases))
+        self.assertTrue(any(c.worth > 1_000_000 for c in cases) and any(c.worth == 0 for c in cases) and any(c.multiplier > 100 for c in cases))
+        self.assertTrue(any(1000 <= c.location <= 1008 for c in cases) and any(c.reaction > 100 for c in cases) and any(c.reaction < 0 for c in cases))
+        case = cases[0]
+        stubs = oracle_functions.price_stubs(case)
+        item, pc, npc = oracle_functions.PRICE_ITEM, oracle_functions.PRICE_PC, oracle_functions.PRICE_NPC
+
+        def call(address, *arguments):
+            return stubs[address](lambda index: arguments[index])
+        self.assertEqual(call(oracle_functions.FIELD_GETTER, *item, 0x5B), case.worth & 0xFFFFFFFF)
+        self.assertEqual(call(oracle_functions.FIELD_GETTER, *npc, 0x125), case.multiplier & 0xFFFFFFFF)
+        self.assertEqual((call(oracle_functions.IS_PC, *pc), call(oracle_functions.IS_PC, *npc)), (1, 0))
+        self.assertEqual(call(0x4C62E0, *pc, 9, *item), case.haggle)
+        self.assertEqual(call(oracle_functions.STANDARD_REACTION, *npc, *pc), case.reaction & 0xFFFFFFFF)
+        for address, arguments in ((oracle_functions.FIELD_GETTER, (*pc, 0x125)), (oracle_functions.FIELD_GETTER, (*item, 0x58)),
+                                   (0x4C62E0, (*npc, 9, *item)), (oracle_functions.SKILL_TRAINING, (*pc, 8)),
+                                   (oracle_functions.SCRIPT_EVENT, (*item, *pc, *npc, 17, 0)), (oracle_functions.STANDARD_REACTION, (*pc, *npc))):
+            with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
+                call(address, *arguments)
 
     def test_the_resist_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
         rng = random.Random(5)
