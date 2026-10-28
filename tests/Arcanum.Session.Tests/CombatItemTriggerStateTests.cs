@@ -36,9 +36,13 @@ public sealed class CombatItemTriggerStateTests
         public List<bool> Held { get; } = [];
         public bool Supports(string item) => true;
 
-        public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null)
+        public List<(SpellLocation Tile, string? RunOther)> Contexts { get; } = [];
+
+        public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null, SpellLocation tile = default,
+            string? runOther = null)
         {
             Calls.Add((eventMask, item, holder, other));
+            Contexts.Add((tile, runOther));
             if (holds is not null) Held.Add(holds(item, holder));
             return SessionItemTriggerResult.None;
         }
@@ -234,6 +238,28 @@ public sealed class CombatItemTriggerStateTests
             return;
         }
         Assert.Fail("no single hit within the bounded run");
+    }
+
+    // ARC-MAGIC-025 (IC10): every end of the arrow's flight fires the bow's attacks a location at that tile.
+    [TestMethod]
+    public void A_shot_s_end_names_the_projectile_s_item_at_its_tile_while_it_flies()
+    {
+        using var owner = BowOwner();
+        var golem = GolemCombat();
+        var shot = owner.AttackCritter(owner.Version, new(golem) { Distance = 3, Flight = true, TargetWorn = Worn(owner) });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        var flying = shot.Shots[0];
+        var tile = new Arcanum.Simulation.Movement.CellCoord(104, 200);
+        var events = owner.QueryShotEndItemEvents(flying, tile);
+        CollectionAssert.AreEqual(new[] { new SessionItemEvent(ItemTriggerEvent.ParentAttacksLocation, Hero, null) { Item = Blade, Tile = new(104, 200) } },
+            events.ToArray());
+        var host = new Recorder();
+        owner.FireItemEvents(host, events, _ => null);
+        CollectionAssert.AreEqual(new (uint, string, string, string?)[] { (ParentAttacksLocation, Blade, Hero, null) }, host.Calls.ToArray());
+        CollectionAssert.AreEqual(new[] { (new SpellLocation(104, 200), (string?)Hero) }, host.Contexts.ToArray());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => owner.QueryShotEndItemEvents(flying, new(-1, 0)));
+        foreach (var each in shot.Shots) owner.EndShot(each);
+        Assert.AreEqual(0, owner.QueryShotEndItemEvents(flying, tile).Count, "a shot no longer in flight");
     }
 
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap

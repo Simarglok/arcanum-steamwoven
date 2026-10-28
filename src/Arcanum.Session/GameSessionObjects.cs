@@ -200,6 +200,11 @@ public sealed record SessionObjectAttackResult(GameSessionDisposition Dispositio
     /// <summary>ARC-COMBAT-018: every projectile of the shot now in flight, in launch order: one, or two for a bow at expert training
     /// (0x4B39B0), each striking on its own with the same decided outcome; empty when nothing flies.</summary>
     public IReadOnlyList<SessionShot> Shots { get => _shots ?? Array.Empty<SessionShot>(); init => _shots = value; }
+    private readonly IReadOnlyList<SessionItemEvent>? _itemEvents;
+
+    /// <summary>ARC-MAGIC-025: the item events of a critical self-hit's life step (as <see cref="SessionAttackResult.ItemEvents"/>);
+    /// empty otherwise (an object's damage step makes no wrapper call, IC2).</summary>
+    public IReadOnlyList<SessionItemEvent> ItemEvents { get => _itemEvents ?? Array.Empty<SessionItemEvent>(); init => _itemEvents = value; }
 }
 
 /// <summary>
@@ -400,7 +405,7 @@ public sealed partial class GameSessionOwner
             var criticals = new List<SessionCriticalStep>();
             var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, attack.DropMap, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
-                selfFailure, Version) { Criticals = criticals, Ammunition = ammunition, Shots = flying };
+                selfFailure, Version) { Criticals = criticals, Ammunition = ammunition, Shots = flying, ItemEvents = applied.ItemEvents };
         }
 
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
