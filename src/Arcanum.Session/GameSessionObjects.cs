@@ -484,11 +484,12 @@ public sealed partial class GameSessionOwner
         }
         var applied = ApplyChanges(Version, null, edits);
         // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7);
-        // ARC-WORLD-063: one by one, so from the second item on they gather into a junk pile on the container's cell (JP1).
+        // ARC-WORLD-063: one by one, the last first (0x463730 walks the list down), so from the second item on they gather into a
+        // junk pile on the container's cell (JP1).
         if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
             _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
         {
-            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).ToArray();
+            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).Reverse().ToArray();
             var later = items.ToHashSet(StringComparer.Ordinal);
             foreach (var item in items)
             {

@@ -112,14 +112,14 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(chest).Condition);
         var inventory = owner.QueryMapInventory(Exterior)!;
         Assert.AreEqual(0, inventory.Holders.Single(h => h.Entity == "chest").Items.Count);
-        // ARC-WORLD-063: the items drop one by one, so the knife, landing where the cup lies, gathers both into a junk pile.
+        // ARC-WORLD-063: the items drop one by one, the last first, so the cup, landing where the knife lies, gathers both into a junk pile.
         CollectionAssert.AreEqual(new[] { ("vase", new CellCoord(101, 200)) }, inventory.Ground.Select(g => (g.Item.Entity, g.Cell)).ToArray());
         var junk = inventory.JunkPiles.Single();
         Assert.AreEqual(("junk:1", ChestCell), (junk.Entity, junk.Cell));
-        CollectionAssert.AreEqual(new[] { "cup", "knife" }, junk.Items.Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "knife", "cup" }, junk.Items.Select(item => item.Entity).ToArray());
         CollectionAssert.AreEqual(new[] { (0, 1, 1), (1, 1, 1) }, owner.QueryJunkPiles().Single().Items.Select(item => (item.Slot, item.Width, item.Height)).ToArray());
         // ARC-WORLD-062: the spilled items decay; the vase, which lay there at T0, does not.
-        CollectionAssert.AreEqual(new[] { "cup", "knife" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray());
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItem(owner.Version, "cup", Accept).Failure, "an item in a pile is not on the ground");
         Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:1", "cup", Accept).Failure, "it is looted from the pile");
         Assert.AreEqual("cup", owner.QueryPcInventory().Single().Entity);
@@ -402,11 +402,11 @@ public sealed class ObjectAttackStateTests
         Assert.AreEqual(ClockMutationDisposition.Changed,
             restored.AdvanceGameTime(restored.QueryClockSnapshot().Token, ItemDecayRules.RetryDelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
         Assert.IsTrue(restored.ProcessEvents(new NoWorld()).Decays.All(d => !d.Postponed));
-        // ARC-WORLD-063: the cup decays first in their junk pile; the pile, left with the knife, dissolves and drops it again, so the
-        // knife's two days start over (0x43CCA0 → 0x463540 → 0x466E50).
-        Assert.IsTrue(restored.IsItemDestroyed("cup") && !restored.IsItemDestroyed("knife"));
+        // ARC-WORLD-063: the knife, dropped first, decays first in their junk pile; the pile, left with the cup, dissolves and drops it
+        // again, so the cup's two days start over (0x43CCA0 → 0x463540 → 0x466E50).
+        Assert.IsTrue(restored.IsItemDestroyed("knife") && !restored.IsItemDestroyed("cup"));
         Assert.AreEqual(0, restored.QueryJunkPiles().Count);
-        Assert.AreEqual(("knife", restored.QueryClockSnapshot().GameTimestampMs + ItemDecayRules.DelayMs),
+        Assert.AreEqual(("cup", restored.QueryClockSnapshot().GameTimestampMs + ItemDecayRules.DelayMs),
             restored.QueryItemDecays().Select(d => (d.Entity, d.DeadlineMs)).Single());
     }
 

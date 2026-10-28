@@ -668,8 +668,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Transitions.** Exits from the window's objects and tiles work as on any map, into interiors and back: the Crash
   Site cave entrance leads to the cave, whose exit leads back onto the main map, which opens around the arrival
   (92913, 82598). Every listed map is a destination.
-- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based,ranged`
-  narrows a run to those stages; without it all but `walk` and `census` run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves; `ranged` alone runs the battery's last combat stages, object attack, critical, line of fire and ARC-COMBAT-015's [ranged shot](../world/hero-attack-runtime.md#ranged-hero-attack-arc-combat-015)) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
+- **Native smoke** (`--native-smoke` on the main map; `ARC_AREA_MAP_SMOKE_ONLY=map,resources,transfer,roundtrip,stream,worldmap,walk,census,cast,turn-based,ranged,junk`
+  narrows a run to those stages; without it all but `walk` and `census` run (`cast`, ARC-MAGIC-015's [first cast](../world/spell-cast-host.md#the-viewer-arc-magic-015), and `turn-based`, ARC-COMBAT-020's [round host](../world/turn-based-round-runtime.md#viewer-host-arc-combat-020), are part of the map battery and alone run only themselves; `ranged` alone runs the battery's last combat stages, object attack, critical, line of fire and ARC-COMBAT-015's [ranged shot](../world/hero-attack-runtime.md#ranged-hero-attack-arc-combat-015); `junk` alone runs ARC-WORLD-063's [junk pile](../world/inventory-runtime.md#junk-piles-arc-world-063) stage, the battery's last) ([map census](#map-census-arc-render-027)); `worldmap` is [the world map](#world-map-arc-ui-048), after the stream), in this order: the map battery at the new-game start (the Crash Site window: walk,
   logbook, sound, dialog with Virgil, who then follows); the resource sweep and reload; the companion follow smoke and
   the map transfer smoke (exit to another map, jump point, F7/F8); `ARC-RENDER-024 native-smoke round-trip PASS`: into
   the cave and back onto the main map by the two exits; and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
@@ -677,7 +677,7 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   with the session carried (and Virgil following), the actor inside the new core and the walk's goal reached, the first
   one met mid-walk. The map battery and the stream run with `--area-map-sector` at a town (1409, 1314) and a generated
   wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
-  visiting from another window is drawn from its kept body) and picks, for the follow smoke, a free NPC that can walk
+  visiting from another window is drawn from its kept body, a junk pile or placed item under its own key) and picks, for the follow smoke, a free NPC that can walk
   6 cells.
 - **Walk smoke** (ARC-WORLD-042; the stage `walk`, run only when named: `ARC_AREA_MAP_SMOKE_ONLY=walk`, on the main
   map from the new-game start): plans the walk to the middle of the Shrouded Hills town sector (90208, 84128) over the

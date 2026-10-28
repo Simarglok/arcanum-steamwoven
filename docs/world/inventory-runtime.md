@@ -299,14 +299,14 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
 
 **Not ready (the original's behaviour, PI1–PI6).**
 
-- Junk piles (PI3): a dropped item joins a junk pile on its tile, or makes one with the loose items there; placed items lie loose.
+- Junk piles (PI3): since ARC-WORLD-063 a placed item goes through the drop's placement ([junk piles](#junk-piles-arc-world-063)).
 - The scripts and side effects of the removal (PI2) and of the pickup (PI6): item spells, the wield-off, remove-item and drop scripts,
   and the get and insert-item scripts of a pickup, none of which runs. A world item whose attached origin seed shows a drop script
   is not dropped (`ScriptUnsupported`), one with a get or insert-item script is not picked up (`ItemScriptUnsupported`); with its
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon; the session
   leaves the slot empty.
-- NPC made items (ARC-WORLD-055) and the junk pile of OD13 can use this store later. The viewer draws placed items and picks
+- NPC made items (ARC-WORLD-055) can use this store later. The viewer draws placed items and picks
   them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
   product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
 
@@ -328,15 +328,76 @@ Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read i
 each decay event (one item on a map, set no later than the saved clock, the decay delay or the retry's, one per item). The viewer's
 event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
-Not ready: junk piles (ARC-WORLD-063; an item in a pile decays as a loose one, and a move into a pile restarts the two days, ID4);
-the player's own drop command (ARC-WORLD-064); the viewer opens no container in the loot window (it loots dead NPCs only, which
-the original's counter does not count), so it never delays a decay; the item flag of the hero's kit and made items is not known (no
+Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
+into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). Not ready: the player's own drop command (ARC-WORLD-064); the viewer's loot window shows no container but the session's junk piles (a dead NPC it loots does not count, as in the original's
+counter), so only an open pile delays a decay; the item flag of the hero's kit and made items is not known (no
 installed prototype sets it); the session reads the no-decay flag only from an attached seed's row, so a seed item the PC took
 whose map's seed is not attached (after a restore on another map) reads as decaying and is deleted two days after a drop, where the
 original keeps it; a container broken while its map's seed is not attached spills items that get no event; while the deleted-item
 budget (`MaxDurabilityRecords`) is full, each due decay postpones itself a minute at a time, so a long wait runs it once a game
 minute; a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
 with decay in the original (ID8), are not modelled.
+
+## Junk piles (ARC-WORLD-063)
+
+Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read in the retail 1.0.7.4 executable by two readers
+([ledger "Junk piles"](../research/ledger/items.md#junk-piles-arc-world-063), JP1–JP8; it settles PI3).
+
+**Rules (Simulation).** `InventoryGridRules` is the original's holder grid: ten columns, 96 rows for a container and 12 for a critter;
+an item takes its inventory art's frame in 32-pixel cells (`CellsOf`, 1 × 1 when the art does not read) from its slot (row × 10 +
+column; worn and quick slots take no cell, `Occupied`), and `FindSlot` gives the first top-left cell, row by row, where its whole
+rectangle is free (JP3). `JunkPileRules.Place` is the drop's placement (0x466EF0, JP1): the tile's junk piles in order, the first with
+room takes the item; else, when loose items lie there, a new pile is made, each loose item that may move enters it at its first free
+slot in tile order and then the dropped item when it fits (else it lies loose beside the pile; a pile that took nothing stays empty, as
+in the original); else the item lies loose. `JunkPileRules.Dissolve` is the check after an item left a pile (0x463540, JP4): no item
+removes the pile, one item releases it, more keep it.
+
+**Session.** A pile the session made is a `SessionJunkPile`: entity `junk:n` (the number after the highest standing pile), map, cell
+and its items in the pile's order, each with its slot and size (`SessionJunkPileItem`). An item in a pile keeps its own ground record
+(a placed item, an NPC's dropped item, a spilled or seed item of the cell), so its decay and its map stay as they were; the pile only
+says it lies in the pile, not on the ground.
+
+| Step | Value |
+| --- | --- |
+| Drop (JP1, JP2) | Every drop the session makes goes through the placement before its decay is scheduled: the hero's and an NPC's critical drops and a broken container's spill, whose items drop one by one in their list order, so from the second item on they gather into a pile on the container's cell. An item swept into a new pile keeps its decay event (in a pile it still decays, JP6); the dropped item's starts over. A thrown item's plain placement (ARC-COMBAT-017) and an assembly product the inventory refused (ARC-WORLD-070, created on the tile) make no pile, as in the original; a later drop on their tile sweeps them in. An item in flight is not on the tile. |
+| Size | `SessionItemFacts.InventoryWidth` and `InventoryHeight` of the attached seed that lists the item; 1 × 1 otherwise (the hero's kit and made items, a seed not attached). |
+| Ground | `QueryMapInventory(map).Ground` leaves out the items in piles; `JunkPiles` lists the map's piles with their items. `QueryJunkPiles` lists every pile. An item in a pile is not picked up from the ground (`PickUpItem`: `ItemNotAvailable`) and cannot be attacked there (`ObjectUnavailable`). |
+| Loot (JP6) | `LootItem(pile, item)` takes an item from a pile of the actor's map as a loot from a holder (the recipient's transfer, the item's remove-item and insert-item scripts through the host; a placed item goes back to the list it came from, as its pickup does); the item lies in its pile slot, not in a worn slot, and its decay ends. The pile stays while the host's loot window shows it. |
+| Close (JP4, JP5) | `CloseJunkPile(expected, pile)` is the host's loot window closing on the pile: a pile left with no item is removed, one left with one item is removed and the item dropped again on its cell through the placement, with a new decay event two days on. One revision when the pile went; `UnknownHolder` for a pile not on the actor's map. |
+| Decay (JP7) | An item that decays in a pile leaves it, and (no container shown in the loot window, or the decay would have waited) a pile left with one item or none dissolves at once, the remaining item's two days starting over. |
+| Bounds | At most 4,096 piles and 8,192 items in them (`SessionJunkPile.MaxPiles`, `MaxItems`, project bounds; the original has none): beyond them a drop lies loose. |
+
+**Snapshot schema 43.** `"inventory":{…,"junkPiles":[{"entity","map","x","y","items":[{"entity","slot","width","height"}]}]}` in the
+order the piles were made. Decoding refuses a width outside 1..10, a height outside 1..96, a slot outside 0..959 and a cell coordinate
+outside 0..2^24 − 1 (`OutOfRange`) and more than the bounds (`BudgetExceeded`); restore refuses a pile entity that is not `junk:n` or
+repeats, an item in two piles, a rectangle past the grid or overlapping another, a placed item away from its pile's map and cell, a
+deleted item, an item the hero holds or an NPC's added item (`InvalidSnapshot`). An attached seed must list every item of a pile on its
+map that is no placed item, and no seed of another map may (`InventoryMismatch`). Schemas 1..42 are refused, not migrated.
+
+**Viewer.** The AREA viewer draws each pile at its cell from the pile prototype's current art (prototype 3043, read through the
+object field reader; flat, as every placed pile of the interiors carries `OF_FLAT`) instead of its items, picks it as a junk pile
+(`AreaInventoryTargetKind.JunkPile`; a turn-based round charges the use of an object), opens it in the loot window titled
+`[junk pile]` (a project label: the pile has no map row to name it), takes items from it there and runs `CloseJunkPile` when the window
+closes. While the window shows a pile, the event pump's world reports a container shown (`ISessionLootWindowWorld`), so the items'
+decay waits a minute (ID3, ID6). Native smoke `ARC-WORLD-063 native-smoke junk-pile` (map mode, `ARC_AREA_MAP_SMOKE_ONLY=junk`, run last
+in the map battery): the hero breaks the shown map's weakest container with two items or more through the session's object attack;
+its items gather into one pile on its cell, which is drawn from the pile art, picked, opened with its items listed and their decay
+held; one item is taken and the window closed. On 2026-10-28: Crash Site cave, a chest of 5 items, all 5 in the pile; Elven Ruins, a
+chest of 3 (one with the no-decay flag), all 3 in the pile.
+
+**Not ready.**
+
+- The map data's own junk piles (15 on 10 interiors, census) take nothing: a drop on their tile ignores them (it may make a session
+  pile beside them), and they are not opened as piles (chests are not lootable in the session).
+- The tile's list order is the session's ground order (seed items, spilled, dropped, then placed items), not the original's object list
+  order, which was not read; it decides only the order in a new pile and its slots.
+- The scripts the original runs on the way: the get script of a swept item and the insert-item event of every insertion. An item whose
+  attached seed shows a get or insert-item script is not swept (it stays loose beside the pile), and a dropped item with an
+  insert-item script lies loose and makes no pile.
+- Gold and ammunition do not merge into a stack of their kind in the pile (JP8); each stays an item of its own.
+- The items' inventory sizes: the viewer's seeds leave every item 1 × 1 (the inventory art's frame size is not read yet), so a pile
+  fills only after 960 items.
+- The network paths and the dissolve's network guard.
 
 ## Drop cell (ARC-COMBAT-010)
 
@@ -392,10 +453,21 @@ The AREA viewer draws what the session holds on the ground but no T0 body drew, 
   ARTs, 2,449 held items, 328 distinct art ids, none failing). An art id that does not resolve or read leaves the
   body as it was and is logged once (`ARC-RENDER-033 extra-art`).
 
-**Not ready.** The junk pile of OD13
-(ARC-WORLD-063); a busted window's busted ART. The items' decay is in since ARC-WORLD-062 (the event pump redraws the ground).
+Since ARC-WORLD-063 a junk pile is drawn in place of its items ([junk piles](#junk-piles-arc-world-063)).
+
+**Not ready.** A busted window's busted ART. The items' decay is in since ARC-WORLD-062 (the event pump redraws the ground).
 
 ## Evidence
+
+- Synthetic (ARC-WORLD-063): [JunkPileRulesTests](../../tests/Arcanum.Simulation.Tests/Items/JunkPileRulesTests.cs) (cell sizes and
+  the unsigned wrap, the grid's rectangles and skipped slots, the first free slot, joining the first pile with room, a new pile with an
+  item that may not move and one too big, the dissolve), [JunkPileStateTests](../../tests/Arcanum.Session.Tests/JunkPileStateTests.cs)
+  (a second drop gathers both, the swept item's kept time, a later drop joins, another cell stays loose, loot and the window's close,
+  an emptied pile, another map, a decay that dissolves a pile of two, items with scripts left loose, the snapshot and every refusal,
+  the attach checks), the spill into a pile and its close in [ObjectAttackStateTests](../../tests/Arcanum.Session.Tests/ObjectAttackStateTests.cs),
+  the viewer's pile window and decay hold in [AreaInventoryHostTests](../../tests/Arcanum.TerrainViewer.Tests/AreaInventoryHostTests.cs);
+  opt-in census [JunkPileCensusOriginalTests](../../tests/Arcanum.TerrainViewer.Tests/JunkPileCensusOriginalTests.cs) (15 placed piles,
+  none blocking); native smoke `ARC-WORLD-063 native-smoke junk-pile`.
 
 - Synthetic (ARC-SCRIPT-041): [ItemEventScriptTests](../../tests/Arcanum.Session.Tests/ItemEventScriptTests.cs) (the get script
   before the insert check, its decline with and without effects, the transfer, remove-item and insert-item order of a loot with

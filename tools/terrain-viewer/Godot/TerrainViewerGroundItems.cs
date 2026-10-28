@@ -129,7 +129,7 @@ public partial class TerrainViewerApp
         if (current is not null)
             foreach (var pile in current.JunkPiles)
             {
-                if (_junkPileArt is not { } pileArt || Frame(pileArt, "junk-pile") is not { } frame)
+                if (ExtraArt() is null || _junkPileArt is not { } pileArt || Frame(pileArt, "junk-pile") is not { } frame)
                 {
                     if (_groundReported.Add("nopile:" + pile.Entity)) GD.Print($"ARC-WORLD-063 junk-pile entity={pile.Entity} not drawn: no pile art");
                     continue;
