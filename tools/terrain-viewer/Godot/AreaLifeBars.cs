@@ -5,9 +5,10 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-020: one health or fatigue bar drawn as two rectangles (the viewer has no original interface art): the filled part
-/// grows from the left, or from the bottom when <see cref="Vertical"/>. Its size is fixed (<see cref="Length"/> pixels along the
-/// fill), so the filled pixels are the rule's for that length. The owner sets the fill and the colour.
+/// ARC-UI-020: one health or fatigue bar drawn as rectangles (no original fill art): the filled part grows from the left, or from
+/// the bottom when <see cref="Vertical"/>; the empty part is drawn only when <see cref="DrawEmpty"/> (inside the interface bar's
+/// vials the art shows it) and only while above 0, as the original's gauges. Its size is fixed (<see cref="Length"/> pixels along
+/// the fill), so the filled pixels are the rule's for that length. The owner sets the fill and the colour.
 /// </summary>
 public partial class AreaLifeBar : Control
 {
@@ -22,15 +23,17 @@ public partial class AreaLifeBar : Control
     public int Thickness { get; init; } = 5;
     public int Filled { get; private set; }
     public Color FillColor { get; private set; } = HealthColor;
+    private bool _drawEmpty = true;
+    public bool DrawEmpty { get => _drawEmpty; set { if (_drawEmpty == value) return; _drawEmpty = value; QueueRedraw(); } }
+    private Vector2 BarSize => Vertical ? new Vector2(Thickness, Length) : new Vector2(Length, Thickness);
 
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
-        CustomMinimumSize = Vertical ? new Vector2(Thickness, Length) : new Vector2(Length, Thickness);
+        CustomMinimumSize = BarSize;
     }
 
-    public void Set(int filled, Color color)
+    public void SetFill(int filled, Color color)
     {
         filled = Math.Clamp(filled, 0, Length);
         if (filled == Filled && color == FillColor) return;
@@ -40,8 +43,7 @@ public partial class AreaLifeBar : Control
 
     public override void _Draw()
     {
-        var size = Vertical ? new Vector2(Thickness, Length) : new Vector2(Length, Thickness);
-        DrawRect(new Rect2(Vector2.Zero, size), EmptyColor);
+        if (DrawEmpty && Filled < Length) DrawRect(new Rect2(Vector2.Zero, BarSize), EmptyColor);
         if (Filled <= 0) return;
         DrawRect(Vertical ? new Rect2(0, Length - Filled, Thickness, Filled) : new Rect2(0, 0, Filled, Thickness), FillColor);
     }
@@ -50,77 +52,108 @@ public partial class AreaLifeBar : Control
 /// <summary>
 /// ARC-UI-020 (ledger CH7): the PC's two gauges, health and fatigue, each 88 px high filled from the bottom
 /// (<see cref="LifeBarRules.GaugeFill"/>), with the current value printed under it (<see cref="LifeBarRules.GaugeNumber"/>) and,
-/// while the PC is poisoned, the health gauge in its poisoned colour and the poison level beside it. The original draws them at the
-/// two ends of its interface bar; the viewer has none, so they stand together in a small panel at the bottom right. Hidden without
-/// a hero or while a window is open.
+/// while the PC is poisoned, the health gauge in its poisoned colour and the poison level over it. While the interface bars
+/// (ARC-UI-018) are shown the gauges fill the bottom strip's vials at the original's places (health 14, 472 and fatigue 754, 473 of
+/// the 800 × 600 screen, the numbers at 15, 578, 755, 578 and the poison at 15, 500), at the bars' scale and over them; otherwise
+/// they stand in a small panel at the bottom right.
 /// </summary>
 public partial class AreaHeroGauges : CanvasLayer
 {
+    // The original's rectangles in its 800 × 600 screen (gauges 0x5C63D8, number slots 0x5C63F8: 0 health, 1 fatigue, 5 poison).
+    private static readonly Rect2 HealthGauge = new(14, 472, 28, 88), FatigueGauge = new(754, 473, 28, 88);
+    private static readonly Rect2 HealthNumber = new(15, 578, 29, 12), FatigueNumber = new(755, 578, 27, 12), PoisonNumber = new(15, 500, 29, 12);
+    private Control _root = null!;
     private PanelContainer _panel = null!;
     private AreaLifeBar _health = null!;
     private AreaLifeBar _fatigue = null!;
     private Label _healthNumber = null!;
     private Label _fatigueNumber = null!;
     private Label _poison = null!;
+    private AreaGameBarPanel? _bars;
 
     internal (int Health, int Fatigue, string HealthText, string FatigueText, string? PoisonText, bool Poisoned) ValuesForSelfTest =>
         (_health.Filled, _fatigue.Filled, _healthNumber.Text, _fatigueNumber.Text, _poison.Visible ? _poison.Text : null,
          _health.FillColor == AreaLifeBar.PoisonedHealthColor);
     internal bool ShownForSelfTest => Visible;
+    /// <summary>Whether the gauges sit in the interface bar's vials, and the health and fatigue gauges' window rectangles.</summary>
+    internal (bool InBars, Rect2 Health, Rect2 Fatigue) PlacementForSelfTest => (_bars is not null, _health.GetGlobalRect(), _fatigue.GetGlobalRect());
 
     public override void _Ready()
     {
-        Layer = 3;
-        _panel = new PanelContainer { Name = "HeroGauges", MouseFilter = Control.MouseFilterEnum.Ignore };
-        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .85f),
-            ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 6, ContentMarginBottom = 6,
-        });
-        AddChild(_panel);
-        var row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        row.AddThemeConstantOverride("separation", 10);
-        _panel.AddChild(row);
-        (_health, _healthNumber) = Column(row, "Health");
-        _poison = new Label { Name = "Poison", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, VerticalAlignment = VerticalAlignment.Bottom };
+        _root = new Control { Name = "HeroGauges", MouseFilter = Control.MouseFilterEnum.Ignore };
+        AddChild(_root);
+        _panel = new PanelContainer { Name = "Back", MouseFilter = Control.MouseFilterEnum.Ignore, Size = new Vector2(110, 120) };
+        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .85f) });
+        _root.AddChild(_panel);
+        _health = new AreaLifeBar { Name = "HealthGauge", Vertical = true, Length = LifeBarRules.GaugeHeight, Thickness = 28 };
+        _fatigue = new AreaLifeBar { Name = "FatigueGauge", Vertical = true, Length = LifeBarRules.GaugeHeight, Thickness = 28 };
+        _healthNumber = Number("HealthNumber"); _fatigueNumber = Number("FatigueNumber"); _poison = Number("Poison");
         _poison.AddThemeColorOverride("font_color", AreaLifeBar.PoisonedHealthColor);
-        row.AddChild(_poison);
-        (_fatigue, _fatigueNumber) = Column(row, "Fatigue");
+        _poison.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _poison.AddThemeConstantOverride("outline_size", 3);
+        _root.AddChild(_health); _root.AddChild(_fatigue);
+        _root.AddChild(_healthNumber); _root.AddChild(_fatigueNumber); _root.AddChild(_poison);
         GetViewport().SizeChanged += Place;
+        AreaGameBarPanel.InsetsChanged += Place;
         Hide();
     }
 
-    private static (AreaLifeBar Bar, Label Number) Column(HBoxContainer row, string name)
+    public override void _ExitTree()
     {
-        var column = new VBoxContainer { Name = name, MouseFilter = Control.MouseFilterEnum.Ignore };
-        var bar = new AreaLifeBar { Name = name + "Gauge", Vertical = true, Length = LifeBarRules.GaugeHeight, Thickness = 28 };
-        var number = new Label { Name = name + "Number", MouseFilter = Control.MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center };
-        column.AddChild(bar); column.AddChild(number); row.AddChild(column);
-        return (bar, number);
+        GetViewport().SizeChanged -= Place;
+        AreaGameBarPanel.InsetsChanged -= Place;
     }
 
-    /// <summary>Shows the PC's values, or hides the gauges (null).</summary>
-    public void Show(AreaLife? life)
+    private static Label Number(string name) => new()
+    {
+        Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center, ClipText = false,
+    };
+
+    /// <summary>Shows the PC's values, in the vials of <paramref name="bars"/> when given (shown), else in the panel; or hides the
+    /// gauges (null life).</summary>
+    public void Show(AreaLife? life, AreaGameBarPanel? bars)
     {
         if (life is not { } value) { Hide(); return; }
-        _health.Set(LifeBarRules.GaugeFill(value.Health, value.MaxHealth, LifeBarRules.GaugeHeight),
+        _health.SetFill(LifeBarRules.GaugeFill(value.Health, value.MaxHealth, LifeBarRules.GaugeHeight),
             value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-        _fatigue.Set(LifeBarRules.GaugeFill(value.Fatigue, value.MaxFatigue, LifeBarRules.GaugeHeight), AreaLifeBar.FatigueColor);
+        _fatigue.SetFill(LifeBarRules.GaugeFill(value.Fatigue, value.MaxFatigue, LifeBarRules.GaugeHeight), AreaLifeBar.FatigueColor);
         _healthNumber.Text = LifeBarRules.GaugeNumber(value.Health);
         _fatigueNumber.Text = LifeBarRules.GaugeNumber(value.Fatigue);
         _poison.Visible = value.Poisoned;
         _poison.Text = value.Poisoned ? LifeBarRules.GaugeNumber(value.Poison) : "";
+        _bars = bars;
         Show();
         Place();
     }
 
+    private static void Put(Control control, Rect2 rect) { control.Position = rect.Position; control.Size = rect.Size; }
+
     private void Place()
     {
-        if (_panel is null) return;
+        if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
-        _panel.ResetSize();
-        var panel = _panel.GetCombinedMinimumSize();
-        _panel.Position = new(Math.Max(12, size.X - panel.X - 12), Math.Max(12, size.Y - panel.Y - 12));
+        var inBars = _bars is { Visible: true } && AreaGameBarPanel.BottomInset > 0;
+        // Over the bars (layer 5) in their vials; under the windows (layer 4) in the panel.
+        Layer = inBars ? 6 : 3;
+        _panel.Visible = !inBars;
+        _health.DrawEmpty = _fatigue.DrawEmpty = !inBars;
+        foreach (var label in new[] { _healthNumber, _fatigueNumber, _poison }) label.AddThemeFontSizeOverride("font_size", inBars ? 10 : 14);
+        if (inBars)
+        {
+            // The bars' own placement: the 800 × 600 screen centred at the whole factor, its bottom strip at the window's bottom.
+            var factor = _bars!.Factor;
+            var left = MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
+            _root.Position = new(left, size.Y - AreaGameBarLayout.ScreenHeight * factor);
+            _root.Scale = new(factor, factor);
+            Put(_health, HealthGauge); Put(_fatigue, FatigueGauge);
+            Put(_healthNumber, HealthNumber); Put(_fatigueNumber, FatigueNumber); Put(_poison, PoisonNumber);
+            return;
+        }
+        _root.Scale = Vector2.One;
+        _root.Position = new(Math.Max(12, size.X - _panel.Size.X - 12), Math.Max(12, size.Y - _panel.Size.Y - 12));
+        Put(_health, new Rect2(10, 8, 28, 88)); Put(_fatigue, new Rect2(72, 8, 28, 88));
+        Put(_healthNumber, new Rect2(4, 98, 40, 18)); Put(_fatigueNumber, new Rect2(66, 98, 40, 18)); Put(_poison, new Rect2(38, 44, 34, 18));
     }
 }
 
@@ -162,8 +195,8 @@ public partial class AreaHoverLifeBars : VBoxContainer
     {
         if (critter is not { } shown) { Visible = false; return; }
         var life = shown.Life;
-        _health.Set(LifeBarRules.HoverFill(life.HealthPercent, BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-        _fatigue.Set(LifeBarRules.HoverFill(life.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+        _health.SetFill(LifeBarRules.HoverFill(life.HealthPercent, BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+        _fatigue.SetFill(LifeBarRules.HoverFill(life.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
         _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
         _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
         Visible = true;

@@ -77,6 +77,10 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
     /// <summary>ARC-RENDER-033: each kit item's ground ART id (its prototype's current art, field 0), by kit index; null for a
     /// prototype that does not read. The viewer draws a placed kit item with it.</summary>
     public IReadOnlyList<uint?>? KitArt { get; init; }
+
+    /// <summary>ARC-UI-016: each kit item's spell facts (its spell fields, charges, complexity and item flags) under its kit entity, by
+    /// kit index; null for a prototype that does not read or is no item. The cast host knows the hero's items through them.</summary>
+    public IReadOnlyList<SessionItemSpells?>? KitItemSpells { get; init; }
 }
 
 /// <summary>
@@ -164,6 +168,7 @@ public static class AreaStartingHero
             KitArt = KitArt(prototypes.Read, definition),
             KitMissileArt = KitMissileArt(prototypes.Read, definition),
             KitThrowWeight = KitThrowWeight(prototypes.Read, definition),
+            KitItemSpells = KitItemSpells(prototypes.Read, definition),
         };
     }
 
@@ -226,6 +231,17 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
             ? SessionWearItem.FromCombatFields("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fields) : null).ToArray();
+    }
+
+    /// <summary>ARC-UI-016: each kit item's spell facts held by the hero under its kit entity
+    /// (<see cref="SessionItemSpells.FromCombatFields"/>), null where the prototype does not read or is no item.</summary>
+    public static IReadOnlyList<SessionItemSpells?> KitItemSpells(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Kit.Select((item, index) => CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype).Fields is { } fields
+            ? SessionItemSpells.FromCombatFields("kit:" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), SessionSpellCaster.Hero, fields)
+            : null).ToArray();
     }
 
     /// <summary>ARC-RENDER-033: each kit item's ground ART id from its prototype's combat fields, null where it does not read.</summary>

@@ -261,6 +261,8 @@ public partial class TerrainViewerApp
         // Every refusal comes first, then the day/night driver is built: if either refuses, nothing has been swapped.
         if (_conversationHost is not null && talk is null) throw new InvalidOperationException("AREA_CONVERSATION_REBIND_REQUIRED");
         RebindAreaAmbient(session);
+        // ARC-WORLD-092: the AI host belongs to the replaced session; the next frame builds the new one's.
+        _aiHost = null; _aiHostStamp = null; _aiPcOccupancy = null;
         var previous = _areaSession;
         _areaSession = session;
         AttachAreaEncumbranceEffect();

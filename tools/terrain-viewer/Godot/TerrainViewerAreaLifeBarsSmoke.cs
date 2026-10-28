@@ -12,7 +12,8 @@ namespace Arcanum.TerrainViewer;
 // numbers and, once a poison packet lands, the poisoned colour and the poison level; a drawn living speaker with follow facts
 // joins (the session's forced join inside a conversation, as the ARC-WORLD-037 smoke does), its portrait shows its bars, and a
 // hit-point packet that leaves it below 20 % turns the portrait red; hovering it shows "current/maximum", hovering another NPC
-// with combat values shows a percent. ARC_AREA_LIFE_CAPTURE saves in-app readbacks to the caller's ignored path.
+// with combat values shows a percent; with the interface bars drawn the gauges fill their vials. The stage leaves the hero poisoned
+// and the NPC joined and wounded. ARC_AREA_LIFE_CAPTURE saves in-app readbacks to the caller's ignored path.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaLifeBarsSmokeAsync()
@@ -37,7 +38,7 @@ public partial class TerrainViewerApp
         }
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
-        _worldFocusSimulationForSelfTest = true;
+        _worldFocusSimulationForSelfTest = true; _lifeBarsForSelfTest = true; _heroGaugeStamp = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -105,9 +106,10 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Vector2? ScreenPoint(AreaObjectKey key)
             {
+                // The camera is on the PC and the follower stands within a few cells of it: the window's middle part is searched.
                 var size = GetViewport().GetVisibleRect().Size; var hud = _hud!.Rect;
-                for (var y = 0; y < (int)size.Y; y += 2)
-                for (var x = 0; x < (int)size.X; x += 2)
+                for (var y = Math.Max(0, (int)size.Y / 2 - 240); y < Math.Min((int)size.Y, (int)size.Y / 2 + 240); y += 2)
+                for (var x = Math.Max(0, (int)size.X / 2 - 320); x < Math.Min((int)size.X, (int)size.X / 2 + 320); x += 2)
                 {
                     var p = new Vector2(x + .5f, y + .5f);
                     if (!hud.HasPoint(p) && AreaObjectAtScreen(p) == key) return p;
@@ -140,6 +142,7 @@ public partial class TerrainViewerApp
                 if (otherPoint is null) continue;
                 other = (command, life); break;
             }
+            Require(other is not null, "another living NPC with combat values is drawn on screen");
             string? otherText = null;
             if (other is { } found)
             {
@@ -151,6 +154,23 @@ public partial class TerrainViewerApp
                 await Capture("other");
             }
             HoverReleaseForSelfTest();
+            // With the interface bars drawn (ARC-UI-018) the gauges fill the bottom strip's vials at the original's places, scaled with it.
+            _gameBarForSelfTest = true;
+            for (var i = 0; i < 120 && _gameBarPanel is not { Visible: true }; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_gameBarPanel is { Visible: true }, "the interface bars are drawn: " + _gameBarNotice);
+            for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var view = GetViewport().GetVisibleRect().Size; var factor = _gameBarPanel!.Factor;
+            var origin = new Vector2(MathF.Round((view.X - AreaGameBarLayout.ScreenWidth * factor) / 2), view.Y - AreaGameBarLayout.ScreenHeight * factor);
+            var placed = _heroGauges!.PlacementForSelfTest;
+            Require(placed.InBars && _heroGauges.ShownForSelfTest, "the gauges moved into the bars");
+            Require(placed.Health.Position.IsEqualApprox(origin + new Vector2(14, 472) * factor) && placed.Health.Size.IsEqualApprox(new Vector2(28, 88) * factor)
+                && placed.Fatigue.Position.IsEqualApprox(origin + new Vector2(754, 473) * factor), $"vial places {placed} at factor {factor}");
+            CheckGauges("in the bars");
+            await Capture("bars");
+            _gameBarForSelfTest = false;
+            for (var i = 0; i < 120 && _gameBarPanel is { Visible: true }; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!_heroGauges.PlacementForSelfTest.InBars && _heroGauges.ShownForSelfTest, "without the bars the gauges are in their panel again");
             // A window hides the gauges.
             ToggleWorldSettings();
             RefreshFollowerPortraits();
@@ -160,7 +180,7 @@ public partial class TerrainViewerApp
             Require(_heroGauges?.ShownForSelfTest == true, "closing it shows them again");
             GD.Print("ARC-UI-020 native-smoke life PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName,
-                Hero = new { Before = heroBefore.ToString(), After = heroAfter.ToString(), Gauges = _heroGauges!.ValuesForSelfTest.ToString() },
+                Hero = new { Before = heroBefore.ToString(), After = heroAfter.ToString(), Gauges = _heroGauges!.ValuesForSelfTest.ToString(), BarFactor = factor },
                 Follower = new { template.Speaker.ScriptId, Start = start.ToString(), Wounded = wounded.ToString(),
                     Portrait = _followerPortraits!.BarsForSelfTest(companion.Entity).ToString(), Hover = followerBars.ToString() },
                 OtherNpc = other is { } o ? new { Life = o.Life.ToString(), Text = otherText } : null,
@@ -168,6 +188,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            _lifeBarsForSelfTest = false; _gameBarForSelfTest = false; _heroGaugeStamp = null;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }

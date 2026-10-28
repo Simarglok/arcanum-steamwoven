@@ -68,6 +68,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
     /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
+    /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
+    public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = Array.Empty<SessionRestockFiring>();
 }
 
 /// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the rules say the event does.
@@ -123,8 +125,8 @@ public static class SessionEventKinds
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
-    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/> and ARC-WORLD-087
-    /// <see cref="HeroEncumbrance"/> without a new version:
+    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
+    /// <see cref="HeroEncumbrance"/> and ARC-WORLD-094 <see cref="Restock"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -192,9 +194,9 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
-    /// magic-tech events, the Item Decay events and the AI ticks.</summary>
+    /// magic-tech events, the Item Decay events, the AI ticks and (ARC-WORLD-094) the restock events.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -230,6 +232,20 @@ public static class SessionEventKinds
     public const string ItemDecay = "item.decay";
     /// <summary>Pending Item Decay events a session holds (project policy; the original has no bound): a drop beyond it does not decay.</summary>
     public const int MaxItemDecays = 8192;
+    /// <summary>
+    /// The original's restock event (type 0x16, saved, game time; ARC-WORLD-094, ledger RK1–RK8): 12 to 24 game hours after an inventory
+    /// window showed an object with an inventory source, the object's inventory is cleared and generated again
+    /// (<see cref="Arcanum.Simulation.Items.RestockRules"/>). Scoped to the object's map, one per object (a new one replaces the pending
+    /// one). Entity: the NPC or container; values: the game time it was scheduled at and its delay (the rules' 43,200,000..86,400,000 ms,
+    /// or the session's <see cref="RestockRetryDelayMs"/>).
+    /// </summary>
+    public const string Restock = "inventory.restock";
+    /// <summary>Pending restock events a session holds (project policy; the original has no bound; the installed maps have 374 objects
+    /// with an inventory source).</summary>
+    public const int MaxRestocks = 2048;
+    /// <summary>The delay of a restock event the session could not run yet (no restock host, the map's seed not attached, a full
+    /// deleted-item budget): one game minute.</summary>
+    public const long RestockRetryDelayMs = 60_000;
     /// <summary>
     /// The original's magic-tech event (kind 5; ARC-MAGIC-010, ledger RP): a run's tick, interrupt or process
     /// (<see cref="Arcanum.Simulation.Magic.SpellRunEventCode"/>). Global, any number. No entities; values: the game time it was
@@ -274,6 +290,8 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
+            new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
+                new RestockHandler(owner), Validate: RestockPayload),
             new(AiTick, GameEventDomain.Game, GameEventPersistence.SavedUnlessRebuilt, GameEventUniqueness.Replace, GameEventScopeRule.ActiveMapOnly,
                 1, 3, 1, 0, new AiTickHandler(owner), Validate: AiTickPayload),
             new(SpellRun, GameEventDomain.Game, GameEventPersistence.NotSaved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
@@ -287,6 +305,15 @@ public static class SessionEventKinds
     internal static bool DecayPayload(GameEventPayload payload) =>
         payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Items.ItemDecayRules.DelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
         && payload.Entities[0].Code != AbsentRole;
+
+    // Scheduled at a game time, after a restock delay or the retry's, naming an NPC or a container (not the player, not a made item).
+    internal static bool RestockPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is >= Arcanum.Simulation.Items.RestockRules.MinDelayMs and <= Arcanum.Simulation.Items.RestockRules.MaxDelayMs
+            or RestockRetryDelayMs && RestockHolder(payload.Entities[0].Code);
+
+    // A restock event names a session entity id that is neither the absent role, the player nor a made item.
+    internal static bool RestockHolder(string? entity) =>
+        entity is not null && SessionValidation.Entity(entity) && entity != AbsentRole && entity != PlayerEntity && !entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal);
 
     // Scheduled at a game time, a delay of 1 ms up to the longest, a wake-up marker, naming an NPC.
     internal static bool AiTickPayload(GameEventPayload payload) =>
@@ -398,6 +425,12 @@ internal sealed class ItemDecayHandler(SessionEventSink sink) : IGameEventHandle
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireItemDecay(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class RestockHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireRestock(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class SpellRunHandler(SessionEventSink sink) : IGameEventHandler

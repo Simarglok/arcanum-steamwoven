@@ -83,8 +83,8 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
 ## Restock rules (ARC-WORLD-093)
 
 `Arcanum.Simulation.Items.RestockRules` holds the original's restock event as pure rules (ledger
-[RK1–RK8](../research/ledger/items.md#merchant-restock-arc-world-093), one reading, F1); the session event and the viewer come in
-later slices.
+[RK1–RK8](../research/ledger/items.md#merchant-restock-arc-world-093), one reading, F1); the session runs it as an event
+([below](#restock-event-arc-world-094)); the viewer comes in a later slice.
 
 | API | Original | Rule |
 | --- | --- | --- |
@@ -100,15 +100,47 @@ set with a buy line unless the buy or loot line fails, which empties the set in 
 [`RestockRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/RestockRulesTests.cs),
 [`AreaRestockCensusTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaRestockCensusTests.cs) (opt-in census).
 
+## Restock event (ARC-WORLD-094)
+
+The session runs the restock event (`SessionEventKinds.Restock`, `inventory.restock`; [event queue](game-event-queue-runtime.md))
+through the rules above. Code: `GameSessionRestock.cs`; tests:
+[`RestockStateTests`](../../tests/Arcanum.Session.Tests/RestockStateTests.cs).
+
+| Step | Original | Session |
+| --- | --- | --- |
+| Schedule | 0x4640C0 at every window open (0x5733A9, RK2) | `ScheduleRestock(expected, holder, hasSource)` on the actor's map: with a source (the host's, RK1) the holder's pending event is replaced by one after a labelled `restock.delay` roll of 12–24 game hours (one revision); without one the pending event stays (`NoChange`). The multiplayer quarter delay is not modelled. |
+| Firing | 0x464180 → 0x463C60 (RK3) | The `ISessionRestockWorld` host gives the holder's facts (`RestockFacts`: kind, source, dead, PC leader, container flags, on screen) and, for an off-screen container without flag 0x400, its merchant (`RestockMerchant`: the first NPC of the game-window-sized area whose substitute it is) and that merchant's facts; `RestockRules.Fire` decides. `Reschedule` sets a new event (a new roll); `None` sets none; a missing holder does nothing. |
+| Clear | 0x463B30 keep 1 (RK5) | Every entry of the holder's current list (its seed items still there and its added items; worn and gold included) is deleted unless the host's `Persistent` says it carries flag 0x2000. A seed item gets the deleted-item record (it hides it from the seed); a made item leaves none and its number is kept as `lastDiscardedMade` (schema 51), so restocks do not fill the deleted-item budget and a new made item never takes a discarded number. |
+| Generation | 0x463E20 (RK4, RK6) | `RestockRules.Generate` with labelled session rolls `restock.coins` and `restock.line`. Coins above 0 become a new `made:n` gold pile of `RestockPileKind` (a persistent pile that stayed takes them instead); each created line is `RestockItem(basic prototype)` made as a `made:n` item at the end of the list after the host's `RestockInsertCheck` (refused: destroyed, counted as `Refused`). Ammunition joins the holder's stack as the insertion merges it (an NPC's stack of the prototype; a container's by the type lookup, which follows AMA5). |
+| Report | — | `SessionEventPassResult.Restocks`: the decision and each regeneration (`SessionRestockRegeneration`: outcome, removed, coins and pile, created items, refused and skipped counts), the merchant's first, then the container's; all of one firing in one revision. |
+
+Decisions of this slice for sets (`SessionRestockSet`, the host's reading of `InventorySourceRules`):
+
+- `Read`: a parsed set generates; a set the load emptied (`Emptied`) is given as the coin pair its loot line read and no lines, so it
+  still generates its coins (RK6).
+- `Unreachable`: a set outside 1..count (RK7), or one the load emptied before its coin pair, would give an undefined coin count: the
+  list is cleared and nothing is generated, in both modes (technical bug, owner rule 2026-10-28).
+- `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; 39 of the 123 installed sets are `Malformed`) are read
+  partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
+  the map's seed does not list as that kind, a spilled container, a holder with a transfer script (the session does not run it, so
+  every created item would be refused after the clear) and a container with flag 0x200 (generated once from its own seeded draws,
+  RK4: the first-open slice).
+
+The session postpones a firing a minute (`SessionRestockFiring.Postponed`) when the pass has no restock host, the holder's map seed
+is not attached, the deleted-item budget cannot hold the clear's records, or the session-wide added-item, pile or stack budgets could
+not hold every line and a pile after the clear; nothing is cleared then. A postponement or a reschedule whose new event is refused
+(a full event budget) reports it in `SessionRestockFiring.ScheduleFailure`. With a host that checks objects (`ISessionScriptWorld`)
+a restock event of a missing holder is dropped by the queue, which is the same "nothing" as RK3.
+
 ## Not modelled (NOT READY)
 
-- **Restock in play**: the rules are above (ARC-WORLD-093), but no session event exists yet: the open does not schedule the shown
-  inventory's regeneration (RK2) and nothing regenerates. Next slices: a saved session event (schema main+1) with the clearing and the
-  generation into the holder's list (labelled session rolls, `made:n` items, RK7 fixed), then the viewer's schedule at every window
-  open and its world port (screen test, merchant search). The first-open generation of containers with flag 0x200 (RK4, RK8; 116
-  installed) and an NPC's best-items wield after a regeneration are not modelled. Open for the session slice: the project refuses 39
-  of the 123 installed sets by their shape (`Malformed`, census), and an `Emptied` set still generates its coins in the original (RK6);
-  which of them a regeneration reads must be decided there.
+- **Restock in play**: the session event exists (ARC-WORLD-094, above), but the viewer does not schedule it at its window opens yet and
+  has no restock host (screen test, merchant search, persistent flag, set reading, `AreaEventWorld` port): next slice. The first-open
+  generation of containers with flag 0x200 (RK4, RK8; 116 installed), an NPC's best-items wield after a regeneration (0x4654F0) and the
+  other callers of 0x463E20 and 0x463C60 (RK8) are not modelled. Lines whose prototype is gold, a key or a key ring are skipped (the
+  session's lists do not admit them), as are lines the host has no prototype for and lines past the holder's full list
+  (`SessionRestockRegeneration.Skipped`). A roll refused by an exhausted generator (2^63 − 1 draws) throws out of the pass after the
+  clear (not guarded).
 - **Substitute container limits** (ARC-WORLD-090): the host finds the container from the T0 data (the NPC's leader handle and field
   0x126) and measures the 20 tiles between the T0 positions of the speaker and the container (the original measures where they are now);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container

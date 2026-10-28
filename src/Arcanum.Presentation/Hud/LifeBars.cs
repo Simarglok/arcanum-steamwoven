@@ -50,7 +50,7 @@ public static class LifeBarRules
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         var p = Math.Clamp(percent, 0, 100);
         if (p == 0) return 0;
-        var filled = width * p / 100;
+        var filled = (int)((long)width * p / 100);
         return filled < width ? filled + 1 : filled;
     }
 
@@ -69,7 +69,7 @@ public static class LifeBarRules
     public static int PortraitFill(int percent, int width)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
-        return percent <= 0 ? 0 : width * Math.Min(percent, 100) / 100;
+        return percent <= 0 ? 0 : (int)((long)width * Math.Min(percent, 100) / 100);
     }
 
     /// <summary>Whether a follower's portrait gets the red fill: its health percent below 20 (a dead follower's too).</summary>

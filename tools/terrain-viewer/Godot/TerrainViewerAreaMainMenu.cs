@@ -86,6 +86,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.BackRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.AnswerRequested += yes => MainMenuCommand(() => _mainMenu!.Answer(yes));
             _mainMenuPanel.OptionChangeRequested += (index, direction) => MainMenuCommand(() => _mainMenu!.Change(index, direction));
+            _mainMenuPanel.SoundRequested += id => PlayBarSound(id, "menu button");
         }
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
@@ -318,6 +319,7 @@ public partial class TerrainViewerApp
         _areaKitArt = hero?.KitArt;
         _areaKitMissileArt = hero?.KitMissileArt;
         _areaKitThrowWeight = hero?.KitThrowWeight;
+        _areaKitItemSpells = hero?.KitItemSpells;
         _menuTablesHero = hero?.Hero;
         if (_arguments is not null) _arguments = _arguments with { Hero = hero?.Hero };
     }

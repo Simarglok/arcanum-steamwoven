@@ -71,6 +71,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         AddChild(_menu);
         _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
         GetViewport().SizeChanged += () => { CloseMenu(); Place(); };
+        AreaGameBarPanel.InsetsChanged += Place;
         Hide();
     }
 
@@ -107,8 +108,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         {
             var (button, health, fatigue) = _entries[entity];
             var value = life ?? default;
-            health.Set(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-            fatigue.Set(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+            health.SetFill(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+            fatigue.SetFill(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
             button.SelfModulate = life is not null && LifeBarRules.PortraitTinted(value.Health, value.MaxHealth) ? Tint : Colors.White;
         }
     }
@@ -148,11 +149,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     public void CloseMenu() { _menu.Hide(); _menuEntity = null; }
 
+    // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
+    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
+
     private void Place()
     {
         if (_list?.GetParent() is not PanelContainer panel) return;
         var size = GetViewport().GetVisibleRect().Size;
         panel.ResetSize();
-        panel.Position = new(12, Math.Max(12, size.Y - panel.GetCombinedMinimumSize().Y - 12));
+        panel.Position = new(12, Math.Max(12, size.Y - panel.GetCombinedMinimumSize().Y - 12 - AreaGameBarPanel.BottomInset));
     }
 }

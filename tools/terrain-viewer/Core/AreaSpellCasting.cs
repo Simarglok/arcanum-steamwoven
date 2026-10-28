@@ -8,6 +8,20 @@ namespace Arcanum.TerrainViewer.Core;
 /// (<see cref="SpellCostRules.CastCost"/>).</summary>
 public sealed record AreaSpellChoice(int Spell, string Name, string College, int? Cost);
 
+/// <summary>ARC-UI-016: one button of the weapon's spell pane: the item's slot, its spell and name, and whether a press activates it
+/// (a spell with item triggers shows but does nothing, 0x57C040).</summary>
+public sealed record AreaItemSpellChoice(int Slot, int Spell, string Name, bool Activates);
+
+/// <summary>ARC-UI-016: the bar's weapon button and the weapon's spell pane (bar mode 8): the wielded weapon, whether its button shows,
+/// whether the pane is open, its buttons and the gauge's text.</summary>
+public sealed record AreaWeaponSpellPane(string Item, bool ButtonShown, bool Open, IReadOnlyList<AreaItemSpellChoice> Buttons, string Gauge)
+{
+    public bool Equals(AreaWeaponSpellPane? other) => other is not null && Item == other.Item && ButtonShown == other.ButtonShown && Open == other.Open
+        && Buttons.SequenceEqual(other.Buttons) && Gauge == other.Gauge;
+
+    public override int GetHashCode() => HashCode.Combine(Item, ButtonShown, Open, Buttons.Count, Gauge);
+}
+
 /// <summary>
 /// ARC-MAGIC-015 (magic plan MT20a-2): the AREA viewer's casting, Godot-free. The spell pane lists the hero's known spells (college
 /// by college, rank by rank: the spell book's ranks); the records are the data reader's in the rules' types
@@ -31,6 +45,21 @@ public static class AreaSpellCasting
                     data is null ? null : SpellCostRules.CastCost(data.Records[spell].Cost, spell, caster)));
             }
         return known;
+    }
+
+    /// <summary>ARC-UI-016: the weapon's spell pane from the cast host's answer (<see cref="SessionSpellCaster.ItemPane"/>), open or
+    /// not; null without an answer.</summary>
+    public static AreaWeaponSpellPane? WeaponPane(SessionItemSpellPane? pane, bool open, SpellData? data)
+    {
+        if (pane is null) return null;
+        var buttons = pane.Buttons.Select(b => new AreaItemSpellChoice(b.Slot, b.Spell, AreaSpellsPage.SpellName(data, b.Spell), b.Activates)).ToArray();
+        var gauge = pane.Gauge.Kind switch
+        {
+            ItemSpellGaugeKind.Unknown => "charges unknown (not identified)",
+            ItemSpellGaugeKind.Unlimited => "unlimited charges",
+            _ => $"{pane.Gauge.Charges} charges",
+        };
+        return new(pane.Item, pane.WeaponButton, open, buttons, gauge);
     }
 
     /// <summary>All records in the rules' types, by number (0..222).</summary>

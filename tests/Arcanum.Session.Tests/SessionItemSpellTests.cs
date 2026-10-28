@@ -330,10 +330,11 @@ public sealed class SessionItemSpellTests
             DisallowedTargetCritterFlags = 0, ItemTriggers = triggers });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionItemTriggers Triggers) UseSession(int wandCharges = 20, int scrollSpell = 162,
-        int[]? stats = null, int potionDuration = 0)
+        int[]? stats = null, int potionDuration = 0, int[]? wandSpells = null, uint wandFlags = 0)
     {
         var disabled = SessionSpellRecords.Translate(Use(165, 0x4).Data with { Enabled = false });
-        var records = new[] { Use(160, 0x4), Use(161, 0x4, ItemUsed | Other, potionDuration), Use(162, 0x1), Use(163, 0x2000000), disabled }
+        var technology = SessionSpellRecords.Translate(Use(164, 0x4).Data with { IsTechnology = true });
+        var records = new[] { Use(160, 0x4), Use(161, 0x4, ItemUsed | Other, potionDuration), Use(162, 0x1), Use(163, 0x2000000), technology, disabled }
             .ToDictionary(r => r.Data.Number);
         // The kit: a weapon (the wand), a scroll and a food item (the potion); prototypes and names are invented.
         var owner = CreateWith(HalfElf(stats) with
@@ -343,12 +344,39 @@ public sealed class SessionItemSpellTests
         var caster = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner), new Events(),
             id => id switch
             {
-                Wand => new SessionItemSpells(Wand, SessionSpellCaster.Hero, 5, [160, 10000, 10000, 10000, 10000], wandCharges, 10),
+                Wand => new SessionItemSpells(Wand, SessionSpellCaster.Hero, 5, wandSpells ?? [160, 10000, 10000, 10000, 10000], wandCharges, 10, wandFlags),
                 Scroll => new SessionItemSpells(Scroll, SessionSpellCaster.Hero, SessionItemSpells.ScrollType, [scrollSpell, 10000, 10000, 10000, 10000], 1, 10),
                 Potion => new SessionItemSpells(Potion, SessionSpellCaster.Hero, SessionItemSpells.FoodType, [161, 10000, 10000, 10000, 10000], 1, 10),
                 _ => null,
             });
         return (owner, caster, new SessionItemTriggers(caster, new NoCombat()));
+    }
+
+    [TestMethod]
+    public void The_item_pane_shows_an_identified_items_slots_without_technology_and_follows_its_saved_charges()
+    {
+        // ARC-UI-016 (ledger IP rows): 0x556EF0, 0x551660, the gauge at 0x54B47C and 0x57C040's trigger test.
+        var (owner, caster, triggers) = UseSession(wandSpells: [160, 10000, 161, 164, 163], wandFlags: ItemSpellPaneRules.IdentifiedFlag);
+        using var _ = owner;
+        var pane = caster.ItemPane(Wand)!;
+        Assert.IsTrue(pane.WeaponButton);
+        CollectionAssert.AreEqual(new ItemSpellButton[] { new(0, 160, true), new(2, 161, false), new(4, 163, true) }, pane.Buttons.ToArray());
+        Assert.AreEqual(new ItemSpellGauge(ItemSpellGaugeKind.Charges, 20), pane.Gauge);
+        Assert.AreEqual(SessionItemUseOutcome.Used, triggers.UseItem(Wand, SessionSpellCaster.Hero).Outcome);
+        Assert.AreEqual(new ItemSpellGauge(ItemSpellGaugeKind.Charges, 19), caster.ItemPane(Wand)!.Gauge, "the session's spent charge");
+        Assert.IsNull(caster.ItemPane("kit:9"), "an item the host does not know");
+    }
+
+    [TestMethod]
+    public void An_unidentified_item_shows_its_weapon_button_but_no_slot_and_an_unknown_gauge()
+    {
+        var (owner, caster, _) = UseSession(wandCharges: -1);
+        using var __ = owner;
+        var pane = caster.ItemPane(Wand)!;
+        Assert.AreEqual((true, 0, ItemSpellGaugeKind.Unknown), (pane.WeaponButton, pane.Buttons.Count, pane.Gauge.Kind));
+        var (empty, emptyCaster, _) = UseSession(wandCharges: 0, wandFlags: ItemSpellPaneRules.IdentifiedFlag);
+        using var ___ = empty;
+        Assert.IsFalse(emptyCaster.ItemPane(Wand)!.WeaponButton, "no charges and no magical flag");
     }
 
     [TestMethod]
