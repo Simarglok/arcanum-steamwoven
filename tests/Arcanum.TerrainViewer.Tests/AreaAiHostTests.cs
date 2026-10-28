@@ -191,6 +191,15 @@ public sealed class AreaAiHostTests
         Assert.IsNotNull(bite.Resolution);
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(rat)), "the attempt puts the attacker into combat mode (goal 19 node 5)");
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Hero), "and its PC target");
+        // ARC-WORLD-099: its attack run ends done, and an NPC in combat mode outside a round then starts its fidget (0x4B4320).
+        var fidget = false;
+        for (var frame = 1200; frame < 1600 && !fidget; frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            fidget = host.DrainNotices().Any(n => n.Npc == rat && n.Kind == AreaAiNoticeKind.Fidget);
+        }
+        Assert.IsTrue(fidget, "a fidget follows its done attack run");
         Trace($"distance {distance} steps {notices.Count(n => n.Kind == AreaAiNoticeKind.Step)} bite {bite.Resolution!.Outcome} damage {bite.Life?.HitPointDamage} hero damage {session.QueryHeroLife()!.Record.State.HitPointDamage}");
     }
 
@@ -257,6 +266,42 @@ public sealed class AreaAiHostTests
         Assert.IsTrue(pending, "its checks wrote the pending cost");
         Assert.IsTrue(pendingAtHero.All(p => p == 0), "the pending cost reads 0 after a subturn start");
         Assert.IsTrue(events.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended");
+        Assert.IsTrue(host.TraceOf(rat)!.EndCombatScripts > 0, "its subturn ends asked its end-combat script (point 16, ARC-WORLD-099)");
+        Assert.IsFalse(notices.Any(n => n.Kind == AreaAiNoticeKind.Fidget), "no fidget starts in a round");
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void A_turn_set_that_interrupts_the_last_run_runs_the_completion_check()
+    {
+        var (session, host, _, _, rat, _, _, world) = Open(4);
+        var critter = SessionCombatant.Critter(rat);
+        host.HeroAttacked(rat);
+        if (session.QueryDanger(rat).State != DangerState.CombatFocus) Assert.Inconclusive($"this animal does not fight the hero: {session.QueryDanger(rat).State}");
+        Assert.AreEqual(GameSessionFailure.None, session.SetCombatMode(session.Version, SessionCombatant.Hero, true,
+            new SessionCombatModeContext { TurnBased = true, World = world }).Failure);
+        // The round goes on (the runs stepping, the hero passing its subturns) until the animal's subturn hook starts its walk up, which
+        // holds the subturn.
+        var pump = new AreaEventPump(session, host);
+        for (var frame = 0; frame < 4000 && !(session.QueryCombatRound()?.Actor == critter && host.RunOf(rat) is not null); frame++)
+        {
+            pump.Advance(8 * 50);
+            host.Pump(50L * frame);
+            Assert.AreEqual(GameSessionFailure.None, AreaTurnBased.Step(session, world, heroIdle: true, host).Failure);
+            if (session.QueryCombatRound() is { Actor.IsHero: true })
+                Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, SessionCombatant.Hero, world).Failure);
+        }
+        Assert.AreEqual(critter, session.QueryCombatRound()?.Actor, "the animal's subturn");
+        Assert.IsNotNull(host.RunOf(rat), "its hook started a run");
+        // Its subturn ends from outside while the run goes on: the next turn set interrupts that run, the last one, and the completion
+        // check follows for the new participant (TH10); the round goes on.
+        Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, critter, world).Failure);
+        var checks = host.CompletionChecks;
+        host.ObserveRound();
+        Assert.IsNull(host.RunOf(rat), "the turn set interrupted its run");
+        Assert.AreEqual(checks + 1, host.CompletionChecks, "the free of the last run ran the completion check");
+        Assert.IsNotNull(session.QueryCombatRound());
+        host.ObserveRound();
+        Assert.AreEqual(checks + 1, host.CompletionChecks, "once");
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-092 " + line);

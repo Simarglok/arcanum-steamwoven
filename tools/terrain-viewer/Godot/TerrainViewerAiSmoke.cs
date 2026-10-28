@@ -89,6 +89,15 @@ public partial class TerrainViewerApp
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
             Require(drawnMoved, "its body was drawn on the cells it walked");
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
+            // ARC-WORLD-099: its attack run ends done, and in combat mode outside a round it starts its fidget (0x4B4320).
+            var fidgets = _aiFidgets;
+            for (var f = 0; f < 400 && _aiFidgets == fidgets; f++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(_aiFidgets > fidgets, "its done attack run was followed by its fidget");
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the AI");
 
@@ -120,7 +129,7 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
@@ -236,6 +245,7 @@ public partial class TerrainViewerApp
             Require(paid, "its steps or attack paid the round's action points");
             Require(!offTurn, "it never walked on another participant's subturn");
             Require(_roundLog.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended and passed on");
+            Require(trace?.EndCombatScripts > 0, "its subturn end asked its end-combat script (point 16)");
             var at = host.Tile(entity)!.Value;
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
@@ -244,6 +254,7 @@ public partial class TerrainViewerApp
             Require(hud.Contains("turn-based: round", StringComparison.Ordinal) && hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the round and the AI");
             GD.Print("ARC-WORLD-095 native-smoke ai-turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Frames = frames, Held = held, HeroTurns = heroTurns, Hit = hit,
+                EndCombatScripts = trace!.EndCombatScripts,
                 Rounds = _roundLog.Count(e => e.Kind == SessionCombatEventKind.RoundBegan),
                 Parity = "NOT_VERIFIED (round hooks read in the original executable; no original-runtime run)" }));
         }

@@ -22,6 +22,8 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party)? _aiHostStamp;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
+    // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
+    private int _aiFidgets;
     private string? _aiNotice;
     // The line of fire the AI reads, rebuilt once per frame.
     private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
@@ -67,6 +69,7 @@ public partial class TerrainViewerApp
             HeroCombatMode = CombatModeContext,
             Parameters = _companionData?.Data?.Table ?? (_arguments is { } arguments ? MapCompanionData(arguments.ModulePath)?.Table : null),
             Timing = grid.Timing,
+            HeroIdle = HeroIdleForRound,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -109,6 +112,11 @@ public partial class TerrainViewerApp
                 case AreaAiNoticeKind.Hit:
                     AiHit(notice);
                     redraw = true;
+                    break;
+                case AreaAiNoticeKind.Fidget:
+                    // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
+                    _aiFidgets++;
+                    GD.Print($"ARC-WORLD-099 ai-fidget npc={notice.Npc}");
                     break;
             }
         }

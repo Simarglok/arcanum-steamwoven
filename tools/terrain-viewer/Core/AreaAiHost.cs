@@ -52,10 +52,14 @@ public sealed record AreaAiScene
     public GaitTiming? Timing { get; init; }
     /// <summary>The attack ART's frames, action frame and raw frame rate of an NPC's body, or null for the fixed human attack ART.</summary>
     public Func<AreaAiNpc, (int Frames, int ActionFrame, int RawFramesPerSecond)?>? AttackArt { get; init; }
+    /// <summary>ARC-WORLD-099: whether the hero runs no animation (its walk or attack, which count in the original's animations-complete
+    /// test); null: idle.</summary>
+    public Func<bool>? HeroIdle { get; init; }
 }
 
-/// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound }
+/// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, and (ARC-WORLD-099)
+/// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet).</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -77,6 +81,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// (ARC-WORLD-095) the host follows the round's subturns (<see cref="ObserveRound"/>): a round's start and each new subturn interrupt
 /// runs as the original's do, the pending cost reads 0 after each subturn start, and the round host
 /// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>) runs the NPCs' subturn hooks.
+/// ARC-WORLD-099: an NPC's subturn end asks its end-combat script (<see cref="SubturnsEnded"/>), a turn set's interrupt that frees the
+/// last run runs the completion check, and a done run's end may start the NPC's fidget (<see cref="AiExecutorRules.FidgetAfterRun"/>).
 /// NOT READY (later slices): casting, item use, skills, throws and pickups, grenades, the
 /// back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
@@ -87,7 +93,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
     private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000;
     private const uint Undead = 0x4, Animal = 0x8, SleepingFlag = 0x1000, NoFleeFlag = 0x8000000, NonLethal = 0x10000000, AnimalEnshrouded = 0x40000000;
-    private const uint NighInvulnerable2 = 0x200;
+    private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
     private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
     private const int GuardClass = 5;
@@ -179,14 +185,30 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var starts = _session.QueryCombatSubturnStarts();
         if (starts == _subturnsSeen) return;
         _subturnsSeen = starts;
-        if (_turnSetActor is { } previous && previous != Pc) Interrupt(previous);
+        // ARC-WORLD-099: a turn set's interrupt that frees the last run (and the hero runs none) calls the completion check (0x4B7080 as
+        // the animation system's callback, TH5), before the new participant's hook. A round's start runs none: its interrupts come
+        // before the callback is registered and the round flag set (0x4B71E0).
+        var previous = _turnSetActor;
         _turnSetActor = Id(round.Actor);
+        // A check that passes the turn on (an actor seen again with unchanged action points) is the next observation's turn set.
+        if (previous is not null && previous != Pc && Interrupt(previous) && _runs.Count == 0 && (_scene.HeroIdle?.Invoke() ?? true))
+        {
+            CompletionChecks++;
+            RoundCall(_session.CompleteCombatActions(_session.Version, _round));
+        }
     }
 
-    // An interrupt at priority 3 (0x44E2C0 with 3): a run whose current goal has priority 3 or less ends with its end nodes.
-    private void Interrupt(string npc)
+    /// <summary>ARC-WORLD-099: the completion checks the host's own round observations ran (a turn set's interrupt that freed the last
+    /// run), for the overlay and tests.</summary>
+    public int CompletionChecks { get; private set; }
+
+    // An interrupt at priority 3 (0x44E2C0 with 3): a run whose current goal has priority 3 or less ends with its end nodes. True: it
+    // freed a run.
+    private bool Interrupt(string npc)
     {
-        if (RunOf(npc) is { } run && Priorities.GetValueOrDefault(run.Top.Goal, 2) <= 3) DropRun(npc);
+        if (RunOf(npc) is not { } run || Priorities.GetValueOrDefault(run.Top.Goal, 2) > 3) return false;
+        DropRun(npc);
+        return true;
     }
 
     /// <summary>The notices since the last call, in order.</summary>
@@ -246,6 +268,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
                 _runs.Remove(npc);
                 // The end step ran the end nodes itself; a killed run, the node limit and an overflow drop the run without them.
                 if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) AiExecutorRules.EndRun(run, this);
+                // ARC-WORLD-099: the stepper's end of a done run (TH4): the fidget's call (0x4B4320). The node limit frees its run without
+                // it; an overflow, which the reading did not follow, is taken as the node limit.
+                if (step.End is not (AiRunEnd.NodeLimit or AiRunEnd.Overflow)) Fidget(npc);
                 continue;
             }
             // A delay of 0 is the next frame.
@@ -262,6 +287,35 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// (the follower rule) are not told yet.
     /// </summary>
     public void HeroAttacked(string victim) => AttackEvent(Pc, victim);
+
+    /// <summary>
+    /// ARC-WORLD-099: the subturn ends among <paramref name="events"/> (a round call's): an NPC's end runs its end-combat script (point 16,
+    /// 0x4B7630: the NPC as attachee and triggerer; the PC's end calls the interface's callback instead). This host runs no SCR at the AI
+    /// points (<see cref="RunScript"/> continues), so only the trace counts it. The host passes the events of its own round calls (the
+    /// executor's consumes and subturn ends, a turn set's completion check); the round host those of its calls.
+    /// </summary>
+    public void SubturnsEnded(IEnumerable<SessionCombatEvent> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        foreach (var ended in events)
+            if (ended is { Kind: SessionCombatEventKind.SubturnEnded, Combatant: { IsHero: false } critter } && Id(critter) is var npc && npc != Pc)
+            {
+                RunScript(AiScriptPoint.EndCombat, npc, npc);
+                Trace(npc).EndCombatScripts++;
+            }
+    }
+
+    // The fidget after a done run (0x4B4320): an NPC in combat mode outside a round, or auto-animating, without a run. Its art test
+    // (0x503E20) allows it: NPC ART is not read yet. The fidget's run (goal 2, priority 1) is not held: the round's completion test does
+    // not count it, every start replaces it, and the subturn hook, the only reader of "a run runs" (0x423300), never meets it, since a
+    // round starts none.
+    private void Fidget(string npc)
+    {
+        if (npc == Pc || Fields(npc)?.Critter is not { } critter) return;
+        var combatMode = _session.QueryCombatMode(SessionCombatant.Critter(npc));
+        if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, (critter.Flags2 & AutoAnimates2) != 0, _runs.ContainsKey(npc), artAllows: true)) return;
+        _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
+    }
 
     /// <summary>Drops every run and mover (a map change, a load).</summary>
     public void Reset()
@@ -614,11 +668,17 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
     public void Consume(string id, int cost)
     {
-        if (Combatant(id) is { } combatant) _roundEvents.AddRange(_session.ConsumeActionPoints(_session.Version, combatant, cost, _round).Events);
+        if (Combatant(id) is { } combatant) RoundCall(_session.ConsumeActionPoints(_session.Version, combatant, cost, _round));
     }
     public void EndSubturn(string id)
     {
-        if (Combatant(id) is { } combatant) _roundEvents.AddRange(_session.EndCombatTurn(_session.Version, combatant, _round).Events);
+        if (Combatant(id) is { } combatant) RoundCall(_session.EndCombatTurn(_session.Version, combatant, _round));
+    }
+
+    private void RoundCall(SessionCombatResult result)
+    {
+        _roundEvents.AddRange(result.Events);
+        SubturnsEnded(result.Events);
     }
 
     // ---- perform's world (IAiPerformWorld) ----
@@ -952,4 +1012,6 @@ public sealed class AreaAiTrace
     public string? Hit { get; set; }
     public string? Event { get; set; }
     public string? Reaction { get; set; }
+    /// <summary>ARC-WORLD-099: the end-combat scripts (point 16) its subturn ends asked.</summary>
+    public int EndCombatScripts { get; set; }
 }
