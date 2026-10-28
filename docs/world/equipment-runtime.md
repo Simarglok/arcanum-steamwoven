@@ -156,6 +156,27 @@ perception; the training is the stored bits. The best-items choice scores a fire
 attack values report it (NPC ranged attacks stay refused). The NPC's stored effects are not applied, as for its basic skills. Tests:
 `AreaNpcSessionWearTests`, `NpcAttackStateTests`.
 
+## Body armour art (ARC-WORLD-112)
+
+The body a critter is drawn with wears its body armour, as the original sets the critter's art when an item enters or leaves the
+body-armour slot 1006 (ledger [BA1–BA6](../research/ledger/items.md#body-armour-art-arc-world-112)). `BodyArmorArtRules.WornArt`
+(0x465AE0) gives the art: with an item, the current art with the armour part of the item's use art (item field 0x5F, bits 6..9) and
+that use art's palette (bits 4..5); with none, armour part 0 (underwear) and the palette of the critter's base art. A part the art
+id cannot hold (9..15 for a critter, 8..15 for a monster, any but 0 for a unique NPC) fails, and the original's wear check refuses
+that item as not wieldable (BA6). No other slot changes the body: helmet, gauntlets, boots, rings and the medallion are not drawn on
+it, and the weapon and shield slots take the weapon art (not built here). `SessionWearableItem.UseArt` carries the item's use art
+from its stored fields (`SessionEquipmentFacts.Wearable`); the session saves none of it, so there is no schema change.
+
+The AREA viewer's hero (ARC-UI-039's `HeroBody`) wears the session hero's worn body armour: `HeroBody.Wearing(useArt)` sets the
+body's armour part and palette, and the swap draws the new body at the next frame after a wear, a take-off, a new game or a load.
+The file the id names is the art owner's rule N1 (plate parts 4 and 6 draw the sexless body, elf as human and halfling as dwarf). An
+installed observation: all twelve pre-made heroes' kit body armour loads (clothes, part 8, for most; the robe 8114, part 5 palette 2,
+for the human man and the elf woman). Not ready: a made item's use art is not read (the hero is drawn bare in it); a worn body whose
+ARTs do not read is drawn bare; NPCs and companions keep their map art (the session's NPC wear, ARC-WORLD-103/106, does not redraw
+them); the viewer's art check still answers yes, so an item whose armour art is missing is worn and drawn bare. Tests:
+`BodyArmorArtRulesTests`, `HeroBodyArtTests`, `EquipmentStateTests`; native smoke `ARC-WORLD-112 native-smoke body armour PASS`
+(the hero smoke takes the body armour off and wears it again and checks the drawn frame each time).
+
 ## Backgrounds (ARC-WORLD-069)
 
 The hero carries its background id in the session (`SessionHeroState.Background`, snapshot schema 36; a pre-made hero's comes from
@@ -323,6 +344,6 @@ times; wield off reaches the same script's removal loop through call-ex, which r
   whether the original charges for changing equipment in a round is not researched here.
 - **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield without a script host (refused;
   with one, [wield events](#wield-events-arc-script-042)), art and
-  appearance changes, the animation speed recalculation (EQ5), the paperdoll UI's own path, identification
+  appearance changes other than the hero's body armour ([body armour art](#body-armour-art-arc-world-112)), the animation speed recalculation (EQ5), the paperdoll UI's own path, identification
   (combat reads every magic adjustment), weapon wear, hexed items, ammunition pools, drop, barter, weight effects,
   base AC and resistances of the PC and its effects, skills and training.

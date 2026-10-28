@@ -1,5 +1,7 @@
 using Arcanum.Data;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Sound;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -12,8 +14,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// </summary>
 /// <param name="Body">The art id's body type (bits 24..26): 0 human, 1 dwarf, 2 halfling (and gnome), 3 half-ogre, 4 elf.</param>
 /// <param name="Gender">The art id's gender bit (27): 0 female, 1 male.</param>
-/// <param name="Armor">The art id's armour part (bits 20..23): 0 underwear (the hero's only one until the worn armour's art is
-/// written, a later slice), up to 8 (rule N1's armour codes).</param>
+/// <param name="Armor">The art id's armour part (bits 20..23): 0 underwear, up to 8 (rule N1's armour codes); worn body armour sets it
+/// (<see cref="Wearing"/>, ARC-WORLD-112).</param>
 /// <param name="Palette">The art id's palette (bits 4..5, 0..3): the base art's (0 for every creatable PC) until worn body armour's
 /// use art sets it (0x465AE0, ARC-WORLD-112).</param>
 public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int Palette = 0)
@@ -36,6 +38,23 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
         // N1: an elf woman has no body of her own; the human body draws her.
         return new(body == 4 && male == 0 ? 0 : body, male, armor, palette);
     }
+
+    /// <summary>
+    /// ARC-WORLD-112: this body with what the body-armour slot gives it (0x465AE0, ledger BA1–BA2): a worn item's armour subtype and its
+    /// use art's palette, or with no item the underwear and <paramref name="basePalette"/> (the base art's; 0 for every creatable PC).
+    /// Null when the item's subtype does not stand in a critter art id (9..15; the original's wear check refuses such an item, BA6).
+    /// Only the body-armour slot changes the body.
+    /// </summary>
+    /// <param name="useArt">The worn body armour's use art (item field 0x5F), or null for none.</param>
+    public HeroBody? Wearing(uint? useArt, int basePalette = 0)
+    {
+        if (basePalette is < 0 or > 3) return null;
+        var current = Selector(CritterArt);
+        if (BodyArmorArtRules.WornArt(current, BodyArmorArtRules.WithPalette(current, basePalette), useArt) is not { } worn) return null;
+        return this with { Armor = SoundCueRules.CritterArtArmor(worn), Palette = BodyArmorArtRules.Palette(worn) };
+    }
+
+    private const uint CritterArt = BodyArmorArtRules.CritterArt << 28;
 
     /// <summary>The folder and file prefix of this body's critter ART (for example <c>EFM</c>). Plate armour (4, 6) has one
     /// sexless art per body and none for the elf or halfling body, which take the human and dwarf ones (rule N1).</summary>
