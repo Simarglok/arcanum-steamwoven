@@ -299,6 +299,7 @@ public sealed class AreaAiHostTests
         host.ObserveRound();
         Assert.IsNull(host.RunOf(rat), "the turn set interrupted its run");
         Assert.AreEqual(checks + 1, host.CompletionChecks, "the free of the last run ran the completion check");
+        Assert.AreEqual(GameSessionFailure.None, host.CheckFailure);
         Assert.IsNotNull(session.QueryCombatRound());
         host.ObserveRound();
         Assert.AreEqual(checks + 1, host.CompletionChecks, "once");
