@@ -258,9 +258,10 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg41_a_target_gone_at_the_release_frame_keeps_the_run_in_the_original_and_frees_it_in_Steamwoven()
+    public void Mg41_a_target_gone_at_the_release_frame_frees_the_run_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        // Owner decision 2026-10-28: the original keeps the run in its slot until the game ends (a slot leak), fixed in both modes.
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
         {
             // A BEGIN area that takes objects (0x4): the box, destroyed by the release frame, no longer passes.
             var record = SelfBolt(beginTargets: 0x4);
@@ -592,9 +593,9 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void Mg41_a_target_gone_when_the_missile_arrives_keeps_the_run_in_the_original_and_frees_it_in_Steamwoven()
+    public void Mg41_a_target_gone_when_the_missile_arrives_frees_the_run_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, true), (RuleMode.Steamwoven, false) })
+        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
         {
             var record = SelfBolt(beginTargets: 0x4);
             var (owner, caster, map) = MissileSession(mode, record);
