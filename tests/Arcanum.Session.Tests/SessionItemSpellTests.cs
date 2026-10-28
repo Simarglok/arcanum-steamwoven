@@ -315,4 +315,149 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual(SessionItemSpellOutcome.Started, moved.ItemSpells[1].Spells.Single(s => s.Firing.Spell == 150).Outcome);
         Assert.AreEqual(1, Runs(owner).Count(r => r.Triggers == (int)Wear), "one wear run again");
     }
+
+    // ---- ARC-MAGIC-022: the item use's spell path (0x462CC0) ----
+
+    private const string Wand = "kit:1", Scroll = "kit:2", Potion = "kit:3";
+
+    // A record whose BEGIN deals 2 damage at the run's target; `begin` is its BEGIN area, `triggers` its item triggers (its damage is
+    // gated by them when given).
+    private static SessionSpellRecord Use(int number, ulong begin, uint triggers = 0, int duration = 0) =>
+        SessionSpellRecords.Translate(Record(number: number, beginTargets: begin, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.Damage, new(begin == 0x1 ? 0x1UL : 0x4UL, 0, 0, 0, -1), 0, triggers, new DamageData(0, 2, 2, 0))])
+        with { Areas = [.. Enumerable.Repeat(new SpellArea(begin, 0, 0, 0, -1), 5)], Cost = 5, MaintainCost = 0, MaintainPeriod = 0, DurationSeconds = duration,
+            DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0,
+            DisallowedTargetCritterFlags = 0, ItemTriggers = triggers });
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionItemTriggers Triggers) UseSession(int wandCharges = 20, int scrollSpell = 162,
+        int[]? stats = null, int potionDuration = 0)
+    {
+        var disabled = SessionSpellRecords.Translate(Use(165, 0x4).Data with { Enabled = false });
+        var records = new[] { Use(160, 0x4), Use(161, 0x4, ItemUsed | Other, potionDuration), Use(162, 0x1), Use(163, 0x2000000), disabled }
+            .ToDictionary(r => r.Data.Number);
+        // The kit: a weapon (the wand), a scroll and a food item (the potion); prototypes and names are invented.
+        var owner = CreateWith(HalfElf(stats) with
+        {
+            Kit = [Kit[0], new(new(SessionItemType.Scroll, 9700, 4100, 9700)), new(new(SessionItemType.Food, 9800, 4200, 9800))],
+        });
+        var caster = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner), new Events(),
+            id => id switch
+            {
+                Wand => new SessionItemSpells(Wand, SessionSpellCaster.Hero, 5, [160, 10000, 10000, 10000, 10000], wandCharges, 10),
+                Scroll => new SessionItemSpells(Scroll, SessionSpellCaster.Hero, SessionItemSpells.ScrollType, [scrollSpell, 10000, 10000, 10000, 10000], 1, 10),
+                Potion => new SessionItemSpells(Potion, SessionSpellCaster.Hero, SessionItemSpells.FoodType, [161, 10000, 10000, 10000, 10000], 1, 10),
+                _ => null,
+            });
+        return (owner, caster, new SessionItemTriggers(caster, new NoCombat()));
+    }
+
+    [TestMethod]
+    public void A_wand_casts_its_slot_zero_spell_at_the_target_from_the_item_and_spends_a_saved_charge()
+    {
+        var (owner, caster, triggers) = UseSession();
+        using var _ = owner;
+        var hp = HitPoints(owner);
+        var use = triggers.UseItem(Wand, SessionSpellCaster.Hero);
+        Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.AtTarget, SpellCastAttemptOutcome.Started), (use.Outcome, use.Cast, use.Attempt!.Outcome));
+        Assert.AreEqual(SpellCastGoalOutcome.Started, use.Goal!.Outcome);
+        Assert.AreEqual(SpellRunRules.GoalCast, use.Attempt.Run!.Creation!.CastGoal, "the activation's cast plays the casting goal");
+        Assert.AreEqual(hp - 2, HitPoints(owner));
+        Assert.AreEqual(19, owner.QueryItemCharges(Wand), "the item paid, not the hero");
+        Assert.AreEqual(0, owner.QueryHeroLife()!.Record.State.FatigueDamage, "no fatigue for the hero");
+        Assert.AreEqual(0, use.ItemUsed!.Spells.Count, "record 160 has no item triggers");
+        Assert.IsFalse(use.Spent);
+        Assert.IsFalse(owner.IsItemDestroyed(Wand));
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ChargeSpent && e.Object == Wand));
+    }
+
+    [TestMethod]
+    public void An_item_without_charges_or_magic_takes_the_other_branches_and_an_exhausted_wand_casts_but_cannot_pay()
+    {
+        var (owner, _, triggers) = UseSession(wandCharges: 0);
+        using var _ = owner;
+        Assert.AreEqual(SessionItemUseOutcome.NoMagic, triggers.UseItem(Wand, SessionSpellCaster.Hero).Outcome);
+        Assert.AreEqual(SessionItemUseOutcome.Unknown, triggers.UseItem("kit:9", SessionSpellCaster.Hero).Outcome);
+        Assert.AreEqual(0, owner.Version.Revision);
+
+        var (charged, _, host) = UseSession(wandCharges: 1);
+        using var __ = charged;
+        Assert.AreEqual(SpellCastGoalOutcome.Started, host.UseItem(Wand, SessionSpellCaster.Hero).Goal!.Outcome);
+        Assert.AreEqual(0, charged.QueryItemCharges(Wand));
+        // No charge left, but the magical flag the spend set keeps the spell path; the item source skips the cost check at the cast,
+        // and the goal's check refuses (the item pays nothing).
+        var again = host.UseItem(Wand, SessionSpellCaster.Hero);
+        Assert.AreEqual((SessionItemUseOutcome.Used, SpellCastGoalOutcome.CannotAfford), (again.Outcome, again.Goal!.Outcome));
+        Assert.AreEqual(0, charged.QuerySpellRuns().Runs.Count(), "the refused goal frees the run");
+    }
+
+    [TestMethod]
+    public void A_potion_fires_item_used_at_the_target_and_is_spent()
+    {
+        var (owner, _, triggers) = UseSession();
+        using var _ = owner;
+        var hp = HitPoints(owner);
+        var use = triggers.UseItem(Potion, SessionSpellCaster.Hero);
+        Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.Triggered), (use.Outcome, use.Cast), "slot 0's record has item triggers");
+        var fired = use.ItemUsed!.Spells.Single();
+        Assert.AreEqual((161, ItemSpellAim.Other, SessionItemSpellOutcome.Started), (fired.Firing.Spell, fired.Firing.Aim, fired.Outcome));
+        Assert.AreEqual(SpellRunRules.GoalCastWithoutGoal, fired.Result!.Creation!.CastGoal);
+        Assert.AreEqual(hp - 2, HitPoints(owner), "the gated damage runs: the run's triggers are Item_Used");
+        Assert.IsTrue(use.Spent);
+        Assert.IsTrue(owner.IsItemDestroyed(Potion));
+        Assert.IsNull(owner.QueryItemCharges(Potion), "the spent charge's row went with the potion");
+        Assert.IsTrue(owner.QuerySpellRuns().Runs.All(r => r.Source?.Id != Potion), "the spend cleared the runs' source");
+    }
+
+    [TestMethod]
+    public void A_scroll_with_a_self_spell_casts_at_the_holder_s_tile_and_an_inventory_spell_is_not_ready()
+    {
+        var (owner, caster, triggers) = UseSession();
+        using var _ = owner;
+        var use = triggers.UseItem(Scroll, "kit:1");
+        Assert.AreEqual((SessionItemUseCast.AtCaster, SpellCastAttemptOutcome.Started), (use.Cast, use.Attempt!.Outcome), "the use's target is not read");
+        Assert.AreEqual(caster.Facts(SessionSpellCaster.Hero)!.Location, use.Attempt.Run!.Creation!.Run!.TargetTile);
+        Assert.IsTrue(use.Spent);
+        Assert.IsFalse(caster.ScrollTooHard(Wand));
+
+        var (inventory, _, host) = UseSession(scrollSpell: 163);
+        using var __ = inventory;
+        var notReady = host.UseItem(Scroll, SessionSpellCaster.Hero);
+        Assert.AreEqual((SessionItemUseCast.InventoryTarget, true), (notReady.Cast, notReady.Spent), "the scroll is still spent, as in the original");
+    }
+
+    [TestMethod]
+    public void The_slot_zero_cast_does_nothing_for_an_empty_slot_or_a_disabled_spell_and_a_surviving_potion_run_loses_its_source()
+    {
+        var (owner, _, triggers) = UseSession(scrollSpell: 10000, potionDuration: 30);
+        using var _ = owner;
+        var empty = triggers.UseItem(Scroll, SessionSpellCaster.Hero);
+        Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.NoSpell, true), (empty.Outcome, empty.Cast, empty.Spent), "IU6: nothing cast");
+        var potion = triggers.UseItem(Potion, SessionSpellCaster.Hero);
+        var run = potion.ItemUsed!.Spells.Single().Run!.Value;
+        Assert.IsNotNull(owner.QuerySpellRuns()[run], "a lasting run");
+        Assert.IsNull(owner.QuerySpellRuns()[run]!.Source, "0x4574D0 cleared the spent potion as source");
+
+        var (disabledOwner, _, host) = UseSession(scrollSpell: 165);
+        using var __ = disabledOwner;
+        Assert.AreEqual(SessionItemUseCast.Nothing, host.UseItem(Scroll, SessionSpellCaster.Hero).Cast);
+    }
+
+    [TestMethod]
+    public void A_scroll_needs_intelligence_five_and_only_food_or_a_scroll_the_hero_holds_is_destroyed_as_used()
+    {
+        var stats = Defaults();
+        stats[(int)Arcanum.Simulation.Character.CharacterStat.Intelligence] = 3;
+        var (dull, caster, _) = UseSession(stats: stats);
+        using var _ = dull;
+        Assert.IsTrue(caster.ScrollTooHard(Scroll));
+        Assert.IsFalse(caster.ScrollTooHard(Potion));
+
+        var (owner, _, _) = UseSession();
+        using var __ = owner;
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.DestroyUsedItem(owner.Version, Wand).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyUsedItem(owner.Version, "kit:9").Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.DestroyUsedItem(owner.Version with { Revision = 7 }, Scroll).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.DestroyUsedItem(owner.Version, "").Failure);
+        Assert.AreEqual(0, owner.Version.Revision);
+    }
 }

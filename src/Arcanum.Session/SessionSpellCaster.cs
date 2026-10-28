@@ -172,6 +172,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public SpellRunRecord Record(int spell) => _records(spell)?.Run ?? new();
 
+    /// <summary>ARC-MAGIC-022: the whole record of <paramref name="spell"/> the host knows, or null.</summary>
+    public SessionSpellRecord? SpellRecord(int spell) => _records(spell);
+
+    /// <summary>ARC-MAGIC-022: the hero's life status, or null without a hero.</summary>
+    public LifeStatus? HeroLife => Life(Hero)?.Status;
+
     public SpellStageFacts StageFacts(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -538,18 +544,23 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     /// <summary>
-    /// The spell UI's cast at a picked target (0x57C110, ARC-MAGIC-015) by <paramref name="caster"/>, which is the run's source and
-    /// parent: nothing when the caster is missing, dead or unconscious; a critter caster must afford the spell's <c>Cost:</c> (0x4508A0:
+    /// The spell UI's cast at a picked target (0x57C110, ARC-MAGIC-015) by <paramref name="caster"/>, which is the run's parent and,
+    /// without <paramref name="item"/>, its source: nothing when the caster is missing, dead or unconscious; a critter caster must afford the spell's <c>Cost:</c> (0x4508A0:
     /// <see cref="SpellCostRules.CheckCost"/>, the payment asked without applying), else spell.mes 600; the invocation (0x455A20) takes
     /// the target object, or else the tile; no line of fire (0x456BC0) shows spell.mes 604; then the run starts (0x455AC0: the
     /// invocation check, a slot and the run), whose casting goal is the host's (<see cref="StartGoal"/>).
+    /// ARC-MAGIC-022: with <paramref name="item"/> (an item the host knows that <paramref name="caster"/> holds) the item is the
+    /// invocation's source and the caster its parent, with the power the caster draws from it, as the item use's slot-0 cast sets the
+    /// activation's source (0x57BC70: an item's holder is the caster); an item source skips the cost check.
     /// </summary>
     [OriginalFunction(0x57C110, OriginalFunctionScope.Partial)]
-    public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile)
+    public SpellCastAttempt CastAt(string caster, int spell, string? targetObject, SpellLocation targetTile, string? item = null)
     {
         ArgumentNullException.ThrowIfNull(caster);
         if (Life(caster) is not { } life || life.Status.IsDead || life.Status.IsUnconscious) return new(SpellCastAttemptOutcome.Nothing);
-        if (_records(spell) is not { } record || RunObject(caster) is not { } source || Facts(caster) is not { } facts)
+        if (item is not null && Item(item)?.Holder != caster) return new(SpellCastAttemptOutcome.Nothing);
+        if (_records(spell) is not { } record || RunObject(item ?? caster) is not { } source || Facts(caster) is not { } facts ||
+            (item is null ? facts : Facts(item)) is not { } sourceFacts)
             return new(SpellCastAttemptOutcome.Nothing);
         if (source.IsCritter)
         {
@@ -559,7 +570,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         }
         var target = targetObject is null ? null : Facts(targetObject);
         if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
-        var invocation = new SpellInvocation(spell, facts, facts, target, target is null ? targetTile : SpellLocation.None, ParentIsLocalPlayer: caster == Hero);
+        var invocation = new SpellInvocation(spell, facts, sourceFacts, target, target is null ? targetTile : SpellLocation.None,
+            item is null ? null : ItemPower(Item(item)!, facts), ParentIsLocalPlayer: caster == Hero);
         var world = InvocationWorld();
         if (!SpellInvocationRules.HasLineOfFire(invocation, world)) return Refused(SpellCastAttemptOutcome.NoLineOfFire, SpellUiRules.NoLineOfFireMessage);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
@@ -576,25 +588,53 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// The targeting cursor's test of a candidate (0x4F2830's area test, ARC-MAGIC-015): the BEGIN area with <paramref name="mask"/>
-    /// (the cursor's) for <paramref name="caster"/> as self and source, the candidate object as candidate and target, or with none the
-    /// tile as both tiles. The answer carries the area test's failure reason for the cursor's message.
+    /// (the cursor's) for <paramref name="caster"/> as self and source, the candidate object (if any) as candidate and target and the
+    /// tile (none with an object, except for the picker's second test, ARC-MAGIC-021) as both tiles. The answer carries the area
+    /// test's failure reason for the cursor's message.
     /// </summary>
     public SpellTargetTest TestTarget(string caster, int spell, ulong mask, string? candidate, SpellLocation tile)
     {
         ArgumentNullException.ThrowIfNull(caster);
         if (_records(spell) is not { } record || record.Areas.Length == 0 || _map.Object(caster) is not { } self) return new(false);
-        var basis = new SpellTargetContext(record.Areas[0] with { Targets = mask }, self, self, self.Location);
+        var basis = new SpellTargetContext(record.Areas[0] with { Targets = mask }, self, self, self.Location, CandidateTile: tile, TargetTile: tile);
         if (candidate is not null)
             return _map.Object(candidate) is { } o && (o.ObjectFlags & PickerRefused) == 0
                 ? SpellTargetRules.Test(basis with { Candidate = o, Target = o }, _map, Profile) : new(false);
-        return SpellTargetRules.Test(basis with { CandidateTile = tile, TargetTile = tile }, _map, Profile);
+        return SpellTargetRules.Test(basis, _map, Profile);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-021: the targeting cursor's pick (0x4F28A0, <see cref="SpellUiRules.Pick"/>) for <paramref name="caster"/> as the
+    /// local PC: the object the screen pick found under the point (<paramref name="atPoint"/>, a map id, found without the objects
+    /// <see cref="PickSpares"/> names), else the objects on <paramref name="tile"/> (null: no tile under the point) in the map's order,
+    /// else the tile, each through <see cref="TestTarget"/>. The caster's followers are the map's party of the caster.
+    /// </summary>
+    public SpellPick PickTarget(string caster, int spell, ulong mask, string? atPoint, SpellLocation? tile)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        var followers = Followers(caster);
+        return SpellUiRules.Pick(mask, caster, followers, atPoint is null ? null : _map.Object(atPoint), tile, _map,
+            (o, at) => TestTarget(caster, spell, mask, o?.Id, at));
+    }
+
+    /// <summary>ARC-MAGIC-021: which map objects the pick sees through for this mask (SU15, <see cref="SpellUiRules.PickSpares"/>), the
+    /// screen pick's extra skip while the cursor is open; the followers are read once, when it is made.</summary>
+    public Func<string, bool> PickSpared(string caster, ulong mask)
+    {
+        ArgumentNullException.ThrowIfNull(caster);
+        var followers = Followers(caster);
+        return id => _map.Object(id ?? throw new ArgumentNullException(nameof(id))) is { } o && SpellUiRules.PickSpares(mask, o, caster, followers);
+    }
+
+    // The follower list of the pick (0x441260): the map's party of the caster, the caster left out.
+    private HashSet<string> Followers(string caster) =>
+        _map.Object(caster) is { } self ? _map.Party(self).Select(o => o.Id).Where(id => id != caster).ToHashSet(StringComparer.Ordinal) : [];
 
     // A run whose BEGIN has not run yet: the only one a release frame begins.
     private static bool AwaitsBegin(SpellRun run) => run.Action == SpellRunAction.Begin && (run.Flags & SpellRunFlags.Processed) == 0;
 
     /// <summary>The object flag the picker's wrapper refuses an object target for (0x4F2680).</summary>
-    public const int PickerRefused = 0x800;
+    public const int PickerRefused = SpellUiRules.ClickThrough;
 
     /// <summary>One action on the session's runs through this host, with its notes applied.</summary>
     public SessionSpellRunResult Act(SessionSpellRunAction action)

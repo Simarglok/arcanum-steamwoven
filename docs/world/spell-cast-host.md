@@ -21,7 +21,8 @@ UI"](../research/ledger/spell-runs.md#spell-ui-arc-magic-015) (SU1–SU14, MG42)
 cast"](../research/ledger/spell-runs.md#queued-cast-arc-magic-019) (QC1–QC6, MG43); the viewer's cast, with a second cast queued
 behind it, is observed by the L2 native smoke `ARC-MAGIC-015 native-smoke cast`. The missile and the facing turn (ARC-MAGIC-018)
 are read in [ledger "Spell missile and caster facing"](../research/ledger/spell-runs.md#spell-missile-and-caster-facing-arc-magic-018)
-(SM1–SM9, MG44); the same smoke casts a missile spell.
+(SM1–SM9, MG44); the same smoke casts a missile spell. The cursor's pick is read in [ledger "Target
+picker"](../research/ledger/spell-runs.md#target-picker-arc-magic-021) (SU15–SU19, MG45).
 
 Code:
 - [`SessionSpellRecords`](../../src/Arcanum.Session/SessionSpellRecords.cs) — the spell data in the rules' types;
@@ -29,7 +30,7 @@ Code:
   magic host and the casting goal;
 - [`AreaSpellCastMap`](../../tools/terrain-viewer/Core/AreaSpellCastMap.cs) — the AREA map as a cast reads it;
 - [`SpellUiRules`](../../src/Arcanum.Simulation/Magic/SpellUiRules.cs) — the spell UI's activation, cursor mask and no-target message
-  (ARC-MAGIC-015);
+  (ARC-MAGIC-015) and the cursor's pick (`Pick`, `PickTest`, `PickSpares`; ARC-MAGIC-021);
 - [`AreaSpellCasting`](../../tools/terrain-viewer/Core/AreaSpellCasting.cs) and the viewer's
   [`TerrainViewerSpellCast`](../../tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs), [`AreaSpellPane`](../../tools/terrain-viewer/Godot/AreaSpellPane.cs)
   — the viewer's casting (ARC-MAGIC-015);
@@ -45,7 +46,8 @@ Tests:
 - [`SpellUiRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellUiRulesTests.cs),
   [`AreaSpellCastingTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSpellCastingTests.cs) (ARC-MAGIC-015);
 - [`SpellMissileRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellMissileRulesTests.cs) and the missile census in
-  `SpellEyeCandyRealDataTests` (ARC-MAGIC-018).
+  `SpellEyeCandyRealDataTests` (ARC-MAGIC-018);
+- [`SpellPickRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellPickRulesTests.cs) (ARC-MAGIC-021).
 
 ## The records (`SessionSpellRecords`)
 
@@ -72,7 +74,9 @@ The target functions' questions (MT8) over the shown map:
 Stand-ins, each a later slice's:
 - one sector kind for the whole map (the indoor/outdoor test of an NPC's fallback tile);
 - a path to every admitted tile;
-- NPCs stand on their map cells;
+- NPCs stand on their map cells, except the companions: since ARC-MAGIC-021 a companion's row stands on its committed cell and on
+  none while it is on another map (no target and no critter then; a visitor from another map is not a row of the shown map and is
+  no target); in a square query a companion comes after the rows of the swept cells;
 - an NPC wields no weapon in a spell's context (MG36 only reaches a caster with a weapon);
 - spell damage to objects other than critters is not ready (an acid's worn items take no damage step), and the hero's worn kit
   items carry no stored fields here, so the hero answers no worn items while wearing any.
@@ -165,8 +169,12 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    the non-party bit for an aggressive spell while no Alt key is held; an Alt key held in the cursor removes it (SU7). With Shift, an
    object spell that may target its caster is cast at once at the hero. An open cursor is closed first.
 3. **The cursor** (SU9). The hover shows "cast" (cross cursor) where a left press would cast and "no target" (forbidden cursor)
-   elsewhere. A left press casts at the object under the pointer when it passes the area test, else at the hero when its tile is under
-   the pointer, else at the tile; a failure shows spell.mes 606 for "not damaged" (SU10) and keeps the cursor. The cursor stays open
+   elsewhere. A left press casts at what the pick finds, in the original's order (`SpellUiRules.Pick`, `SessionSpellCaster.PickTarget`,
+   ARC-MAGIC-021, SU15–SU19): the object under the pointer (the hover's screen pick, which for the pick also sees through the hero
+   with a no-self mask, the hero's followers with the non-party bit and dead critters with the not-dead bit), else the objects on the
+   tile under the pointer (the hero first, then the map's rows), else that tile. A scenery object stands for its occupant; an object
+   that fails is tried once more as its own tile, which then is the target (a tile spell clicked on an NPC casts at the NPC's tile).
+   A failure shows spell.mes 606 for "not damaged" (SU10), the last reason this pick's tests left, and keeps the cursor. The cursor stays open
    after a cast, as in the original, until a right press, another activation, a window (inventory, sheet, logbook, dialog …) or a
    map change.
 4. **The cast** (`SessionSpellCaster.CastAt`, SU8): spell.mes 600 when the hero cannot afford the spell, 604 without a line of fire,
@@ -273,6 +281,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The stage writes its payment's fatigue before the components run. | The host applies the call's payments after the call, so a component reading the caster's fatigue in the same pass sees it unpaid. | — |
 | A spell's life changes come from the components inside the run's pass. | The same, through the session's life calls; their revisions come before the run's own. | — |
 | A pick with no target shows spell.mes 606 when the area test's failure global holds "not damaged" — a global no pick clears, so an earlier test's reason can show (MG42). | 606 only for the current pick's own reason. | — (owner decision 2026-10-27: fix without a switch) |
+| The pick's end clears `OF_CLICK_THROUGH` on the objects it saw through, so one whose data carried the flag loses it (MG45). | No flag is written: such an object keeps it, in both modes. | — (technical bug, latent; fixed without a switch by the owner rule of 2026-10-28) |
 | Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
@@ -302,7 +311,11 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   meanwhile (the session saves no goal or queue).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item); item and hotkey activation
   (0x57C040, 0x57C080, read as IT9). The host runs an item's own spells with the item as source since ARC-MAGIC-020
-  ([item spell triggers](item-spell-triggers.md)); the picker 0x4F28A0's own object/tile order (the viewer's: object, hero tile, tile).
+  ([item spell triggers](item-spell-triggers.md)).
+- The pick's stand-ins (ARC-MAGIC-021): the hero is no drawn pick target, so the pick finds it only through its tile; the order of
+  the objects on one tile is the host's (the hero, then the map's rows in file order; the original's sector list order is not
+  read); the dead critters seen through are the whole map's, where the original takes those in a window-sized rectangle around the
+  PC (the same unless the view is scrolled away from the hero); the screen pick has the hover's limits (ARC-UI-005).
 - A run's events on a map the viewer has no cast host for (no combat host, or no spell data yet) get plain passes, which refuse
   them.
 - In a turn-based round (ARC-COMBAT-020) the casting goal's start charges its 4 action points through the round's world; outside

@@ -6,8 +6,9 @@ item trigger slice of [FR-MAGIC-011](../requirements/combat-magic-tech.md#fr-mag
 read twice ([ledger IT1–IT10](../research/ledger/spell-runs.md#item-spell-triggers-arc-magic-020)); the item spell fields and the
 technology side are the [tech devices](tech-devices-runtime.md) contract's (DV1–DV3).
 
-This slice runs an item's spells on its **wear and unwear** through the [cast host](spell-cast-host.md). The other events are later
-slices (see [Not ready](#not-ready)).
+This slice runs an item's spells on its **wear and unwear** and (ARC-MAGIC-022) its **use** through the [cast host](spell-cast-host.md),
+and saves the charges the spells spend. The other events are later slices (see [Not ready](#not-ready)); the use is read in ledger
+[IU1–IU10](../research/ledger/spell-runs.md#item-use-and-moves-arc-magic-022).
 
 ## Rules (`ItemSpellTriggerRules`, Simulation)
 
@@ -71,6 +72,35 @@ slices (see [Not ready](#not-ready)).
 - Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-50)): `durability.charges` (`entity`,
   `charges` 0..1,000,000, ordinal order, within the durability budget) and each worn item's `itemSpells`.
 
+## Item use (ARC-MAGIC-022)
+
+`SessionItemTriggers.UseItem(item, target)` is the spell branch of the hero's item use (0x462CC0, IU1). The host runs the use's
+earlier steps first, as the original does: the scroll test (`SessionSpellCaster.ScrollTooHard`: a scroll's spell needs intelligence
+5, 0x4B1750, and a PC is told message 13), the targeting cursor for an item that needs a target (item flag 0x100) and has none, a trap
+device's own use, and the use script, which may stop the use. Outcomes: the host does not know the item as the hero's (`Unknown`);
+no charges and no magical flag (`NoMagic`: the reading, lockpick, healing kit and spending branches stay the host's, with their 4
+action points); else `Used`, in this order (the use charges no action points; each casting goal charges its own 4 in a turn-based
+round, so a goal refused there frees its run while a food or scroll is still spent):
+
+1. **Slot 0** (0x4605E0 → the callback 0x57CE30, IU2–IU3): nothing for an empty slot (`NoSpell`; the original reads outside the
+   record table, IU6) or a record with item triggers (`Triggered`). Otherwise the activation (`SpellUiRules.Activate`, 0x57BC70, IU4)
+   with the holder as caster and no Shift or Alt (the interface mode change it makes is the host's): `Nothing` when the hero cannot act or the spell is disabled; a cast at once at the
+   holder's tile (`AtCaster`, the use's target unread); otherwise, whether the cursor would open or the action points refuse, the cast
+   at the use's target (`AtTarget`). Both go through `SessionSpellCaster.CastAt` with the item as source (IU5: the holder is the
+   parent, the power it draws from the item; an item source skips the cost check), and the casting goal plays at once with its end,
+   so the BEGIN's payment spends the item's charge (saved, see below). A spell aimed at an inventory item (`InventoryTarget`) is not
+   ready: nothing is cast, where the original opens the inventory and casts at the use's target.
+2. **Item used** (0x4CBF70, IU7): the executor with `ItemUsed` (0x1000) and the use's target as the other object; its runs play as
+   the other executors' (goal 73).
+3. **Spend**, food and scrolls only (`SessionSpellCaster.SpendUsedItem`): the session deletes the item (`GameSessionOwner.DestroyUsedItem`,
+   refused for an item the hero does not hold or wears, that is not food or a scroll, or past the durability budget), then the source
+   of every run whose parent or source is the item is cleared (0x4574D0, IU8; the original clears first, and nothing reads the runs
+   in between); a refused deletion clears nothing. Its destroy script is the host's. A scroll is spent whatever its slot-0 cast did.
+
+The installed uses ([census](#installed-data)): 84 scrolls (69 cast at a picked target, 13 at once, 1 at an inventory item, 1 through
+`Item_Used`), 43 food items (41 `Item_Used` potions, 2 at a picked target), 3 weapons with 20 charges and one unlimited (at a picked
+target), and 22 items with unlimited charges whose slot 0 has item triggers (wear items and `Item_Used` devices).
+
 ## Installed data
 
 The census (`ItemSpellCensusRealDataTests`, opt-in `DAT_ROOT`) finds four wear items, all armour with unlimited charges and no move
@@ -89,11 +119,16 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
 | The wear and unwear executors run inside the wield and unwield (0x4677B0, 0x467CB0), before the light recalculation and script points 24/25 (IT8). | They run after the move and its scripts. No installed wear item has a move script. | — (order of the session's move) |
 | A fired run whose goal 73 refuses at its start stays in its slot, never begun (IT10). | Freed unpaid in both modes. | none (owner decision 2026-10-28: fixed in both modes) |
 | The casting goal's release waits for the caster's eye candy (EC7). | The goals of item spells are released at once. | — (presentation, not ready) |
+| An item use's empty slot 0 on the spell branch reads a record outside the table (IU6). | Nothing is cast. | none (technical bug, fixed in both modes; owner rule 2026-10-28) |
+| A used scroll whose slot-0 spell targets an inventory item opens the inventory and is cast at the use's target (IU4). | Nothing is cast and the scroll is still spent (one installed scroll). | — (not ready: inventory targets) |
+| A used food or scroll has its runs' sources cleared before their goals play, so their BEGIN finds no source and charges nothing. | The goals play at once, so the item pays its charge before it is spent and deleted. | — (not visible: the item is deleted; no installed food or scroll reaches the spell branch with no charge left) |
 
 ## Not ready
 
-- Pickup, drop and item use (`Item_Used`, 42 installed slots, charges 1 mostly): the session's inventory moves and the use need the
-  executor wired (ARC-MAGIC-022's next parts).
+- Pickup and drop: the session's inventory moves need the executors wired (ARC-MAGIC-022's next part).
+- The item use's other branches (reading, lockpick, healing kit, food and scroll spending without magic) are the host's own calls
+  (`UseWrittenItem`, `PickLock…`, `HealWithItem`); no viewer action calls `UseItem` yet. Spells aimed at an inventory item through a
+  use, and an NPC's use (the activation refuses a holder that is not a player's PC, SU1) are not ready.
 - The combat and life events (parent hit, stunned, going unconscious, dying, attacks, damages, target hit) and the global attacker.
 - The item spell pane and hotkeys (0x57C040, 0x57C080, IT9), and spells aimed at an inventory item.
 - The best-items start (`EquipBest`) skips items with spells, as before: it runs before any cast host exists.

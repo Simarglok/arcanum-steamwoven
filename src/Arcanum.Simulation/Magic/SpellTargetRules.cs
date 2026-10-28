@@ -285,7 +285,7 @@ public static class SpellTargetRules
     // 0x4F2C60: a scenery object with an occupant stands for the occupant (as an NPC); otherwise the object's own type. An occupant
     // the world does not know leaves the scenery object (the original takes the occupant's handle whatever it is).
     [OriginalFunction(0x4F2C60, OriginalFunctionScope.Partial)]
-    private static (SpellTargetObject Object, int Kind) Visible(SpellTargetObject o, ISpellTargetWorld world) =>
+    internal static (SpellTargetObject Object, int Kind) Visible(SpellTargetObject o, ISpellTargetWorld world) =>
         o.Type == SpellTargetObject.Scenery && o.Occupant is { } id && world.Object(id) is { } occupant ? (occupant, SpellTargetObject.Npc) : (o, o.Type);
 
     // The types a radius or cone gather asks for; every type but projectiles when no type bit is named and one of the given
