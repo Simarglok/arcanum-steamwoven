@@ -104,6 +104,9 @@ public sealed class AttackItemTriggerStateTests
         CollectionAssert.AreEqual(new (uint, string, string, string?, SpellLocation, string?)[] { (ParentAttacksLocation, Grenade, Hero, null, new(7, 9), Hero) },
             host.Calls.ToArray(), "no walk over the worn items; no item, no call");
         Assert.ThrowsExactly<ArgumentException>(() => owner.FireItemEvents(host, [location with { Item = "" }], NpcWorn));
+        Assert.ThrowsExactly<ArgumentException>(() => owner.FireItemEvents(host, [new SessionItemEvent(ItemTriggerEvent.ParentHit, Golem, Hero) { Item = Grenade }], NpcWorn),
+            "an item belongs to attacks a location only");
+        Assert.ThrowsExactly<ArgumentException>(() => owner.FireItemEvents(host, [location with { Chain = [""] }], NpcWorn));
     }
 
     [TestMethod]
@@ -248,6 +251,8 @@ public sealed class AttackItemTriggerStateTests
             "0x450A50: an item on the map is its own parent; the global is the run's other object");
 
         // The attack start's first worn item carries the attacker too; its run's parent is the holder.
+        // A held item still fires only for its holder.
+        Assert.AreEqual(0, Caster(owner, (Blade, Hurting(174, ParentAttacksOpponent))).StartItemSpells(ParentAttacksOpponent, Blade, Golem).Count);
         var started = Caster(owner, (Blade, Hurting(174, ParentAttacksOpponent))).FireItemEvents(owner.QueryAttackStartItemEvents(Hero, Golem));
         var swing = started.Single(f => f.Result.Spells.Count > 0).Result.Spells.Single().Result!.Creation!.Run!;
         Assert.AreEqual((Hero, Hero), (swing.Parent!.Id, swing.Other!.Id));

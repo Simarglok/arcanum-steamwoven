@@ -69,7 +69,10 @@ public sealed partial class GameSessionOwner
     /// attacks an opponent's first worn item carries its parent as the run's other object (0x4CBD40); a parent that
     /// <paramref name="isItem"/> names an item fires only on damages an opponent, its own target hit with the event's other object
     /// (the victim) as the holder (0x4CBE70's item branch). MG46: in Steamwoven a walk skips the items of the event's chain
-    /// (<see cref="ItemSpellTriggerRules.ChainSkips"/>).
+    /// (<see cref="ItemSpellTriggerRules.ChainSkips"/>). The chain goes on only through the cast host
+    /// (<see cref="SessionSpellCaster.FireItemEvents"/>), which records it for the runs a firing starts; a host that fires chained
+    /// events here directly starts runs without one, so the chain restarts at their sources. An event with an item or tile that is
+    /// not an attacks a location, or a chain entry that is not an entity id, is refused (<see cref="ArgumentException"/>).
     /// </summary>
     public SessionItemEventResult FireItemEvents(ISessionItemTriggers triggers, IEnumerable<SessionItemEvent> events, Func<string, IReadOnlyList<string>?> npcWorn,
         Func<string, bool>? isItem = null)
@@ -82,7 +85,8 @@ public sealed partial class GameSessionOwner
         if (_passWorld is not null) return new(GameSessionFailure.InvalidEventPass, []);
         var list = events.ToArray();
         if (list.Any(e => e is null || !SessionValidation.Entity(e.Parent) || e.Other is { } other && !SessionValidation.Entity(other)
-            || e.Item is { } item && !SessionValidation.Entity(item) || e.Chain is { } chain && chain.Any(id => id is null)))
+            || (e.Event == ItemTriggerEvent.ParentAttacksLocation ? e.Item is { } item && !SessionValidation.Entity(item) : e.Item is not null || !e.Tile.IsNone)
+            || e.Chain is { } chain && chain.Any(id => !SessionValidation.Entity(id))))
             throw new ArgumentException("Invalid item event.", nameof(events));
         return new(GameSessionFailure.None, WalkItemEvents(triggers, list, holder => holder == SessionEventKinds.PlayerEntity
             ? [.. _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity)] : npcWorn(holder), null, isItem));

@@ -189,7 +189,8 @@ run an item event started with the run's chain (`SessionItemEvent.Chain`: its so
 when an item event's firing starts the run), and a walk skips those items (`ItemSpellTriggerRules.ChainSkips`). So an item spell's
 damage still fires every other item once (a `Parent_Hit` armour answers a `Target_Hit` weapon's spell, and the attacker's armour may
 answer that), and the chain ends when every item in reach has fired. The 64-walk bound stays for the Original setting. Runs are not
-saved, so a chain is followed only within the session's run table; a run whose slot another cast reused has no chain.
+saved, so a chain is followed only within the session's run table: an item run the cast host has no record for (its slot reused, or
+started by a host's direct `FireItemEvents` call outside the cast host) carries only its own source.
 
 ## Attack events (ARC-MAGIC-025)
 
@@ -214,7 +215,9 @@ saved, so a chain is followed only within the session's run table; a run whose s
 - **`ItemParentCalls`** (0x4CBE70's item branch, IC13): a damage step whose attacker is an item (a spell run whose parent is the
   item) fires that item's own **target hit** with the victim as the executor's parent and the item as the other object; every other
   event of an item parent fires nothing. `FireItemEvents` takes an `isItem` test for it; the cast host answers from its map's object
-  types (5..14).
+  types (5..14). Such a run's source is the item itself, so in Steamwoven this target hit is always in its chain and never fires
+  (MG46: the item fired already for the event that started the run); the Original setting fires it (latent: no installed record has
+  both `Parent_Atks_Location` and `Target_Hit`).
 - A critical self-hit (`AttackCritter`, `AttackObject`) returns its life step's events (`ItemEvents`: the fatigue setter's going
   unconscious, IC4) for the host to fire; the hero's damage step in it reads no context (IC2).
 

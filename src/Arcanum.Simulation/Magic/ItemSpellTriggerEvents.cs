@@ -136,7 +136,9 @@ public static partial class ItemSpellTriggerRules
     /// ARC-MAGIC-025: the item branch of a wrapper whose parent is an item (types 5..14), which only damages an opponent has (0x4CBE70,
     /// ledger IC1, IC13): one executor call with the item itself as the item and the other object and the event's other object (the
     /// victim) as the parent, with <see cref="TargetHit"/>. A spell run whose parent is an item (a thrown item's, 0x450A50) damages with
-    /// it as the attacker. Every other wrapper fires nothing for an item.
+    /// it as the attacker. Every other wrapper fires nothing for an item. Such a run's source is that item, so in Steamwoven its own
+    /// target hit is in the run's chain and never fires (MG46, <see cref="ChainSkips"/>): the item fired already for the event that
+    /// started the run. Latent: no installed record has both <c>Parent_Atks_Location</c> and <c>Target_Hit</c>.
     /// </summary>
     public static IReadOnlyList<ItemTriggerCall> ItemParentCalls(ItemTriggerEvent kind) =>
         kind == ItemTriggerEvent.ParentDamagesOpponent ? [new(0, TargetHit)] : [];
