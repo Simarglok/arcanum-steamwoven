@@ -192,8 +192,8 @@ is one of the markers below (case-insensitive) shows a generated phrase as its t
 qualifies; `DialogOption.TextOrigin` names its file and number. The phrase is picked as the reply is offered, in offer order, with the
 port's facts, files, rules and a `DialogGreetingRoll.Phrase` roll (the AREA host's `dialog.phrase.line`), by the same pick as a
 greeting line (GD5, the [GD-A1](../formats/generated-dialog-files.md#api) gap switch, the missing-line text, `@pcname@`/`@npcname@`).
-A rebuild of the same node's offers (`RefreshOptions`, a stale selection) keeps the turn's phrases and rolls nothing new: the
-original rebuilds its options with the random state it saved (ledger [GP6](../research/ledger/social.md#generated-player-phrases-arc-script-043)).
+A rebuild of the same node's offers (`RefreshOptions`, a stale selection) keeps the phrases already shown in the turn (only a reply
+that became eligible since rolls its own): the original rebuilds its options with the random state it saved (ledger [GP6](../research/ledger/social.md#generated-player-phrases-arc-script-043)).
 
 | Marker | Phrase (0x416C10) |
 | --- | --- |
@@ -214,7 +214,7 @@ an insult (group 1000).
 ## Barter reply (ARC-UI-050)
 
 With the optional `IDialogBarterPort` (`DialogConversationPorts.Barter`) a Player reply whose text is exactly `b:` (the generated barter
-phrase, its text not loaded) is offered with the transition `DialogOptionTransition.Barter` and no target node; without the port it stays
+phrase, [below](#generated-phrases-arc-script-043)) is offered with the transition `DialogOptionTransition.Barter` and no target node; without the port it stays
 blocked as before (`UnsupportedInteraction`). Picking it runs the reply's action in field order, then the port's `OpenBarterCommand` (the
 NPC as merchant, the PC as buyer, recorded after the action), and ends the conversation with `DialogEndKind.BarterWindow`: no further NPC
 line, no SCR continuation, and the talk does not resume (the original's mode change ends the dialog, ledger

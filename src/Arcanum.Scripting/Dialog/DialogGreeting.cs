@@ -38,9 +38,9 @@ public enum DialogGreetingStates
 /// <summary>
 /// What the greeting reads of the NPC and the PC. <paramref name="NpcDumb"/> is the original's test 0x45FC00 on the NPC
 /// (intelligence 4 or less); <paramref name="NpcSocialClass"/> is NPC field 0x128; races and genders are stats 27 and 26.
-/// </summary>
 /// <paramref name="NpcLedByPc"/> (ARC-SCRIPT-043) is whether the PC is the NPC's leader (0x45DE00), which chooses the barter
 /// phrase of a Player <c>b:</c> option.
+/// </summary>
 public sealed record DialogGreetingFacts(bool NpcMale, bool PcMale, bool NpcDumb, int NpcSocialClass, int NpcRace, int PcRace,
     DialogReactionCategory Category, bool MetBefore, DialogGreetingStates States = DialogGreetingStates.None, bool NpcLedByPc = false);
 

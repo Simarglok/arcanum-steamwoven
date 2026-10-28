@@ -1046,7 +1046,7 @@ public sealed class DialogConversation
         }
         else if (found is { Letter: 'b' } && exact && _ports.Barter is not null)
         {
-            // ARC-UI-050: the original's barter reply (exactly "b:", 0x416C10 → 0x4182D0): a generated phrase (not loaded) whose pick runs
+            // ARC-UI-050: the original's barter reply (exactly "b:", 0x416C10 → 0x4182D0): a generated phrase (ARC-SCRIPT-043) whose pick runs
             // the reply's action and then opens the barter window (state 3, 0x567E30); its response value is not followed.
             kind = DialogOptionTextKind.Generated;
             marker = found;

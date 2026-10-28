@@ -92,7 +92,9 @@ public partial class TerrainViewerApp
                 var turns = 0; var phrases = 0;
                 // ARC-SCRIPT-043: with the module's texts loaded, every offered reply that is an exact phrase marker (and the
                 // no-reply farewell) shows a phrase from the generated-dialog files, never the placeholder.
-                var textsReady = host.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready;
+                // A speaker whose stored fields give no greeting facts keeps empty phrases.
+                var textsReady = host.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready
+                    && AreaGreeting.FactsFor(Arcanum.Data.Combat.CombatFieldReader.Read(speaker.Row).Fields, host.Profile.Pc, 0, false, false) is not null;
                 void CountPhrases()
                 {
                     foreach (var shown in conversation!.Options.Where(o => o.TextKind == DialogOptionTextKind.Fallback
