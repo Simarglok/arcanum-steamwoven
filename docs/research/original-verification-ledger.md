@@ -197,6 +197,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
 | <a id="message-log-arc-ui-023"></a>[Message log (ARC-UI-023)](ledger/ui-audio.md#message-log-arc-ui-023) | [Interface windows and audio](ledger/ui-audio.md) | ML1–ML8 |
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
+| <a id="npc-ai-turn-based-host-tail-arc-world-099"></a>[NPC AI turn-based host tail (ARC-WORLD-099)](ledger/npc-ai.md#npc-ai-turn-based-host-tail-arc-world-099) | [NPC AI](ledger/npc-ai.md) | TH7–TH10 |
 
 ## Decisions to revisit
 
