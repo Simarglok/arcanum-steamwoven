@@ -134,4 +134,136 @@ public partial class TerrainViewerApp
         }
         await Task.CompletedTask;
     }
+
+    // Native observation (ARC-WORLD-095, ARC_AREA_MAP_SMOKE_ONLY=ai-turn-based, map mode with --hero, the Crash Site cave): the AI and
+    // the turn-based setting on, the hero four cells from the living monstrous NPC with the fewest hit points, which is told of the
+    // hero's attack; R enters combat mode and round 1 begins with the NPC. In its own subturns its goal run walks it up tile by tile,
+    // paying action points, and bites; it never moves on the hero's subturn, which E ends. The NPC, the hero and the settings are
+    // restored for the later stages.
+    private async Task RunAreaAiTurnBasedSmokeAsync(TerrainLoadResult? mapMode = null)
+    {
+        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-WORLD-095 ai-turn-based smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_AI_TURN_BASED_SMOKE_FAILED");
+        }
+        var map = mapMode is { Area: { } loaded, AreaStepSnapshot: { } mapSteps }
+            ? new AreaMapRuntime(loaded.Snapshot, mapSteps, loaded.Plan.Chart) : _areaTransitions!.Current;
+        var inventory = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap);
+        var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
+        var candidates = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
+            .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(map.RuntimeMap, h.Entity)))
+            .Where(c => c.Build.Combat is { Monstrous: true } && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core)
+            .OrderBy(c => LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        if (candidates.Length == 0) { GD.Print($"ARC-WORLD-095 native-smoke ai-turn-based NO-TARGET map={map.RuntimeMap}"); return; }
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        var setting = _turnBasedSetting;
+        var target = candidates[0];
+        var entity = target.Holder.Entity;
+        var critter = SessionCombatant.Critter(entity);
+        var npcLife = target.Build.Combat!.Target;
+        var npcBefore = session.QueryLife(npcLife).View!.Status.HitPoints;
+        var heroBefore = session.QueryHeroLife()!.Record.State;
+        _worldFocusSimulationForSelfTest = true;
+        _aiForSmoke = true;
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest();
+            if (HeroInCombatMode) ToggleCombatMode();
+            _roundLog.Clear();
+            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            CellCoord? start = null;
+            foreach (var (dx, dy) in new[] { (4, 0), (-4, 0), (0, 4), (0, -4), (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3) })
+            {
+                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
+                if (!map.Chart.Contains(near)) continue;
+                CellCoord cell;
+                try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
+                if (Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y)) >= 3) { start = cell; break; }
+            }
+            Require(start is not null, "a standable cell a few cells from the NPC");
+            AreaSmokePlace(map, start!.Value);
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            var host = AreaAiHostNow();
+            Require(host is not null, "the AI host is built");
+            host!.HeroAttacked(entity);
+            var danger = session.QueryDanger(entity);
+            Require(danger.State == DangerState.CombatFocus && danger.Focus == SessionCombatant.Hero, $"the NPC fights the hero: {danger.State}");
+            void Press(Key key, bool pressed) => InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = pressed });
+            void Tap(Key key) { Press(key, true); Press(key, false); }
+            Tap(Key.Space);
+            Require(_turnBasedSetting && session.QueryCombatRound() is null, "Space turned the setting on: " + _turnBasedNotice);
+            Tap(Key.R);
+            Require(HeroInCombatMode && session.QueryCombatRound() is { Turn: 1 } first && first.Participants.Contains(critter), "R began round 1 with the NPC: " + _combatModeNotice);
+
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var hostMs = 31_000_000L;
+            TickAreaClock(hostMs);
+            var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
+            string? hit = null;
+            for (; frames < 6000 && hit is null; frames++)
+            {
+                var before = session.QueryCombatRound()?.Actor;
+                var cell = host.Tile(entity);
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                hit = host.TraceOf(entity)?.Hit;
+                offTurn |= before != critter && host.Tile(entity) != cell;
+                var round = session.QueryCombatRound();
+                Require(round is not null, $"the round runs at frame {frames}");
+                if (round!.Actor == critter)
+                {
+                    if (host.RunOf(entity) is not null) held++;
+                    paid |= lastPoints is { } points && round.ActionPoints < points;
+                    lastPoints = round.ActionPoints;
+                }
+                else lastPoints = null;
+                if (round.Actor.IsHero && HeroIdleForRound())
+                {
+                    heroTurns++;
+                    Tap(Key.E);
+                }
+            }
+            var trace = host.TraceOf(entity);
+            GD.Print($"ARC-WORLD-095 ai-turn-based smoke trace perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit} frames={frames} held={held} heroTurns={heroTurns}");
+            Require(hit is { } bite && !bite.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal), $"the NPC's bite was resolved in a round: {hit}");
+            Require(held >= 2, "its goal run held its subturn over frames");
+            Require(paid, "its steps or attack paid the round's action points");
+            Require(!offTurn, "it never walked on another participant's subturn");
+            Require(_roundLog.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended and passed on");
+            var at = host.Tile(entity)!.Value;
+            var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
+            Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
+            RefreshAreaStatus();
+            var hud = GetSelfTestSnapshot().Hud;
+            Require(hud.Contains("turn-based: round", StringComparison.Ordinal) && hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the round and the AI");
+            GD.Print("ARC-WORLD-095 native-smoke ai-turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                map.RuntimeMap, Target = target.Row.PrototypeNumber, Frames = frames, Held = held, HeroTurns = heroTurns, Hit = hit,
+                Rounds = _roundLog.Count(e => e.Kind == SessionCombatEventKind.RoundBegan),
+                Parity = "NOT_VERIFIED (round hooks read in the original executable; no original-runtime run)" }));
+        }
+        finally
+        {
+            if (session.QueryCombatRound() is not null) session.EndCombatRound(session.Version);
+            _turnBasedSetting = setting;
+            if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+            CancelAreaAttack(null);
+            if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead))
+                session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var heroNow = session.QueryHeroLife()!.Record.State;
+            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            _aiForSmoke = false; _aiHost = null; _aiHostStamp = null;
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
+            PublishWorldSelection();
+        }
+        await Task.CompletedTask;
+    }
 }

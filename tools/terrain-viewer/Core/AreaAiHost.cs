@@ -73,8 +73,11 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// runs <see cref="AiExecutorRules.Perform"/>; the danger stage runs <see cref="HostilityRules.DangerUpdate"/> and applies its plan through
 /// the session's setter; the hit step is the session's <see cref="GameSessionOwner.AttackByNpc"/>, followed by the attack event; the
 /// hero's hits run the attack event here too (<see cref="HeroAttacked"/>). The walker moves NPCs tile by tile (<see cref="Movers"/>).
-/// The runs go by the viewer's world clock (<see cref="Pump"/>), the ticks by the session's game clock.
-/// NOT READY (later slices): the turn-based subturn hook and round costs, casting, item use, skills, throws and pickups, grenades, the
+/// The runs go by the viewer's world clock (<see cref="Pump"/>), the ticks by the session's game clock. In a turn-based round
+/// (ARC-WORLD-095) the host follows the round's subturns (<see cref="ObserveRound"/>): a round's start and each new subturn interrupt
+/// runs as the original's do, the pending cost reads 0 after each subturn start, and the round host
+/// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>) runs the NPCs' subturn hooks.
+/// NOT READY (later slices): casting, item use, skills, throws and pickups, grenades, the
 /// back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
@@ -109,8 +112,17 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private readonly Dictionary<string, (AiGoalRun Run, long DueMs)> _runs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
     private readonly List<AreaAiNotice> _notices = [];
+    // The round's events of the host's own session calls (the executor's consumes and subturn ends), for the viewer's round log.
+    private readonly List<SessionCombatEvent> _roundEvents = [];
     // The animation clock of the last pump.
     private long _nowMs;
+    // ARC-WORLD-095: the round as last observed (whether one ran, the session's subturn starts then, the critter of the last turn set:
+    // 0x5FC248), the pending cost (0x5FC244) and the subturn start it was written in.
+    private bool _roundSeen;
+    private long _subturnsSeen = -1;
+    private string? _turnSetActor;
+    private int _pendingCost;
+    private long _pendingAt = -1;
 
     /// <param name="events">The viewer's event world: the pass's script calls, life facts, party and loot questions.</param>
     /// <param name="round">The turn-based round's world (the scan of the map's critters).</param>
@@ -132,6 +144,50 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     /// <summary>What the overlay shows of an NPC: its last pass, perform, run step and reason.</summary>
     public AreaAiTrace? TraceOf(string npc) => _traces.GetValueOrDefault(npc);
+
+    /// <summary>The subturn start whose subturn hook the round host ran last (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>),
+    /// -1 before any; a host built during a round asks the NPC whose subturn it is again.</summary>
+    public long HookedSubturn { get; set; } = -1;
+
+    /// <summary>The round's events of the host's own session calls since the last call, in order.</summary>
+    public IReadOnlyList<SessionCombatEvent> DrainRoundEvents()
+    {
+        var drained = _roundEvents.ToArray();
+        _roundEvents.Clear();
+        return drained;
+    }
+
+    /// <summary>Whether a goal run of a critter other than <paramref name="npc"/> runs (each counts in the original's animations-complete
+    /// test: every goal of the host has priority 2 or more).</summary>
+    public bool RunsBesides(string npc) => _runs.Keys.Any(other => other != npc);
+
+    /// <summary>
+    /// ARC-WORLD-095: follows the session's turn-based round. A round that began since the last call interrupts every run (the round's
+    /// start 0x4B71E0: 0x424310 and the scanned critters' 0x424070 at priority 3); a subturn that started since then interrupts the runs
+    /// of the critter of the previous turn set when that is an NPC (the turn set 0x4B6E70, 0x424070 at priority 3). Priority 3 ends a run
+    /// whose current goal has priority 3 or less (0x44E2C0: walks, attacks and flights; an attempted cast's 4 goes on) and its end nodes
+    /// run. Called by the pump before and after each step and by the round host.
+    /// </summary>
+    public void ObserveRound()
+    {
+        if (_session.QueryCombatRound() is not { } round) { _roundSeen = false; return; }
+        if (!_roundSeen)
+        {
+            _roundSeen = true;
+            foreach (var npc in _runs.Keys.ToArray()) Interrupt(npc);
+        }
+        var starts = _session.QueryCombatSubturnStarts();
+        if (starts == _subturnsSeen) return;
+        _subturnsSeen = starts;
+        if (_turnSetActor is { } previous && previous != Pc) Interrupt(previous);
+        _turnSetActor = Id(round.Actor);
+    }
+
+    // An interrupt at priority 3 (0x44E2C0 with 3): a run whose current goal has priority 3 or less ends with its end nodes.
+    private void Interrupt(string npc)
+    {
+        if (RunOf(npc) is { } run && Priorities.GetValueOrDefault(run.Top.Goal, 2) <= 3) DropRun(npc);
+    }
 
     /// <summary>The notices since the last call, in order.</summary>
     public IReadOnlyList<AreaAiNotice> DrainNotices()
@@ -173,6 +229,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var steps = 0;
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Settle(_nowMs);
+        ObserveRound();
         while (steps < maxSteps && _runs.Where(r => r.Value.DueMs <= _nowMs).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
                    .Select(r => r.Key).FirstOrDefault() is { } npc)
         {
@@ -190,6 +247,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             }
             // A delay of 0 is the next frame.
             _runs[npc] = (step.Run, Math.Max(due, _nowMs) + Math.Max(step.DelayMs, 1));
+            // A step that began a round (an attack putting the hero into combat mode) or passed the subturn on interrupts runs as the
+            // original's round start and turn set do, its own run too (inside its step the original marks it done).
+            ObserveRound();
         }
         return steps;
     }
@@ -209,6 +269,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _runs.Clear();
         _traces.Clear();
         _notices.Clear();
+        _roundEvents.Clear();
         Movers.Clear();
     }
 
@@ -543,14 +604,20 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool InRound => _session.QueryCombatRound() is not null;
     public string? RoundActor => _session.QueryCombatRound() is { } round ? Id(round.Actor) : null;
     public int ActionPoints(string id) => _session.QueryCombatRound() is { } round && Id(round.Actor) == id ? round.ActionPoints : 0;
-    public int PendingCost { get; set; }
+    /// <summary>The round's pending cost (0x5FC244): what the last action-point check of this subturn wrote, 0 once a subturn started
+    /// since (the subturn start's check of cost 0, 0x4B75D0, ARC-WORLD-095), whichever call began it.</summary>
+    public int PendingCost
+    {
+        get => _pendingAt == _session.QueryCombatSubturnStarts() ? _pendingCost : 0;
+        set { _pendingCost = value; _pendingAt = _session.QueryCombatSubturnStarts(); }
+    }
     public void Consume(string id, int cost)
     {
-        if (Combatant(id) is { } combatant) _session.ConsumeActionPoints(_session.Version, combatant, cost, _round);
+        if (Combatant(id) is { } combatant) _roundEvents.AddRange(_session.ConsumeActionPoints(_session.Version, combatant, cost, _round).Events);
     }
     public void EndSubturn(string id)
     {
-        if (Combatant(id) is { } combatant) _session.EndCombatTurn(_session.Version, combatant, _round);
+        if (Combatant(id) is { } combatant) _roundEvents.AddRange(_session.EndCombatTurn(_session.Version, combatant, _round).Events);
     }
 
     // ---- perform's world (IAiPerformWorld) ----

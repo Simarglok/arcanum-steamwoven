@@ -13,8 +13,9 @@ namespace Arcanum.TerrainViewer;
 // (the scheduler's pass: gate, danger update, perform), and each frame the host steps the goal runs on the world clock. An NPC the
 // hero hits reacts (the attack event); a fighting NPC walks up tile by tile, swings and bites through the session's NPC hit step. NPC
 // bodies are their T0 frames moved with the walker (no walk or attack ART yet). Automated runs (self-test, native smokes) keep the AI
-// off unless their stage turns it on, so the other stages stay as they were. NOT READY: turn-based rounds (NPC subturns still end at
-// once), casting, items, throws, pickups, followers in combat, NPC ranged attacks, saved NPC positions.
+// off unless their stage turns it on, so the other stages stay as they were. In a turn-based round (ARC-WORLD-095) the round host
+// runs the NPCs' subturn hooks with this host and their runs pay action points. NOT READY: casting, items, throws, pickups, followers
+// in combat, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
@@ -93,6 +94,10 @@ public partial class TerrainViewerApp
         if (AreaAiHostNow() is not { } host) return;
         var now = WorldMilliseconds();
         var steps = host.Pump(now);
+        // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
+        var roundEvents = host.DrainRoundEvents();
+        LogRound(roundEvents);
+        if (roundEvents.Count > 0 || steps > 0 && InTurnBasedRound) RefreshAreaStatus();
         var redraw = steps > 0;
         foreach (var notice in host.DrainNotices())
         {

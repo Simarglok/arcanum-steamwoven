@@ -7,7 +7,7 @@ ledger [CL1–CL13](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054), 
 thinks, what one AI pass checks before it acts, and how a turn-based round hands an NPC its subturn. The rules are drivers in
 `Arcanum.Simulation.Ai.AiSchedulerRules` over an `IAiSchedulerWorld` and an `IAiRollSource`; the session (`GameSessionAi.cs`)
 schedules the tick on its event queue, answers and writes the state it owns, and asks the host (`ISessionAiWorld`) for the rest.
-No host implements `ISessionAiWorld` yet: the viewer schedules no tick and still ends an NPC's subturn at once (slice I10).
+The AREA viewer's AI host implements `ISessionAiWorld` ([AI viewer host](ai-host.md), slice I10): its ticks since ARC-WORLD-092, the subturn hook in a turn-based round since ARC-WORLD-095.
 
 ## Rules (`AiSchedulerRules`)
 
@@ -76,7 +76,8 @@ follow the original in both settings; P5 (the combat scripts on every pass) is k
 
 - **Host.** The AREA viewer's AI host ([AI viewer host](ai-host.md), ARC-WORLD-092) implements `ISessionAiWorld` and schedules the
   delayed tick of every NPC of the shown map when it is built; it schedules none on a sector fold, runs no heartbeat or combat
-  script through the gate, and the viewer still ends an NPC's subturn at once (`AreaTurnBased.Step`, I10's next part).
+  script through the gate; in a turn-based round the viewer's round host runs the subturn hook with it (`AreaTurnBased.Step`,
+  ARC-WORLD-095).
 - **Pipeline stages.** Heal and the item search (rules of slice I8, `AiSupportRules.Heal` and `AiGroundRules.SearchItems`, [AI support](ai-support.md)), the danger update's writes (the decisions of slices I4 and I5) and
   perform are the host's stages; perform's rules are the executor's `AiExecutorRules.Perform` (ARC-WORLD-086,
   [AI executor](ai-executor.md)); the viewer's host runs the danger update and perform (ARC-WORLD-092), not heal and the item search yet.
