@@ -124,6 +124,20 @@ public enum AiRollPurpose
     GateBlindRecovery,
     /// <summary>The gate clears every crippled condition on 1 of 1..8000 (0x4A8570, slice I6).</summary>
     GateCrippleRecovery,
+    /// <summary>A walk goal whose next step is blocked waits 0..300 game milliseconds before it gives up (the stepper's random delay,
+    /// 0x423560 → 0x4CEF00; slice I7).</summary>
+    BlockedStepWait,
+    /// <summary>Heal (0x4A8940): in combat mode the NPC also cares for targets above 30 % HP when 1..100 is at most parameter 14
+    /// (slice I8).</summary>
+    HealCareRoll,
+    /// <summary>The spell choice (0x4ABC70) goes on when 1..100 is at most its chance (slice I8).</summary>
+    SpellChoiceRoll,
+    /// <summary>The spell choice tries the defensive list when parameter 13 is below 1..100 (P7, slice I8).</summary>
+    DefensiveListRoll,
+    /// <summary>The chooser (0x4ABF10) starts at the first entry when 1..100 is below 80 (slice I8).</summary>
+    ChooserStart,
+    /// <summary>Otherwise the chooser starts at entry 0..n−1 (slice I8).</summary>
+    ChooserEntry,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

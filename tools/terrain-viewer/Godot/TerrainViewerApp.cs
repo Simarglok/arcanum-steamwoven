@@ -82,6 +82,7 @@ public partial class TerrainViewerApp : Node
             _arguments = _launchArguments = TerrainViewerArguments.Parse(args);
             ConfigureVisualProfile();
             ConfigureAudio();
+            ConfigureGameSettings();
             _hud.SetMode(_arguments.Mode);
             if (IsWorld) InitializeWorld();
             _lastLoad = StartLoadAsync(_arguments);
@@ -127,14 +128,14 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, barter, menu, scene)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census, barter, menu and scene run.
+                        // walk, census, barter, menu, scene and options run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaJunkPileSmokeAsync(); }
                             // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
@@ -144,12 +145,16 @@ public partial class TerrainViewerApp : Node
                                 // ARC-COMBAT-015: the combat stages after the cast (object attack, critical, line of fire, ranged shot), as the
                                 // map battery runs them last.
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                                // ARC-WORLD-063: the junk pile stage alone (the map battery runs it last).
+                                if (Stage("junk")) await RunAreaJunkPileSmokeAsync();
                                 // ARC-UI-050: the barter window over a speaker of the map (with --hero).
                                 if (Stage("barter")) await RunAreaBarterSmokeAsync();
                                 // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
                                 if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
                                 // ARC-UI-012: the scene flow from another map (with --main-menu true; the start map loads in it).
                                 if (Stage("scene")) await RunAreaSceneFlowSmokeAsync();
+                                // ARC-UI-013: the options window from the main menu and from play (start map, with --main-menu true).
+                                if (Stage("options")) await RunAreaOptionsSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);

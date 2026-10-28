@@ -84,7 +84,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectAmmo(GameSessionFailure.RevisionExhausted);
         if (removed) Delete(found.Entity);
         else _inventory.Ammo[found.Entity] = found with { Units = left.Units };
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, left.Units, removed, Version);
     }
 

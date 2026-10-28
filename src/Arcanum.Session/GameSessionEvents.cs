@@ -123,7 +123,8 @@ public static class SessionEventKinds
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
-    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/> and ARC-WORLD-084 <see cref="AiTick"/> without a new version:
+    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/> and ARC-WORLD-087
+    /// <see cref="HeroEncumbrance"/> without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -173,6 +174,12 @@ public static class SessionEventKinds
     public const string NpcPoisonDamage = "life.npc.poison-damage";
     public const string NpcPoisonRecovery = "life.npc.poison-recovery";
     public const string NpcResting = "life.npc.resting";
+    /// <summary>
+    /// The hero's encumbrance fatigue timer (ARC-WORLD-087; mode 1 of the original's fatigue timer, ledger WE5, WE8): global, one at a time
+    /// (a new one is not added while one is pending, WEA2). No entities; value: the game time it was scheduled at. Its delay is the drain
+    /// interval of the level (<see cref="Arcanum.Simulation.Items.CarryRules.DrainIntervalMs"/>).
+    /// </summary>
+    public const string HeroEncumbrance = "life.hero.encumbrance";
 
     /// <summary>Fatigue recovery: 80 game seconds (10 real seconds) after fatigue damage is set.</summary>
     public const long FatigueRecoveryDelayMs = 80_000;
@@ -183,10 +190,10 @@ public static class SessionEventKinds
     /// <summary>Resting: one game hour after hit-point damage is set.</summary>
     public const long RestingDelayMs = 3_600_000;
 
-    /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
+    /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events and the AI ticks.</summary>
-    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
+    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
         + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks;
 
     /// <summary>
@@ -250,6 +257,8 @@ public static class SessionEventKinds
         [
             Hero(HeroFatigue, LifeTimer.Fatigue), Hero(HeroPoisonDamage, LifeTimer.PoisonDamage),
             Hero(HeroPoisonRecovery, LifeTimer.PoisonRecovery),
+            new(HeroEncumbrance, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
+                new EncumbranceDrainHandler(owner), Validate: payload => payload.Values[0] >= 0),
             Npc(NpcFatigue, LifeTimer.Fatigue), Npc(NpcPoisonDamage, LifeTimer.PoisonDamage),
             Npc(NpcPoisonRecovery, LifeTimer.PoisonRecovery), Npc(NpcResting, LifeTimer.Resting),
             new(ScriptCall, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 2, 4, 0, 0,
@@ -395,6 +404,12 @@ internal sealed class SpellRunHandler(SessionEventSink sink) : IGameEventHandler
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireSpellRun(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class EncumbranceDrainHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireEncumbranceDrain(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler

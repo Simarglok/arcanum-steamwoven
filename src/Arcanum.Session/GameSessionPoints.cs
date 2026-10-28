@@ -111,7 +111,7 @@ public sealed partial class GameSessionOwner
         var hero = _hero!;
         if (_revision == long.MaxValue) return RejectPoint(GameSessionFailure.RevisionExhausted);
         hero.Apply(AdvancementDomain.WithSheet(hero.State, change.Sheet, hero.State.Experience));
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, Version);
     }
 

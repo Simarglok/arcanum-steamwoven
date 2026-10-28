@@ -192,7 +192,7 @@ public sealed partial class GameSessionOwner
         if (outcome.Break == ItemBreakStep.Deleted)
         {
             Delete(entity);
-            _revision++;
+            Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, ItemBreakStep.Deleted, slot, Version);
         }
         _durability.Records[entity] = outcome.Condition;
@@ -204,7 +204,7 @@ public sealed partial class GameSessionOwner
             if (outcome.Break == ItemBreakStep.Broken) { _equipment.Worn.Remove(worn); unworn = worn; }
             else _equipment.Worn[worn] = _equipment.Worn[worn] with { Item = Conditioned(_equipment.Worn[worn].Item, outcome.Condition) };
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome.Condition, outcome.Break, unworn, Version);
     }
 
@@ -226,6 +226,8 @@ public sealed partial class GameSessionOwner
         foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
         // ARC-WORLD-085: its weight facts go with it.
         _inventory.Weights.Remove(entity);
+        // ARC-WORLD-063: a deleted item leaves its junk pile (the caller decides whether the pile dissolves).
+        _inventory.LeaveJunkPile(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);

@@ -147,6 +147,15 @@ item whose map's seed is not attached yet: the firing then postpones the deletio
 it does while the deleted-item budget (`MaxDurabilityRecords`) is full. A restore refuses one with another delay, set after the saved
 clock, whose deadline is not its time plus its delay, or a second one of the same item. See [item decay](inventory-runtime.md#item-decay-arc-world-062).
 
+**Encumbrance timer (ARC-WORLD-087).** The kind `life.hero.encumbrance` (also added to registry version 1 without a new version)
+is mode 1 of the original's fatigue timer (ledger WE5, WE8): game time, saved, global, no entities, one at a time (`KeepExisting`:
+a level rise while one is pending keeps its older delay, WEA2). Value: the game time it was set at. A recalculation of the
+hero's encumbrance level to 4, 5 or 6 sets it with that level's interval (600 s, 60 s, 5 s); when due it drains the hero's
+fatigue (`CarryRules.Drain` of `max(1, elapsed s / 80)` steps, never below 4 fatigue; nothing for a dead hero), reported in
+`SessionEventPassResult.Life`, and is set again with the interval of the level then (none below level 4). A restore refuses one
+without a hero, with entities, set after the saved clock, or whose deadline is not its time plus one of the three intervals. See
+[encumbrance consequences](inventory-runtime.md#encumbrance-consequences-arc-world-087).
+
 **Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
 original's magic-tech event (kind 5, ledger RP11–RP14): game time, **not saved** (`NotSaved`: the session's spell runs are not
 saved either until MT9b, so a restored session has neither), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
@@ -185,10 +194,10 @@ poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The session's queue holds 45,187 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
-  since ARC-DATA-029, and three for the hero, plus the 1,024 deferred script calls, 64 timed-effect ENDs, 1,024 Lock
-  events, 64 wait timers, 1,024 respawn events, 1,024 magic-tech events and, since ARC-WORLD-062, 8,192 Item Decay
-  events), so the
+  step. The session's queue holds 53,380 events (`SessionEventKinds.MaxPending`: four per NPC life record, 8,192 records
+  since ARC-DATA-029, and four for the hero (its encumbrance timer since ARC-WORLD-087), plus the 1,024 deferred script calls,
+  64 timed-effect ENDs, 1,024 Lock events, 64 wait timers, 1,024 respawn events, 1,024 magic-tech events, since ARC-WORLD-062
+  8,192 Item Decay events and since ARC-WORLD-084 8,192 AI ticks), so the
   timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the clock's range, is
   refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the

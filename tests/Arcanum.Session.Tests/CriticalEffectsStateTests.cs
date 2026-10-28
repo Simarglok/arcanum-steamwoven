@@ -464,6 +464,9 @@ public sealed class CriticalEffectsStateTests
         Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, Blade()),
             (_, _) => true, Accept).Failure);
         var worn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = GolemItems[EquipmentSlot.Weapon], [EquipmentSlot.Shield] = new("golem-torch", Sturdy) };
+        // Where a dropped item lies: loose, or (ARC-WORLD-063) in a junk pile when another drop lies on its cell.
+        CellCoord? Lies(string entity) => owner.QueryMapInventory(Exterior)!.Ground.FirstOrDefault(g => g.Item.Entity == entity)?.Cell
+            ?? owner.QueryMapInventory(Exterior)!.JunkPiles.FirstOrDefault(p => p.Items.Any(item => item.Entity == entity))?.Cell;
         // An arm is a tenth of the rolled locations (an aimed attack at the arm misses too often to be worth it here).
         for (var attempt = 0; attempt < 4000; attempt++)
         {
@@ -473,8 +476,8 @@ public sealed class CriticalEffectsStateTests
             var result = owner.AttackCritter(owner.Version, new(golem)
             {
                 HeroWorn = owner.QueryEquipment().Worn.ToDictionary(item => item.Slot, item => new SessionWearItem(item.Entity, Sturdy)),
-                TargetWorn = worn.Where(pair => !owner.IsItemDestroyed(pair.Value.Entity) && !owner.QueryMapInventory(Exterior)!.Ground
-                    .Any(g => g.Item.Entity == pair.Value.Entity)).ToDictionary(pair => pair.Key, pair => pair.Value),
+                TargetWorn = worn.Where(pair => !owner.IsItemDestroyed(pair.Value.Entity) && Lies(pair.Value.Entity) is null)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value),
                 TargetCell = GolemCell,
             });
             Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
@@ -483,7 +486,7 @@ public sealed class CriticalEffectsStateTests
             // The sword's wear values are not in the golem's map data (no carried fields for it): its check cannot run.
             Assert.AreEqual((SessionCriticalStepOutcome.Unknown, SessionCriticalStepOutcome.Dropped), (steps[0].Outcome, steps[1].Outcome),
                 string.Join("; ", result.Criticals) + " attempt " + attempt);
-            Assert.AreEqual(GolemCell, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == "golem-torch").Cell);
+            Assert.AreEqual(GolemCell, Lies("golem-torch"));
             return;
         }
         Assert.Fail("no crippling arm hit within the bounded run");

@@ -247,7 +247,7 @@ public sealed partial class GameSessionOwner
     /// the ground (<see cref="GameSessionFailure.ObjectUnavailable"/>), hero items that do not hold
     /// (<see cref="GameSessionFailure.InvalidWear"/>), an aim at the torso, a distance outside 0..reach
     /// or a throw that does not hold (as for <see cref="AttackCritter"/>, <see cref="GameSessionFailure.InvalidAttack"/>), a wielded
-    /// throwing-skill weapon (<see cref="GameSessionFailure.AttackUnsupported"/>),
+    /// boomerang still away (<see cref="GameSessionFailure.WeaponInFlight"/>, ARC-COMBAT-019),
     /// the version, the revision, and for a respawning scenery a full event budget. The resolution's draws are spent once it ran,
     /// also when nothing changes (a hit for 0 on an object whose damage is recorded); each later step commits its own revision.
     /// A wall (<see cref="SessionObjectAttack.Wall"/>, ARC-COMBAT-015: the line of fire struck it) is resolved the same way and takes
@@ -265,7 +265,9 @@ public sealed partial class GameSessionOwner
     /// <see cref="AttackObject"/> after the resolution follows; the shot is gone afterwards and nothing of it is spent again.
     /// <see cref="SessionObjectAttack.Distance"/> and <see cref="SessionObjectAttack.Flight"/> are not read. Refused as
     /// <see cref="AttackObject"/> is, and with <see cref="GameSessionFailure.InvalidAttack"/> for a shot not in flight, a missed shot
-    /// striking its own target or a thrown shot that struck already (a thrown shot waits for its item's landing, <see cref="LandThrownItem"/>).
+    /// striking its own target or a thrown shot that struck already (a thrown shot waits for its item's landing, <see cref="LandThrownItem"/>)
+    /// or a boomerang flying back. ARC-COMBAT-019: a boomerang's shot is not gone after its strike: it flies back to the hero
+    /// (<see cref="ReturnShot"/>) until its flight ends (<see cref="EndShot"/>).
     /// </summary>
     public SessionObjectAttackResult LandShotOnObject(GameSessionVersion expected, SessionShot shot, SessionObjectAttack attack) =>
         ObjectAttack(expected, attack, shot);
@@ -279,7 +281,7 @@ public sealed partial class GameSessionOwner
         var struckKey = ShotObjectKey(attack);
         PendingShot? pending = null;
         // Walls share one key and take nothing: a missed shot may strike any wall past its destination.
-        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || !pending.Hit && pending.Object == struckKey && !attack.Wall))
+        if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || pending.Returning || !pending.Hit && pending.Object == struckKey && !attack.Wall))
             return RejectObject(GameSessionFailure.InvalidAttack);
         AttackTargetKind kind;
         Combatant defender;
@@ -323,10 +325,13 @@ public sealed partial class GameSessionOwner
             hero = hero with { Weapon = hero.Weapon with { ArtSubtype = wielded.ArtSubtype } };
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || pending is null && (attack.Distance < 0 || attack.Distance > hero.Range))
             return RejectObject(GameSessionFailure.InvalidAttack);
+        // ARC-COMBAT-019: the attack start refuses while the hero's boomerang is away (0x434B00).
+        if (pending is null && HeroBoomerangAway()) return RejectObject(GameSessionFailure.WeaponInFlight);
         // ARC-COMBAT-017: the reach is the weapon's (RH1); a thrown weapon is then checked with the throwing skill and its thrown range.
         string? thrown = null;
         if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
             return RejectObject(throwFailure);
+        if (pending is null && thrown is null) BoomerangHero(ref hero);
         if (pending is null && !hero.Supported) return RejectObject(GameSessionFailure.AttackUnsupported);
         if (pending is null && attack.Flight && _shots.Count > MaxShotsInFlight - ShotProjectiles(hero)) return RejectObject(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectObject(GameSessionFailure.StaleVersion);
@@ -364,7 +369,7 @@ public sealed partial class GameSessionOwner
         if (resolution.Fate != FateUse.None && pending is null)
         {
             ClearUsedAttackFate(resolution.Fate);
-            _revision++;
+            Revise();
         }
         var changed = resolution.Fate != FateUse.None && pending is null;
         var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;
@@ -379,7 +384,7 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already).
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
-                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null }, ShotProjectiles(hero)) : [];
+                { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown) }, ShotProjectiles(hero)) : [];
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying };
@@ -488,11 +493,21 @@ public sealed partial class GameSessionOwner
             edits.AddRange(Edits(openable, openableBaseline.Kind, flags | LockRules.BustedBit, 0));
         }
         var applied = ApplyChanges(Version, null, edits);
-        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7).
+        // ARC-WORLD-062: a spilled container's items lie on the ground and decay (0x463730 drops each through the placement, ledger ID7);
+        // ARC-WORLD-063: one by one, the last first (0x463730 walks the list down), so from the second item on they gather into a
+        // junk pile on the container's cell (JP1).
         if (applied.Disposition == GameSessionDisposition.Changed && hit.Break == ObjectBreak.ContainerSpilled &&
             _inventory.Seeds.TryGetValue(target.Map, out var spillSeed) && spillSeed.Holders.TryGetValue(target.Entity, out var spilled))
-            foreach (var item in _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)))
-                ScheduleDecay(item.Entity, target.Map);
+        {
+            var items = _inventory.Current(spillSeed, spilled, entity => DroppedCell(target.Map, spillSeed, entity)).Select(item => item.Entity).Reverse().ToArray();
+            var later = items.ToHashSet(StringComparer.Ordinal);
+            foreach (var item in items)
+            {
+                later.Remove(item);
+                SettleDrop(item, target.Map, target.Baseline.Cell, later);
+                ScheduleDecay(item, target.Map);
+            }
+        }
         if (applied.Disposition != GameSessionDisposition.Changed || hit.Break != ObjectBreak.SceneryRespawns) return applied;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var delay = ObjectDamageRules.RespawnDelayMs(target.Baseline.RespawnDelay);
@@ -584,7 +599,8 @@ public sealed partial class GameSessionOwner
     // The spill cell above the condition byte (each coordinate in 24 bits, +1 so a cell at 0,0 is told from none).
     private static long SpillValue(CellCoord cell) => (((long)cell.Y << 24 | (uint)cell.X) + 1) << 8;
 
-    private bool OnGround(string item) =>
+    // ARC-WORLD-063: an item in a junk pile lies in the pile, out of an attack's reach.
+    private bool OnGround(string item) => _inventory.JunkPileOf(item) is null &&
         _inventory.Seeds.Any(pair => !_inventory.Taken.Contains(item) && LooseCell(pair.Key, pair.Value, item) is not null);
 
     private static bool ValidObject(SessionObjectTarget target) =>

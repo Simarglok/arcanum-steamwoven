@@ -23,7 +23,17 @@ public sealed class DangerRulesTests
         Assert.AreEqual(DangerState.CombatFocus, DangerRules.Read(DangerFlags.Fighting));
         Assert.AreEqual(DangerState.Surrender, DangerRules.Read(DangerFlags.Surrendered | DangerFlags.Fighting));
         Assert.AreEqual(DangerState.Flee, DangerRules.Read(DangerFlags.Fleeing | DangerFlags.Surrendered | DangerFlags.Fighting));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DangerRules.Read((DangerFlags)(1 << 11)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DangerRules.Read((DangerFlags)(1 << 15)));
+    }
+
+    [TestMethod]
+    public void TheStoredNoFleeTurnsFlightIntoCombat()
+    {
+        // ARC-WORLD-086: the bit the move-away goal sets counts as the critter's NO_FLEE (rule 2) and survives the transition.
+        var step = Set(DangerFlags.NoFlee, DangerState.Flee, new());
+        Assert.AreEqual((DangerState.CombatFocus, DangerSetterRule.NoFlee), (step.Applied, step.Rule));
+        Assert.IsTrue(step.Flags.HasFlag(DangerFlags.NoFlee));
+        Assert.IsTrue(Set(step.Flags, DangerState.None, new()).Flags.HasFlag(DangerFlags.NoFlee));
     }
 
     [TestMethod]

@@ -258,6 +258,18 @@ both: their ARC-RES-048 verdicts stand. Every direct branch stays inside `.text`
 | SP17 | heal helper (0x4A8AA0) | The fatigue-recovery rung tests the healer's fatigue while the target may be its leader or a follower. | Original bug; owner decision 2026-10-20: Original switch `HealFatigueRungForOthers` |
 | SP18 | chooser (0x4ABF10), 0x4CC2A0 | In mode 4 the second defensive value is read for every visited entry before the spell −1 test; for an item AI-action entry the spell table is indexed with −1, so 4 bytes before the table decide whether the item is used on the pass target or on the NPC. Reachable only by an item with AI action 2; the installed data has none. | Original bug (latent) |
 
+ARC-WORLD-088 (slice I8, 2026-10-28) re-read the chooser (0x4ABF10), the global list build (0x4CC380) with its comparator
+(0x4CC2D0) and the runtime's quicksort (0x58A548, 0x58A69C, 0x58A6EA), the list build and cache (0x4CC4C0, 0x4CC4F0, 0x4CC520,
+0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCB90, 0x4CCC00, 0x4CCC40), the item-use
+test (0x4CC160) and the item search (0x4A8E70, 0x4A8F90) with `llvm-objdump` (one reader) and agrees with SP6, SP9, SP10, SP11 and
+SP12; the global list build also runs in the function oracle (F3, model `ai-global-list`). The three facts it adds are SP19–SP21.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SP19 | list request (0x4CCA90), request init (0x4CC4F0), cache (0x4CC580, 0x4CC6F0, 0x4CC740), identification (0x4CCA30) | The request init sets the critter, the list and four zero fields but not the PC-leader field (+0x8) that the identification rule reads; only a newly taken slot gets the critter's PC leader (0x45DDA0). A hit with the requested list empty builds into the request record, whose PC-leader field no function of the cache sets (what the caller's frame holds there was not traced). | Original bug (latent, uninitialised read): both settings use the critter's current PC leader, as for SU8 |
+| SP20 | runtime quicksort (0x58A548), selection sort (0x58A69C), swap (0x58A6EA), comparator (0x4CC2D0) | Parts of up to 8 elements: from the whole part down to two elements, the first element the comparator ranks last (`> 0` against the current one) moves to the part's end. Longer parts: the middle element (`lo + (size / 2) × width`) swapped to the front; scans `≤ 0` from the left while within the part and `≥ 0` from the right while above the front; swap, until the scans cross; the pivot swapped to the right scan's place; the larger side stacked (when it holds two or more elements) and the smaller sorted next. The comparator answers 1 when the first value is smaller, 0 when equal, −1 when larger. The 16-byte entries are swapped byte by byte; a swap with itself does nothing. | Original (closes U1: three equal values 0, 1, 2 come out 1, 2, 0) |
+| SP21 | search (0x4A8F90) | The nearest loose item gets the pickup (0x4356C0); when the pickup does not start, the junk piles are searched as when no loose item qualified. | Original |
+
 ## NPC AI action execution (ARC-RES-066)
 
 Source: [NPC AI action execution](../npc-ai-execution.md) (plan stage A6, source unit S19 and the animation goals behind it).
@@ -273,6 +285,10 @@ spread-out order runs the move-away goal without flag 0x400, so its NO_FLEE bran
 (EX20); the first reader and a fresh second reader, from the questions only, both re-read those paths and agree with the
 corrected rows below. Both readers read the ranged approach's test (EX9), the end step's charge (EX6) and the spread-out
 NO_FLEE (EX12) as unintended, by inference. Every direct branch stays inside `.text`.
+
+ARC-WORLD-086 (slice I7, 2026-10-28) re-read the stepper (0x423560) and its pop (0x423D10), the start gate (0x4348E0), the
+action-point check (0x4B7790), the start of the escape path (0x426A80) and the back-off run's starter (0x433C80) with
+`llvm-objdump` (one reader) and agrees with EX3, EX5, EX6 and EX12; the three facts it adds are EX21–EX23.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
@@ -296,6 +312,9 @@ NO_FLEE (EX12) as unintended, by inference. Every direct branch stays inside `.t
 | EX18 | runtime sort (0x58A548), comparator (0x4CC2D0), list set-up (0x4CC380) | Quicksort with the middle element as pivot and a selection sort (first maximum moved to the end) for parts of eight or fewer; the comparator orders by value, highest first; input spells 0..222 by number; not stable. | Original (answers support U1 for the algorithm) |
 | EX19 | casting goal (26/82) node 0x429B50, throw goal (37), node helper (0x433270), attack start (0x432700) | Casting: 4 at its start (else the goal ends), no approach; throw: no approach, 2 at its end; the node helper charges 2 to anyone but the local PC; the attack start charges the weapon's cost. | Original |
 | EX20 | walk goals 5, 61, 80: next step blocked (0x4270B0 → 0x427110), step start (0x42E9B0), node 10 (0x433270) | A living critter on the next tile within the last two path steps, a newly spotted trap or (with run flag 0x400) a blocking tile, after a random 0..300 ms wait, or a step that cannot start, leads to node 10: 2 action points (anyone but the local PC); then goals 5 and 80 end the whole run and goal 61 pops to its parent, which re-plans. | Original |
+| EX21 | goal stepper (0x423560), pop (0x423D10), check (0x4B7790) | A push and a pop go on in the same step; a restart ends it; the random delay (0x4CEF00, 0..300) ends the step even when it draws 0. Popping the bottom goal marks the run done without the end step, so a finished attack charges no pending cost (only the end step's 0x90000000 path calls 0x4B7CD0). The check passes outside a round and for any critter but the current one; for the current one it writes the pending cost and passes when the action points cover the cost, or for the local PC with action points left and fatigue above 1; an NPC gets no fatigue allowance there (unlike the start gate). | Original |
+| EX22 | back-off run starter (0x433C80) | Its single-player path calls no start gate (no call of 0x4348E0), so the back-off run is not gated in a round. | Original |
+| EX23 | escape path (0x426A80), rotation (0x4B8D50), neighbour (0x4B8FF0) | The direction is the rotation from the source's location to the NPC's; the destination is range + 1 neighbour steps in it, and a neighbour off the map ends the request without a path. | Original |
 
 ## NPC AI followers in combat (ARC-RES-067)
 

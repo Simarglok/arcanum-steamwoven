@@ -72,6 +72,7 @@ ORACLE_TEST_CLASSES = ("tests/Arcanum.Simulation.Tests/Character/ExperienceOrigi
                        "tests/Arcanum.Simulation.Tests/Magic/SpellInvocationOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellTargetOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellRunOriginalExeTests.cs",
+                       "tests/Arcanum.Simulation.Tests/Ai/AiListOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Items/TradeOriginalExeTests.cs")
 # ARC-DEV-008: where `./arcanum oracle` has the tests write their receipts (checked against docs/verification/functions.csv).
 ORACLE_RECEIPTS = "docs/verification/receipts"
@@ -113,6 +114,7 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4521A0": "HealComponentMatchesTheOriginal",
     "0x4B5810": "AcidMatchesTheOriginal",
     "0x461F80": "PriceMatchesTheOriginal",
+    "0x4CC380": "GlobalListMatchesTheOriginal",
 }
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")

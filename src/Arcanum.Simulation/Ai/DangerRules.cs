@@ -13,8 +13,8 @@ public enum DangerState
 
 /// <summary>
 /// The danger bits of one NPC that the AI writes (project names; the original's words in brackets). One set for both rule
-/// settings (design rule 7). NO_FLEE and the invulnerability flags are data the caller supplies
-/// (<see cref="DangerSetterFacts"/>), not state of this set.
+/// settings (design rule 7). The invulnerability flags and the NO_FLEE of the critter's data are facts the caller supplies
+/// (<see cref="DangerSetterFacts"/>); the NO_FLEE the AI sets at run time is <see cref="NoFlee"/>.
 /// </summary>
 [Flags]
 public enum DangerFlags
@@ -43,8 +43,18 @@ public enum DangerFlags
     /// <summary>NPC flag 0x80 (CHECK_WEAPON): the gate's next pass wields the best weapon (slice I6; the full re-wield clears it
     /// too, CL2).</summary>
     CheckWeapon = 1 << 10,
+    /// <summary>Critter flag 0x8000000 (NO_FLEE) as the AI sets it for good (0x4AF1D0: a flight's cornered move-away, slice I7); the
+    /// setter also honours the caller's <see cref="DangerSetterFacts.NoFlee"/> from the critter's data.</summary>
+    NoFlee = 1 << 11,
+    /// <summary>NPC flag 0x8000000 (LOOK_FOR_AMMO): the item search looks for ammunition (set by an AI ranged attack without
+    /// ammunition, 0x4ADFF0; slice I8).</summary>
+    LookForAmmo = 1 << 12,
+    /// <summary>NPC flag 0x2000000 (LOOK_FOR_WEAPON): the item search looks for a weapon (out of ammunition, or a weapon dropped).</summary>
+    LookForWeapon = 1 << 13,
+    /// <summary>NPC flag 0x4000000 (LOOK_FOR_ARMOR): the item search looks for armour (armour dropped).</summary>
+    LookForArmor = 1 << 14,
     /// <summary>Every defined bit.</summary>
-    All = (1 << 11) - 1,
+    All = (1 << 15) - 1,
 }
 
 /// <summary>
@@ -145,7 +155,7 @@ public static class DangerRules
 
     /// <summary>
     /// The setter in the original's rule order (core loop transition table, re-read for ARC-WORLD-079). Rule 1 invulnerable →
-    /// NONE; rule 2 FLEE with NO_FLEE → COMBAT_FOCUS, skipping rule 3; rule 3 FLEE or SURRENDER under an extraordinary leader →
+    /// NONE; rule 2 FLEE with NO_FLEE (the caller's fact or the stored <see cref="DangerFlags.NoFlee"/>) → COMBAT_FOCUS, skipping rule 3; rule 3 FLEE or SURRENDER under an extraordinary leader →
     /// COMBAT_FOCUS; rule 4 COMBAT_FOCUS with the switch off or NO_ATTACK → NONE. Rule 5: FLEE or SURRENDER sets its bit and
     /// clears the other (the line only when neither was set), a surrender leaves combat mode, fleeing-from := target; any
     /// other state clears both. Rule 6: COMBAT_FOCUS on a target-locked NPC stops there. Rule 7: not yet FIGHTING → FIGHTING,
@@ -165,7 +175,7 @@ public static class DangerRules
         var state = requested;
         var rule = DangerSetterRule.None;
         if (facts.Invulnerable) (state, rule) = (DangerState.None, DangerSetterRule.Invulnerable);
-        if (state == DangerState.Flee && facts.NoFlee) (state, rule) = (DangerState.CombatFocus, DangerSetterRule.NoFlee);
+        if (state == DangerState.Flee && (facts.NoFlee || flags.HasFlag(DangerFlags.NoFlee))) (state, rule) = (DangerState.CombatFocus, DangerSetterRule.NoFlee);
         else if (state is DangerState.Flee or DangerState.Surrender && facts.LeaderExtraordinaryCharisma)
             (state, rule) = (DangerState.CombatFocus, DangerSetterRule.LeaderCharisma);
         if (state == DangerState.CombatFocus && (facts.NpcFightingOff || flags.HasFlag(DangerFlags.NoAttack)))

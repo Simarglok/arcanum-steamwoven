@@ -130,7 +130,7 @@ public sealed partial class GameSessionOwner
             ? advancement with { TechSkills = advancement.TechSkills.SetItem(index, change.Stored) }
             : advancement with { BasicSkills = advancement.BasicSkills.SetItem(index, change.Stored) };
         hero.Apply(hero.State.With([.. hero.State.Stats], hero.State.Level, hero.State.Experience, hero.State.UnspentPoints, advancement));
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, Version);
     }
 

@@ -64,7 +64,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectBest(GameSessionFailure.RevisionExhausted);
         _equipment.Worn.Clear();
         foreach (var (slot, worn) in plan.Worn) _equipment.Worn[slot] = worn;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(plan.Steps.ToArray()), Version);
     }
 

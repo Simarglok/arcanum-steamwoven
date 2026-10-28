@@ -134,6 +134,47 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool RangedApproachSkipsClearShot { get; init; }
 
+    /// <summary>
+    /// EX6 (owner decision 2026-10-21; ARC-WORLD-086): a goal run that ends through an end step in a round charges an NPC the
+    /// round's pending cost, the last action-point check's value, so a throw, an item use or an aborted action after a walk pays its
+    /// last step again (see <see cref="Ai.AiExecutorRules.Step"/>). Steamwoven charges nothing at the end step.
+    /// </summary>
+    public bool EndStepRechargesPendingCost { get; init; }
+
+    /// <summary>
+    /// EX12 (owner decision 2026-10-21; ARC-WORLD-086): the move-away goal that the spread-out goal pushes sets NO_FLEE for good when
+    /// its escape line bends after a partial straight line or fails, as a flight's does (see <see cref="Ai.AiExecutorRules.Step"/>).
+    /// Steamwoven sets no NO_FLEE from a spread-out move-away; flights keep it.
+    /// </summary>
+    public bool SpreadOutSetsNoFlee { get; init; }
+
+    /// <summary>
+    /// SP11 (owner decision 2026-10-20; ARC-WORLD-088): the AI list cache keeps, per critter, only the list requested when its slot
+    /// was taken, frozen until an inventory change, an exhausted listed item, a reset or round-robin reuse, and builds every other list
+    /// afresh (see <see cref="Ai.AiListCache.Request"/>). Steamwoven builds each list fresh on every request.
+    /// </summary>
+    public bool AiListCacheKeepsFirstList { get; init; }
+
+    /// <summary>
+    /// SP15 (owner decision 2026-10-20; ARC-WORLD-088): the grenade's friendly-fire scan asks for NPCs only, so a PC in the blast never
+    /// stops a throw (see <see cref="Ai.AiGroundRules.Grenade"/>). Steamwoven scans PCs and NPCs with the same protect rule.
+    /// </summary>
+    public bool GrenadeIgnoresPcsInBlast { get; init; }
+
+    /// <summary>
+    /// SP17 (owner decision 2026-10-20; ARC-WORLD-088): the heal ladder's fatigue-recovery rung tests the healer's fatigue but is tried
+    /// for every heal target, leader and followers included (see <see cref="Ai.AiSupportRules.Heal"/>). Steamwoven tries it only when
+    /// the target is the healer.
+    /// </summary>
+    public bool HealFatigueRungForOthers { get; init; }
+
+    /// <summary>
+    /// P3 (owner decision 2026-10-20; ARC-WORLD-088): the AI redirect compares the spell target's intelligence, not each candidate's, with
+    /// the component's <c>MinIQ:</c>, so it redirects every candidate or none (see <see cref="Ai.AiGroundRules.Redirect"/>). Steamwoven
+    /// compares each candidate's.
+    /// </summary>
+    public bool RedirectTestsTargetIntelligence { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -161,6 +202,12 @@ public sealed record CombatAnomalyProfile
         StaleSpellFleeSkipsFleeSpell = true,
         FleeGoalAfterRefusedSurrender = true,
         GateRecoveryWritesStaleFlags = true,
+        EndStepRechargesPendingCost = true,
+        SpreadOutSetsNoFlee = true,
+        AiListCacheKeepsFirstList = true,
+        GrenadeIgnoresPcsInBlast = true,
+        HealFatigueRungForOthers = true,
+        RedirectTestsTargetIntelligence = true,
     };
 
     /// <summary>Both settings, default first.</summary>

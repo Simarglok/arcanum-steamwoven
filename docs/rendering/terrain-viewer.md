@@ -969,7 +969,7 @@ The HUD shows `combat mode: ON (real time)` or `off`, the hero's fatigue and the
 dead hero is refused with the reason. Without `--hero` R reports that combat mode needs a hero. A dialog start leaves
 combat mode first (the exit gate never closes here: no NPC has a combat focus yet), and the cave transfer leaves it as the
 original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
-walks, and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
+walks, and so does a hero at encumbrance level 4 or more (ARC-WORLD-087, ledger WE9), and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
 mode a left click on a living NPC attacks it (below). Native smoke with `--hero` (after the run stage):
 `ARC-COMBAT-004 native-smoke combat-mode PASS`. Since ARC-COMBAT-006 its run goal is a cell the PC can walk to 12 cells
 from its start (a search over open steps; else the farthest such cell at least 8 away) and its held-stick run takes the first direction that runs at least one
@@ -1136,6 +1136,14 @@ to rank 0.
 
 ### Level-up messages (ARC-UI-046)
 
+Since ARC-WORLD-087 the same window also shows a change of the hero's encumbrance level: line `11 + level` of
+`mes\critter.mes` (loaded with the level texts) for the latest change the session records (one entry when several came between
+two frames, where the original shows one per recalculation)
+([encumbrance consequences](../world/inventory-runtime.md#encumbrance-consequences-arc-world-087)). The viewer attaches effect 158
+from the hero's effect tables to every new or loaded session. Native smoke (after the level message one):
+`ARC-WORLD-087 native-smoke encumbrance PASS` (the installed rule of effect 158 changes the speed, the seven message lines are
+the player's texts, an entry is shown).
+
 Each level the hero's recalculation writes in its normal branch posts one entry to the viewer's message window, as the
 original posts one per level for the local PC (checked in the 1.0.7.4 executable, rows
 [OL27–OL28](../research/companion-orders-loyalty-evidence.md#4-level-up-message-q4-xp5)); the last-level branch and a
@@ -1225,10 +1233,10 @@ does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
 
-- **Windows.** Main (Single Player, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
-  (Pick Character, Cancel), in the original's order. The original's MultiPlayer, Options, Credits, View Intro and
-  New Character are hidden, as Steamwoven does not have them yet (network play, the options window of the next
-  tasks, credits, movies, the character editor); each window names its hidden buttons and why. A button opens its
+- **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
+  (Pick Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013).
+  The original's MultiPlayer, Credits, View Intro and New Character are hidden, as Steamwoven does not have them yet
+  (network play, credits, movies, the character editor); each window names its hidden buttons and why. A button opens its
   window over the current one; Cancel and Escape go back; Escape on the main window does nothing (as at the
   original's first opening; when the original's menu opens again later, Escape there exits the game).
 - **Texts and keys.** The labels and hotkey letters are the game's `mes\MainMenu.mes` (the first character of the
@@ -1269,7 +1277,7 @@ when closed unused, ending the menu on a load), a controller's Exit. Native smok
 the start map: `ARC_AREA_MAP_SMOKE_ONLY=menu` with `--main-menu true` prints `ARC-UI-011 native-smoke main menu PASS`
 (the game's texts, Last Save with no save, the real first hero read and started at the map list's start
 (92958, 82592) with its prototype, gold and flag, then F7 and Last Save loading it); the `menu` stage runs only when
-named, as the open menu blocks the other stages. Not done: the options window (N9), the character editor,
+named, as the open menu blocks the other stages. Not done: the character editor,
 credits, movies and network play, the original menu art and button sounds; the scene flow is
 [ARC-UI-012](#scene-flow-arc-ui-012).
 
@@ -1280,8 +1288,8 @@ The way between the main menu and play in crash-site-area (exterior, cave and ma
 
 - **In-play menu.** In play, Escape (no palette, dialog or window open, the window focused, no load in progress)
   opens the same menu at the original's in-play window: Save Game, Load Game, Quit and Continue, with the game's
-  `MainMenu.mes` labels and letters (messages 30–34); Options is hidden until the options window (N9). In a
-  turn-based round on another combatant's turn it opens the original's short window (Quit and Continue, messages
+  `MainMenu.mes` labels and letters (messages 30–34); Options opens the [options window](#options-window-arc-ui-013). In a
+  turn-based round on another combatant's turn it opens the original's short window (Options, Quit and Continue, messages
   70–72; the original also opens it over its dialog and world map, which here are modal windows that take Escape). Escape or Continue closes it and play goes on; the menu is modal like the main menu.
 - **Save Game and Load Game** open the save list's windows over the waiting menu (the save window once the game is
   drawn without the menu, for its preview). A save closes both, as the original's; a load closes both and keeps the
@@ -1312,8 +1320,53 @@ prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and q
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
 window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
-turn in the self-test or the smoke). Not done: the options window (N9), the start movies, the menu after the hero's death
+turn in the self-test or the smoke). Not done: the start movies, the menu after the hero's death
 or the game's end (the original restarts it there), the original menu art and button sounds.
+
+### Options window (ARC-UI-013)
+
+The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
+in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
+project's.
+
+- **Pages.** The buttons Game, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
+  letters G, S, D); the window opens at the Game page each time. The letters act as in the other menu windows; the
+  original's options window ignores them (an original bug: its hotkey path runs such buttons only in the in-play
+  windows, OP7), so there only a click chooses a page or Done. The original's Video page (Brightness, Text
+  Duration, Floats, Float Speed, Combat Taunts) is hidden with its reason, as Steamwoven has no gamma control,
+  floating text or combat taunts; so is its V letter.
+- **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
+  list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
+  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack and Always
+  Run. Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
+  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
+  Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
+- **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
+  a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
+  hero it goes through the hero's turn-based switch (a hero in combat mode starts or ends a round; a refusal keeps the
+  value and names why, where the original's setting keeps the new value, OP5), without one the setting changes alone;
+  a quick load that brings a round turns it on and saves it. Auto Attack is the real-time attack repeat's setting
+  (ARC-COMBAT-005). Always Run and the three volumes are the palette's settings (ARC-WORLD-020, ARC-UI-044).
+- **Storage.** User preferences, never part of a save: difficulty, turn-based and auto attack in
+  `user://game_settings_v1.json` (`{"version":1,"difficulty":D,"turnBased":B,"autoAttack":B}`; a missing or invalid file
+  reads as the original's defaults 1, off, on), Always Run and the volumes in their own files. Each change is saved at
+  once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
+  automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
+- **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
+  does the same. Escape does nothing in this window, as in the original's key table.
+
+Self-test `ARC-UI-013 self-test PASS synthetic options window` (the production app over the synthetic area owner
+launched without the menu, no preference file): in-play Options opening the window at its Game page with the Video
+page hidden and named, each arrow applying the difficulty (on the session), the turn-based setting, auto attack,
+Always Run and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
+from play, Done going back from the main menu. Native smoke on the original data, map mode on the start map with
+`--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=options` prints `ARC-UI-013 native-smoke options PASS` (all 27 option
+texts from the game, the original's defaults shown, a music step moving the channel, Done back to the main menu, a new
+game as the first hero, then in play a difficulty step reaching the session and the default combat mode going through
+the hero's turn-based switch and back, the O key closing the menu). Not done: the Video page's settings, Module,
+Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
+button sounds.
 
 ### Logbook (ARC-UI-008)
 
@@ -1630,7 +1683,7 @@ never reads, writes or deletes the player's saved
 viewer files: the app marks the process automated before it reads any setting (`ViewerAutomatedStorage`). Each store
 then picks its path by `ViewerStoragePaths.Choose` (Core): an explicit test path wins
 (`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH`, `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`, and as before `ALWAYS_RUN_TEST_PATH`,
-`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
+`VISUAL_PROFILE_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `GAME_SETTINGS_TEST_PATH`, `ARC_HD_BUDGET_PATH`); otherwise an automated run uses a fresh
 temporary folder of its own process (`arcanum-viewer-automated-<pid>-<id>` under the system temporary folder, deleted when
 the viewer app exits); only an ordinary run uses the `user://` file. Per setting:
 
@@ -1640,7 +1693,7 @@ the viewer app exits); only an ordinary run uses the `user://` file. Per setting
 | Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
 | Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
 | HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
-| Always run, visual profile, audio volumes | `user://` | none, as before (off, Legacy, defaults) |
+| Always run, visual profile, audio volumes, game settings `game_settings_v1.json` (ARC-UI-013) | `user://` | none, as before (off, Legacy, defaults) |
 | HD pack folders | discovered | not searched, as before |
 
 So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer

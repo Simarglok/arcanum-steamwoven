@@ -58,7 +58,7 @@ public sealed partial class GameSessionOwner
         // Every damage the heal removes goes to 0, so no life timer is due (fatigue, poison and resting timers start only on a
         // rise); a pending one finds nothing to do when it fires.
         if (heal is not null) _life.Hero = new(heal.After, _life.Hero!.Value.DeathTimeMs);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, heal, Version);
     }
 
@@ -118,7 +118,7 @@ public sealed partial class GameSessionOwner
         if (!change.Changed) return new(GameSessionDisposition.Rejected, GameSessionFailure.FateRefused, change, null, Version);
         if (_revision == long.MaxValue) return RejectFate(GameSessionFailure.RevisionExhausted);
         _hero!.Apply(_hero.State.WithFate(change.After));
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change, null, Version);
     }
 

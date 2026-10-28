@@ -313,7 +313,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectExperience(GameSessionFailure.RevisionExhausted);
         if (heroChanged) _hero!.Apply(award!.Hero);
         if (npcChanged) _experience.Npcs[after!.Value.Entity] = after.Value;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, award?.Award, after, Version);
     }
 

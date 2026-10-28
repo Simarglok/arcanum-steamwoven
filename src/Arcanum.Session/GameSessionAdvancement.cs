@@ -253,7 +253,7 @@ public sealed partial class GameSessionOwner
             return RejectFollower(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectFollower(GameSessionFailure.RevisionExhausted);
         _advancement.Npcs[next.Entity] = next;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, up, outcome, next, Version);
     }
 
@@ -310,7 +310,7 @@ public sealed partial class GameSessionOwner
         if (before is not null && before.SequenceEqual(steps)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, before, Version);
         if (_revision == long.MaxValue) return RejectDefer(GameSessionFailure.RevisionExhausted);
         _advancement.Missed[entity] = steps;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps, Version);
     }
 
@@ -344,7 +344,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectFollower(GameSessionFailure.RevisionExhausted);
         if (levelled) _advancement.Npcs[now.Entity] = now;
         _advancement.Missed.Remove(loaded.Entity);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, last, lastOutcome, now, Version);
     }
 
@@ -385,7 +385,7 @@ public sealed partial class GameSessionOwner
             if (_revision == long.MaxValue) return RejectScheme(GameSessionFailure.RevisionExhausted);
             _advancement.Npcs[npc.Entity] = record with { AutoLevelScheme = scheme };
         }
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, scheme, Version);
     }
 
