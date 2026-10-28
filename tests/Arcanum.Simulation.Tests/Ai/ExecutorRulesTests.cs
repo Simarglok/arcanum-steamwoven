@@ -40,7 +40,7 @@ public sealed class ExecutorRulesTests
         public readonly Dictionary<string, int> Points = [];
         public readonly Dictionary<string, string> Leaders = [];
         public int Range = 1, Cost = 3, WalkMs = 100, RunMs = 50;
-        public bool Weapon, LineClosed, NoPaths, StoppedShort, Round, Grenade, BackOffStart, Throws, InterruptFails, Boomerang;
+        public bool Weapon, LineClosed, NoPaths, StoppedShort, Round, Grenades, BackOffStart, Throws, InterruptFails, Boomerang;
         public string? Actor;
         public DangerState State = DangerState.CombatFocus;
         public DangerFlags Bits;
@@ -99,6 +99,28 @@ public sealed class ExecutorRulesTests
         public AiAttackSwing BeginAttack(string id, string target) { Calls.Add($"swing {target}"); return new(400, 600); }
         public void Hit(string id, string target) => Calls.Add($"hit {target}");
         public void SetNoFlee(string id) => Calls.Add("no-flee");
+        public AiCastGoalStart StartCast(string id, int run) => throw new AssertFailedException("no cast here");
+        public bool FaceCast(string id, int run) => throw new AssertFailedException("no cast here");
+        public AiCastSwing BeginCast(string id, int run, bool castAnimation) => throw new AssertFailedException("no cast here");
+        public bool CastActionFrame(string id, int run) => throw new AssertFailedException("no cast here");
+        public bool ReleaseCast(string id, int run) => throw new AssertFailedException("no cast here");
+        public void EndCast(string id, int run, bool refused) => throw new AssertFailedException("no cast here");
+        public bool FaceForAction(string id, string? target, CellCoord? tile) => true;
+        public AiActionSwing BeginAction(string id, AiActionAnimation animation) => new(AiActionStart.Started, 300, 300);
+        public bool AttemptSkill(string id, string target, int skill, string? item) => false;
+        public void AttemptPickLocks(string id, string target, string? item) { }
+        public bool ThrowItem(string id, string item, CellCoord tile) => true;
+        public void PickUp(string id, string item) { }
+        public string? ItemHolder(string item) => null;
+        public AiUsedItem UsedItem(string user, string item) => new();
+        public bool RunUseScript(string user, string item, string? target) => true;
+        public void OpenTargeting(string user, string item) { }
+        public void UseTrapDevice(string user, string item, string? target) { }
+        public void ReadWritten(string user, string item) { }
+        public bool Lockable(string target) => false;
+        public void StartSkillWithItem(string user, string item, string target, int skill) { }
+        public void UseItemMagic(string user, string item, string? target) { }
+        public void SpendItem(string item) { }
         public bool InRound => Round;
         public string? RoundActor => Actor;
         public int ActionPoints(string id) => Points.GetValueOrDefault(id);
@@ -117,18 +139,22 @@ public sealed class ExecutorRulesTests
         public BackOffRun BackOff(string npc, string? target) => BackOffStep;
         public CellCoord? AwayTile(string npc, string? target, int range) => Away;
         public void EndBackOff(string npc) => Calls.Add("end back-off");
-        public void Cast(string npc) => Calls.Add("cast");
-        public void UseItem(string npc) => Calls.Add("use item");
-        public void UseSkill(string npc) => Calls.Add("use skill");
+        public AiCastStart Cast(string npc, AiPassChoice choice) { Calls.Add("cast"); return new(null); }
         public void LeaveCombatMode(string npc) => Calls.Add("leave combat mode");
         public string? Leader(string npc) => Leaders.TryGetValue(npc, out var l) ? l : null;
         public bool Waiting(string npc) => Waits.Contains(npc);
         public void LoyaltyCheck(string npc) => Calls.Add("loyalty");
         public void RunRoutine(string npc) => Calls.Add("routine");
         public bool StartBackOff(string npc, string? target) { Calls.Add("back-off start?"); return BackOffStart; }
-        public bool ThrowGrenade(string npc, string? target) { Calls.Add("grenade?"); return Grenade; }
-        public bool ThrowsWieldedWeapon(string npc) => Throws;
-        public void ThrowWeapon(string npc, string target) => Calls.Add($"throw at {target}");
+        public AiGrenadeResult Grenade(string npc, string target)
+        {
+            Calls.Add("grenade?");
+            return Grenades ? new(AiGrenadeStop.Throw, "oid:grenade") : new(AiGrenadeStop.NoCheck);
+        }
+        public string? ThrowableWeapon(string npc) => Throws ? "oid:dagger" : null;
+        public void Unwield(string npc, string item) => Calls.Add($"unwield {item}");
+        public bool HasSkillArt(string npc) => true;
+        public bool NpcPickupsOn => true;
         public bool BoomerangInFlight(string npc) => Boomerang;
         public bool InterruptLowerAnimations(string id) => !InterruptFails;
         public void StepApart(string id) => Calls.Add("step apart");
@@ -249,8 +275,13 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.DeadSet.Add(Foe);
-        var step = AiExecutorRules.Step(AttackRun(), world, Rolls, Steamwoven);
-        Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.AttackTargetGone), (step.End, step.Reason));
+        world.Round = true;
+        world.Actor = Npc;
+        world.PendingCost = 2;
+        world.Points[Npc] = 5;
+        var step = AiExecutorRules.Step(AttackRun(), world, Rolls, Original);
+        Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.AttackTargetGone), (step.End, step.Reason), "AG2: the attack goal pops");
+        Assert.AreEqual(5, world.Points[Npc], "no end step, so no EX6 charge");
 
         world = Arena(1);
         world.Attack = new(TargetGone: true);
@@ -506,7 +537,7 @@ public sealed class ExecutorRulesTests
         var world = Arena(1);
         world.Bits = DangerFlags.BackingOff | DangerFlags.Fighting;
         world.Away = new(5, 10);
-        var perform = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null);
+        var perform = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
         Assert.AreEqual(AiPerformKind.BackOffRun, perform.Kind);
         Assert.IsTrue(perform.Run!.Flags.HasFlag(AiRunFlags.Running));
         var steps = Drive(perform.Run, world, Steamwoven);
@@ -519,9 +550,9 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.Bits = DangerFlags.BackingOff;
-        Assert.AreEqual(AiPerformKind.BackOffEnded, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.BackOffEnded, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
         world.BackOffStep = new(BackOffRunStep.Reached, 5);
-        Assert.AreEqual(AiPerformKind.BackOffEnded, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.BackOffEnded, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
         CollectionAssert.AreEqual(new[] { "end back-off", "end back-off" }, world.Calls);
     }
 
@@ -569,22 +600,23 @@ public sealed class ExecutorRulesTests
         var world = Arena(1);
         world.Round = true;
         world.Actor = Foe;
-        Assert.AreEqual(AiPerformKind.NotActor, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.Cast, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.NotActor, AiExecutorRules.Perform(world, Npc, Foe, new AiPassChoice(AiPassAction.Cast, 11, -1, null, Foe), null, null).Kind);
         Assert.AreEqual(0, world.Calls.Count);
     }
 
     [TestMethod]
     public void PerformRunsThePassActionsBeforeTheDangerState()
     {
-        foreach (var (action, kind, call) in new[]
+        foreach (var (action, kind, goal) in new[]
                  {
-                     (AiPassAction.Cast, AiPerformKind.Cast, "cast"), (AiPassAction.UseItem, AiPerformKind.UseItem, "use item"),
-                     (AiPassAction.UseSkill, AiPerformKind.UseSkill, "use skill"),
+                     (AiPassAction.Cast, AiPerformKind.Cast, (AiGoalType?)null), (AiPassAction.UseItem, AiPerformKind.UseItem, AiGoalType.UseItem),
+                     (AiPassAction.UseSkill, AiPerformKind.UseSkill, AiGoalType.UseSkill),
                  })
         {
             var world = Arena(1);
-            Assert.AreEqual(kind, AiExecutorRules.Perform(world, Npc, Foe, action, null, null).Kind);
-            CollectionAssert.AreEqual(new[] { call }, world.Calls);
+            var perform = AiExecutorRules.Perform(world, Npc, Foe, new AiPassChoice(action, 11, 10, "oid:kit", Foe), null, null);
+            Assert.AreEqual((kind, goal), (perform.Kind, perform.Run?.Bottom.Goal));
+            CollectionAssert.DoesNotContain(world.Calls, "back-off start?", "the danger state's branch is not reached");
         }
     }
 
@@ -593,13 +625,15 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.BackOffStart = true;
-        Assert.AreEqual(AiPerformKind.BackOffStart, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.BackOffStart, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
         world = Arena(1);
-        world.Grenade = true;
-        Assert.AreEqual(AiPerformKind.Grenade, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
+        world.Grenades = true;
+        var grenade = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
+        Assert.AreEqual((AiPerformKind.Grenade, AiGoalType.ThrowItem, "oid:grenade", world.At[Foe]),
+            (grenade.Kind, grenade.Run!.Bottom.Goal, grenade.Run.Bottom.Item, grenade.Run.Bottom.Tile));
         CollectionAssert.AreEqual(new[] { "back-off start?", "grenade?" }, world.Calls);
         world = Arena(1);
-        var attack = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, 12, null);
+        var attack = AiExecutorRules.Perform(world, Npc, Foe, null, 12, null);
         Assert.AreEqual(AiPerformKind.Attack, attack.Kind);
         Assert.AreEqual((AiGoalType.Attack, Foe, 12), (attack.Run!.Bottom.Goal, attack.Run.Bottom.Target, attack.Run.Bottom.Sound));
         Assert.IsTrue(attack.Run.Flags.HasFlag(AiRunFlags.Running), "fatigue above 8");
@@ -611,7 +645,19 @@ public sealed class ExecutorRulesTests
         var world = Arena(1);
         Assert.AreEqual(AiStartRefusal.Self, AiExecutorRules.StartAttack(world, Npc, Npc, null, null).Refusal);
         world.Throws = true;
-        Assert.AreEqual(AiPerformKind.ThrowWeapon, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Kind);
+        var thrown = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiPerformKind.ThrowWeapon, AiGoalType.ThrowItem, "oid:dagger"), (thrown.Kind, thrown.Run!.Bottom.Goal, thrown.Run.Bottom.Item));
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 0;
+        world.Movers[Npc] = new(Fatigue: 1, MaxFatigue: 20);
+        world.InterruptFails = true;
+        var refusedThrow = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiPerformKind.ThrowWeapon, AiStartRefusal.Interrupt), (refusedThrow.Kind, refusedThrow.Refusal), "the weapon is off even so (AG13)");
+        world.Round = false;
+        world.Movers.Remove(Npc);
+        world.InterruptFails = false;
+        world.Calls.Remove("unwield oid:dagger");
         world.Throws = false;
         var running = AttackRun();
         var same = AiExecutorRules.StartAttack(world, Npc, Foe, null, running);
@@ -627,7 +673,7 @@ public sealed class ExecutorRulesTests
         world.Boomerang = false;
         world.Attack = new(BodyOfAir: true);
         Assert.AreEqual(AiStartRefusal.BodyOfAir, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
-        CollectionAssert.AreEqual(new[] { "throw at pc", "step apart", "step apart", "step apart", "step apart" }, world.Calls);
+        CollectionAssert.AreEqual(new[] { "unwield oid:dagger", "step apart", "step apart", "step apart", "step apart" }, world.Calls);
         world.Attack = new();
         world.Round = true;
         world.Actor = Npc;
@@ -712,13 +758,13 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.State = DangerState.Flee;
-        var flee = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null);
+        var flee = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
         Assert.AreEqual((AiPerformKind.Flee, AiGoalType.Flee, AiRunFlags.Flight, true), (flee.Kind, flee.Run!.Bottom.Goal, flee.Run.Flags, flee.Started));
         world.Fleeing = new(false, Foe);
-        var kept = AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, flee.Run);
+        var kept = AiExecutorRules.Perform(world, Npc, Foe, null, null, flee.Run);
         Assert.AreEqual((flee.Run, false), (kept.Run, kept.Started), "no goal: the current run is kept");
         world.State = DangerState.Surrender;
-        Assert.AreEqual(AiPerformKind.Surrender, AiExecutorRules.Perform(world, Npc, Foe, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.Surrender, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
         CollectionAssert.AreEqual(new[] { "perform fleeing", "perform fleeing", "perform surrender" }, world.Calls);
     }
 
@@ -727,16 +773,16 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.State = DangerState.None;
-        Assert.AreEqual(AiPerformKind.Routine, AiExecutorRules.Perform(world, Npc, null, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.Routine, AiExecutorRules.Perform(world, Npc, null, null, null, null).Kind);
         world.Leaders[Npc] = Leader;
         world.At[Leader] = new(20, 10);
-        var follow = AiExecutorRules.Perform(world, Npc, null, AiPassAction.None, null, null);
+        var follow = AiExecutorRules.Perform(world, Npc, null, null, null, null);
         Assert.AreEqual((AiPerformKind.Follow, AiGoalType.Follow, AiRunFlags.None), (follow.Kind, follow.Run!.Bottom.Goal, follow.Run.Flags));
-        Assert.AreEqual(AiStartRefusal.AlreadyQueued, AiExecutorRules.Perform(world, Npc, null, AiPassAction.None, null, follow.Run).Refusal);
+        Assert.AreEqual(AiStartRefusal.AlreadyQueued, AiExecutorRules.Perform(world, Npc, null, null, null, follow.Run).Refusal);
         world.At[Leader] = new(14, 10);
-        Assert.AreEqual(AiStartRefusal.LeaderNear, AiExecutorRules.Perform(world, Npc, null, AiPassAction.None, null, null).Refusal);
+        Assert.AreEqual(AiStartRefusal.LeaderNear, AiExecutorRules.Perform(world, Npc, null, null, null, null).Refusal);
         world.Waits.Add(Npc);
-        Assert.AreEqual(AiPerformKind.Waiting, AiExecutorRules.Perform(world, Npc, null, AiPassAction.None, null, null).Kind);
+        Assert.AreEqual(AiPerformKind.Waiting, AiExecutorRules.Perform(world, Npc, null, null, null, null).Kind);
         CollectionAssert.AreEqual(new[] { "leave combat mode", "routine", "leave combat mode", "loyalty", "leave combat mode", "loyalty",
             "leave combat mode", "loyalty", "leave combat mode" }, world.Calls);
     }
