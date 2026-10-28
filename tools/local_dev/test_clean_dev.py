@@ -147,12 +147,14 @@ class CleanDevTests(unittest.TestCase):
         (artifacts / "world-builds" / "ARC-RENDER-008").mkdir()
         (artifacts / "builds" / "ARC-RENDER-005").mkdir(parents=True)
         (artifacts / "gamepad-builds").mkdir()
+        (artifacts / "packages" / "macos").mkdir(parents=True)
         home = checkout / "local" / "gpad005-pr-home"; home.mkdir(parents=True)
         (home / "config-v1.json").write_text(json.dumps({"artifactRoots": {"gpad005": str(artifacts / "gamepad-builds")}}), encoding="utf-8")
         conf = config.default_config(); conf["artifactRoots"] = {"world": str(artifacts / "world-builds")}
         found = {Path(item["path"]).relative_to(checkout).as_posix(): item for item in clean.unmanaged(conf, checkout)}
-        self.assertEqual(sorted(found), ["artifacts/builds", "artifacts/gamepad-builds", "artifacts/world-builds/ARC-NOT-A-TASK"])
+        self.assertEqual(sorted(found), ["artifacts/builds", "artifacts/gamepad-builds", "artifacts/packages", "artifacts/world-builds/ARC-NOT-A-TASK"])
         self.assertTrue(all(item["class"] == "keep" for item in found.values()))
+        self.assertEqual(found["artifacts/packages"]["reason"], clean.PACKAGES_REASON)
         self.assertIn(str(home.resolve()), found["artifacts/gamepad-builds"]["reason"])
 
     def test_caches_are_build_outputs_next_to_a_project_only(self) -> None:

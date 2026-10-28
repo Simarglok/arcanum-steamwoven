@@ -192,6 +192,12 @@ def _within(path: Path, other: Path) -> bool:
     return path == other or other in path.parents or path in other.parents
 
 
+# ARC-DEV-047: the player builds of `./arcanum package` (docs/workflow/packaging.md); that command replaces them itself.
+PACKAGES = "packages"
+PACKAGES_REASON = ("packaged player builds of ./arcanum package (ARC-DEV-047): the current and the previous build per platform; "
+                   "the next package replaces them")
+
+
 def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
     """Entries of artifacts/ and task folders of configured roots that the configured roots' inventory does not cover."""
     roots = conf.get("artifactRoots", {})
@@ -212,6 +218,7 @@ def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:
             continue
         home = next((name for root, name in owned.items() if _within(child.resolve(), root)), None)
         reason = (f"artifact root of the owned home {home}; run ARCANUM_LOCAL_HOME={home} ./arcanum clean" if home
+                  else PACKAGES_REASON if child.name == PACKAGES
                   else "not a configured artifact root (older layout or a lab output); owner decides")
         results.append({"path": str(child), "bytes": disk_bytes(child), "class": "keep", "reason": reason})
     return results

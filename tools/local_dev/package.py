@@ -192,7 +192,9 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
     if logs.exists():
         shutil.rmtree(logs)
     logs.mkdir(parents=True)
-    work = Path(tempfile.mkdtemp(prefix="arcanum-package-"))
+    # Resolved: on macOS the temporary folder is under the /var -> /private/var link, and a locked restore given the link path
+    # compares the referenced projects' lock entries by their resolved paths and refuses (NU1004 "Current dependencies: None").
+    work = Path(tempfile.mkdtemp(prefix="arcanum-package-")).resolve()
     say(f"work {work} logs {logs}")
     try:
         source = work / "source"
