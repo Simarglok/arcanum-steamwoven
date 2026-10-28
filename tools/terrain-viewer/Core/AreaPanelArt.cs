@@ -47,7 +47,7 @@ public static class AreaFollowerFrameLayout
     }
 }
 
-public enum AreaPortraitStatus { Ready, NoPortrait, NotCritter, CatalogueMissing, NotFound, MissingFile, Unreadable, LimitExceeded }
+public enum AreaPortraitStatus { Ready, NotRead, CatalogueMissing, NotFound, MissingFile, Unreadable, LimitExceeded }
 
 /// <param name="Bytes">The image file's bytes (a BMP the host decodes); null unless ready.</param>
 public sealed record AreaPortraitFile(int Id, AreaPortraitStatus Status, string? Path, byte[]? Bytes, string Detail);
@@ -148,7 +148,7 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
     {
         var content = known ?? Empty(reason);
         var portraits = new Dictionary<int, AreaPortraitFile>(content.Portraits);
-        foreach (var id in wanted) portraits[id] = new(id, AreaPortraitStatus.CatalogueMissing, null, null, reason);
+        foreach (var id in wanted) portraits[id] = new(id, AreaPortraitStatus.NotRead, null, null, reason);
         return content with { Portraits = portraits };
     }
 }
