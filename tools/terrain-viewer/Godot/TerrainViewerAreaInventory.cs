@@ -32,6 +32,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionItemSpells?>? _areaKitItemSpells;
     // ARC-UI-015: the kit's wear facts (the best-items start's), for wearing a kit item from the window.
     private IReadOnlyList<SessionWearableItem?>? _areaKitWear;
+    // ARC-UI-019: the kit's facts for a move in the hero's grid.
+    private IReadOnlyList<SessionGridMoveItem?>? _areaKitGridMove;
     // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
@@ -213,6 +215,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.RepairRequested += RepairItem;
             _inventoryPanel.WearRequested += WearItem;
             _inventoryPanel.TakeOffRequested += TakeOffItem;
+            _inventoryPanel.DropRequested += DropItem;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -342,6 +345,55 @@ public partial class TerrainViewerApp
             $"scripts={result.Scripts.Count} spells={result.ItemSpells.Count} worn={session.QueryEquipment().Worn.Count}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
+        RefreshReadyStatus();
+    }
+
+    /// <summary>
+    /// ARC-UI-019: the held item's release on the doll or the grid (ledger IW10–IW13): a grid item moves to the cell under its grab (the session's
+    /// <see cref="GameSessionOwner.MoveHeroItem"/>), a worn item comes off into that cell (<see cref="GameSessionOwner.Unequip"/> with the slot),
+    /// either goes into a wear slot (<see cref="GameSessionOwner.Equip"/>, after which the occupant it took out is on the cursor), and a release
+    /// anywhere else puts it back. Every refusal leaves the item where it was and the cursor empty. No action points (IW8).
+    /// </summary>
+    private void DropItem(AreaInventoryDrop drop)
+    {
+        if (!InventoryOpen || !InventoryActive) return;
+        var holder = _inventoryPanel!.Holder;
+        var session = _areaSession!;
+        var item = drop.Held.Entity;
+        var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
+        string NameOf(string entity) => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog);
+        string message;
+        EquipmentMutationResult? result = null;
+        switch (drop.Kind)
+        {
+            case AreaInventoryDropKind.GridMove:
+                if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) { message = $"not moved: {name}'s facts do not read here"; break; }
+                result = session.MoveHeroItem(session.Version, item, drop.GridSlot!.Value, facts, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session));
+                message = AreaInventoryHost.GridText(result.Value, name, drop.GridSlot.Value);
+                break;
+            case AreaInventoryDropKind.TakeOffTo:
+                var triggers = ItemTriggersNow();
+                result = session.Unequip(session.Version, drop.Held.Worn!.Value, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), triggers, drop.GridSlot);
+                message = AreaInventoryHost.GridText(result.Value, name, drop.GridSlot!.Value);
+                break;
+            case AreaInventoryDropKind.Wear:
+                if (_inventoryHost.Wearable(session, item, _areaKitWear) is not { } wearable) { message = $"not worn: {name} has no wear values here"; break; }
+                var wearTriggers = ItemTriggersNow();
+                result = session.Equip(session.Version, item, drop.Slot!.Value, wearable, (_, _) => true, _inventoryHost.InsertCheck, _inventoryHost.ItemScripts(session), wearTriggers);
+                message = AreaInventoryHost.WearText(result.Value, name, drop.Slot.Value, false, NameOf);
+                break;
+            default:
+                message = $"{name} went back to its place";
+                break;
+        }
+        GD.Print($"ARC-UI-019 drop kind={drop.Kind} item={item} from={drop.Held.Worn?.ToString() ?? "grid"} grid-slot={drop.GridSlot?.ToString() ?? "-"} " +
+            $"slot={drop.Slot?.ToString() ?? "-"} disposition={result?.Disposition.ToString() ?? "-"} failure={result?.Failure.ToString() ?? "-"} " +
+            $"verdict={result?.Verdict?.ToString() ?? "-"} displaced={result?.Displaced ?? "-"} grid={session.QueryHeroGrid().Items.Count} worn={session.QueryEquipment().Worn.Count}");
+        _inventoryStatus = message;
+        _inventoryPanel.Render(InventoryView(holder), message);
+        // A wear move's occupant ends up held, in the cell the session gave it (IW3).
+        if (drop.Kind == AreaInventoryDropKind.Wear && result is { Disposition: GameSessionDisposition.Changed, Displaced: { } displaced })
+            _inventoryPanel.Hold(new(displaced, null, 0));
         RefreshReadyStatus();
     }
 

@@ -72,6 +72,7 @@ public partial class TerrainViewerApp
         _areaKitLockpicks = result.Hero?.KitLockpicks;
         _areaKitDurability = result.Hero?.KitDurability;
         _areaKitWear = result.Hero?.KitWear;
+        _areaKitGridMove = result.Hero?.KitGridMove;
         _areaKitArt = result.Hero?.KitArt;
         _areaKitMissileArt = result.Hero?.KitMissileArt;
         _areaKitThrowWeight = result.Hero?.KitThrowWeight;

@@ -803,8 +803,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   or transfer script declines stays, named "the item's get script declined it" or "the PC's
   transfer script declined it" with any line it printed, and the log lists every run as
   `scripts=point:script:stop`. Project
-  diagnostic window: no inventory grid, drop or stacks (ARC-UI-015 added the paper doll and the weight line); the host's insert check
-  accepts every item (grid room is NOT READY); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
+  diagnostic window: no drop or stacks (ARC-UI-015 added the paper doll and the weight line, ARC-UI-019 the grid and the drag); the
+  host's insert check accepts every item (the room for an item entering from outside is NOT READY; the session answers it for the
+  window's moves, ARC-UI-019); since ARC-WORLD-069 the session refuses a technological item for a Technophobia hero
   and since ARC-WORLD-085 an item past the hero's carry weight ([weight](../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085)).
 - **Paper doll, wear and take-off (ARC-UI-015).** Above the PC's list the window shows the hero's nine wear slots in slot order
   (helmet, ring 1, ring 2, medallion, weapon, shield, armor, gauntlets, boots; the original's locations 1000..1008) with the worn
@@ -820,10 +821,26 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   lookup is NOT READY, so an item with spells stays refused. Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Not built yet (follow-up slices): the grid, drag and drop, moving a worn ring to the other ring
-  slot, dropping on the ground or the use icon, right-click use, stack splitting and the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Not built yet (follow-up slices): dropping on the ground or the use icon, right-click use, stack
+  splitting and the gold drag. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
+- **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
+  window's frame ([ledger IW14](../research/ledger/ui-audio.md#inventory-grid-arc-ui-019); `AreaInventoryDrag`, plain shapes and
+  names, no original art), scaled to the window. The grid is the session's (`QueryHeroGrid`,
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (1 × 1 until the
+  inventory art's size is read, NOT READY) at the first free place, and the items without room are named in the hint line. A left
+  press on an item of the grid or the doll holds it (it stays in its place and is not drawn there, IW2); the next left release puts it
+  where the pointer is: on a cell, the target is the cell minus the grab's offset in grid locations (IW10), a grid item moves there
+  (`MoveHeroItem`) and a worn item comes off into it (`Unequip` with the slot); on a slot, `Equip` runs with its checks and an
+  occupant lands in the first free cell and is then held on the cursor (IW11); a ring goes to the other ring slot (IW13); anywhere
+  else the item goes back. Every refusal leaves the item where it was and the cursor empty, named in the message line ("no room for
+  it at row r, column c", "no free room in the grid", the wear rule, the no-drop flag). A press while an item is held waits for its
+  release and a right press does nothing (IW15); closing the window puts a held item back (IW1). The buttons stay for the keyboard and
+  the controller. The log line `ARC-UI-019 drop kind=… disposition=… failure=… verdict=… displaced=…` names each release's outcome. A
+  kit item's no-drop flag and scripts come from the hero load (`AreaHeroLoad.KitGridMove`), a taken item's from its object row; a made
+  item has none here (NOT READY). The native smoke drags a grid item to a free cell and back and the first worn item off into a free
+  cell and back onto its slot (`ARC-UI-019 native-smoke drag PASS dragged=4`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

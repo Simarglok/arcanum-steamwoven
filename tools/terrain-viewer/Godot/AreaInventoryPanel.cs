@@ -8,8 +8,9 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-004 diagnostic inventory window: the PC's list (items taken from the world, in order) and, when a dead NPC is
 /// looted, that body's current list with a take button per item and "take all". ARC-UI-015: above the list the paper doll (the
-/// nine wear slots, a take-off button per worn item), a wear button per slot an item can go to, and the weight line. It renders an
-/// <see cref="AreaInventoryView"/>; the app runs every transfer through the session.
+/// nine wear slots, a take-off button per worn item), a wear button per slot an item can go to, and the weight line. ARC-UI-019: above the
+/// lists the doll and the hero's grid, where the mouse picks an item up and drops it (<see cref="AreaInventoryGridArea"/>); the buttons stay
+/// for the keyboard and the controller. It renders an <see cref="AreaInventoryView"/>; the app runs every transfer through the session.
 /// </summary>
 public partial class AreaInventoryPanel : CanvasLayer
 {
@@ -33,6 +34,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     private Button _close = null!;
     private ScrollContainer _scroll = null!;
     private HBoxContainer _columns = null!;
+    private AreaInventoryGridArea _area = null!;
     private readonly List<Button> _buttons = new();
     private AreaInventoryView? _view;
     public event Action? CloseRequested;
@@ -50,6 +52,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action<string, EquipmentSlot>? WearRequested;
     /// <summary>ARC-UI-015: take the item of a wear slot off into the pack (the original's drop of a worn item on the grid).</summary>
     public event Action<EquipmentSlot>? TakeOffRequested;
+    /// <summary>ARC-UI-019: the held item was released on the doll or the grid (or elsewhere: put back).</summary>
+    public event Action<AreaInventoryDrop>? DropRequested;
     public bool IsOpen => Visible;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
@@ -66,6 +70,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal Button TakeAllForSelfTest => _takeAll;
     internal string MessageForSelfTest => _message.Text;
     internal string PcTextForSelfTest => _pc.Text;
+    internal AreaInventoryGridArea GridAreaForSelfTest => _area;
 
     public override void _Ready()
     {
@@ -101,7 +106,9 @@ public partial class AreaInventoryPanel : CanvasLayer
         _close = new Button { Name = "Close", Text = "Close", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _close.Pressed += () => CloseRequested?.Invoke();
         _hint = new Label { Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        foreach (var control in new Control[] { _header, _scroll, _message, _close, _hint }) contents.AddChild(control);
+        _area = new AreaInventoryGridArea { Name = "DollAndGrid" };
+        _area.DropRequested += drop => DropRequested?.Invoke(drop);
+        foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -111,8 +118,13 @@ public partial class AreaInventoryPanel : CanvasLayer
         Show(); Render(view, message);
     }
 
+    /// <summary>ARC-UI-019: puts an item on the cursor (a wear move's occupant).</summary>
+    public void Hold(AreaInventoryHeld? held) => _area.Hold(held);
+
     public void CloseView()
     {
+        // An item held on the cursor goes back first (0x575770, IW1): it never left its place.
+        _area.Hold(null);
         _view = null; Hide();
         GetViewport().GuiReleaseFocus();
     }
@@ -129,6 +141,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         foreach (var button in _takeOffButtons.Concat(_wearButtons)) { _wear.RemoveChild(button); button.QueueFree(); }
         _takeOffButtons.Clear(); _wearButtons.Clear(); _wearTargets.Clear();
         _view = view;
+        _area.Render(view);
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
             + (view.Holder is null ? string.Empty : " | looting a dead NPC");
         _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
@@ -227,7 +240,9 @@ public partial class AreaInventoryPanel : CanvasLayer
             + (_pickButtons.Count > 0 ? "Pick a lock closes the window; then press a door or window | " : string.Empty)
             + (_repairButtons.Count > 0 ? "Repair uses the hero's Repair skill on a damaged item | " : string.Empty)
             + (_wearButtons.Count + _takeOffButtons.Count > 0 ? "Wear puts an item into a slot (an occupant goes back to the pack); Take off moves it to the pack | " : string.Empty)
-            + "I, Escape or cancel closes | PROJECT diagnostic window: no grid, drag, drop or stacks; original UI parity NOT_VERIFIED";
+            + "Mouse: press an item of the doll or grid and release it on a grid cell or a slot (an occupant comes onto the cursor)"
+            + (view.Unplaced.Count > 0 ? $" | no room in the grid: {string.Join(", ", view.Unplaced)}" : string.Empty)
+            + " | I, Escape or cancel closes | PROJECT diagnostic window: no drop to the ground, no stacks; original UI parity NOT_VERIFIED";
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
         ResizePanel();
@@ -267,7 +282,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         var width = Math.Max(1, Math.Min(960, size.X - 48));
-        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260)));
+        _area.Fit(Math.Min(width - 32, (size.Y - 300) * AreaInventoryDrag.FrameWidth / AreaInventoryDrag.FrameHeight));
+        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - _area.CustomMinimumSize.Y)));
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);

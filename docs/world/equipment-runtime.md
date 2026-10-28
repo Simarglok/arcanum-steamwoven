@@ -250,7 +250,9 @@ times; wield off reaches the same script's removal loop through call-ex, which r
 ## Not ready
 
 - **Paperdoll.** The viewer's inventory window has a diagnostic paper doll with wear and take-off buttons (ARC-UI-015, ledger
-  IW1–IW9); the original's grid, drag and drop and the doll's art are not built, and a made item has no wear values there. With a
+  IW1–IW9) and, since ARC-UI-019, the hero's grid with the mouse's drag onto cells and slots
+  ([hero grid](inventory-runtime.md#hero-inventory-grid-arc-ui-019), IW10–IW15); the doll's art is not built, and a made item has
+  no wear values there. With a
   worn taken item the viewer's attack wears none of the hero's items and a taken ranged weapon has no missile art (kit values only). The
   pre-made start wields the kit (ARC-WORLD-034). The best-items choice reads the hero's skill levels (ARC-SKILLS-002) and its ammunition stacks (ARC-WORLD-066); a custom
   character's start (weapon and armour only) and the AI's call with a target are not wired.

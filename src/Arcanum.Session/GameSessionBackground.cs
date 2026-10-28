@@ -33,14 +33,17 @@ public sealed partial class GameSessionOwner
     /// item entering the hero's list from outside it (<paramref name="incoming"/>), the session answers the weight itself
     /// (<see cref="SessionInsertVerdict.TooHeavy"/> when the hero's total plus the item would pass its carry weight, ledger WE4); a host's
     /// weight refusal counts as well. Between weight and room the session refuses a technological item for a Technophobia hero
-    /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A wear move
-    /// passes no incoming item: the item is in the hero's list already, and the original's weight test on an unwield is not read yet
-    /// (not ready).
+    /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A move inside
+    /// the hero's inventory passes no incoming item (the item is in the list already) and answers the weight with its own load test
+    /// (ARC-UI-019, IW12). ARC-UI-019: <paramref name="room"/> false (the hero's grid has no free slot for the item, ledger IW11) refuses an
+    /// accepted item as <see cref="SessionInsertVerdict.NoRoom"/>; the wear and grid moves answer it, items entering from outside leave the
+    /// room to the host (not ready).
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x466510, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null)
+    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null, bool room = true)
     {
         if (host == SessionInsertVerdict.TooHeavy || incoming is { } item && !HeroFits(item)) return SessionInsertVerdict.TooHeavy;
-        return _hero is null || !SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity) ? host : SessionInsertVerdict.TechnologyRefused;
+        if (_hero is not null && SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity)) return SessionInsertVerdict.TechnologyRefused;
+        return host == SessionInsertVerdict.Accepted && !room ? SessionInsertVerdict.NoRoom : host;
     }
 }

@@ -258,6 +258,8 @@ public enum GameSessionFailure
     GoldShort, GoldUnavailable,
     // Boomerangs (ARC-COMBAT-019): no attack starts while the hero's boomerang is away (0x434B00).
     WeaponInFlight,
+    // Hero inventory grid (ARC-UI-019): the target cells hold another item or leave the grid; a saved grid that disagrees with the lists.
+    GridCellsTaken, InvalidGrid,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -433,8 +435,9 @@ public sealed class GameSessionSnapshot
     /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081); schema 49 adds the items' spent spell charges to
     /// <see cref="Durability"/> and a worn item's item spells mark to <see cref="Equipment"/> (ARC-MAGIC-022); schema 50 adds the identified items and the
     /// containers' added lists to <see cref="Inventory"/> (ARC-WORLD-090); schema 51 adds the highest discarded made number to
-    /// <see cref="Inventory"/> (ARC-WORLD-094). Schemas 1..50 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 51;
+    /// <see cref="Inventory"/> (ARC-WORLD-094); schema 52 adds the hero's inventory grid to <see cref="Inventory"/> (ARC-UI-019).
+    /// Schemas 1..51 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 52;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

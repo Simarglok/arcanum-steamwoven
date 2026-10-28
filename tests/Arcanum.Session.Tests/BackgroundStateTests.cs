@@ -83,8 +83,11 @@ public sealed class BackgroundStateTests
             Kind = EquipmentItemKind.Armor, MagickTechComplexity = -10,
             Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium, AcAdjustment = 12 },
         };
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor,
-            new(Kit[1].Kind, [], false, gear), (_, _) => true, Accept).Disposition, "the start kit's item is worn");
+        // ARC-UI-019: the move into an empty slot runs the insert check too (ledger IW12), so the hero cannot put it on from the grid.
+        var into = owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, new(Kit[1].Kind, [], false, gear), (_, _) => true, Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused), (into.Failure, into.Verdict));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EquipBest(owner.Version, entity => entity == "kit:2" ? new(Kit[1].Kind, [], false, gear) : null,
+            (_, _) => true, Accept).Disposition, "the start kit's item is worn");
         var revision = owner.Version.Revision;
         var off = owner.Unequip(owner.Version, EquipmentSlot.Armor, Accept);
         Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused, revision),

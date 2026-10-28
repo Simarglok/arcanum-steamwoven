@@ -36,12 +36,20 @@ public sealed record ItemRuleProfile
     /// </summary>
     public bool EncumbranceLagsOnStackMerge { get; init; }
 
+    /// <summary>
+    /// Ledger IWA1 (IW13): a worn item moved to another wear slot (a ring between the two ring slots) passes the insert check of the
+    /// same-holder move (0x5788C0 → 0x466510), which asks for a free slot in the grid although the item never enters it, so with a full
+    /// grid the ring silently stays where it was, as the retail executable does. Steamwoven moves it without the room test (a gameplay
+    /// bug fixed in Steamwoven, owner rule 2026-10-28, ARC-UI-019).
+    /// </summary>
+    public bool WornMoveNeedsRoom { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ItemRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true,
-        EncumbranceLagsOnStackMerge = true };
+        EncumbranceLagsOnStackMerge = true, WornMoveNeedsRoom = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ItemRuleProfile> All { get; } = new[] { Steamwoven, Original };

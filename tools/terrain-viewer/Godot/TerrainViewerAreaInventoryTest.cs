@@ -181,6 +181,18 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeOffButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(InventoryOpen && _inventoryStatus == "not taken off: no hero", "the take-off button ran the app's take-off: " + _inventoryStatus);
+            // ARC-UI-019: a press on a grid item holds it and its release on another cell asks the app for the move; this item is unknown here.
+            _inventoryPanel.Render(new AreaInventoryView([], null, null, []) { Grid = [new("syn:box", 0, 2, 1, "box")] }, null);
+            var area = _inventoryPanel.GridAreaForSelfTest;
+            area.PressAt(AreaInventoryGridArea.CellCentre(1));
+            Require(area.Held == new AreaInventoryHeld("syn:box", null, 1), "the press holds the box with its grab offset");
+            area.ReleaseAt(AreaInventoryGridArea.CellCentre(16));
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(InventoryOpen && area.Held is null && _inventoryStatus.StartsWith("not moved: ", StringComparison.Ordinal) && _inventoryStatus.EndsWith("facts do not read here", StringComparison.Ordinal), "the release ran the app's move: " + _inventoryStatus);
+            area.PressAt(AreaInventoryGridArea.CellCentre(0));
+            area.ReleaseAt(new(-20, -20));
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_inventoryStatus.EndsWith(" went back to its place", StringComparison.Ordinal), "a release outside puts it back: " + _inventoryStatus);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
             return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, heal use button, pick a lock button, repair button, wear and take-off buttons";
@@ -286,6 +298,7 @@ public partial class TerrainViewerApp
             Require(InventoryOpen && view.Pc.Count == _areaSession.QueryHeroKit().Count + start + 2 + looted && view.Pc.All(line => !line.Text.StartsWith('[')), "I lists the named items");
             // ARC-UI-015: with a hero, every worn item comes off through its take-off button and goes back on through its wear button.
             var wornCycled = 0;
+            var dragged = 0;
             if (_areaSession.QueryHero() is not null)
             {
                 Require(view.Doll.Count == 9 && view.Carry is not null && _inventoryPanel.HeaderForSelfTest.Contains("encumbrance level", StringComparison.Ordinal), "the doll and weight line");
@@ -304,6 +317,7 @@ public partial class TerrainViewerApp
                     wornCycled++;
                 }
                 view = _inventoryPanel.ViewForSelfTest!;
+                (dragged, view) = await DragForSmoke(view);
             }
             // ARC_AREA_INVENTORY_CAPTURE saves an in-app readback of the open window to the caller's ignored path.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture)
@@ -318,8 +332,8 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-004 native-smoke inventory PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
-                PrintedLines = printed, WornCycled = wornCycled,
-                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no grid or drag)" }));
+                PrintedLines = printed, WornCycled = wornCycled, Dragged = dragged, Grid = _areaSession.QueryHeroGrid().Items.Count,
+                Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count, Parity = "NOT_VERIFIED (diagnostic window, no original art)" }));
         }
         finally
         {
@@ -328,5 +342,42 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    /// <summary>ARC-UI-019: drags with the mouse's press and release on the window's grid area: a grid item to a free cell and back, the
+    /// first worn item off into a free cell and back onto its slot. Returns the drags that moved and the window's view after them.</summary>
+    private async Task<(int Dragged, AreaInventoryView View)> DragForSmoke(AreaInventoryView view)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
+        var area = _inventoryPanel!.GridAreaForSelfTest;
+        var session = _areaSession!;
+        int? Free() => Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell => AreaInventoryDrag.ItemAt(_inventoryPanel.ViewForSelfTest!.Grid, cell!.Value) is null);
+        int SlotOf(string entity) => session.QueryHeroGrid().Items.FirstOrDefault(item => item.Entity == entity)?.Slot ?? -1;
+        async Task Drag(Vector2 from, Vector2 to)
+        {
+            area.PressAt(from);
+            Require(area.Held is not null, "the press holds an item");
+            area.ReleaseAt(to);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        var dragged = 0;
+        if (view.Grid.FirstOrDefault(item => item.Width == 1 && item.Height == 1) is { } small && Free() is { } free)
+        {
+            await Drag(AreaInventoryGridArea.CellCentre(small.Slot), AreaInventoryGridArea.CellCentre(free));
+            Require(SlotOf(small.Entity) == free && _inventoryStatus.StartsWith("moved ", StringComparison.Ordinal), "grid move: " + _inventoryStatus);
+            await Drag(AreaInventoryGridArea.CellCentre(free), AreaInventoryGridArea.CellCentre(small.Slot));
+            Require(SlotOf(small.Entity) == small.Slot, "grid move back: " + _inventoryStatus);
+            dragged += 2;
+        }
+        if (_inventoryPanel.ViewForSelfTest!.Doll.FirstOrDefault(slot => slot.Entity is not null) is { } worn && Free() is { } cell)
+        {
+            await Drag(AreaInventoryGridArea.SlotCentre(worn.Slot), AreaInventoryGridArea.CellCentre(cell));
+            Require(SlotOf(worn.Entity!) == cell && session.QueryEquipment().Worn.All(item => item.Entity != worn.Entity), "take off into a cell: " + _inventoryStatus);
+            await Drag(AreaInventoryGridArea.CellCentre(cell), AreaInventoryGridArea.SlotCentre(worn.Slot));
+            Require(session.QueryEquipment().Worn.Any(item => item.Entity == worn.Entity && item.Slot == worn.Slot) && area.Held is null, "back onto its slot: " + _inventoryStatus);
+            dragged += 2;
+        }
+        GD.Print($"ARC-UI-019 native-smoke drag PASS dragged={dragged} grid={session.QueryHeroGrid().Items.Count} unplaced={session.QueryHeroGrid().Unplaced.Count}");
+        return (dragged, _inventoryPanel.ViewForSelfTest!);
     }
 }

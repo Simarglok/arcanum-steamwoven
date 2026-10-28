@@ -183,8 +183,9 @@ public sealed class SessionInventoryState
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
         SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
-        string[]? identified = null, int lastDiscardedMade = 0)
+        string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null)
     {
+        Grid = Array.AsReadOnly(grid ?? []);
         Identified = Array.AsReadOnly(identified ?? []);
         LastDiscardedMade = lastDiscardedMade;
         ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
@@ -219,6 +220,8 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionItemWeightRecord> Weights { get; }
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made.</summary>
     public IReadOnlyList<SessionJunkPile> JunkPiles { get; }
+    /// <summary>ARC-UI-019: the slots of the hero's items in its inventory grid, in slot order.</summary>
+    public IReadOnlyList<SessionHeroGridItem> Grid { get; }
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1, a barter window's open and sale), by entity in
     /// ordinal order.</summary>
     public IReadOnlyList<string> Identified { get; }
@@ -531,7 +534,10 @@ internal sealed class InventoryDomain
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray())) { Container = Containers.Contains(pair.Key) }).ToArray(),
         Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
-        LastDiscardedMade);
+        LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray());
+
+    /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
+    internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);
 
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
     internal List<SessionJunkPile> JunkPiles { get; } = [];

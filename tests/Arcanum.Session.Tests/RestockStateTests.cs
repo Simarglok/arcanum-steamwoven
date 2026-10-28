@@ -356,7 +356,7 @@ public sealed class RestockStateTests
         Fire(owner, world);
         Schedule(owner, "chest");
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"lastDiscardedMade\":1}");
+        StringAssert.Contains(text, "\"lastDiscardedMade\":1,\"grid\":[");
         StringAssert.Contains(text, "\"kind\":\"inventory.restock\"");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

@@ -198,7 +198,9 @@ public sealed class EquipmentStateTests
             "\"broken\":false,\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null," +
             "\"armor\":{\"coverage\":\"Shield\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":0,\"magicAc\":0," +
             "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}},\"scripts\":[],\"itemSpells\":false}";
-        var paired = text.Replace("],\"durability\":", shieldJson + "],\"durability\":", StringComparison.Ordinal);
+        // ARC-UI-019: a worn item has no grid slot.
+        var paired = text.Replace("],\"durability\":", shieldJson + "],\"durability\":", StringComparison.Ordinal)
+            .Replace("{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1},", "", StringComparison.Ordinal);
         Assert.AreEqual(GameSessionFailure.InvalidEquipment, GameSessionOwner.Restore(Decode(paired), RestoreOptions()).Failure);
         Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(paired.Replace("\"handCountFixed\":true", "\"handCountFixed\":false",
             StringComparison.Ordinal)), RestoreOptions()).Failure, "without the fixed hand count they share the hands");
