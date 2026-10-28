@@ -123,11 +123,16 @@ public sealed class MoraleTests
     public void TheBackOffBitsAndTheKillNotificationAreWrittenInOneRevision()
     {
         using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.InvalidDangerFacts, owner.StartBackOff(owner.Version, Wolf).Failure, "combat perform runs in COMBAT_FOCUS");
+        var fight = new SessionDangerRequest { Entity = Wolf, State = DangerState.CombatFocus, Target = SoggHandle };
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version, fight).Disposition);
+        var fighting = DangerFlags.Fighting | DangerFlags.CheckWield | DangerFlags.CheckGrenade;
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.StartBackOff(new GameSessionVersion(owner.Identity, 0), Wolf).Failure);
         var start = owner.StartBackOff(owner.Version, Wolf);
         Assert.AreEqual(GameSessionDisposition.Changed, start.Disposition);
-        Assert.AreEqual(DangerFlags.BackingOff | DangerFlags.CheckGrenade, owner.QueryDanger(Wolf).Flags);
+        Assert.AreEqual(fighting | DangerFlags.BackingOff, owner.QueryDanger(Wolf).Flags);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.EndBackOff(owner.Version, Wolf).Disposition);
-        Assert.AreEqual(DangerFlags.CheckGrenade, owner.QueryDanger(Wolf).Flags);
+        Assert.AreEqual(fighting, owner.QueryDanger(Wolf).Flags);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndBackOff(owner.Version, Wolf).Disposition);
 
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version, Flee(Sogg, Hero)).Disposition);
@@ -138,13 +143,50 @@ public sealed class MoraleTests
             Victim = SessionCombatant.Critter(Sogg), Plan = plan with { BacksOff = ["bad id"] },
         });
         Assert.AreEqual((GameSessionFailure.InvalidDangerTarget, revision), (bad.Failure, owner.Version.Revision));
+        var stale = owner.ApplyKillNotification(new GameSessionVersion(owner.Identity, revision - 1),
+            new SessionKillNotificationRequest { Victim = SessionCombatant.Critter(Sogg), Plan = plan });
+        Assert.AreEqual((GameSessionFailure.StaleVersion, revision), (stale.Failure, owner.Version.Revision));
 
         var kill = owner.ApplyKillNotification(owner.Version, new SessionKillNotificationRequest { Victim = SessionCombatant.Critter(Sogg), Plan = plan });
         Assert.AreEqual((GameSessionDisposition.Changed, revision + 1, DangerState.None), (kill.Disposition, owner.Version.Revision, kill.Transition!.Value.Applied));
         Assert.AreEqual(DangerState.None, owner.QueryDanger(Sogg).State);
-        Assert.AreEqual(DangerFlags.CheckGrenade | DangerFlags.BackingOff, owner.QueryDanger(Wolf).Flags, "the kill back-off sets no CHECK_GRENADE");
+        Assert.AreEqual(fighting | DangerFlags.BackingOff, owner.QueryDanger(Wolf).Flags, "the kill back-off sets BACKING_OFF only");
 
         var hero = owner.ApplyKillNotification(owner.Version, new SessionKillNotificationRequest { Victim = Hero, Plan = plan with { BacksOff = [] } });
         Assert.AreEqual((GameSessionDisposition.NoChange, (DangerTransition?)null), (hero.Disposition, hero.Transition));
+    }
+
+    [TestMethod]
+    public void PerformFleeingAfterAFleeSpellClearsSpellFleeUnlessMr7AndARefusalKeepsTheFleeingFrom()
+    {
+        foreach (var (rules, keeps, goal) in new[] { (RuleMode.Steamwoven, false, false), (RuleMode.Original, true, true) })
+        {
+            using var owner = Owner(rules);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version, Flee(Wolf, SoggHandle)).Disposition);
+            Assert.AreEqual(FleeSpellOutcome.Chosen, owner.RunFleeSpellStep(owner.Version, Wolf, () => true).Outcome);
+            var stale = owner.PerformFleeing(new GameSessionVersion(owner.Identity, 1), new SessionPerformFleeingRequest { Entity = Wolf });
+            Assert.AreEqual(GameSessionFailure.StaleVersion, stale.Failure);
+            var surrender = owner.PerformFleeing(owner.Version, new SessionPerformFleeingRequest { Entity = Wolf });
+            Assert.AreEqual((DangerState.Surrender, true), (surrender.Transition!.Value.Applied, surrender.StartsFleeGoal));
+            Assert.AreEqual(keeps, owner.QueryDanger(Wolf).Flags.HasFlag(DangerFlags.SpellFlee), rules.ToString());
+
+            // A flight whose NPC became invulnerable: the setter applies NONE; the host finds the source in FleeingFrom (MR9).
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version, Flee(Wolf, SoggHandle)).Disposition);
+            var refused = owner.PerformFleeing(owner.Version, new SessionPerformFleeingRequest { Entity = Wolf, Facts = new(Invulnerable: true) });
+            Assert.AreEqual((DangerState.None, goal), (refused.Transition!.Value.Applied, refused.StartsFleeGoal), rules.ToString());
+            var record = owner.QueryDanger(Wolf);
+            Assert.AreEqual(((SessionCombatant?)null, SoggHandle), (record.Source, record.FleeingFrom));
+        }
+    }
+
+    [TestMethod]
+    public void AChooserThatChangesTheSessionLeavesTheFleeSpellStepStale()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerState(owner.Version, Flee(Wolf, Hero)).Disposition);
+        var result = owner.RunFleeSpellStep(owner.Version, Wolf, () =>
+            owner.SetDangerState(owner.Version, new SessionDangerRequest { Entity = Wolf, State = DangerState.None }).Disposition == GameSessionDisposition.Changed);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, result.Failure);
+        Assert.AreEqual(DangerFlags.None, owner.QueryDanger(Wolf).Flags, "the chooser's write stands, the step writes nothing");
     }
 }

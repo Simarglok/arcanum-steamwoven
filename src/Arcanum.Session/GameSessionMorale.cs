@@ -19,8 +19,9 @@ public sealed record SessionFleeSpellResult(GameSessionDisposition Disposition, 
     public FleeSpellOutcome? Outcome { get; init; }
 }
 
-/// <summary>The kill notification's writes (0x4AA1B0) for <see cref="Victim"/>, as <see cref="Plan"/>
-/// (<see cref="MoraleRules.KillNotification"/>) decided them, with the setter's facts for the victim's stop fleeing.</summary>
+/// <summary>The kill notification's writes (0x4AA1B0) for <see cref="Victim"/>: the back-offs of <see cref="Plan"/>
+/// (<see cref="MoraleRules.KillNotification"/>) and the victim's stop fleeing, which the session decides again on its own record,
+/// with the setter's facts for it.</summary>
 public sealed record SessionKillNotificationRequest
 {
     public required SessionCombatant Victim { get; init; }
@@ -33,8 +34,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The flee-spell step (<see cref="MoraleRules.FleeSpell"/>) of a fleeing NPC in one revision: SPELL_FLEE set → cleared and
     /// nothing chosen; otherwise <paramref name="choosesFleeAction"/> (the host's list chooser over the NPC's flee list, which
-    /// must not call back into the owner) is asked once and a choice sets SPELL_FLEE. An NPC not in FLEE is
-    /// <see cref="GameSessionFailure.InvalidDangerFacts"/> (the danger update runs the step only in FLEE).
+    /// must not call back into the owner; a session changed by it is <see cref="GameSessionFailure.StaleVersion"/>) is asked once and
+    /// a choice sets SPELL_FLEE. An NPC not in FLEE is <see cref="GameSessionFailure.InvalidDangerFacts"/> (the danger update runs
+    /// the step only in FLEE).
     /// </summary>
     public SessionFleeSpellResult RunFleeSpellStep(GameSessionVersion expected, string entity, Func<bool> choosesFleeAction)
     {
@@ -45,6 +47,8 @@ public sealed partial class GameSessionOwner
         var record = _danger.Get(entity);
         if (record.State != DangerState.Flee) return RejectFleeSpell(GameSessionFailure.InvalidDangerFacts);
         var step = MoraleRules.FleeSpell(record.Flags, choosesFleeAction);
+        // The chooser must not call back into the owner; one that changed the session leaves this step stale.
+        if (!IsCurrent(expected)) return RejectFleeSpell(GameSessionFailure.StaleVersion);
         var plan = new DangerPlan(this);
         plan.Update(entity, r => r with { Flags = step.Flags });
         return plan.Commit(new SessionFleeSpellResult(GameSessionDisposition.NoChange, GameSessionFailure.None, Version) { Outcome = step.Outcome },
@@ -55,7 +59,8 @@ public sealed partial class GameSessionOwner
     /// Perform fleeing (0x4AC620) in one revision: the setter asked for SURRENDER from what the NPC flees (its fleeing-from
     /// handle, which stays the record's fleeing-from), as <see cref="SetDangerState"/> applies it, and
     /// <see cref="SessionDangerResult.StartsFleeGoal"/> when the flee goal away from that source starts
-    /// (<see cref="MoraleRules.StartsFleeGoal"/>, MR9); the goal is the executor's. An NPC not in FLEE is
+    /// (<see cref="MoraleRules.StartsFleeGoal"/>, MR9); the goal is the executor's. After a refused surrender the state's source
+    /// may be none (NONE), so the host reads the record's <see cref="SessionDanger.FleeingFrom"/>, which the call leaves as it was. An NPC not in FLEE is
     /// <see cref="GameSessionFailure.InvalidDangerFacts"/>, as is a surrender of an NPC in combat mode without
     /// <see cref="SessionPerformFleeingRequest.CombatMode"/> facts.
     /// </summary>
@@ -94,10 +99,17 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>The back-off start of combat perform (<see cref="MoraleRules.StartsBackOff"/>, after its roll came up): BACKING_OFF
-    /// and CHECK_GRENADE set, in one revision. The run that follows at once is the host's.</summary>
-    public SessionDangerResult StartBackOff(GameSessionVersion expected, string entity) =>
-        ChangeDanger(expected, entity, null, false, plan =>
+    /// and CHECK_GRENADE set, in one revision. Combat perform runs only in COMBAT_FOCUS, so an NPC in another state is
+    /// <see cref="GameSessionFailure.InvalidDangerFacts"/> (perform tests the bit before the state). The run that follows at once
+    /// is the host's.</summary>
+    public SessionDangerResult StartBackOff(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (SessionValidation.Entity(entity) && IsCurrent(expected) && _danger.Get(entity).State != DangerState.CombatFocus)
+            return RejectDanger(GameSessionFailure.InvalidDangerFacts);
+        return ChangeDanger(expected, entity, null, false, plan =>
             plan.Update(entity, record => record with { Flags = record.Flags | DangerFlags.BackingOff | DangerFlags.CheckGrenade }));
+    }
 
     /// <summary>The back-off's end (<see cref="MoraleRules.BackOff"/>: the range reached, or no "away" path): BACKING_OFF cleared.</summary>
     public SessionDangerResult EndBackOff(GameSessionVersion expected, string entity) =>
@@ -106,8 +118,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The kill notification's writes (0x4AA1B0) in one revision: the victim's stop fleeing (<see cref="StopFleeing"/>, decided on
     /// the session's record; the hero has none) and BACKING_OFF on each NPC of <see cref="KillNotificationPlan.BacksOff"/>. The
-    /// victim's flee-goal interrupt and stop waiting (0x4AA8C0) are the host's. A plan naming the hero or an invalid id among the
-    /// back-offs is <see cref="GameSessionFailure.InvalidDangerTarget"/>.
+    /// victim's flee-goal interrupt and stop waiting (0x4AA8C0) are the host's. An invalid id among the back-offs is
+    /// <see cref="GameSessionFailure.InvalidDangerTarget"/>.
     /// </summary>
     public SessionDangerResult ApplyKillNotification(GameSessionVersion expected, SessionKillNotificationRequest request)
     {

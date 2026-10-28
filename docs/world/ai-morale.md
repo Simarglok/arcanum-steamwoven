@@ -36,9 +36,9 @@ The setter (`DangerRules.Set`) gains MR7: in the Steamwoven setting any applied 
 | Operation | Original | What it does |
 | --- | --- | --- |
 | `RunFleeSpellStep(entity, choosesFleeAction)` | 0x4AAF50 | One revision for an NPC in FLEE (otherwise `InvalidDangerFacts`): the flee-spell step's bit write, the chooser asked at most once. Returns the outcome. |
-| `PerformFleeing(request)` | 0x4AC620 | One revision for an NPC in FLEE: the setter's SURRENDER from its fleeing-from (with the surrender's combat-mode exit and CL4, needing `CombatMode` facts in combat mode) and `StartsFleeGoal` (MR9). |
+| `PerformFleeing(request)` | 0x4AC620 | One revision for an NPC in FLEE: the setter's SURRENDER from its fleeing-from (with the surrender's combat-mode exit and CL4, needing `CombatMode` facts in combat mode) and `StartsFleeGoal` (MR9); after a refused surrender the host reads the unchanged `FleeingFrom`. |
 | `StopFleeing(entity, facts)` | (0x4AF170) | The setter's NONE for an NPC in FLEE; nothing in any other state. The flee-goal interrupt is the host's. |
-| `StartBackOff(entity)` / `EndBackOff(entity)` | (0x4AC6E0, 0x4AC7B0) | BACKING_OFF and CHECK_GRENADE set / BACKING_OFF cleared. |
+| `StartBackOff(entity)` / `EndBackOff(entity)` | (0x4AC6E0, 0x4AC7B0) | BACKING_OFF and CHECK_GRENADE set for an NPC in COMBAT_FOCUS (otherwise `InvalidDangerFacts`) / BACKING_OFF cleared. |
 | `ApplyKillNotification(request)` | (0x4AA1B0) | One revision: the victim's stop fleeing on its session record (none for the hero) and BACKING_OFF on each NPC of the plan. |
 | `AiRolls` | | Adds the label `ai.BackOffStart`. |
 
