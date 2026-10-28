@@ -171,6 +171,20 @@ public sealed class ItemEventScriptTests
     }
 
     [TestMethod]
+    public void The_moved_item_s_changed_slot_is_kept()
+    {
+        // ARC-SCRIPT-042: the remove-item run sets local flag 1 of the item's slot; the session keeps it with the move.
+        using var owner = Seeded();
+        var host = new Host();
+        host.Slots[("torn", SessionScriptPoint.RemoveItem)] = RemoveScript;
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var looted = owner.LootItem(owner.Version, "corpse", "torn", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1L), (looted.Disposition, owner.Version.Revision));
+        Assert.AreEqual(new SessionItemScriptSlot("torn", SessionScriptPoint.RemoveItem, RemoveScript, 1u << 1, 0), owner.QueryItemScriptSlots().Single());
+        Assert.IsTrue(owner.QueryPcInventory().Any(item => item.Entity == "torn"));
+    }
+
+    [TestMethod]
     public void A_refused_later_run_or_insert_check_drops_every_write_of_the_transfer()
     {
         using var owner = Seeded();

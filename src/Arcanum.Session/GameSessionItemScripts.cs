@@ -79,6 +79,7 @@ public sealed partial class GameSessionOwner
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
             if (Failure != GameSessionFailure.None) return null;
+            _reads.RatioReads = 0;
             var run = ScrDispatcher.RunObject(new(point, new ScrObjectRef(_map, attachee), new ScrObjectRef(_map, triggerer),
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
@@ -98,7 +99,7 @@ public sealed partial class GameSessionOwner
             foreach (var write in slots)
                 if (write.Source != ScrSource.Object || write.Attachee is not { } item || item.Map != _map || !_items.ContainsKey(item.Code))
                     return GameSessionFailure.ItemScriptUnsupported;
-            var aptitude = HazardOf(run) ? Aptitude() : (int?)null;
+            var aptitude = HazardOf(run, _reads.RatioReads) ? Aptitude() : (int?)null;
             foreach (var change in effects.EffectChanges)
             {
                 var failure = Plan(change);
@@ -116,7 +117,9 @@ public sealed partial class GameSessionOwner
             return GameSessionFailure.None;
         }
 
-        private static bool HazardOf(ScrRunResult run)
+        // A ratio read that may come after an effect change of the same run: the trace shows the outer run's order, but a call-ex callee's
+        // reads and changes are not in it, so a run with a call-ex and any ratio read counts too.
+        private static bool HazardOf(ScrRunResult run, int ratioReads)
         {
             var trace = run.Trace;
             var lastRatio = -1; var firstChange = int.MaxValue; var callEx = false;
@@ -127,7 +130,7 @@ public sealed partial class GameSessionOwner
                 if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.AddEffect or Arcanum.Data.Scripts.ScrCatalogue.Action.RemoveEffect) firstChange = Math.Min(firstChange, i);
                 callEx |= action == Arcanum.Data.Scripts.ScrCatalogue.Action.CallScriptEx;
             }
-            return run.Effects.EffectChanges.Count > 0 && lastRatio >= 0 && (callEx || firstChange < lastRatio);
+            return run.Effects.EffectChanges.Count > 0 && ratioReads > 0 && (callEx || firstChange < lastRatio);
         }
 
         // One effect action on the hero, checked as AddHeroEffect and RemoveHeroEffect check theirs (0x4E9F70, 0x4EA100); another object is
@@ -292,8 +295,12 @@ public sealed partial class GameSessionOwner
             return identified;
         }
 
+        /// <summary>How many power ratios the current run read (call-ex callees included).</summary>
+        internal int RatioReads { get; set; }
+
         public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner)
         {
+            RatioReads++;
             var ratio = runs.PowerRatio(item, owner);
             UnknownObject |= ratio is null;
             return ratio;

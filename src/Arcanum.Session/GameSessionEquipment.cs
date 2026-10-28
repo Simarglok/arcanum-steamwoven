@@ -319,7 +319,8 @@ public sealed partial class GameSessionOwner
         EquipmentMutationResult Refused(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
             RejectWear(failure, verdict: verdict) with { Scripts = runs.Runs };
 
-        RemovalRuns(runs, entity, points, previous is not null);
+        // A ring moved between ring slots leaves with the points it was worn with.
+        RemovalRuns(runs, entity, previous is { } wornIn ? _equipment.Worn[wornIn].ScriptPoints : points, previous is not null);
         SessionInsertVerdict? verdict = null;
         var rolledBack = false;
         if (current is null) InsertionRuns(runs, entity, points, wield: true);

@@ -181,16 +181,18 @@ Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#1
 - **Refusals.** A run outside the set, an effect on any object but the PC, an add whose rule the host lacks, a cause outside 0..9 or
   one the session does not own (race, gender, injury), an innate effect number, a full or unbounded effect list, a slot change of an
   object that is not an item of the move, an object the host or session does not know, a ratio read after an effect change of the
-  same run (or after a call-ex in it) that changed the hero's aptitude, and a trap destruction refuse the whole move: nothing is
+  same run that changed the hero's aptitude (with a call-ex in the run, any ratio read with such a change), and a trap destruction refuse the whole move: nothing is
   applied and the result lists the runs made (`Scripts`); later runs are not made.
 - **A refused occupant** (`RolledBack`): both items are back where they were after the scripts of both removals and both
   re-insertions ran, and what those runs changed is applied (`Changed`, or `NoChange` when nothing), as in the original; `Verdict`
-  is the insert check's answer and `Displaced` is null.
+  is the insert check's answer, `Displaced` is null and `Failure` is None (a host tells the refusal by `RolledBack` or the verdict,
+  not by the failure as on the path without scripts).
 
 **Snapshot schema 43.** A worn item's `scripts` (its item event points, ascending) and the inventory's `scriptSlots` (entity,
 point, script, local flags, counters; by entity in ordinal order, then by point, at most `SessionItemScripts.MaxStoredSlots`). Restore
 refuses a point outside 0..35 or the dialog-override slot, a script number outside 0..99,999, a deleted item's slot, worn points
-other than 21, 24, 25 and 28 and an unsorted list. A deleted item's kept slots go with it.
+other than 21, 24, 25 and 28 and an unsorted list (it does not check that the entity is an item the session or a seed lists). A deleted
+item's kept slots go with it.
 
 **Installed data** (the `--script-census` probe's `item_points` and `wield_pairs`): 43 of the 56 wield-on scripts and 50 of the 52
 wield-off scripts run from line 0 inside the item set, and 42 of the 56 objects' wield pairs (wield on, and wield off with the
@@ -205,8 +207,10 @@ times; wield off reaches the same script's removal loop through call-ex, which r
   scaled item keeps the count of its wield (the condition answers false).
 - **Hosts.** No viewer host calls `Equip` or `Unequip` (no paperdoll); the AREA viewer's item script host answers no effect rule
   and no identified test, so such a run refuses there.
-- **Other paths.** A worn item deleted by wear or destruction leaves without its wield-off script (its effects stay); item spells on
-  wear are still refused; NPC equipment runs no events; the effect list's bound (`SessionEffectLimits.MaxHeroEffects`, 64 entries)
+- **Other paths.** Giving a worn item with item event points to an NPC (ARC-WORLD-071) and throwing such a wielded weapon
+  (ARC-COMBAT-017) are refused (`ItemScriptUnsupported`), as those paths run no item events; a worn item deleted by wear or destruction,
+  a weapon a critical miss drops (ARC-COMBAT-009) and an item whose first break takes it off (ARC-WORLD-053) leave the slot without their
+  wield-off and remove-item scripts (their effects stay); item spells on wear are still refused; NPC equipment runs no events; the effect list's bound (`SessionEffectLimits.MaxHeroEffects`, 64 entries)
   refuses a move whose adds would pass it (the original has no bound).
 
 ## Tests

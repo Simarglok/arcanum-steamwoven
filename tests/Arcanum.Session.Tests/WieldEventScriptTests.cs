@@ -226,6 +226,76 @@ public sealed class WieldEventScriptTests
     }
 
     [TestMethod]
+    public void A_later_run_that_cannot_be_applied_drops_what_the_earlier_runs_did()
+    {
+        int[] all = [SessionScriptPoint.InsertItem, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem];
+        var (owner, host) = Owner();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Ring1, Wearable(2, Ring(2), all), Drawn, Accept, host).Disposition);
+        var before = (owner.Version, Charms(owner), owner.QueryItemScriptSlots().ToArray());
+        // The new ring's remove-item run sets a flag, adds a charm and changes its slot; the occupant's remove-item run then asks for an
+        // effect the host has no rule for.
+        const int Changing = 703, Failing = 704;
+        host.Programs[Changing] = Program(Do(C(ScrCatalogue.Action.SetGlobalFlag, N(3))), Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Charm), N(5))),
+            Do(C(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        host.Programs[Failing] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(51), N(5))));
+        host.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Changing;
+        host.Slots[("kit:2", SessionScriptPoint.RemoveItem)] = Failing;
+        var refused = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), all), Drawn, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
+        CollectionAssert.AreEqual(new[] { (28, "kit:3"), (25, "kit:2"), (28, "kit:2") }, Runs(refused));
+        Assert.AreEqual(before.Version, owner.Version);
+        Assert.AreEqual(before.Item2, Charms(owner));
+        CollectionAssert.AreEqual(before.Item3, owner.QueryItemScriptSlots().ToArray());
+        Assert.AreEqual(false, owner.Flags.Read(new(new(Guid.NewGuid()), owner.Flags.Version, new(3))).Value);
+        Assert.AreEqual("kit:2", owner.QueryEquipment().Worn.Single().Entity);
+    }
+
+    [TestMethod]
+    public void A_ratio_read_after_an_effect_change_of_the_aptitude_in_the_same_run_refuses_the_move()
+    {
+        // A sharpening charm raises the hero's magick/tech aptitude by 50 (stat 16); the run adds it and then reads the ratio, which the
+        // original would read under the new aptitude.
+        const int Sharp = 52;
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Effects[Sharp] = new(Sharp, [new(EffectAttributeKind.Stat, 16, EffectChangeOperator.Add, 50)]);
+        host.Programs[WieldOn] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Sharp), N(5))),
+            Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Local, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var ring = Wearable(3, Ring(1, complexity: 40), SessionScriptPoint.WieldOn);
+        var refused = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0L), (refused.Disposition, refused.Failure, owner.Version.Revision));
+        // The other order (read, then add) is what the installed scripts do: accepted.
+        host.Programs[WieldOn] = Program(Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Local, 0))),
+            Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Sharp), N(5))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host).Disposition);
+    }
+
+    [TestMethod]
+    public void A_slot_change_of_an_object_outside_the_move_and_a_refused_take_off_check_run_nothing_applied()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        // Wield on call-exes the PC's own wield-on slot, which changes its local flag: the PC's slot has no home.
+        const int PcScript = 705;
+        host.Programs[PcScript] = Program(Do(C(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        host.Slots[(SessionEventKinds.PlayerEntity, SessionScriptPoint.WieldOn)] = PcScript;
+        host.Programs[WieldOn] = Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Triggerer, 0), N(24), N(0), (Triggerer, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var ring = Wearable(3, Ring(1), SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported),
+            (owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host) is var refused ? (refused.Disposition, refused.Failure) : default));
+        // A take-off the insert check refuses runs no script.
+        host.Programs[WieldOn] = Scaled;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host).Disposition);
+        var kept = owner.Unequip(owner.Version, EquipmentSlot.Ring1, _ => SessionInsertVerdict.NoRoom, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, 0), (kept.Disposition, kept.Failure, kept.Scripts.Count));
+        Assert.AreEqual(10, Charms(owner));
+        // Giving the worn scripted ring to an NPC is refused: that path runs no item events.
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.GiveItemToNpc(owner.Version, "virgil", "kit:3", Accept).Failure);
+    }
+
+    [TestMethod]
     public void Equip_best_leaves_a_scripted_worn_item_in_its_slot()
     {
         var (owner, host) = Owner();
