@@ -222,6 +222,10 @@ public sealed partial class GameSessionOwner
         _inventory.Ammo.Remove(entity);
         _inventory.Piles.Remove(entity);
         _inventory.Given.Remove(entity);
+        // ARC-SCRIPT-042: its kept script slots go with it.
+        foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
+        // ARC-WORLD-085: its weight facts go with it.
+        _inventory.Weights.Remove(entity);
         // ARC-WORLD-063: a deleted item leaves its junk pile (the caller decides whether the pile dissolves).
         _inventory.LeaveJunkPile(entity);
         // Taken hides an item from every seed view and from pickup and loot.

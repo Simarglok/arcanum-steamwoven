@@ -43,7 +43,7 @@ public sealed class AreaInventoryTests
     {
         var fields = new List<AreaFieldValue>
         {
-            Value(18, flags), Value(21, name), Value(22, name + 10), Value(36, itemFlags), Handle(37, parent), Value(38, 5), Value(40, 7),
+            Value(18, flags), Value(21, name), Value(22, name + 10), Value(36, itemFlags), Handle(37, parent), Value(38, 5), Value(39, 0), Value(40, 7),
             Value(43, location), Value(45, complexity), Value(47, name + 20), Null(31),
         };
         if (quantity is { } q) fields.Add(Value(60, q));

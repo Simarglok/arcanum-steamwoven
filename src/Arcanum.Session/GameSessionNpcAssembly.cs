@@ -130,11 +130,14 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-083: the product's complexity, which each new unit keeps (the NPC has no background; the hero who takes a unit has).
         var complexity = facts(prototype)?.Complexity ?? 0;
         ThrowIfDisposed();
+        // ARC-WORLD-085: each new unit has the product prototype's weight (the NPC's own weight is the host's insert check).
+        var weight = CreatedWeight(prototype, complexity);
         if (Stale()) return RejectAssembly(GameSessionFailure.StaleVersion);
         // ARC-WORLD-070: one insert check a product unit for the NPC, for the object it is (the stack it merges into); a refused unit
         // lies on the crafter's tile.
         var units = PlanUnits(quantity, ammo is not null, into?.Entity,
-            unitEntity => insertCheck(new SessionInventoryItem(unitEntity, InventoryDomain.MadeFacts(kind, complexity) with { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType })),
+            unitEntity => insertCheck(new SessionInventoryItem(unitEntity, InventoryDomain.MadeFacts(kind, complexity) with
+                { Quantity = ammo?.Units, AmmoType = ammo?.AmmoType, Weight = weight.Weight, MagicWeight = weight.MagicWeight })),
             Stale, out var firstRefusal, out var unitFailure);
         if (units is null) return unitFailure == GameSessionFailure.StaleVersion ? RejectAssembly(unitFailure) : RejectAssembly(unitFailure, plan);
         var ground = units.Count(u => u.Ground);
@@ -169,6 +172,7 @@ public sealed partial class GameSessionOwner
                 _inventory.AddToNpc(npc, new SessionMadeItem(unit.Entity, kind, complexity));
                 _inventory.Taken.Add(unit.Entity);
             }
+            if (unit.NewObject || unit.Ground) _inventory.SetWeight(unit.Entity, weight);
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         _revision++;

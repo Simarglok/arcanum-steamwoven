@@ -168,6 +168,20 @@ public sealed class ScrAdmissionSet
         S12.Actions.Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
             ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation]), S12.ValueKinds, S12.FocusKinds);
 
+    /// <summary>
+    /// The item-effect set (ARC-SCRIPT-042, ledger WE1–WE6): <see cref="S13"/> plus the conditions identified (47) and items being
+    /// rewielded (50), which the host answers through <see cref="IScrItemQueries"/>, and add effect (77) and remove effect (78), which hand
+    /// <see cref="ScrEffectRequest"/> effects to the host, call-ex (81), which runs an object's attachment at once (its slot change comes
+    /// back in <see cref="ScrEffects.SlotWrites"/>), the magick-tech adjustment (91), which stores a value scaled by an item's power ratio
+    /// for its owner, and play script eye candy (120), a presentation effect.
+    /// </summary>
+    public static ScrAdmissionSet S14 { get; } = new("S14", S13.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
+        S13.Actions.Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
+            ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]), S13.ValueKinds, S13.FocusKinds);
+
+    /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
+    public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
+
     /// <summary>The conditions of <see cref="S4"/> a host answers through <see cref="IScrObjectQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed,
         ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
@@ -301,10 +315,12 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
             }
-            // Get skill stores into its third operand (SX1), the only store outside slot 0.
+            // Get skill stores into its third operand (SX1).
             if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get object type stores into its number operand 1 (ARC-SCRIPT-018).
             if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // The magick-tech adjustment stores into its number operand 3 (ARC-SCRIPT-042, WE2).
+            if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
             if (slot != 0) continue;
             var literal = (ScrValueKind)kind == ScrValueKind.Number;

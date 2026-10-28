@@ -48,7 +48,14 @@ public enum PremadeHeroFailure
 
 /// <summary>A starting-kit item: basic prototype, prototype (file) number, object type (5..14), numeric name class
 /// (<c>OBJ_F_NAME</c>) and description number, all from the item prototype.</summary>
-public sealed record PremadeHeroItem(int BasicPrototype, int Prototype, int Type, int Name, int Description);
+public sealed record PremadeHeroItem(int BasicPrototype, int Prototype, int Type, int Name, int Description)
+{
+    /// <summary>ARC-WORLD-085: the prototype's weight (field 0x59), magic weight adjustment (field 0x5A) and magick/tech complexity
+    /// (field 0x60), which the kit item, created from it, keeps.</summary>
+    public int Weight { get; init; }
+    public int MagicWeight { get; init; }
+    public int Complexity { get; init; }
+}
 
 /// <summary>
 /// One pre-made hero at the moment the new game starts (ARC-RES-027). Race, gender, alignment and age are the prototype's
@@ -85,6 +92,8 @@ public static class PremadeHeroReader
     private const int StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, EffectSlot = 46, CauseSlot = 47, PortraitSlot = 49,
         GoldSlot = 50, InventoryCountSlot = 55, InventoryListSlot = 56, InventorySourceSlot = 57, SchemeSlot = 63,
         BackgroundSlot = 73, BankSlot = 87, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
+    // ARC-WORLD-085: the item slots of the weight facts (as the area inventory reads them).
+    private const int ItemWeightSlot = 38, ItemMagicWeightSlot = 39, ItemComplexitySlot = 45;
     private const int GetScript = 4, InsertItemScript = 21;
     private const int ExperienceStat = 18, AlignmentStat = 19, AgeStat = 25, GenderStat = 26, RaceStat = 27;
     private const int RaceCause = 0, GenderCause = 9, RaceCount = 11;
@@ -155,7 +164,8 @@ public static class PremadeHeroReader
                 // An attachment with script number 0 is no script (word 2 of the 12-byte element).
                 if (item.Fields[ScriptsSlot].Elements.Any(e => e.Key is GetScript or InsertItemScript && e.Words.Count == 3 && e.Words[2] != 0))
                     return new(PremadeHeroFailure.ItemScriptUnsupported, null, itemNumber);
-                items.Add(new(entry.BasicPrototype, itemNumber, item.Type, Int(item.Fields[NameSlot]), Int(item.Fields[DescriptionSlot])));
+                items.Add(new(entry.BasicPrototype, itemNumber, item.Type, Int(item.Fields[NameSlot]), Int(item.Fields[DescriptionSlot]))
+                    { Weight = Int(item.Fields[ItemWeightSlot]), MagicWeight = Int(item.Fields[ItemMagicWeightSlot]), Complexity = Int(item.Fields[ItemComplexitySlot]) });
             }
         }
 

@@ -7,7 +7,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-UI-010: the save and load windows of the save list in crash-site-area (exterior, cave and map mode, each mode with its own
-// folder as the quick save). The palette opens them (the original opens them from its in-game menu, which is a later task); the
+// folder as the quick save). The palette opens them, and the in-play menu's Save Game and Load Game (ARC-UI-012), as the original's; the
 // window is modal like the logbook (gate closed, clock paused, a walk stopped) and owns the keys: Up/Down select, Return saves or
 // loads, Delete or Backspace asks to delete, Escape answers no or closes, as the original's save window keys (U3). A save writes the
 // game as it was when the window opened (the actor does not move while it is open) with the preview taken just before the window
@@ -28,15 +28,28 @@ public partial class TerrainViewerApp
     private void PaletteSaveGame() => PaletteOpenSaveList(AreaSaveListMode.Save);
     private void PaletteLoadGame() => PaletteOpenSaveList(AreaSaveListMode.Load);
 
-    private async void PaletteOpenSaveList(AreaSaveListMode mode)
+    private void PaletteOpenSaveList(AreaSaveListMode mode)
     {
         if (!QuickKeysActive) { _worldPanel?.SetActionStatus("Save list: no AREA game session"); return; }
         if (PaletteOpen) ToggleWorldSettings();
-        // The palette is gone from the screen only once the next frame is drawn; the preview is taken then (a headless run draws no
-        // frame and takes no preview, so it waits for the next process frame instead).
+        OpenSaveListAfterDraw(mode);
+    }
+
+    /// <summary>The palette (or the in-play menu, ARC-UI-012) is gone from the screen only once the next frame is drawn; the window
+    /// opens and takes its preview then (a headless run draws no frame and takes no preview, so it waits for the next process frame).</summary>
+    private async void OpenSaveListAfterDraw(AreaSaveListMode mode)
+    {
         if (DisplayServer.GetName() == "headless") await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         else await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        if (!_exiting) OpenSaveList(mode);
+        if (_exiting) return;
+        OpenSaveList(mode);
+        // A window that could not open gives the waiting menu back with the reason.
+        if (!SaveListOpen && _mainMenu is not null && !MainMenuOpen && QuickKeysActive)
+        {
+            _mainMenu.Resume("the save list could not open: " + _saveListStatus);
+            QuarantineWorld(); _quickKeys.Reset();
+            RenderMainMenu(); RefreshReadyStatus();
+        }
     }
 
     private void OpenSaveList(AreaSaveListMode mode)
@@ -93,13 +106,14 @@ public partial class TerrainViewerApp
             case AreaSaveCommandKind.Overwrite:
                 var name = command.Kind == AreaSaveCommandKind.SaveNew ? null : command.Name;
                 // As the original, a save that succeeded closes the window (SL5); a failure keeps it with the reason.
-                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ") is not null) EndSaveList();
+                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ") is not null) EndSaveList(finished: true);
                 else RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Load:
                 // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
-                if (LoadGame(slot, "Load ", _mainMenu is null ? null : MainMenuTables())) { EndSaveList(loaded: true); return; }
+                // From the main menu the placeholder has no hero tables; from play (ARC-UI-012) the running session's are kept, as F8's.
+                if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null)) { EndSaveList(finished: true); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Delete:
@@ -121,14 +135,14 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <param name="loaded">True when a load closes it (ARC-UI-011: the main menu waiting under it then ends).</param>
-    private void EndSaveList(bool loaded = false)
+    /// <param name="finished">True when a load or a save closes it (ARC-UI-011, ARC-UI-012: the menu waiting under it then ends).</param>
+    private void EndSaveList(bool finished = false)
     {
         if (_saveListPanel is null || !_saveListPanel.IsOpen) return;
         GD.Print("ARC-UI-010 save list closed");
         _saveListPanel.CloseView(); _saveList = null; _saveListThumbnail = null; _saveListPreview = null;
         QuarantineWorld(); RefreshReadyStatus();
-        SaveListClosedUnderMainMenu(loaded);
+        SaveListClosedUnderMainMenu(finished);
     }
 
     /// <summary>Per frame while open: a session that is gone (map mode left, a reset) closes the window.</summary>

@@ -194,6 +194,34 @@ field argument is the constant 0x60. Every direct branch stays inside `.text`.
 | --- | --- | --- | --- |
 | MC1 | drop (0x461A90, 0x461AB0), removal (0x466E00, 0x467860, 0x467CB0), placement (0x466E50, 0x466EF0, 0x4415C0), pickup and transfer (0x4617F0, 0x461810, 0x461CA0), insertion (0x466640), creation (0x4ED8B0); setter 0x406D40 | None of these functions, nor any callee two calls deep, writes field 0x60: their constant-field writes are the location, parent, inventory location (0x5E), item flags (0x57) and sector fields, and their three setter calls with a field in a register write the owner's list count (a read plus one) and, on a stack merge, the quantity (the two holders' values added). Every call of 0x406D40 with the constant field 0x60 lies in the prototype initialisers (0x46C000..0x49FFFF); a created instance answers its prototype's value through the getter until it has its own (BG1). So an item keeps its complexity wherever it moves, and a made item has its prototype's: the insert check on its pickup reads the same value that refused it before. | Original |
 
+## Weight and encumbrance (ARC-WORLD-085)
+
+Source: [inventory runtime](../../world/inventory-runtime.md#weight-and-encumbrance-arc-world-085). Questions: what does an item
+weigh in a holder's list (gold, ammunition, the magic weight adjustment), when does the insert check refuse on weight, how are the
+encumbrance levels computed, and what does a level change do (effects, message, fatigue timer)? Read on 2026-10-28 by this task and
+by a fresh agent that saw only the questions (method step 6), independently; they agree on every row, so the rows are F2. Every
+direct branch stays inside `.text`. Data: effect 158 of the installed `rules\effect.mes` is a speed change of −2; `mes\critter.mes`
+has lines 11..24.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| WE1 | item weight (0x461370), stack field (0x462410) | Gold (type 8) weighs 0 whatever its fields. Any other item weighs its stored weight (field 0x59) plus, only when an owner is passed, its magic weight adjustment (field 0x5A) as the owner gets it (WE2). An item with a stack field (ammunition) then weighs that times its unit count (field 0x8E) / 4: a 32-bit product, signed division truncating toward zero. | Original |
+| WE2 | magic adjustment (0x461590), power (0x4614A0) | The adjustment as EQ9 reads it for a critter owner (PC or NPC): `(complexity + aptitude) / 2` clamped to the item's side, then `v × power / c` (magickal) or `v − v × power / c` (technological), whole for a neutral item. Any other owner, a container included, has the complexity as its power: a magickal item keeps the whole adjustment in a container, a technological one none. | Original |
+| WE3 | total weight (0x461410) | A container sums its list (fields 0x3B/0x3C), any other object the critter inventory (0xED/0xEE); each item is weighed with the summing object as owner, so a critter's worn items count; a plain 32-bit sum. | Original |
+| WE4 | insert check (0x466510) | Only a PC or NPC holder has the weight test: a key going onto a key ring the critter holds skips it (slot 0); otherwise the item is refused (code 1) when the holder's total plus the item's weight with that holder is above the effective carry weight (stat 8): a load equal to the carry weight fits. The test comes before the Technophobia test (code 15, BG4) and the room (code 2); a gold or ammunition item with a same-prototype stack in the list needs no room. A weightless item is still refused when the load is already above the carry weight. | Original |
+| WE5 | recalculation (0x45F820) | Given the old level, the new level (WE6) is computed; equal: nothing happens. Otherwise every effect 158 is removed (0x4EA200) and effect 158 with the item cause (5) is added `level` times, with two more at level 6 (8 entries); then the animation speed (0x436FA0). For the local PC, while the counter 0x5E8638 is above 0 (set to 1 when the critter module loads `mes\critter.mes`, 0x45CF30; the inventory window's drag handlers lower and raise it), line 11 + level of `mes\critter.mes` is shown as a type-4 message. A level with a timer value (0x5B3050: 0, 0, 0, 0, 600 000, 60 000, 5 000 ms) schedules the fatigue timer in mode 1 with that delay (0x45E820). | Original |
+| WE6 | encumbrance level (0x45F790, table 0x5B306C through 0x45F960) | For a PC or NPC: the first level 0..6 whose threshold `percent × carry weight / 100` (percents 15, 30, 45, 60, 75, 90, 100; 32-bit product, truncating division) is above the total weight; 6 when none is, so 6 from 90 % up. A non-critter is level 6. Line 18 + level of `mes\critter.mes` names a level (0x45F930). | Original |
+| WE7 | callers of 0x45F820 | Each reads the old level before its change: the insertion (0x466640, a non-container holder), the removal (0x467860, the same), the base stat setter for strength only (0x4B0980), the effect add (0x4E9F70) and the internal effect removal (0x4EA520) when the effective strength changed. The insertion's merge of gold or ammunition into a held stack returns before the recalculation (WEA1). | Original; WEA1 |
+| WE8 | fatigue timer (0x45E610, mode 1), schedule (0x45E820) | A null or dead critter does nothing. The tick's steps are `max(1, elapsed s / 80)`, as the recovery's. With current fatigue 5 or more it adds the steps to the fatigue damage, or 1 when that would leave less than 5 (so the floor is 4); below 5 nothing. It does not check the level first; afterwards it schedules mode 1 again with the delay of the level then (none at levels 0..3). The schedule adds nothing while a timer of the same mode is pending for the critter (WEA2). | Original; WEA2 |
+| WE9 | the level's other readers | The animation's run decisions (0x42B940, 0x433640, 0x433C80, 0x434030, 0x434400, 0x436AB0) run only below level 4 (the locomotion research's "load below 60 %", ARC-RES-047); the inventory window shows it (0x576520). | Original |
+
+Anomalies:
+
+| ID | Behaviour | Classification |
+| --- | --- | --- |
+| WEA1 | A gold or ammunition item that merges into a held stack adds its weight without a level recalculation, so the level (its effects and timer) lags until the next recalculation. | Bug of the original (F2); proposed switch for the consequences task: Original lags, Steamwoven recalculates. Not decided. |
+| WEA2 | A level rise while a mode-1 timer is pending keeps the older, longer delay (a jump from level 4 to 6 drains once after up to 600 s before the 5 s cadence starts). | In the original (F2); no switch proposed. |
+
 ## Junk piles (ARC-WORLD-063)
 
 Source: [inventory runtime](../../world/inventory-runtime.md#junk-piles-arc-world-063) and

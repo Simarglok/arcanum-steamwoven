@@ -106,7 +106,8 @@ public static class SoundCueRules
     /// <summary>An item's weight for its sounds: gold weighs 0; otherwise the stored weight plus the wielder's magic
     /// adjustment, and ammunition is that times its quantity / 4 (32-bit, truncating toward zero).</summary>
     /// <param name="magicAdjustment">The stored magic weight adjustment scaled by the holder's aptitude; 0 without a holder.</param>
-    [OriginalFunction(0x461370, OriginalFunctionScope.Partial)]
+    /// <remarks>The weight of 0x461370 with the adjustment already scaled; the rule itself is <see cref="Items.CarryRules.ItemWeight"/>
+    /// (ARC-WORLD-085).</remarks>
     public static int ItemWeight(int type, int storedWeight, int ammoQuantity = 0, int magicAdjustment = 0)
     {
         if (type == GoldType) return 0;

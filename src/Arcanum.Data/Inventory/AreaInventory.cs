@@ -64,6 +64,9 @@ public sealed record AreaInventoryItem(AreaObjectKey Key, AreaItemType Type, int
     uint ObjectFlags, uint ItemFlags, int Name, int Description, int UnknownDescription, int Complexity, int Weight, int Worth,
     int InventoryLocation, int? Quantity, int? KeyId, IReadOnlyList<AreaInventoryScript> Scripts, int? Holder, int? ListIndex, int? AmmoType = null)
 {
+    /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
+    public int MagicWeight { get; init; }
+
     public int SourceIndex => Key.SourceIndex;
     public bool InInventory => Holder is not null;
     /// <summary>Identified when its complexity is not positive or the identified item flag is set.</summary>
@@ -139,7 +142,7 @@ public static class AreaInventoryReader
     private const int ContainerFlagsSlot = 36, ContainerKeySlot = 38, ContainerCountSlot = 39, ContainerListSlot = 40, ContainerSourceSlot = 41;
     private const int CritterGoldSlot = 50, CritterCountSlot = 55, CritterListSlot = 56, CritterSourceSlot = 57;
     private const int NpcLeaderSlot = 70, NpcSubstituteSlot = 83;
-    private const int ItemFlagsSlot = 36, ItemParentSlot = 37, ItemWeightSlot = 38, ItemWorthSlot = 40, ItemLocationSlot = 43,
+    private const int ItemFlagsSlot = 36, ItemParentSlot = 37, ItemWeightSlot = 38, ItemMagicWeightSlot = 39, ItemWorthSlot = 40, ItemLocationSlot = 43,
         ItemComplexitySlot = 45, ItemUnknownDescriptionSlot = 47, ItemSecondGroupSlot = 59;
     private const int ContainerType = 2, PcType = 15, NpcType = 16;
 
@@ -225,7 +228,7 @@ public static class AreaInventoryReader
                 Number(o, ItemWeightSlot), Number(o, ItemWorthSlot), Number(o, ItemLocationSlot),
                 type is AreaItemType.Gold or AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 1) : null,
                 type == AreaItemType.Key ? Number(o, ItemSecondGroupSlot) : null, Scripts(o), holderIndex, listIndex,
-                type == AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 2) : null));
+                type == AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 2) : null) { MagicWeight = Number(o, ItemMagicWeightSlot) });
         }
 
         var holders = new List<AreaInventoryHolder>(holderRows.Length);

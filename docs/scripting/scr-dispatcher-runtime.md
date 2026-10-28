@@ -447,6 +447,36 @@ remove reputation (73), as the original runs them (ledger [SS1–SS5](../researc
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow
   from 644 to 684 of 3,012; the 21 guarded use sites keep 9 running and 12 refused.
 
+## Item effects (ARC-SCRIPT-042, set S14)
+
+`ScrAdmissionSet.S14` is S13 plus the conditions identified (47) and items being rewielded (50) and the actions add effect (77),
+remove effect (78), call-ex (81), the magick-tech adjustment (91) and play script eye candy (120): the commands the installed wield-on
+and wield-off scripts use (ledger [WE1–WE6](../research/ledger/scripts.md#wield-events-arc-script-042)). A host whose set holds 47, 50
+or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that does not).
+
+- **Effect actions** hand one `ScrEffectRequest` per object of operand 0 to the host in action order (`ScrEffects.EffectChanges`):
+  add with the effect and the cause as read, remove with the effect (the first entry of the number, whatever its cause).
+- **Magick-tech adjustment** stores `(ratio × value + 50) / 100` into operand 3 (32-bit wrap, truncation toward zero, a counter
+  keeps the low byte), the ratio `IScrItemQueries.PowerRatio(item, owner)` of operands 1 and 2; admission refuses a number literal
+  as the store. An absent object or one the host does not know stops the run (`MissingObject`).
+- **Play script eye candy** hands `ScrEyeCandy(number, object)` to the host (`ScrEffects.EyeCandies`); an absent object shows
+  nothing.
+- **Identified** counts `IScrItemQueries.IsIdentified` over operand 0's objects (one at most in the set): true when it is identified,
+  false for none or an absent object; an object the host does not know stops the run. **Items being rewielded** is
+  `IScrItemQueries.ItemsBeingRewielded`.
+- **Call-ex** runs the attachment of operand 1's point of operand 0's object from operand 2's line with operand 3 as the triggerer and
+  no extra object, as an event of its own (0x441980): no slot, script 0, a missing or trap script and a monster generator run nothing;
+  the run shares the dispatch's effects, global overlay and bounds (call depth 16 and its line budget, ARC-SCRIPT-018), and its slot,
+  when it changed, is reported in `ScrEffects.SlotWrites` in the order the runs ended; a later call-ex of the same slot reads it. The
+  caller applies the slot writes and then the event's own `Writeback`, so the event's slot wins when both changed it, as the original's
+  outer run writes its copy last (and only when it changed). Project limits: a use or dialog point (the trap spot and the dialog
+  gates are not modelled for a nested run), a dialog action in the callee and a trap object whose script becomes 0 refuse the
+  dispatch; a point outside 0..35 or the dialog-override slot ends it (`ScrStop.CallExPoint`, nothing applied); an absent object
+  stops the caller's run.
+- **Hosts.** Only the session's item events run S14 commands (through `SessionItemScripts.Admission`, the
+  [equipment's wield events](../world/equipment-runtime.md#wield-events-arc-script-042)); the viewer's use, tile, sector and dialog
+  sets do not hold them.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -529,10 +559,10 @@ remove reputation (73), as the original runs them (ledger [SS1–SS5](../researc
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
   the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
   combat are later slices.
-- Not in any admitted set yet: focus groups, loops, call-ex, float line, reactions and most other world actions.
+- Not in any admitted set yet: focus groups, loops, float line, reactions and most other world actions.
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
-  location, set rumor and add or remove reputation (S13).
+  location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

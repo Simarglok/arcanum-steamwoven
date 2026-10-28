@@ -266,7 +266,9 @@ public sealed class InventoryStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, NoHero + ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" +
             "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":3804,\"name\":2804,\"description\":32804}," +
-            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"junkPiles\":[]}" +
+            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[]," +
+            // ARC-WORLD-085: each taken item keeps its seed's weight facts.
+            "\"weights\":[{\"entity\":\"apple\",\"weight\":5,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"ring\",\"weight\":5,\"magicWeight\":0,\"complexity\":0}],\"junkPiles\":[]}" +
             NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
@@ -296,7 +298,7 @@ public sealed class InventoryStateTests
     public void DecodeAndRestoreRefusePcItemsTheTransfersCannotProduce()
     {
         const string Item = "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":1,\"name\":2804,\"description\":2}";
-        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"junkPiles\":[]}");
+        string With(string pc) => GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" + pc + "],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[]}");
         void Fails(string pc, SnapshotDecodeFailure failure, string path)
         {
             var result = GameSessionSnapshotCodec.TryDecode(With(pc));
@@ -309,7 +311,7 @@ public sealed class InventoryStateTests
         Fails(Item.Replace("\"ring\"", "\"r i\""), SnapshotDecodeFailure.OutOfRange, "$.inventory.pc[0].entity");
         Fails(Item.Replace("}", ",\"slot\":0}"), SnapshotDecodeFailure.UnknownField, "$.inventory.pc[0].slot");
         Fails(Item.Replace(",\"description\":2", ""), SnapshotDecodeFailure.MissingField, "$.inventory.pc[0].description");
-        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{},\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"junkPiles\":[]}"));
+        var notList = GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(EmptyInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":{},\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[]}"));
         Assert.AreEqual((SnapshotDecodeFailure.WrongType, "$.inventory.pc"), (notList.Failure, notList.Path));
 
         // Gold and keys never enter the list, so a save holding one is refused on restore; ammunition (ARC-WORLD-066) needs its stack.

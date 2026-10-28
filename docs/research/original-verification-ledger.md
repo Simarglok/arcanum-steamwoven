@@ -141,6 +141,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="drop-cell-arc-combat-010"></a>[Drop cell (ARC-COMBAT-010)](ledger/combat.md#drop-cell-arc-combat-010) | [Combat](ledger/combat.md) | DC1–DC8 |
 | <a id="reading-window-arc-ui-049"></a>[Reading window (ARC-UI-049)](ledger/ui-audio.md#reading-window-arc-ui-049) | [Interface windows and audio](ledger/ui-audio.md) | WR1–WR16 |
 | <a id="item-events-arc-script-041"></a>[Item events (ARC-SCRIPT-041)](ledger/scripts.md#item-events-arc-script-041) | [Scripts and events](ledger/scripts.md) | IE1–IE7 |
+| <a id="wield-events-arc-script-042"></a>[Wield events (ARC-SCRIPT-042)](ledger/scripts.md#wield-events-arc-script-042) | [Scripts and events](ledger/scripts.md) | WE1–WE7 |
 | <a id="item-use-script-arc-script-020"></a>[Item use script (ARC-SCRIPT-020)](ledger/scripts.md#item-use-script-arc-script-020) | [Scripts and events](ledger/scripts.md) | IU1–IU5 |
 | <a id="freed-cells-arc-world-065"></a>[Freed cells (ARC-WORLD-065)](ledger/items.md#freed-cells-arc-world-065) | [Items and inventory](ledger/items.md) | FC1–FC3 |
 | <a id="long-and-far-routes-arc-world-060"></a>[Long and far routes (ARC-WORLD-060)](ledger/world.md#long-and-far-routes-arc-world-060) | [World, maps and movement](ledger/world.md) | LR1–LR9 |
@@ -163,6 +164,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="save-list-arc-ui-010"></a>[Save list (ARC-UI-010)](ledger/ui-audio.md#save-list-arc-ui-010) | [Interface windows and audio](ledger/ui-audio.md) | SL1–SL8 |
 | <a id="npc-gold-and-transfers-arc-world-071"></a>[NPC gold and transfers (ARC-WORLD-071)](ledger/items.md#npc-gold-and-transfers-arc-world-071) | [Items and inventory](ledger/items.md) | NT1–NT4 |
 | <a id="made-item-complexity-arc-world-083"></a>[Made item complexity (ARC-WORLD-083)](ledger/items.md#made-item-complexity-arc-world-083) | [Items and inventory](ledger/items.md) | MC1 |
+| <a id="weight-and-encumbrance-arc-world-085"></a>[Weight and encumbrance (ARC-WORLD-085)](ledger/items.md#weight-and-encumbrance-arc-world-085) | [Items and inventory](ledger/items.md) | WE1–WE9 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |

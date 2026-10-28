@@ -1,6 +1,7 @@
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Character;
 
 namespace Arcanum.Session;
 
@@ -47,6 +48,12 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
 
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
+
+    /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
+    public int MagicWeight { get; init; }
+
+    /// <summary>ARC-WORLD-085: the weight facts the session keeps for the item once it tracks it.</summary>
+    public SessionItemWeight WeightFacts => new(Weight, MagicWeight, Complexity);
 
     /// <summary>ARC-WORLD-063: the item's size in inventory cells (its inventory art's frame in 32-pixel cells, 0x461780), which decides
     /// whether a junk pile has room for it; 1 × 1 when the host does not know it (the original's size when the art does not read).</summary>
@@ -165,10 +172,12 @@ public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
-        SessionJunkPile[]? junkPiles = null)
+        SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null)
     {
+        ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
+        Weights = Array.AsReadOnly(weights ?? []);
         Given = Array.AsReadOnly(given ?? []);
         Piles = Array.AsReadOnly(piles ?? []);
         Gold = gold;
@@ -190,6 +199,11 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionGivenItem> Given { get; }
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity in ordinal order.</summary>
     public IReadOnlyList<SessionGoldRecord> Piles { get; }
+    /// <summary>ARC-SCRIPT-042: the item script slots runs changed, by entity in ordinal order and then by point.</summary>
+    public IReadOnlyList<SessionItemScriptSlot> ScriptSlots { get; }
+    /// <summary>ARC-WORLD-085: the weight facts of the objects the session tracks, by entity in ordinal order (rows with a non-zero
+    /// weight or adjustment only).</summary>
+    public IReadOnlyList<SessionItemWeightRecord> Weights { get; }
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made.</summary>
     public IReadOnlyList<SessionJunkPile> JunkPiles { get; }
 }
@@ -285,20 +299,49 @@ public sealed record SessionPrintedLine(SessionPrintedLineStatus Status, string 
 public interface ISessionItemScriptHost : IScrHost
 {
     SessionPrintedLine PrintedLine(int script, int line);
+
+    /// <summary>ARC-SCRIPT-042: the rule of an effect number an add-effect action names (<see cref="SessionEffectDefinition.FromRule"/> of
+    /// the module's effect rule), or null when the host has none; the session then refuses the move.</summary>
+    SessionEffectDefinition? EffectDefinition(int number) => null;
+
+    /// <summary>ARC-SCRIPT-042: the identified test of an object (<see cref="IScrItemQueries.IsIdentified"/>), or null when the host does
+    /// not know it; the session then refuses the move.</summary>
+    bool? IsIdentified(ScrObjectRef obj) => null;
 }
 
-/// <summary>ARC-SCRIPT-013: how a transfer runs an item's insert-item script.</summary>
+/// <summary>ARC-SCRIPT-013: how a transfer runs an item's insert-item script; ARC-SCRIPT-042: and an equipment move its item events.</summary>
 public static class SessionItemScripts
 {
     /// <summary>
-    /// The commands an insert-item script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
+    /// The commands an item event's script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
     /// conversation starts from a transfer), the story-state actions (the session has no story-state number) and the
-    /// deferred calls (not applied from a transfer yet). A script outside it refuses the transfer.
+    /// deferred calls (not applied from a transfer yet); ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
+    /// the identified and rewielding conditions, add and remove effect, call-ex, the magick-tech adjustment, play script eye candy and play
+    /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play). A script outside it refuses the move.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S6-item", ScrAdmissionSet.S6.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S14-item",
+        ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
         ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
-            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall)),
+            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall))
+            .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
+                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound]),
         ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
+
+    /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
+    /// all eight item event points each).</summary>
+    public const int MaxStoredSlots = GameSessionLimits.PolicyMaxPcItems * 8;
+
+    /// <summary>
+    /// ARC-SCRIPT-042, WE1: the cause an add-effect action names, as the original numbers its causes (race 0, bless 3, curse 4 and
+    /// gender 9 read in the executable's callers of the effect add; the others in the same order: background 1, class 2, item 5,
+    /// spell 6, injury 7, tech 8); null for any other number.
+    /// </summary>
+    public static EffectCause? Cause(int code) => code switch
+    {
+        0 => EffectCause.Race, 1 => EffectCause.Background, 2 => EffectCause.Class, 3 => EffectCause.Bless, 4 => EffectCause.Curse,
+        5 => EffectCause.Item, 6 => EffectCause.Spell, 7 => EffectCause.Injury, 8 => EffectCause.Tech, 9 => EffectCause.Gender,
+        _ => null,
+    };
 }
 
 /// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list, and the made items added to
@@ -316,6 +359,11 @@ internal sealed class InventoryDomain
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
+    /// <summary>ARC-SCRIPT-042: the item script slots runs changed, by item entity and attachment point.</summary>
+    internal Dictionary<(string Entity, int Point), ScrSlot> ScriptSlots { get; } = [];
+
+    internal SessionItemScriptSlot[] CaptureScriptSlots() => [.. ScriptSlots.OrderBy(pair => pair.Key.Entity, StringComparer.Ordinal).ThenBy(pair => pair.Key.Point)
+        .Select(pair => new SessionItemScriptSlot(pair.Key.Entity, pair.Key.Point, pair.Value.Script, pair.Value.LocalFlags, pair.Value.Counters))];
     /// <summary>Moves on every seed attach; a seed is not state, so it moves no revision, but a transfer that called the host must
     /// see that the seeds it read are still the same.</summary>
     internal long SeedGeneration { get; set; }
@@ -420,9 +468,21 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity.</summary>
     internal SortedDictionary<string, int> Piles { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-WORLD-085: the weight facts of the objects the session tracks (kit, taken and made items wherever they are), by
+    /// entity; an object without a row weighs 0.</summary>
+    internal SortedDictionary<string, SessionItemWeight> Weights { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Keeps an object's weight facts: a row only for a non-zero weight or adjustment.</summary>
+    internal void SetWeight(string entity, SessionItemWeight facts)
+    {
+        if (facts.Weight != 0 || facts.MagicWeight != 0) Weights[entity] = facts;
+        else Weights.Remove(entity);
+    }
+
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray());
+        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(), CaptureScriptSlots(),
+        Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray());
 
     /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
     internal List<SessionJunkPile> JunkPiles { get; } = [];
@@ -556,7 +616,7 @@ internal sealed class InventoryDomain
     private static bool Facts(SessionItemFacts? facts) => facts?.ScriptPoints is not null && Enum.IsDefined(facts.Kind.Type) &&
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
         facts.Quantity is null or >= 0 && (facts.AmmoType is null) == (facts.Kind.Type != SessionItemType.Ammo) &&
-        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes;
+        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && facts.WeightFacts.IsValid;
 
     private static bool Points(IReadOnlyList<int> points) =>
         points.All(point => point is >= 0 and <= SessionScriptPoint.Last) && points.Distinct().Count() == points.Count;
