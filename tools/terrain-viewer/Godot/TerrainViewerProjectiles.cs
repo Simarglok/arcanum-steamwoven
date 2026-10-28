@@ -27,27 +27,47 @@ public partial class TerrainViewerApp
         public required long StartMs { get; init; }
         public required ProjectileFlight Flight { get; set; }
         public required ProjectileShot State { get; set; }
+        // ARC-COMBAT-017: the thrown item the projectile carries, which lands where it ends; null for a weapon kept in the hand.
+        public SessionThrownShot? Thrown { get; init; }
         public long Ticks { get; set; }
         public int Frames { get; set; } = 1;
     }
 
     private readonly List<AreaProjectile> _projectiles = [];
     private IReadOnlyList<int?>? _areaKitMissileArt;
+    private IReadOnlyList<int?>? _areaKitThrowWeight;
     // The smoke's lent projectile art (with its lent bow, ARC-COMBAT-016); null in play.
     private int? _lentMissileArtForSelfTest;
+    // The smoke's lent throw weight (with its lent throwing dagger, ARC-COMBAT-017); null in play.
+    private int? _lentThrowWeightForSelfTest;
     // The strikes and ends so far, for the smoke: the shot, what ended it and the struck entity.
     private readonly List<(SessionShot Shot, ProjectileStrikeKind Strike, string? Struck)> _projectileEndsForSelfTest = [];
+    // The thrown items' landings so far, for the smoke: the item, the tile and the session's answer.
+    private readonly List<(string Item, CellCoord Tile, GameSessionDisposition Disposition)> _thrownLandingsForSelfTest = [];
 
     /// <summary>The wielded weapon's projectile art (field 127; null for none, -1): the smoke's lent art, else the wielded kit item's.</summary>
     private int? HeroMissileArt()
     {
         if (_lentMissileArtForSelfTest is { } lent) return lent;
-        if (_areaSession?.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon) is not { } wielded
-            || !wielded.Entity.StartsWith("kit:", StringComparison.Ordinal)
-            || !int.TryParse(wielded.Entity.AsSpan(4), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
-            || _areaKitMissileArt is not { } kit || number < 1 || number > kit.Count) return null;
+        if (WieldedKitNumber() is not { } number || _areaKitMissileArt is not { } kit || number > kit.Count) return null;
         return kit[number - 1] is { } art && art != CombatWeaponFields.NoMissileArt ? art : null;
     }
+
+    /// <summary>ARC-COMBAT-017: the throw of the wielded weapon when it "default throws" (weapon flag 0x200, ledger RH2), with its stored
+    /// weight: the smoke's lent one, else the wielded kit item's; null for a weapon that stays in the hand.</summary>
+    private SessionThrow? HeroThrow()
+    {
+        if (_lentThrowWeightForSelfTest is { } lent) return new(lent);
+        if (WieldedKitNumber() is not { } number || _areaKitThrowWeight is not { } kit || number > kit.Count) return null;
+        return kit[number - 1] is { } weight ? new(weight) : null;
+    }
+
+    // The wielded kit item's number (1-based), or null when the hero wields nothing from its kit.
+    private int? WieldedKitNumber() =>
+        _areaSession?.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon) is { } wielded
+        && wielded.Entity.StartsWith("kit:", StringComparison.Ordinal)
+        && int.TryParse(wielded.Entity.AsSpan(4), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
+        && number >= 1 ? number : null;
 
     /// <summary>ARC-COMBAT-016 (ledger PF1, RH3): a shot on the ranged path flies as a projectile when the weapon has a projectile art:
     /// that art and the weapon's range, read before the shot (a critical miss may drop or break the weapon); null when it hits at once
@@ -58,7 +78,8 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-COMBAT-016: the session's shot leaves the hero's tile for the goal target's tile (the destination stays the target's tile
     /// after a line-of-fire redirect, ledger PF2) with the art faced in its screen direction (0x4B6A00, 0x4B6B10); a shot that cannot
-    /// fly (no line between the tiles) ends at once.
+    /// fly (no line between the tiles) ends at once. ARC-COMBAT-017: a thrown item flies to its thrown range (PF9) and lands where the
+    /// projectile ends.
     /// </summary>
     private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
         AttackGoal? critter, AreaObjectAttackTarget? obj)
@@ -68,9 +89,12 @@ public partial class TerrainViewerApp
         var hero = session.Chart.ToWorld(session.State.CommittedCell);
         var start = new CellCoord(checked((int)hero.X), checked((int)hero.Y));
         var destination = new CellCoord(checked((int)goal.Row.WorldX!.Value), checked((int)goal.Row.WorldY!.Value));
+        var thrown = owner.QueryThrownShot(shot);
         if (ProjectileRules.Launch(start, destination) is not { } flight)
         {
-            owner.EndShot(shot);
+            // A thrown item lands where it lies, on the hero's cell.
+            if (thrown is not null) owner.LandThrownItem(owner.Version, shot, start);
+            else owner.EndShot(shot);
             GD.Print($"ARC-COMBAT-016 projectile-unlaunched shot={shot.Id} from={start} to={destination}");
             return;
         }
@@ -80,11 +104,12 @@ public partial class TerrainViewerApp
         _projectiles.Add(new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = art,
-            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, false, weapon.Range),
+            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, false, thrown?.Range ?? weapon.Range), Thrown = thrown,
         });
         _attackNotice = $"the shot flies ({(hit ? "it will hit" : "it missed")})";
         GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
-            + $" to={destination.X},{destination.Y} direction={direction} art={(art is { } a ? $"0x{a:X8}" : "none")}");
+            + $" to={destination.X},{destination.Y} direction={direction} art={(art is { } a ? $"0x{a:X8}" : "none")}"
+            + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : ""));
         SyncAreaProjectileBodies();
     }
 
@@ -116,7 +141,7 @@ public partial class TerrainViewerApp
             for (var i = 0; i < steps && _projectiles.Contains(projectile); i++)
             {
                 var (next, crossing) = ProjectileRules.Step(projectile.Flight, lineMap.Contains);
-                if (next is null) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "it left the map"); break; }
+                if (next is null) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "it left the map", land: true); break; }
                 // The tile left is handled before the projectile moves into the next one (0x42F6A0).
                 if (crossing is { } c) CrossTile(projectile, c, owner, lineMap);
                 projectile.Flight = next;
@@ -132,7 +157,7 @@ public partial class TerrainViewerApp
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
         if (!crossed.Ends) return;
-        if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range"); return; }
+        if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range", land: true); return; }
         Strike(projectile, crossed.Strike, crossed.Struck!);
     }
 
@@ -142,7 +167,8 @@ public partial class TerrainViewerApp
 
     /// <summary>The struck object takes the shot through the session: an NPC with combat values (<see cref="GameSessionOwner.LandShot"/>),
     /// a door, window, container, scenery or trap (<see cref="GameSessionOwner.LandShotOnObject"/>), a wall; a companion or an NPC
-    /// without combat values is not ready (the shot ends without a strike).</summary>
+    /// without combat values is not ready (the shot ends without a strike). ARC-COMBAT-017: a thrown item then lands on the tile left
+    /// (the original lands it just before the hit, PF8; nothing of the hit reads it).</summary>
     private void Strike(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck)
     {
         var owner = projectile.Owner;
@@ -156,8 +182,8 @@ public partial class TerrainViewerApp
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Life?.HitPointDamage}");
             // A refused strike leaves the shot in the session: it ends there too.
-            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
-            else FinishCritterHit(goal, result);
+            EndOnTile(projectile);
+            if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
             return;
         }
         if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
@@ -168,8 +194,8 @@ public partial class TerrainViewerApp
                 target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow() });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
-            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
-            else FinishObjectHit(null, target, result);
+            EndOnTile(projectile);
+            if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result);
             return;
         }
         if (struck.Type == 0)
@@ -177,21 +203,39 @@ public partial class TerrainViewerApp
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
                 new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
-            if (result.Disposition == GameSessionDisposition.Rejected) owner.EndShot(projectile.Shot);
-            else _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
+            EndOnTile(projectile);
+            if (result.Disposition != GameSessionDisposition.Rejected) _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
             RefreshAreaStatus();
             return;
         }
-        owner.EndShot(projectile.Shot);
+        EndOnTile(projectile);
         Ended(projectile, kind, null, $"struck {(IsAreaCompanion(struck.Key) ? "a companion" : $"an object of type {struck.Type}")}: not ready");
         _attackNotice = "the shot struck " + (IsAreaCompanion(struck.Key) ? "a companion" : "an object") + ": striking it is not ready";
         RefreshAreaStatus();
     }
 
-    private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why)
+    /// <summary>ARC-COMBAT-017: a shot ends on the tile the projectile is on: a thrown item lands there (0x4B2690, flag 0x40) and the
+    /// ground is drawn again; any other shot is gone (after a strike the session holds it no more).</summary>
+    private void EndOnTile(AreaProjectile projectile)
+    {
+        var owner = projectile.Owner;
+        if (projectile.Thrown is not { } thrown) { owner.EndShot(projectile.Shot); return; }
+        var landed = owner.LandThrownItem(owner.Version, projectile.Shot, projectile.Flight.Tile);
+        GD.Print($"ARC-COMBAT-017 thrown-landing shot={projectile.Shot.Id} item={thrown.Item} at={projectile.Flight.Tile.X},{projectile.Flight.Tile.Y}"
+            + $" disposition={landed.Disposition} failure={landed.Failure}");
+        _thrownLandingsForSelfTest.Add((thrown.Item, projectile.Flight.Tile, landed.Disposition));
+        if (!ReferenceEquals(owner, _areaSession)) return;
+        _groundStamp = null;
+        SyncAreaInventory();
+    }
+
+    /// <summary>A flight ends without a strike: beyond its range or off the map a thrown item lands on its last tile
+    /// (<paramref name="land"/>); a flight given up (a map change, a reload) leaves it on the hero's cell where it was thrown from.</summary>
+    private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why, bool land = false)
     {
         _projectiles.Remove(projectile);
-        projectile.Owner.EndShot(projectile.Shot);
+        if (land) EndOnTile(projectile);
+        else projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
     }

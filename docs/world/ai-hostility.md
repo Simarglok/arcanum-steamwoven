@@ -7,7 +7,7 @@ The hostility and targeting rules of the retail 1.0.7.4 executable ([hostility s
 [HS1–HS22](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task) as pure
 rules in `Arcanum.Simulation.Ai.HostilityRules` over an `IHostilityWorld` and an `IAiRollSource`, and the writes they decide in
 `Arcanum.Session` (`GameSessionHostility.cs`) on the danger records of slice I3 ([danger state](ai-danger-state.md)). No AI pass,
-combat path or host calls them yet: the scheduler (I6) and the executor (I7) are their first callers.
+combat path or host calls them yet: the scheduler (I6, [AI scheduler](ai-scheduler.md)) runs the danger update as a host stage, and the host behind it (I10) and the executor (I7) are their first callers.
 
 ## Rules (`HostilityRules`)
 
@@ -61,7 +61,7 @@ hero (leave, the leader check's leave, the expired wait) loses NO_ATTACK (FO7). 
 
 ## Not ready
 
-- **Callers.** No AI pass (I6) runs the danger update, no combat path builds an attack event, no host runs the witness rule,
+- **Callers.** The AI pass (I6) runs the danger update only as a host stage that no host implements yet, no combat path builds an attack event, no host runs the witness rule,
   peace or stop attacking (the companion "stop" order is I9's; the script and dialog attacks and stop attacking are the
   dispatcher's S-slices; pick pocket's detection is ARC-SKILLS-010's). The hosts implement no `IHostilityWorld` yet.
 - **Steps returned, not run.** The follower rule (0x4A9C00, I9), the PC victim's response (0x4A9AD0), the turn, the goal and

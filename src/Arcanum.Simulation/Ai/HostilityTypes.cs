@@ -118,6 +118,12 @@ public enum AiRollPurpose
     SurrenderCalm,
     /// <summary>Combat perform (0x4AC6E0) starts a back-off on 1 of 1..20 when closer to its target than parameter 15 (slice I5).</summary>
     BackOffStart,
+    /// <summary>A wake-up tick adds 0..5000 game milliseconds to the tick it schedules (0x4AD200, slice I6).</summary>
+    TickWakeUpJitter,
+    /// <summary>The gate clears blindness on 1 of 1..160 (0x4A8570, slice I6).</summary>
+    GateBlindRecovery,
+    /// <summary>The gate clears every crippled condition on 1 of 1..8000 (0x4A8570, slice I6).</summary>
+    GateCrippleRecovery,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

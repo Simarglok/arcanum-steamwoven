@@ -121,6 +121,12 @@ public sealed record CombatAnomalyProfile
     public bool FleeGoalAfterRefusedSurrender { get; init; }
 
     /// <summary>
+    /// CL5 (owner decision 2026-10-20): the gate's blindness, crippling and stun recoveries write back the critter flags read before
+    /// the pass's combat scripts, undoing a change those scripts made (see <see cref="Ai.AiSchedulerRules.Gate"/>, ARC-WORLD-084).
+    /// </summary>
+    public bool GateRecoveryWritesStaleFlags { get; init; }
+
+    /// <summary>
     /// EX9 (owner decision 2026-10-21; ARC-COMBAT-015): the ranged approach's callback (0x425590) stops at a clear shot only when the
     /// attack has become impossible, so an attacker walking to a target that stands still closes to the adjacent tile before it shoots.
     /// Steamwoven stops the approach at the first tile from which the attack goal's reach test passes
@@ -154,6 +160,7 @@ public sealed record CombatAnomalyProfile
         NpcLeaderPartyCountsAlone = true,
         StaleSpellFleeSkipsFleeSpell = true,
         FleeGoalAfterRefusedSurrender = true,
+        GateRecoveryWritesStaleFlags = true,
     };
 
     /// <summary>Both settings, default first.</summary>

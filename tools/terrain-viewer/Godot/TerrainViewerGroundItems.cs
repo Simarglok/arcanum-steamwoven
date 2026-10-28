@@ -44,8 +44,8 @@ public partial class TerrainViewerApp
     /// <summary>
     /// The shown map's bodies drawn from extra art, recomputed when the session or the map changes: a scenery or trap the session
     /// busted takes its destroyed ART (field 24) at its own anchor, and every item lying on the map's ground away from a T0 body
-    /// (spilled from a container, dropped by an NPC, placed by the hero) is drawn at its cell from its ground ART. An art id that does
-    /// not read leaves the body as it was (T0, or not drawn) and is said once.
+    /// (spilled from a container, dropped by an NPC, placed by the hero) is drawn at its cell from its ground ART, except a thrown item
+    /// still in flight (ARC-COMBAT-017). An art id that does not read leaves the body as it was (T0, or not drawn) and is said once.
     /// </summary>
     /// <returns>Whether the bodies were recomputed.</returns>
     private bool SyncAreaGroundBodies()
@@ -89,6 +89,8 @@ public partial class TerrainViewerApp
             foreach (var ground in current.Ground)
             {
                 var entity = ground.Item.Entity;
+                // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands; its projectile is drawn instead.
+                if (session.QueryItemInFlight(entity)) continue;
                 AreaObjectRecord? row = null;
                 if (map?.TryGetRow(entity, out var own) == true) row = own;
                 else if (placedItems.FirstOrDefault(p => p.Entity == entity) is { Origin: { } origin }

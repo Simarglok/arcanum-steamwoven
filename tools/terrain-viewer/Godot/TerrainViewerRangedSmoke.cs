@@ -146,18 +146,24 @@ public partial class TerrainViewerApp
             }
             Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
+            var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights,
+                Projectiles = flights, Throws = throws,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
             CancelAreaAttack(null);
             _lentMissileArtForSelfTest = null;
+            _lentThrowWeightForSelfTest = null;
             ClearAreaProjectiles("the smoke ended");
+            // A thrown kit weapon still on the ground goes back to the hand before the kit weapon is restored.
+            if (lent && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon)
+                && session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed)
+                session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true, _ => SessionInsertVerdict.Accepted);
             if (lent && !Wear(wielded.Item)) GD.Print("ARC-COMBAT-015 ranged smoke could not restore the kit weapon");
             Heal();
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
@@ -215,6 +221,74 @@ public partial class TerrainViewerApp
             Require(drawn > 0 && maxSteps >= ProjectileRules.DefaultStepsPerTick, $"the arrow was drawn while it flew ({drawn} frames, {maxSteps} steps)");
             GD.Print($"ARC-COMBAT-016 native-smoke projectile PASS map={_readyMapName} target={pick.Target.Entity} misses={misses.Count} drawn={drawn} steps={maxSteps}");
             return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };
+        }
+
+        // ARC-COMBAT-017: the lent bow becomes a throwing dagger (melee skill, "default throws", the installed 6072's weight 15) with the
+        // same projectile art. Each throw leaves the hand at the shot (the item lies hidden on the hero's cell and is not drawn), flies,
+        // and lands on the tile its projectile ends on (the struck target's, or the last one beyond the thrown range), drawn again and
+        // without decay; it is picked up and wielded again for the next throw. Throws until one has hit (at most 12; a hit is reported,
+        // not required).
+        async Task<object> Throws()
+        {
+            var dagger = wielded.Item with
+            {
+                Weapon = wielded.Item.Weapon! with
+                {
+                    Skill = CombatSkill.Melee, Range = LentBowRange, MagicRange = 0, AmmoType = null, AmmoConsumption = 0,
+                    CriticalMissChart = wielded.Item.Weapon.CriticalMissChart,
+                },
+            };
+            Require(Wear(dagger), "the kit weapon takes the lent throwing dagger's values");
+            _lentMissileArtForSelfTest = LentMissileArt;
+            _lentThrowWeightForSelfTest = 15;
+            var landings = new List<string>();
+            var hit = false; var hiddenChecked = false;
+            for (var throws = 0; throws < 12 && !hit; throws++)
+            {
+                Heal();
+                AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+                _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
+                var result = await ShootOnce(pick.Target, expectWalk: false);
+                var heroCell = session.QueryActor().Cell;
+                Require(result?.Shot is { } shot && session.QueryThrownShot(shot) is { Item: var item } && item == wielded.Entity,
+                    $"the dagger is thrown ({result?.Failure} {result?.Resolution?.Outcome}, shot {result?.Shot?.Id})");
+                Require(result!.Resolution!.Difficulty is not null && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
+                    "the dagger left the hand at the shot");
+                if (_projectiles.Count == 1)
+                {
+                    SyncAreaGroundBodies();
+                    Require(session.QueryItemInFlight(wielded.Entity) && session.QueryPlacedItems().Single(p => p.Entity == wielded.Entity).Cell == heroCell
+                        && !_groundBodies.ContainsKey(PlacedKey(runtime, wielded.Entity)), "it lies hidden on the hero's cell while it flies");
+                    hiddenChecked = true;
+                }
+                for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_projectiles.Count == 0 && _thrownLandingsForSelfTest.Count == 1 && _thrownLandingsForSelfTest[0].Disposition != GameSessionDisposition.Rejected,
+                    $"the flight ended and the dagger landed ({_projectiles.Count} in flight, {_thrownLandingsForSelfTest.Count} landings)");
+                var landing = _thrownLandingsForSelfTest[0];
+                var placed = session.QueryPlacedItems().Single(p => p.Entity == wielded.Entity);
+                Require(placed.Cell == landing.Tile && !session.QueryItemInFlight(wielded.Entity) && session.QueryShotsInFlight().Count == 0
+                    && session.QueryItemDecays().All(d => d.Entity != wielded.Entity), $"it lies where the projectile ended, without decay ({placed.Cell} vs {landing.Tile})");
+                var end = _projectileEndsForSelfTest.Single();
+                hit = result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                if (hit) Require(end.Strike == ProjectileStrikeKind.Target && landing.Tile == World(pick.Target.Row), $"a hit lands on its target's tile ({end.Strike} {landing.Tile})");
+                SyncAreaGroundBodies();
+                landings.Add($"{end.Strike}:{landing.Tile.X},{landing.Tile.Y}:drawn={_groundBodies.ContainsKey(PlacedKey(runtime, wielded.Entity))}");
+                Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
+                    && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, dagger), (_, _) => true,
+                        _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "the dagger is picked up and wielded again");
+            }
+            // The pre-made heroes barely train throwing: a hit is reported, not required (the session's tests strike with one).
+            Require(hiddenChecked, $"a throw was seen in flight ({string.Join(",", landings)})");
+            _lentThrowWeightForSelfTest = null;
+            GD.Print($"ARC-COMBAT-017 native-smoke throw PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} landings={string.Join(",", landings)}");
+            return new { Throws = landings.Count, Hit = hit, Landings = landings };
         }
 
         void Heal()
