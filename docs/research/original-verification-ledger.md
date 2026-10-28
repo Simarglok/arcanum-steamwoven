@@ -166,6 +166,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
 | <a id="thrown-weapons-arc-combat-017"></a>[Thrown weapons (ARC-COMBAT-017)](ledger/combat.md#thrown-weapons-arc-combat-017) | [Combat](ledger/combat.md) | TW1–TW7 |
+| <a id="second-projectile-and-scatter-arc-combat-018"></a>[Second projectile and scatter (ARC-COMBAT-018)](ledger/combat.md#second-projectile-and-scatter-arc-combat-018) | [Combat](ledger/combat.md) | PS1–PS6 |
 
 ## Decisions to revisit
 

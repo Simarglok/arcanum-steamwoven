@@ -15,7 +15,10 @@ namespace Arcanum.Session.Tests;
 public sealed class ThrowStateTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
-    private static readonly SessionThrow Dagger = new(15);
+    // The throw's target location (a missed throw scatters from it, ARC-COMBAT-018): as many cells from the hero's start cell as the
+    // rats' distance.
+    private static readonly SessionThrow Dagger = new(15) { Target = new CellCoord(Start.Cell.X + 3, Start.Cell.Y) };
+    private static readonly SessionThrow Heavy = new(ThrowRules.MaxWeight) { Target = new CellCoord(Start.Cell.X + 2, Start.Cell.Y) };
 
     private static GameSessionOwner Owner()
     {
@@ -96,7 +99,7 @@ public sealed class ThrowStateTests
         owner.EndShot(thrown.Shot!.Value);
         Rewield(owner);
         // A weight that thrown range 1 cannot carry two cells: the check is impossible, the throw misses and still flies.
-        var heavy = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = new(ThrowRules.MaxWeight) });
+        var heavy = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = Heavy });
         Assert.AreEqual(1, owner.QueryThrownShot(heavy.Shot!.Value)!.Value.Range);
         Assert.IsTrue(heavy.Resolution!.Difficulty!.Range >= 1_000_000);
         Assert.IsFalse(heavy.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit);
@@ -152,9 +155,10 @@ public sealed class ThrowStateTests
     {
         using var owner = Owner();
         var rat = Rat();
-        var miss = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = new(ThrowRules.MaxWeight) });
-        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandShot(owner.Version, miss.Shot!.Value, new(rat)).Failure, "a miss never strikes its target");
-        var stray = owner.LandShot(owner.Version, miss.Shot.Value, new(Rat("oid:other")));
+        var miss = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = Heavy });
+        Assert.IsNotNull(miss.Scatter, "a missed throw scatters (ARC-COMBAT-018)");
+        // The scatter cleared its target (PF6): the rat it missed may take a stray strike on the way, as any critter.
+        var stray = owner.LandShot(owner.Version, miss.Shot!.Value, new(rat));
         Assert.AreEqual((GameSessionFailure.None, AttackOutcome.Hit), (stray.Failure, stray.Resolution!.Outcome), "a stray strike is a forced hit");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, miss.Shot.Value, new CellCoord(7, 7)).Disposition);
         Rewield(owner);
@@ -216,5 +220,58 @@ public sealed class ThrowStateTests
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandShotOnObject(owner.Version, shot, new() { Wall = true }).Failure, "a shot strikes once");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, new CellCoord(3, 3)).Disposition);
         Assert.AreEqual(0, owner.QueryShotsInFlight().Count);
+    }
+
+    // ARC-COMBAT-018 (0x4B39B0, ledger RH2, PS rows): a missed throw flies from its target location (20 − level) / 5 + 1 tiles, at
+    // most its distance, in one of eight directions the session draws, and carries no target.
+    [TestMethod]
+    public void AMissedThrowScattersFromItsTargetLocation()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var here = owner.QueryActor().Cell;
+        var level = owner.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Throwing].Level;
+        var target = new CellCoord(here.X + 3, here.Y);
+        var miss = ThrowUntil(owner, rat, hit: false);
+        var tiles = ThrowRules.ScatterTiles(level, 3);
+        Assert.IsTrue(tiles >= 1);
+        var reachable = Enumerable.Range(0, ThrowRules.ScatterDirections)
+            .Select(r => ThrowRules.Scatter(target, r, tiles, (c, d) => Arcanum.Simulation.Navigation.OriginalPathRequest.Neighbor(c, d))).ToArray();
+        CollectionAssert.Contains(reachable, miss.Scatter!.Value, "one of the eight directions, the tiles of the thrower's level");
+        Assert.AreEqual("kit:1", owner.QueryThrownShot(miss.Shot!.Value)!.Value.Item);
+
+        // A hit keeps its target and does not scatter.
+        Assert.IsTrue(owner.EndShot(miss.Shot.Value));
+        Rewield(owner);
+        Assert.IsNull(ThrowUntil(owner, rat, hit: true).Scatter);
+    }
+
+    [TestMethod]
+    public void TheScatterStopsAtTheMapsEdgeAndNeedsATargetLocation()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var target = new CellCoord(Start.Cell.X + 2, Start.Cell.Y);
+        var walled = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = Heavy, DropMap = new NoSteps() });
+        Assert.AreEqual((GameSessionFailure.None, target), (walled.Failure, walled.Scatter), "every step leaves the map: it stays on the target location");
+        Assert.IsTrue(owner.EndShot(walled.Shot!.Value));
+        Rewield(owner);
+        // Without the throw's location the attack's target cell is the origin; with neither the throw is refused before any roll.
+        var draws = owner.QueryRandom().Draws;
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = new(15) }).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.AttackCritter(owner.Version,
+            new(rat) { Distance = 2, Flight = true, Throw = new(15) { Target = new CellCoord(-1, 0) } }).Failure);
+        Assert.AreEqual(draws, owner.QueryRandom().Draws);
+        Assert.IsTrue(Wields(owner));
+        var fromCell = owner.AttackCritter(owner.Version, new(rat) { Distance = 2, Flight = true, Throw = new(ThrowRules.MaxWeight), TargetCell = target, DropMap = new NoSteps() });
+        Assert.AreEqual((GameSessionFailure.None, target), (fromCell.Failure, fromCell.Scatter));
+    }
+
+    // A map where every step leaves it.
+    private sealed class NoSteps : Arcanum.Simulation.Items.IDropMap
+    {
+        public CellCoord? Step(CellCoord from, int rotation) => null;
+        public Arcanum.Simulation.Items.DropPath Path(CellCoord from, CellCoord to, Arcanum.Simulation.Items.DropOwner owner) => new(0, 0, []);
+        public bool HasCritter(CellCoord cell) => false;
     }
 }

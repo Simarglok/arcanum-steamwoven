@@ -14,9 +14,13 @@ public sealed class ProjectileStateTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private static GameSessionOwner Owner(int arrows = 40)
+    private static GameSessionOwner Owner(int arrows = 40, SkillTraining training = SkillTraining.None)
     {
-        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        // ARC-COMBAT-018: the bow's training is in the stored skill's training bits.
+        int[] basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Bow] = 4 | (int)training << 6;
+        var hero = training == SkillTraining.None ? HalfElf() : HalfElf() with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } };
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = hero }).Owner!;
         var seed = new SessionMapInventorySeed([],
             [new SessionSeedItem("arrows", new(new(SessionItemType.Ammo, 7058, 100, 200), 1, 0, 0, arrows, []) { AmmoType = 0 }, new CellCoord(101, 200))]);
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
@@ -44,7 +48,7 @@ public sealed class ProjectileStateTests
             Assert.AreEqual(GameSessionFailure.None, shot.Failure);
             var hits = shot.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
             if (hits == hit && shot.Resolution.Outcome != AttackOutcome.CriticalMiss) return shot;
-            if (shot.Shot is { } other) owner.EndShot(other);
+            foreach (var other in shot.Shots) owner.EndShot(other);
         }
         Assert.Fail("no such shot");
         return null!;
@@ -138,5 +142,88 @@ public sealed class ProjectileStateTests
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true }).Failure);
         owner.EndShot(owner.QueryShotsInFlight()[0]);
         Assert.IsNotNull(owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true }).Shot);
+    }
+
+    // ARC-COMBAT-018 (0x4B39B0, ledger PF2, PS rows): from expert training a bow shot flies as two projectiles with the same decided
+    // outcome; each strikes on its own and rolls its own damage, and the arrow went once, at the shot.
+    [TestMethod]
+    public void AnExpertBowShotFliesAsTwoProjectilesThatStrikeOnTheirOwnForOneArrow()
+    {
+        using var owner = Owner(training: SkillTraining.Expert);
+        Assert.AreEqual(SkillTraining.Expert, owner.QueryHeroAttack()!.Training);
+        var rat = Rat();
+        var before = Hp(owner, rat);
+        var arrows = owner.QueryHeroAmmo().Single().Units;
+        var shot = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true });
+        Assert.AreEqual(2, shot.Shots.Count);
+        Assert.AreEqual(shot.Shots[0], shot.Shot);
+        CollectionAssert.AreEqual(shot.Shots.ToArray(), owner.QueryShotsInFlight().ToArray());
+        Assert.AreEqual(arrows - 1, owner.QueryHeroAmmo().Single().Units, "one arrow for both");
+        Assert.IsNull(shot.Scatter);
+        foreach (var flying in shot.Shots) owner.EndShot(flying);
+
+        var hit = ShootUntil(owner, rat, hit: true);
+        var first = owner.LandShot(owner.Version, hit.Shots[0], new(rat));
+        var second = owner.LandShot(owner.Version, hit.Shots[1], new(rat));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionDisposition.Changed), (first.Disposition, second.Disposition));
+        Assert.AreEqual((hit.Resolution!.HitLocation, hit.Resolution.HitLocation), (first.Resolution!.HitLocation, second.Resolution!.HitLocation),
+            "both carry the hit decided at the shot");
+        Assert.AreEqual(before - first.Life!.HitPointDamage - second.Life!.HitPointDamage, Hp(owner, rat), "each rolls its own damage");
+        Assert.AreEqual((0, (SessionAmmoUse?)null), (owner.QueryShotsInFlight().Count, second.Ammunition));
+    }
+
+    [TestMethod]
+    public void TheSecondArrowOnACorpseDoesNothingAndAMissFliesAsTwoStrays()
+    {
+        using var owner = Owner(training: SkillTraining.Master);
+        var rat = Rat();
+        var hit = ShootUntil(owner, rat, hit: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var late = owner.LandShot(owner.Version, hit.Shots[1], new(rat));
+        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead), (late.Disposition, late.Resolution!.Refusal), "a corpse takes no damage");
+        Assert.AreEqual(1, owner.QueryShotsInFlight().Count, "that arrow is gone");
+        owner.EndShot(hit.Shots[0]);
+
+        var other = Rat("oid:other");
+        var miss = ShootUntil(owner, other, hit: false);
+        Assert.AreEqual(2, miss.Shots.Count);
+        foreach (var flying in miss.Shots)
+        {
+            Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandShot(owner.Version, flying, new(other)).Failure, "a miss never strikes its target");
+            Assert.AreEqual(AttackOutcome.Hit, owner.LandShot(owner.Version, flying, new(Rat("oid:third"))).Resolution!.Outcome, "each may stray");
+        }
+    }
+
+    [TestMethod]
+    public void BothArrowsMustFitTheLimitAndABowBelowExpertShootsOne()
+    {
+        using var owner = Owner(arrows: GameSessionOwner.MaxShotsInFlight, training: SkillTraining.Expert);
+        var rat = Rat();
+        for (var i = 0; i < GameSessionOwner.MaxShotsInFlight / 2 - 1; i++)
+            Assert.AreEqual(2, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true }).Shots.Count);
+        Assert.AreEqual(GameSessionOwner.MaxShotsInFlight - 2, owner.QueryShotsInFlight().Count);
+        Assert.AreEqual(2, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true }).Shots.Count);
+        owner.EndShot(owner.QueryShotsInFlight()[0]);
+        var units = owner.QueryHeroAmmo().Single().Units;
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true }).Failure,
+            "one free place is not enough for two");
+        Assert.AreEqual(units, owner.QueryHeroAmmo().Single().Units, "a refused shot spends nothing");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2, Flight = true }).Failure);
+
+        using var apprentice = Owner(training: SkillTraining.Apprentice);
+        Assert.AreEqual(1, apprentice.AttackCritter(apprentice.Version, new(rat) { Distance = 3, Flight = true }).Shots.Count);
+        var wall = apprentice.AttackObject(apprentice.Version, new() { Wall = true, Distance = 2, Flight = true });
+        Assert.AreEqual(1, wall.Shots.Count);
+    }
+
+    [TestMethod]
+    public void AnExpertShotAtAWallFliesAsTwoAndEachStrikes()
+    {
+        using var owner = Owner(training: SkillTraining.Expert);
+        var wall = owner.AttackObject(owner.Version, new() { Wall = true, Distance = 2, Flight = true });
+        Assert.AreEqual(2, wall.Shots.Count);
+        foreach (var flying in wall.Shots)
+            Assert.AreEqual(GameSessionFailure.None, owner.LandShotOnObject(owner.Version, flying, new() { Wall = true }).Failure);
+        Assert.AreEqual(0, owner.QueryShotsInFlight().Count);
     }
 }
