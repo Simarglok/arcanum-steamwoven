@@ -1515,6 +1515,35 @@ asked first that clears the selection. The native quick-save smoke checks the au
 details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
 original window art, sorting or paging options, a text cursor of the original's own, and the original `.gsi` format.
 
+### Bug report (ARC-DEV-051)
+
+**Ctrl+B** opens the bug report in the WORLD and AREA modes, in play, in the main menu and over any window (the
+death screen included), in both rules modes; it is no key of the original (B has no binding and a Ctrl letter is
+silenced, ARC-INPUT-004), and a function key would need Fn on a Mac. The key's moment is kept first: the frame on
+screen as PNG (before the report window is drawn; none in a headless run), the last 120 s of the log, and in a game a
+save taken as F7 takes it (none in the main menu before a game or while F7 refuses: a map change, a cast or a missile).
+Then the modal window opens above every other window (canvas layer 20): one text field, Send (Ctrl+Enter) and Cancel
+(Escape); the gate closes, the game clock pauses, a walk stops, the shade takes every click; after Send it shows the
+folder and Close. What the viewer steps on the wall clock under any modal window (NPC goal runs, flights in progress)
+keeps going under it too.
+
+- **Log.** `BugReportLog.Process`, an in-memory ring buffer of the last 120 s (at most 20,000 lines and 4 million
+  characters; a burst drops its oldest lines early and the report counts them), filled from the app's first line by
+  an engine logger (`BugReportLogger`, every engine message and error) and by session-event lines: the map, the
+  hero's cell and phase, combat mode and round, the open windows (one line per change), stored message-log entries
+  and fired queue events.
+- **Folder.** `BugReportWriter` writes `reports/YYYY-MM-DD_HH-MM-SS/` (local time, `_2`… in the same second) with
+  `report.md`, `log.txt`, `screenshot.png` and `save/slot0000.json` with its details and preview (a one-save save list;
+  `GameSaveLibrary` lists it and the quick load's path loads it). A packaged game (`steamwoven_package`) writes beside
+  the folder it was launched from (the folder of the `.app`, or of the exe); a translocated app, or a folder that cannot
+  take a written file, falls back to the user folder's `reports` with the reason. A source run uses its user folder;
+  an automated run its isolated folder. No upload.
+- **Smoke.** Stage `report` (last in the map battery, or `ARC_AREA_MAP_SMOKE_ONLY=report`): Ctrl+B opens the modal
+  report, the moment holds a save, the log line before the key and a screenshot; Send writes the folder whose
+  `report.md` names the build, rules, map, hero and combat, whose log holds the line and whose save loads; Escape
+  closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing. Marker
+  `ARC-DEV-051 native-smoke bug report PASS`. Player instruction: [alpha build](../player/alpha-build.md#7-reporting-a-bug-ctrlb).
+
 ### Main menu (ARC-UI-011)
 
 With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
