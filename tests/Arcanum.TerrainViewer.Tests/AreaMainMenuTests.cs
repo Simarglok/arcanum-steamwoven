@@ -17,8 +17,8 @@ public sealed class AreaMainMenuTests
         var menu = Menu();
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
         CollectionAssert.AreEqual(new[] { 10, 11, 12, 13, 14 }, menu.Buttons.Select(button => button.Message).ToArray(), "MM2 window 2");
-        CollectionAssert.AreEqual(new[] { "Single Player", "Exit Game" }, Labels(menu));
-        CollectionAssert.AreEqual(new[] { "MultiPlayer: " + AreaMainMenu.NoNetworkPlay, "Options: " + AreaMainMenu.NoOptions, "Credits: " + AreaMainMenu.NoCredits },
+        CollectionAssert.AreEqual(new[] { "Single Player", "Options", "Exit Game" }, Labels(menu));
+        CollectionAssert.AreEqual(new[] { "MultiPlayer: " + AreaMainMenu.NoNetworkPlay, "Credits: " + AreaMainMenu.NoCredits },
             menu.HiddenNotes.ToArray());
         menu.Activate(0);
         Assert.AreEqual(AreaMenuWindow.SinglePlayer, menu.Window);
@@ -116,7 +116,7 @@ public sealed class AreaMainMenuTests
         Assert.AreEqual(0, menu.Focus);
         menu.Move(1);
         Assert.AreEqual(1, menu.Focus);
-        menu.Move(1);
+        menu.Move(1); menu.Move(1);
         Assert.AreEqual(0, menu.Focus, "wraps");
         menu.Move(-1);
         Assert.AreEqual(AreaMenuCommandKind.Exit, menu.Confirm().Kind);
@@ -159,19 +159,19 @@ public sealed class AreaMainMenuTests
     }
 
     [TestMethod]
-    public void The_in_play_windows_list_the_originals_buttons_and_hide_options()
+    public void The_in_play_windows_list_the_originals_buttons()
     {
         var menu = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlay);
         Assert.AreEqual(AreaMenuWindow.InPlay, menu.Window);
         CollectionAssert.AreEqual(new[] { 30, 31, 32, 33, 34 }, menu.Buttons.Select(button => button.Message).ToArray(), "SF1 window 3");
-        CollectionAssert.AreEqual(new[] { "Save Game", "Load Game", "Quit", "Continue" }, Labels(menu));
-        CollectionAssert.AreEqual(new[] { "Options: " + AreaMainMenu.NoOptions }, menu.HiddenNotes.ToArray());
+        CollectionAssert.AreEqual(new[] { "Save Game", "Load Game", "Options", "Quit", "Continue" }, Labels(menu));
+        Assert.AreEqual(0, menu.HiddenNotes.Count);
         Assert.AreEqual(AreaMenuCommandKind.SaveGame, menu.Type('s').Kind);
         Assert.AreEqual(AreaMenuCommandKind.LoadGame, menu.Type('L').Kind);
         Assert.AreEqual(AreaMenuCommandKind.Continue, menu.Type('c').Kind);
         var limited = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.InPlayLimited);
         CollectionAssert.AreEqual(new[] { 70, 71, 72 }, limited.Buttons.Select(button => button.Message).ToArray(), "SF1 window 4");
-        CollectionAssert.AreEqual(new[] { "Quit", "Continue" }, Labels(limited));
+        CollectionAssert.AreEqual(new[] { "Options", "Quit", "Continue" }, Labels(limited));
         Assert.Throws<ArgumentOutOfRangeException>(() => new AreaMainMenu(AreaMainMenuTexts.Project("test"), null, AreaMenuWindow.SinglePlayer));
     }
 
