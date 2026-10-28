@@ -114,7 +114,8 @@ public sealed partial class GameSessionOwner
     /// (RH1). A weapon the remove check refuses (no drop, 0x466DA0) stays in the hand and attacks as without the flag (0x434B00).
     /// Refused (<see cref="GameSessionFailure.InvalidAttack"/>): a throw that does not fly, a weight outside 0..<see cref="ThrowRules.MaxWeight"/>,
     /// no wielded weapon, or one whose skill is not melee (the only installed "default throws" weapon, the throwing dagger 6072, is a
-    /// melee weapon; a bow's ammunition or a boomerang's return would follow other rules, TW7).
+    /// melee weapon; a bow's ammunition or a boomerang's return would follow other rules, TW7). ARC-SCRIPT-042: a weapon worn with item
+    /// event scripts is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>): the throw's removal would run them.
     /// </summary>
     private GameSessionFailure ThrowingHero(ref SessionHeroAttack hero, SessionThrow? requested, bool flight, out string? thrown)
     {
@@ -124,6 +125,8 @@ public sealed partial class GameSessionOwner
             || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)) return GameSessionFailure.InvalidAttack;
         if (Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None)
             return GameSessionFailure.None;
+        // ARC-SCRIPT-042: the throw's removal (0x466E00) would run the weapon's wield-off and remove-item scripts, which this path does not.
+        if (wielded.ScriptPoints.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
         var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
         var range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, requested.Weight);
         hero = hero with

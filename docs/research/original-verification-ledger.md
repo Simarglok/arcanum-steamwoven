@@ -141,6 +141,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="drop-cell-arc-combat-010"></a>[Drop cell (ARC-COMBAT-010)](ledger/combat.md#drop-cell-arc-combat-010) | [Combat](ledger/combat.md) | DC1–DC8 |
 | <a id="reading-window-arc-ui-049"></a>[Reading window (ARC-UI-049)](ledger/ui-audio.md#reading-window-arc-ui-049) | [Interface windows and audio](ledger/ui-audio.md) | WR1–WR16 |
 | <a id="item-events-arc-script-041"></a>[Item events (ARC-SCRIPT-041)](ledger/scripts.md#item-events-arc-script-041) | [Scripts and events](ledger/scripts.md) | IE1–IE7 |
+| <a id="wield-events-arc-script-042"></a>[Wield events (ARC-SCRIPT-042)](ledger/scripts.md#wield-events-arc-script-042) | [Scripts and events](ledger/scripts.md) | WE1–WE7 |
 | <a id="item-use-script-arc-script-020"></a>[Item use script (ARC-SCRIPT-020)](ledger/scripts.md#item-use-script-arc-script-020) | [Scripts and events](ledger/scripts.md) | IU1–IU5 |
 | <a id="freed-cells-arc-world-065"></a>[Freed cells (ARC-WORLD-065)](ledger/items.md#freed-cells-arc-world-065) | [Items and inventory](ledger/items.md) | FC1–FC3 |
 | <a id="long-and-far-routes-arc-world-060"></a>[Long and far routes (ARC-WORLD-060)](ledger/world.md#long-and-far-routes-arc-world-060) | [World, maps and movement](ledger/world.md) | LR1–LR9 |

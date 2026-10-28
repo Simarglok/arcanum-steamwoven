@@ -13,7 +13,8 @@ public delegate SessionWearableItem? SessionWearableLookup(string entity);
 /// <summary>
 /// What <see cref="GameSessionOwner.EquipBest"/> did in one slot: the item it took off (to the inventory), the item it wielded, and,
 /// when a step was refused, the wear rule (<see cref="Refusal"/>) or the insert check's answer (<see cref="Verdict"/>). When the
-/// chosen item has a move script or item spells, which the session does not run, <see cref="Unsupported"/> names the item and
+/// chosen item has a move script or item spells, or (ARC-SCRIPT-042) the worn item the step would take off has item event scripts,
+/// which this call does not run, <see cref="Unsupported"/> names the item and
 /// <see cref="Failure"/> the reason (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or
 /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>), and the slot keeps what it held when the call began (a weapon taken off
 /// for the choice goes back on). A slot where nothing happened is not listed.
@@ -178,6 +179,8 @@ public sealed partial class GameSessionOwner
         internal void TakeOff(EquipmentSlot slot, StepRecord step)
         {
             var current = Worn[slot];
+            // ARC-SCRIPT-042: a worn item with item event scripts stays (this call runs no scripts).
+            if (current.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
             if (EquipmentRules.CheckRemove(current.Item) is var refusal and not EquipmentRefusal.None) { step.Refusal = refusal; return; }
             var verdict = Insert(current);
             if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
@@ -194,6 +197,7 @@ public sealed partial class GameSessionOwner
             var unsupported = EquipmentDomain.MoveScripts.Any(facts.ScriptPoints.Contains) ? GameSessionFailure.ItemScriptUnsupported
                 : facts.HasItemSpells ? GameSessionFailure.ItemEffectUnsupported : GameSessionFailure.None;
             if (unsupported != GameSessionFailure.None) { step.Unsupported = entity; step.Failure = unsupported; return; }
+            if (current?.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
             var worn = Worn.ToDictionary(pair => pair.Key, pair => pair.Value.Item);
             var refusal = EquipmentRules.CheckWear(facts.Item, slot, Wearer, worn);
             if (refusal == EquipmentRefusal.None && EquipmentRules.NeedsArtCheck(facts.Item, slot))
