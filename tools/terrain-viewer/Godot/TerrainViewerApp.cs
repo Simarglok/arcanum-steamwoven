@@ -46,6 +46,8 @@ public partial class TerrainViewerApp : Node
 
     public override void _Ready()
     {
+        // ARC-DEV-047: the packaged commit (or a source run) and the user:// folder this build reads and writes.
+        GD.Print($"ARC-DEV-047 build {ViewerBuild.Current.Text} user={OS.GetUserDataDir()}");
         var canvas = new TerrainCanvas { Name = "TerrainCanvas" };
         AddChild(canvas);
         _canvas = canvas;
