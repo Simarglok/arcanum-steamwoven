@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Items;
 
 namespace Arcanum.Session;
@@ -155,8 +156,13 @@ public sealed partial class GameSessionOwner
     private bool HeroOverloaded(string? leaving = null) =>
         HeroCarryFacts(leaving is null ? null : new Dictionary<string, int?>(StringComparer.Ordinal) { [leaving] = null }) is { } carry && carry.Weight > carry.CarryWeight;
 
-    // The held items that belong in the grid: not worn, in list order (kit, taken, made).
-    private IEnumerable<string> GridMembers() => HeroHeld().Select(item => item.Entity).Where(entity => _equipment.SlotOf(entity) is null);
+    // The held items that belong in the grid: not worn and on no item hotkey entry (ARC-UI-022: location 2000 + entry), in list order (kit,
+    // taken, made).
+    private IEnumerable<string> GridMembers()
+    {
+        var onHotkeys = HotkeyItems().ToHashSet(StringComparer.Ordinal);
+        return HeroHeld().Select(item => item.Entity).Where(entity => _equipment.SlotOf(entity) is null && !onHotkeys.Contains(entity));
+    }
 
     /// <summary>
     /// ARC-UI-019: after every change the grid follows the hero's list as the original's removal and insertion keep it (0x466E00, 0x466640):
@@ -184,11 +190,13 @@ public sealed partial class GameSessionOwner
         }
     }
 
-    // A saved grid: each item one the PC holds and does not wear, once, inside the grid, with no shared cell.
-    private static GameSessionFailure ImportHeroGrid(IReadOnlyList<SessionHeroGridItem> saved, InventoryDomain inventory, EquipmentDomain equipment)
+    // A saved grid: each item one the PC holds and does not wear, on no item hotkey entry (ARC-UI-022), once, inside the grid, with no shared cell.
+    private static GameSessionFailure ImportHeroGrid(IReadOnlyList<SessionHeroGridItem> saved, InventoryDomain inventory, EquipmentDomain equipment,
+        IReadOnlyList<HotkeyEntry> hotkeys)
     {
         var held = inventory.Kit.Select(item => item.Entity).Concat(inventory.Pc.Select(item => item.Entity)).Concat(inventory.Made.Select(item => item.Entity))
-            .Where(entity => equipment.SlotOf(entity) is null).ToHashSet(StringComparer.Ordinal);
+            .Where(entity => equipment.SlotOf(entity) is null && !hotkeys.Any(entry => entry.Kind == HotkeyKind.Item && entry.Item == entity))
+            .ToHashSet(StringComparer.Ordinal);
         var occupied = new bool[SessionHeroGrid.Slots];
         foreach (var item in saved)
         {

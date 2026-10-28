@@ -125,6 +125,9 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-019: puts an item on the cursor (a wear move's occupant).</summary>
     public void Hold(AreaInventoryHeld? held) => _area.Hold(held);
 
+    /// <summary>ARC-UI-022: the item held on the cursor, or null (a key 1..0 drops it on a hotkey entry).</summary>
+    public AreaInventoryHeld? Held => _area.Held;
+
     public void CloseView()
     {
         // An item held on the cursor goes back first (0x575770, IW1): it never left its place.

@@ -478,6 +478,8 @@ public partial class TerrainViewerApp
     /// <summary>While the window is open it owns every key: I and Escape close it on a fresh press.</summary>
     private void HandleInventoryKey(InputEventKey key)
     {
+        // ARC-UI-022: a key 1..0 drops the held item on that hotkey entry.
+        if (DropHeldOnHotkey(key)) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.I && !CharacterKeySilenced(key, routed)))) EndInventory();
     }
