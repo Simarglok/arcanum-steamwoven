@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Skills;
 
-// The pick-pocket rules (ARC-SKILLS-010, ledger PP1–PP10). Values are invented.
+// The pick-pocket rules (ARC-SKILLS-010, ledger PP1–PP11). Values are invented.
 [TestClass]
 public sealed class PickPocketRulesTests
 {

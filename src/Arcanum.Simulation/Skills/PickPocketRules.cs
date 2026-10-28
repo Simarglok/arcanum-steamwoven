@@ -37,7 +37,7 @@ public enum PickPocketDetection { None, Noticed, PerceptionRoll }
 public enum PickPocketCaughtStop { VictimScript, VictimFollowsThief, None }
 
 /// <summary>
-/// The pick-pocket skill (ARC-SKILLS-010, task S15 of the skills plan) as the retail 1.0.7.4 executable runs it (ledger PP1–PP10): the
+/// The pick-pocket skill (ARC-SKILLS-010, task S15 of the skills plan) as the retail 1.0.7.4 executable runs it (ledger PP1–PP11): the
 /// skill bar's start (0x57A320 → 0x57A5E0 → the inventory window in steal mode), the pick-pocket case of the skill handler after the
 /// shared check (0x4C7160 around 0x4C743C: the amount that moves, the detection of a failure, the alignment change of a theft) and the
 /// order of a caught thief's consequences. The check itself is <see cref="SkillCheckRules.Run"/> (pick pocket is opposed by the

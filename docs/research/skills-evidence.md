@@ -441,7 +441,7 @@ an attack by the thief on the victim (AI hostility). A master is never caught pl
 (handler (0x4C7160)).
 
 **Original check (ARC-SKILLS-010):** read in the retail executable, rows
-[PP1–PP10](ledger/skills.md#pick-pocket-arc-skills-010) (PP1–PP8 by two readers, PP9–PP10 one reading). They add that a stoned
+[PP1–PP11](ledger/skills.md#pick-pocket-arc-skills-010) (PP1–PP8 by two readers, PP9–PP11 one reading). They add that a stoned
 target and the thief itself are refused silently, that the "no pickpocket" and mechanical refusal comes before the life test, that the
 window opens only while the thief sees the target, that each drag is a 4-action-point attempt without a quantity window, that a
 refused insertion is a quiet failure, that only an untrained thief faces the perception die, that the alignment change has bounds and

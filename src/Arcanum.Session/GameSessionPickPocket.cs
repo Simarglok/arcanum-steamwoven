@@ -128,7 +128,7 @@ public sealed partial class GameSessionOwner
             if (_revision >= long.MaxValue - 1) return RejectPickPocket(GameSessionFailure.RevisionExhausted);
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectPickPocket(charge.Failure) with { Charge = charge };
-            // Too few action points end the subturn and the attempt does not run.
+            // Too few action points end the subturn and the check node does not run the check (0x42A359, PP11).
             if (charge.Charge == SessionActionPointUse.Refused) return RejectPickPocket(GameSessionFailure.PickPocketOutOfTurn) with { Charge = charge };
         }
         return PickPocketStep(victim, direction, item, kind, quantity, location, width, height, newStackKind, insertCheck, scripts, triggers) with { Charge = charge };
@@ -175,36 +175,43 @@ public sealed partial class GameSessionOwner
         catch (SkillRolls.ExhaustedException) { return RejectPickPocket(GameSessionFailure.RandomExhausted); }
 
         var amount = check.Success ? PickPocketRules.Amount(kind, quantity) : 0;
-        // The check's draws are spent before the move, whose item scripts and triggers draw after them; a refused move puts them back.
+        // The check's draws are spent before the move, whose item scripts and triggers draw after them; a refused move puts them back
+        // unless a host's call back into the owner committed state meanwhile (its draws then stay).
         var before = _random;
+        var committed = _revision;
         _random = rolls.Trial;
+        void PutBack() { if (_revision == committed) _random = before; }
         InventoryMutationResult? move = null;
         var moved = false;
         if (amount > 0)
         {
             var npc = victim.Npc;
-            move = (direction, kind) switch
+            try
             {
-                (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item),
-                (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck),
-                (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers),
-                (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck),
-                _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers),
-            };
+                move = (direction, kind) switch
+                {
+                    (PickPocketDirection.Steal, PickPocketItemKind.Gold) => TakeGoldFromNpc(Version, npc, amount, item),
+                    (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck),
+                    (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers),
+                    (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck),
+                    _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers),
+                };
+            }
+            catch { PutBack(); throw; }
             var result = move.Value;
             moved = result.Disposition == GameSessionDisposition.Changed && result.Item is not null;
             // A move the insertion refuses or a script declines is a failure that is never noticed (PP3); any other refusal is one the
             // session cannot answer as the original does, so the attempt is refused with nothing rolled.
             if (result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.InsertRefused)
             {
-                _random = before;
+                PutBack();
                 return RejectPickPocket(result.Failure) with { Move = result };
             }
             if (!moved) amount = 0;
         }
         if (move is not { Disposition: GameSessionDisposition.Changed } && _revision == long.MaxValue)
         {
-            _random = before;
+            PutBack();
             return RejectPickPocket(GameSessionFailure.RevisionExhausted);
         }
 

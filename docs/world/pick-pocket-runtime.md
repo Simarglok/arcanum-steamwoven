@@ -17,8 +17,8 @@ Requirements: [FR-ITEM-015](../requirements/items-economy.md#fr-item-015) (steal
 ## Evidence
 
 - The retail 1.0.7.4 `Arcanum.exe`: rows PP1–PP8 of the [verification ledger](../research/ledger/skills.md#pick-pocket-arc-skills-010),
-  read on 2026-10-21 by two independent readers who agree on every row, and PP9–PP10, one reading by this task (the refusal bits, the
-  window's mode, the skill bar's file, the drop handlers without the quantity window, no stolen flag on the item). No row is an
+  read on 2026-10-21 by two independent readers who agree on every row, and PP9–PP11, one reading by this task (the refusal bits, the
+  window's mode, the skill bar's file, the drop handlers without the quantity window, no stolen flag on the item, the check node's refused charge). No row is an
   anomaly that needs a rule-mode switch.
 - The check, its difficulty and the fate: [SC1–SC17](../research/ledger/skills.md#skill-check-arc-skills-003) (pick pocket is opposed
   by the victim's perception; SC11 its worn-slot and size terms; SC14 its fate kind 8), FT6.
@@ -49,7 +49,8 @@ cannot pay ends its subturn and refuses the attempt (`PickPocketOutOfTurn` with 
 perception die when it is rolled. On a success the move runs through `TakeGoldFromNpc`, `TakeAmmoFromNpc`, `TakeItemFromNpc`,
 `GiveAmmoToNpc` or `GiveItemToNpc`; the check, the move, the alignment and the fate share the move's revision, and an attempt that moves
 nothing takes one revision of its own. The check's draws are committed before the move (whose item scripts and pickup or removal
-triggers draw after them) and put back when the move is refused. The thief's alignment `b` is the hero's stored alignment (the
+triggers draw after them) and put back when the move is refused for any reason but the insert check (or throws), unless a host's call back into the owner
+committed state meanwhile. The thief's alignment `b` is the hero's stored alignment (the
 session has no effects on alignment). A move refused for any reason but the insert check (a script the session does not run, a
 budget, the revision) refuses the attempt after the charge, with nothing rolled or moved. The answer carries the check, the amount
 moved, the move's own result, the die, whether the failure was noticed, the new alignment and whether the fate was used.
