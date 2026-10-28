@@ -15,8 +15,8 @@ Requirements touched (none changes coverage here): [FR-UI-006](../requirements/u
 (the player's own installation), [FR-PRODUCT-005](../requirements/content-product.md#fr-product-005)
 (platforms) and [FR-PRODUCT-006](../requirements/content-product.md#fr-product-006) (compatibility vs intended fixes).
 
-Related work: the in-game Options window ARC-UI-013 (step N9 of the owner's alpha plan, outside the repository; in
-progress and not on main when this note was written) and the alpha's final task, packaged builds for macOS and Windows 11 x64 with a player instruction for pointing
+Related work: the in-game Options window [ARC-UI-013](../rendering/terrain-viewer.md#options-window-arc-ui-013)
+(PR #441, step N9 of the owner's alpha plan, which is outside the repository) and the alpha's final task, packaged builds for macOS and Windows 11 x64 with a player instruction for pointing
 the app at the original GOG files (owner, 2026-10-28; outside the repository).
 
 ## Sources and evidence
@@ -82,12 +82,13 @@ How the mode is chosen today:
 
 The JSON stores keep an automated run away from the player's files (ARC-DEV-032): a test path variable wins; without
 one an automated run either uses an isolated folder (`ViewerStoragePaths`: zoom, input, saves) or has no file at all
-(Always Run, volumes, visual profile); only an ordinary run reads and writes the player's file. The files carry a
-`version` field (volumes, zoom, input) or a `schema` field (visual profile) and are overwritten in place. Under Godot's
+(Always Run, volumes, visual profile, game settings); only an ordinary run reads and writes the player's file. The files carry a
+`version` field (game settings, volumes, zoom, input) or a `schema` field (visual profile) and are overwritten in place. Under Godot's
 `user://`:
 
 | File | Owner task | Content |
 | --- | --- | --- |
+| `user://game_settings_v1.json` | ARC-UI-013 | the Options window's difficulty, default combat mode, auto attack (`version` 1) |
 | `user://always_run_v1.json` | ARC-WORLD-020 | Always Run option |
 | `user://audio_volumes_v1.json` | ARC-UI-040 | effects, voice, music volumes (0–10, default 5) |
 | `user://visual_profile_v1.json` | ARC-UI-006 | Legacy or HD visual profile |
@@ -98,10 +99,11 @@ one an automated run either uses an isolated folder (`ViewerStoragePaths`: zoom,
 | `user://saves/`, `user://saves/map` (folders) | ARC-UI-010 | saves and the map quick save |
 
 Outside the AREA viewer, `src/Arcanum.Godot`'s HD review capture writes `user://hd-review` (diagnostic only).
-According to the ARC-UI-013 work in progress (not on main, so not checked here), that task adds the original's Options
-window for the settings the original keeps in `arcanum.cfg` (difficulty, combat mode, auto-attack, always run, volumes
-and the rest; their exact list is that task's executable reading) with its own store, and decides whether Always Run
-and the volumes keep their current files or move to its store. The viewer's project is
+ARC-UI-013 opens the original's Options window (window 6, ledger OP1–OP8; the original keeps its 16 controls in
+`arcanum.cfg`) from the main menu and the in-play menus. It shows the Game and Sound pages (difficulty, default combat
+mode, auto attack, Always Run, the three volumes) and hides the Video page and the controls without a function, each
+with its reason. It stores its own three values in `game_settings_v1.json` and leaves Always Run and the volumes in
+their files. It has **no rule-mode control**. The viewer's project is
 still named `Arcanum Terrain Viewer` and has no custom user folder, so `user://` is Godot's default
 `app_userdata/Arcanum Terrain Viewer` folder on each OS.
 
@@ -167,8 +169,8 @@ screen is not part of the original's menu: it comes before it, has its own look,
 
 | Setting | In-game Options (original menu) | Launcher |
 | --- | --- | --- |
-| The original's `arcanum.cfg` settings (difficulty, combat mode, auto-attack, always run, volumes, …) and their stores, including today's Always Run and volume files | **Owner** (ARC-UI-013) | not shown |
-| Rule mode Steamwoven/Original | optional line or toggle (D8 says the settings menu may switch it in play; alpha plan N9 lists "rule mode") | **Owner**: full choice incl. custom profiles |
+| The original's options (difficulty, default combat mode, auto attack, Always Run, volumes; later the Video page) and their files | **Owner** (ARC-UI-013, done) | not shown |
+| Rule mode Steamwoven/Original | optional line or toggle, not built by ARC-UI-013 (D8 says the settings menu may switch it in play; alpha plan N9 lists "rule mode") | **Owner**: full choice incl. custom profiles |
 | Per-switch custom profile | shows the active profile's name only | **Owner** (editor) |
 | Game folder, module | — | **Owner** (applies at once before the main menu; a change after content is loaded needs a restart) |
 | Display mode, monitor, UI scale | — (the original has none) | **Owner** |
@@ -192,7 +194,7 @@ does not erase a newer build's settings.
   last validation result's identity (`Version.txt`, file sizes) so a changed installation is noticed at start.
 - the existing preference files above and ARC-UI-013's options store, as that task leaves them.
 - the original's own `arcanum.cfg` in the game folder is **never written**: the installation stays read-only.
-  Importing its values once on the first run is an option for ARC-UI-013, not for the launcher.
+  Importing its values once on the first run is an option for a later Options task, not for the launcher.
 
 **Location.** Godot's `user://`. A packaged build should set `application/config/use_custom_user_dir` with a project
 name instead of the default `Godot/app_userdata/<project>` folder:
@@ -316,7 +318,7 @@ project yet).
 | --- | --- | --- | --- | --- | --- |
 | 1 | Launcher settings store and game-folder locator: `launcher_v1.json` codec (Godot-independent), OS folders, Windows registry and fixed candidates, `Discover` + identity check, typed results, synthetic tests | DEV | Mac (dotnet) | FR-CONTENT-001, FR-LIFECYCLE-004, FR-PRODUCT-005 | — |
 | 2 | Launcher screen in the game app: first-run and invalid-folder flows, native folder dialog, rule mode (built-in), display at start, Play; the app reads the folder instead of command-line roles when started without them; launcher sync in `tools/local_dev` and docs | UI | Mac (Godot) | FR-LIFECYCLE-001, FR-UI-006, FR-LIFECYCLE-004 | 1 |
-| 3 | Rule mode in play: wire the stored mode to session start and `SelectRules`, and the in-game Options line if ARC-UI-013 does not add it; close the "no settings menu" item of the rule modes contract | UI | Mac | FR-PRODUCT-006, FR-UI-006 | 1, ARC-UI-013 |
+| 3 | Rule mode in play: wire the stored mode to session start and `SelectRules`, and the in-game Options line (ARC-UI-013 did not add one); close the "no settings menu" item of the rule modes contract | UI | Mac | FR-PRODUCT-006, FR-UI-006 | 1, ARC-UI-013 |
 | 4 | Switch catalogue and custom profiles: catalogue with player texts, `GameRules.Custom`, codec schema 2, contract change, launcher editor | WORLD + UI (two tasks) | Mac | FR-PRODUCT-006 | 2, owner's decision |
 | 5 | Packaged builds (the alpha's final task): macOS `.app` and Windows x64 presets, player folder name, icon, signing level, smoke on both OSes, player instruction for GOG on macOS and Windows | DEV | Mac (+ a Windows 11 machine for the smoke) | FR-PRODUCT-005, FR-LIFECYCLE-001 | 1, 2 |
 
