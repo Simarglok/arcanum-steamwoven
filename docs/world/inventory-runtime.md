@@ -517,8 +517,9 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
 - **Not modelled.** A refused new pile or stack, which the original leaves on the ground at the NPC's tile while it reports success (here
   nothing moves, `InsertRefused`); the transfer script's veto and the item and holder events (refused when present, not run); a source
   without a pile or stack, which the original credits from nothing (AMA6: refused here); the no-drop item flag
-  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers; the barter window's substitute
-  container, identified flag, payment order and restock (ARC-UI-050, NT4).
+  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers. The barter window's trades
+  (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); its substitute container,
+  identified flag and restock are not modelled.
 
 ## Made item complexity (ARC-WORLD-083)
 

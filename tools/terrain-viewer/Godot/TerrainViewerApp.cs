@@ -127,9 +127,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, menu, scene)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, barter, menu, scene)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census, menu and scene run.
+                        // walk, census, barter, menu and scene run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -144,6 +144,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-COMBAT-015: the combat stages after the cast (object attack, critical, line of fire, ranged shot), as the
                                 // map battery runs them last.
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
+                                // ARC-UI-050: the barter window over a speaker of the map (with --hero).
+                                if (Stage("barter")) await RunAreaBarterSmokeAsync();
                                 // ARC-UI-011: the main menu over the start map (with --main-menu true, which blocks the other stages).
                                 if (Stage("menu")) await RunAreaMainMenuSmokeAsync();
                                 // ARC-UI-012: the scene flow from another map (with --main-menu true; the start map loads in it).
@@ -900,7 +902,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); }
+            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

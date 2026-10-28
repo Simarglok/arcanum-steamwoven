@@ -402,7 +402,9 @@ public sealed class AreaConversationHost
                 // ARC-TECHNOLOGY-006: SU asks for the schematic window with the speaker as crafter; the host opens it once the talk ended.
                 new SchematicPort(this),
                 // ARC-WORLD-058: an NPC g: greeting, when the module's greeting texts load.
-                greeting));
+                greeting,
+                // ARC-UI-050: a b: reply asks for the barter window with the speaker as merchant; it needs the session hero.
+                _session.QueryHero() is null ? null : new BarterPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -468,6 +470,30 @@ public sealed class AreaConversationHost
             if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
             if (host._session.QueryNpcDead(entity) || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
             host.SchematicCrafter = entity;
+            return DialogCommandResult.Applied;
+        }
+    }
+
+    /// <summary>ARC-UI-050: the merchant the last b: reply asked for (its entity and speaker index), set when the port applied it; the
+    /// host opens the barter window with it after the conversation ended with <see cref="DialogEndKind.BarterWindow"/>.</summary>
+    public (string Entity, int Speaker)? BarterMerchant { get; private set; }
+
+    /// <summary>Takes the merchant the last b: reply asked for, once.</summary>
+    public (string Entity, int Speaker)? TakeBarterMerchant()
+    {
+        var merchant = BarterMerchant;
+        BarterMerchant = null;
+        return merchant;
+    }
+
+    // b: (ledger BT7): the original's open refuses only a dead or missing PC (0x572370); the partner is not checked.
+    private sealed class BarterPort(AreaConversationHost host) : IDialogBarterPort
+    {
+        public DialogCommandResult Execute(OpenBarterCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            if (host._session.QueryHero() is null || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
+            host.BarterMerchant = (entity, (int)(command.Npc.Value - 1000));
             return DialogCommandResult.Applied;
         }
     }

@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || WorldMapOpen || SaveListOpen || MainMenuOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -349,6 +349,7 @@ public partial class TerrainViewerApp
         if (SheetOpen) { HandleSheetPulse(intent); return; }
         if (LogbookOpen) { HandleLogbookPulse(intent); return; }
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
+        if (BarterOpen) { HandleBarterPulse(intent); return; }
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
         if (SaveListOpen) { HandleSaveListPulse(intent); return; }
@@ -789,6 +790,13 @@ public partial class TerrainViewerApp
         if (SchematicsOpen && input is InputEventKey schematicsKey)
         {
             HandleSchematicsKey(schematicsKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-050: the open barter window owns every key (Escape closes it).
+        if (BarterOpen && input is InputEventKey barterKey)
+        {
+            HandleBarterKey(barterKey);
             GetViewport().SetInputAsHandled();
             return;
         }

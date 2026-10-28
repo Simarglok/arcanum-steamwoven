@@ -166,6 +166,8 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaSceneFlowAsync(host);
             Stage("AreaSchematics");
             await AssertAreaSchematicsAsync(host);
+            Stage("AreaBarter");
+            await AssertAreaBarterAsync(host);
             Stage("AreaReading");
             await AssertAreaReadingAsync(host);
             Stage("ViewerAudio");

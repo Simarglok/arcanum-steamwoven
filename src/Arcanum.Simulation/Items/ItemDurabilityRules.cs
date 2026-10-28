@@ -130,17 +130,16 @@ public static class ItemDurabilityRules
     public static bool BlocksUse(ItemCondition item) => false;
 
     /// <summary>The part of the sale check that reads the item alone: a worth of 0 or a broken item is refused (the price is
-    /// then 0). The haggle, buy-script, dealer and item-flag checks need both parties and are the trade owner's.</summary>
-    [OriginalFunction(0x462170, OriginalFunctionScope.Partial)]
+    /// then 0). The whole check, both parties included, is <see cref="TradeRules.SaleCheck"/> (ARC-UI-050).</summary>
     public static bool SaleRefused(ItemCondition item, int worth) => worth == 0 || item.Broken;
 
     /// <summary>
     /// The damage part of the item price: when the PC sells and the item has lost hit points (current below maximum), the
     /// price the caller computed (worth, the buyer's multiplier and the haggle share) becomes <c>current × price / maximum</c>;
     /// then a negative price is 0 and a price of exactly 1 is 2 (the PC-seller branch's bounds). Buying from an NPC ignores
-    /// damage: the price comes back unchanged (that branch's own bounds are the trade owner's).
+    /// damage: the price comes back unchanged (that branch's own bounds are the trade owner's). The whole price is
+    /// <see cref="TradeRules.Price"/> (ARC-UI-050); the repair quote keeps this step.
     /// </summary>
-    [OriginalFunction(0x461F80, OriginalFunctionScope.Partial)]
     public static int ScalePrice(int price, ItemCondition item, bool pcSells)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(price);

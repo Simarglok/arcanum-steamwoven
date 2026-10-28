@@ -1393,6 +1393,28 @@ native smoke after the logbook stage: `ARC-TECHNOLOGY-005 native-smoke schematic
 `--hero`, `T` opens over the live session, the controls move, `Escape` closes, nothing changes; on a detached synthetic hero
 holding a learned record's components one assembly makes its product).
 
+### Barter window (ARC-UI-050)
+
+A conversation reply `b:` ends the talk and opens a diagnostic barter window with the speaker as merchant once nothing else owns input
+(crash-site-area: exterior, cave and `--area-map`; it needs `--hero`). Contract: [barter runtime](../world/barter-runtime.md), ledger
+[BT1–BT10](../research/ledger/items.md#barter-arc-ui-050). The header shows the hero's and the merchant's gold, the hero's haggle
+effectiveness and training, the merchant's reaction, price multiplier and buy list (`Listed`, `Everything`, `None`, `Emptied`), a fence and
+a buy-object script; the left column has a `Sell:` button per hero item with its sale quote, the right column a `Buy:` button per
+merchant ware (not worn, not coins) with its buy quote; a quote of 0 shows its reason (`NotDealt`, `WontSell`, `Stolen`, ...) and its
+button is disabled; a follower's window is free. A stack trades whole at the unit price × units. A trade runs through the session,
+prints `sold …`/`bought … for N` with a reaction change, or `not enough money`, `won't buy (…)`, `the merchant cannot pay`, and requests
+the trade sound 8158. Like the schematic window it is modal (gate closed, clock paused, a walk stopped) and owns every key: `Escape`, a
+controller cancel or `Close` closes it. A quick load, a map change or a dead hero closes it. The inventory sources and every item
+prototype load once per module in the background. The HUD adds `barter open: Escape closes` and the last refusal.
+
+**Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
+the follower menu and cycling, the substitute container (installed merchants keep their stock there, so they show only their own list),
+the identified flag and the restock timer ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). Self-test
+`ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
+with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
+`ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, its quotes, `Escape` closes
+with nothing changed; one sale and one buy on a detached copy).
+
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use
