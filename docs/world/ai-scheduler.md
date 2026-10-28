@@ -76,7 +76,7 @@ follow the original in both settings; P5 (the combat scripts on every pass) is k
 
 - **Host.** No host implements `ISessionAiWorld`: the viewer schedules no tick on a sector fold or an NPC's placement, runs no
   heartbeat or combat script through the gate, and ends an NPC's subturn at once (`AreaTurnBased.Step`); I10 wires them.
-- **Pipeline stages.** Heal and the item search (slice I8), the danger update's writes (the decisions of slices I4 and I5) and
+- **Pipeline stages.** Heal and the item search (rules of slice I8, `AiSupportRules.Heal` and `AiGroundRules.SearchItems`, [AI support](ai-support.md)), the danger update's writes (the decisions of slices I4 and I5) and
   perform are the host's stages; perform's rules are the executor's `AiExecutorRules.Perform` (ARC-WORLD-086,
   [AI executor](ai-executor.md)), but no host calls it behind the port yet (I10).
 - **Other callers of the pass.** The attack misses and the damage without death (0x4B30F5, 0x4B3948, 0x4B52FC) and the follower
