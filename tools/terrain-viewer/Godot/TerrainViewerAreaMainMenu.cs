@@ -314,6 +314,7 @@ public partial class TerrainViewerApp
         _areaKitHealing = hero?.KitHealing;
         _areaKitLockpicks = hero?.KitLockpicks;
         _areaKitDurability = hero?.KitDurability;
+        _areaKitWear = hero?.KitWear;
         _areaKitArt = hero?.KitArt;
         _areaKitMissileArt = hero?.KitMissileArt;
         _areaKitThrowWeight = hero?.KitThrowWeight;

@@ -834,9 +834,13 @@ public sealed partial class GameSessionOwner : IDisposable
     /// merges into the hero's stack of its prototype (or starts one; a sum past 32 bits is <see cref="GameSessionFailure.BudgetExceeded"/>). An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
     /// without a host such an item is refused.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     [OriginalFunction(0x4617F0, OriginalFunctionScope.Partial)]
-    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
+    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
+        ISessionItemTriggers? triggers = null) => PickedUp(PickUp(expected, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult PickUp(GameSessionVersion expected, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -863,10 +867,13 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script without a host. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled without a host (the
     /// session has no PC object); since ARC-SCRIPT-041 that slot runs through <paramref name="scripts"/>, with the item's remove-item script.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     [OriginalFunction(0x461CA0, OriginalFunctionScope.Partial)]
     public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(Loot(expected, holder, item, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult Loot(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -893,9 +900,12 @@ public sealed partial class GameSessionOwner : IDisposable
     /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
     /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
     /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
+    /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move.
     /// </summary>
     public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null)
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(GiveToPc(expected, npc, name, insertCheck, scripts), triggers);
+
+    private InventoryMutationResult GiveToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -1670,6 +1680,15 @@ public sealed partial class GameSessionOwner : IDisposable
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
+    }
+
+    /// <summary>ARC-MAGIC-022: the pickup executor (0x4CBAA0, IU10) through <paramref name="triggers"/> for an item that entered the hero's
+    /// list (not for an ammunition item merged into a stack: it is deleted, and the original returns before the pickup).</summary>
+    private InventoryMutationResult PickedUp(InventoryMutationResult result, ISessionItemTriggers? triggers)
+    {
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item))
+            return result;
+        return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
     }
 
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
