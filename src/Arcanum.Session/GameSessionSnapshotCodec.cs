@@ -85,9 +85,10 @@ public static class GameSessionSnapshotCodec
     // ARC-WORLD-083 (schema 41): a made item's complexity.
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
-    private static readonly string[] WornFields = ["slot", "entity", "item", "scripts"];
-    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses"];
+    private static readonly string[] WornFields = ["slot", "entity", "item", "scripts", "itemSpells"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses", "charges"];
     private static readonly string[] ItemUseFields = ["entity", "uses"];
+    private static readonly string[] ItemChargeFields = ["entity", "charges"];
     private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
@@ -492,6 +493,15 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
                 w.WriteNumber("uses", item.Uses);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("charges");
+            foreach (var item in snapshot.Durability.Charges)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("charges", item.Charges);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1712,6 +1722,8 @@ public static class GameSessionSnapshotCodec
         w.WriteStartArray("scripts");
         foreach (var point in worn.ScriptPoints) w.WriteNumberValue(point);
         w.WriteEndArray();
+        // ARC-MAGIC-022: whether its wear spells ran through a trigger host.
+        w.WriteBoolean("itemSpells", worn.ItemSpells);
         w.WriteEndObject();
     }
 
@@ -1747,7 +1759,8 @@ public static class GameSessionSnapshotCodec
                 if (!EquipmentDomain.MoveScripts.Contains(scripts[j]) || j > 0 && scripts[j] <= scripts[j - 1])
                     throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{path}.scripts[{j}]");
             }
-            worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item")) { ScriptPoints = EquipmentDomain.MovePoints(scripts) };
+            worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"))
+                { ScriptPoints = EquipmentDomain.MovePoints(scripts), ItemSpells = Bool(f["itemSpells"], path + ".itemSpells") };
         }
         return new(worn);
     }
@@ -1800,7 +1813,17 @@ public static class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(entity, uses[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             uses[i] = new(entity, Int(item["uses"], path + ".uses", 1, SessionItemUseLimits.MaxUses));
         }
-        return new(items, destroyed, uses);
+        var spent = Array(f["charges"], p + ".charges", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var charges = new SessionItemCharges[spent.Length];
+        for (var i = 0; i < spent.Length; i++)
+        {
+            var path = $"{p}.charges[{i}]";
+            var item = Fields(spent[i], path, ItemChargeFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, charges[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            charges[i] = new(entity, Int(item["charges"], path + ".charges", 0, SessionItemUseLimits.MaxUses));
+        }
+        return new(items, destroyed, uses, charges);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.

@@ -120,6 +120,8 @@ public sealed partial class GameSessionOwner
         var worn = _equipment.SlotOf(item) is not null;
         // ARC-SCRIPT-042: a worn item with item event scripts (a kit or made item too) would leave without its wield-off and remove-item runs.
         if (_equipment.SlotOf(item) is { } wornIn && _equipment.Worn[wornIn].ScriptPoints.Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-MAGIC-022: a worn item with the item spells mark would leave without its unwear (0x4CBFC0).
+        if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (held.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item, out var listed) &&
             (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
                 worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))

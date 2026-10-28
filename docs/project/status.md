@@ -65,6 +65,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
+| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |
@@ -128,6 +129,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC AI executor | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-086, ARC-WORLD-084, ARC-WORLD-082 |
 | NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-088, ARC-WORLD-086, ARC-MAGIC-014 |
 | NPC AI action goals | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-089, ARC-WORLD-088, ARC-WORLD-086 |
+| NPC AI followers in combat | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-091, ARC-WORLD-080, ARC-WORLD-046 |
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |

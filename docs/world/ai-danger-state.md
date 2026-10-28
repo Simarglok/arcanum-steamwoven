@@ -88,7 +88,7 @@ an undefined bit, an invalid handle, a repeated enemy and the budgets. Schema 40
 
 ## Not ready
 
-- **Callers.** The AI pass (slice I6, [AI scheduler](ai-scheduler.md)) runs the danger update only as a host stage, and no host or follower order (I9) calls the setter yet (morale, I5, decides its flight requests), and nothing calls the danger
+- **Callers.** The AI pass (slice I6, [AI scheduler](ai-scheduler.md)) runs the danger update only as a host stage, and no host calls the setter yet (the attack order of slice I9 locks through it, [AI followers](ai-followers.md)) (morale, I5, decides its flight requests), and nothing calls the danger
   update, attack event, reaction to an attack, kill-on-sight or scan rules of slice I4; the viewer shows nothing.
   The hosts run no enter or exit combat script: the hook is returned, and the dispatcher's combat
   hooks (S7) are to carry it. The start and end combat points (15, 16) run in I6's gate through the host (`ISessionAiWorld.RunScript`).
