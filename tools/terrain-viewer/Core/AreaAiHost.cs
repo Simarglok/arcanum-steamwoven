@@ -1257,7 +1257,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(_scene.RuntimeMap, id);
 
-    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_scene.RuntimeMap, id).Combat;
+    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, _scene.RuntimeMap, id).Combat;
 
     private LifeState? LifeState(string id) => Build(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 

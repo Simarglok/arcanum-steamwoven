@@ -212,6 +212,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="pick-pocket-arc-skills-010"></a>[Pick pocket (ARC-SKILLS-010)](ledger/skills.md#pick-pocket-arc-skills-010) | [Skills](ledger/skills.md) | PP1–PP11 |
+| <a id="npc-firearms-level-arc-world-106"></a>[NPC firearms level (ARC-WORLD-106)](ledger/skills.md#npc-firearms-level-arc-world-106) | [Skills](ledger/skills.md) | NF1 |
 
 ## Decisions to revisit
 
