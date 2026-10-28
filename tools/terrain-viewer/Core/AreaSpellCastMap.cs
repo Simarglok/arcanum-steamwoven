@@ -14,8 +14,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none) and the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell. An NPC's facts
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
-/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs stand on
-/// their map cells, an NPC wields no weapon for a spell's context, and spell damage to objects other than critters is not ready.
+/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs other than
+/// the companions stand on their map cells (a companion where it stands, none while on another map: ARC-MAGIC-021), an NPC wields no weapon for a spell's context, and spell damage to objects other than critters is not ready.
 /// </summary>
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
@@ -29,11 +29,14 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<CellCoord?> _heroCell;
     private readonly Func<AreaLineOfFire?> _lineOfFire;
     private readonly Func<AreaObjectKey, bool> _gone;
+    private readonly Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>> _placed;
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
     // The rows by their world cell, and each row's stored fields read once.
     private readonly Dictionary<(long X, long Y), List<string>> _cells = [];
     private readonly Dictionary<string, CombatFields?> _fields = new(StringComparer.Ordinal);
     private readonly List<string> _npcs = [];
+    // The ids of the rows in the cell index, by their key.
+    private readonly Dictionary<AreaObjectKey, string> _keys = [];
 
     /// <param name="session">The session (life, companions, the hero).</param>
     /// <param name="runtimeMap">The runtime map the rows belong to.</param>
@@ -43,8 +46,11 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// <param name="heroCell">The hero's cell now (null: not on the map).</param>
     /// <param name="lineOfFire">The map's line of fire now (null: none, every line is clear).</param>
     /// <param name="gone">Whether the session destroyed or switched off a row (none when null).</param>
+    /// <param name="placed">ARC-MAGIC-021: the rows that stand elsewhere than their map cell now (the companions: their live cell, or
+    /// null while on another map), asked at each query (none when null).</param>
     public AreaSpellCastMap(GameSessionOwner session, int runtimeMap, AreaStepSnapshot steps, IEnumerable<AreaObjectRecord> rows, AreaCombatHost combat,
-        Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null)
+        Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
+        Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _map = runtimeMap;
@@ -54,6 +60,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         _heroCell = heroCell ?? throw new ArgumentNullException(nameof(heroCell));
         _lineOfFire = lineOfFire ?? throw new ArgumentNullException(nameof(lineOfFire));
         _gone = gone ?? (_ => false);
+        _placed = placed ?? (() => new Dictionary<AreaObjectKey, (long X, long Y)?>());
         foreach (var row in rows)
         {
             // A carried item (object flag 0x1000) stands in no sector list, whatever location it stores.
@@ -63,6 +70,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             if ((Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) != 0) continue;
             if (!_cells.TryGetValue((x, y), out var list)) _cells[(x, y)] = list = [];
             list.Add(id);
+            _keys[row.Key] = id;
             if (row.Type == NpcType) _npcs.Add(id);
         }
     }
@@ -86,8 +94,12 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(id);
         if (id == SessionSpellCaster.Hero) return HeroObject();
-        return _rows.TryGetValue(id, out var row) ? RowObject(id, row) : null;
+        return _rows.TryGetValue(id, out var row) && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
     }
+
+    // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.
+    private static (long X, long Y)? Cell(AreaObjectRecord row, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed) =>
+        placed.TryGetValue(row.Key, out var live) ? live : (row.WorldX!.Value, row.WorldY!.Value);
 
     public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask)
     {
@@ -95,9 +107,11 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         if (radius < 0) return found;
         if ((typeMask & (1 << PcType)) != 0 && HeroObject() is { } hero
             && Math.Max(Math.Abs((long)hero.Location.X - centre.X), Math.Abs((long)hero.Location.Y - centre.Y)) <= radius) found.Add(hero);
+        var placed = _placed();
         for (long y = (long)centre.Y - radius; y <= (long)centre.Y + radius; y++)
             for (long x = (long)centre.X - radius; x <= (long)centre.X + radius; x++)
-                Add(found, x, y, typeMask);
+                Add(found, x, y, typeMask, placed);
+        AddPlaced(found, placed, typeMask, cell => Math.Max(Math.Abs(cell.X - centre.X), Math.Abs(cell.Y - centre.Y)) <= radius);
         return found;
     }
 
@@ -105,16 +119,28 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         var found = new List<SpellTargetObject>();
         if ((typeMask & (1 << PcType)) != 0 && HeroObject() is { } hero && hero.Location == tile) found.Add(hero);
-        Add(found, tile.X, tile.Y, typeMask);
+        var placed = _placed();
+        Add(found, tile.X, tile.Y, typeMask, placed);
+        AddPlaced(found, placed, typeMask, cell => cell.X == tile.X && cell.Y == tile.Y);
         return found;
     }
 
-    private void Add(List<SpellTargetObject> found, long x, long y, int typeMask)
+    // The rows on a map cell, without the placed ones (they are added where they stand, after the cell's own rows).
+    private void Add(List<SpellTargetObject> found, long x, long y, int typeMask, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed)
     {
         if (!_cells.TryGetValue((x, y), out var ids)) return;
         foreach (var id in ids)
-            if (_rows[id].Type is >= 0 and < 32 && (typeMask & (1 << _rows[id].Type)) != 0) found.Add(RowObject(id, _rows[id]));
+            if (!placed.ContainsKey(_rows[id].Key) && Matches(_rows[id], typeMask)) found.Add(RowObject(id, _rows[id], (x, y)));
     }
+
+    private void AddPlaced(List<SpellTargetObject> found, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed, int typeMask,
+        Func<(long X, long Y), bool> at)
+    {
+        foreach (var entry in placed)
+            if (entry.Value is { } cell && at(cell) && _keys.TryGetValue(entry.Key, out var id) && Matches(_rows[id], typeMask)) found.Add(RowObject(id, _rows[id], cell));
+    }
+
+    private static bool Matches(AreaObjectRecord row, int typeMask) => row.Type is >= 0 and < 32 && (typeMask & (1 << row.Type)) != 0;
 
     public bool TileBlocked(SpellLocation tile) => !_steps.IsAdmitted(new(tile.X, tile.Y));
 
@@ -141,7 +167,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(source);
         if (source.Id != SessionSpellCaster.Hero) return [];
-        return _npcs.Where(id => _session.QueryCompanion(id).LedByPc).Select(id => RowObject(id, _rows[id])).ToArray();
+        return _npcs.Where(id => _session.QueryCompanion(id).LedByPc).Select(Object).OfType<SpellTargetObject>().ToArray();
     }
 
     // ---- ISpellCastMap ----
@@ -202,9 +228,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             Alignment: _session.QueryHero()?.Alignment ?? 0, Poison: state.PoisonLevel);
     }
 
-    private SpellTargetObject RowObject(string id, AreaObjectRecord row)
+    private SpellTargetObject RowObject(string id, AreaObjectRecord row, (long X, long Y) cell)
     {
-        var location = new SpellLocation(checked((uint)row.WorldX!.Value), checked((uint)row.WorldY!.Value));
+        var location = new SpellLocation(checked((uint)cell.X), checked((uint)cell.Y));
         var objectFlags = Flags(row, ObjectFlagsSlot) | (_gone(row.Key) ? DestroyedOrOff : 0);
         if (row.Type == NpcType && Critter(id) is { } npc && _session.QueryLife(npc.Combat.Target).View is { } life)
             return new(id, NpcType, location, objectFlags, npc.SpellFlags, npc.CritterFlags, npc.CritterFlags2, life.Status.HitPoints,

@@ -49,9 +49,9 @@ public sealed class SpellPickRulesTests
         }
     }
 
-    private static SpellPick Pick(ulong mask, World world, Tests tests, SpellTargetObject? atPoint, SpellLocation? tile = null,
+    private static SpellPick Pick(ulong mask, World world, Tests tests, SpellTargetObject? atPoint, bool noTile = false,
         IReadOnlyCollection<string>? followers = null) =>
-        SpellUiRules.Pick(mask, Hero.Id, followers ?? NoFollowers, atPoint, tile ?? Clicked, world, tests.Run);
+        SpellUiRules.Pick(mask, Hero.Id, followers ?? NoFollowers, atPoint, noTile ? null : Clicked, world, tests.Run);
 
     [TestMethod]
     public void The_object_under_the_point_comes_first_then_the_tile_list_then_the_tile()
@@ -73,8 +73,9 @@ public sealed class SpellPickRulesTests
         var onTile = Pick(Object | Tile, world, new Tests("tile 100,100"), null);
         Assert.AreEqual(((SpellTargetObject?)null, Clicked, true), (onTile.Object, onTile.Tile, onTile.Found), "the clicked tile last");
 
-        var none = Pick(Object, world, new Tests(), null, tile: null);
-        Assert.IsFalse(none.Found);
+        var offMap = new Tests("tile 100,100", "orc");
+        Assert.IsFalse(Pick(Object | Tile, world, offMap, front, noTile: true).Found, "no tile under the point: no tile list, no tile");
+        CollectionAssert.AreEqual(new[] { "front", "front@103,101" }, offMap.Calls);
     }
 
     [TestMethod]

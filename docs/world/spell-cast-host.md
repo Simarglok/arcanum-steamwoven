@@ -74,7 +74,8 @@ The target functions' questions (MT8) over the shown map:
 Stand-ins, each a later slice's:
 - one sector kind for the whole map (the indoor/outdoor test of an NPC's fallback tile);
 - a path to every admitted tile;
-- NPCs stand on their map cells;
+- NPCs stand on their map cells, except the companions: since ARC-MAGIC-021 a companion's row stands on its committed cell and on
+  none while it is on another map (a visitor from another map is not a row of the shown map and is no target);
 - an NPC wields no weapon in a spell's context (MG36 only reaches a caster with a weapon);
 - spell damage to objects other than critters is not ready (an acid's worn items take no damage step), and the hero's worn kit
   items carry no stored fields here, so the hero answers no worn items while wearing any.

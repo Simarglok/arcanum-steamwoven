@@ -99,7 +99,8 @@ public static class SpellUiRules
     /// <summary>
     /// ARC-MAGIC-021 (SU15): whether the pick (0x4F28A0) makes an object click-through (object flag 0x800, 0x43D0E0) while it looks:
     /// the local PC (<paramref name="localPc"/>) for a mask with the no-self bit, the PC's followers (0x441260) for one with the
-    /// non-party bit, a dead PC or NPC (0x45D8D0) for one with the not-dead bit. The screen pick sees through such an object, and the
+    /// non-party bit, a dead PC or NPC (0x45D8D0) for one with the not-dead bit (here any dead critter; the original's are those in a
+    /// game-window-sized rectangle around the PC, 0x440FC0, which differs only for a view scrolled away from the PC). The screen pick sees through such an object, and the
     /// picker's wrapper (0x4F2680) refuses it as a target. The multiplayer party list (0x441310, network on) is not modelled.
     /// </summary>
     public static bool PickSpares(ulong mask, SpellTargetObject candidate, string localPc, IReadOnlyCollection<string> followers)

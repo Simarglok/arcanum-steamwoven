@@ -135,7 +135,8 @@ public partial class TerrainViewerApp
             (_spellTargeting?.Spell, _spellTargeting?.Mask));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
-        var key = visible ? AreaObjectAtScreen(screen) : null;
+        // ARC-MAGIC-021: the open spell cursor names what its pick sees, through the objects it spares.
+        var key = visible ? AreaObjectAtScreen(screen, spared: SpellPickSpared()) : null;
         var action = open ? HoverAction(screen, key) : AreaHoverAction.None;
         ShowAreaHover(key, action, screen);
     }
