@@ -72,7 +72,7 @@ public static class AreaInventoryDrag
     }
 
     /// <summary>A left press with nothing held (IW2): the item under the point goes on the cursor; a grid item keeps the grab's offset, a worn
-    /// item none. Null over an empty cell or slot or outside both. No check runs on the press. ARC-UI-025: a right press with nothing held
+    /// item none. Null over an empty cell or slot or outside both. No check runs on the press. ARC-UI-025: a right release with nothing held
     /// names the same item (IW5), which the app may use.</summary>
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaInventoryHit hit)
     {

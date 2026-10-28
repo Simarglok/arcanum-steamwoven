@@ -1,3 +1,4 @@
+using Arcanum.Data.Combat;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Hotkeys;
@@ -10,14 +11,18 @@ namespace Arcanum.TerrainViewer;
 // HK10–HK16). The view draws the session's entries with the game's art; a left click on a slot activates its entry (or drops the item the
 // inventory window holds on it), a left click on a recent-action button activates that action, and a right press on a slot or on a spell
 // of the spell pane (or a slot of the weapon's pane) starts a drag whose release decides with HotkeyBarRules.Drop: a move between entries,
-// a put, or an entry dragged off the bar emptied. The item entries' icons (the inventory art or the item's type icon) are not ready: the
-// slot shows the item's name.
+// a put, or an entry dragged off the bar emptied. ARC-UI-032: an item entry shows its inventory art when it fits a slot, else its type
+// icon (HK17, HK18); the slot shows the item's name only when neither reads.
 public partial class TerrainViewerApp
 {
     private AreaHotkeyBarView? _hotkeyBarView;
     private AreaHotkeyBarContent? _hotkeyBarContent;
     private string? _hotkeyBarModule;
     private IReadOnlyDictionary<int, ImageTexture[]> _hotkeyBarArt = new Dictionary<int, ImageTexture[]>();
+    private AreaItemIcons? _hotkeyItemIcons;
+    private readonly Dictionary<string, (ImageTexture[]? Icon, string Detail)> _hotkeyItemIconCache = new(StringComparer.Ordinal);
+    // The session the cache was filled for: kit:n and made:n name other items in another session (a load, a new game).
+    private GameSessionOwner? _hotkeyItemIconSession;
     private (HotkeyDragSourceKind Kind, int Entry, HotkeyEntry? Payload)? _hotkeyDrag;
     private (GameSessionOwner Session, GameSessionVersion Version, bool Dragging, bool Names)? _hotkeyBarShown;
     private int _hotkeyBarClicksForSelfTest;
@@ -47,7 +52,15 @@ public partial class TerrainViewerApp
             _hotkeyBarContent = SelfTestBootstrap || module is null ? AreaHotkeyBarContent.Empty("self-test: no game folder") : AreaHotkeyBarContent.Load(module);
             GD.Print($"ARC-UI-027 hotkey bar art {_hotkeyBarContent.Detail}");
             _hotkeyBarArt = _hotkeyBarContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready).ToDictionary(load => load.Number,
-                load => load.Frames.Select(frame => ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba))).ToArray());
+                load => load.Frames.Select(HotkeyTexture).ToArray());
+            _hotkeyItemIcons?.Dispose();
+            _hotkeyItemIcons = null;
+            _hotkeyItemIconCache.Clear();
+            if (!SelfTestBootstrap && module is not null)
+            {
+                _hotkeyItemIcons = AreaItemIcons.Open(module, out var detail);
+                GD.Print($"ARC-UI-032 hotkey item icons {detail}");
+            }
             _hotkeyBarShown = null;
         }
         var shown = (session, session.Version, _hotkeyDrag is not null, InventoryActive);
@@ -84,15 +97,50 @@ public partial class TerrainViewerApp
 
     private ImageTexture[]? Art(int number) => _hotkeyBarArt.GetValueOrDefault(number);
 
+    private static ImageTexture HotkeyTexture(AreaInterfaceFrame frame) =>
+        ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba));
+
     private static ImageTexture? First(ImageTexture[]? frames) => frames is { Length: > 0 } ? frames[0] : null;
 
-    // An entry's icon (HK12): a spell's (also an item's spell), a skill-bar button's; an item's is not ready (null).
+    // An entry's icon (HK12): a spell's (also an item's spell), a skill-bar button's, an item's (ARC-UI-032).
     private ImageTexture[]? HotkeyIcon(HotkeyEntry entry) => entry.Kind switch
     {
         HotkeyKind.Spell or HotkeyKind.ItemSpell => HotkeyBarRules.SpellIcon(entry.Index) is { } spell ? Art(spell) : null,
         HotkeyKind.Skill => Art(HotkeyBarRules.SkillIcon(entry.Index)),
+        HotkeyKind.Item when entry.Item is { } item => HotkeyItemIcon(item).Icon,
         _ => null,
     };
+
+    /// <summary>ARC-UI-032: an item entry's icon (its inventory art up to 32 × 32, else its type icon, HK17, HK18), read once per item and
+    /// redrawn when the session identifies it; null when the item's fields or art do not read.</summary>
+    private (ImageTexture[]? Icon, string Detail) HotkeyItemIcon(string item)
+    {
+        if (_areaSession is not { } session || _hotkeyItemIcons is not { } icons || HeroItemKind(session, item) is not { } kind)
+            return (null, "no item icons");
+        if (!ReferenceEquals(_hotkeyItemIconSession, session)) { _hotkeyItemIconCache.Clear(); _hotkeyItemIconSession = session; }
+        var identified = session.QueryItemIdentified(item);
+        var key = item + (identified ? "|identified" : "");
+        if (_hotkeyItemIconCache.TryGetValue(key, out var known)) return known;
+        CombatFields? row = null;
+        foreach (var map in _inventoryHost?.Maps ?? [])
+            if (map.TryGetRow(item, out var found)) { row = CombatFieldReader.Read(found).Fields; break; }
+        var icon = icons.Icon(kind, row, identified);
+        (ImageTexture[]? Icon, string Detail) shown = icon.Status switch
+        {
+            AreaItemIconStatus.InventoryArt => ([HotkeyTexture(icon.Art!)], icon.Detail),
+            AreaItemIconStatus.TypeIcon => (Art(icon.TypeIcon!.Value), icon.Detail),
+            _ => (null, icon.Detail),
+        };
+        GD.Print($"ARC-UI-032 hotkey item-icon item={item} {icon.Status} {icon.Detail}");
+        _hotkeyItemIconCache[key] = shown;
+        return shown;
+    }
+
+    // The kind of an item the hero holds: a kit item, an item taken from a map or a made item.
+    private static SessionItemKind? HeroItemKind(GameSessionOwner session, string item) =>
+        session.QueryHeroKit().FirstOrDefault(held => held.Entity == item) is { Entity: not null } kit ? kit.Kind
+        : session.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is { Entity: not null } taken ? taken.Kind
+        : session.QueryMadeItems().FirstOrDefault(held => held.Entity == item) is { Entity: not null } made ? made.Kind : null;
 
     private bool HotkeyItemHeld => _inventoryPanel?.Held is not null && InventoryOpen;
 

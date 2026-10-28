@@ -11,8 +11,9 @@ public partial class TerrainViewerApp
     // ARC-UI-027 native observation, inside the cast stage (a hero who knows <spell>; an automated run, which draws the bars only because
     // this smoke asks): pointer events go through the window's GUI. The bar shows the game's slot art; a right press on the spell's button
     // in the pane and a right release over slot 2 put the spell there with its icon; a left click on slot 2 opens the spell's cursor; a right
-    // drag from slot 2 to slot 6 moves it and one from slot 6 off the bar empties it; an item entry shows its name and its count; the latest
-    // recent action's button shows its icon and a click on it opens its cursor with the bar's button sounds.
+    // drag from slot 2 to slot 6 moves it and one from slot 6 off the bar empties it; an item entry shows its icon (ARC-UI-032: the
+    // inventory art or the type icon, no name) and its count, and every item the hero holds has an icon; the latest recent action's button
+    // shows its icon and a click on it opens its cursor with the bar's button sounds.
     private async Task RunAreaHotkeyBarSmokeAsync(GameSessionOwner session, int spell)
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-027 hotkey-bar smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-027 hotkey-bar smoke: " + why); } }
@@ -98,14 +99,27 @@ public partial class TerrainViewerApp
                 Require(session.Unequip(session.Version, lent.Value, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, $"{piece} taken off for the item entry");
                 item = piece;
             }
-            string? itemCount = null;
+            string? itemCount = null, itemIcon = null;
+            // ARC-UI-032: every item the hero holds (kit, taken, made) gets an icon: its inventory art or its type icon.
+            var icons = session.QueryHeroKit().Select(h => h.Entity).Concat(session.QueryPcInventory().Select(h => h.Entity))
+                .Concat(session.QueryMadeItems().Select(h => h.Entity)).Select(entity => (entity, HotkeyItemIcon(entity))).ToArray();
+            var missing = icons.Where(pair => pair.Item2.Icon is not { Length: > 0 }).Select(pair => $"{pair.entity} ({pair.Item2.Detail})").ToArray();
+            Require(icons.Length > 0 && missing.Length == 0, $"every held item has an icon ({icons.Length} items): {string.Join("; ", missing)}");
+            var inventoryArts = icons.Count(pair => !pair.Item2.Detail.StartsWith("type icon", StringComparison.Ordinal));
             if (item is not null)
             {
                 Require(session.AssignHotkey(session.Version, 3, HotkeyEntry.ForItem(item)).Disposition == GameSessionDisposition.Changed, $"item {item} goes on entry 3");
                 await Frames(2);
                 itemCount = view.CountForSelfTest(3);
-                Require(view.StandInForSelfTest(3).Length > 0 && itemCount == session.QueryHotkeyCount(3)?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    $"slot 3 shows the item's name '{view.StandInForSelfTest(3)}' and count '{itemCount}'");
+                Require(itemCount == session.QueryHotkeyCount(3)?.ToString(System.Globalization.CultureInfo.InvariantCulture), $"slot 3 shows the count '{itemCount}'");
+                // ARC-UI-032: the item's icon, not its name (HK17, HK18).
+                var shown = HotkeyItemIcon(item);
+                var slotIcon = view.IconForSelfTest(3);
+                Require(slotIcon is not null && shown.Icon is { Length: > 0 } frames && slotIcon == frames[0] && view.StandInForSelfTest(3).Length == 0,
+                    $"slot 3 shows the item's icon, not its name '{view.StandInForSelfTest(3)}': {shown.Detail}");
+                Require(slotIcon!.GetWidth() <= HotkeyBarRules.IconSize && slotIcon.GetHeight() <= HotkeyBarRules.IconSize || shown.Detail.StartsWith("type icon", StringComparison.Ordinal),
+                    $"an icon larger than a slot is a type icon: {slotIcon.GetWidth()}×{slotIcon.GetHeight()} {shown.Detail}");
+                itemIcon = shown.Detail;
                 session.ClearHotkey(session.Version, 3);
                 if (lent is { } slot) Require(WearFromHotkey(session, item, slot) is null, $"{item} worn again");
             }
@@ -124,6 +138,7 @@ public partial class TerrainViewerApp
                 "the button played 3000 then 3001: " + string.Join(",", _gameBarSoundsForSelfTest.Select(s => s.Id)));
             CancelSpellTargeting(null);
             GD.Print($"ARC-UI-027 native-smoke hotkey-bar PASS spell={spell} item={item ?? "-"} count={itemCount ?? "-"} recent={latest.Index} art={_hotkeyBarContent!.ReadyCount}");
+            GD.Print($"ARC-UI-032 native-smoke hotkey-item-icons PASS items={icons.Length} inventory-art={inventoryArts} type-icon={icons.Length - inventoryArts} slot3={itemIcon ?? "-"}");
         }
         finally
         {

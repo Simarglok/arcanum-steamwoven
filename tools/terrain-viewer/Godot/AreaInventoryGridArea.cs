@@ -9,8 +9,8 @@ namespace Arcanum.TerrainViewer;
 /// (<see cref="AreaInventoryDrag"/>) scaled to fit. A left press puts the item under the pointer on the cursor (it stays in its place, not
 /// drawn there); the next left release asks the app to put it where it was released (<see cref="DropRequested"/>) and empties the cursor,
 /// unless the app puts a swapped occupant on it (<see cref="Hold"/>). A press while an item is held only waits for its release; a right
-/// press does nothing then. ARC-UI-025: a right press with nothing held asks the app to use the item under the pointer
-/// (<see cref="UseRequested"/>, IW5); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
+/// press does nothing then. ARC-UI-025: a right click with nothing held asks the app to use the item under the pointer
+/// (<see cref="UseRequested"/>, IW5; on the right release, ARC-UI-032: the original's mouse subtype 3); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
 /// original art.
 /// </summary>
 public partial class AreaInventoryGridArea : Control
@@ -19,7 +19,7 @@ public partial class AreaInventoryGridArea : Control
     private float _scale = 1;
     private Vector2 _pointer;
     public event Action<AreaInventoryDrop>? DropRequested;
-    /// <summary>ARC-UI-025: a right press with nothing held on an item of the doll or the grid.</summary>
+    /// <summary>ARC-UI-025: a right release with nothing held on an item of the doll or the grid (ARC-UI-032: the release, IW5).</summary>
     public event Action<AreaInventoryHeld>? UseRequested;
 
     /// <summary>The item on the cursor, or null.</summary>
@@ -61,10 +61,11 @@ public partial class AreaInventoryGridArea : Control
     {
         if (@event is InputEventMouseMotion motion) { _pointer = motion.Position; if (Held is not null) QueueRedraw(); return; }
         if (Blocked && @event is InputEventMouseButton) { AcceptEvent(); return; }
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } right)
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } right)
         {
+            // The original uses the item on the right release (mouse subtype 3, IW5); the press does nothing in the window.
             _pointer = right.Position;
-            RightPressAt(right.Position / _scale);
+            if (!right.Pressed) RightReleaseAt(right.Position / _scale);
             AcceptEvent();
             return;
         }
@@ -83,8 +84,8 @@ public partial class AreaInventoryGridArea : Control
         QueueRedraw();
     }
 
-    /// <summary>ARC-UI-025: a right press at a point of the frame: with nothing held, the item under it is offered for use (IW5).</summary>
-    internal void RightPressAt(Vector2 frame)
+    /// <summary>ARC-UI-025: a right release at a point of the frame: with nothing held, the item under it is offered for use (IW5).</summary>
+    internal void RightReleaseAt(Vector2 frame)
     {
         if (Held is not null || _view is null || AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
         Callable.From(() => UseRequested?.Invoke(item)).CallDeferred();

@@ -125,6 +125,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="item-spell-pane-arc-ui-016"></a>[Item spell pane (ARC-UI-016)](ledger/spell-runs.md#item-spell-pane-arc-ui-016) | [Magic: casting and spell runs](ledger/spell-runs.md) | IP1–IP9 |
 | <a id="hotkey-bar-arc-ui-022"></a>[Hotkey bar (ARC-UI-022)](ledger/spell-runs.md#hotkey-bar-arc-ui-022) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK1–HK9 |
 | <a id="hotkey-bar-art-and-drag-arc-ui-027"></a>[Hotkey bar art and drag (ARC-UI-027)](ledger/spell-runs.md#hotkey-bar-art-and-drag-arc-ui-027) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK10–HK16 |
+| <a id="hotkey-bar-item-icons-arc-ui-032"></a>[Hotkey bar item icons (ARC-UI-032)](ledger/spell-runs.md#hotkey-bar-item-icons-arc-ui-032) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK17–HK19 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |

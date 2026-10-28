@@ -937,7 +937,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   occupant lands in the first free cell and is then held on the cursor (IW11); a ring goes to the other ring slot (IW13); anywhere
   else the item goes back. Every refusal leaves the item where it was and the cursor empty, named in the message line ("no room for
   it at row r, column c", "no free room in the grid", the wear rule, the no-drop flag). A press while an item is held waits for its
-  release and a right press does nothing (IW15); closing the window puts a held item back (IW1). The buttons stay for the keyboard and
+  release and a right click does nothing (IW15); closing the window puts a held item back (IW1). The buttons stay for the keyboard and
   the controller. The log line `ARC-UI-019 drop kind=… disposition=… failure=… verdict=… displaced=…` names each release's outcome. A
   kit item's no-drop flag and scripts come from the hero load (`AreaHeroLoad.KitGridMove`), a taken item's from its object row; a made
   item has none here (NOT READY). The native smoke drags a grid item to a free cell and back and the first worn item off into a free
@@ -947,7 +947,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
   ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
   events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
-  (ARC-UI-029, below). A right press on an item (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  (ARC-UI-029, below). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032; the grid takes the release only after a right press on it, where the original takes any right release over the window), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
   the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
   map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
@@ -956,7 +956,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   a trap device's use is NOT READY; the item's use script (a taken item's) may stop the use; an item with spell charges or the magical
   flag casts its slot-0 spell through the map's cast host (`SessionItemTriggers.UseItem`); otherwise a written item opens the reading
   window, a healing kit heals the hero, food and scrolls are spent; 4 action points on the hero's turn of a round. Log lines
-  `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-presses
+  `ARC-UI-025 use item=… source=… step=…` and `ARC-UI-025 ground-drop item=… disposition=… cell=… pile=…`; the native smoke right-clicks
   a worn item (nothing), uses the first usable grid item when the hero holds one, drags a taken item onto *Drop* and takes it back
   (`ARC-UI-025 native-smoke drop-use PASS`).
 - **Quantity window (ARC-UI-029).** A dead NPC's gold pile or ammunition stack of more than one unit taken with its *Take* button,
@@ -1878,7 +1878,9 @@ a left click on a slot activates it, a right drag from a slot or the spell pane 
 recent-action button activates its action. Keys stay as stand-ins: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
 spell pane, or the palette's Prowl action; the only way to a skill-bar button, as the skill bar is not drawn) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the
 inventory window holds an item drops the item on the entry (it leaves the grid). The status line lists the entries and the latest
-action. The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS` and then `ARC-UI-027 native-smoke hotkey-bar PASS`.
+action. Since ARC-UI-032 an item entry shows its inventory art up to 32 × 32 or its type icon ([item icons](../world/spell-cast-host.md#the-hotkey-bars-item-icons-arc-ui-032)).
+The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`, then `ARC-UI-027 native-smoke hotkey-bar PASS` and
+`ARC-UI-032 native-smoke hotkey-item-icons PASS items=… inventory-art=… type-icon=…` (every item the hero holds has an icon).
 
 ### Logbook (ARC-UI-008)
 

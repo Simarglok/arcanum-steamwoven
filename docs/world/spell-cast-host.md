@@ -353,8 +353,7 @@ The bar is drawn on the bottom strip of the [interface bars](../rendering/terrai
    per slot inside the band at y 440..476).
 2. **Icons and counts** (HK12). A spell entry and an item-and-spell entry show the spell's icon (`SpellIcon`, spells 0..79), a skill-bar
    entry its button's art (`SkillIcon`). An item entry prints its count (`QueryHotkeyCount`, the items of its prototype the hero holds) at
-   the slot's left + 2 and the strip's top while it lies in 0..9999; its icon (the inventory art up to 32 × 32, else the item's type icon)
-   is not ready, so the slot shows the item's name.
+   the slot's left + 2 and the strip's top while it lies in 0..9999; its icon is [ARC-UI-032's](#the-hotkey-bars-item-icons-arc-ui-032).
 3. **Buttons** (HK13, HK14, HK16). A left click on a slot (press and release over its 32 × 32 button) activates the entry, or drops the item the inventory
    window holds on it (`ClickEntry`); the activation is [ARC-UI-022's](#the-hotkey-bar-arc-ui-022) without the keys' turn test. The two
    recent-action buttons at (69, 548) and (114, 548) show their action's icon (frame 0, frame 1 while held) and a click on one activates its
@@ -368,6 +367,23 @@ The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ct
 hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
 from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
 marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
+
+## The hotkey bar's item icons (ARC-UI-032)
+
+An item entry shows its item's inventory art when the art fits a slot, else its type icon (ledger
+[HK17–HK18](../research/ledger/spell-runs.md#hotkey-bar-item-icons-arc-ui-032)); the dragged entry's icon follows the pointer as well.
+
+1. **Fields.** The item's stored fields are its object row's when a map of the run holds it (instance over prototype), else its kind's
+   prototype's (`AreaItemIcons`, Core). Identified is the original's test (0x464370): complexity 0 or less, the stored item flag 0x1, or
+   the session's identification mark (`QueryItemIdentified`).
+2. **Inventory art** (HK18). The inventory art id (field 0x5D) names its file through `art\item\item_inven.mes` with the ground art's
+   number rule (`AreaObjectArt.ResolveItemInventory`, 0x4EC290; the area owner's `Resolve` keeps refusing inventory art); its only frame is
+   drawn with the id's palette when both sides are at most 32 (`ItemShowsInventoryArt`), centred in the slot.
+3. **Type icon** (HK17). Otherwise `HotkeyBarRules.ItemTypeIcon` (0x554C20) gives the interface art: by type, the art subtype, the
+   coverage, the ammunition type, the written subtype or the discipline, one art further for magick and two for technology on weapons and
+   armour, and the hexed icons for an identified item with item flag 0x40. The bar reads every type icon with its other art
+   (`TypeIconNumbers`). An inventory art that does not read also takes the type icon; only when neither reads does the slot show the item's
+   name. Log line `ARC-UI-032 hotkey item-icon item=… InventoryArt|TypeIcon|NoIcon …`, once per item (again when it is identified).
 
 ## Differences from the original
 
@@ -404,6 +420,9 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | An item entry dragged off the bar leaves its item on the cursor for the inventory or the map to place (HK15). | The item goes back to the grid at once. | — (not ready: the map's cursor hold) |
 | An item entry's count is set on its drop and on a load and recounted when an item leaves its place (HK6, HK12): an item picked up later shows only after such a change. | The count is read at every redraw, so a pickup shows at once. | — (display only) |
 | The count of an item entry of the prototype 15085 is always 1 (0x462B40, HK12). | Its items are counted like any other's (as the same-kind finder, AM1). | — (not ready) |
+| The type icon's tables are read without a bound, so an index past them reads the next table or what follows (HK17). | The same within the five tables and the message window's icons; past them no icon (the item's name shows). | — (latent: the installed items stay inside the tables) |
+| An inventory art that does not read leaves the bar with what the art library gives for it (not read). | The type icon. | — |
+| A broken item's inventory art carries the destroyed bit 10 (DU4), whose effect on the drawing was not read. | Drawn as stored; the bit is ignored. | — (not ready) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -416,8 +435,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
-- The hotkey bar (ARC-UI-027): an item entry's icon (the inventory art up to 32 × 32 or the type icon 0x554C20; the slot shows the
-  item's name), a spell's icon beyond spell 79, the descriptions shown when the pointer enters a slot or a recent-action button (0x550150),
+- The hotkey bar (ARC-UI-027, ARC-UI-032): a spell's icon beyond spell 79, the descriptions shown when the pointer enters a slot or a
+  recent-action button (0x550150, read as HK19: the next slice),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.

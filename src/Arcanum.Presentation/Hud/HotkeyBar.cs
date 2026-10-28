@@ -20,6 +20,14 @@ public enum HotkeyClickKind { Nothing, Activate, DropHeld }
 /// its top-left corner.</summary>
 public readonly record struct HotkeyIconPlace(int X, int Y, int Width, int Height);
 
+/// <summary>What an item's type icon is chosen by (0x554C20, ARC-UI-032), as the item's fields store them: its object type (field 0x14F,
+/// 5..14 for items), magick/tech complexity (field 0x60), whether it is identified (0x464370) and hexed (item flag 0x40, field 0x57), the
+/// art subtype of its use-art fragment (field 0x5F, bits 6..9), the coverage of its inventory art (field 0x5D, bits 14..16), its
+/// ammunition type (field 0x8F), its written subtype (field 0xCA) and its discipline (field 0x61). A field another type does not have is
+/// never read.</summary>
+public readonly record struct HotkeyItemIconFacts(int Type, int Complexity, bool Identified, bool Hexed, int UseArtSubtype, int Coverage,
+    int AmmoType = 0, int WrittenSubtype = 0, int Discipline = 0);
+
 /// <summary>
 /// ARC-UI-027: the original's hotkey bar on the bottom strip (docs/research/ledger/spell-runs.md "Hotkey bar art", HK10–HK16): the ten
 /// entry slots of the strip's top row, their icons and item counts, the two recent-action buttons, the light button, the right-button
@@ -61,8 +69,90 @@ public static class HotkeyBarRules
         111, 112, 113, 114, 115, 81, 82, 83, 84, 85, 117, 118, 119, 120, 121, 123, 124, 125, 126, 127,
     ];
 
-    /// <summary>Every interface art number the bar draws: the slot art, the light button, the skill-bar arts and the spell icons.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [SlotArt, LightArt, .. SkillArts.Distinct(), .. SpellArts];
+    // ARC-UI-032: the type icons' tables as the executable lays them out from 0x5C6FE4, one after the other (0x554C20 indexes them without a
+    // bound, so an index past a table reads the next): weapons by art subtype (15), ammunition by type (4, 0x5C7020), armour by art subtype
+    // (9, 0x5C7030), armour by coverage (7, 0x5C7054; coverage 0 never reads it), written items by subtype (7, 0x5C7070), then the message
+    // window's icons (0x5C708C, ledger ML5). What lies past them was not read.
+    private const int AmmoTable = 15, ArmorTable = 19, CoverageTable = 28, WrittenTable = 35;
+    private static readonly int[] TypeIconTables =
+    [
+        391, 391, 391, 391, 391, 391, 392, 391, 395, 391, 392, 391, 391, 391, 391,
+        398, 399, 400, 401,
+        402, 402, 405, 405, 405, 408, 405, 405, 402,
+        0, 405, 405, 405, 405, 411, 414,
+        428, 429, 431, 430, 428, 462, 428,
+        438, 439, 440, 441, 442, 443, 444,
+    ];
+
+    /// <summary>The type icons that are not in the tables: coins, food (potions, therapeutics, herbal, chemical, plain), scroll, key, key
+    /// ring, the generic item's three, the hexed icons (melee, bow, shield, clothes, medallion, ring, robes) and the plain hexed icon.</summary>
+    public const int GoldIcon = 417, PotionIcon = 418, TherapeuticIcon = 419, HerbalIcon = 420, ChemicalIcon = 421, FoodIcon = 423,
+        ScrollIcon = 425, KeyIcon = 426, KeyRingIcon = 427, GenericIcon = 432, MagickGenericIcon = 433, TechGenericIcon = 434, HexedIcon = 440,
+        HexedMeleeIcon = 791, HexedBowIcon = 792, HexedShieldIcon = 793, HexedClothesIcon = 794, HexedMedallionIcon = 795, HexedRingIcon = 796,
+        HexedRobesIcon = 797;
+
+    private static readonly int[] FixedTypeIcons =
+    [
+        GoldIcon, PotionIcon, TherapeuticIcon, HerbalIcon, ChemicalIcon, FoodIcon, ScrollIcon, KeyIcon, KeyRingIcon, GenericIcon,
+        MagickGenericIcon, TechGenericIcon, HexedIcon, HexedMeleeIcon, HexedBowIcon, HexedShieldIcon, HexedClothesIcon, HexedMedallionIcon,
+        HexedRingIcon, HexedRobesIcon,
+    ];
+
+    /// <summary>Every type icon an item of types 5..14 can get (the tables' weapon, ammunition, armour and written parts with the
+    /// complexity steps, and the fixed icons).</summary>
+    public static IReadOnlyList<int> TypeIconNumbers { get; } =
+    [
+        .. TypeIconTables[..AmmoTable].Concat(TypeIconTables[ArmorTable..WrittenTable]).Where(art => art != 0)
+            .SelectMany(art => new[] { art, art + 1, art + 2 })
+            .Concat(TypeIconTables[AmmoTable..ArmorTable]).Concat(TypeIconTables[WrittenTable..(WrittenTable + 7)]).Concat(FixedTypeIcons)
+            .Distinct().Order(),
+    ];
+
+    /// <summary>Every interface art number the bar draws: the slot art, the light button, the skill-bar arts, the spell icons and
+    /// (ARC-UI-032) the items' type icons.</summary>
+    public static IReadOnlyList<int> ArtNumbers { get; } = [.. new[] { SlotArt, LightArt }.Concat(SkillArts).Concat(SpellArts).Concat(TypeIconNumbers).Distinct()];
+
+    /// <summary>
+    /// ARC-UI-032: an item's type icon (0x554C20), the icon of an item entry whose inventory art does not fit a slot. An identified hexed
+    /// weapon shows the hexed bow icon for art subtype 8, the hexed melee icon for subtypes 2, 3, 4, 5, 7 and 13, else the plain hexed icon;
+    /// an identified hexed armour by coverage 5 the hexed ring, 6 the hexed medallion, another coverage the hexed shield, and with coverage
+    /// 0 by its subtype 5 the hexed robes, 1 or 8 the hexed clothes, else the hexed shield; any other identified hexed item the plain hexed
+    /// icon. Otherwise by type: a weapon (5) its subtype's icon and an armour (7) its coverage's (or with coverage 0 its subtype's), each one
+    /// art further for a positive complexity (magick) and two for a negative one (technology); ammunition (6) its type's; gold (8) coins;
+    /// food (9) potions when magickal, plain food when neutral, and when technological therapeutics for discipline 7, herbal for 0, chemical
+    /// for 1, else plain food; a scroll (10), key (11) or key ring (12) its icon; a written item (13) its subtype's; a generic item (14) its
+    /// own by complexity. Any other type returns the type itself (only items reach it). Null where an index leaves the tables read.
+    /// </summary>
+    [OriginalFunction(0x554C20, OriginalFunctionScope.Partial)]
+    public static int? ItemTypeIcon(HotkeyItemIconFacts item)
+    {
+        if (item.Identified && item.Hexed)
+            return item.Type switch
+            {
+                5 => item.UseArtSubtype == 8 ? HexedBowIcon : item.UseArtSubtype is 2 or 3 or 4 or 5 or 7 or 13 ? HexedMeleeIcon : HexedIcon,
+                7 when item.Coverage == 0 => item.UseArtSubtype == 5 ? HexedRobesIcon : item.UseArtSubtype is 8 or 1 ? HexedClothesIcon : HexedShieldIcon,
+                7 => item.Coverage switch { 5 => HexedRingIcon, 6 => HexedMedallionIcon, _ => HexedShieldIcon },
+                _ => HexedIcon,
+            };
+        int Step(int art) => art + (item.Complexity > 0 ? 1 : item.Complexity < 0 ? 2 : 0);
+        return item.Type switch
+        {
+            5 => Table(item.UseArtSubtype) is { } art ? Step(art) : null,
+            6 => Table(AmmoTable + (long)item.AmmoType),
+            7 => Table(item.Coverage == 0 ? ArmorTable + (long)item.UseArtSubtype : CoverageTable + (long)item.Coverage) is { } art ? Step(art) : null,
+            8 => GoldIcon,
+            9 => item.Complexity > 0 ? PotionIcon : item.Complexity == 0 ? FoodIcon
+                : item.Discipline switch { 7 => TherapeuticIcon, 0 => HerbalIcon, 1 => ChemicalIcon, _ => FoodIcon },
+            10 => ScrollIcon,
+            11 => KeyIcon,
+            12 => KeyRingIcon,
+            13 => Table(WrittenTable + (long)item.WrittenSubtype),
+            14 => item.Complexity > 0 ? MagickGenericIcon : item.Complexity < 0 ? TechGenericIcon : GenericIcon,
+            _ => item.Type,
+        };
+    }
+
+    private static int? Table(long index) => index >= 0 && index < TypeIconTables.Length ? TypeIconTables[index] : null;
 
     /// <summary>A spell's icon (0x4B1570): the table's art for spells 0..79. Any other spell's icon depends on a spell-record flag
     /// (art 35 or 36) that was not read: null.</summary>

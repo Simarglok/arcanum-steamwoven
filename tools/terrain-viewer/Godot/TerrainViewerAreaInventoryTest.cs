@@ -456,7 +456,7 @@ public partial class TerrainViewerApp
         return (dragged, _inventoryPanel.ViewForSelfTest!);
     }
 
-    /// <summary>ARC-UI-025: a right press on a worn item does nothing; a usable item (when the hero holds one) is used; a taken item dragged
+    /// <summary>ARC-UI-025: a right click (its release, IW5) on a worn item does nothing; a usable item (when the hero holds one) is used; a taken item dragged
     /// onto the drop icon lies on the hero's tile and is taken back. Returns the window's view after them.</summary>
     private async Task<AreaInventoryView> DropAndUseForSmoke()
     {
@@ -467,15 +467,15 @@ public partial class TerrainViewerApp
         if (view.Doll.FirstOrDefault(slot => slot.Entity is not null) is { } worn)
         {
             var revision = session.Version.Revision;
-            area.RightPressAt(AreaInventoryGridArea.SlotCentre(worn.Slot));
+            area.RightReleaseAt(AreaInventoryGridArea.SlotCentre(worn.Slot));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(LastItemUseForSelfTest is { Gate: AreaItemUseGate.Wearable } && session.Version.Revision == revision, "a right press on a worn item does nothing: " + _inventoryStatus);
+            Require(LastItemUseForSelfTest is { Gate: AreaItemUseGate.Wearable } && session.Version.Revision == revision, "a right release on a worn item does nothing: " + _inventoryStatus);
         }
         var usable = view.Pc.Where(line => line.Usable).Select(line => line.Entity).ToArray();
         string used = "-";
         if (usable.FirstOrDefault(entity => view.Grid.Any(item => item.Entity == entity)) is { } entity)
         {
-            area.RightPressAt(AreaInventoryGridArea.CellCentre(view.Grid.First(item => item.Entity == entity).Slot));
+            area.RightReleaseAt(AreaInventoryGridArea.CellCentre(view.Grid.First(item => item.Entity == entity).Slot));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(LastItemUseForSelfTest is { Gate: AreaItemUseGate.Use, Step: not null } last && last.Item == entity, "a usable item is used: " + _inventoryStatus);
             used = LastItemUseForSelfTest!.Value.Step!.Value.ToString();
