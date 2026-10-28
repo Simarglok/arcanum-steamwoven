@@ -126,7 +126,7 @@ public sealed class SnapshotRestoreTests
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":39,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":40,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // ARC-WORLD-071: schema 38 has no given items or gold piles in the inventory and is refused, not migrated.
         Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":38,\"world\"").Replace(NoTransfers, ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With(",\"given\":[]", ""), SnapshotDecodeFailure.MissingField, "$.inventory.given");
@@ -278,7 +278,7 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":39,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":40,\"wardrobe\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With("\"schemaVersion\":39,\"world\"", "\"schemaVersion\":4294967297,\"world\"").Replace(NoTransfers, "").Replace(NoConcealment, "").Replace(",\"placed\":[]", "").Replace(NoReputations, "").Replace(NoAdvancement, "").Replace(QuelledRumors, "").Replace(NoCombatMode, "").Replace(NoExperience, "").Replace(NoEffects, ""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
