@@ -48,6 +48,12 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
 
+    /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
+    public int MagicWeight { get; init; }
+
+    /// <summary>ARC-WORLD-085: the weight facts the session keeps for the item once it tracks it.</summary>
+    public SessionItemWeight WeightFacts => new(Weight, MagicWeight, Complexity);
+
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
     /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>
@@ -157,9 +163,11 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
 public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
-        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null)
+        SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
+        SessionItemWeightRecord[]? weights = null)
     {
         Ammo = Array.AsReadOnly(ammo ?? []);
+        Weights = Array.AsReadOnly(weights ?? []);
         Given = Array.AsReadOnly(given ?? []);
         Piles = Array.AsReadOnly(piles ?? []);
         Gold = gold;
@@ -181,6 +189,9 @@ public sealed class SessionInventoryState
     public IReadOnlyList<SessionGivenItem> Given { get; }
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity in ordinal order.</summary>
     public IReadOnlyList<SessionGoldRecord> Piles { get; }
+    /// <summary>ARC-WORLD-085: the weight facts of the objects the session tracks, by entity in ordinal order (rows with a non-zero
+    /// weight or adjustment only).</summary>
+    public IReadOnlyList<SessionItemWeightRecord> Weights { get; }
 }
 
 public sealed record SessionInventoryItem(string Entity, SessionItemFacts Facts);
@@ -405,9 +416,21 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity.</summary>
     internal SortedDictionary<string, int> Piles { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-WORLD-085: the weight facts of the objects the session tracks (kit, taken and made items wherever they are), by
+    /// entity; an object without a row weighs 0.</summary>
+    internal SortedDictionary<string, SessionItemWeight> Weights { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Keeps an object's weight facts: a row only for a non-zero weight or adjustment.</summary>
+    internal void SetWeight(string entity, SessionItemWeight facts)
+    {
+        if (facts.Weight != 0 || facts.MagicWeight != 0) Weights[entity] = facts;
+        else Weights.Remove(entity);
+    }
+
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray()))).ToArray(), Placed.ToArray(),
-        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray());
+        Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
+        Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray());
 
     /// <summary>The facts of a made item: its kind, no weight, location (-1, in the bag) or scripts; the host knows the prototype's
     /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>
@@ -506,7 +529,7 @@ internal sealed class InventoryDomain
     private static bool Facts(SessionItemFacts? facts) => facts?.ScriptPoints is not null && Enum.IsDefined(facts.Kind.Type) &&
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
         facts.Quantity is null or >= 0 && (facts.AmmoType is null) == (facts.Kind.Type != SessionItemType.Ammo) &&
-        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes;
+        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && facts.WeightFacts.IsValid;
 
     private static bool Points(IReadOnlyList<int> points) =>
         points.All(point => point is >= 0 and <= SessionScriptPoint.Last) && points.Distinct().Count() == points.Count;

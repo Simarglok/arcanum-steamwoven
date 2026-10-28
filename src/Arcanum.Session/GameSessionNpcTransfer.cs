@@ -285,11 +285,15 @@ public sealed partial class GameSessionOwner
         if (number > int.MaxValue) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
         var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0);
+        // ARC-WORLD-085: the new object has its base prototype's weight; the insert check weighs its units.
+        var weight = CreatedWeight(kind.Prototype);
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0,
+            new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, units));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return (null, RejectItem(GameSessionFailure.StaleVersion, verdict));
         if (verdict != SessionInsertVerdict.Accepted) return (null, RejectItem(GameSessionFailure.InsertRefused, verdict));
         _inventory.Add(item);
+        _inventory.SetWeight(item.Entity, weight);
         _inventory.Ammo[item.Entity] = new(item.Entity, ammoType, units);
         return (item, null);
     }
@@ -319,11 +323,14 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) { refusal = RejectItem(GameSessionFailure.RevisionExhausted); return null; }
         var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-        var verdict = insertCheck(new SessionInventoryItem(item.Entity, facts));
+        // ARC-WORLD-085: the new object has its prototype's weight (the NPC's own weight is the host's insert check).
+        var weight = CreatedWeight(kind.Prototype);
+        var verdict = insertCheck(new SessionInventoryItem(item.Entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
         if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
         _inventory.AddToNpc(npc, item);
+        _inventory.SetWeight(item.Entity, weight);
         _inventory.Taken.Add(item.Entity);
         return item;
     }

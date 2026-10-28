@@ -31,7 +31,7 @@ public static class CombatFieldReader
     private const int CurrentArtSlot = 0, ScriptsSlot = 31, LastScriptPoint = 35, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
         HpDamageSlot = 28, MaterialSlot = 29, ResistanceSlot = 30;
     // Item block (36..58).
-    private const int ItemFlagsSlot = 36, WeightSlot = 38, WorthSlot = 40, ManaStoreSlot = 41, InventoryArtSlot = 42, InventoryLocationSlot = 43,
+    private const int ItemFlagsSlot = 36, WeightSlot = 38, MagicWeightSlot = 39, WorthSlot = 40, ManaStoreSlot = 41, InventoryArtSlot = 42, InventoryLocationSlot = 43,
         UseArtFragmentSlot = 44, ComplexitySlot = 45,
         DisciplineSlot = 46, FirstSpellSlot = 49, SpellManaStoreSlot = 54, AiActionSlot = 55;
     // Weapon block (59..85).
@@ -209,7 +209,7 @@ public static class CombatFieldReader
         var item = new CombatItemFields(Flags(ItemFlagsSlot), Int(WeightSlot), Int(WorthSlot), Int(ManaStoreSlot), Int(ComplexitySlot),
             Int(DisciplineSlot), Int(InventoryLocationSlot),
             System.Array.AsReadOnly(Enumerable.Range(FirstSpellSlot, ItemSpells).Select(Int).ToArray()), Int(SpellManaStoreSlot), Int(AiActionSlot),
-            Flags(InventoryArtSlot), Flags(UseArtFragmentSlot));
+            Flags(InventoryArtSlot), Flags(UseArtFragmentSlot)) { MagicWeight = Int(MagicWeightSlot) };
         CombatWeaponFields? weapon = null;
         CombatAmmoFields? ammo = null;
         CombatArmorFields? armor = null;

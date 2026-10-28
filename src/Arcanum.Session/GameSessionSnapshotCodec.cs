@@ -69,7 +69,8 @@ public static class GameSessionSnapshotCodec
         "Gambling", "Haggle", "Heal", "Persuasion", "Repair", "Firearms", "PickLocks", "DisarmTraps"];
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "weights"];
+    private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] AmmoFields = ["entity", "ammoType", "units"];
     private static readonly string[] GivenFields = ["entity", "origin"];
     private static readonly string[] PileFields = ["entity", "coins"];
@@ -407,6 +408,18 @@ public static class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", pile.Entity);
                 w.WriteNumber("coins", pile.Quantity);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-085: the weight rows by entity in ordinal order.
+            w.WriteStartArray("weights");
+            foreach (var row in snapshot.Inventory.Weights)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", row.Entity);
+                w.WriteNumber("weight", row.Facts.Weight);
+                w.WriteNumber("magicWeight", row.Facts.MagicWeight);
+                w.WriteNumber("complexity", row.Facts.Complexity);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1487,7 +1500,22 @@ public static class GameSessionSnapshotCodec
             lastPile = entity;
             piles[i] = new(entity, Int(row["coins"], path + ".coins", 0, int.MaxValue));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles);
+        // ARC-WORLD-085: the weight rows by entity in strictly ascending ordinal order, at most one an object the inventory can hold.
+        var weightRows = Array(f["weights"], p + ".weights", GameSessionLimits.PolicyMaxPcItems + GameSessionLimits.PolicyMaxNpcItems);
+        var weights = new SessionItemWeightRecord[weightRows.Length];
+        string? lastWeight = null;
+        for (var i = 0; i < weightRows.Length; i++)
+        {
+            var path = $"{p}.weights[{i}]";
+            var row = Fields(weightRows[i], path, WeightFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            if (lastWeight is not null && string.CompareOrdinal(lastWeight, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            lastWeight = entity;
+            weights[i] = new(entity, new(Int(row["weight"], path + ".weight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
+                Int(row["magicWeight"], path + ".magicWeight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
+                Complexity(row, path)));
+        }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, weights);
     }
 
     // ARC-WORLD-083: a made or placed item's magick/tech complexity, any 32-bit value (the original's field 0x60 is one).

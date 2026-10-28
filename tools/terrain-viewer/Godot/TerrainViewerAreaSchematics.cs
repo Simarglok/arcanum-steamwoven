@@ -160,6 +160,8 @@ public partial class TerrainViewerApp
         if (!SchematicsOpen || _schematicsPanel!.View is not { Placeholder: false } view || _schematicData?.Data is not { } data) return;
         if (view.Button != AssemblyButton.CanAssemble) { _schematicMessage = view.ButtonText; Render(); return; }
         if (data.Catalog.Read(view.Record).Record is not { } record) return;
+        // ARC-WORLD-085: the products have their prototypes' weight (not saved, so attached before each assembly).
+        _areaSession!.AttachItemWeights(data.WeightOf);
         var result = _schematicCrafter is { } crafter
             ? _areaSession!.AssembleSchematicForNpc(_areaSession.Version, crafter, record, SchematicItems, data.Facts, data.Kind, AreaInventoryHost.DiagnosticInsertCheck,
                 data.AmmoOf)

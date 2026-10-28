@@ -40,8 +40,10 @@ public enum AreaSchematicDataStatus { Ready, ModuleOutsideGameRoot, MountFailed,
 public sealed class AreaSchematicData
 {
     public AreaSchematicData(SchematicCatalog catalog, TechTexts texts, IReadOnlyDictionary<int, (ComponentFacts Facts, SessionItemKind Kind)> prototypes,
-        IReadOnlyDictionary<int, (int AmmoType, int Units)>? ammo = null, IReadOnlyDictionary<int, uint>? art = null)
+        IReadOnlyDictionary<int, (int AmmoType, int Units)>? ammo = null, IReadOnlyDictionary<int, uint>? art = null,
+        IReadOnlyDictionary<int, SessionItemWeight>? weights = null)
     {
+        Weights = weights ?? new Dictionary<int, SessionItemWeight>();
         Ammo = ammo ?? new Dictionary<int, (int, int)>();
         Art = art ?? new Dictionary<int, uint>();
         ArgumentNullException.ThrowIfNull(catalog);
@@ -66,6 +68,12 @@ public sealed class AreaSchematicData
     public IReadOnlyDictionary<int, uint> Art { get; }
 
     public uint? ArtOf(int prototype) => Art.TryGetValue(prototype, out var a) ? a : null;
+
+    /// <summary>ARC-WORLD-085: a prototype's weight facts (weight, magic weight adjustment, complexity), which the session gives the
+    /// objects it creates from it (<see cref="GameSessionOwner.AttachItemWeights"/>).</summary>
+    public IReadOnlyDictionary<int, SessionItemWeight> Weights { get; }
+
+    public SessionItemWeight? WeightOf(int prototype) => Weights.TryGetValue(prototype, out var w) ? w : null;
 
     public ComponentFacts? Facts(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Facts : null;
     public SessionItemKind? Kind(int prototype) => Prototypes.TryGetValue(prototype, out var p) ? p.Kind : null;
@@ -104,6 +112,7 @@ public static class AreaSchematics
         var facts = new Dictionary<int, (ComponentFacts, SessionItemKind)>();
         var ammo = new Dictionary<int, (int, int)>();
         var art = new Dictionary<int, uint>();
+        var weights = new Dictionary<int, SessionItemWeight>();
         foreach (var record in catalog.Catalog.Records)
             foreach (var base_ in record.Component1.Bases.Concat(record.Component2.Bases).Concat(record.Product.Bases).Distinct())
             {
@@ -114,8 +123,9 @@ public static class AreaSchematics
                     new((SessionItemType)fields.Object.Type, prototype, fields.Object.Name, fields.Object.Description));
                 if (fields.Ammo is { } a) ammo[prototype] = (a.AmmoType, a.Quantity);
                 art[prototype] = fields.Object.CurrentArt;
+                weights[prototype] = new(item.Weight, item.MagicWeight, item.MagickTechComplexity);
             }
-        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts, ammo, art),
+        return new(AreaSchematicDataStatus.Ready, new(catalog.Catalog, texts.Texts, facts, ammo, art, weights),
             $"records {catalog.Catalog.Records.Count}, prototypes {facts.Count}");
     }
 

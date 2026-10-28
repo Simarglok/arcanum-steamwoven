@@ -372,7 +372,8 @@ public static class AreaStartingHero
         return new(hero.Prototype, Races[hero.Race], hero.Gender == 0 ? CharacterGender.Female : CharacterGender.Male,
             [.. Enumerable.Repeat(PremadeHero.StartPrimaryStat, 8), 0, 0], PremadeHero.StartLevel, PremadeHero.StartUnspentPoints, hero.Alignment,
             raceEffect, genderEffect, hero.Gold,
-            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))],
+            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description))
+                { Weight = new(item.Weight, item.MagicWeight, item.Complexity) })],
             Advancement: SessionHeroAdvancement.WithScheme(hero.AutoLevelScheme is >= 0 and <= SessionAdvancementLimits.MaxScheme ? hero.AutoLevelScheme : 0),
             // A scheme or background outside the session's range starts as 0 (none), as the pre-made data never has one (39..50 installed).
             InnateSkills: skills, Background: hero.Background is >= SessionHeroLimits.MinBackground and <= SessionHeroLimits.MaxBackground ? hero.Background : 0);

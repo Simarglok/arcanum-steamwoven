@@ -49,7 +49,11 @@ public sealed record CombatObjectFields(int Type, int Prototype, uint Flags, uin
 /// armour item's coverage and <see cref="UseArtFragment"/> (<c>OBJ_F_ITEM_USE_AID_FRAGMENT</c>) the weapon or armour art subtype a
 /// wearer's art takes (see <see cref="CombatItemArt"/>).</summary>
 public sealed record CombatItemFields(uint Flags, int Weight, int Worth, int ManaStore, int MagickTechComplexity, int Discipline,
-    int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction, uint InventoryArt, uint UseArtFragment);
+    int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction, uint InventoryArt, uint UseArtFragment)
+{
+    /// <summary>ARC-WORLD-085: the magic weight adjustment (<c>OBJ_F_ITEM_MAGIC_WEIGHT_ADJ</c>, field 0x5A).</summary>
+    public int MagicWeight { get; init; }
+}
 
 /// <summary>
 /// The item art id bits the wear rules read (the bits the retail 1.0.7.4 executable decodes,

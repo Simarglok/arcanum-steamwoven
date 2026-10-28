@@ -29,12 +29,17 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The insert check's answer for the hero (0x466510): the host answers the weight and the room; between them the session refuses a
-    /// technological item for a Technophobia hero (<see cref="SessionInsertVerdict.TechnologyRefused"/>). The host's weight refusal
-    /// comes first, as the original checks the weight before the background; any other host answer yields to the background refusal.
+    /// The insert check's answer for the hero (0x466510): the weight first, then the background, then the room. ARC-WORLD-085: for an
+    /// item entering the hero's list from outside it (<paramref name="incoming"/>), the session answers the weight itself
+    /// (<see cref="SessionInsertVerdict.TooHeavy"/> when the hero's total plus the item would pass its carry weight, ledger WE4); a host's
+    /// weight refusal counts as well. Between weight and room the session refuses a technological item for a Technophobia hero
+    /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A wear move
+    /// passes no incoming item: the item is in the hero's list already, so the session does not weigh it twice.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x466510, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity) =>
-        host == SessionInsertVerdict.TooHeavy || _hero is null || !SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity)
-            ? host : SessionInsertVerdict.TechnologyRefused;
+    private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null)
+    {
+        if (host == SessionInsertVerdict.TooHeavy || incoming is { } item && !HeroFits(item)) return SessionInsertVerdict.TooHeavy;
+        return _hero is null || !SessionBackgrounds.RefusesCarry(_hero.State.Background, complexity) ? host : SessionInsertVerdict.TechnologyRefused;
+    }
 }

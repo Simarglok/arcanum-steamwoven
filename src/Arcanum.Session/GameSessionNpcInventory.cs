@@ -59,12 +59,15 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-        var verdict = insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind)));
+        // ARC-WORLD-085: the new object has its prototype's weight.
+        var weight = CreatedWeight(kind.Prototype);
+        var verdict = insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind) with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
         ThrowIfDisposed();
         // A seed attached from the callback moves no revision but may change what the NPC is or how long its list is.
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         _inventory.AddToNpc(npc, item);
+        _inventory.SetWeight(item.Entity, weight);
         _inventory.Taken.Add(item.Entity);
         if (ammo is { } kept) _inventory.Ammo[item.Entity] = new(item.Entity, kept.AmmoType, kept.Units);
         _revision++;

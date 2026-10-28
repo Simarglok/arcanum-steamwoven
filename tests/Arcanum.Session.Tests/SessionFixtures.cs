@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":41," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":42," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -95,7 +95,7 @@ internal static class SessionFixtures
     internal const string NoStoryState = ",\"storyState\":0";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
     internal const string NoHero = ",\"hero\":null";
-    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[]}";
+    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"weights\":[]}";
     internal const string FreshRandom = ",\"random\":{\"seed\":\"0000000000000000\",\"draws\":0}";
     internal const string NoLife = ",\"life\":{\"hero\":null,\"critters\":[]}";
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";
@@ -104,6 +104,8 @@ internal static class SessionFixtures
     internal const string NoConcealment = ",\"concealment\":{\"hero\":false,\"npcs\":[]}";
     /// <summary>ARC-WORLD-071: no given items and no tracked gold piles.</summary>
     internal const string NoTransfers = ",\"given\":[],\"piles\":[]";
+    /// <summary>ARC-WORLD-085: no weight rows.</summary>
+    internal const string NoWeights = ",\"weights\":[]";
     // ARC-WORLD-079: no NPC danger record.
     internal const string NoDanger = ",\"danger\":{\"records\":[]}";
     internal const string NoSound = ",\"sound\":{\"slots\":[0,0],\"restorePending\":false,\"restore\":[0,0],\"combatMusic\":false,\"preCombat\":[0,0]}";
