@@ -216,9 +216,10 @@ public partial class TerrainViewerApp
                 Require(messagePortrait.Rect.Position.IsEqualApprox(origin + new Vector2(AreaGameBarLayout.HoverImage.X, AreaGameBarLayout.HoverImage.Y) * factor)
                     && messagePortrait.Rect.Size.IsEqualApprox(new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize) * factor),
                     $"the portrait at 217, 510: {messagePortrait.Rect}");
+            Require(!_gameBarPanel.MessageLog.Visible, "the hovered panel takes the message window from the log (ARC-UI-023)");
             await Capture("bars");
             HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
-            Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null, "no hover, no portrait");
+            Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null && _gameBarPanel.MessageLog.Visible, "no hover, no portrait, the message log back");
             HoverReleaseForSelfTest();
             // A window the bars stay over (the inventory, by its key) keeps the gauges in the vials.
             void InventoryKey()
