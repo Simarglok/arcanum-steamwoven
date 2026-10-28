@@ -157,7 +157,9 @@ objects its pending restock events name other than an NPC with a life record (th
 without an object check does not drop a container's event; a pass without a restock host, or before the map's seed is attached,
 postpones it a minute (`SessionRestockFiring.Postponed`). A restore refuses one with another delay, set after the saved clock, whose
 deadline is not its time plus its delay, naming the player or a made item, or a second one of the same holder. See
-[restock event](barter-runtime.md#restock-event-arc-world-094).
+[restock event](barter-runtime.md#restock-event-arc-world-094). ARC-WORLD-096: the AREA viewer schedules it at its barter and loot opens and its
+event world is the restock host; a pass through the cast host reaches it (and the loot window) behind the cast host's wrapping pass world
+([viewer](barter-runtime.md#restock-in-the-viewer-arc-world-096)).
 
 **Encumbrance timer (ARC-WORLD-087).** The kind `life.hero.encumbrance` (also added to registry version 1 without a new version)
 is mode 1 of the original's fatigue timer (ledger WE5, WE8): game time, saved, global, no entities, one at a time (`KeepExisting`:
