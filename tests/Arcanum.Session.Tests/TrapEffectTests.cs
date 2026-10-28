@@ -66,10 +66,10 @@ public sealed class TrapEffectTests
         DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0,
     });
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session()
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session(uint guardFlags2 = 0)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
-        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
+        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0, flags2: guardFlags2);
         var map = new Map(owner, new(SessionCritterCombat.From(Guard, fields).Combat!, 0, 0, 0, 0, 0));
         var record = Spell();
         return (owner, new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, map, new Events()), map);
@@ -101,7 +101,8 @@ public sealed class TrapEffectTests
         Assert.AreEqual((SessionTrapHit.Damaged, hero.Amount, hero.Amount), (hero.Hit, hero.HitPointDamage, before - HeroHitPoints(owner)));
         Assert.AreEqual(new DamageByType(hero.Amount, 0, 0, 0, 0), hero.Step!.Rolled, "normal damage only, no multiplier");
         Assert.AreEqual((SpellCastAttemptOutcome.Nothing, (int?)null), (hero.Spell, hero.SpellRun), "top byte 0: no spell");
-        Assert.AreNotEqual(SessionTrapHit.None, result.Victims[0].Hit, "the NPC is hit too");
+        var guard = result.Victims[0];
+        Assert.AreEqual((SessionTrapHit.Damaged, guard.Amount), (guard.Hit, guard.HitPointDamage), "the NPC is hit too");
     }
 
     [TestMethod]
@@ -175,8 +176,21 @@ public sealed class TrapEffectTests
             (none.Victims.Single().Hit, none.Victims.Single().Spell, none.Victims.Single().Shooter));
         var shot = caster.ApplyTrapEffect(Firing(30002, Counters(90, 5, 8, 2), 0) with { Shooters = [new(Box, 30007, Counters(0, 5, 0, 0))] })
             .Victims.Single();
-        Assert.AreEqual((SessionTrapHit.ShotNotReady, Box, 0, SpellCastAttemptOutcome.Started), (shot.Hit, shot.Shooter, shot.Amount, shot.Spell));
-        Assert.AreEqual(draws, owner.QueryRandom().Draws, "the shot is not ready: nothing drawn");
+        Assert.AreEqual((SessionTrapHit.ShotNotReady, Box, 0, SpellCastAttemptOutcome.Nothing), (shot.Hit, shot.Shooter, shot.Amount, shot.Spell),
+            "the shot is not ready: neither its damage nor its spell is applied");
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing drawn");
+        Assert.AreEqual(0, owner.QuerySpellRuns().Runs.Count(), "no run started");
+    }
+
+    [TestMethod]
+    public void A_nigh_invulnerable_critter_takes_no_trap_damage_as_the_trapped_object_is_no_uber_weapon()
+    {
+        var (owner, caster, _) = Session(guardFlags2: 0x200);
+        using var __ = owner;
+        var result = caster.ApplyTrapEffect(Firing(30001, Counters(0, 0, 4, 4), TrapRules.SquareOneFlag));
+        var guard = result.Victims.Single(v => v.Entity == Guard);
+        Assert.AreEqual((SessionTrapHit.Prevented, DamagePrevention.NighInvulnerable, 0), (guard.Hit, guard.Step!.Prevented, guard.HitPointDamage));
+        Assert.AreEqual(SessionTrapHit.Damaged, result.Victims.Single(v => v.Entity == Hero).Hit, "the hero still takes it");
     }
 
     [TestMethod]

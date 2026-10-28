@@ -28,7 +28,7 @@ public enum SessionTrapHit
     /// <summary>The session or the map did not take the damage (a dead critter, an object the map does not damage).</summary>
     NotApplied,
     /// <summary>A shot (30002) found its shooter; the shot itself (the attack dispatcher 0x4B3170 with a non-critter attacker) is
-    /// not ready, so no amount is drawn. Its spell is cast.</summary>
+    /// not ready, so nothing is applied yet: no amount is drawn and its spell is not cast, which the shot slice adds together.</summary>
     ShotNotReady,
     /// <summary>A shot found no shooter: nothing happens to the victim, no spell either.</summary>
     NoShooter,
@@ -56,8 +56,9 @@ public sealed partial class SessionSpellCaster
     /// (30001, 30003..30006) draws its amount and takes the damage step (<see cref="AttackResolver.DamageStep"/>, the same as a
     /// spell's) with the trapped object as the attacker and its own weapon (a non-weapon, so no weapon flag counts), the player as the
     /// damage source of a PC-placed trap, applied to the critter's life or through the map to an object; a shot (30002) looks for its
-    /// shooter (<see cref="TrapEffectRules.Shooter"/>) and stops at <see cref="SessionTrapHit.ShotNotReady"/>; then the spell — always
-    /// for 30000, else the top byte when not 0 — starts as a run with no parent and no source at the victim (0x455A20, 0x455AC0),
+    /// shooter (<see cref="TrapEffectRules.Shooter"/>) and stops at <see cref="SessionTrapHit.ShotNotReady"/> with nothing applied;
+    /// the item events a victim's damage step calls for fire before its spell and the next victim (as inside 0x4BCDC0); then the
+    /// spell — always for 30000, else the top byte when not 0 — starts as a run with no parent and no source at the victim (0x455A20, 0x455AC0),
     /// whose BEGIN comes as an event. The run's floating line (<see cref="TrapEffectRules.FiredLine"/> over the triggerer) and its eye
     /// candy lines (<see cref="NativeTrapRun"/>) are the host's to show. Nothing for 30007.
     /// </summary>
@@ -70,7 +71,6 @@ public sealed partial class SessionSpellCaster
             return SessionTrapEffectResult.None;
         var killer = TrapEffectRules.CreditsPlayer(firing.ObjectFlags) ? Hero : null;
         var victims = TrapVictims(firing).Select(victim => TrapHit(effect, firing, victim, killer)).ToArray();
-        FirePendingItems();
         return new(effect, killer, victims);
     }
 
@@ -85,12 +85,12 @@ public sealed partial class SessionSpellCaster
 
     private SessionTrapVictim TrapHit(TrapEffect effect, SessionTrapFiring firing, string victim, string? killer)
     {
-        var (hit, amount, step, hitPoints, shooter) = (SessionTrapHit.None, 0, (AttackDamage?)null, 0, (string?)null);
+        var (hit, amount, step, hitPoints) = (SessionTrapHit.None, 0, (AttackDamage?)null, 0);
         if (effect.Kind == TrapEffectKind.Shot)
         {
-            shooter = TrapEffectRules.Shooter(firing.Shooters, effect.ShooterTag);
-            if (shooter is null) return new(victim, SessionTrapHit.NoShooter, 0, null, 0, null, SpellCastAttemptOutcome.Nothing, null);
-            hit = SessionTrapHit.ShotNotReady;
+            var shooter = TrapEffectRules.Shooter(firing.Shooters, effect.ShooterTag);
+            return new(victim, shooter is null ? SessionTrapHit.NoShooter : SessionTrapHit.ShotNotReady, 0, null, 0, shooter,
+                SpellCastAttemptOutcome.Nothing, null);
         }
         else if (effect.Kind == TrapEffectKind.Damage)
         {
@@ -103,9 +103,10 @@ public sealed partial class SessionSpellCaster
                 Damage = TrapEffectRules.Damage(effect, amount),
             });
             (hit, hitPoints) = step.Prevented != DamagePrevention.None ? (SessionTrapHit.Prevented, 0) : ApplyTrapDamage(victim, kind, step, firing.Trap, killer);
+            FirePendingItems();
         }
         var (spell, run) = effect.CastsSpell ? CastWithoutCaster(effect.Spell, victim) : (SpellCastAttemptOutcome.Nothing, null);
-        return new(victim, hit, amount, step, hitPoints, shooter, spell, run);
+        return new(victim, hit, amount, step, hitPoints, null, spell, run);
     }
 
     private (SessionTrapHit Hit, int HitPoints) ApplyTrapDamage(string victim, AttackTargetKind kind, AttackDamage step, string trap, string? killer)

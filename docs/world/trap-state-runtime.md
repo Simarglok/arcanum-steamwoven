@@ -103,12 +103,14 @@ or the triggerer alone for radius 0, none without a triggerer):
   attacker and no weapon flag (TT13); a critter's life takes it through
   `GameSessionOwner.ApplyDamage` with the trapped object as attacker and the player (for a
   PC-placed trap) as the source, which fires the life item events; an object takes it
-  through the map (`ISpellCastMap.DamageObject`). The hit's damage effect (TT14) is the
-  host's to show.
+  through the map (`ISpellCastMap.DamageObject`). The item events the step calls for fire
+  before the victim's spell and the next victim, as inside the original's call. The hit's
+  damage effect (TT14) is the host's to show.
 - **Shot** (30002): no shooter, no effect at all (no spell either); with a shooter the
-  result is `ShotNotReady`: the shot (the dispatcher 0x4B3170 with a non-critter attacker,
-  TT15) is a later slice and draws nothing yet.
-- **Spell**: 30000, and any damage or shot with a top byte, starts the spell at the victim
+  result is `ShotNotReady` and nothing is applied yet: the shot (the dispatcher 0x4B3170
+  with a non-critter attacker, TT15), its draw and its spell are a later slice together. The
+  host lists the shooter candidates around the triggerer; without a triggerer it lists none.
+- **Spell**: 30000, and any damage with a top byte (a shot's comes with the shot slice), starts the spell at the victim
   with no parent and no source (TT16); its BEGIN comes as an event of the host's pass. An
   unknown spell number casts nothing.
 
@@ -124,8 +126,8 @@ spell run owners record them.
   location 1005 and the master's second roll (S10).
 - The walk's spot before each step (0x427110, ledger TT10) and the route cost of a known
   trap (DC8): the walk is the host's.
-- The shot of script 30002 (TT15) and the shooter list's rectangle around the triggerer
-  (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
+- The shot of script 30002 (TT15) with its draw and its spell (a found shooter applies
+  nothing yet), and the shooter list's rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
   are the host's presentation.
 - Trap devices placed by the player (ARC-TECHNOLOGY-011/012, ledger TP1–TP8) and the
   multiplayer per-player lists.
