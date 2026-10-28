@@ -279,7 +279,10 @@ with the earlier generator reading R1–R6 ([scripts](scripts.md#scripts-event-q
 The session keeps its own generator for every other draw ([session random](../../world/session-random-runtime.md)); only the draws of a
 container generated once come from the original generator, so its goods depend on the PC and the place as in the original. Simulation
 holds the seed (`RestockRules.GeneratedOnceSeed`), the generator (`OriginalRandom`) and the seeded generation
-(`RestockRules.GenerateOnce`); the session, the viewer's container window and the callers of RK13–RK14 are later tasks.
+(`RestockRules.GenerateOnce`). ARC-WORLD-100 runs them in the session: the first loot open (`GenerateContainerOnce`, RK12) and the
+restock event generate a container with flag 0x200 once and record it (its source and flag cleared, snapshot schema 55); the hero gives
+the race, gender and background, the host the tile x and the player name. The viewer's container window and the callers of RK13–RK14
+are later tasks.
 
 ## Made item complexity (ARC-WORLD-083)
 

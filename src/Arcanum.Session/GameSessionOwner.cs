@@ -1873,6 +1873,17 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-094: the highest discarded made number.
         if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
         inventory.LastDiscardedMade = saved.LastDiscardedMade;
+        // ARC-WORLD-100: the generated-once containers by map and then entity in ordinal order, within the bound.
+        if (saved.Generated.Count > SessionInventoryState.MaxGenerated) return GameSessionFailure.BudgetExceeded;
+        SessionGeneratedContainer? lastGenerated = null;
+        foreach (var row in saved.Generated)
+        {
+            if (row.Map.RuntimeMap < 1 || !SessionEventKinds.RestockHolder(row.Entity) || lastGenerated is { } before &&
+                (before.Map.RuntimeMap > row.Map.RuntimeMap || before.Map == row.Map && string.CompareOrdinal(before.Entity, row.Entity) >= 0))
+                return GameSessionFailure.InvalidSnapshot;
+            lastGenerated = row;
+            inventory.Generated.Add(row);
+        }
         // ARC-SCRIPT-042: the kept item script slots by entity in ordinal order and then by point, within the bound; a slot of an object
         // point (not the dialog-override one) of an item that was not deleted, with a script number 0..99999.
         if (saved.ScriptSlots.Count > SessionItemScripts.MaxStoredSlots) return GameSessionFailure.BudgetExceeded;

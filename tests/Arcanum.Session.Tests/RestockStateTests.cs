@@ -297,15 +297,7 @@ public sealed class RestockStateTests
     [TestMethod]
     public void Holders_the_session_cannot_regenerate_keep_their_lists()
     {
-        // A container generated once (flag 0x200) is the first-open slice's.
-        using var once = Owner();
-        var world = new World();
-        world.Facts["box"] = world.Facts["box"] with { ContainerFlags = RestockRules.RegeneratesAloneFlag | RestockRules.GeneratedOnceFlag };
-        Schedule(once, "box");
-        var revision = once.Version.Revision;
-        Assert.AreEqual(SessionRestockOutcome.Unsupported, Fire(once, world).Restocks.Single().Regenerations.Single().Outcome);
-        Assert.AreEqual(revision, once.Version.Revision);
-        // A holder with a transfer script would refuse every created item after the clear (the script is not run).
+        // A container generated once (flag 0x200) without the host's seed facts: GeneratedOnceStateTests (ARC-WORLD-100). A holder with a transfer script would refuse every created item after the clear (the script is not run).
         var scripted = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "smith" ? h with { ScriptPoints = [SessionScriptPoint.Transfer] } : h)] };
         using var owner = Owner(seed: scripted);
         Schedule(owner, "smith");
