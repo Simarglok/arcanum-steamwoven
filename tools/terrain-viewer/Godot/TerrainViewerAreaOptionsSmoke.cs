@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
 using Godot;
@@ -18,7 +19,7 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         _saveLibraryForSelfTest = new(directory);
-        var before = (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes);
+        var before = (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes, _ruleMode);
         try
         {
             void Key(Key key, char unicode = '\0')
@@ -51,7 +52,10 @@ public partial class TerrainViewerApp
                 $"Options opened the options window with the game's texts: {texts.Detail} {_mainMenuPanel?.HeaderForSelfTest}");
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off"]), "Game page: " + string.Join("|", Controls()));
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
+            // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
+            panel.ChangeForSelfTest(4, 1);
+            Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
             Choose(4002);
             Require(Controls().SequenceEqual(["Effects: 5/10", "Voice: 5/10", "Music: 5/10"]), "Sound page: " + string.Join("|", Controls()));
             panel.ChangeForSelfTest(2, -1);
@@ -66,7 +70,8 @@ public partial class TerrainViewerApp
             Require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && first.Status == AreaHeroStatus.Ready, "the first real hero reads: " + first.Detail);
             MainMenuCommand(() => _mainMenu!.Start());
             await Frames(3);
-            Require(!MainMenuOpen && _areaSession!.QueryHero() is not null && _areaSession.Difficulty == GameDifficulty.Normal, "the new game began at moderate difficulty");
+            Require(!MainMenuOpen && _areaSession!.QueryHero() is not null && _areaSession.Difficulty == GameDifficulty.Normal && _areaSession.Rules.Mode == RuleMode.Original,
+                "the new game began at moderate difficulty under the Original rules: " + _areaSession?.Rules.Name);
             Key(Godot.Key.Escape); Choose(32);
             Require(_mainMenu?.Window == AreaMenuWindow.Options && Controls()[0] == "Difficulty: Moderate", "Options from play opened at the Game page");
             Key(Godot.Key.Right);
@@ -75,18 +80,20 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && Controls()[1] == "Default Combat Mode: Turn Based", "the hero's turn-based switch took it: " + _mainMenu!.Notice + " " + _turnBasedNotice);
             panel.ChangeForSelfTest(1, 1);
             Require(!_turnBasedSetting && Controls()[1] == "Default Combat Mode: Real Time", "back to real time");
+            panel.ChangeForSelfTest(4, -1);
+            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "Steamwoven again in play");
             Key(Godot.Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
             await Frames(3);
             GD.Print("ARC-UI-013 native-smoke options PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Texts = texts.Detail, Map = _readyMapName, Hero = first.Hero.Name, Difficulty = _areaSession!.Difficulty.ToString(), Revision = _areaSession.Version.Revision }));
+                Texts = texts.Detail, Map = _readyMapName, Hero = first.Hero.Name, Difficulty = _areaSession!.Difficulty.ToString(), Rules = _areaSession.Rules.Name, Revision = _areaSession.Version.Revision }));
         }
         finally
         {
             if (_mainMenu is not null) EndMainMenu("smoke end");
             if (_audioVolumes != before._audioVolumes) PaletteVolumeChanged(Arcanum.Presentation.Audio.AudioChannel.Music, before._audioVolumes.Music);
-            (_gameSettings, _turnBasedSetting, _alwaysRunOption) = (before._gameSettings, before._turnBasedSetting, before._alwaysRunOption);
-            _areaSession?.SelectDifficulty(_gameSettings.SessionDifficulty);
+            (_gameSettings, _turnBasedSetting, _alwaysRunOption, _ruleMode) = (before._gameSettings, before._turnBasedSetting, before._alwaysRunOption, before._ruleMode);
+            if (_areaSession is { } current) ApplySessionSettings(current);
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
             System.IO.Directory.Delete(directory, recursive: true);

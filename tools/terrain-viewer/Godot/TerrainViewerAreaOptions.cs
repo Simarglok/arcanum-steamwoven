@@ -10,13 +10,17 @@ namespace Arcanum.TerrainViewer;
 // readers), the default combat mode is the turn-based setting Space also toggles (a hero in combat mode starts or ends a round),
 // auto attack is the real-time attack repeat's setting, Always Run and the three volumes are the palette's. They are user
 // preferences, saved at once in the viewer's preference files (the original writes arcanum.cfg when the game exits) and never in a
-// save; Always Run and the volumes keep their own files.
+// save; Always Run and the volumes keep their own files. ARC-UI-014: the window's Rules line switches the session between the two
+// built-in rule modes (owner decision D8); every session the viewer then makes, loads or brings takes the chosen mode. The choice
+// lasts the run: its stored value belongs to the launcher's settings file (ARC-DEV-046), which this window will write through the
+// launcher's store once it lands.
 public partial class TerrainViewerApp
 {
     private GameSettingsStore? _gameSettingsStore;
     private AreaGameSettings _gameSettings = AreaGameSettings.Defaults;
     private string _gameSettingsOrigin = "default";
     private AreaOptionsTexts? _optionsTexts;
+    private RuleMode _ruleMode = RuleMode.Steamwoven;
 
     private void ConfigureGameSettings()
     {
@@ -29,7 +33,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -57,7 +61,7 @@ public partial class TerrainViewerApp
         {
             case AreaOption.Difficulty:
                 SaveGameSettings(_gameSettings with { Difficulty = value });
-                if (_areaSession is { } session) ApplyDifficulty(session);
+                if (_areaSession is { } session) ApplySessionSettings(session);
                 break;
             case AreaOption.DefaultCombatMode:
                 var turnBased = value == 1;
@@ -76,17 +80,28 @@ public partial class TerrainViewerApp
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;
             case AreaOption.Voice: PaletteVolumeChanged(AudioChannel.Voice, value); break;
             case AreaOption.Music: PaletteVolumeChanged(AudioChannel.Music, value); break;
+            case AreaOption.Rules:
+                // The contract's safety rules make a switch in play safe: the next decision of every domain follows it, nothing is converted
+                // and nothing is saved (docs/world/rule-modes.md).
+                if (!Enum.IsDefined((RuleMode)value)) { refused = "no such rule mode"; break; }
+                _ruleMode = (RuleMode)value;
+                if (_areaSession is { } ruled) ApplySessionSettings(ruled);
+                break;
             default: refused = option + " is not offered"; break;
         }
         GD.Print($"ARC-UI-013 option {option}={value} {(refused is null ? "applied" : "refused: " + refused)}");
         return refused;
     }
 
-    /// <summary>The difficulty setting on a session (its skill and experience readers; not saved with it, ARC-WORLD-030).</summary>
-    private void ApplyDifficulty(GameSessionOwner session)
+    /// <summary>The settings a session takes from the player rather than from a save: the difficulty (its skill and experience readers,
+    /// ARC-WORLD-030) and the rule mode (ARC-UI-014). Neither is saved with it.</summary>
+    private void ApplySessionSettings(GameSessionOwner session)
     {
         if (session.SelectDifficulty(_gameSettings.SessionDifficulty) == GameSessionDisposition.Rejected)
             GD.Print($"ARC-UI-013 difficulty {_gameSettings.SessionDifficulty} refused by the session");
+        var rules = session.SelectRules(_ruleMode);
+        if (rules == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-014 rules {_ruleMode} refused by the session");
+        else if (rules == GameSessionDisposition.Changed) GD.Print($"ARC-UI-014 rules {session.Rules.Name}");
     }
 
     private void SaveGameSettings(AreaGameSettings settings)
