@@ -17,7 +17,7 @@ public partial class TerrainViewerApp
     // another menu choice or a rebuilt group drops it.
     private string? _pendingWalkOrder;
     // The portraits' last state (session, revision, group, modal), so a frame with nothing new does not rebuild them.
-    private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names)? _portraitStamp;
+    private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names, object? Combat)? _portraitStamp;
 
     /// <summary>Orders are taken only while the world owns input: focused, no modal window or control focus, no transfer pending.</summary>
     private bool OrderInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && !AreaTransferPending;
@@ -96,7 +96,9 @@ public partial class TerrainViewerApp
     /// modal state changed.</summary>
     private void RefreshFollowerPortraits()
     {
-        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex);
+        RefreshHeroGauges();
+        // ARC-UI-020: the combat host gives the portraits' bars their values.
+        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex, (object?)_combatHost);
         if (_portraitStamp == stamp) return;
         _portraitStamp = stamp;
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
@@ -112,8 +114,9 @@ public partial class TerrainViewerApp
             _followerPortraits.ItemChosen += FollowerMenuChosen;
         }
         var shown = group.Companions.ToDictionary(c => c.Entity, StringComparer.Ordinal);
+        // ARC-UI-020: each portrait's bars from the follower's life.
         _followerPortraits.Show(session.QueryParty().Followers.Where(f => shown.ContainsKey(f.Entity))
-            .Select(f => (f.Entity, CompanionName(shown[f.Entity]))).ToArray());
+            .Select(f => (f.Entity, CompanionName(shown[f.Entity]), CompanionLife(shown[f.Entity]))).ToArray());
     }
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)

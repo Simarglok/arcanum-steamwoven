@@ -65,5 +65,7 @@ public partial class TerrainViewerApp
         _statusAge = 0; RefreshReadyStatus();
         // ARC-WORLD-046: the follower portraits follow modal windows and party changes (cheap when nothing changed).
         if (_readyArea is not null) RefreshFollowerPortraits();
+        // ARC-UI-020: the PC's gauges also hide once no area is shown.
+        else RefreshHeroGauges();
     }
 }

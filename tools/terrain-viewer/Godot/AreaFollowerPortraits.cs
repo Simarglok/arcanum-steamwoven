@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Hud;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Godot;
@@ -10,6 +11,10 @@ namespace Arcanum.TerrainViewer;
 /// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and character sheet are shown disabled (not
 /// modelled for followers). A diagnostic strip: no portrait art. The menu is an inline panel of buttons that take no focus, not a
 /// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
+/// ARC-UI-020 (ledger CH9): under each button a health bar (in its poisoned colour while the follower is poisoned) and a fatigue
+/// bar, each cropped to the follower's percent (<see cref="LifeBarRules.PortraitFill"/>); below 20 % health the button turns red
+/// (<see cref="LifeBarRules.PortraitTinted"/>), as the original adds red over the face. A follower without combat values shows
+/// empty bars.
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
@@ -18,6 +23,10 @@ public partial class AreaFollowerPortraits : CanvasLayer
     private VBoxContainer _menuItems = null!;
     private string? _menuEntity;
     private string _signature = "";
+    private readonly Dictionary<string, (Button Button, AreaLifeBar Health, AreaLifeBar Fatigue)> _entries = new(StringComparer.Ordinal);
+    /// <summary>The width of a portrait's bars, in pixels.</summary>
+    public const int BarWidth = 96;
+    private static readonly Color Tint = new(1f, .35f, .35f);
 
     /// <summary>A menu item chosen for a follower: its entity and the item.</summary>
     public event Action<string, FollowerMenuItem>? ItemChosen;
@@ -28,7 +37,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>The screen centre of a follower's portrait button, or of an item of the open menu, for the native smoke's mouse
     /// presses (the layer has no transform).</summary>
     internal Vector2? PortraitCentreForSelfTest(string entity) =>
-        _list.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(EntityMeta) && (string)b.GetMeta(EntityMeta) == entity)?.GetGlobalRect().GetCenter();
+        _entries.TryGetValue(entity, out var entry) ? entry.Button.GetGlobalRect().GetCenter() : null;
+    /// <summary>A follower portrait's bar fills, whether its health bar has the poisoned colour, and its red tint.</summary>
+    internal (int Health, int Fatigue, bool Poisoned, bool Tinted)? BarsForSelfTest(string entity) =>
+        _entries.TryGetValue(entity, out var entry)
+            ? (entry.Health.Filled, entry.Fatigue.Filled, entry.Health.FillColor == AreaLifeBar.PoisonedHealthColor, entry.Button.SelfModulate == Tint)
+            : null;
     internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
         _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
 
@@ -61,25 +75,43 @@ public partial class AreaFollowerPortraits : CanvasLayer
         Hide();
     }
 
-    /// <summary>Shows one button per follower (entity, label) in array order; hidden when there is none.</summary>
-    public void Show(IReadOnlyList<(string Entity, string Label)> followers)
+    /// <summary>Shows one button per follower (entity, label, life) in array order, with its bars; hidden when there is none. The
+    /// buttons are rebuilt only when the followers or their labels change; the bars follow every call.</summary>
+    public void Show(IReadOnlyList<(string Entity, string Label, AreaLife? Life)> followers)
     {
         var signature = string.Join("\n", followers.Select(f => f.Entity + "\t" + f.Label));
-        if (signature == _signature) return;
-        _signature = signature;
-        // Removed at once so the panel's minimum size no longer counts them when it is placed below.
-        foreach (var child in _list.GetChildren()) { _list.RemoveChild(child); child.QueueFree(); }
-        EntitiesForSelfTest = followers.Select(f => f.Entity).ToArray();
-        if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
-        foreach (var (entity, label) in followers)
+        if (signature != _signature)
         {
-            var button = new Button { Text = label + " ▸", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
-            button.Pressed += () => OpenMenu(entity, button);
-            button.SetMeta(EntityMeta, entity);
-            _list.AddChild(button);
+            _signature = signature;
+            // Removed at once so the panel's minimum size no longer counts them when it is placed below.
+            foreach (var child in _list.GetChildren()) { _list.RemoveChild(child); child.QueueFree(); }
+            _entries.Clear();
+            EntitiesForSelfTest = followers.Select(f => f.Entity).ToArray();
+            if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
+            foreach (var (entity, label, _) in followers)
+            {
+                var entry = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+                entry.AddThemeConstantOverride("separation", 2);
+                var button = new Button { Text = label + " ▸", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
+                button.Pressed += () => OpenMenu(entity, button);
+                button.SetMeta(EntityMeta, entity);
+                var health = new AreaLifeBar { Name = "Health", Length = BarWidth, Thickness = 4 };
+                var fatigue = new AreaLifeBar { Name = "Fatigue", Length = BarWidth, Thickness = 4 };
+                entry.AddChild(button); entry.AddChild(health); entry.AddChild(fatigue);
+                _list.AddChild(entry);
+                _entries[entity] = (button, health, fatigue);
+            }
+            Visible = followers.Count > 0;
+            Place();
         }
-        Visible = followers.Count > 0;
-        Place();
+        foreach (var (entity, _, life) in followers)
+        {
+            var (button, health, fatigue) = _entries[entity];
+            var value = life ?? default;
+            health.SetFill(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+            fatigue.SetFill(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+            button.SelfModulate = life is not null && LifeBarRules.PortraitTinted(value.Health, value.MaxHealth) ? Tint : Colors.White;
+        }
     }
 
     /// <summary>Opens the order menu of a follower next to its portrait button (a second press of the same portrait closes it).</summary>
