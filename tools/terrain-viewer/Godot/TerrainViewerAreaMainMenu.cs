@@ -25,6 +25,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-030 (N10b): "New Character" makes the new character from the generic prototype (read as the pre-made heroes are) and opens
 // its window: the gender, race and background buttons change it under the rule setting (NW4), Accept starts a new game as it the
 // same way a pre-made hero starts (its race and gender in the session's hero, its background set with its effect, no main-menu flag).
+// ARC-UI-034: Accept now opens the character editor (window 14, TerrainViewerAreaCreationEditor.cs) on a draft session of the
+// character; the editor's Accept starts the game with its presses replayed, its Cancel goes back to a new character.
 public partial class TerrainViewerApp
 {
     /// <summary>ARC-UI-012: what the start scene does once it is published: open the main menu again, or start a new game as a hero.</summary>
@@ -213,6 +215,7 @@ public partial class TerrainViewerApp
         BindOptionsWindow();
         _mainMenu.Rules = CreationRules();
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero) : "");
+        RenderCharacterEditor();
     }
 
     /// <summary>ARC-UI-030: the character-creation rules of the rule setting the launcher and options window hold (NW4).</summary>
@@ -289,6 +292,16 @@ public partial class TerrainViewerApp
                 var defaultName = _mainMenu.Texts.FromGame ? MesText.Encode(_mainMenu.Texts.Text(CharacterNameRules.DefaultNameMessage), AreaHoverIndex.TextProfile) : null;
                 _mainMenu.OpenNewCharacter(new AreaNewCharacter(generic, defaultName));
                 GD.Print("ARC-UI-030 new character window open");
+                break;
+            case AreaMenuCommandKind.OpenCharacterEditor:
+                // ARC-UI-034: the original's Accept opens window 14, the character editor in creation mode (CM1).
+                var editing = _mainMenu.Creation!;
+                if (MakeCreationDraft(editing, out var draftRefused) is { } draft)
+                {
+                    _mainMenu.OpenCharacterEditor(new AreaCreationEditor(editing, draft));
+                    GD.Print($"ARC-UI-034 character editor open race={editing.Race} gender={editing.Gender} background={editing.Background} unspent={draft.QueryHeroExperience()?.UnspentPoints}");
+                }
+                else _mainMenu.Notice = "the character editor cannot open: " + draftRefused;
                 break;
             case AreaMenuCommandKind.StartNewCharacter:
                 var made = _mainMenu.Creation!;
@@ -418,6 +431,7 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is null) return;
         GD.Print("ARC-UI-011 main menu closed: the scene ended (another map loads)");
+        _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = "closed: another map loads";
     }
 
@@ -425,6 +439,7 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is null) return;
         GD.Print("ARC-UI-011 main menu closed: " + reason);
+        _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = reason;
         QuarantineWorld(); RefreshReadyStatus();
     }
@@ -443,7 +458,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: a session that is gone (a reset, map mode left) ends the menu.</summary>
     private void SyncMainMenu()
     {
-        if (_mainMenu is not null && !QuickKeysActive) { _mainMenuPanel?.CloseView(); _mainMenu = null; }
+        if (_mainMenu is not null && !QuickKeysActive) { _mainMenu.DropEditor(); CloseCharacterEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
     }
 
     /// <summary>While open the menu owns the keys: Escape goes back (or continues play, exits from a reopened main menu, answers
@@ -456,6 +471,8 @@ public partial class TerrainViewerApp
         if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape()); return; }
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
+        // ARC-UI-034: Return in the character editor goes on as its Accept does (the menu's key handler, CM5).
+        if (routed is Key.Enter or Key.KpEnter && _mainMenu.Window == AreaMenuWindow.CharacterEditor) { MainMenuCommand(() => _mainMenu.Accept()); return; }
         // ARC-UI-033: while the name field is typed into, Backspace removes its last character and Enter ends the typing.
         if (routed is Key.Backspace or Key.Enter or Key.KpEnter && _mainMenu.Creation is { TypingName: true })
         {
@@ -522,7 +539,13 @@ public partial class TerrainViewerApp
     // the first hero (its prototype, gold and main-menu flag in the new session); after F7, a reopened menu's "Last Save" loads it.
     private async Task RunAreaMainMenuSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-011 main menu smoke: " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            // The scene's failure line names only the exception's type: the reason is printed first.
+            GD.Print("ARC-UI-011 main menu smoke FAILED: " + why);
+            throw new InvalidOperationException("ARC-UI-011 main menu smoke: " + why);
+        }
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-011-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -627,10 +650,33 @@ public partial class TerrainViewerApp
             Require(!creation.TypingName && creation.NameText() == "Vela" && _mainMenuPanel.CreationForSelfTest.Contains("Name: Vela"),
                 "the typed name: " + string.Join(" | ", _mainMenuPanel.CreationForSelfTest));
             var beforeAccept = _areaSession;
+            // ARC-UI-034: Accept opens the character editor on her draft; the real stats, skills and spells pages spend her points: willpower
+            // (the original's sheet order, row 7), a hit point, the first skill and a college 1 spell (willpower 9 lets rank 1 be learned); a
+            // second willpower − is refused at the opening; Return starts the game with the presses replayed.
             _mainMenuPanel!.AcceptForSelfTest();
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && ReferenceEquals(beforeAccept, _areaSession)
+                && _editorPanel!.StatsForSelfTest is { UnspentPoints: 5, EditorOpen: true } && _editorPanel.SkillsForSelfTest is not null,
+                "Accept opened the character editor: " + _mainMenu?.Notice);
+            var willpower = _editorPanel!.StatsForSelfTest!.Rows[7];
+            Require(willpower.Stat == Arcanum.Simulation.Character.CharacterStat.Willpower && willpower.Value == 8, "row 7 is willpower 8: " + AreaStatsPage.Line(willpower));
+            _editorPanel!.StatPlusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.StatPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.SkillPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.CollegeTabForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.SpellPlusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            var learned = _editorPanel!.SkillMessageForSelfTest;
+            _editorPanel!.StatMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.StatMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            var editorPresses = _mainMenu!.Creation!.Presses.Count;
+            Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 2 } && editorPresses == 5 && learned.StartsWith("learned ", StringComparison.Ordinal)
+                && _editorPanel!.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund",
+                $"the editor's presses: {editorPresses} learned='{learned}' last='{_editorPanel!.SkillMessageForSelfTest}'");
+            HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
             var made = _areaSession!.QueryHero();
-            Require(!MainMenuOpen && !ReferenceEquals(beforeAccept, _areaSession) && made is { Race: Arcanum.Simulation.Character.CharacterRace.Elf,
-                Gender: Arcanum.Simulation.Character.CharacterGender.Female, Level: 1, UnspentPoints: 5 }
+            Require(!MainMenuOpen && !CharacterEditorShown && !ReferenceEquals(beforeAccept, _areaSession) && made is { Race: Arcanum.Simulation.Character.CharacterRace.Elf,
+                Gender: Arcanum.Simulation.Character.CharacterGender.Female, Level: 1, UnspentPoints: 2 }
+                && made.Stats[(int)Arcanum.Simulation.Character.CharacterStat.Willpower] == 9 && made.Advancement.HitPointPoints == 0
+                && made.Advancement.BasicSkills[0] == 1 && made.Advancement.Colleges[0] == 1 && !_areaSession.HeroEditorOpen
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == chosen.Background && _areaSession.QueryHeroBackgroundDescription() == chosen.Description
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
@@ -644,6 +690,9 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-030 native-smoke new character PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Backgrounds = creation.Generic.Backgrounds!.Count, DwarfBackground = dwarfBackground!.Background, Rules = CreationRules().Name,
                 chosen.Background, chosen.Description, chosen.Effect, made!.Prototype, Revision = _areaSession.Version.Revision }));
+            GD.Print("ARC-UI-034 native-smoke character editor PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Presses = editorPresses, made.UnspentPoints, Willpower = made.Stats[(int)Arcanum.Simulation.Character.CharacterStat.Willpower],
+                Skill = made.Advancement.BasicSkills[0], College = made.Advancement.Colleges[0], Learned = learned, Life = _areaSession.QueryHeroLife()?.Status.HitPoints }));
             GD.Print("ARC-UI-033 native-smoke name and portrait PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Portraits = portraits.GameCount, FirstPortrait = firstPortrait, made.Portrait, NameBytes = made.PlayerName.Length,
                 DefaultNameBytes = creation.DefaultName.Length, Refusal = CharacterNameRules.RefusalMessage }));

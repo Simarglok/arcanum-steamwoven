@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 /// original's menu art and layout are not drawn. ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
 /// ARC-UI-013: the options window: the page's shown controls, each with its label, value and arrows, above the page and Done buttons.
 /// ARC-UI-030: the new-character window: gender, race and background rows with their arrows (the original's art buttons), the
-/// background's name and text from the game, Accept and Cancel.
+/// background's name and text from the game, Accept and Cancel. ARC-UI-034: the character editor (window 14) is the creation-mode
+/// character sheet the app shows above this backdrop; the menu's own panel is hidden there.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -118,8 +119,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
             AreaMenuWindow.Main => "Main menu", AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => "Game menu",
             AreaMenuWindow.SinglePlayer => menu.Texts.Text(10), AreaMenuWindow.NewGame => menu.Texts.Text(50),
             AreaMenuWindow.Options => menu.Texts.Text(12) + ": " + menu.Texts.Text(4000 + (int)menu.Page),
-            AreaMenuWindow.NewCharacter => menu.Texts.Text(421), _ => menu.Texts.Text(420),
+            AreaMenuWindow.NewCharacter => menu.Texts.Text(421), AreaMenuWindow.CharacterEditor => "Character editor", _ => menu.Texts.Text(420),
         };
+        // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
+        _panel.Visible = menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         RenderControls(menu);
         var options = menu.Window == AreaMenuWindow.Options;
@@ -159,8 +162,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
-                : creating ? "the arrows change the gender, race and background (a race or gender change clears the background); Accept begins a new game "
-                    + "as this character, Escape or Cancel goes back; race and gender names are the project's, the background's text the game's"
+                : creating ? "the arrows change the gender, race and background (a race or gender change clears the background); Accept opens the character editor "
+                    + "for this character, Escape or Cancel goes back; race and gender names are the project's, the background's text the game's"
                 : options && !menu.QuitPending ? "Up/Down choose a control, the arrows or Left/Right change its value at once (it is saved as a user preference, not in a save); "
                     + "a page's letter shows it, Done closes the window" + (menu.Root == AreaMenuWindow.Main ? "" : " and the menu, as the O key does")
                     + "; Escape does nothing here, as in the original; options texts "
@@ -265,7 +268,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide();
+        Hide(); _panel.Visible = true;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);

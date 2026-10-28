@@ -1338,8 +1338,15 @@ the row text (the original also over its + and −, whose tooltips here are the 
 spent or refunded (the original clears the text bar, SP7) and no 3 s hint delay after a refusal (SP5). The view-only
 mode of the original (mode 2, + and − hidden) has no caller in the viewer.
 
-**Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
-errors), tech disciplines and schematics panels, age (not session state), the portrait and PC lens,
+Since ARC-UI-034 the sheet also has a stats page (its first tab): hit points, fatigue and the eight primary stats in the
+original's order (strength, constitution, dexterity, beauty, intelligence, willpower, perception, charisma; ledger
+[CP3, CP4, CM8](../research/ledger/character.md#character-editor-in-creation-mode-arc-ui-034)), each with `−` and `+`
+through the same pool (`AreaStatsPage`, `SpendHeroPoint`/`RefundHeroPoint`): the row shows the effective value, the base
+when it differs and the cost of the next point (the original's hint; "at its maximum" when the base has reached the race's
+maximum), a pool its maximum and the points bought. Refusals in project words (not enough points, at its maximum or
+minimum, nothing to refund since the sheet opened, a skill, spell or degree that needs the stat).
+
+**Not implemented:** the original's refusal texts and sound for the stats page, tech disciplines and schematics panels, age (not session state), the portrait and PC lens,
 followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
 key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
 while open, rebuild on change, the skills page's `+` and `−` with the editor's floor over a close and reopen, dead-hero close
@@ -1393,8 +1400,9 @@ Differences from the original, all of the page's presentation:
 - project refusal texts, with no refusal sound (the original plays 3004, SG6, SP7);
 - a success reported in words; the original clears its text bar.
 
-The view-only and character-creation modes of the original sheet have no caller in the viewer. Those modes also show `−` down
-to rank 0.
+The view-only mode of the original sheet has no caller in the viewer. The character-creation mode is the
+[character editor](#character-editor-in-creation-mode-arc-ui-034) (ARC-UI-034); like the original's (CM8) it refuses a `−`
+at the floor, which is the new character's start.
 
 **Not implemented:**
 
@@ -1765,16 +1773,51 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   over the rows (gender, race, background, portrait, name), Accept and Cancel, and its confirm presses a row's next arrow,
   begins or ends the name's typing, or presses the button.
 
-Not built yet (later N10b slices): the portrait's image in the window, the character editor in creation mode that Accept opens in the original (point
-buying, FR-CHAR-015, FR-CHAR-020), and the opening shop with the background's money and items and the clothes
-(FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no gold, no items and
-its 5 points unspent. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
-back, the default name refused, a name typed through the keys and an Accept that starts a dwarf with a background and its
-effect, the name and the portrait); native smoke on the original data: the `menu` stage
+Since ARC-UI-034 Accept opens the [character editor](#character-editor-in-creation-mode-arc-ui-034) instead of starting the
+game. Not built yet (later N10b slices): the portrait's image in the window and the opening shop with the background's money
+and items and the clothes (FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no
+gold and no items. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
+back, the default name refused, a name typed through the keys and an Accept that opens the editor and, through it, starts a
+dwarf with a background and its effect, the name and the portrait); native smoke on the original data: the `menu` stage
 (`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
-steps her portraits, has Accept refuse the default name, types a name through the window's keys, accepts and checks the
-session (`ARC-UI-030 native-smoke new character PASS`, then `ARC-UI-033 native-smoke name and portrait PASS`). Checks:
-`AreaNewCharacterTests`, `CharacterNameRulesTests`, `HeroNameTests`.
+steps her portraits, has Accept refuse the default name, types a name through the window's keys, accepts, spends in the
+editor and checks the session (`ARC-UI-030 native-smoke new character PASS`, `ARC-UI-034 native-smoke character editor PASS`,
+then `ARC-UI-033 native-smoke name and portrait PASS`). Checks: `AreaNewCharacterTests`, `CharacterNameRulesTests`,
+`HeroNameTests`, `AreaStatsPageTests`.
+
+### Character editor in creation mode (ARC-UI-034)
+
+N10b, slice 3 (FR-CHAR-001, FR-CHAR-015, FR-CHAR-016, FR-CHAR-017, FR-CHAR-020): the original's window 14, which the
+new-character window's Accept opens once the name passes ([ledger CM1–CM8](../research/ledger/character.md#character-editor-in-creation-mode-arc-ui-034)).
+In the original it is the ordinary character editor (`charedit`) opened on the new PC in creation mode; its opening takes the
+snapshot every refund stops at, so the five starting points can be spent and taken back while the window stays open.
+
+- **The draft.** Steamwoven makes the new character's session only when the game starts (possibly after the start scene loads),
+  so the editor works on a draft session made from the window's character exactly as the start makes it (the scene's
+  new-game recipe, the race, gender, portrait, name and background with its effect; `AreaCreationEditor`), with its
+  character editor open: the floor is the character's start (eight stats 8, nothing bought), as in the original (CM4). The
+  draft is disposed whenever the window is left or the menu ends. A scene without its new-game recipe (its session came from
+  a transfer or a load) cannot open the editor and names the reason.
+- **Pages.** The character sheet in its creation mode above the main menu's backdrop: the sheet's values, the stats page
+  (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
+  rules and texts, [skills page](#skills-page-arc-ui-009)), and Cancel and Accept. Each press that changes the draft is
+  recorded; a refused one is not.
+- **Accept** (or Return, CM5) starts the new game as Start does for a pre-made hero, then replays the recorded presses on the new
+  session inside an editor of its own opened on the same start (`AreaNewCharacter.Apply`), and closes that editor: the game
+  starts with nothing refundable (owner rule 2026-10-20). A press the new session refuses fails the start and names it. The
+  original goes on to the opening shop (window 15, CM2), which is not built.
+- **Cancel** (or Escape, CM5) goes back to the new-character window, which, as in the original, starts a new character (the
+  generic human man; CM6). The name field starts with message 500 again (the original keeps the typed name, NW7: a later
+  slice).
+- **Keys.** The menu owns the keys: Return accepts, Escape cancels, no letters (CM7). A controller moves over Accept and Cancel
+  and confirms; the pages' buttons take the pointer.
+
+Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: Accept opens the editor on the dwarf's draft, `+` on
+strength, Cancel back to a new human, then Accept again, strength, a hit point, constitution `+` and `−`, the first skill, a
+refused `−` at the floor, and Return starts the dwarf with the presses replayed and the editor closed. Native smoke (`menu`
+stage, original data): the elf woman's willpower, a hit point, the first skill and a college 1 spell, the hit point taken
+back and a second `−` refused, then Return; `ARC-UI-034 native-smoke character editor PASS` with the started session's values.
+Checks: `AreaNewCharacterTests` (draft, record, replay, a refused replay, the menu's window 14), `AreaStatsPageTests`.
 
 ### Interface bars (ARC-UI-018)
 

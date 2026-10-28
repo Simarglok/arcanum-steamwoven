@@ -19,8 +19,9 @@ public enum AreaNewCharacterButton { GenderPrevious, GenderNext, RacePrevious, R
 /// background press sets them, as in the original. <see cref="Apply"/> gives a session made from <see cref="Hero"/> the background the
 /// window holds. ARC-UI-033: the portrait buttons step through the portraits the race and gender may take (<see cref="PortraitCatalogue.Press"/>,
 /// PO9) and a race or gender change takes the first one it finds; the name field types at its end (<see cref="CharacterNameRules"/>,
-/// NW6–NW8), and <see cref="AcceptName"/> checks it as the original's Accept does. The character editor and the shop that the
-/// original's Accept leads to are later slices. Caller-serialized.
+/// NW6–NW8), and <see cref="AcceptName"/> checks it as the original's Accept does. ARC-UI-034: the character editor that Accept
+/// opens (<see cref="AreaCreationEditor"/>) records its presses here (<see cref="Presses"/>), and <see cref="Apply"/> replays them on
+/// the started session; the opening shop is a later slice. Caller-serialized.
 /// </summary>
 public sealed class AreaNewCharacter
 {
@@ -172,9 +173,22 @@ public sealed class AreaNewCharacter
     /// field's bytes as the player name when they pass Accept's check, <see cref="AcceptName"/>; background 0, no effect): a set
     /// with the chosen block's description number and effect (cause 1, ARC-WORLD-097), or nothing when no background press set one.
     /// <paramref name="effects"/> answers the effect rule of a number (<see cref="AreaHeroLoad.Effects"/>); a number without one adds an
-    /// entry with no changes, as the original's effect list does. Null on success, else why the session refused it.
+    /// entry with no changes, as the original's effect list does. ARC-UI-034: then the character editor's <see cref="Presses"/>, replayed
+    /// in order. Null on success, else why the session refused it.
     /// </summary>
-    public string? Apply(GameSessionOwner owner, Func<int, EffectRule?> effects)
+    public string? Apply(GameSessionOwner owner, Func<int, EffectRule?> effects) => ApplyChoices(owner, effects) ?? Replay(owner);
+
+    /// <summary>ARC-UI-034: the presses of the character editor (window 14) that changed the character, in order.</summary>
+    public IReadOnlyList<AreaCreationPress> Presses => _presses;
+    private readonly List<AreaCreationPress> _presses = [];
+
+    internal void Record(AreaCreationPress press) => _presses.Add(press);
+
+    /// <summary>
+    /// The window's choices on <paramref name="owner"/> as <see cref="Apply"/> sets them, without the editor's presses: the name and
+    /// the background (the draft session the editor works on is made with this).
+    /// </summary>
+    public string? ApplyChoices(GameSessionOwner owner, Func<int, EffectRule?> effects)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(effects);
@@ -187,6 +201,27 @@ public sealed class AreaNewCharacter
         var effect = effects(choice.Effect) is { } rule ? SessionEffectDefinition.FromRule(rule) : new SessionEffectDefinition(choice.Effect, []);
         var set = owner.SetHeroBackground(owner.Version, choice, effect);
         return set.Disposition == GameSessionDisposition.Rejected ? $"the background {choice.Background} was refused ({set.Failure})" : null;
+    }
+
+    /// <summary>ARC-UI-034: the editor's presses on the started session, inside an editor of its own opened on the same sheet the draft's
+    /// opened on (so the same floor), and closed after them: the game starts with the editor closed, nothing refundable any more.</summary>
+    private string? Replay(GameSessionOwner owner)
+    {
+        if (_presses.Count == 0) return null;
+        if (owner.OpenHeroEditor() is { Disposition: not GameSessionDisposition.Changed } opened) return $"the character editor did not open ({opened.Failure})";
+        try
+        {
+            for (var i = 0; i < _presses.Count; i++)
+            {
+                var press = _presses[i];
+                var result = press.Spend ? owner.SpendHeroPoint(owner.Version, press.Track, press.Index)
+                    : owner.RefundHeroPoint(owner.Version, press.Track, press.Index, press.Click);
+                if (result.Disposition != GameSessionDisposition.Changed)
+                    return $"the editor's press {i + 1} ({press.Track} {press.Index} {(press.Spend ? "+" : "-")}) was refused ({result.Failure} {result.Change?.Status})";
+            }
+            return null;
+        }
+        finally { owner.CloseHeroEditor(); }
     }
 
     private void Take(CreationPress press)

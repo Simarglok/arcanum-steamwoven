@@ -208,9 +208,37 @@ public partial class TerrainViewerApp
             InventoryKey(Key.Enter);
             Require(_mainMenuPanel.CreationForSelfTest.Contains("Name: Dain") && _mainMenu!.Window == AreaMenuWindow.NewCharacter, "Enter ended the typing");
             var beforeCreation = _areaSession;
+            // ARC-UI-034: Accept opens the character editor (window 14) over a draft of the character; Cancel goes back to a new one.
             _mainMenuPanel.AcceptForSelfTest();
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && ReferenceEquals(beforeCreation, _areaSession)
+                && _editorPanel!.StatsForSelfTest is { UnspentPoints: 5, EditorOpen: true } && _mainMenu.Editor!.Draft.QueryHero()!.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf,
+                "Accept opened the editor on the dwarf's draft: " + _mainMenu?.Notice);
+            _editorPanel!.StatPlusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 4 } && _editorPanel!.StatTextForSelfTest(2).StartsWith("Strength: 10 (base 9)", StringComparison.Ordinal),
+                "+ bought strength on the draft: " + _editorPanel!.StatTextForSelfTest(2));
+            var firstDraft = _mainMenu!.Editor!;
+            _editorPanel!.CloseForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter && !CharacterEditorShown && firstDraft.Disposed
+                && _mainMenu.Creation is { Race: Arcanum.Simulation.Character.CharacterRace.Human, Presses.Count: 0 }, "Cancel went back to a new character");
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
+            _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
+            _mainMenuPanel.NameClickForSelfTest();
+            foreach (var letter in "Dain") Letter(letter);
+            InventoryKey(Key.Enter);
+            _mainMenuPanel.AcceptForSelfTest();
+            Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown, "Accept opened the editor again");
+            // Strength +, a hit point +, constitution + and −, the first skill +; Escape is the menu's (back), Return its Accept (CM5).
+            foreach (var (row, plus) in new[] { (2, true), (0, true), (3, true), (3, false) })
+                (plus ? _editorPanel!.StatPlusForSelfTest(row) : _editorPanel!.StatMinusForSelfTest(row)).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.SkillPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel!.StatMinusForSelfTest(3).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 2 } && _editorPanel!.SkillMessageForSelfTest.StartsWith("refused: nothing bought", StringComparison.Ordinal)
+                && _mainMenu.Creation!.Presses.Count == 5, "the presses on the draft: " + _editorPanel!.SkillMessageForSelfTest);
+            InventoryKey(Key.Enter);
             var made = _areaSession!.QueryHero();
-            Require(!MainMenuOpen && _mainMenu is null && !ReferenceEquals(beforeCreation, _areaSession) && made?.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf
+            Require(!MainMenuOpen && _mainMenu is null && !CharacterEditorShown && !ReferenceEquals(beforeCreation, _areaSession) && made?.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf
+                && made.UnspentPoints == 2 && made.Stats[(int)Arcanum.Simulation.Character.CharacterStat.Strength] == 9 && made.Advancement.HitPointPoints == 1
+                && made.Advancement.BasicSkills[0] == 1 && !_areaSession.HeroEditorOpen
                 && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
                 && _areaSession.QueryHeroBackground() == 1 && _areaSession.QueryHeroBackgroundDescription() == 1001
                 && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Number == 86 && e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
@@ -228,7 +256,8 @@ public partial class TerrainViewerApp
             return "opened modal by --main-menu with the offered buttons, letters and Escape (not at the root), Last Save without a save stays, " +
                 "browser cycles, Start begins a new game as the hero, Last Save loads the newest, Load Game window over the waiting menu (back unused, ends on a load), " +
                 "New Character window (arrows, Escape back, Accept starts with the background and its effect; portrait row, the default name refused, " +
-                "a typed name stored with the portrait), controller Exit";
+                "a typed name stored with the portrait), character editor (stats and skill presses on the draft, Cancel back to a new character, " +
+                "Return starts with the presses replayed), controller Exit";
         }
         finally
         {

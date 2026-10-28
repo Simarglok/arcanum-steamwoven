@@ -10,7 +10,9 @@ namespace Arcanum.TerrainViewer;
 /// and a hover hint (the description and the key stat the next point needs). ARC-MAGIC-008 adds the spells page: the sixteen
 /// college tabs, the shown college's five spells (name, state and minimum level, the original's hover hint) and the college's − and
 /// + (<see cref="SpellUnlearnRequested"/>, <see cref="SpellLearnRequested"/>). The two pages are tabs. The app rebuilds it whenever
-/// the session changes.
+/// the session changes. ARC-UI-034 adds the stats page (hit points, fatigue and the eight primary stats, each with − and +,
+/// <see cref="StatRefundRequested"/>, <see cref="StatSpendRequested"/>) and the creation mode of the character editor (window 14):
+/// Accept and Cancel instead of Close, over the main menu.
 /// </summary>
 public partial class AreaCharacterSheetPanel : CanvasLayer
 {
@@ -22,13 +24,23 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     private AreaSkillsPageView? _skillsView;
     private Label _skillMessage = null!;
     private readonly List<(Button Minus, Label Text, Button Plus)> _skillRows = [];
+    private readonly List<(Button Minus, Label Text, Button Plus)> _statRows = [];
+    private AreaStatsPageView? _statsView;
+    private readonly bool _creation;
+    private Button? _accept;
     private AreaSpellsPageView? _spellsView;
     private TabContainer _pages = null!;
     private readonly List<Button> _collegeTabs = [];
     private Label _collegeLine = null!;
     private readonly List<Label> _spellRows = [];
     private Button _spellMinus = null!, _spellPlus = null!;
+    /// <summary>Close, or in creation mode Cancel.</summary>
     public event Action? CloseRequested;
+    /// <summary>ARC-UI-034: the creation mode's Accept.</summary>
+    public event Action? AcceptRequested;
+    /// <summary>ARC-UI-034: + or − of a stats row (0 hit points, 1 fatigue, 2..9 the stats).</summary>
+    public event Action<int>? StatSpendRequested;
+    public event Action<int>? StatRefundRequested;
     public event Action<int>? SkillSpendRequested;
     public event Action<int>? SkillRefundRequested;
     /// <summary>A college tab was pressed (0..15).</summary>
@@ -52,11 +64,23 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     internal string SpellTextForSelfTest(int rank) => _spellRows[rank].Text;
     internal string SpellHintForSelfTest(int rank) => _spellRows[rank].TooltipText;
     internal string CollegeHintForSelfTest(int college) => _collegeTabs[college].TooltipText;
+    internal AreaStatsPageView? StatsForSelfTest => _statsView;
+    internal Button StatPlusForSelfTest(int row) => _statRows[row].Plus;
+    internal Button StatMinusForSelfTest(int row) => _statRows[row].Minus;
+    internal string StatTextForSelfTest(int row) => _statRows[row].Text.Text;
+    internal Button? AcceptForSelfTest => _accept;
+    internal Button CloseForSelfTest => _close;
+
+    public AreaCharacterSheetPanel() { }
+
+    /// <param name="creation">ARC-UI-034: the character editor in creation mode (Accept and Cancel, above the main menu).</param>
+    public AreaCharacterSheetPanel(bool creation) => _creation = creation;
 
     public override void _Ready()
     {
-        Layer = 4;
-        _panel = new PanelContainer { Name = "AreaCharacterSheet", MouseFilter = Control.MouseFilterEnum.Stop };
+        // ARC-UI-034: the creation editor sits above the main menu's backdrop (layer 4).
+        Layer = _creation ? 5 : 4;
+        _panel = new PanelContainer { Name = _creation ? "AreaCharacterEditor" : "AreaCharacterSheet", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .96f),
@@ -64,9 +88,10 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         });
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
-        var header = new Label { Text = "Character sheet", Modulate = new Color(1f, .85f, .55f) };
+        var header = new Label { Text = _creation ? "Character editor (new character)" : "Character sheet", Modulate = new Color(1f, .85f, .55f) };
         _body = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _pages = new TabContainer { Name = "Pages", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _pages.AddChild(BuildStatsPage());
         var skills = new GridContainer { Name = "Skills", Columns = 2, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         for (var group = 0; group < AreaSkillsPage.Rows / AreaSkillsPage.RowsPerGroup; group++)
         {
@@ -91,16 +116,46 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _pages.AddChild(skills);
         _pages.AddChild(BuildSpellsPage());
         _skillMessage = new Label { Modulate = new Color(.85f, .9f, .95f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _close = new Button { Name = "Close", Text = "Close", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
+        _close = new Button { Name = "Close", Text = _creation ? "Cancel" : "Close", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _close.Pressed += () => CloseRequested?.Invoke();
         _hint = new Label
         {
             Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "C, Escape or cancel closes | PROJECT diagnostic window: skill and spell points (no stat or tech discipline buttons); original UI parity NOT_VERIFIED",
+            Text = _creation
+                ? "Return accepts, Escape cancels (back to the new-character window, which starts a new character) | PROJECT diagnostic window: stat, skill and spell points, no tech discipline buttons; the opening shop is not built; original UI parity NOT_VERIFIED"
+                : "C, Escape or cancel closes | PROJECT diagnostic window: stat, skill and spell points (no tech discipline buttons); original UI parity NOT_VERIFIED",
         };
-        foreach (var control in new Control[] { header, _body, _pages, _skillMessage, _close, _hint }) contents.AddChild(control);
+        var buttons = new HBoxContainer();
+        if (_creation)
+        {
+            // The original's window 14: Cancel on the left, Accept on the right (CM2).
+            _accept = new Button { Name = "Accept", Text = "Accept", FocusMode = Control.FocusModeEnum.All };
+            _accept.Pressed += () => AcceptRequested?.Invoke();
+            buttons.AddChild(_close); buttons.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }); buttons.AddChild(_accept);
+        }
+        else buttons.AddChild(_close);
+        foreach (var control in new Control[] { header, _body, _pages, _skillMessage, buttons, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
+    }
+
+    private VBoxContainer BuildStatsPage()
+    {
+        var page = new VBoxContainer { Name = "Stats", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        for (var row = 0; row < AreaStatsPage.Rows; row++)
+        {
+            var r = row;
+            var line = new HBoxContainer();
+            var minus = new Button { Text = "−", FocusMode = Control.FocusModeEnum.All, TooltipText = "refund (down to the value when the sheet opened)" };
+            var plus = new Button { Text = "+", FocusMode = Control.FocusModeEnum.All, TooltipText = "spend unspent points" };
+            var text = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
+            minus.Pressed += () => StatRefundRequested?.Invoke(r);
+            plus.Pressed += () => StatSpendRequested?.Invoke(r);
+            line.AddChild(minus); line.AddChild(text); line.AddChild(plus);
+            page.AddChild(line);
+            _statRows.Add((minus, text, plus));
+        }
+        return page;
     }
 
     private VBoxContainer BuildSpellsPage()
@@ -134,23 +189,30 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         return page;
     }
 
-    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null)
+    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null)
     {
-        Show(); Render(view, skills, spells);
-        _close.GrabFocus();
+        Show(); Render(view, skills, spells, stats);
+        (_accept ?? _close).GrabFocus();
     }
 
     public void CloseView()
     {
-        _view = null; _skillsView = null; _spellsView = null; _skillMessage.Text = string.Empty; Hide();
+        _view = null; _skillsView = null; _spellsView = null; _statsView = null; _skillMessage.Text = string.Empty; Hide();
         GetViewport().GuiReleaseFocus();
     }
 
-    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null)
+    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null)
     {
         ArgumentNullException.ThrowIfNull(view);
-        _view = view; _skillsView = skills; _spellsView = spells;
+        _view = view; _skillsView = skills; _spellsView = spells; _statsView = stats;
         _body.Text = string.Join("\n", AreaCharacterSheet.Lines(view));
+        for (var row = 0; row < _statRows.Count; row++)
+        {
+            var (minus, text, plus) = _statRows[row];
+            var stat = stats?.Rows[row];
+            text.Text = stat is null ? "" : AreaStatsPage.Line(stat);
+            minus.Disabled = plus.Disabled = stats is not { EditorOpen: true };
+        }
         for (var row = 0; row < _skillRows.Count; row++)
         {
             var (minus, text, plus) = _skillRows[row];

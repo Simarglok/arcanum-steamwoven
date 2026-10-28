@@ -9,7 +9,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-030 (N10b): the new-character window (ledger NW1–NW5, BD4, BD10) over a synthetic generic hero and background table;
-/// ARC-UI-033: its portrait buttons (PO9) over a synthetic portrait file and its name field (NW6–NW8).</summary>
+/// ARC-UI-033: its portrait buttons (PO9) over a synthetic portrait file and its name field (NW6–NW8); ARC-UI-034: the character editor
+/// in creation mode (window 14, CM1–CM8) on a draft session and the replay of its presses.</summary>
 [TestClass]
 public sealed class AreaNewCharacterTests
 {
@@ -299,7 +300,7 @@ public sealed class AreaNewCharacterTests
         Assert.AreEqual(AreaMenuWindow.NewCharacter, menu.Window);
         Assert.AreEqual(0, menu.Shown.Count, "art buttons only: no letters");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('x'));
-        CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.NoEditor);
+        CollectionAssert.DoesNotContain(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShop, "ARC-UI-034: Accept opens the editor");
         menu.PressCreation(AreaNewCharacterButton.RaceNext, Steamwoven);
         Assert.AreEqual(CharacterRace.Dwarf, menu.Creation!.Race);
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Accept(), "ARC-UI-033: the default name is refused");
@@ -309,7 +310,7 @@ public sealed class AreaNewCharacterTests
         Assert.IsTrue(menu.NameKey(backspace: false), "Enter ends the typing");
         Assert.IsFalse(menu.NameKey(backspace: true), "no longer typing: the key is the window's");
         Assert.AreEqual("n", menu.Creation.NameText());
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Accept());
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenCharacterEditor), menu.Accept(), "ARC-UI-034: the host opens the editor");
         Assert.IsNull(menu.Notice);
         // The controller: rows gender, race, background, portrait, name, Accept, Cancel.
         menu.Move(1);
@@ -327,7 +328,7 @@ public sealed class AreaNewCharacterTests
         menu.Confirm();
         Assert.AreEqual((false, "x"), (menu.Creation.TypingName, menu.Creation.NameText()), "and a second Confirm ends it as Enter");
         menu.Move(1);
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Confirm(), "the Accept row");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.OpenCharacterEditor), menu.Confirm(), "the Accept row");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Escape());
         Assert.AreEqual(AreaMenuWindow.NewGame, menu.Window, "Escape goes back");
         Assert.IsNull(menu.Creation, "and drops the character");
@@ -337,5 +338,132 @@ public sealed class AreaNewCharacterTests
         refused.Type('s'); refused.Type('n');
         refused.OpenNewCharacter(new AreaNewCharacter(Generic()));
         Assert.AreEqual(AreaMenuWindow.NewGame, refused.Window, "no new game here: the window does not open");
+    }
+
+    private static (AreaNewCharacter Creation, AreaHeroLoad Hero) ElfWoman()
+    {
+        var creation = new AreaNewCharacter(Generic());
+        creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        creation.Press(AreaNewCharacterButton.RaceNext, Steamwoven);
+        creation.Press(AreaNewCharacterButton.GenderNext, Steamwoven);
+        creation.Press(AreaNewCharacterButton.BackgroundNext, Steamwoven);
+        return (creation, creation.Hero(out var detail) ?? throw new AssertFailedException(detail ?? "hero"));
+    }
+
+    private static GameSessionOwner Session(AreaHeroLoad hero) => AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(),
+        Guid.NewGuid(), AreaGridSession.Cell(AreaGridSession.Spawn), 1, hero).Owner ?? throw new AssertFailedException("session");
+
+    [TestMethod]
+    public void The_editor_spends_on_a_draft_down_to_its_opening_and_the_start_replays_the_presses()
+    {
+        var (creation, hero) = ElfWoman();
+        var draft = Session(hero);
+        Assert.IsNull(creation.ApplyChoices(draft, Effect));
+        using var editor = new AreaCreationEditor(creation, draft);
+        Assert.IsTrue(draft.HeroEditorOpen, "creation mode opens the editor: its snapshot is the floor (CM3)");
+        var start = editor.Stats()!;
+        Assert.AreEqual((8, 9, 5), (start.Rows[2].Value, start.Rows[2].Effective, start.UnspentPoints), "strength 8, effective 9 with the background");
+        Assert.IsTrue(editor.PressStat(2, spend: true).Changed);
+        Assert.IsTrue(editor.PressStat(3, spend: true).Changed);
+        Assert.IsTrue(editor.PressStat(3, spend: false).Changed);
+        Assert.AreEqual("refused: nothing bought since the sheet opened to refund", editor.PressStat(3, spend: false).Message, "down to the opening only");
+        Assert.IsTrue(editor.PressStat(0, spend: true).Changed);
+        Assert.IsTrue(editor.PressSkill(0, spend: true).Changed);
+        Assert.AreEqual(5, creation.Presses.Count, "a refused press is not recorded");
+        CollectionAssert.AreEqual(new[]
+        {
+            new AreaCreationPress(AdvancementTrack.Stat, (int)CharacterStat.Strength, true), new(AdvancementTrack.Stat, (int)CharacterStat.Constitution, true),
+            new(AdvancementTrack.Stat, (int)CharacterStat.Constitution, false), new(AdvancementTrack.HitPoints, 0, true), new(AdvancementTrack.BasicSkill, 0, true),
+        }, creation.Presses.ToArray());
+        Assert.AreEqual(2, editor.Stats()!.UnspentPoints);
+        Assert.AreEqual((1, 2), (editor.Skills(null, MesTextProfile.Windows1252)!.Rows[0].Points, editor.Sheet()!.UnspentPoints));
+
+        using var started = Session(hero);
+        Assert.IsNull(creation.Apply(started, Effect));
+        var made = started.QueryHero()!;
+        var drafted = draft.QueryHero()!;
+        CollectionAssert.AreEqual(drafted.Stats.ToArray(), made.Stats.ToArray());
+        Assert.AreEqual(drafted.Advancement, made.Advancement);
+        Assert.AreEqual((2, 9, 1), (made.UnspentPoints, made.Stats[(int)CharacterStat.Strength], made.Advancement.HitPointPoints));
+        Assert.IsFalse(started.HeroEditorOpen, "the game starts with the editor closed: nothing refundable any more");
+        Assert.AreEqual((2, 1002), (started.QueryHeroBackground(), started.QueryHeroBackgroundDescription()));
+        editor.Dispose();
+        Assert.IsTrue(editor.Disposed);
+        Assert.ThrowsExactly<ObjectDisposedException>(() => draft.QueryHero());
+        editor.Dispose();
+    }
+
+    [TestMethod]
+    public void A_press_the_started_session_refuses_fails_the_start_and_closes_its_editor()
+    {
+        var (creation, hero) = ElfWoman();
+        var draft = Session(hero);
+        using (var editor = new AreaCreationEditor(creation, draft))
+            for (var i = 0; i < 5; i++) Assert.IsTrue(editor.PressStat(1, spend: true).Changed);
+        // A session whose hero already spent its points: the first replayed press finds none.
+        using var other = Session(hero);
+        other.OpenHeroEditor();
+        Assert.IsTrue(other.SpendHeroPoint(other.Version, AdvancementTrack.Fatigue, 0).Disposition == GameSessionDisposition.Changed);
+        for (var i = 0; i < 4; i++) other.SpendHeroPoint(other.Version, AdvancementTrack.Fatigue, 0);
+        other.CloseHeroEditor();
+        var refused = creation.Apply(other, Effect);
+        StringAssert.StartsWith(refused, "the editor's press 1 (Fatigue 0 +) was refused (PointRefused NotEnoughPoints)");
+        Assert.IsFalse(other.HeroEditorOpen);
+    }
+
+    [TestMethod]
+    public void The_editor_takes_a_fresh_character_and_a_draft_with_its_editor_closed()
+    {
+        var (creation, hero) = ElfWoman();
+        using var open = Session(hero);
+        open.OpenHeroEditor();
+        Assert.ThrowsExactly<ArgumentException>(() => new AreaCreationEditor(creation, open), "an open editor has another floor");
+        using (var editor = new AreaCreationEditor(creation, Session(hero))) editor.PressStat(2, spend: true);
+        Assert.ThrowsExactly<ArgumentException>(() => new AreaCreationEditor(creation, open), "presses already recorded");
+    }
+
+    [TestMethod]
+    public void The_menu_s_editor_window_accepts_cancels_to_a_new_character_and_owns_the_draft()
+    {
+        var menu = new AreaMainMenu(AreaMainMenuTexts.Project("test"), null);
+        menu.Type('s'); menu.Type('n');
+        menu.OpenNewCharacter(new AreaNewCharacter(Generic()));
+        var creation = menu.Creation!;
+        menu.PressCreation(AreaNewCharacterButton.RaceNext, Steamwoven);
+        menu.BeginName(); menu.Type('n'); menu.NameKey(backspace: false);
+        Assert.AreEqual(AreaMenuCommandKind.OpenCharacterEditor, menu.Accept().Kind);
+        var draft = Session(creation.Hero(out _)!);
+        var editor = new AreaCreationEditor(creation, draft);
+        menu.OpenCharacterEditor(editor);
+        Assert.AreEqual((AreaMenuWindow.CharacterEditor, 0, 0), (menu.Window, menu.Shown.Count, menu.Focus));
+        Assert.AreSame(editor, menu.Editor);
+        CollectionAssert.Contains(menu.HiddenNotes.ToArray(), AreaMainMenu.NoShop);
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Type('a'), "no letters in the editor (CM7)");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Accept(), "Accept starts the game (no shop)");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.StartNewCharacter), menu.Confirm(), "the controller's Accept row");
+        menu.Move(1);
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "the Cancel row goes back");
+        Assert.AreEqual(AreaMenuWindow.NewCharacter, menu.Window);
+        Assert.IsTrue(editor.Disposed, "leaving the editor disposes its draft");
+        Assert.IsNull(menu.Editor);
+        Assert.AreNotSame(creation, menu.Creation, "window 12 opens again with a new character (CM6, NW1)");
+        Assert.AreEqual((CharacterRace.Human, 0, 0), (menu.Creation!.Race, menu.Creation.Presses.Count, menu.Focus));
+        CollectionAssert.AreEqual(creation.DefaultName.ToArray(), menu.Creation.Name.ToArray(), "the name starts as the default (NW7 is a later slice)");
+
+        // Escape goes back the same way; an editor offered outside window 12, or for another character, is disposed at once.
+        menu.BeginName(); menu.Type('m'); menu.NameKey(backspace: false);
+        menu.Accept();
+        var second = new AreaCreationEditor(menu.Creation, Session(menu.Creation.Hero(out _)!));
+        menu.OpenCharacterEditor(second);
+        Assert.AreEqual(AreaMenuCommand.Nothing, menu.Escape());
+        Assert.AreEqual((AreaMenuWindow.NewCharacter, true), (menu.Window, second.Disposed));
+        var stranger = new AreaCreationEditor(new AreaNewCharacter(Generic()), Session(Generic()));
+        menu.OpenCharacterEditor(stranger);
+        Assert.AreEqual((AreaMenuWindow.NewCharacter, true), (menu.Window, stranger.Disposed));
+        menu.Accept();
+        var third = new AreaCreationEditor(menu.Creation, Session(menu.Creation.Hero(out _)!));
+        menu.OpenCharacterEditor(third);
+        menu.DropEditor();
+        Assert.AreEqual((true, (AreaCreationEditor?)null), (third.Disposed, menu.Editor));
     }
 }
