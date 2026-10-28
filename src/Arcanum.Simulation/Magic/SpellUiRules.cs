@@ -82,4 +82,16 @@ public static class SpellUiRules
     /// shows nothing, and the cursor stays.</summary>
     [OriginalFunction(0x57BC30, OriginalFunctionScope.Partial)]
     public static int? NoTargetMessage(ulong reason) => reason == DamagedBit ? NotDamagedMessage : null;
+
+    /// <summary>ARC-MAGIC-019 (SU13): a cast while the caster's casting goal (26 or 27) plays is queued beneath it unless the playing
+    /// goal's stack index (the goals beneath it, the queued casts, plus its own subgoals) is this or more (0x455C30 through 0x4373A0).
+    /// The insertion's own limit (0x44D9B0: index 7 of an 8-goal stack) is never reached from here.</summary>
+    public const int QueueRefusedFromDepth = 4;
+
+    /// <summary>
+    /// ARC-MAGIC-019 (SU13, 0x455C30's queue branch): whether a cast whose run started while the caster's casting goal plays is
+    /// refused rather than queued: at a stack index of <see cref="QueueRefusedFromDepth"/> or more (<paramref name="depth"/>), or
+    /// while turn-based combat is on (0x4B6D70: any round, whoever's turn). A refusal frees the run (0x4558D0) and shows nothing.
+    /// </summary>
+    public static bool QueueRefused(int depth, bool turnBased) => depth >= QueueRefusedFromDepth || turnBased;
 }

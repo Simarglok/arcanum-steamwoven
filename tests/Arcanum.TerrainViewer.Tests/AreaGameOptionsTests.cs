@@ -1,10 +1,12 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-013 options window (ledger OP1–OP8): the original's table, the menu's window 6, the values and the settings file.</summary>
+/// <summary>ARC-UI-013 options window (ledger OP1–OP8): the original's table, the menu's window 6, the values and the settings file;
+/// ARC-UI-014 its project control, the rule mode.</summary>
 [TestClass]
 public sealed class AreaGameOptionsTests
 {
@@ -24,10 +26,11 @@ public sealed class AreaGameOptionsTests
     [TestMethod]
     public void The_table_is_the_originals_three_pages_with_their_settings_and_defaults()
     {
-        Assert.AreEqual(16, AreaOptionTable.All.Count);
-        CollectionAssert.AreEqual(new[] { 100, 101, 102, 103, 104, 105, 106, 107 }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2");
-        CollectionAssert.AreEqual(new[] { 200, 201, 202, 203, 204 }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
-        CollectionAssert.AreEqual(new[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
+        Assert.AreEqual(16, AreaOptionTable.All.Count(c => !c.Project), "the original's 16 controls");
+        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode");
+        CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204 }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
+        CollectionAssert.AreEqual(new int?[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
+        CollectionAssert.AreEqual(new[] { AreaOption.Rules }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "one project control");
         for (var i = 0; i < AreaOptionTable.All.Count; i++) Assert.AreEqual((AreaOption)i, AreaOptionTable.All[i].Option, "the table is indexed by the option");
         var defaults = AreaOptionTable.All.ToDictionary(c => c.Setting, c => c.Default);
         Assert.AreEqual(1, defaults["difficulty"]);
@@ -39,7 +42,8 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(5, defaults["music volume"]);
         Assert.AreEqual(9, AreaOptionTable.Of(AreaOption.Brightness).Max, "brightness's record sets its slider's top");
         Assert.AreEqual(10, AreaOptionTable.Of(AreaOption.Effects).Max, "a slider's default top");
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Effects, AreaOption.Voice, AreaOption.Music },
+        Assert.AreEqual((int)RuleMode.Steamwoven, defaults["rules"], "Steamwoven is the default mode");
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
         Assert.IsFalse(AreaOptionTable.Offered(AreaOptionsPage.Video));
         Assert.AreEqual(AreaGameSettings.Defaults, new AreaGameSettings(1, RealTimeCombatRules.TurnBasedDefault, RealTimeCombatRules.AutoAttackDefault));
@@ -70,7 +74,8 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
         CollectionAssert.AreEqual(new[] { "Game", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun }, main.Controls.Select(c => c.Option).ToArray());
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules },
+            main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
             "Video: " + AreaOptionTable.NoVideoPage, "Module: " + AreaOptionTable.NoModules, "Violence Filter: " + AreaOptionTable.NoViolenceFilter,
@@ -129,9 +134,30 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(6, menu.OptionsFocus, "4 controls and 3 buttons, wrapping");
+        Assert.AreEqual(7, menu.OptionsFocus, "5 controls and 3 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
+    }
+
+    [TestMethod]
+    public void The_rule_mode_line_switches_between_the_two_built_in_modes()
+    {
+        var menu = Options(AreaMenuWindow.InPlay);
+        var rules = AreaOptionTable.Of(AreaOption.Rules);
+        Assert.AreEqual(4, menu.Controls.ToList().IndexOf(rules), "the Game page's last line");
+        Assert.AreEqual((int)RuleMode.Steamwoven, Values.Value(AreaOption.Rules));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Original), menu.Change(4, 1));
+        menu.SetOptions(Values with { Rules = RuleMode.Original });
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(4, 1), "the list wraps");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(4, -1));
+        Assert.AreEqual(Enum.GetValues<RuleMode>().Length - 1, rules.Max, "one value per built-in mode, no custom mix (after alpha)");
+        // The project's texts only: a game file's message 108 is never its label, nor a message of any file its values.
+        var game = AreaOptionsTexts.From((_, _) => "game text", "test");
+        Assert.AreEqual("Rules", game.Label(rules));
+        Assert.AreEqual("Steamwoven", game.Value(rules, 0));
+        Assert.AreEqual("Original", game.Value(rules, 1));
+        Assert.AreEqual("[2]", game.Value(rules, 2));
+        Assert.AreEqual("game text", game.Label(AreaOptionTable.Of(AreaOption.Difficulty)), "an original control still reads the game");
     }
 
     [TestMethod]

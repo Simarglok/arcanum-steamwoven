@@ -4,8 +4,9 @@ Status: **Implemented bounded component**, ARC-WORLD-023. The game has two rule 
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16), extended to every domain by the
 owner on 2026-10-17): **Steamwoven**, the original game with the recorded fixes, which is the default, and
 **Original**, the retail 1.0.7.4 behaviour including the bugs of the original game. The player will pick the mode in
-the settings menu and change it during play without a restart (there is no menu yet, see [Not ready](#not-ready)); the
-mechanism below already allows it. This contract fixes the mechanism every domain uses and
+the settings menu and change it during play without a restart (the AREA viewer's options window switches it since
+ARC-UI-014; the stored choice and the launcher are not ready, see [Not ready](#not-ready)); the mechanism below allows
+it. This contract fixes the mechanism every domain uses and
 keeps the registry of mode differences. The architecture decision is recorded in
 [architecture direction](../architecture/decisions.md).
 
@@ -124,6 +125,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Magic | `MagicAnomalyProfile` | `GoalRefusalChargesBegin` | MG39 | a casting goal refused before its animation (the parent's action points in a turn-based round, the pre-animation check, or a target destroyed or off) ends through the goal's end, which frees the run with its BEGIN cost charged: the caster pays for a cast that never started; Steamwoven frees the run unpaid (owner decision 2026-10-27; ARC-MAGIC-014) |
 | Magic | `MagicAnomalyProfile` | `GoalEndChargesAnyRun` | MG40 | the charge of a run freed before its BEGIN tests neither the free flag nor the technology flag nor `ChargeBeginCost: 0`, so such a run pays its cost anyway; Steamwoven charges it only when its BEGIN would have paid (owner decision 2026-10-27; ARC-MAGIC-014) |
 | Magic | `MagicAnomalyProfile` | `ReleaseRefusalKeepsRun` | MG41 | when the target re-check at the release frame fails, the goal's end frees nothing and the run keeps its slot; Steamwoven frees it unpaid (owner decision 2026-10-27; ARC-MAGIC-014) |
+| Magic | `MagicAnomalyProfile` | `DroppedQueueKeepsRuns` | MG43 | queued casts whose goals never play (their stack ended through the end step or was killed) keep their runs in their slots, unbegun and unpaid; Steamwoven frees them unpaid (pending owner decision, recommended and built: fix; ARC-MAGIC-019) |
 | Magic | `MagicAnomalyProfile` | `DifficultyScalesKillDamage` | MG35 | the damage step takes a full or death hit's amount (the target's current hit points) and then applies a PC attacker's difficulty share, so on hard a PC's death spell leaves the target alive with a quarter of its hit points; Steamwoven leaves that amount alone (owner decision 2026-10-21; ARC-MAGIC-012) |
 | Magic | `MagicAnomalyProfile` | `SpellDamageUsesCastersWeapon` | MG36 | a spell's damage step carries the caster's wielded weapon: its ignore-resistance flag lets the spell ignore resistances, its "uber" flag lets the spell hurt a nigh-invulnerable critter, its damage-armour flag wears the target's armour; Steamwoven gives the spell no weapon (owner decision 2026-10-21; ARC-MAGIC-012) |
 | Magic | `MagicAnomalyProfile` | `MarginTakesFromNoDamage` | MG37 | a resistance margin takes at least 1 from a Damage component's amount even when it is 0, so a resisted stun-only spell heals a hit point; Steamwoven takes nothing from an amount of 0 or less (owner decision 2026-10-21; ARC-MAGIC-012) |
@@ -175,8 +177,11 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   each round call, but no host runs a round yet. The event queue reads the rules too
   (ARC-WORLD-024): a restore uses `Rules.Events` for `RebuildOnLoad`, and the poison recovery timer reads
   `PoisonRecoveryTwice` when it fires.
-- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
-  (F8) keeps the current session's mode.
+- The AREA viewer's options window has a Rules line (ARC-UI-014) that switches the session between the two built-in
+  modes in play and gives every session the viewer then makes or loads the chosen mode. The choice is not stored yet
+  and every run starts in Steamwoven: the launcher's settings file (ARC-DEV-046) will hold it, and the launcher screen
+  will choose it before the main menu. `RuleModeSettingCodec` is still not used. Custom per-switch mixes are not
+  offered (after alpha).
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
 - The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation

@@ -115,6 +115,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="cast-host-and-casting-goal-arc-magic-014"></a>[Cast host and casting goal (ARC-MAGIC-014)](ledger/spell-runs.md#cast-host-and-casting-goal-arc-magic-014) | [Magic: casting and spell runs](ledger/spell-runs.md) | CG1–CG8, MG39–MG41 |
 | <a id="spell-ui-arc-magic-015"></a>[Spell UI (ARC-MAGIC-015)](ledger/spell-runs.md#spell-ui-arc-magic-015) | [Magic: casting and spell runs](ledger/spell-runs.md) | SU1–SU14, MG42 |
 | <a id="spell-eye-candy-arc-magic-017"></a>[Spell eye candy (ARC-MAGIC-017)](ledger/spell-runs.md#spell-eye-candy-arc-magic-017) | [Magic: casting and spell runs](ledger/spell-runs.md) | EC1–EC13 |
+| <a id="queued-cast-arc-magic-019"></a>[Queued cast (ARC-MAGIC-019)](ledger/spell-runs.md#queued-cast-arc-magic-019) | [Magic: casting and spell runs](ledger/spell-runs.md) | QC1–QC6, MG43 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |
