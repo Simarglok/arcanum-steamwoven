@@ -88,8 +88,10 @@ public interface ISessionItemTriggers
     bool Supports(string item);
 
     /// <summary>The executor for one item of <paramref name="holder"/>; <paramref name="other"/> is the event's other object (since
-    /// ARC-MAGIC-023: an attack's other party), the aim of <c>Target_Attacker</c>.</summary>
-    SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null);
+    /// ARC-MAGIC-023: an attack's other party), the aim of <c>Target_Attacker</c>. ARC-MAGIC-025: <paramref name="tile"/> is the aim
+    /// of <c>Parent_Atks_Location</c> (0x4CBDB0's tile) and <paramref name="runOther"/> the attacker global 0x5FF618 the executor
+    /// copies into its runs' other object (IC6, IC10); none for the other events.</summary>
+    SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null, SpellLocation tile = default, string? runOther = null);
 
     SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder);
 
@@ -136,15 +138,20 @@ public sealed partial class SessionSpellCaster
     /// <paramref name="other"/> object or <paramref name="tile"/>, with the event's mask as the run's triggers and without the
     /// casting goal (the invocation's flag 0x1: goal 73). Nothing for an item the host does not know or that
     /// <paramref name="holder"/> does not hold. The aims at an attacker's worn weapon or armour are not ready.
+    /// ARC-MAGIC-025: the run's parent is the item's (0x455A20 → 0x450A50): its holder in an inventory, else the item itself, which the
+    /// item lookup reports as its own holder (a thrown item on the map); such an item fires for any <paramref name="holder"/>, the
+    /// executor's parent, which only the parent aim reads. <paramref name="runOther"/> (the attacker global) is each run's other
+    /// object (+0xA0): the damage source its kill credits (DH1) and the other party of its target areas. MG46: a run started while the
+    /// host fires an item event records that event's chain (<see cref="FireItemEvents"/>).
     /// </summary>
     public IReadOnlyList<SessionItemSpellStart> StartItemSpells(uint eventMask, string item, string holder, string? other = null,
-        SpellLocation tile = default)
+        SpellLocation tile = default, string? runOther = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(holder);
-        if (Item(item) is not { } spells || spells.Holder != holder) return [];
+        if (Item(item) is not { } spells || spells.Holder != holder && spells.Holder != item) return [];
         return ItemSpellTriggerRules.Fire(spells.Spells, RecordTriggers, eventMask, Rolls)
-            .Select(firing => StartItemSpell(firing, spells, eventMask, firing.Aim switch
+            .Select(firing => StartItemSpell(firing, spells, eventMask, runOther, firing.Aim switch
             {
                 ItemSpellAim.Parent => (holder, SpellLocation.None, false),
                 ItemSpellAim.Other => (other, SpellLocation.None, false),
@@ -173,7 +180,7 @@ public sealed partial class SessionSpellCaster
             if (_owner.QuerySpellRuns().Runs.FirstOrDefault(r => r.Parent?.Id == holder && r.Target?.Id == holder && r.Spell == firing.Spell) is { } run
                 && Act(new(SessionSpellRunActionKind.Interrupt, run.Id)).Disposition != GameSessionDisposition.Rejected)
                 stopped.Add(run.Id);
-            started.Add(StartItemSpell(firing, spells, eventMask, (holder, SpellLocation.None, false)));
+            started.Add(StartItemSpell(firing, spells, eventMask, null, (holder, SpellLocation.None, false)));
         }
         return (stopped, started);
     }
@@ -230,7 +237,8 @@ public sealed partial class SessionSpellCaster
     // past it (no installed slot holds one).
     private uint RecordTriggers(int value) => value is >= 0 and < SpellPaymentRules.Spells ? _records(value)?.Data.ItemTriggers ?? 0 : 0;
 
-    private SessionItemSpellStart StartItemSpell(ItemSpellFiring firing, SessionItemSpells item, uint eventMask, (string? Object, SpellLocation Tile, bool NotReady) aim)
+    private SessionItemSpellStart StartItemSpell(ItemSpellFiring firing, SessionItemSpells item, uint eventMask, string? runOther,
+        (string? Object, SpellLocation Tile, bool NotReady) aim)
     {
         if (aim.NotReady) return new(firing, SessionItemSpellOutcome.NotReady);
         // No target object and no tile: the executor calls no dispatcher.
@@ -240,12 +248,13 @@ public sealed partial class SessionSpellCaster
         var target = aim.Object is null ? null : Facts(aim.Object);
         if (aim.Object is not null && target is null) return new(firing, SessionItemSpellOutcome.NoTarget);
         var invocation = new SpellInvocation(firing.Spell, parent, source, target, target is null ? aim.Tile : SpellLocation.None, ItemPower(item, parent),
-            ParentIsLocalPlayer: item.Holder == Hero);
+            ParentIsLocalPlayer: item.Holder == Hero) { Other = runOther is null ? null : Facts(runOther) };
         var started = _owner.StartSpellRun(_owner.Version, new(invocation, SkipCastGoal: !firing.CastGoal, Triggers: unchecked((int)eventMask)),
             record.Run, InvocationWorld(), _owner.SpellRolls);
-        return started.Disposition == GameSessionDisposition.Changed && started.Creation?.Run is { } run
-            ? new(firing, SessionItemSpellOutcome.Started, run.Id, started)
-            : new(firing, SessionItemSpellOutcome.Refused, null, started);
+        if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
+            return new(firing, SessionItemSpellOutcome.Refused, null, started);
+        Chained(run.Id, _firingChain);
+        return new(firing, SessionItemSpellOutcome.Started, run.Id, started);
     }
 
     // The power a critter parent draws from an item source (0x4614A0, the equipment rules); another parent takes the complexity.
@@ -315,8 +324,9 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     public bool Supports(string item) => _caster.Item(item) is { Holder: SessionSpellCaster.Hero };
 
-    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null) =>
-        Played([], _caster.StartItemSpells(eventMask, item, holder, other));
+    public SessionItemTriggerResult Fire(uint eventMask, string item, string holder, string? other = null, SpellLocation tile = default,
+        string? runOther = null) =>
+        Played([], _caster.StartItemSpells(eventMask, item, holder, other, tile, runOther));
 
     public SessionItemTriggerResult Withdraw(uint eventMask, string item, string holder)
     {

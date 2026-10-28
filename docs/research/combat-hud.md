@@ -62,7 +62,7 @@ Each slice is its own task code, thread and pull request (owner rule 2026-10-28)
 3. **Health and fatigue bars**: the hero's gauges with numbers and poison, the follower portraits' bars and red tint, the
    hovered critter's bars; FR-UI-002. Done in ARC-UI-020 ([viewer](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)).
 4. **Floating text**: the layer, its motion and colours, the damage, poison and message lines, the two settings in the
-   options window; FR-UI-005.
+   options window; FR-UI-005. Done in ARC-UI-021 ([viewer](../rendering/terrain-viewer.md#floating-text-arc-ui-021)).
 
 Slice 2 depends on the viewer's turn-based host (ARC-COMBAT-020) and on the NPC fighting host (ARC-WORLD-092) for other
 participants' subturns; slices 3 and 4 can start at once. Slices 2–4 all touch the viewer's screen layout, so they must keep
