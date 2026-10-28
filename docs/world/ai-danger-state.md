@@ -7,7 +7,7 @@ stage A1; [enemy list and target lock](../research/npc-ai-hostility.md#6-enemy-l
 [ledger CL4, CL10](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054) and
 [HS18](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task)
 as pure rules in `Arcanum.Simulation.Ai.DangerRules` and per-NPC session state in
-`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38; 39 since ARC-WORLD-082). No AI pass or host
+`Arcanum.Session` (`GameSessionDanger.cs`, snapshot schema 38; 40 since ARC-WORLD-082). No AI pass or host
 calls it yet: the rules of slice I4 ([hostility and targets](ai-hostility.md), ARC-WORLD-080) decide its requests, and peace,
 stop attacking and the attack event's writes are session operations there.
 
@@ -69,13 +69,13 @@ also on death (0x4B411C), and allows the hero's followers to attack when the her
 Budgets: `GameSessionLimits.MaxDangerRecords` (8,192, as life and reaction) and
 `MaxDangerEnemies` (65,536 entries of all lists together; the original's lists have no limit).
 
-## Snapshot schema 39
+## Snapshot schema 40
 
 `"danger":{"records":[{"entity","flags","focus","fleeingFrom","hitBy","enemies"}]}` after
 `concealment`, records in ordinal entity order, flag names in bit order, each handle the entity id,
 `""` for the hero (never a valid entity id) or `null` for none. Restore refuses a baseline record,
-an undefined bit, an invalid handle, a repeated enemy and the budgets; schemas 1..38 are refused, not
-migrated. Schema 39 (ARC-WORLD-082) adds the flag name `SpellFlee`.
+an undefined bit, an invalid handle, a repeated enemy and the budgets; schemas 1..39 are refused, not
+migrated. Schema 40 (ARC-WORLD-082) adds the flag name `SpellFlee`.
 
 ## Settings
 

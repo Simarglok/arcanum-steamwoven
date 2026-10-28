@@ -43,7 +43,7 @@ The setter (`DangerRules.Set`) gains MR7: in the Steamwoven setting any applied 
 | `AiRolls` | | Adds the label `ai.BackOffStart`. |
 
 **State.** SPELL_FLEE is a new danger bit (`DangerFlags.SpellFlee`, critter flag 0x10000), saved in both settings: the
-snapshot moves to schema 39 (flag name `SpellFlee`; schemas 1..38 are refused, not migrated).
+snapshot moves to schema 40 (flag name `SpellFlee`; schemas 1..39 are refused, not migrated).
 
 ## Settings
 
