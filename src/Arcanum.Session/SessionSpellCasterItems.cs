@@ -168,8 +168,8 @@ public sealed partial class SessionSpellCaster
 /// goals of the runs they start play at once — no eye-candy art is drawn, so each release comes on the goal's start — through the
 /// host's goal (<see cref="SessionSpellCaster.StartGoal"/>, its action points in a turn-based round, then
 /// <see cref="SessionSpellCaster.Release"/>). A fired run's goal 73 has no end node: when its start refuses, the original keeps the
-/// run in its slot, never begun (IT10); Steamwoven frees it unpaid, as MG41 does for a run that fails its release re-check (switch
-/// <see cref="MagicAnomalyProfile.ReleaseRefusalKeepsRun"/>). A withdrawal's recast plays the casting goal with its end
+/// run in its slot, never begun (IT10); both rule modes free it unpaid (owner decision 2026-10-28: a slot leak, fixed without a
+/// switch). A withdrawal's recast plays the casting goal with its end
 /// (<see cref="SessionSpellCaster.EndGoal"/>).
 /// </summary>
 public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionCombatWorld combat) : ISessionItemTriggers
@@ -196,8 +196,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
         var start = _caster.StartGoal(run, _combat);
         if (start.Outcome == SpellCastGoalOutcome.Started) _caster.Release(run);
         if (castGoal) _caster.EndGoal(run, refused: start.Outcome != SpellCastGoalOutcome.Started);
-        else if (start.Outcome != SpellCastGoalOutcome.Started && !_caster.Owner.Rules.Magic.ReleaseRefusalKeepsRun)
-            _caster.Act(new(SessionSpellRunActionKind.Free, run));
+        else if (start.Outcome != SpellCastGoalOutcome.Started) _caster.Act(new(SessionSpellRunActionKind.Free, run));
         return start;
     }
 }
