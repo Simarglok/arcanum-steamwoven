@@ -23,7 +23,7 @@ public sealed class AreaGameBarTests
             var (x, y, w, h) = AreaGameBarLayout.StripRect(spec.Strip);
             Assert.IsTrue(spec.X >= x && spec.X < x + w && spec.Y >= y && spec.Y < y + h, $"{spec.Button} lies in its strip");
         }
-        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137 }, AreaGameBarLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137, 18, 17, 19, 20 }, AreaGameBarLayout.ArtNumbers.ToArray());
     }
 
     [TestMethod]

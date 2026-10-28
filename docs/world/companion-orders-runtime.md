@@ -76,9 +76,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   the original's F1–F6 handlers mostly ignore Ctrl and Shift (KM-09 in
   [original keyboard and mouse](../requirements/original-keyboard-mouse.md)), and the viewer keeps those combinations for its
   diagnostic layer.
-- **Follower portraits** (`AreaFollowerPortraits`, bottom left): one button per follower in the array (in its order; none for a waiting
+- **Follower portraits** (`AreaFollowerPortraits`; since ARC-UI-024 the original's frames down the left edge, [panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)): one frame per follower in the array (in its order, at most six; none for a waiting
   one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. Since ARC-UI-020 each button has the follower's health and fatigue bars under it and turns red below 20 %
+  shown disabled. Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
   health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
   modifier, or a press on the ground that the world accepts closes it (that press does nothing else; a press while the world does

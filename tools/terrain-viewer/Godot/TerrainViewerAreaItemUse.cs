@@ -7,8 +7,8 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-UI-025: the inventory window's drop and use (ledger IW5, IW6). The drop icon (or a Drop button) drops a held item on the hero's tile
-// through the session (GameSessionOwner.DropHeroItem: drop script, no-drop flag, removal events, junk pile and decay); a stack of more
-// than one unit would first ask the quantity (IW7, NOT READY: refused). A right click on an item (its release, IW5) or its Use button uses it with the hero
+// through the session (GameSessionOwner.DropHeroItem: drop script, no-drop flag, removal events, junk pile and decay); ARC-UI-029: an
+// ammunition stack goes the stack path (DropHeroAmmo) after the quantity window (TerrainViewerAreaQuantity). A right click on an item (its release, IW5) or its Use button uses it with the hero
 // as user and target, the use icon with the hero as target only while Shift is held; both run the original's item use (0x462CC0,
 // AiExecutorRules.UseItemNow) over the hero's world below: read, heal with a healing kit, the item's magic through the cast host, spend
 // food and scrolls, 4 action points on the hero's turn of a round. The map drop (flag 4, a throw of the held item at a clicked tile) is NOT
@@ -101,8 +101,9 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
         string message;
-        if (session.QueryAmmo(item) is { Units: > 1 } stack) message = $"not dropped: a stack of {stack.Units} first asks how many (the quantity window is NOT READY)";
-        else if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not dropped: {name}'s facts do not read here";
+        // ARC-UI-029: an ammunition stack goes the original's stack path (0x4658E0, 0x465A40), after the quantity window when it holds more than one unit.
+        if (session.QueryAmmo(item) is not null) { DropStackToGround(item, name); return; }
+        if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not dropped: {name}'s facts do not read here";
         // The session's actor is the hero's tile only after a placement (walking does not move it).
         else if (!PlaceHeroForDrop()) message = "not dropped: the hero's tile is not known here";
         else
