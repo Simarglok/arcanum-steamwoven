@@ -63,4 +63,13 @@ public sealed class SpellUiRulesTests
         Assert.IsNull(SpellUiRules.NoTargetMessage(0x400UL << 32));
         Assert.IsNull(SpellUiRules.NoTargetMessage(0));
     }
+
+    [TestMethod]
+    public void Su13_a_cast_while_a_goal_plays_is_queued_below_a_stack_index_of_4_and_never_in_a_turn_based_round()
+    {
+        foreach (var depth in new[] { 0, 1, 2, 3 }) Assert.IsFalse(SpellUiRules.QueueRefused(depth, false), $"{depth}");
+        Assert.IsTrue(SpellUiRules.QueueRefused(4, false));
+        Assert.IsTrue(SpellUiRules.QueueRefused(7, false));
+        Assert.IsTrue(SpellUiRules.QueueRefused(0, true), "no queue in a turn-based round");
+    }
 }

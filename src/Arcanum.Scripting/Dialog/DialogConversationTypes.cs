@@ -54,7 +54,8 @@ public sealed record DialogConversationPorts(
     IDialogFatePort? Fate = null,
     IDialogReputationPort? Reputations = null,
     IDialogSchematicPort? Schematics = null,
-    IDialogGreetingPort? Greeting = null);
+    IDialogGreetingPort? Greeting = null,
+    IDialogBarterPort? Barter = null);
 
 public enum DialogReactionMode
 {
@@ -126,6 +127,19 @@ public sealed record OpenSchematicsCommand(DialogParticipantId Npc, DialogPartic
 public interface IDialogSchematicPort
 {
     DialogCommandResult Execute(OpenSchematicsCommand command);
+}
+
+/// <summary>ARC-UI-050: a Player <c>b:</c> reply, the barter window with the NPC as merchant and the PC as buyer (ledger BT7).</summary>
+public sealed record OpenBarterCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// Barter seam (ARC-UI-050). Without it a <c>b:</c> reply stays blocked as an unsupported interaction. Applied means the host will open
+/// the barter window with the NPC once the conversation has ended (<see cref="DialogEndKind.BarterWindow"/>); Rejected (the original's
+/// open refuses only a dead PC) fails the conversation; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogBarterPort
+{
+    DialogCommandResult Execute(OpenBarterCommand command);
 }
 
 /// <summary>
@@ -277,6 +291,9 @@ public enum DialogOptionTransition
     /// <summary>ARC-TECHNOLOGY-006: the reply action holds SU: every action of the field runs, the reply's target node is not entered
     /// and the dialog ends for the schematic window (<see cref="DialogEndKind.SchematicWindow"/>).</summary>
     Schematics,
+    /// <summary>ARC-UI-050: a Player <c>b:</c> reply with a barter port: the reply's action runs, its response value is not followed,
+    /// and the dialog ends for the barter window (<see cref="DialogEndKind.BarterWindow"/>).</summary>
+    Barter,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
@@ -338,6 +355,10 @@ public enum DialogEndKind
     /// as crafter (the original's interface-mode change ends the dialog, NC2); no SCR continuation follows and the talk does not
     /// resume when the window closes.</summary>
     SchematicWindow,
+    /// <summary>ARC-UI-050: a <c>b:</c> reply: the dialog ended without another NPC line and the host opens the barter window with the NPC
+    /// as merchant (the original's interface-mode change ends the dialog, BT7); no SCR continuation follows and the talk does not resume
+    /// when the window closes.</summary>
+    BarterWindow,
 }
 
 public sealed record DialogConversationEnd(DialogEndKind Kind, DialogScriptLine? ScriptLine);

@@ -43,6 +43,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell damage and heal | [Magic](status/magic.md) | ARC-MAGIC-012 |
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
+| Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
 | Schematic data | [Technology](status/technology.md) | ARC-TECHNOLOGY-001 |
 | ART and playback | [Data and formats](status/data.md) | ARC-DATA-016 |
 | HD pack format | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DATA-014, ARC-RENDER-016, ARC-DEV-003 |
@@ -103,6 +104,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
 | NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
 | Weight and encumbrance | [Items and inventory](status/items.md) | ARC-WORLD-085 |
+| Barter window | [Items and inventory](status/items.md) | ARC-UI-050 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069 |
 | Starting hero | [Game session and character](status/session.md) | ARC-RES-027, ARC-WORLD-027, ARC-DATA-026 |
 | Skill check | [Skills](status/skills.md) | ARC-SKILLS-003, ARC-SKILLS-005, ARC-SKILLS-006 |
@@ -124,6 +126,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC AI scheduler | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-084, ARC-WORLD-079, ARC-WORLD-024 |
 | NPC AI executor | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-086, ARC-WORLD-084, ARC-WORLD-082 |
 | NPC AI support and magic | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-088, ARC-WORLD-086, ARC-MAGIC-014 |
+| NPC AI action goals | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-089, ARC-WORLD-088, ARC-WORLD-086 |
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |

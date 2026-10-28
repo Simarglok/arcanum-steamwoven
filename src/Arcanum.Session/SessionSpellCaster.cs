@@ -51,6 +51,10 @@ public enum SpellCastGoalOutcome { Started, NoActionPoints, CannotAfford, Target
 /// <summary>A casting goal's start and its action-point charge (null when the parent is not a combatant).</summary>
 public sealed record SpellCastGoalStart(SpellCastGoalOutcome Outcome, SessionCombatResult? ActionPoints);
 
+/// <summary>How a cast while the caster's casting goal plays went (<see cref="SessionSpellCaster.Queue"/>, SU13): queued beneath the
+/// playing goal, refused (the run freed), or there is no such run.</summary>
+public enum SpellCastQueueOutcome { Queued, Refused, NoRun }
+
 /// <summary>How the spell UI's cast at a target went (<see cref="SessionSpellCaster.CastAt"/>): nothing (a missing, dead or
 /// unconscious caster), the caster cannot afford it (spell.mes 600), no line of fire (604), the run was refused (the invocation
 /// check or the session: <see cref="SpellCastAttempt.Run"/>), or the run started and waits for its casting goal.</summary>
@@ -93,7 +97,7 @@ public enum SpellCastEventKind
 /// come from the map. Damage and Heal (MT12) are applied to the session's life; the other component types are not ready and report
 /// <see cref="SpellCastEventKind.ComponentNotReady"/>. Payments the rules return are applied through <see cref="Apply"/>.
 /// </summary>
-public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld
+public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld
 {
     /// <summary>The PC's entity id in the run rules and the map (the session's player entity).</summary>
     public const string Hero = SessionEventKinds.PlayerEntity;
@@ -110,12 +114,17 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     // before the cells of every payment; a run without a source asks neither and pays nothing.
     private string? _cellsPayer;
 
-    public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events)
+    /// <summary>A host over <paramref name="map"/>; with <paramref name="items"/> (ARC-MAGIC-020) the items a critter of the map holds
+    /// are objects too (<see cref="Item"/>), so their spells can run with the item as source.</summary>
+    public SessionSpellCaster(GameSessionOwner owner, Func<int, SessionSpellRecord?> records, ISpellCastMap map, ISessionEventWorld events,
+        Func<string, SessionItemSpells?>? items = null)
     {
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
         _records = records ?? throw new ArgumentNullException(nameof(records));
-        _map = map ?? throw new ArgumentNullException(nameof(map));
+        ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
+        _items = items;
+        _map = items is null ? map : new ItemCastMap(map, items);
     }
 
     /// <summary>The session this host casts in.</summary>
@@ -161,9 +170,11 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
             parent is null ? 0 : Stat(parent, 6) ?? 0, parent?.Id == Hero, source is null ? null : Payer(source), Caster(source));
     }
 
-    /// <summary>The charge cells of the payer asked for last (<see cref="Payer"/>): the hero's; any other payer's are not modelled yet
-    /// and refuse.</summary>
-    public ISpellCellSource Cells => _cellsPayer == Hero ? _owner.HeroCellSource() ?? NoCells.Instance : NoCells.Instance;
+    /// <summary>The charge cells of the payer asked for last (<see cref="Payer"/>): the hero's, also for an item the hero holds (its
+    /// parent's stack, ARC-MAGIC-020); any other payer's are not modelled yet and refuse.</summary>
+    public ISpellCellSource Cells => _cellsPayer == Hero ? _owner.HeroCellSource() ?? NoCells.Instance
+        : _cellsPayer is not null && Item(_cellsPayer) is { Holder: Hero } item ? _owner.HeroCellSource(item.Complexity) ?? NoCells.Instance
+        : NoCells.Instance;
 
     public bool FlagsAllow(SpellRun run)
     {
@@ -182,7 +193,7 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
     {
         ArgumentNullException.ThrowIfNull(who);
         _cellsPayer = who.Id;
-        if (!who.IsCritter) return new(SpellPayerKind.Other);
+        if (!who.IsCritter) return Item(who.Id) is { } item ? new(SpellPayerKind.Item, ItemCharges: item.Charges) : new(SpellPayerKind.Other);
         if (Life(who.Id) is not { } life) return null;
         var limiting = who.Id != Hero && _map.Critter(who.Id) is { } npc && (npc.CritterFlags & unchecked((int)0x80000000)) != 0;
         // Worn mana stores are not modelled yet (no item store state): the fatigue pays all.
@@ -399,6 +410,31 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
         if (_released.Contains(run) || _owner.QuerySpellRuns()[run] is not { } r || (r.Flags & SpellRunFlags.Processed) != 0) return null;
         return Act(new(refused && !Profile.GoalRefusalChargesBegin ? SessionSpellRunActionKind.Free : SessionSpellRunActionKind.FreeCharged, run));
     }
+
+    /// <summary>
+    /// ARC-MAGIC-019 (SU13): a run the spell UI started (<see cref="CastAt"/>) while the caster's casting goal plays is queued beneath
+    /// that goal (0x455C30's queue branch, 0x44D9B0): the new goal goes to the bottom of the caster's goal stack, so queued casts play
+    /// in the order they were cast, each once the goals above it are done, and start then through <see cref="StartGoal"/>.
+    /// <paramref name="depth"/> is the playing goal's stack index: the casts already queued plus its own subgoals. Refused
+    /// (<see cref="SpellUiRules.QueueRefused"/>: depth 4 or more, or a turn-based round) the run is freed unpaid (0x4558D0), silently.
+    /// </summary>
+    [OriginalFunction(0x44D9B0, OriginalFunctionScope.Partial)]
+    public SpellCastQueueOutcome Queue(int run, int depth)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(depth);
+        if (_owner.QuerySpellRuns()[run] is null) return SpellCastQueueOutcome.NoRun;
+        if (!SpellUiRules.QueueRefused(depth, _owner.QueryCombatRound() is not null)) return SpellCastQueueOutcome.Queued;
+        Act(new(SessionSpellRunActionKind.Free, run));
+        return SpellCastQueueOutcome.Refused;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-019: a queued cast whose goal never plays, because its caster's goal stack ended through the end step or was
+    /// interrupted. Its only end node, the casting goal 26's animation reset (0x42B090), frees nothing: in the original the run keeps
+    /// its slot (MG43); Steamwoven frees a run still waiting for its BEGIN, unpaid. Null when nothing was freed.
+    /// </summary>
+    public SessionSpellRunResult? DropQueued(int run) =>
+        Profile.DroppedQueueKeepsRuns || _owner.QuerySpellRuns()[run] is not { } r || !AwaitsBegin(r) ? null : Act(new(SessionSpellRunActionKind.Free, run));
 
     /// <summary>
     /// The release frame's target re-check (0x456A90): the record's BEGIN area passes at once when it is 0, exactly 0x10, or has
