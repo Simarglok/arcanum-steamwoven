@@ -15,8 +15,8 @@ Requirements touched (none changes coverage here): [FR-UI-006](../requirements/u
 (the player's own installation), [FR-PRODUCT-005](../requirements/content-product.md#fr-product-005)
 (platforms) and [FR-PRODUCT-006](../requirements/content-product.md#fr-product-006) (compatibility vs intended fixes).
 
-Related work: the in-game Options window ARC-UI-013 (N9 of the owner's alpha plan, in progress when this note was
-written) and the alpha's final task, packaged builds for macOS and Windows 11 x64 with a player instruction for pointing
+Related work: the in-game Options window ARC-UI-013 (step N9 of the owner's alpha plan, outside the repository; in
+progress and not on main when this note was written) and the alpha's final task, packaged builds for macOS and Windows 11 x64 with a player instruction for pointing
 the app at the original GOG files (owner, 2026-10-28; outside the repository).
 
 ## Sources and evidence
@@ -54,14 +54,14 @@ switch is `true`, Steamwoven `false`:
 | `Travel` | `TravelRuleProfile` (Simulation) | 4 | WT3 discovery uses the best radius |
 | `Experience` | `ExperienceRuleProfile` (Simulation) | 3 | XP3 progress product wraps |
 | `Scripts` | `ScrRuleProfile` (Scripting) | 3 | X10 global flag write spills, TE1 call delay wraps |
-| `Sound` | `SoundRuleProfile` | 3 | SN18 a combat save loses the schemes |
-| `Events` | `GameEventQueueProfile` | 2 | OQ2 rebuild on load, TE10 poison recovery twice |
+| `Sound` | `SoundRuleProfile` (Session) | 3 | SN18 a combat save loses the schemes |
+| `Events` | `GameEventQueueProfile` (Simulation) | 2 | OQ2 rebuild on load, TE10 poison recovery twice |
 | `Items` | `ItemRuleProfile` (Simulation) | 2 | TC7 repair quote counts damage twice |
 | `Technology` | `TechnologyRuleProfile` (Simulation) | 2 | TC1 item cells favour magick |
 | `Navigation` | `NavigationRuleProfile` (Simulation) | 2 | LR4/LR7 a far click does not move |
 | `Reaction` | `ReactionRuleProfile` (Simulation) | 1 | reputation A2 a follower hit raises reaction |
-| `Dialog` | `DialogRuleProfile` | 1 | GD-A1 generated line pick spans gaps |
-| `Written` | `WrittenRuleProfile` | 1 | WRD3 unprefixed message loses its first character |
+| `Dialog` | `DialogRuleProfile` (Scripting) | 1 | GD-A1 generated line pick spans gaps |
+| `Written` | `WrittenRuleProfile` (Data) | 1 | WRD3 unprefixed message loses its first character |
 
 More switches are reserved (for example MG9, MG10, MR13, P3, SP11, SP15, SP17, EX15, SU17) and land with their slices,
 so the list grows with every domain; any settings screen must be generated from the profiles, not typed by hand.
@@ -80,23 +80,28 @@ How the mode is chosen today:
 
 ### Player preferences in the AREA viewer (the current game host)
 
-Every store follows `ViewerStoragePaths` (ARC-DEV-032): a test path variable wins, an automated run gets an isolated
-folder, only an ordinary run reads and writes the player's file. All are versioned JSON under Godot's `user://`:
+The JSON stores keep an automated run away from the player's files (ARC-DEV-032): a test path variable wins; without
+one an automated run either uses an isolated folder (`ViewerStoragePaths`: zoom, input, saves) or has no file at all
+(Always Run, volumes, visual profile); only an ordinary run reads and writes the player's file. The files carry a
+`version` field (volumes, zoom, input) or a `schema` field (visual profile) and are overwritten in place. Under Godot's
+`user://`:
 
 | File | Owner task | Content |
 | --- | --- | --- |
 | `user://always_run_v1.json` | ARC-WORLD-020 | Always Run option |
 | `user://audio_volumes_v1.json` | ARC-UI-040 | effects, voice, music volumes (0–10, default 5) |
-| `user://visual_profile_v1.json` | HD toggle | Legacy or HD visual profile |
-| `user://hd_budget_v1.json` | HD | device memory budget for HD packs |
-| `user://hd-packs/` | HD | the player's local HD pack collection ([format](../formats/hd-pack.md)) |
-| `user://world_diagnostic_input_v1.json` | WORLD mode | joystick deadzone, sensitivity, camera inversion (`InputSettings`) |
+| `user://visual_profile_v1.json` | ARC-UI-006 | Legacy or HD visual profile |
+| `user://hd_budget_v1.json` | ARC-UI-006 | device memory budget for HD packs |
+| `user://hd-packs/` (folder) | ARC-UI-006 | the player's local HD pack collection ([format](../formats/hd-pack.md)); always read, no isolation |
+| `user://world_diagnostic_input_v1.json` | ARC-DEV-032 | joystick deadzone, sensitivity, camera inversion (`InputSettings`) |
 | `user://world_diagnostic_zoom_v1.json` | ARC-DEV-032 | WORLD camera zoom |
-| `user://saves/`, `user://saves/map` | ARC-UI-010 | saves and the map quick save |
-| `user://hd-review` | HD review | review captures (diagnostic) |
+| `user://saves/`, `user://saves/map` (folders) | ARC-UI-010 | saves and the map quick save |
 
-ARC-UI-013 adds the original's Options window (three pages, the 16 settings the original keeps in `arcanum.cfg`:
-difficulty, combat mode, auto-attack, always run, volumes and the rest) with its own store. The viewer's project is
+Outside the AREA viewer, `src/Arcanum.Godot`'s HD review capture writes `user://hd-review` (diagnostic only).
+According to the ARC-UI-013 work in progress (not on main, so not checked here), that task adds the original's Options
+window for the settings the original keeps in `arcanum.cfg` (difficulty, combat mode, auto-attack, always run, volumes
+and the rest; their exact list is that task's executable reading) with its own store, and decides whether Always Run
+and the volumes keep their current files or move to its store. The viewer's project is
 still named `Arcanum Terrain Viewer` and has no custom user folder, so `user://` is Godot's default
 `app_userdata/Arcanum Terrain Viewer` folder on each OS.
 
@@ -104,17 +109,20 @@ still named `Arcanum Terrain Viewer` and has no custom user folder, so `user://`
 
 The game folder is known only to the developer launcher, a Python tool for the owner's Mac:
 
-- `./arcanum setup [--game-root PATH]` examines one folder the caller names (it never scans the machine), maps the
+- `./arcanum setup [--game-root PATH]` examines one folder (the caller's, default `/Applications/Arcanum`; it never
+  scans the machine), maps the
   `GAME_ROLES` it finds (`modules/Arcanum.dat`, `arcanum1.dat`–`arcanum3.dat`, `modules/Arcanum.PATCH0`, two map
   files, `data/proto`, the game folder itself) and records an `arcanum-installation-v1` record with the pinned
   identities (`pinnedVerified`).
 - The record lives in `config-v1.json` under `~/Library/Application Support/Arcanum Steamwoven` (or
-  `ARCANUM_LOCAL_HOME`), next to `build-registry-v1.json`. The tool uses `fcntl` and that macOS folder, so it does not
-  run on Windows, and a player's build cannot depend on Python.
-- The viewer itself takes the inputs as command-line flags (`--module`, `--resource`, `--game-root`, …). In map mode
-  (ARC-DEV-015) everything is derived from `--game-root`; the content stack (`ContentMountPlan.Discover(gameRoot)`,
+  `ARCANUM_LOCAL_HOME`), next to `build-registry-v1.json`. The tool's locking uses `fcntl`, so it does not run on
+  Windows, and a player's build cannot depend on Python.
+- The viewer itself takes the inputs as command-line flags (`--module`, `--resource`, `--game-root`, …). Map mode
+  (ARC-RENDER-017, any installation since ARC-DEV-015) takes the module, `arcanum1.dat`, `arcanum2.dat` and
+  `--game-root`, all inside the game folder; the content stack (`ContentMountPlan.Discover(gameRoot)`,
   ARC-DATA-011) validates a folder with typed results (`Ready`, `MissingGameRoot`, `MissingTig`, `MissingModule`, …).
-  So **one setting, the game folder, is enough** for a packaged build: every role and the mount order follow from it.
+  So **one setting, the game folder, is enough** for a packaged build: every role and the mount order can be derived
+  from it.
 
 ### Other parameters
 
@@ -130,7 +138,7 @@ Command-line and environment switches (`--main-menu`/`--no-main-menu`, `--hero`,
 | Code reuse | Full: `GameRules`, codecs, `ContentMountPlan.Discover`, the switch catalogue, the viewer's UI theme | Full C#, but a second project, export and test setup | C#-only with Avalonia; none with Tauri/Electron/Python |
 | Packaging | One `.app`, one `.exe` folder; nothing new | Two Godot .NET exports per platform (each carries the .NET runtime, roughly doubling size); on macOS a nested `.app` complicates signing | A second toolchain and installer per platform; Python is not on players' machines |
 | Start the game | Same process: change the scene | `OS.CreateProcess`; two processes, two crash surfaces | Process start; path to the game binary per OS |
-| Apply settings at once | Yes (same process; rule mode can also change in play) | Only at the next start | Only at the next start |
+| Apply settings at once | Yes before the main menu (same process); after content is loaded, the game folder needs a restart, the rule mode can change in play | Only at the next start | Only at the next start |
 | Risk to the original menu | None: the original main menu stays as it is | None | None |
 | New dependencies | None | None | New UI framework and its licences, lock files, CI |
 
@@ -159,10 +167,10 @@ screen is not part of the original's menu: it comes before it, has its own look,
 
 | Setting | In-game Options (original menu) | Launcher |
 | --- | --- | --- |
-| The original's 16 `arcanum.cfg` settings (difficulty, combat mode, auto-attack, always run, volumes, …) | **Owner** (ARC-UI-013) | not shown |
+| The original's `arcanum.cfg` settings (difficulty, combat mode, auto-attack, always run, volumes, …) and their stores, including today's Always Run and volume files | **Owner** (ARC-UI-013) | not shown |
 | Rule mode Steamwoven/Original | optional line or toggle (D8 says the settings menu may switch it in play; alpha plan N9 lists "rule mode") | **Owner**: full choice incl. custom profiles |
 | Per-switch custom profile | shows the active profile's name only | **Owner** (editor) |
-| Game folder, module | — | **Owner** (needs a restart) |
+| Game folder, module | — | **Owner** (applies at once before the main menu; a change after content is loaded needs a restart) |
 | Display mode, monitor, UI scale | — (the original has none) | **Owner** |
 | Legacy/HD, HD packs | the viewer's existing hot-key stays | **Owner** of the stored value |
 | Key and gamepad bindings | later, wherever FR-UI-006 puts it | — |
@@ -172,15 +180,17 @@ in-game window shows the rule mode, it writes the launcher's file through one sh
 
 ## Configuration file
 
-**Format.** Versioned JSON with a `schema` field, as every existing store and `RuleModeSettingCodec` already are:
-missing, unreadable or unknown content loads the defaults, never throws at the boundary, and is written atomically
-(temporary file and rename). Unknown keys are kept on rewrite so an older build does not erase a newer build's settings.
+**Format.** Versioned JSON with a `schema` field, as `RuleModeSettingCodec` already is. Requirements for the new
+file (today's stores do not all meet them: they overwrite in place, and the input store's save can throw): missing,
+unreadable or unknown content loads the defaults; reading and writing never throw at the boundary but return a typed
+result; the file is written atomically (temporary file and rename); unknown keys are kept on rewrite so an older build
+does not erase a newer build's settings.
 
 **Files.** One file per owner, so nothing is migrated now:
 
 - `launcher_v1.json` (new): `gameRoot`, `gameSource` (`gog`, `other`), `showAtStart`, `rules` (below), `display`, and the
   last validation result's identity (`Version.txt`, file sizes) so a changed installation is noticed at start.
-- the existing preference files above, unchanged; ARC-UI-013's options file, unchanged.
+- the existing preference files above and ARC-UI-013's options store, as that task leaves them.
 - the original's own `arcanum.cfg` in the game folder is **never written**: the installation stays read-only.
   Importing its values once on the first run is an option for ARC-UI-013, not for the launcher.
 
@@ -212,14 +222,20 @@ existing tool. The developer runs keep the isolation of `ViewerStoragePaths` eit
   An override names `<GameRules member>.<switch>`; an unknown name (a switch renamed or removed) is ignored and shown
   as "no longer exists", so an old file never blocks the start. A profile whose overrides all equal its base is that
   base.
-- **What it needs in code** (a contract change, owner's call):
+- **What it needs in code** (a contract and session API change, owner's call):
   1. a **switch catalogue**: for every boolean of every profile its member, name, ledger ID, Original/Steamwoven text
      for players, generated from the profiles by reflection plus a text table, with a test that every switch has a
      text and every text a switch;
   2. `GameRules` able to carry a custom name: `GameRules.Custom(name, base, overrides)` building each domain profile with
      `with`, and the test "every profile carries the mode's name" relaxed to "the base's name, or the custom name";
-  3. a codec for the block above, extending `RuleModeSettingCodec` (schema 2) and still reading schema 1;
-  4. traces, bug reports and smoke output name the profile and list its overrides, so a report from a custom mix is
+  3. the session API: today `GameSessionDescriptor.Rules`, `GameSessionRestoreOptions.Rules` and
+     `GameSessionOwner.SelectRules` take the `RuleMode` enum, `GameRules` has a private constructor and derives `Name`
+     from `Mode`, and each profile's `FromName` knows only the two built-in names. They must accept a `GameRules` value
+     (or a profile id resolved through a registry) instead of the enum; `Mode` of a custom mix stays its base mode,
+     `Name` becomes the custom name, and `FromName` of a custom name fails as an unknown name (custom mixes are built
+     from overrides, never looked up by name);
+  4. a codec for the block above, extending `RuleModeSettingCodec` (schema 2) and still reading schema 1;
+  5. traces, bug reports and smoke output name the profile and list its overrides, so a report from a custom mix is
      never read as Steamwoven or Original behaviour.
 - The safety rules of the contract hold unchanged: profiles stay stateless, nothing is saved in snapshots, a switch
   takes effect at the next decision. A future network game must take the host's rules (FR-NET), which a named profile
@@ -235,10 +251,14 @@ check then reads `Version.txt` and, when present, the SHA-256 of `Arcanum.exe` (
 another version is allowed with a warning, since only the GOG 1.0.7.4 data is verified. A `goggame-1207658829.info`
 file marks a GOG install.
 
+All facts in this section except the `Discover` check and the 1.0.7.4 hash are level F0: common layouts and public
+reports (GOG product 1207658829 and its `goggame-<id>.info` marker, the registry key, default folders, wrapper layouts),
+not checked on a machine. The packaging task checks the ones it supports.
+
 **Windows 11 x64** (GOG ships Windows only):
 
-1. Registry: `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829`, value `path` (also the 64-bit view
-   `HKLM\SOFTWARE\GOG.com\Games\1207658829`). Read through `Microsoft.Win32.Registry` behind `OperatingSystem.IsWindows()`
+1. Registry: `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829`, value `path` (and, unverified, the same key
+   without `WOW6432Node`). Read through `Microsoft.Win32.Registry` behind `OperatingSystem.IsWindows()`
    so the platform analyzer passes under `TreatWarningsAsErrors`.
 2. Default folders: `C:\GOG Games\Arcanum` (offline installer), `C:\Program Files (x86)\GOG Galaxy\Games\Arcanum`
    (GOG Galaxy).
@@ -246,8 +266,8 @@ file marks a GOG install.
 
 **macOS** (no native build; players either copy or extract the Windows files, or run them in a Wine wrapper):
 
-1. `/Applications/Arcanum` and `~/Applications/Arcanum` (a plain copied or extracted folder, the layout the developer
-   launcher already uses).
+1. `/Applications/Arcanum` and `~/Applications/Arcanum` (a plain copied or extracted folder; the developer launcher's default is
+   `/Applications/Arcanum`).
 2. CrossOver bottles: `~/Library/Application Support/CrossOver/Bottles/*/drive_c/GOG Games/Arcanum` and
    `…/drive_c/Program Files (x86)/GOG Galaxy/Games/Arcanum`.
 3. Wineskin wrappers chosen by the player: when the chosen path is an `.app`, look inside it for
@@ -257,11 +277,13 @@ file marks a GOG install.
    another app's data, so it is only looked at when the player picks it.
 4. The player's choice through the native dialog.
 
-All the macOS paths are level F0 (common layouts, not checked on a machine); the packaging task checks the ones it
-supports. The simplest instruction for macOS players is to extract the GOG offline installer with `innoextract` and
+The simplest instruction (F0, to be tried by the packaging task) for macOS players is to extract the GOG offline installer with `innoextract` and
 point the launcher at the extracted folder; the alpha's player instruction should say so.
 
 ## Packaging (input to the alpha's final task)
+
+Godot export, signing and SmartScreen facts below are level F0 (Godot and platform documentation, not tried in this
+project yet).
 
 - **Godot 4.7.2 .NET export** for macOS (`.app`, universal or arm64) and Windows x64 (a folder with the `.exe`, the
   .NET runtime and the `.pck`), both exported on the owner's Mac through the run queue
