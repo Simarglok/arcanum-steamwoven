@@ -762,14 +762,36 @@ rows PI1–PI3 and the item use's AG15, TP1 and IU1.
   no-drop flag (`ItemNotDroppable`; a worn item's own record answers too), the tile (`DropTileUnfit`), then the removal's wield-off and
   remove-item events and the placement (`PlaceHeroItem`: a junk pile on the tile or a new one, then the decay timer). One revision;
   with a trigger host a worn item's unwear executor and the removal's spell steps follow. A refusal after the drop script drops its
-  writes (session policy, as the pickup's). No action points (IW8). The caller places the actor on the hero's tile first. A stack
-  drops whole: the quantity window that splits it first (IW7) is the host's (the viewer refuses a stack of more than one unit).
+  writes (session policy, as the pickup's). No action points (IW8). The caller places the actor on the hero's tile first. An
+  ammunition stack takes `DropHeroAmmo` instead (ARC-UI-029, below).
 - **Use.** `AiExecutorRules.UseItemNow` (0x462CC0) now reads an `IItemUseWorld`, the part of `IAiGoalWorld` the use needs, so the
   inventory window runs the same use as the NPC executor (see [terrain viewer](../rendering/terrain-viewer.md)).
 - **No snapshot change.** A dropped item is a placed item (schema 32 and later).
 
-**Not ready.** The quantity window before a stack's drop (IW7); the map drop and the throw of an arbitrary held item (IW18); the item
+**Not ready.** The map drop and the throw of an arbitrary held item (IW18); the item
 targeting cursor of an item that needs a target (lockpicks excepted) and a trap device's use from the window.
+
+## Stack drop and the quantity window (ARC-UI-029)
+
+The original asks how many units of a gold or ammunition stack a move to another holder takes (interface mode 13,
+[ledger QW1–QW6](../research/ledger/ui-audio.md#quantity-window-arc-ui-029)). The rules of the question are
+`Arcanum.Presentation.Hud.QuantityBar` (engine-free): `Ask` says whether a move asks or how many it moves at once (one unit, a put
+into a looted holder and Take all move at once), `Open` starts at 0 with the stack's units as the maximum, `Apply` is a press (All,
+up, down, a keypad digit capped at the maximum, Backspace or Delete). The host shows it and makes the move with the count accepted.
+
+- **Ammunition drop.** `DropHeroAmmo(expected, stack, count, newStackKind)` drops `count` units of one of the hero's ammunition stacks
+  on the actor's tile as the original's stack path does (QW5): the units leave the stack (exactly the count deletes it, with no
+  remove-item event), a new made stack of `newStackKind` (the original takes the type's base prototype; the host names the kind)
+  carries them, and the drop's placement lays it down (junk pile, decay). The stack's drop script and no-drop flag are not consulted
+  (the original's stack path never reaches 0x461A70). In order: input (`InvalidItem`; a negative count or a kind that is not
+  ammunition `InvalidAmmo`), version, a stack the hero holds (`ItemNotAvailable`), a count of 0 (`NoChange`, as the original's request
+  returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the ammunition, item and made-number budgets
+  (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
+- **Takes from a dead NPC** use `TakeGoldFromNpc` and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
+- **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
+
+**Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
+in the original's window), the map drop of a stack (flag 4, IW18).
 
 ## Next steps
 

@@ -218,6 +218,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.WearRequested += WearItem;
             _inventoryPanel.TakeOffRequested += TakeOffItem;
             _inventoryPanel.DropRequested += DropItem;
+            _inventoryPanel.QuantityAccepted += AcceptQuantity;
+            _inventoryPanel.QuantityCancelled += CancelQuantity;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -418,6 +420,8 @@ public partial class TerrainViewerApp
         if (_inventoryPanel is null || !_inventoryPanel.IsOpen) return;
         GD.Print($"ARC-UI-004 inventory closed pc={_areaSession?.QueryPcInventory().Count}");
         var holder = _inventoryPanel.Holder;
+        // ARC-UI-029: a question still up goes with the window; nothing moves.
+        _quantityMove = null;
         _inventoryPanel.CloseView();
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;
@@ -434,6 +438,8 @@ public partial class TerrainViewerApp
     private void TakeFromBody(string item)
     {
         if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Holder is not { } holder) return;
+        // ARC-UI-029: a gold pile or an ammunition stack of more than one unit asks how many first.
+        if (TakeStackFromBody(holder, item)) return;
         var result = _inventoryHost!.Loot(_areaSession!, holder, item);
         if (AreaInventoryHost.Moved(result)) PlayTakenItemSound(item);
         var message = AreaInventoryHost.Moved(result)
@@ -451,7 +457,10 @@ public partial class TerrainViewerApp
         var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {
-            var result = _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
+            // ARC-UI-029: Take all moves a dead NPC's gold pile whole without asking (the original's flag 0x20, QW1).
+            var result = line.StackKind is { Type: SessionItemType.Gold } && SessionJunkPile.Number(holder) is null
+                ? _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units)
+                : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.
             if (AreaInventoryHost.Moved(result)) { if (taken++ == 0) PlayTakenItemSound(line.Entity); printed.Append(AreaInventoryHost.Printed(result)); }
@@ -478,6 +487,8 @@ public partial class TerrainViewerApp
     /// <summary>While the window is open it owns every key: I and Escape close it on a fresh press.</summary>
     private void HandleInventoryKey(InputEventKey key)
     {
+        // ARC-UI-029: while the quantity window asks it owns the keys.
+        if (_inventoryPanel?.Asking == true) { HandleQuantityKey(key); return; }
         // ARC-UI-022: a key 1..0 drops the held item on that hotkey entry.
         if (DropHeldOnHotkey(key)) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
@@ -486,7 +497,8 @@ public partial class TerrainViewerApp
 
     private void HandleInventoryPulse(IntentFrame intent)
     {
-        if (intent.Cancel) EndInventory();
+        if (intent.Cancel && _inventoryPanel!.Asking) _inventoryPanel.CancelQuantity();
+        else if (intent.Cancel) EndInventory();
         else if (intent.MenuPressedDirection != 0) _inventoryPanel!.Navigate(intent.MenuPressedDirection);
         else if (intent.Confirm) _inventoryPanel!.Confirm();
     }
