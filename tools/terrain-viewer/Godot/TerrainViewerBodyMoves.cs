@@ -8,13 +8,16 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-111: the critters that walk off their T0 cell (the companions following the PC, the NPCs the AI walks) are drawn with
 // their own walk or run cycle and facing, as the original draws every walker (step animation 0x42EDC0), not as their T0 frame slid
 // across the map. The move ARTs are read on demand from the body's archive, once per standing art (AreaBodyMoveArt), and their frames
-// join the shown map's frame overlay as the fallen poses do. A body whose move ARTs cannot be read keeps its T0 frame and says why once.
+// join the shown map's frame overlay as the fallen poses do; the move ARTs and the NPCs' gait clocks are dropped with that overlay (a map
+// change or a reload), a companion's clock lives with its group. A body whose move ARTs cannot be read keeps its T0 frame and says why once.
 public partial class TerrainViewerApp
 {
     private readonly Dictionary<(AreaEntryIdentity Entry, int Palette), AreaBodyMoves> _bodyMoves = [];
     private readonly Dictionary<AreaObjectKey, AreaBodyCycle> _bodyCycles = [];
-    // Whether the last AI mover drawing showed a body stepping (its stand pose is drawn once more after the step).
+    // Whether the last AI mover drawing showed a body stepping (its stand pose is drawn once more after the step), and the movers'
+    // version it drew (a turn in place is drawn too).
     private bool _aiMoversStepping;
+    private long _aiMoversDrawn = -1;
     /// <summary>Smoke observation: the moved bodies drawn with a walk or run frame, and the distinct frames drawn so.</summary>
     private int _bodyWalkDraws;
     private readonly HashSet<AreaFrameKey> _bodyWalkFrames = [];
@@ -33,7 +36,7 @@ public partial class TerrainViewerApp
             if (group.Companions.FirstOrDefault(c => c.Key == command.Identity) is not { } companion
                 || !companion.Template.Visuals.TryGetValue(command.Visual, out var visual)) { drawn.Add(command); continue; }
             var state = DiagnosticGridActor.RenderState(companion.Grid.State);
-            drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, keepT0Until: true));
+            drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, companion.Cycle, keepT0Until: true));
         }
         return drawn.AsReadOnly();
     }
@@ -48,26 +51,30 @@ public partial class TerrainViewerApp
             if (command.Identity is not { } key || _fallenBodies.ContainsKey(key) || host.Scene.Npcs.FirstOrDefault(n => n.Row.Key == key) is not { } npc
                 || host.Movers.Of(npc.Entity) is not { } mover || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) { drawn.Add(command); continue; }
             var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
-            drawn.Add(AnimateBody(command, npc.Row, visual, action, DiagnosticGridActor.Octant(mover.Facing), now, keepT0Until: false));
+            if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
+            drawn.Add(AnimateBody(command, npc.Row, visual, action, DiagnosticGridActor.Octant(mover.Facing), now, cycle, keepT0Until: false));
         }
         return drawn.AsReadOnly();
     }
 
-    /// <summary>Whether an AI mover is stepping now, or was at the last drawing (so its stand pose is drawn once).</summary>
+    /// <summary>Whether an AI mover is stepping now, was at the last drawing (so its stand pose is drawn once), or the movers changed
+    /// since (a turn in place).</summary>
     private bool AiMoversAnimating(AreaAiHost host, long now)
     {
         var stepping = host.Movers.All.Any(m => m.Stepping(now));
-        var animating = stepping || _aiMoversStepping;
-        _aiMoversStepping = stepping;
+        var animating = stepping || _aiMoversStepping || host.Movers.Version != _aiMoversDrawn;
+        _aiMoversStepping = stepping; _aiMoversDrawn = host.Movers.Version;
         return animating;
     }
 
+    /// <summary>Drops the move ARTs and the NPCs' gait clocks with the frame overlay they were drawn into.</summary>
+    private void ResetBodyMoves() { _bodyMoves.Clear(); _bodyCycles.Clear(); _bodyWalkFrames.Clear(); }
+
     // One body: its gait clock, then its pose (a companion that has not moved yet keeps its T0 frame and facing, as before it joined).
     private AreaDrawCommand AnimateBody(AreaDrawCommand command, AreaObjectRecord row, AreaVisualRecord visual, ActorDiagnosticAction action,
-        int octant, long now, bool keepT0Until)
+        int octant, long now, AreaBodyCycle cycle, bool keepT0Until)
     {
         if (command.Identity is not { } key || _readyArea is not { } area) return command;
-        if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
         var elapsed = cycle.Observe(action, now);
         if (keepT0Until && !cycle.Moved) return command;
         if (!_bodyMoves.TryGetValue((visual.Entry, visual.RequestedPalette), out var moves))
@@ -78,7 +85,7 @@ public partial class TerrainViewerApp
         }
         try
         {
-            var (moved, pose) = AreaBodyMoveArt.Animate(command, row, visual, moves, action, octant, elapsed);
+            var (moved, pose) = AreaBodyMoveArt.Animate(command, row, visual, moves, action, octant, elapsed, cycle.Moved);
             if (pose is null) return command;
             ((AreaFrameOverlay)AreaFrames()).Add(pose.Key, pose.Frame);
             if (action != ActorDiagnosticAction.Idle) { _bodyWalkDraws++; _bodyWalkFrames.Add(pose.Key); }

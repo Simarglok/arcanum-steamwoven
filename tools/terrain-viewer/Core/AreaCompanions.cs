@@ -235,6 +235,8 @@ public sealed class AreaCompanion
     /// request's flag 0x10 (the approach walks' path step asks the flag builder with its second argument set, as the PC's walk does,
     /// ledger LR2 and LR10) and its steps are admitted like the PC's since ARC-WORLD-074; false keeps the ordinary overlay.</summary>
     public bool PassesCritters { get; internal set; }
+    /// <summary>ARC-WORLD-111: the gait clock of its drawn walk cycle; a rebuilt group starts a fresh one (its body at T0 until it moves).</summary>
+    public AreaBodyCycle Cycle { get; } = new();
 }
 
 /// <summary>

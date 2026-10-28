@@ -107,6 +107,34 @@ public sealed class AreaBodyMoveTests
 
             var refused = moves with { Status = AreaBodyMoveStatus.Unreadable };
             Assert.AreSame(command, AreaBodyMoveArt.Animate(command, body, visual, refused, ActorDiagnosticAction.Walk, 5, 250).Command);
+
+            var (back, again) = AreaBodyMoveArt.Animate(command, body, visual, moves, ActorDiagnosticAction.Idle, visual.NominalFacing, 0, moved: true);
+            Assert.AreEqual((0, 5), (again!.Key.Frame, again.Key.Group), "once moved it stands on its stand ART with its T0 facing too");
+            Assert.AreEqual(again.Key, back.Frame);
+
+            // The object's own flip (blit bit 1) stays: it flips a straight pose and unflips a mirrored one.
+            var flipped = command with { FlipX = true };
+            Assert.IsTrue(AreaBodyMoveArt.Animate(flipped, body, visual, moves, ActorDiagnosticAction.Walk, 5, 0).Command.FlipX);
+            Assert.IsFalse(AreaBodyMoveArt.Animate(flipped, body, visual, moves, ActorDiagnosticAction.Walk, 2, 0).Command.FlipX);
+            var mirroredT0 = visual with { Mirrored = true };
+            // The T0 plan draws a mirrored frame flipped; that flip is the frame's, not the object's.
+            Assert.IsFalse(AreaBodyMoveArt.Animate(command with { Visual = mirroredT0.Key, FlipX = true }, body, mirroredT0, moves, ActorDiagnosticAction.Walk, 5, 0).Command.FlipX,
+                "a mirrored T0 frame is no object flip");
+        });
+    }
+
+    [TestMethod]
+    public void BytesAfterTheLastFrameAreNoPartOfTheArtAndAOneRotationArtMirrors()
+    {
+        var walk = Art(2, 10, 6, 2, groups: 1);
+        WithArchive([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 6, 2)), ("art/critter/hmm/hmmuwxab.art", [.. walk, 7, 7, 7])], (path, identity) =>
+        {
+            var moves = AreaBodyMoveArt.Load(Visual(identity(0)), path);
+            Assert.AreEqual(AreaBodyMoveStatus.Ready, moves.Status, moves.Detail);
+            var straight = moves.Walk!.Pose(5, 1);
+            Assert.AreEqual((0, 1, false, walk.Length), (straight.Key.Group, straight.Key.Frame, straight.FlipX, straight.Key.ViewLength));
+            var mirrored = moves.Walk.Pose(3, 1);
+            Assert.AreEqual((0, true, 6 - 2 - 1), (mirrored.Key.Group, mirrored.FlipX, mirrored.HotX), "rotation 3 mirrors group 0, as the T0 body");
         });
     }
 
@@ -125,6 +153,8 @@ public sealed class AreaBodyMoveTests
         Assert.AreEqual(0, cycle.Observe(ActorDiagnosticAction.Run, 600), "a new gait restarts it");
         Assert.AreEqual(0, cycle.Observe(ActorDiagnosticAction.Idle, 700));
         Assert.AreEqual(0, cycle.Observe(ActorDiagnosticAction.Run, 800), "a new walk restarts it");
+        Assert.AreEqual(0, cycle.Observe(ActorDiagnosticAction.Run, 100), "a clock set back restarts it");
+        Assert.AreEqual(50, cycle.Observe(ActorDiagnosticAction.Run, 150));
         Assert.IsTrue(cycle.Moved);
     }
 
@@ -166,14 +196,16 @@ public sealed class AreaBodyMoveTests
         finally { File.Delete(path); }
     }
 
-    // A minimal 8-bit ART: 8 groups of `frames` width×height frames with hotspot (hotX, height − 1), palette 0 white.
-    private static byte[] Art(int frames, int fps, int width, int hotX)
+    // A minimal 8-bit ART: `groups` (8, or 1 with the one-rotation flag) groups of `frames` width×height frames with hotspot
+    // (hotX, height − 1), palette 0 white.
+    private static byte[] Art(int frames, int fps, int width, int hotX, int groups = 8)
     {
         const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28, height = 2;
-        var total = 8 * frames; var size = width * height;
+        var total = groups * frames; var size = width * height;
         var table = headerBytes + paletteBytes;
         var payload = table + total * frameHeaderBytes;
         var bytes = new byte[payload + total * size];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, groups == 1 ? 1u : 0u);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), fps);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 1);

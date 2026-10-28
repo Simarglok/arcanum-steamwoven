@@ -160,25 +160,31 @@ facing selects the ART rotation; a stand is animation 0 frame 0 (ST1, and the en
 [actor placement](../research/actor-placement-evidence.md), F0). This is a technical bug of ours, fixed in both rule modes.
 
 - **Move ARTs** (`AreaBodyMoveArt.Load`, viewer Core): read on demand from the archive the body's standing art came from,
-  once per standing art, its archive entry checked against the published snapshot (a changed archive is refused). The
+  once per standing art (dropped with the map's frame overlay at a map change or reload), its archive entry checked
+  against the published snapshot (a changed archive is refused); bytes after an ART's last frame are not part of it. The
   names are the body's ART name with new shield, weapon and animation letters (ledger MA3): walk `x<weapon>b` (walk
   clears the shield, MA2), run `xag` (animations 6–19 clear both), stand `<shield><weapon>a`. Missing-art repair (MA1):
-  a missing run is drawn as the walk, a missing armed walk as the walk without the weapon (`xab`, then `xbb`), a missing
-  stand with weapon 0 as weapon 1. Critter, monster and unique-NPC art only (classes 2, 12, 13), not bad art; any
+  a missing run is drawn as the walk, a missing armed walk as the walk without the weapon (`xab`), a missing
+  stand with weapon 0 as weapon 1; an unreadable candidate leaves the next one. Critter, monster and unique-NPC art only (classes 2, 12, 13), not bad art; any
   other status keeps the T0 frame and the log says why once (`ARC-WORLD-111 body-moves …`).
 - **Facing and placement** (`AreaBodyArt.Pose`, `AreaBodyMoveArt.Animate`): facing octant = ART rotation; rotations 1..3
-  draw groups 7..5 mirrored with hotspot X `width − hotX − 1` (AP-006), a one-rotation ART serves every facing. The
+  draw groups 7..5 mirrored with hotspot X `width − hotX − 1` (AP-006), a one-rotation ART serves every facing from its
+  group 0 (mirrored for 1..3, as the T0 body). The
   frame is placed by `AreaScenePlan.Repose` at the body's anchor where it stands now; the object's own flip stays. The
   frames join the shown map's frame overlay, as the fallen poses do.
 - **Clock** (`AreaBodyCycle`): as the PC's, a walk's steps share one cycle; it restarts when the walker starts moving or
   changes gait. Frame = elapsed ms × ART fps ÷ 1000 mod frames, on the viewer's world clock (the clock the walks run on).
-  A companion: its grid's drawn action and facing (`DiagnosticGridActor.RenderState`); until it first moves it keeps its
-  T0 frame and facing. An AI mover: walking or running while its step lasts (`AreaAiMover.Stepping`, `Running` from
-  the run's gait), else its stand frame turned as it faces; a standing NPC with its T0 facing keeps its T0 frame.
+  A companion: its grid's drawn action and facing (`DiagnosticGridActor.RenderState`), its clock `AreaCompanion.Cycle`
+  living with its group; until it first moves it keeps its T0 frame and facing. An AI mover: walking or running while
+  its step lasts (`AreaAiMover.Stepping`, `Running` from the run's gait), else its stand frame turned as it faces (a
+  turn in place is drawn at once); until it first moves, standing with its T0 facing keeps its T0 frame. Once moved, a
+  body always stands on its stand ART: the T0 frame of a mirrored critter is placed by its unmirrored hotspot (the T0
+  plan's rule), and going back to it would shift the body sideways.
 - **Bounded.** The frame rate is the ART's own (the Speed table's middle rate, as the PC at Speed 8); the sprite moves
   linearly across the step, not by the ART's frame offsets; the vault, stealth walk, attack, cast and other NPC
-  animations are not drawn (a follower's window step shows the walk); no footstep sounds for NPCs. Original UI parity
-  NOT VERIFIED.
+  animations are not drawn (a follower's window step shows the walk); no footstep sounds for NPCs. The move ARTs are
+  looked up in the standing art's archive only, not through the resource order (a loose file or a later archive that
+  overrides one is NOT READY). Original UI parity NOT VERIFIED.
 
 ## Loyalty and the wait timer (ARC-WORLD-045)
 

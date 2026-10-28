@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
             Require(drawnMoved, "its body was drawn on the cells it walked");
-            Require(stepFrames.Count >= 2, $"its steps were drawn with its move cycle: {stepFrames.Count} distinct frames over {steppingFrames} stepping frames; "
+            Require(stepFrames.Count >= 3, $"its steps were drawn with its move cycle: {stepFrames.Count} distinct frames over {steppingFrames} stepping frames; "
                 + string.Join(", ", _bodyMoves.Values.Select(m => $"{m.Status} {m.Detail}")));
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
             // ARC-WORLD-099: its attack run ends done, and in combat mode outside a round it starts its fidget (0x4B4320).
