@@ -71,9 +71,10 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
     // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
-    // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid.
+    // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
+    // generated-once containers.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified", "lastDiscardedMade", "grid"];
+        "identified", "lastDiscardedMade", "grid", "generated"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
     private static readonly string[] WeightFields = ["entity", "weight", "magicWeight", "complexity"];
     private static readonly string[] JunkPileFields = ["entity", "map", "x", "y", "items"];
@@ -487,6 +488,16 @@ public static class GameSessionSnapshotCodec
                 w.WriteNumber("slot", item.Slot);
                 w.WriteNumber("width", item.Width);
                 w.WriteNumber("height", item.Height);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-100: the generated-once containers by map and then entity in ordinal order.
+            w.WriteStartArray("generated");
+            foreach (var row in snapshot.Inventory.Generated)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("map", row.Map.RuntimeMap);
+                w.WriteString("entity", row.Entity);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1702,8 +1713,19 @@ public static class GameSessionSnapshotCodec
                 Int(item["height"], path + ".height", 1, Arcanum.Simulation.Items.InventoryGridRules.CritterRows));
             if (i > 0 && grid[i].Slot <= grid[i - 1].Slot) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".slot");
         }
+        // ARC-WORLD-100: the generated-once containers by map and then entity in strictly ascending ordinal order.
+        var generatedRows = Array(f["generated"], p + ".generated", SessionInventoryState.MaxGenerated);
+        var generated = new SessionGeneratedContainer[generatedRows.Length];
+        for (var i = 0; i < generatedRows.Length; i++)
+        {
+            var path = $"{p}.generated[{i}]";
+            var row = Fields(generatedRows[i], path, EventEntityFields);
+            generated[i] = new(new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)), Entity(row["entity"], path + ".entity"));
+            if (i > 0 && (generated[i - 1].Map.RuntimeMap > generated[i].Map.RuntimeMap || generated[i - 1].Map == generated[i].Map &&
+                string.CompareOrdinal(generated[i - 1].Entity, generated[i].Entity) >= 0)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid);
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
