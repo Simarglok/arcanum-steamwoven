@@ -51,7 +51,8 @@ public partial class TerrainViewerApp
         // ARC-UI-012: the start scene a quit or a new game elsewhere asked for opens the menu again or starts the game.
         if (_sceneFlow is { } flow && string.Equals(flow.Map, arguments.AreaMapName, StringComparison.Ordinal))
         {
-            _sceneFlow = null;
+            // The start scene's own first opening is this one: a later publish (a window move, a transfer, a reload) opens none.
+            _sceneFlow = null; _mainMenuShown = true;
             ContinueSceneFlow(flow);
             return;
         }
@@ -74,7 +75,8 @@ public partial class TerrainViewerApp
 
     private void OpenMainMenu(AreaMainMenuTexts texts, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false)
     {
-        if (!QuickKeysActive || MainMenuOpen || WorldModal) return;
+        // A menu waiting under the save list (or for its window to open) is not replaced.
+        if (!QuickKeysActive || MainMenuOpen || WorldModal || _mainMenu is not null) return;
         if (_mainMenuPanel is null)
         {
             _mainMenuPanel = new AreaMainMenuPanel(); AddChild(_mainMenuPanel);
@@ -118,7 +120,7 @@ public partial class TerrainViewerApp
     {
         why = null;
         if (_launchArguments is not { } launch) { why = "the launch arguments are not known"; return null; }
-        launch = launch with { Hero = null, MainMenu = true, AreaMapArrival = null, AreaMapSector = null, DataRules = null };
+        launch = launch with { Hero = null, AreaMapArrival = null, AreaMapSector = null, DataRules = null };
         if (launch.AreaMapName is null) return launch;
         if (CurrentAreaMap == 1 && _readyMapName is { } shown) return launch with { AreaMapName = shown };
         if (_mapTransfers?.Destinations.TryGetValue(1, out var start) == true) return launch with { AreaMapName = start.Name };
@@ -237,7 +239,7 @@ public partial class TerrainViewerApp
                 break;
             case AreaMenuCommandKind.SaveGame:
                 // ARC-UI-012: the save window opens over the waiting in-play menu once the game is drawn without it (the preview).
-                _mainMenuPanel!.CloseView();
+                _mainMenuPanel!.CloseView(); QuarantineWorld();
                 OpenSaveListAfterDraw(AreaSaveListMode.Save);
                 return;
             case AreaMenuCommandKind.Continue:
@@ -390,7 +392,9 @@ public partial class TerrainViewerApp
     private bool RouteGameMenuKey(WorldKeyDecision decision)
     {
         if (!QuickKeysActive || decision.Key != WorldKey.Escape) return false;
-        if (!decision.Pressed || decision.Echo) return true;
+        // The palette's own Escape closes it (its pulse); a menu waiting for the save window to open takes no second one.
+        if (PaletteOpen) return false;
+        if (!decision.Pressed || decision.Echo || _mainMenu is not null) return true;
         if (!_worldFocused || WorldModal || WorldUiFocus) { _mainMenuStatus = "Escape ignored: palette, dialog or UI focus owns input"; RefreshAreaStatus(); return true; }
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
         {

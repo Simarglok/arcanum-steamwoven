@@ -76,8 +76,11 @@ def build_has_main_menu(manifest: dict) -> bool:
         commit = manifests.manifest_candidate(manifest)
     except ValueError:
         return False
-    return subprocess.call(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MAIN_MENU_COMMIT, commit],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+    try:
+        return subprocess.call(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MAIN_MENU_COMMIT, commit],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+    except OSError:
+        return False
 
 
 def run(args: argparse.Namespace) -> int:
@@ -101,7 +104,8 @@ def run(args: argparse.Namespace) -> int:
             if index == len(tasks) - 1:
                 raise
     if main_menu and not build_has_main_menu(manifest):
-        print("The current build was exported before the main menu (ARC-UI-011) and cannot open it: export a fresh "
+        print("The current build was not exported from a commit that holds the main menu (ARC-UI-011; an older build, or a "
+              "commit this checkout does not hold) and may not open it: export a fresh "
               f"{launch.UNIVERSAL_TASK} build, or run ./arcanum {args.mode} with --no-main-menu"
               + (" (or without --main-menu)" if args.mode == "map" else "") + ".", file=sys.stderr)
         return 2

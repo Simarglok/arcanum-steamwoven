@@ -1297,7 +1297,9 @@ The way between the main menu and play in crash-site-area (exterior, cave and ma
   shown map (map mode without the map list's runtime map 1 among its destinations) Pick Character is hidden with that
   reason.
 - **A failed start scene.** When the start scene does not load, its failure stays on screen with its stage and
-  nothing runs on a later scene (the original stops with a fatal error when it cannot load its module again).
+  nothing runs on a later scene (the original stops with a fatal error when it cannot load its module again). A
+  palette Reload or Reset started while the start scene loads supersedes it: that scene then opens with its fresh
+  session and no menu, and the quit or new game is dropped (logged).
 
 Self-test `ARC-UI-012 self-test PASS synthetic scene flow` (the production app over the synthetic area owner
 launched without the menu, a temporary save folder and synthetic heroes; the start scene is the synthetic scene
@@ -1309,7 +1311,8 @@ map than the start map with `--main-menu true` (for example `crematorium-lev 1`)
 prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
 window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
-kept, its root Escape exiting). Not done: the options window (N9), the start movies, the menu after the hero's death
+kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
+turn in the self-test or the smoke). Not done: the options window (N9), the start movies, the menu after the hero's death
 or the game's end (the original restarts it there), the original menu art and button sounds.
 
 ### Logbook (ARC-UI-008)

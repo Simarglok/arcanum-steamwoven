@@ -129,6 +129,9 @@ public partial class TerrainViewerApp
             Require(_sceneLoadsForSelfTest == loads + 2 && !MainMenuOpen && _mainMenu is null && !ReferenceEquals(placeholder, _areaSession)
                 && _areaSession!.QueryHero()?.Prototype == AreaStartingHero.Premade[0].BasicPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset && _arguments!.AreaMapSector is null
                 && _quickSaveStatus == "new game as halfling-male", "the start scene loaded and the new game began there: " + _quickSaveStatus);
+            // A later publish of the scene (a window move, a transfer, a reload) opens no menu over play.
+            await _sceneLoadForSelfTest!(_arguments!);
+            Require(!MainMenuOpen && _mainMenu is null && !WorldModal, "a later publish opened no menu");
 
             // Quit again: the reopened main menu's root Escape exits the game (MM6; here only counted).
             InventoryKey(Key.Escape); Letter('q'); Letter('y');
@@ -137,7 +140,7 @@ public partial class TerrainViewerApp
             Require(_mainMenuExitsForSelfTest == 1, "Escape on the reopened root exited");
             return "Escape opens the in-play window (Escape/Continue close it), Save Game saves and ends it, Load Game back unused, " +
                 "Quit asks (N, Escape keep playing; Return yes) and loads the start scene with the main menu reopened (save kept), " +
-                "a new game off the start scene loads it and starts there, reopened root Escape exits";
+                "a new game off the start scene loads it and starts there (no menu at a later publish), reopened root Escape exits";
         }
         finally
         {
