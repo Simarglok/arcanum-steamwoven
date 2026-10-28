@@ -4,7 +4,8 @@ namespace Arcanum.Simulation.Magic;
 
 /// <summary>The combat and life events whose wrappers walk a critter's worn items (ARC-MAGIC-023, ledger IC rows): the parent is hit
 /// (0x4CBAD0), stunned (0x4CBB80), going unconscious (0x4CBBF0), dying (0x4CBC60), attacks an opponent (0x4CBD40), damages an
-/// opponent (0x4CBE70: also the target hit and the weapon's own mask), and its target is going unconscious (0x4CBE00).</summary>
+/// opponent (0x4CBE70: also the target hit and the weapon's own mask), and its target is going unconscious (0x4CBE00); since
+/// ARC-MAGIC-025 also attacks a location (0x4CBDB0), whose one call names an item instead of walking (IC10).</summary>
 public enum ItemTriggerEvent
 {
     ParentHit,
@@ -14,6 +15,7 @@ public enum ItemTriggerEvent
     ParentAttacksOpponent,
     ParentDamagesOpponent,
     TargetGoingUnconscious,
+    ParentAttacksLocation,
 }
 
 /// <summary>Who an event's wrapper takes as the parent (whose worn items fire) or the other object, in the damage step's terms: its
@@ -26,8 +28,9 @@ public enum ItemTriggerParty { None, Attacker, Target, Killer }
 public readonly record struct ItemTriggerStep(ItemTriggerEvent Event, ItemTriggerParty Parent, ItemTriggerParty Other, bool Melee = false);
 
 /// <summary>One executor call of a wrapper's walk over the parent's worn items: the item (its index in the slot-ordered list the caller
-/// passed) and the event mask.</summary>
-public readonly record struct ItemTriggerCall(int Item, uint Mask);
+/// passed) and the event mask; ARC-MAGIC-025: whether the call runs while the wrapper's parent sits in the attacker global 0x5FF618,
+/// which the executor copies into each run's other object (+0xA0) and clears at its exit (IC6, IC10).</summary>
+public readonly record struct ItemTriggerCall(int Item, uint Mask, bool RunOtherIsParent = false);
 
 public static partial class ItemSpellTriggerRules
 {
@@ -87,23 +90,58 @@ public static partial class ItemSpellTriggerRules
     }
 
     /// <summary>
-    /// ARC-MAGIC-024: the wrapper calls of a spell's damage step (0x4518D0 → 0x4B4390, ledger DH1, IC2): <see cref="DamageStep"/> with
+    /// ARC-MAGIC-024: the wrapper calls of a spell's damage step (0x4518D0 → 0x4B4390, ledger DH1, IC8): <see cref="DamageStep"/> with
     /// the run's parent as the attacker (<paramref name="parent"/>: whether the run has one) and the damage source the kill credits,
     /// the run's other object or else its parent (<paramref name="killer"/>); a spell's context has no attack entry flag, so the parent
-    /// hit carries no melee bit and the damages opponent names no weapon. MG46: a run an item event started (<paramref name="itemRun"/>)
-    /// whose damage fires its parent's damages opponent fires the item again, a chain that ends only with the target's death or the
-    /// item's charge; Steamwoven (<see cref="MagicAnomalyProfile.ItemRunDamageFiresHooks"/> off) leaves out such a step's parent hit
-    /// and damages opponent.
+    /// hit carries no melee bit and the damages opponent names no weapon. MG46 (IC9) is the walk's (<see cref="ChainSkips"/>): an item
+    /// run's damage keeps every call here.
     /// </summary>
-    public static IReadOnlyList<ItemTriggerStep> SpellDamageStep(LifeFacts facts, LifeDamage damage, LifeOutcome outcome, bool parent, bool killer,
-        bool itemRun, MagicAnomalyProfile profile)
+    public static IReadOnlyList<ItemTriggerStep> SpellDamageStep(LifeFacts facts, LifeDamage damage, LifeOutcome outcome, bool parent, bool killer) =>
+        DamageStep(facts, damage, outcome, parent, killer, melee: false);
+
+    /// <summary>
+    /// ARC-MAGIC-025, MG46 (IC9; owner decision 2026-10-28, the narrow fix): whether a walk skips <paramref name="item"/> because it
+    /// fired already in the event's chain (<paramref name="chain"/>: the items whose runs led to this event's damage step, the run's
+    /// own source among them; none for an event no item run caused). The original skips nothing
+    /// (<see cref="MagicAnomalyProfile.ItemRunDamageFiresHooks"/>), so an item fires on its own run's damage again and two answering
+    /// items ping-pong; Steamwoven lets each item fire at most once in a chain, keeping every other item's answer.
+    /// </summary>
+    public static bool ChainSkips(MagicAnomalyProfile profile, string item, IReadOnlyCollection<string>? chain)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        var steps = DamageStep(facts, damage, outcome, parent, killer, melee: false);
-        return itemRun && !profile.ItemRunDamageFiresHooks
-            ? [.. steps.Where(step => step.Event is not (ItemTriggerEvent.ParentHit or ItemTriggerEvent.ParentDamagesOpponent))]
-            : steps;
+        ArgumentNullException.ThrowIfNull(item);
+        return !profile.ItemRunDamageFiresHooks && chain is not null && chain.Contains(item);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-025: the attack animation's begin (0x432700, ledger IC6): after its checks (attacker and target set, an attacker not
+    /// stoned, a critter attacker neither stunned nor paralysed) and its action point charge (CT2: a refusal ends the goal first), the
+    /// host's, it fires the attacker's attacks an opponent (0x4CBD40) with the target as the other object, on every swing. A throw
+    /// (goal 37, 0x42AB90 → 0x4B3C00) never reaches it (IC14), so it fires none.
+    /// </summary>
+    [OriginalFunction(0x432700, OriginalFunctionScope.Partial)]
+    public static IReadOnlyList<ItemTriggerStep> AttackStart() =>
+        [new(ItemTriggerEvent.ParentAttacksOpponent, ItemTriggerParty.Attacker, ItemTriggerParty.Target)];
+
+    /// <summary>
+    /// ARC-MAGIC-025: attacks a location (0x4CBDB0, ledger IC10, IC11): no type test of the parent and no walk; for a non-null item one
+    /// executor call (0x4CB830) with the item, the parent, no other object, the tile and <see cref="ParentAttacksLocation"/>, the
+    /// parent in the attacker global (the run's other object). The executor's run takes its parent from the item (0x450A50: its holder
+    /// in an inventory, else the item itself), so a thrown item's run has the item as its parent. Null without an item.
+    /// </summary>
+    [OriginalFunction(0x4CBDB0, OriginalFunctionScope.Partial)]
+    public static ItemTriggerCall? LocationCall(bool item) => item ? new(0, ParentAttacksLocation, RunOtherIsParent: true) : null;
+
+    /// <summary>
+    /// ARC-MAGIC-025: the item branch of a wrapper whose parent is an item (types 5..14), which only damages an opponent has (0x4CBE70,
+    /// ledger IC1, IC13): one executor call with the item itself as the item and the other object and the event's other object (the
+    /// victim) as the parent, with <see cref="TargetHit"/>. A spell run whose parent is an item (a thrown item's, 0x450A50) damages with
+    /// it as the attacker. Every other wrapper fires nothing for an item. Such a run's source is that item, so in Steamwoven its own
+    /// target hit is in the run's chain and never fires (MG46, <see cref="ChainSkips"/>): the item fired already for the event that
+    /// started the run. Latent: no installed record has both <c>Parent_Atks_Location</c> and <c>Target_Hit</c>.
+    /// </summary>
+    public static IReadOnlyList<ItemTriggerCall> ItemParentCalls(ItemTriggerEvent kind) =>
+        kind == ItemTriggerEvent.ParentDamagesOpponent ? [new(0, TargetHit)] : [];
 
     /// <summary>
     /// ARC-MAGIC-024: the dying animation's end (0x42FF40, ledger IC5): for a dead critter (unless the goal's flag 0x200, the host's)
@@ -131,7 +169,10 @@ public static partial class ItemSpellTriggerRules
     /// A wrapper's walk (ledger IC1) over its parent's worn items, given in slot order (1000..1008), for a parent that is a PC or an
     /// NPC (any other parent fires nothing): each item once with the event's mask; for <see cref="ItemTriggerEvent.ParentDamagesOpponent"/>
     /// each item twice, damages opponent then target hit, and the item that is the attack's weapon (<paramref name="weapon"/>) a third
-    /// time with damages opponent with the item. The executor (<see cref="Fire"/>) then reads each item's slots.
+    /// time with damages opponent with the item. The executor (<see cref="Fire"/>) then reads each item's slots. ARC-MAGIC-025: attacks an
+    /// opponent (0x4CBD40) puts its parent in the attacker global, which the first executor call copies into its runs and clears, so
+    /// only the first worn item's call carries it (<see cref="ItemTriggerCall.RunOtherIsParent"/>). Attacks a location walks nothing
+    /// (<see cref="LocationCall"/>).
     /// </summary>
     [OriginalFunction(0x4CBE70, OriginalFunctionScope.Partial)]
     public static IReadOnlyList<ItemTriggerCall> WornCalls(ItemTriggerEvent kind, int wornItems, bool melee = false, int? weapon = null)
@@ -140,9 +181,10 @@ public static partial class ItemSpellTriggerRules
         var calls = new List<ItemTriggerCall>();
         for (var item = 0; item < wornItems; item++)
         {
+            if (kind == ItemTriggerEvent.ParentAttacksLocation) break;
             if (kind != ItemTriggerEvent.ParentDamagesOpponent)
             {
-                calls.Add(new(item, Mask(kind, melee)));
+                calls.Add(new(item, Mask(kind, melee), kind == ItemTriggerEvent.ParentAttacksOpponent && item == 0));
                 continue;
             }
             calls.Add(new(item, ParentDamagesOpponent));
@@ -157,7 +199,7 @@ public static partial class ItemSpellTriggerRules
 
     /// <summary>The mask a wrapper passes for an event (for damages opponent its first one): parent hit 0x2000000, with the melee bit
     /// 0x100 for a melee hit; stunned 0x4000000; going unconscious 0x8000000; dying 0x100000; attacks an opponent 0x400000; damages
-    /// an opponent 0x10000; target going unconscious 0x80000.</summary>
+    /// an opponent 0x10000; target going unconscious 0x80000; attacks a location 0x800000.</summary>
     public static uint Mask(ItemTriggerEvent kind, bool melee = false) => kind switch
     {
         ItemTriggerEvent.ParentHit => melee ? ParentHit | WeaponMelee : ParentHit,
@@ -167,6 +209,7 @@ public static partial class ItemSpellTriggerRules
         ItemTriggerEvent.ParentAttacksOpponent => ParentAttacksOpponent,
         ItemTriggerEvent.ParentDamagesOpponent => ParentDamagesOpponent,
         ItemTriggerEvent.TargetGoingUnconscious => TargetGoingUnconscious,
+        ItemTriggerEvent.ParentAttacksLocation => ParentAttacksLocation,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }
