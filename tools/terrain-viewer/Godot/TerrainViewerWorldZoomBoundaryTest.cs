@@ -93,12 +93,12 @@ public partial class TerrainViewerApp
         var scroll = panel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
         // Navigable palette controls: 8 input settings, zoom editor, 3 presets, Fit,
         // Reset scene, Reload, Game time +1 hour, Ambient lighting on/off (ARC-RENDER-010),
-        // Visual Legacy/HD (ARC-UI-006), Always Run on/off (ARC-WORLD-020), Prowl (stealth) on/off (ARC-SKILLS-008), Save game and Load game (ARC-UI-010), Sound test (ARC-UI-040), three volumes (ARC-UI-044), the passability checkbox (ARC-RENDER-008, available with a movement authority),
+        // Visual Legacy/HD (ARC-UI-006), Always Run on/off (ARC-WORLD-020), Prowl (stealth) on/off (ARC-SKILLS-008), Pick pocket (ARC-SKILLS-010), Save game and Load game (ARC-UI-010), Sound test (ARC-UI-040), three volumes (ARC-UI-044), the passability checkbox (ARC-RENDER-008, available with a movement authority),
         // Reset preferences, Close.
         var overlay = scroll.GetChild(0).GetChildren().OfType<CheckButton>().Single(c => c.Name == "PassabilityOverlay");
         Require(!overlay.Disabled && overlay.FocusMode == Control.FocusModeEnum.All, "overlay checkbox available and navigable");
         var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton).ToArray();
-        Require(controls.Length == 29, "all camera/actor/zoom/palette controls retained");
+        Require(controls.Length == 30, "all camera/actor/zoom/palette controls retained");
         var last = controls.Length - 1;
         var none = new RawInputFrame(-1, default); var pad = new RawInputFrame(3, default);
         var viewport = GetViewport(); var original = viewport.GetVisibleRect().Size;
@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
         void Volume(Arcanum.Presentation.Audio.AudioChannel channel, int setting) => operations++;
         panel.ZoomRequested += Zoom; panel.FitRequested += Action; panel.ResetRequested += Action; panel.CloseRequested += Action;
         panel.ResetSceneRequested += Action; panel.ReloadRequested += Action;
-        panel.GameHourRequested += Action; panel.LightingToggleRequested += Action; panel.VisualToggleRequested += Action; panel.AlwaysRunToggleRequested += Action; panel.ProwlToggleRequested += Action; panel.SoundTestRequested += Action; panel.SaveGameRequested += Action; panel.LoadGameRequested += Action; panel.VolumeChanged += Volume;
+        panel.GameHourRequested += Action; panel.LightingToggleRequested += Action; panel.VisualToggleRequested += Action; panel.AlwaysRunToggleRequested += Action; panel.ProwlToggleRequested += Action; panel.PickPocketRequested += Action; panel.SoundTestRequested += Action; panel.SaveGameRequested += Action; panel.LoadGameRequested += Action; panel.VolumeChanged += Volume;
         async Task Visible(int index, string mode)
         {
             await NextFrameAsync(); await NextFrameAsync();
@@ -183,7 +183,7 @@ public partial class TerrainViewerApp
         {
             panel.ZoomRequested -= Zoom; panel.FitRequested -= Action; panel.ResetRequested -= Action; panel.CloseRequested -= Action;
             panel.ResetSceneRequested -= Action; panel.ReloadRequested -= Action;
-            panel.GameHourRequested -= Action; panel.LightingToggleRequested -= Action; panel.VisualToggleRequested -= Action; panel.AlwaysRunToggleRequested -= Action; panel.ProwlToggleRequested -= Action; panel.SoundTestRequested -= Action; panel.SaveGameRequested -= Action; panel.LoadGameRequested -= Action; panel.VolumeChanged -= Volume;
+            panel.GameHourRequested -= Action; panel.LightingToggleRequested -= Action; panel.VisualToggleRequested -= Action; panel.AlwaysRunToggleRequested -= Action; panel.ProwlToggleRequested -= Action; panel.PickPocketRequested -= Action; panel.SoundTestRequested -= Action; panel.SaveGameRequested -= Action; panel.LoadGameRequested -= Action; panel.VolumeChanged -= Volume;
             Resize(new((int)original.X, (int)original.Y)); await NextFrameAsync(); await NextFrameAsync();
             _worldFocusSimulationForSelfTest = false;
             SetProcess(processing);

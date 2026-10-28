@@ -268,6 +268,8 @@ public enum GameSessionFailure
     InvalidBackground,
     // Hero player name (ARC-UI-033): longer than the stored bound or holding a NUL byte.
     InvalidPlayerName,
+    // Pick pocket (ARC-SKILLS-010): no living hero to steal; a victim's facts outside their bounds, or a victim that is not a living NPC.
+    PickPocketUnavailable, InvalidPickPocketVictim,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

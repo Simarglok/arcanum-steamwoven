@@ -146,6 +146,7 @@ public partial class TerrainViewerApp
         _worldPanel.VisualToggleRequested += PaletteVisualToggle;
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
         _worldPanel.ProwlToggleRequested += PaletteProwlToggle;
+        _worldPanel.PickPocketRequested += ArmPickPocket;
         _worldPanel.SoundTestRequested += PaletteSoundTest;
         _worldPanel.SaveGameRequested += PaletteSaveGame;
         _worldPanel.LoadGameRequested += PaletteLoadGame;
@@ -489,6 +490,7 @@ public partial class TerrainViewerApp
         if (ProcessAreaTransition()) return;
         ProcessTalkAfterRoute();
         ProcessInventoryAfterRoute();
+        ProcessPickPocketAfterRoute();
         ProcessAreaAttack();
         // ARC-WORLD-092: the NPCs' goal runs step after the hero's attack.
         ProcessAreaAi();
@@ -710,6 +712,13 @@ public partial class TerrainViewerApp
                 CancelTalkApproach("a press cancelled the pick"); CancelAreaUseApproach("a press cancelled the pick"); CancelInventoryApproach("a press cancelled the pick");
                 RefreshReadyStatus();
             }
+            return;
+        }
+        // ARC-SKILLS-010: an armed pick pocket takes this press: an NPC has its pocket picked, anything else cancels the skill.
+        if (_pickPocketArmed)
+        {
+            CancelAreaAttack("an armed pick pocket took the press");
+            PickPocketPress(screen);
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
