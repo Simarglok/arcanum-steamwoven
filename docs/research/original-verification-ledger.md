@@ -161,6 +161,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="ammunition-arc-world-066"></a>[Ammunition (ARC-WORLD-066)](ledger/items.md#ammunition-arc-world-066) | [Items and inventory](ledger/items.md) | AM1–AM7 |
 | <a id="backgrounds-arc-world-069"></a>[Backgrounds (ARC-WORLD-069)](ledger/character.md#backgrounds-arc-world-069) | [Character](ledger/character.md) | BG1–BG8 |
 | <a id="background-table-arc-data-044"></a>[Background table (ARC-DATA-044)](ledger/character.md#background-table-arc-data-044) | [Character](ledger/character.md) | BD1–BD8 |
+| <a id="portrait-catalogue-arc-data-045"></a>[Portrait catalogue (ARC-DATA-045)](ledger/character.md#portrait-catalogue-arc-data-045) | [Character](ledger/character.md) | PO1–PO10 |
 | <a id="reach-and-line-of-fire-arc-combat-012"></a>[Reach and line of fire (ARC-COMBAT-012)](ledger/combat.md#reach-and-line-of-fire-arc-combat-012) | [Combat](ledger/combat.md) | RA1–RA10 |
 | <a id="ranged-hero-attack-arc-combat-015"></a>[Ranged hero attack (ARC-COMBAT-015)](ledger/combat.md#ranged-hero-attack-arc-combat-015) | [Combat](ledger/combat.md) | RH1–RH7 |
 | <a id="npc-ai-script-and-dialog-surface-arc-res-070"></a>[NPC AI script and dialog surface (ARC-RES-070)](ledger/npc-ai.md#npc-ai-script-and-dialog-surface-arc-res-070) | [NPC AI](ledger/npc-ai.md) | SU1–SU17 |
