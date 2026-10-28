@@ -109,6 +109,11 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
                 Do(new(ScrCatalogue.Action.SetPcQuestState, (Attachee, 0), N(1017), N(2))), Do(new(ScrCatalogue.Action.MarkMapLocation, N(44), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddReputation, (Triggerer, 0), N(1005))), Do(Skip)));
+            // 730 (ARC-WORLD-081): the plant generator's core: next to every scenery named 1673 in the PC's vicinity, prototype 10061.
+            Write("scr/00730plants.scr", Program(Do(new(ScrCatalogue.Action.AssignObject, (Attachee, 0), (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.LoopFor, (15, 0))),
+                If(new(ScrCatalogue.Condition.IsNamed, (10, 0), N(1673)), new(ScrCatalogue.Action.CreateObject, N(10041), (10, 0)), new(0)),
+                Do(new(ScrCatalogue.Action.LoopEnd)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
             Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
@@ -338,6 +343,59 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(held, session.Version, "the local flag 3 is not written back");
         });
     }
+    // ARC-WORLD-081: an open map for the create action: every step stays on the map and every path is the straight walk.
+    private sealed class OpenMap : Arcanum.Simulation.Items.IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public Arcanum.Simulation.Items.DropPath Path(CellCoord from, CellCoord to, Arcanum.Simulation.Items.DropOwner who)
+        {
+            var steps = new List<int>();
+            for (var at = from; at != to; at = Step(at, steps[^1])!.Value) steps.Add(Array.IndexOf(Offsets, (Math.Sign(to.X - at.X), Math.Sign(to.Y - at.Y))));
+            return new(steps.Count, 0, steps);
+        }
+        public bool HasCritter(CellCoord cell) => false;
+    }
+
+    // ARC-WORLD-081: a sector script creates the generator's item next to the marker in the PC's vicinity, up to the Steamwoven limit.
+    [TestMethod]
+    public void A_sector_script_creates_items_next_to_the_marker_in_the_pcs_vicinity_up_to_the_limit()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // The marker (scenery named 1673) at (12, 20); the same marker 11 tiles further is outside the vicinity; a busted one does not count.
+            var marker = Row(2, 3, 0, 1673);
+            var far = Row(Key(13), 3, 0, 1673) with { WorldX = 23 };
+            var busted = Row(3, 3, 0, 1673);
+            var herb = new AreaPrototypeItem(new(SessionItemType.Food, 10061, 7001, 10061), 0x1234, new(1));
+            var world = new AreaScriptWorld(() => new CellCoord(12, 22), row => row.Key == busted.Key, number => number == 10041 ? herb : null, () => new OpenMap());
+            var host = new AreaUseScriptHost(session, 1, [Gate(0), marker, far, busted], [Inventory()], content, world);
+            Assert.AreEqual(2, host.SceneryInVicinity(host.Pc).Count, "the gate and the marker; not the far or the busted one");
+            var sector = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, new(0, 0), -1, new(0, 0), 0, 0, 730);
+            for (var entry = 0; entry < Arcanum.Simulation.Items.CreatedItemRules.Limit + 1; entry++)
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(sector, session.Rules.Scripts).Outcome);
+            var created = host.TakeCreations();
+            Assert.AreEqual(Arcanum.Simulation.Items.CreatedItemRules.Limit + 1, created.Count);
+            Assert.IsTrue(created.Take(Arcanum.Simulation.Items.CreatedItemRules.Limit).All(c => c.Result.Disposition == GameSessionDisposition.Changed && c.Near.Code == AreaUseScriptHost.EntityId(marker)));
+            Assert.AreEqual(GameSessionDisposition.NoChange, created[^1].Result.Disposition, "the patch is full under Steamwoven");
+            var placed = session.QueryPlacedItems();
+            Assert.IsTrue(placed.All(p => p.Source == SessionPlacedSource.Created && p.Kind == herb.Kind && Arcanum.Simulation.Items.CreatedItemRules.Near(new(12, 20), p.Cell)));
+            // The session's rule mode decides the limit, not the run's script rules: the original's mode adds one more.
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(sector, GameRules.Original.Scripts).Outcome);
+            Assert.AreEqual(Arcanum.Simulation.Items.CreatedItemRules.Limit, session.QueryPlacedItems().Count);
+            session.SelectRules(RuleMode.Original);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(sector, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(Arcanum.Simulation.Items.CreatedItemRules.Limit + 1, session.QueryPlacedItems().Count);
+            // A prototype that is no item leaves the whole run unapplied.
+            var noWorld = new AreaUseScriptHost(session, 1, [marker], [Inventory()], content,
+                new AreaScriptWorld(() => new CellCoord(12, 22), _ => false, _ => null, () => new OpenMap()));
+            var refused = noWorld.RunPlaced(sector, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "no item prototype");
+        });
+    }
+
     // ARC-SCRIPT-017: tile and sector scripts run for the PC with no attachee; their slot lives on their sector.
     [TestMethod]
     public void Tile_and_sector_scripts_run_for_the_pc_and_keep_their_slot_on_the_sector_by_rule()

@@ -91,6 +91,10 @@ public sealed class GameSessionLimits
     /// <summary>Enemy-list entries of all danger records together (ARC-WORLD-079; the original's lists have no limit): eight for
     /// every danger record, about 4.6 MB of snapshot at the cap.</summary>
     public const int PolicyMaxDangerEnemies = 65_536;
+    /// <summary>Items scripts created on the ground that lie there still (ARC-WORLD-081): under Steamwoven at most
+    /// <c>CreatedItemRules.Limit</c> lie around one object; under Original the plant generator adds without limit, and past this bound
+    /// the session creates no more (the viewer reports it).</summary>
+    public const int PolicyMaxCreatedItems = 8192;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
@@ -98,7 +102,7 @@ public sealed class GameSessionLimits
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
         int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
         int maxAmmoRecords = PolicyMaxAmmoRecords, int maxGoldRecords = PolicyMaxGoldRecords, int maxDangerRecords = PolicyMaxDangerRecords,
-        int maxDangerEnemies = PolicyMaxDangerEnemies)
+        int maxDangerEnemies = PolicyMaxDangerEnemies, int maxCreatedItems = PolicyMaxCreatedItems)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -116,12 +120,13 @@ public sealed class GameSessionLimits
         if (maxGoldRecords is < 1 or > PolicyMaxGoldRecords) throw new ArgumentOutOfRangeException(nameof(maxGoldRecords));
         if (maxDangerRecords is < 1 or > PolicyMaxDangerRecords) throw new ArgumentOutOfRangeException(nameof(maxDangerRecords));
         if (maxDangerEnemies is < 1 or > PolicyMaxDangerEnemies) throw new ArgumentOutOfRangeException(nameof(maxDangerEnemies));
+        if (maxCreatedItems is < 1 or > PolicyMaxCreatedItems) throw new ArgumentOutOfRangeException(nameof(maxCreatedItems));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
         MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords; MaxGoldRecords = maxGoldRecords; MaxDangerRecords = maxDangerRecords;
-        MaxDangerEnemies = maxDangerEnemies;
+        MaxDangerEnemies = maxDangerEnemies; MaxCreatedItems = maxCreatedItems;
     }
 
     public int MaxMaps { get; }
@@ -140,6 +145,8 @@ public sealed class GameSessionLimits
     public int MaxGoldRecords { get; }
     public int MaxDangerRecords { get; }
     public int MaxDangerEnemies { get; }
+    /// <summary>ARC-WORLD-081: the created items on the ground (<see cref="PolicyMaxCreatedItems"/>).</summary>
+    public int MaxCreatedItems { get; }
 }
 
 /// <summary>
@@ -422,8 +429,9 @@ public sealed class GameSessionSnapshot
     /// the kept item script slots to <see cref="Inventory"/> and a worn item's item event points to <see cref="Equipment"/>
     /// (ARC-SCRIPT-042); schema 44 adds the weight rows to <see cref="Inventory"/> (ARC-WORLD-085); schema 45 adds the NoFlee danger
     /// bit (ARC-WORLD-086); schema 46 adds the junk piles to <see cref="Inventory"/> (ARC-WORLD-063); schema 47 adds the
-    /// LookForAmmo, LookForWeapon and LookForArmor danger bits (ARC-WORLD-088). Schemas 1..46 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 47;
+    /// LookForAmmo, LookForWeapon and LookForArmor danger bits (ARC-WORLD-088); schema 48 adds the items scripts created on the ground to
+    /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081). Schemas 1..47 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 48;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

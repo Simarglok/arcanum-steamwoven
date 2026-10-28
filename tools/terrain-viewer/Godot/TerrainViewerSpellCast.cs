@@ -17,15 +17,12 @@ namespace Arcanum.TerrainViewer;
 // that passes the area test (0x57C110: affordable, line of fire, then the run); the cursor stays open after a cast, as in the
 // original, until a right press, another activation, a window or a map change. A started run's casting goal plays: its start
 // (4 action points in a turn-based round, the pre-animation check), the release frame (the target re-check and BEGIN), the end.
-// The feedback lines are the cast host's log (spell.mes messages, fatigue, damage, healing, resistance, effects not ready).
+// The feedback lines are the cast host's log (spell.mes messages, fatigue, damage, healing, resistance, effects not ready). Since
+// ARC-MAGIC-017 the goal is timed by the cast entry's eye candy on the hero (TerrainViewerEyeCandy.cs).
 // ARC-MAGIC-019 (SU13): a cast while a goal plays is queued beneath it (at most 4, none in a turn-based round) and plays when the
 // goals before it are done; a goal refused at its start, or one cut short, drops the casts queued behind it.
 public partial class TerrainViewerApp
 {
-    // ARC-MAGIC-015: the cast's timing stand-in: the release frame 500 ms after the goal's start and its end 400 ms later. NOT
-    // READY: the original times the release by the caster's eye-candy art (no art is drawn here).
-    internal const long SpellReleaseMs = 500, SpellEndMs = 900;
-
     private SessionSpellRecord[]? _spellRecords;
     private SessionSpellCaster? _spellCaster;
     private AreaSpellCastMap? _spellCastMap;
@@ -51,7 +48,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>A casting goal playing: its run, spell and target, when it started (the first frame after the click, on the frames'
-    /// clock), and whether its release frame fired.</summary>
+    /// clock), its eye candy (ARC-MAGIC-017: it times the release frame and the end) and whether its release frame fired.</summary>
     private sealed class SpellCastGoal(SessionSpellCaster caster, int run, int spell, string target)
     {
         public SessionSpellCaster Caster { get; } = caster;
@@ -59,7 +56,11 @@ public partial class TerrainViewerApp
         public int Spell { get; } = spell;
         public string Target { get; } = target;
         public long? StartMs { get; set; }
+        public CastEyeCandyAnimation? Animation { get; set; }
         public bool Released { get; set; }
+        public long? ReleasedMs { get; set; }
+        // ARC-MAGIC-019: the target failed the re-check before the cast eye candy was added (0x429F00): the goal ends through the end step.
+        public bool TargetFailedAtStart { get; set; }
     }
 
     private bool SpellMapActive => AttackMapActive && _readyArea is not null && _worldActor.Session is AreaGridSession;
@@ -80,6 +81,7 @@ public partial class TerrainViewerApp
         var stamp = (owner, area, grid, (object?)_areaPortals);
         if (Equals(stamp, _spellCasterStamp) && _spellCaster is not null) return _spellCaster;
         CancelSpellCast("the map changed");
+        ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key));
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents);
@@ -147,28 +149,55 @@ public partial class TerrainViewerApp
         var now = WorldMilliseconds();
         var started = goal.StartMs ??= now;
         if (!goal.Released && owner.QueryHeroLife() is not { Status.IsActive: true }) { EndSpellGoal(caster, goal, "the hero cannot act"); return; }
-        if (!goal.Released && now >= started + SpellReleaseMs)
+        // ARC-MAGIC-019: before the cast eye candy is added the target is checked again (0x429F00 → 0x456A90); a failure releases at
+        // once (nothing begins, MG41) and the goal ends through the end step, which drops the casts queued behind it.
+        if (goal.Animation is null && owner.QuerySpellRuns()[goal.Run] is { } awaiting && !caster.TargetStillValid(awaiting))
         {
-            goal.Released = true;
-            var released = caster.Release(goal.Run);
-            GD.Print($"ARC-MAGIC-015 cast-release run={goal.Run} spell={goal.Spell} begun={released?.Disposition.ToString() ?? "re-check failed"}"
-                + $" failure={released?.Failure} eye-candy={6 * goal.Spell + 4} (presentation event, not drawn)");
-            FlushSpellLog(released is null ? "the target is no longer valid" : null);
+            goal.TargetFailedAtStart = true;
+            ReleaseSpellGoal(caster, goal, now);
+            EndSpellGoal(caster, goal, null);
+            return;
         }
-        if (now >= started + SpellEndMs) EndSpellGoal(caster, goal, null);
+        // ARC-MAGIC-017: the cast entry's eye candy times the goal (goal 27): the release at its action frame, the end after it.
+        var animation = goal.Animation ??= StartCastEyeCandy(goal.Run, goal.Spell, started);
+        animation.Advance(now, () => ReleaseSpellGoal(caster, goal, now));
+        if (animation.Ended)
+        {
+            _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), (goal.ReleasedMs ?? now) - started, now - started, animation.Immediate));
+            if (_castTimingsForSelfTest.Count > 16) _castTimingsForSelfTest.RemoveAt(0);
+            EndSpellGoal(caster, goal, null);
+        }
+    }
+
+    /// <summary>The release frame (0x429C80): the target re-check and BEGIN; when it passes, the secondary cast entry's eye candy on the
+    /// hero (0x456E00, 6·spell + 4).</summary>
+    private bool ReleaseSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, long now)
+    {
+        goal.Released = true; goal.ReleasedMs = now;
+        var released = caster.Release(goal.Run);
+        GD.Print($"ARC-MAGIC-015 cast-release run={goal.Run} spell={goal.Spell} begun={released?.Disposition.ToString() ?? "re-check failed"}"
+            + $" failure={released?.Failure} at={now - (goal.StartMs ?? now)}ms");
+        if (released is not null) PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run, now);
+        FlushSpellLog(released is null ? "the target is no longer valid" : null);
+        return released is not null;
     }
 
     private void EndSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, string? why)
     {
         _spellGoal = null;
+        // The end node removes the cast eye candy (0x429CD0, 0x431A40).
+        _eyeCandies.RemoveAll(e => e.Cast is not null && e.Run == goal.Run);
         var ended = caster.EndGoal(goal.Run);
         GD.Print($"ARC-MAGIC-015 cast-end run={goal.Run} spell={goal.Spell} released={goal.Released} freed={ended?.Disposition.ToString() ?? "nothing"}"
             + (why is null ? "" : " why=" + why));
         FlushSpellLog(why);
-        // ARC-MAGIC-019: a goal that played to its end pops (the stand-in plays as with its caster overlay, whose removal pops,
-        // 0x431A40), so the next queued cast's goal starts; a goal cut short interrupts the caster's whole stack (0x44E2C0).
-        if (why is null) StartQueuedSpellGoal(caster);
-        else DropSpellQueue(caster, why);
+        // ARC-MAGIC-019: a goal that played its cast eye candy to the end pops (the overlay's removal answers true, 0x431A40), so the
+        // next queued cast's goal starts; without cast eye candy, or after a target that failed before it, the goal ends through the
+        // end step (0x90000000), and a goal cut short interrupts the caster's whole stack (0x44E2C0): both drop the queue.
+        if (why is not null) DropSpellQueue(caster, why);
+        else if (goal.TargetFailedAtStart) DropSpellQueue(caster, "the target failed before the cast eye candy (end step)");
+        else if (goal.Animation is not { Immediate: false }) DropSpellQueue(caster, "the cast had no eye candy (end step)");
+        else StartQueuedSpellGoal(caster);
         RefreshAreaStatus();
     }
 
@@ -254,6 +283,7 @@ public partial class TerrainViewerApp
         // A goal ends through its own host while its session is the shown one (a map change frees its run, 0x429CD0); a goal of a
         // replaced session (a quick load) is only dropped.
         if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) EndSpellGoal(goal.Caster, goal, why ?? "cancelled");
+        else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Cast is not null && e.Run == dropped.Run);
         _spellGoal = null;
         DropSpellQueue(_spellQueue.Count > 0 ? _spellQueue[0].Caster : null, why ?? "cancelled");
     }
@@ -374,8 +404,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack("a cast replaced it");
         _spellGoal = new(caster, run, spell, name);
         _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, spell)}";
-        GD.Print($"ARC-MAGIC-015 goal-start run={run} spell={spell} ap={start.ActionPoints?.Charge.ToString() ?? "no round"}"
-            + $" eye-candy={6 * spell} (presentation event, not drawn)");
+        GD.Print($"ARC-MAGIC-015 goal-start run={run} spell={spell} ap={start.ActionPoints?.Charge.ToString() ?? "no round"}");
         RefreshAreaStatus();
     }
 
@@ -403,7 +432,8 @@ public partial class TerrainViewerApp
         for (; _spellLogSeen < caster.Log.Count; _spellLogSeen++)
         {
             var entry = caster.Log[_spellLogSeen];
-            GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object}");
+            GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
+            TakeEyeCandyEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         if (lines.Count == 0) return;

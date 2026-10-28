@@ -294,8 +294,8 @@ Agreed through the coordinator on 2026-10-20:
   short research item first (open question O6), then one shared slice after MT9a; equipment now refuses items with
   spells, and that refusal lifts there.
 - **Technology runtime**: the technology lane above.
-- **Spell visuals**: `SpellEyeCandy.mes`, casting and missile art and their animation; MT20a-2 emits presentation events
-  only, and the visual catalogue is a presentation task.
+- **Spell visuals**: `SpellEyeCandy.mes`, the cast, release and component eye candy and the cast's timing are done
+  ([ARC-MAGIC-017](../world/spell-cast-host.md#eye-candy-arc-magic-017)); the missile's art and flight (goal 28) remain.
 - **Line of fire**: the AI awareness lane (combat open question O4).
 - **Fate state**: slice S7 of the [skills plan](skills-plan.md).
 

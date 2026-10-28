@@ -49,12 +49,12 @@ public sealed class SessionSpellCasterTests
 
     // A self spell (BEGIN area self, cost 7, instant) whose BEGIN deals 3 normal damage to its target.
     private static SessionSpellRecord SelfBolt(ulong beginTargets = 0x1, int cost = 7, bool technology = false, bool heal = false, int duration = 0,
-        int range = 99) =>
+        int range = 99, uint cancels = 0x4) =>
         SessionSpellRecords.Translate(Record(number: 90, beginTargets: beginTargets, info: SpellInfo.Friendly, technology: technology,
             components: [new(SpellAction.Begin, SpellComponentType.Damage, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 3, 3, 0)),
                 .. heal ? new[] { new SpellComponent(SpellAction.Begin, SpellComponentType.Heal, new(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 2, 2, 0)) } : []])
         with { Cost = cost, Range = range, DurationSeconds = duration, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, DisallowedCasterSpellFlags = 0,
-            DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+            DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = cancels });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(RuleMode mode, SessionSpellRecord record, bool boxDestroyed = true,
         bool noLineOfFire = false)
@@ -93,6 +93,30 @@ public sealed class SessionSpellCasterTests
         // The component applies during the pass; the host pays the stage's payment from the call's notes after it.
         CollectionAssert.AreEquivalent(new[] { SpellCastEventKind.FatiguePaid, SpellCastEventKind.Damaged, SpellCastEventKind.Freed },
             caster.Log.Select(e => e.Kind).ToArray());
+    }
+
+    [TestMethod]
+    public void Eye_candy_components_are_logged_for_the_host_on_their_target_with_their_entry_and_play_flags()
+    {
+        // ARC-MAGIC-017: Add of number 2 (the destination) with the callback flag, then Remove of number 3 with no_id, on the self target.
+        var record = SessionSpellRecords.Translate(Record(number: 90, beginTargets: 0x1, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.EyeCandy, new(0x1, 0, 0, 0, -1), 0, 0, new EyeCandyData(2, true, 0x8)),
+                new(SpellAction.Begin, SpellComponentType.EyeCandy, new(0x1, 0, 0, 0, -1), 0, 0, new EyeCandyData(3, false, 0x100))])
+            with { Cost = 7, Range = 99, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+        Assert.AreEqual(new SpellEyeCandyComponent(2, true, 0x8), record.Components[0].EyeCandy);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        caster.StartGoal(run, new NoCombat());
+        caster.Release(run);
+        var eye = caster.Log.Where(e => e.Kind is SpellCastEventKind.EyeCandyAdded or SpellCastEventKind.EyeCandyRemoved).ToArray();
+        CollectionAssert.AreEqual(new[]
+        {
+            new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, run, 90 * 6 + 2, SessionSpellCaster.Hero, 0x8),
+            new SpellCastEvent(SpellCastEventKind.EyeCandyRemoved, run, 90 * 6 + 3, SessionSpellCaster.Hero, 0x100),
+        }, eye);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), "an eye candy is no component left undone");
     }
 
     [TestMethod]
@@ -422,7 +446,8 @@ public sealed class SessionSpellCasterTests
     [TestMethod]
     public void Su13_casts_queue_beneath_a_playing_goal_up_to_a_stack_index_of_4_and_each_plays_later_through_its_own_goal()
     {
-        var record = SelfBolt(cost: 1, duration: 30);
+        // No Cancels_SF: a queued run is active from the click, so the playing run's cancels (0x4534E0) would interrupt it.
+        var record = SelfBolt(cost: 1, cancels: 0);
         var (owner, caster) = Session(RuleMode.Steamwoven, record);
         using var _ = owner;
         var before = Hero(owner).Fatigue;
@@ -445,11 +470,27 @@ public sealed class SessionSpellCasterTests
         foreach (var run in queued.Prepend(playing))
         {
             if (run != playing) Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run, new NoCombat()).Outcome);
+            Assert.IsTrue(owner.QuerySpellRuns()[run] is not null, $"run {run} waits for its goal");
             Assert.AreEqual(GameSessionDisposition.Changed, caster.Release(run)!.Disposition);
             Assert.IsNull(caster.EndGoal(run), "nothing freed after the release frame");
         }
         Assert.AreEqual(before - 5, Hero(owner).Fatigue, "five casts paid once each");
         Assert.AreEqual(SpellCastQueueOutcome.NoRun, caster.Queue(refused, 0));
+    }
+
+    [TestMethod]
+    public void Su13_a_queued_run_is_active_so_the_playing_runs_cancels_interrupt_it()
+    {
+        var record = SelfBolt(cost: 1);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var playing = Cast(caster, record);
+        caster.StartGoal(playing, new NoCombat());
+        var queued = Cast(caster, record);
+        Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(queued, 0));
+        caster.Release(playing);
+        Assert.IsNull(owner.QuerySpellRuns()[queued], "the record's Cancels_SF matches its own: the BEGIN interrupts the queued run");
+        Assert.AreEqual(SpellCastGoalOutcome.NoRun, caster.StartGoal(queued, new NoCombat()).Outcome);
     }
 
     [TestMethod]

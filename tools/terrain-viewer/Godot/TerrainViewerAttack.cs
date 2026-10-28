@@ -793,7 +793,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
     {
         var companions = AreaCompanionCommands();
-        if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0) || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
+        if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0)
+            || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
@@ -803,6 +804,8 @@ public partial class TerrainViewerApp
         moving.AddRange(_groundBodies.Values.Where(c => !taken.Contains(c.Identity)));
         // ARC-COMBAT-016: projectiles in flight.
         moving.AddRange(_projectileBodies.Values);
+        // ARC-MAGIC-017: spells' eye candy on their objects.
+        moving.AddRange(_eyeCandyBodies.Values);
         return moving;
     }
 

@@ -477,6 +477,33 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
   [equipment's wield events](../world/equipment-runtime.md#wield-events-arc-script-042)); the viewer's use, tile, sector and dialog
   sets do not hold them.
 
+## World objects (ARC-WORLD-081, set S15)
+
+`ScrAdmissionSet.S15` is S14 plus random (37), loop for (18), loop end (19) and create object (52), the focus kinds "current looped
+object" (10) and "every scenery in vicinity" (15), and a counter operand with any index (`CounterIndexWraps`): the commands of the plant
+generator 30285 that template sectors run (ledger [PG1–PG13](../research/ledger/scripts.md#template-sector-scripts-arc-res-073);
+contract [template sector plants](../world/template-sector-plants-runtime.md)). A host whose set holds random, loop for or focus kind 15
+implements `IScrWorldQueries` (`SceneryInVicinity`, `Random`); `ScrRunOptions.Validate` refuses one that does not, and the interpreter
+runs at most S15.
+
+- **Random** stores a draw of `IScrWorldQueries.Random` between its two values (either order, both included) into operand 2; admission
+  refuses a number literal there.
+- **Loop for** fills the run's list once from its object operand, remembers the line after it and makes the first object the current
+  looped object; an empty list goes on after the first later line with the "true" condition and a loop end as its true action
+  (`ScrAdmission.AfterLoopEnd`, 0x44BC60), and without one past the end. **Loop end** steps to the next object and jumps back, or clears
+  the loop after the last (the current looped object stays). A loop for inside a running loop and a loop end without one do nothing.
+  Region admission takes a loop end's successors as the next line and the line after every loop for of the script.
+- **Focus kind 15** is the host's list of scenery within `ScrWorld.VicinityReach` (10) tiles of the run's attachee on both axes (none
+  without one), the first `ScrWorld.VicinityListCap` (100) of it under `ScrRuleProfile.VicinityListCapped` (Original, PG3); as a single
+  object it names the list's first. Focus kind 10 names the current looped object (none before the run's first loop).
+- **Create object** hands `ScrCreateRequest(prototype, near)` to the host (`ScrEffects.Creations`): the number as named (the host adds 20,
+  PG8) and the first object of operand 1; an absent object asks for nothing.
+- **Counters** read and write counter (index mod 4) for any index (PG6), the original's five-bit shift.
+- **Hosts.** The viewer's use, tile and sector set "S4-area-use-reading-objects-story-world" (`AreaUseScriptHost.Admission`) holds the
+  S15 world commands (not S14's item commands); its host answers the vicinity from the shown map and draws from the session, and hands
+  each creation to `GameSessionOwner.CreateGroundItem`, which applies the Steamwoven limit (`ScrRuleProfile.CreatedItemsUnbounded`,
+  Original: none).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -555,14 +582,16 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-story": S3,
   plus the sound actions, call script in / remove script call, set auto-level scheme, start schematic UI, the reading actions and the story
   actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
-  clicks on guarded use sites run it under "S4-area-use-reading-objects-story", and since ARC-SCRIPT-017 the tile and sector scripts the player
+  clicks on guarded use sites run it under "S4-area-use-reading-objects-story" (since ARC-WORLD-081 "S4-area-use-reading-objects-story-world"), and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
   the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
   combat are later slices.
-- Not in any admitted set yet: focus groups, loops, float line, reactions and most other world actions.
+- Not in any admitted set yet: focus groups other than the vicinity's scenery, loop break, float line, reactions and most other world
+  actions; create object makes items only (ARC-WORLD-081).
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
-  location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only).
+  location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
+  loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

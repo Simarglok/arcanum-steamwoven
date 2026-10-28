@@ -40,7 +40,8 @@ public interface ISpellCastMap : ISpellTargetWorld
 
 /// <summary>What a cast left for the host to show or do: the run note's kind and run, the local player's spell.mes message, the
 /// component types that are not ready yet, and the objects a component touched.</summary>
-public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value = 0, string? Object = null);
+/// <summary>One entry of the cast host's log; <see cref="Detail"/> carries an eye candy's <c>Play:</c> flags (ARC-MAGIC-017).</summary>
+public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value = 0, string? Object = null, int Detail = 0);
 
 /// <summary>How a casting goal's start went (<see cref="SessionSpellCaster.StartGoal"/>): it started, or it ends because the parent's
 /// action points refused, because the source cannot afford the cast, because the target is destroyed or off, or because there is
@@ -79,6 +80,14 @@ public enum SpellCastEventKind
     Resisted,
     /// <summary>The run was freed.</summary>
     Freed,
+    /// <summary>ARC-MAGIC-017: an EyeCandy component's Add (0x451FE0) played eye-candy entry <see cref="SpellCastEvent.Value"/> (the
+    /// table index, 6 · spell + the component's number) on <see cref="SpellCastEvent.Object"/>, with the <c>Play:</c> flags in
+    /// <see cref="SpellCastEvent.Detail"/>: a presentation event the host draws. Its callbacks (play flags 0x8, 0x10) are not
+    /// ready: the run's CALLBACK actions do not follow the animation.</summary>
+    EyeCandyAdded,
+    /// <summary>ARC-MAGIC-017: an EyeCandy component's Remove (0x4CD940) took entry <see cref="SpellCastEvent.Value"/> off
+    /// <see cref="SpellCastEvent.Object"/>: only this run's, or any run's with the <c>no_id</c> play flag (0x100).</summary>
+    EyeCandyRemoved,
 }
 
 /// <summary>
@@ -240,8 +249,23 @@ public sealed class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISess
             else ApplyHeal(run, data, obj);
             return SpellComponentOutcome.None;
         }
+        if (c.Type == SpellComponentType.EyeCandy) { EyeCandy(run, c, target); return SpellComponentOutcome.None; }
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
+    }
+
+    /// <summary>ARC-MAGIC-017: the EyeCandy component (0x451FE0, ledger EC rows) on its target object (none: nothing): an Add plays
+    /// entry 6 · spell + number unless the run is forced to end, a Remove takes that entry off. Presentation only: the host draws it
+    /// from the log; the callbacks are not ready (a callback play flag makes the original's run wait for the animation).</summary>
+    private void EyeCandy(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
+    {
+        if (target.Object is not { } obj || component.EyeCandy is not { } data) return;
+        var index = SpellEyeCandyRules.EntryIndex(run.Spell, data.Number);
+        if (data.Add)
+        {
+            if ((run.Flags & SpellRunFlags.ForcedEnd) == 0) _log.Add(new(SpellCastEventKind.EyeCandyAdded, run.Id, index, obj.Id, (int)data.Play));
+        }
+        else _log.Add(new(SpellCastEventKind.EyeCandyRemoved, run.Id, index, obj.Id, (int)data.Play));
     }
 
     public SpellTimeFacts TimeFacts(SpellRun run)
