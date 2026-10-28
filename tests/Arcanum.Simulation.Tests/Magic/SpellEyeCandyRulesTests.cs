@@ -52,6 +52,20 @@ public sealed class SpellEyeCandyRulesTests
     }
 
     [TestMethod]
+    public void After_a_missile_launch_the_goal_waits_one_pace()
+    {
+        // ARC-MAGIC-018: the launch's true step restarts goal 27 with a pace's delay (0x4246E0): frame 3 comes at 200, not with the
+        // release at 100, and the end one pace later than without a missile.
+        var animation = new CastEyeCandyAnimation(new(6, 2, 10), null, true, 0);
+        var steps = new List<EyeCandyStep>();
+        for (var now = 0L; now <= 2000 && !animation.Ended; now++)
+            steps.AddRange(animation.Advance(now, () => { animation.PaceAfterRelease = true; return true; }));
+        CollectionAssert.AreEqual(new[] { (0L, 1), (100L, 2), (200L, 3), (300L, 4), (400L, 5) },
+            steps.Where(s => s.Kind == EyeCandyStepKind.Frame).Select(s => (s.AtMs, s.Frame)).ToArray());
+        Assert.AreEqual((EyeCandyStepKind.Ended, 600L), (steps.Last().Kind, steps.Last().AtMs));
+    }
+
+    [TestMethod]
     public void A_failed_release_ends_the_goal_at_once()
     {
         var animation = new CastEyeCandyAnimation(new(10, 3, 10), null, true, 0);
