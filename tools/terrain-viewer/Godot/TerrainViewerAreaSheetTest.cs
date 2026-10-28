@@ -118,6 +118,14 @@ public partial class TerrainViewerApp
             _sheetPanel.SpellMinusForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(_sheetPanel.SpellsForSelfTest is { Rank: 0, CanUnlearn: false, UnspentPoints: 4 } && _sheetPanel.SkillMessageForSelfTest == "unlearned College 3 spell 1"
                 && _sheetPanel.SpellMinusForSelfTest.Disabled, "− unlearned it: " + _sheetPanel.SkillMessageForSelfTest);
+            // ARC-UI-034: the stats page's + and − on charisma (row 9) through the same pool, down to the opening.
+            _sheetPanel.StatPlusForSelfTest(9).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.StatsForSelfTest is { UnspentPoints: 3 } stats && stats.Rows[9] is { Stat: CharacterStat.Charisma, Value: 9, FloorValue: 8 }
+                && _sheetPanel.SkillMessageForSelfTest == "spent 1 point(s)", "stat + bought charisma: " + _sheetPanel.SkillMessageForSelfTest);
+            _sheetPanel.StatMinusForSelfTest(9).EmitSignal(BaseButton.SignalName.Pressed);
+            _sheetPanel.StatMinusForSelfTest(9).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_sheetPanel.StatsForSelfTest is { UnspentPoints: 4 } && _areaSession.QueryHero()!.Stats[(int)CharacterStat.Charisma] == 8
+                && _sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund", "stat − to the opening: " + _sheetPanel.SkillMessageForSelfTest);
             // The open sheet owns the keys: the Inventory key neither opens the inventory nor closes the sheet.
             InventoryKey(Key.I);
             Require(SheetOpen && !InventoryOpen, "I under the sheet");
@@ -176,7 +184,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && !_areaSession.HeroEditorOpen, "the dead hero's sheet closed and so did its editor");
             InventoryKey(Key.C);
             Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, prowl toggle and the stealth gait, skills page + and − with the editor floor, spells page tabs, learn, refusal and unlearn (ARC-MAGIC-008), level-up messages (ARC-UI-046), dead-hero close and refusal";
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, prowl toggle and the stealth gait, skills page + and − with the editor floor, stats page + and − (ARC-UI-034), spells page tabs, learn, refusal and unlearn (ARC-MAGIC-008), level-up messages (ARC-UI-046), dead-hero close and refusal";
         }
         finally
         {
