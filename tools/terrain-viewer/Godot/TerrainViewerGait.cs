@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 /// (palette; saved like the original's settings value) and the Num Lock toggle decide the default gait; Ctrl on a
 /// ground click runs once, or walks once with always-run; a click on an object always runs. The gait is fixed when
 /// a route or approach starts and read by the PC's session when it admits each step (<see cref="GaitTiming"/>).
-/// Encumbrance is not modelled; a hero out of fatigue walks (ARC-COMBAT-004).
+/// A hero out of fatigue walks (ARC-COMBAT-004), and so does a hero at encumbrance level 4 or more (ARC-WORLD-087).
 /// </summary>
 public partial class TerrainViewerApp
 {
@@ -68,7 +68,13 @@ public partial class TerrainViewerApp
     private void PaletteAlwaysRunToggle()
     {
         if (!GaitControlsActive) { BindGaitPalette(); return; }
-        _alwaysRunOption = !_alwaysRunOption;
+        SetAlwaysRun(!_alwaysRunOption);
+    }
+
+    /// <summary>The Always Run option set (the palette's toggle, or the options window, ARC-UI-013) and saved.</summary>
+    private void SetAlwaysRun(bool value)
+    {
+        _alwaysRunOption = value;
         var saved = _alwaysRunStore is not { Persistent: true } store ? "not saved (automated run)" : store.Save(_alwaysRunOption) ? "saved" : "save FAILED, this run only";
         GD.Print($"ARC-WORLD-020 always-run option={_alwaysRunOption} {saved}");
         BindGaitPalette(); RefreshReadyStatus();

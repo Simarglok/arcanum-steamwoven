@@ -229,6 +229,16 @@ ACID_ITEMS = tuple((0x5EED00A0 + i, 0x42) for i in range(9))      # the items a 
 DAMAGE_FLAG_BITS = (0x1, 0x2, 0x4, 0x40, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x400000, 0x800000)
 SCHEDULE_CODE = ((0x454790, 0x4548D0), (0x4503E0, 0x450420), (0x45A950, 0x45A970), (0x455250, 0x455350))
 
+# The AI's global action-list build and the runtime's quicksort (ARC-WORLD-088).
+AI_LIST_INDEX = 0x5B7558        # the list being built (0..9), read by the value getter 0x4CC310
+AI_LISTS_LOADED = 0x6016F0      # the AI-list init's loaded flag
+AI_VALUES = 0x12C               # spell record +0x12C + 4 x list: the list's AI value (-1: none)
+AI_LISTS = 10
+AI_ENTRY = 16                   # an entry: spell, a word, the item handle (two words)
+MALLOC, FREE = 0x58A716, 0x58A347
+AI_LIST_CODE = ((0x4CC310, 0x4CC350), (0x4CC2D0, 0x4CC310), (0x58A548, 0x58A69C), (0x58A69C, 0x58A6EA), (0x58A6EA, 0x58A716))
+AI_LIST_LIMIT = 4_000_000       # a sort of all 223 spells runs some hundred thousand instructions
+
 
 @dataclass(frozen=True)
 class FunctionSpec:
@@ -279,6 +289,7 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4518D0, "spell-damage", ((0x4518D0, 0x451AF0),), "spell-damage"),
     FunctionSpec(0x4521A0, "spell-heal", ((0x4521A0, 0x452294),), "spell-heal"),
     FunctionSpec(0x4B5810, "spell-acid", ((0x4B5810, 0x4B58BA),), "spell-acid"),
+    FunctionSpec(0x4CC380, "ai-global-list", ((0x4CC380, 0x4CC430),) + AI_LIST_CODE, "ai-global-list"),
 )}
 
 
@@ -2576,6 +2587,57 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["targetType", "amount", "flags", *(f"worn{s}" for s in range(1000, 1009)), *(f"resist{s}" for s in range(1000, 1009)),
                                 "steps", *(f"step{i}{n}" for i in range(10) for n in ("Slot", "Normal"))])
+    elif spec.model == "ai-global-list":
+        from oracle_emu import StubRejected
+        table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0)
+        record = table + 0x20000
+        out = table + 0x21000
+        emulator.write_heap(b"\0" * (AI_ENTRY * SPELL_RECORDS + 8), 0x20000)
+        emulator.set_global(SPELL_TABLE_POINTER, table)
+        emulator.set_global(AI_LISTS_LOADED, 1)
+        limit, emulator.instruction_limit = emulator.instruction_limit, AI_LIST_LIMIT
+        try:
+            for case_number in range(count):
+                # Mostly short lists (the selection sort and a few partitions), sometimes every spell; values from a small
+                # pool so ties are common, now and then negative or large.
+                size = rng.choice((rng.randint(0, 12), rng.randint(0, 12), rng.randint(13, 60), rng.randint(13, 60), rng.randint(61, SPELL_RECORDS)))
+                listed = set(rng.sample(range(SPELL_RECORDS), size))
+                pool = rng.choice((1, 2, 3, 5, 10, 100))
+                values = [(rng.randrange(pool) if rng.random() < 0.95 else rng.choice((-7, -2, 1000, 2**31 - 1, -2**31))) if spell in listed else -1
+                          for spell in range(SPELL_RECORDS)]
+                values = [v if v != -1 or spell not in listed else 0 for spell, v in enumerate(values)]
+                which = rng.randrange(AI_LISTS)
+                for spell, value in enumerate(values):
+                    emulator.write_heap(struct.pack("<i", value), SPELL_RECORD * spell + AI_VALUES + 4 * which)
+                emulator.set_global(AI_LIST_INDEX, which)
+                emulator.write_heap(struct.pack("<II", 0, 0), 0x20000)
+                allocated = []
+
+                def malloc(argument) -> int:
+                    if argument(0) != AI_ENTRY * size or allocated:
+                        raise StubRejected(f"allocation of {argument(0)} bytes")
+                    allocated.append(argument(0))
+                    return out
+
+                def free(argument) -> int:
+                    raise StubRejected("nothing is allocated before the build")
+                readable = (Range(table, table + SPELL_RECORD * SPELL_RECORDS), Range(AI_LIST_INDEX, AI_LIST_INDEX + 4),
+                            Range(AI_LISTS_LOADED, AI_LISTS_LOADED + 4), Range(SPELL_TABLE_POINTER, SPELL_TABLE_POINTER + 4))
+                writable = (Range(record, record + 8), Range(out, out + AI_ENTRY * SPELL_RECORDS))
+                result = emulator.call(spec.address, (record, 0), code=code, stubs={MALLOC: malloc, FREE: free}, readable=readable, writable=writable)
+                listed_count = emulator.read_u32(record)
+                order = [emulator.read_u32(out + AI_ENTRY * i) for i in range(listed_count)]
+                items = [emulator.read_u32(out + AI_ENTRY * i + 8) | emulator.read_u32(out + AI_ENTRY * i + 12) for i in range(listed_count)]
+                if any(items):
+                    raise RunFailure("model", "an entry holds an item")
+                if listed_count != size or (size and emulator.read_u32(record + 4) != out) or (not size and emulator.read_u32(record + 4) != 0):
+                    raise RunFailure("model", f"the build listed {listed_count} of {size} spells")
+                cases.append([which, result, listed_count, _digest(order), *(order[:3] + [-1] * (3 - len(order[:3]))), *values])
+                if progress and case_number % 1000 == 0:
+                    progress(case_number)
+        finally:
+            emulator.instruction_limit = limit
+        document.update(fields=["list", "result", "count", "digest", "first", "second", "third", *(f"value{s}" for s in range(SPELL_RECORDS))])
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

@@ -120,7 +120,7 @@ object (52).
 ## What ARC-WORLD-081 needs
 
 ARC-WORLD-081 did all of this ([runtime](../world/template-sector-plants-runtime.md)): the window lists its template sectors' scripts, set
-S15 admits the commands, the session keeps the created items (snapshot schema 47), and the owner settled both questions (a fixed reach of
+S15 admits the commands, the session keeps the created items (snapshot schema 48), and the owner settled both questions (a fixed reach of
 10 tiles, the original's own play view, in both settings; a limit of 6 created items within 3 tiles under Steamwoven; Original keeps the
 first 100 objects of the list and no limit).
 

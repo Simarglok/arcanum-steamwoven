@@ -98,7 +98,9 @@ public sealed class CarryRulesTests
         {
             Assert.AreEqual(entries[level], CarryRules.EffectEntries(level), $"entries at {level}");
             Assert.AreEqual(intervals[level], CarryRules.DrainIntervalMs(level), $"interval at {level}");
+            Assert.AreEqual(level < 4, CarryRules.CanRun(level), $"run at {level} (WE9, ARC-WORLD-087)");
         }
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CarryRules.CanRun(7));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CarryRules.EffectEntries(-1));
         Assert.AreEqual(0, CarryRules.Drain(4, 1), "below 5 nothing drains");
         Assert.AreEqual(7, CarryRules.Drain(30, 7));

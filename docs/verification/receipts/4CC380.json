@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4CC380",
+  "name": "ai-global-list",
+  "method": "Arcanum.Simulation.Ai.AiGlobalLists.Sorted",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "879abc5dba89e4ac18be279ecfe301f7c39449e42ec0b99f0fec848fba7527f3",
+  "configuration": "Debug"
+}

@@ -256,6 +256,8 @@ public enum GameSessionFailure
     InvalidDangerTarget, InvalidDangerFacts,
     // NPC gold and transfers (ARC-WORLD-071).
     GoldShort, GoldUnavailable,
+    // Boomerangs (ARC-COMBAT-019): no attack starts while the hero's boomerang is away (0x434B00).
+    WeaponInFlight,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -426,10 +428,10 @@ public sealed class GameSessionSnapshot
     /// the CheckWeapon danger bit and the AI ticks to <see cref="Events"/> (ARC-WORLD-084); schema 43 adds
     /// the kept item script slots to <see cref="Inventory"/> and a worn item's item event points to <see cref="Equipment"/>
     /// (ARC-SCRIPT-042); schema 44 adds the weight rows to <see cref="Inventory"/> (ARC-WORLD-085); schema 45 adds the NoFlee danger
-    /// bit (ARC-WORLD-086); schema 46 adds the junk piles to <see cref="Inventory"/> (ARC-WORLD-063); schema 47 adds the items scripts
-    /// created on the ground to the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081). Schemas 1..46 are
-    /// refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 47;
+    /// bit (ARC-WORLD-086); schema 46 adds the junk piles to <see cref="Inventory"/> (ARC-WORLD-063); schema 47 adds the
+    /// LookForAmmo, LookForWeapon and LookForArmor danger bits (ARC-WORLD-088); schema 48 adds the items scripts created on the ground to
+    /// the placed items of <see cref="Inventory"/> (source <c>created</c>, ARC-WORLD-081). Schemas 1..47 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 48;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

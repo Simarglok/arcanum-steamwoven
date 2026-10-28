@@ -174,7 +174,7 @@ public sealed partial class GameSessionOwner
             if (unit.NewObject || unit.Ground) _inventory.SetWeight(unit.Entity, weight);
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
-        _revision++;
+        Revise();
         return Assembled(plan, units, components, firstRefusal);
     }
 

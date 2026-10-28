@@ -191,7 +191,7 @@ public sealed partial class GameSessionOwner
         EndConcealmentForDialog(entity);
         if (result.Disposition == GameSessionDisposition.NoChange)
         {
-            _revision++;
+            Revise();
             result = result with { Disposition = GameSessionDisposition.Changed, Version = Version };
         }
         return result;
@@ -279,7 +279,7 @@ public sealed partial class GameSessionOwner
         }
         // The leader check needs a PC leader, so the NPC already has a party record and keeps its place in the array.
         if (armed != companion) _party.Put(armed, false);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, adjustment, follow, Version);
     }
 

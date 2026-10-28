@@ -63,10 +63,10 @@ retry changes nothing, so the back-off simply ends without a clear line.
   setter's FLEE), the fear effect's end and resurrection (stop fleeing) are their domains' callers.
 - **Execution.** The flee goal (type 25) and the run to the back-off's tile are the executor's ([AI executor](ai-executor.md),
   ARC-WORLD-086), which calls perform fleeing, the back-off step and the back-off start through its world; the "away" path's
-  tile is the host's; the flee-spell list chooser is I8's.
+  tile is the host's; the flee-spell list chooser is `AiSupportRules.ChooseFleeAction` (slice I8, [AI support](ai-support.md)), which no host calls yet.
 - **Set no-flee** (0x4AF1D0): the move-away goal's NO_FLEE is the session's `SetNoFlee` (ARC-WORLD-086, EX12); the NO_FLEE of the
   critter's data stays the caller's fact. The other writer is the start of mind control, whose end (MR13 `MindControlLeavesNoFlee`, one remembered bit) belongs to the magic slice that
   implements mind control.
 - **Stop waiting** (0x4AA8C0) of the kill notification's victim is the party owner's; the dialog port applies the surrendered
   NPC's greeting, script flag and "flee from the source's party" rule of the study's section 3; the follower rule (I9) and the
-  redirect (P3, I8) are their slices'.
+  redirect (P3, `AiGroundRules.Redirect`, slice I8) are their slices'.

@@ -191,7 +191,7 @@ public sealed class MoraleRulesTests
             MoraleRules.FleeSpell(DangerFlags.Fleeing | DangerFlags.SpellFlee, Chooses), "the pass after a flee spell flees");
         Assert.AreEqual(1, asked, "the chooser is not asked while the flag is set");
         Assert.AreEqual(new FleeSpellStep(FleeSpellOutcome.NoneChosen, DangerFlags.Fleeing), MoraleRules.FleeSpell(DangerFlags.Fleeing, () => false));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MoraleRules.FleeSpell((DangerFlags)(1 << 12), Chooses));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MoraleRules.FleeSpell((DangerFlags)(1 << 15), Chooses));
 
         // A flight left before the next flee-spell step: Steamwoven clears SPELL_FLEE, the Original setting keeps it (MR7).
         var flight = DangerFlags.Fleeing | DangerFlags.SpellFlee;

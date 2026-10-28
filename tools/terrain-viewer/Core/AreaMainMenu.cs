@@ -4,8 +4,8 @@ using Arcanum.Data.Messages;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>The original main-menu windows this menu models, by their window type in the original's window table (ledger MM2;
-/// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2).</summary>
-public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, NewGame = 11, PickCharacter = 13 }
+/// ARC-UI-012: the in-play windows 3 and 4 that Escape opens in play, ledger SF1–SF2; ARC-UI-013: the options window 6, OP1).</summary>
+public enum AreaMenuWindow { Main = 2, InPlay = 3, InPlayLimited = 4, SinglePlayer = 5, Options = 6, NewGame = 11, PickCharacter = 13 }
 
 /// <summary>What a menu button does in Steamwoven.</summary>
 public enum AreaMenuRole
@@ -23,6 +23,10 @@ public enum AreaMenuRole
     Quit,
     /// <summary>ARC-UI-012: closes the in-play menu and play goes on.</summary>
     Continue,
+    /// <summary>ARC-UI-013: shows <see cref="AreaMenuButton.Page"/> of the options window.</summary>
+    OptionsPage,
+    /// <summary>ARC-UI-013: the options window's Done: back to the main menu, or from play closes the menu (OP6).</summary>
+    OptionsDone,
     /// <summary>A button the original has whose function Steamwoven does not have yet; hidden (FR-UI-001).</summary>
     Unavailable,
 }
@@ -43,9 +47,12 @@ public enum AreaMenuCommandKind
     QuitToMenu,
     /// <summary>ARC-UI-012: close the in-play menu.</summary>
     Continue,
+    /// <summary>ARC-UI-013: set <see cref="AreaMenuCommand.Option"/> to <see cref="AreaMenuCommand.Value"/> (the original's setter runs at
+    /// once, OP3); the host applies it and gives the window the values it then has (<see cref="AreaMainMenu.SetOptions"/>).</summary>
+    ChangeOption,
 }
 
-public readonly record struct AreaMenuCommand(AreaMenuCommandKind Kind, int Hero = -1)
+public readonly record struct AreaMenuCommand(AreaMenuCommandKind Kind, int Hero = -1, AreaOption Option = default, int Value = 0)
 {
     public static AreaMenuCommand Nothing => new(AreaMenuCommandKind.None);
 }
@@ -53,7 +60,8 @@ public readonly record struct AreaMenuCommand(AreaMenuCommandKind Kind, int Hero
 /// <param name="Message">The label's message in <c>mes\MainMenu.mes</c>; its hotkey letter is message + 10 (ledger MM3).</param>
 /// <param name="Target">The window an <see cref="AreaMenuRole.Open"/> button opens.</param>
 /// <param name="Unavailable">Why the button is hidden, for the window's note; null when it is shown.</param>
-public sealed record AreaMenuButton(int Message, AreaMenuRole Role, AreaMenuWindow? Target = null, string? Unavailable = null)
+/// <param name="Page">The page an <see cref="AreaMenuRole.OptionsPage"/> button shows.</param>
+public sealed record AreaMenuButton(int Message, AreaMenuRole Role, AreaMenuWindow? Target = null, string? Unavailable = null, AreaOptionsPage Page = default)
 {
     public bool Shown => Role != AreaMenuRole.Unavailable;
     public int HotkeyMessage => Message + AreaMainMenuTexts.HotkeyOffset;
@@ -84,6 +92,8 @@ public sealed class AreaMainMenuTexts
         [40] = "S", [41] = "L", [42] = "O", [43] = "Q", [44] = "C",
         [70] = "Options", [71] = "Quit", [72] = "Continue",
         [80] = "O", [81] = "Q", [82] = "C",
+        [4000] = "Game", [4001] = "Video", [4002] = "Sound", [4003] = "Done",
+        [4010] = "G", [4011] = "V", [4012] = "S", [4013] = "D",
         [QuitQuestion] = "Quit the current game?",
     };
     private readonly Func<int, string?> _original;
@@ -141,7 +151,7 @@ public sealed class AreaMainMenuTexts
 /// ARC-UI-011 main menu state, Godot-free: the original's main, single player and new game windows and the pre-made hero browser
 /// (ledger MM1–MM7). A button opens a window over the current one (a back stack), Cancel and Escape go back; the root window ignores
 /// Escape, as the original's does the first time it opens (later openings, from play, exit the game on Escape). A button's hotkey letter activates
-/// it. Buttons whose function Steamwoven lacks (network play, options, credits, intro movies, the character editor) are hidden and
+/// it. Buttons whose function Steamwoven lacks (network play, credits, intro movies, the character editor) are hidden and
 /// named in the window's note (FR-UI-001: the menu shows only what the profile supports). "Pick Character" needs the start map
 /// (the original's new game teleports the PC there); the host says whether the shown map is it. The pre-made browser starts at the
 /// first hero and cycles through all twelve (the original: 1..count-1, twelve heroes when the female heroes' art exists). The host
@@ -150,11 +160,15 @@ public sealed class AreaMainMenuTexts
 /// in a turn-based round on another's turn, has Options, Quit and Continue), whose Escape continues play (ledger SF1–SF2). Quit asks
 /// first (message 5100; Y or N, Escape answers no) and then goes back to the main menu (SF3), whose root Escape exits the game once
 /// the menu opens again (MM6: <c>reopened</c>).
+/// ARC-UI-013: Options opens the options window (window 6, ledger OP1–OP8) from the main menu and from both in-play windows. Its
+/// buttons show the Game, Video and Sound pages and Done; a page's controls change with their arrows at once (a list wraps around,
+/// a slider stops at its ends), the host applying each change. Done goes back to the main menu, or from play closes the menu; Escape
+/// does nothing there, and from play the O key closes the menu (OP6–OP7). The page and Done letters act, as in the other windows,
+/// though the original's window ignores them (an original bug, OP7). Controls Steamwoven lacks are hidden with the reason.
 /// </summary>
 public sealed class AreaMainMenu
 {
     public const string NoNetworkPlay = "network play is not built";
-    public const string NoOptions = "the options window is a later task (N9)";
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001)";
     public const string NoEditor = "the character editor is not built";
@@ -194,7 +208,7 @@ public sealed class AreaMainMenu
         AreaMenuWindow.Main =>
         [
             new(10, AreaMenuRole.Open, AreaMenuWindow.SinglePlayer), new(11, AreaMenuRole.Unavailable, Unavailable: NoNetworkPlay),
-            new(12, AreaMenuRole.Unavailable, Unavailable: NoOptions), new(13, AreaMenuRole.Unavailable, Unavailable: NoCredits), new(14, AreaMenuRole.Exit),
+            new(12, AreaMenuRole.Open, AreaMenuWindow.Options), new(13, AreaMenuRole.Unavailable, Unavailable: NoCredits), new(14, AreaMenuRole.Exit),
         ],
         AreaMenuWindow.SinglePlayer =>
         [
@@ -208,17 +222,61 @@ public sealed class AreaMainMenu
         ],
         AreaMenuWindow.InPlay =>
         [
-            new(30, AreaMenuRole.SaveGame), new(31, AreaMenuRole.LoadGame), new(32, AreaMenuRole.Unavailable, Unavailable: NoOptions),
+            new(30, AreaMenuRole.SaveGame), new(31, AreaMenuRole.LoadGame), new(32, AreaMenuRole.Open, AreaMenuWindow.Options),
             new(33, AreaMenuRole.Quit), new(34, AreaMenuRole.Continue),
         ],
-        AreaMenuWindow.InPlayLimited => [new(70, AreaMenuRole.Unavailable, Unavailable: NoOptions), new(71, AreaMenuRole.Quit), new(72, AreaMenuRole.Continue)],
+        AreaMenuWindow.InPlayLimited => [new(70, AreaMenuRole.Open, AreaMenuWindow.Options), new(71, AreaMenuRole.Quit), new(72, AreaMenuRole.Continue)],
+        AreaMenuWindow.Options =>
+        [
+            new(4000, AreaMenuRole.OptionsPage, Page: AreaOptionsPage.Game),
+            AreaOptionTable.Offered(AreaOptionsPage.Video) ? new(4001, AreaMenuRole.OptionsPage, Page: AreaOptionsPage.Video)
+                : new(4001, AreaMenuRole.Unavailable, Unavailable: AreaOptionTable.NoVideoPage),
+            new(4002, AreaMenuRole.OptionsPage, Page: AreaOptionsPage.Sound), new(4003, AreaMenuRole.OptionsDone),
+        ],
         _ => [],
     };
 
     public IReadOnlyList<AreaMenuButton> Shown => Buttons.Where(button => button.Shown).ToArray();
 
-    /// <summary>The hidden buttons of the window with the reason, for its note.</summary>
-    public IReadOnlyList<string> HiddenNotes => Buttons.Where(button => !button.Shown).Select(button => $"{Texts.Text(button.Message)}: {button.Unavailable}").ToArray();
+    /// <summary>The hidden buttons of the window with the reason, for its note; in the options window also the page's hidden controls
+    /// and the values a shown control does not offer.</summary>
+    public IReadOnlyList<string> HiddenNotes => Buttons.Where(button => !button.Shown).Select(button => $"{Texts.Text(button.Message)}: {button.Unavailable}")
+        .Concat(Window != AreaMenuWindow.Options ? [] : AreaOptionTable.Page(Page)
+            .Where(control => !control.Shown || control.LimitNote is not null)
+            .Select(control => $"{OptionsTexts.Label(control)}: {control.Unavailable ?? control.LimitNote}"))
+        .ToArray();
+
+    /// <summary>ARC-UI-013: the options texts (labels and values); the project's until the host gives the game's.</summary>
+    public AreaOptionsTexts OptionsTexts { get; set; } = AreaOptionsTexts.Project("not read");
+    /// <summary>ARC-UI-013: the page the options window shows (the Game page when it opens, OP4).</summary>
+    public AreaOptionsPage Page { get; private set; }
+    /// <summary>ARC-UI-013: the values the options window shows; null until the host gives them.</summary>
+    public AreaGameOptions? Options { get; private set; }
+    /// <summary>ARC-UI-013: the shown controls of the options window's page, in slot order.</summary>
+    public IReadOnlyList<AreaOptionControl> Controls => Window == AreaMenuWindow.Options ? AreaOptionTable.Page(Page).Where(control => control.Shown).ToArray() : [];
+    /// <summary>ARC-UI-013: the controller's focus in the options window over its controls, then its shown buttons; -1 none.</summary>
+    public int OptionsFocus { get; private set; } = -1;
+
+    /// <summary>ARC-UI-013: the host's values after it applied a change, or when the window opens.</summary>
+    public void SetOptions(AreaGameOptions options) => Options = options ?? throw new ArgumentNullException(nameof(options));
+
+    /// <summary>ARC-UI-013: an arrow of the <paramref name="index"/>-th shown control (which takes the focus): the change for the host
+    /// to apply (OP3), or nothing at a slider's end or before the values are known.</summary>
+    public AreaMenuCommand Change(int index, int direction)
+    {
+        var controls = Controls;
+        if (QuitPending || Options is not { } options || index < 0 || index >= controls.Count) return AreaMenuCommand.Nothing;
+        // A control's arrow takes the focus, so the keys go on with it.
+        OptionsFocus = index;
+        var control = controls[index];
+        if (options.Value(control.Option) is not { } value || control.Step(value, direction) is not { } next) return AreaMenuCommand.Nothing;
+        Notice = null;
+        return new(AreaMenuCommandKind.ChangeOption, Option: control.Option, Value: next);
+    }
+
+    /// <summary>ARC-UI-013: the physical O key: from play it closes the options window and the menu (the original's key table, OP7).</summary>
+    public AreaMenuCommand OptionsKey() => Window == AreaMenuWindow.Options && Root != AreaMenuWindow.Main && !QuitPending
+        ? new(AreaMenuCommandKind.Continue) : AreaMenuCommand.Nothing;
 
     /// <summary>Activates the <paramref name="index"/>-th shown button.</summary>
     public AreaMenuCommand Activate(int index)
@@ -232,6 +290,9 @@ public sealed class AreaMainMenu
             case AreaMenuRole.SaveGame: return new(AreaMenuCommandKind.SaveGame);
             case AreaMenuRole.Quit: QuitPending = true; return AreaMenuCommand.Nothing;
             case AreaMenuRole.Continue: return new(AreaMenuCommandKind.Continue);
+            case AreaMenuRole.OptionsPage: Page = button.Page; OptionsFocus = Controls.Count > 0 ? 0 : -1; return AreaMenuCommand.Nothing;
+            // The original's Done goes back when the options came from the main menu and closes the menu from play (OP6).
+            case AreaMenuRole.OptionsDone: if (Root != AreaMenuWindow.Main) return new(AreaMenuCommandKind.Continue); Back(); return AreaMenuCommand.Nothing;
             case AreaMenuRole.Open: Open(button.Target!.Value); return AreaMenuCommand.Nothing;
             case AreaMenuRole.Back: Back(); return AreaMenuCommand.Nothing;
             case AreaMenuRole.LoadGame: return new(AreaMenuCommandKind.LoadGame);
@@ -261,10 +322,12 @@ public sealed class AreaMainMenu
     }
 
     /// <summary>Escape (ARC-UI-012): the quit box answers no; a window goes back; the in-play root continues play (SF2); the main
-    /// menu's root exits once the menu opened again (MM6), and does nothing at its first opening.</summary>
+    /// menu's root exits once the menu opened again (MM6), and does nothing at its first opening. ARC-UI-013: the options window's
+    /// key table has no Escape, so it does nothing there (OP7).</summary>
     public AreaMenuCommand Escape()
     {
         if (QuitPending) return Answer(false);
+        if (Window == AreaMenuWindow.Options) return AreaMenuCommand.Nothing;
         if (Back()) return AreaMenuCommand.Nothing;
         if (Root != AreaMenuWindow.Main) return new(AreaMenuCommandKind.Continue);
         return Reopened ? new(AreaMenuCommandKind.Exit) : AreaMenuCommand.Nothing;
@@ -281,16 +344,30 @@ public sealed class AreaMainMenu
         return true;
     }
 
-    /// <summary>Moves the focus over the shown buttons (controller), wrapping.</summary>
+    /// <summary>Moves the focus over the shown buttons (controller), wrapping; in the options window over its controls, then its buttons.</summary>
     public void Move(int direction)
     {
+        if (Window == AreaMenuWindow.Options && !QuitPending)
+        {
+            var all = Controls.Count + Shown.Count;
+            if (all > 0 && direction != 0) OptionsFocus = OptionsFocus < 0 ? 0 : ((OptionsFocus + Math.Sign(direction)) % all + all) % all;
+            return;
+        }
         var count = Window == AreaMenuWindow.PickCharacter || QuitPending ? 0 : Shown.Count;
         if (count == 0 || direction == 0) return;
         Focus = Focus < 0 ? 0 : ((Focus + Math.Sign(direction)) % count + count) % count;
     }
 
-    /// <summary>Confirm (controller): the focused button, or in the browser the start with the browsed hero.</summary>
-    public AreaMenuCommand Confirm() => QuitPending ? Answer(true) : Window == AreaMenuWindow.PickCharacter ? Start() : Activate(Focus);
+    /// <summary>Confirm (controller): the focused button, or in the browser the start with the browsed hero; in the options window a
+    /// focused control's next value.</summary>
+    public AreaMenuCommand Confirm()
+    {
+        if (QuitPending) return Answer(true);
+        if (Window == AreaMenuWindow.PickCharacter) return Start();
+        if (Window != AreaMenuWindow.Options) return Activate(Focus);
+        var controls = Controls.Count;
+        return OptionsFocus < 0 ? AreaMenuCommand.Nothing : OptionsFocus < controls ? Change(OptionsFocus, 1) : Activate(OptionsFocus - controls);
+    }
 
     /// <summary>The browser's previous or next hero, cycling through all of them.</summary>
     public void Browse(int direction)
@@ -318,6 +395,8 @@ public sealed class AreaMainMenu
         Window = target;
         // The original's browser starts at its first hero (index 1).
         if (target == AreaMenuWindow.PickCharacter) Hero = 0;
+        // The original's options window opens at its Game page (OP4).
+        if (target == AreaMenuWindow.Options) { Page = AreaOptionsPage.Game; OptionsFocus = Controls.Count > 0 ? 0 : -1; }
         Focus = Shown.Count > 0 ? 0 : -1;
     }
 }

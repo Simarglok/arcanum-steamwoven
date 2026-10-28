@@ -88,7 +88,9 @@ public partial class TerrainViewerApp
 
     /// <summary>The gait a step starts with: a hero out of fatigue walks (the source's step cost), and a concealed hero runs only
     /// as a master of prowling (ARC-SKILLS-008).</summary>
-    private MovementGait StepGait() => _worldGait == MovementGait.Run && (HeroFatigue() is <= 0 || !StealthAllowsRun()) ? MovementGait.Walk : _worldGait;
+    // ARC-WORLD-087: from encumbrance level 4 the hero walks too (ledger WE9).
+    private MovementGait StepGait() => _worldGait == MovementGait.Run && (HeroFatigue() is <= 0 || !StealthAllowsRun() || _areaSession?.QueryHeroCarry() is { CanRun: false })
+        ? MovementGait.Walk : _worldGait;
 
     private int? HeroFatigue() => _areaSession?.QueryHeroLife()?.Status.Fatigue;
 

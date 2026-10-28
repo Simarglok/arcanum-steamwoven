@@ -66,7 +66,7 @@ object's own tile; after ten failures the object's own tile (PG1, PG2). Next to 
 critter (another script's create next to the PC or an NPC) the walk stops on the first tile with no PC or NPC (PG2), as the PC's side or
 an NPC.
 
-The item is a placed item of source `created` (snapshot schema 47): a new `made:n` entity numbered with the made items, the
+The item is a placed item of source `created` (snapshot schema 48): a new `made:n` entity numbered with the made items, the
 prototype's kind, weight facts and complexity, on the shown map at that cell. It needs no hero, schedules no decay (the creation never
 reaches the decay's scheduler, ledger ID9), and the viewer draws it from its prototype's art and picks it up like any placed item:
 picked up it joins the hero's made items (the hero's budget must have room). Created items have their own budget
