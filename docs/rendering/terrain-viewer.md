@@ -897,7 +897,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   A held item released on *Drop* (or a *Drop on the ground* button) lies on the hero's tile through the session's `DropHeroItem`
   ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
   events and the placement into a junk pile or loose with its decay; a stack of more than one unit is refused ("the quantity window is
-  NOT READY", IW7). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
+  NOT READY", IW7). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032; the grid takes the release only after a right press on it, where the original takes any right release over the window), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
   the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
   map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0

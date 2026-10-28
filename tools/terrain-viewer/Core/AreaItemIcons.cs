@@ -56,7 +56,8 @@ public sealed class AreaItemIcons : IDisposable
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) { detail = $"not read (content stack {opened.Status})"; return null; }
         detail = "content stack open";
-        return new(opened.Stack!);
+        try { return new(opened.Stack!); }
+        catch { opened.Stack!.Dispose(); throw; }
     }
 
     /// <summary>The icon of an item of <paramref name="kind"/>: from <paramref name="rowFields"/> (its object row's, when a map holds it),

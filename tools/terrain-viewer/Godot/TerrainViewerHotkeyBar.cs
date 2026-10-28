@@ -21,6 +21,8 @@ public partial class TerrainViewerApp
     private IReadOnlyDictionary<int, ImageTexture[]> _hotkeyBarArt = new Dictionary<int, ImageTexture[]>();
     private AreaItemIcons? _hotkeyItemIcons;
     private readonly Dictionary<string, (ImageTexture[]? Icon, string Detail)> _hotkeyItemIconCache = new(StringComparer.Ordinal);
+    // The session the cache was filled for: kit:n and made:n name other items in another session (a load, a new game).
+    private GameSessionOwner? _hotkeyItemIconSession;
     private (HotkeyDragSourceKind Kind, int Entry, HotkeyEntry? Payload)? _hotkeyDrag;
     private (GameSessionOwner Session, GameSessionVersion Version, bool Dragging, bool Names)? _hotkeyBarShown;
     private int _hotkeyBarClicksForSelfTest;
@@ -115,6 +117,7 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session || _hotkeyItemIcons is not { } icons || HeroItemKind(session, item) is not { } kind)
             return (null, "no item icons");
+        if (!ReferenceEquals(_hotkeyItemIconSession, session)) { _hotkeyItemIconCache.Clear(); _hotkeyItemIconSession = session; }
         var identified = session.QueryItemIdentified(item);
         var key = item + (identified ? "|identified" : "");
         if (_hotkeyItemIconCache.TryGetValue(key, out var known)) return known;
