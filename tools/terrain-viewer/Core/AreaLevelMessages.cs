@@ -11,14 +11,15 @@ public enum AreaLevelTextsStatus { Ready, ModuleOutsideGameRoot, MountFailed, St
 /// <summary>
 /// The texts a level-up message reads (ARC-UI-046), from the player's installation at run time: <c>mes\intgame.mes</c> (title
 /// 21, level 11, points 12), <c>mes\level.mes</c> (scheme texts 1–4, pool names 5 and 6), and the purchase names of
-/// <c>mes\stat.mes</c>, <c>mes\skill.mes</c>, <c>mes\tech.mes</c> and <c>mes\spell.mes</c>. A file that is missing or does
+/// <c>mes\stat.mes</c>, <c>mes\skill.mes</c>, <c>mes\tech.mes</c> and <c>mes\spell.mes</c>, and (ARC-WORLD-087) the encumbrance
+/// messages of <c>mes\critter.mes</c> (lines 11..17). A file that is missing or does
 /// not parse is left out (its lines fall back to the project's labels); <see cref="Missing"/> names them.
 /// </summary>
 public sealed class AreaLevelTexts
 {
     public const string InterfacePath = "mes/intgame.mes", LevelPath = "mes/level.mes", StatPath = "mes/stat.mes", SkillPath = "mes/skill.mes",
-        TechPath = "mes/tech.mes", SpellPath = "mes/spell.mes";
-    private static readonly string[] Paths = [InterfacePath, LevelPath, StatPath, SkillPath, TechPath, SpellPath];
+        TechPath = "mes/tech.mes", SpellPath = "mes/spell.mes", CritterPath = "mes/critter.mes";
+    private static readonly string[] Paths = [InterfacePath, LevelPath, StatPath, SkillPath, TechPath, SpellPath, CritterPath];
     private readonly IReadOnlyDictionary<string, MesFile> _files;
 
     private AreaLevelTexts(IReadOnlyDictionary<string, MesFile> files) => _files = files;
@@ -40,7 +41,7 @@ public sealed class AreaLevelTexts
         return decoded.Status == MesDecodeStatus.Decoded ? decoded.Text : null;
     }
 
-    /// <summary>Loads the six files through the module's game folder (the rule of the description tables,
+    /// <summary>Loads the seven files through the module's game folder (the rule of the description tables,
     /// <see cref="AreaContentRoot.Discover"/>), each from the base sources of the game-start phase.</summary>
     public static (AreaLevelTextsStatus Status, AreaLevelTexts Texts, string Detail) Load(string modulePath)
     {
@@ -82,6 +83,20 @@ public static class AreaLevelMessages
     public const int TitleMessage = 21, LevelMessage = 11, PointsMessage = 12;
     public const int CompletedMessage = 1, SchemeMessage = 2, NothingMessage = 3, NoRuleMessage = 4, HitPointsMessage = 5, FatigueMessage = 6;
     public const int MaxLoggedNames = 10, FirstTechSkillName = 12, FirstDegreeName = 8, SpellsPerCollege = 5;
+
+    /// <summary>The first <c>mes\critter.mes</c> line of the encumbrance messages (line 11 + level, ARC-WORLD-087).</summary>
+    public const int EncumbranceMessage = Arcanum.Simulation.Items.CarryRules.MessageLine;
+
+    /// <summary>
+    /// ARC-WORLD-087: the message of a change of the hero's encumbrance level (the recalculation 0x45F820, ledger WE5): line
+    /// <c>11 + level</c> of <c>mes\critter.mes</c>, which the original shows to the local PC as a one-line message; the project's label
+    /// when the text is missing.
+    /// </summary>
+    public static AreaMessageEntry Encumbrance(int level, AreaLevelTexts texts)
+    {
+        ArgumentNullException.ThrowIfNull(texts);
+        return new(texts.Text(AreaLevelTexts.CritterPath, EncumbranceMessage + level) ?? $"Encumbrance level {level}", "", "");
+    }
 
     public static AreaMessageEntry Compose(SessionLevelUp levelUp, AreaLevelTexts texts)
     {

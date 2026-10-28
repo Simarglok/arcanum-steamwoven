@@ -85,7 +85,7 @@ public sealed partial class GameSessionOwner
             var pile = _inventory.JunkPileOf(entity.Code);
             Delete(entity.Code);
             if (pile is not null && _inventory.JunkPile(pile.Entity) is { } left) DissolveJunkPile(left);
-            _revision++;
+            Revise();
         }
         _passDecays?.Add(new(firing.Event, map, entity.Code, step) { Postponed = postponed });
         return GameEventHandlerOutcome.Completed;

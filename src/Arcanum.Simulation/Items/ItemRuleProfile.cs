@@ -28,11 +28,20 @@ public sealed record ItemRuleProfile
     /// </summary>
     public bool ContainerStackLookupFails { get; init; }
 
+    /// <summary>
+    /// Ledger WEA1 (WE7): units of gold or ammunition that merge into a stack the critter holds enter no list, so the encumbrance level is
+    /// not recalculated (the insertion 0x466640 returns before 0x45F820, and the unit move 0x4658E0 grows a held stack without it): the
+    /// level's effects and fatigue timer lag the weight until the next recalculation, as the retail executable does. Steamwoven recalculates
+    /// when a held stack grows in place (owner decision 2026-10-28, ARC-WORLD-087).
+    /// </summary>
+    public bool EncumbranceLagsOnStackMerge { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ItemRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true };
+    public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true,
+        EncumbranceLagsOnStackMerge = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ItemRuleProfile> All { get; } = new[] { Steamwoven, Original };

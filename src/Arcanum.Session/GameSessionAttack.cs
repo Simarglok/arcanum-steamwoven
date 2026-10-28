@@ -567,13 +567,13 @@ public sealed partial class GameSessionOwner
         if (resolution.Fate != FateUse.None && pending is null)
         {
             ClearUsedAttackFate(resolution.Fate);
-            _revision++;
+            Revise();
         }
         // ARC-SKILLS-008 (ST4): the attack event on an NPC the hero leads ends the concealment of the hero and of the followers in
         // its follower list (a waiting one keeps its own), in the same revision as the fate's or one of its own.
         var concealmentEnded = pending is null && resolution.Refusal == AttackRefusal.None && target.Target.Entity is { } victim
             && EndConcealmentForAttackOn(SessionCombatant.Critter(victim));
-        if (concealmentEnded && resolution.Fate == FateUse.None) _revision++;
+        if (concealmentEnded && resolution.Fate == FateUse.None) Revise();
         var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;
         if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).

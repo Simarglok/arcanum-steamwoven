@@ -255,7 +255,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectCombat(GameSessionFailure.RevisionExhausted);
         _combat.Round = null;
         _combat.Stall = default;
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, [], Version);
     }
 
@@ -386,7 +386,7 @@ public sealed partial class GameSessionOwner
         var actor = round.Actor;
         round.Participants = [.. TurnBasedRules.Order([.. round.Participants, combatant], InPcParty)];
         round.Current = round.Participants.IndexOf(actor);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, [], Version);
     }
 
@@ -443,7 +443,7 @@ public sealed partial class GameSessionOwner
         }
         _combat.Round = plan.Round;
         _combat.Stall = plan.Stall;
-        if (changed && !revisionTaken) _revision++;
+        if (changed && !revisionTaken) Revise();
         var disposition = changed || revisionTaken || plan.AdvancesClock ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange;
         return new(disposition, GameSessionFailure.None, plan.Events.ToArray(), Version);
     }

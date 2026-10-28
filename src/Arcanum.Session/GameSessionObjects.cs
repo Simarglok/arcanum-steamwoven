@@ -369,7 +369,7 @@ public sealed partial class GameSessionOwner
         if (resolution.Fate != FateUse.None && pending is null)
         {
             ClearUsedAttackFate(resolution.Fate);
-            _revision++;
+            Revise();
         }
         var changed = resolution.Fate != FateUse.None && pending is null;
         var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;

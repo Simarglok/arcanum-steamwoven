@@ -49,7 +49,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectBook(GameSessionFailure.RevisionExhausted);
         hero.Apply(AdvancementDomain.WithSheet(hero.State, AdvancementDomain.HeroSheet(hero.State) with { MasteredCollege = college },
             hero.State.Experience));
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change.Status, change.Book, Version);
     }
 
@@ -72,7 +72,7 @@ public sealed partial class GameSessionOwner
             return RejectBook(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectBook(GameSessionFailure.RevisionExhausted);
         _advancement.Npcs[record.Entity] = record with { Sheet = record.Sheet with { MasteredCollege = college } };
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, change.Status, change.Book, Version);
     }
 

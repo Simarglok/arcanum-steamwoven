@@ -134,6 +134,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
         { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
+        owner.MarkEncumbranceOfNewHero();
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -222,6 +223,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty };
+        owner.MarkEncumbranceOfRestore();
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -1451,7 +1453,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
 
@@ -1520,7 +1522,7 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
         }
         else _inventory.Return(placed);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, verdict, new(_identity, _revision));
     }
 
@@ -1558,7 +1560,7 @@ public sealed partial class GameSessionOwner : IDisposable
             SettleDrop(entity, placed.Map, cell);
             ScheduleDecay(entity, placed.Map);
         }
-        _revision++;
+        Revise();
     }
 
     /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, on every map, in placing order.</summary>
@@ -1661,7 +1663,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
         runs?.Commit();
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
@@ -1932,7 +1934,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
         if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }
 
@@ -2043,6 +2045,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 if (heroState is null || !pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs ||
                     pending.Values[1] is < 1 or > SessionEffectLimits.MaxDurationMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
                     EffectDomain.IsInnate(heroState, (int)pending.Values[2])) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
+            if (pending.Kind == SessionEventKinds.HeroEncumbrance)
+            {
+                // The hero's encumbrance timer (ARC-WORLD-087): set no later than the saved clock, one of the drain intervals before its
+                // deadline (the registry keeps one). The level it found is read when it fires.
+                if (heroState is null || !pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    !Enumerable.Range(0, CarryRules.Levels).Any(level => CarryRules.DrainIntervalMs(level) == pending.DeadlineMs - pending.Values[0]))
+                    return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
                 continue;
             }
@@ -2172,7 +2184,7 @@ public sealed partial class GameSessionOwner : IDisposable
 
     private GameSessionMutationResult Changed()
     {
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
     }
 

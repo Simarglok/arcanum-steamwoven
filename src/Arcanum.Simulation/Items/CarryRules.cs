@@ -119,6 +119,13 @@ public static class CarryRules
     /// <summary>The threshold of a level: the load from which the next level starts (<c>percent × carry weight / 100</c>).</summary>
     public static int Threshold(int level, int carryWeight) => unchecked(Thresholds[CheckLevel(level)] * carryWeight) / 100;
 
+    /// <summary>The first level at which a critter no longer runs: the animation's run decisions read the level and run only below it
+    /// (0x42B940 and five more, ledger WE9; the locomotion research's "load below 60 %").</summary>
+    public const int NoRunLevel = 4;
+
+    /// <summary>Whether a critter at a level may run (WE9): only below <see cref="NoRunLevel"/>. Its fatigue is a separate test.</summary>
+    public static bool CanRun(int level) => CheckLevel(level) < NoRunLevel;
+
     /// <summary>How many entries of <see cref="EffectNumber"/> a level holds (0x45F820, WE5): one a level, eight at the heaviest.</summary>
     public static int EffectEntries(int level) => CheckLevel(level) == HeaviestLevel ? HeaviestLevel + 2 : level;
 
@@ -127,7 +134,7 @@ public static class CarryRules
     public static int? DrainIntervalMs(int level) => DrainIntervals[CheckLevel(level)] is > 0 and var ms ? ms : null;
 
     /// <summary>
-    /// The fatigue one encumbrance tick drains (the fatigue timer's mode 1, 0x45E610, WE7): nothing below 5 current fatigue; otherwise
+    /// The fatigue one encumbrance tick drains (the fatigue timer's mode 1, 0x45E610, WE8): nothing below 5 current fatigue; otherwise
     /// <paramref name="steps"/> (the timer's <c>max(1, elapsed s / 80)</c>, <see cref="Combat.LifeRules.FatigueRecoverySteps"/>), or 1
     /// when that would leave less than 5.
     /// </summary>

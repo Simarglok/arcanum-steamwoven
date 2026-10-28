@@ -254,7 +254,7 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-079: the hero's entry allows its followers to attack (0x4B42B2); an NPC's exit unlocks its target (0x4B411C).
         if (combatant.IsHero && entering) AllowFollowersOnCombatModeEntry();
         else if (!combatant.IsHero && !entering) UnlockOnCombatModeExit(combatant.Entity!);
-        _revision++;
+        Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, SessionCombatModeRefusal.None, entering, Version) { Round = round };
     }
 
