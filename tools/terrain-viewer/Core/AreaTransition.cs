@@ -183,7 +183,9 @@ public sealed class AreaTransitionCoordinator
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
         AreaHeroLoad? hero = null, ReputationCatalog? reputations = null)
     {
-        if (hero is not null && (hero.Status != AreaHeroStatus.Ready || hero.Definition is null || hero.Flag is null))
+        // ARC-UI-030: only the new character starts without a main-menu flag.
+        if (hero is not null && (hero.Status != AreaHeroStatus.Ready || hero.Definition is null
+            || hero.Flag is null && hero.Hero.BasicPrototype != AreaStartingHero.GenericPrototype))
             throw new ArgumentException("AREA_HERO_NOT_READY", nameof(hero));
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);

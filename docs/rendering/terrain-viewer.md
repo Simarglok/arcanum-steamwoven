@@ -1442,9 +1442,10 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
 
 - **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
-  (Pick Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013).
-  The original's MultiPlayer, Credits, View Intro and New Character are hidden, as Steamwoven does not have them yet
-  (network play, credits, movies, the character editor); each window names its hidden buttons and why. A button opens its
+  (Pick Character, New Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013),
+  New Character the [new-character window](#new-character-window-arc-ui-030) (ARC-UI-030).
+  The original's MultiPlayer, Credits and View Intro are hidden, as Steamwoven does not have them yet
+  (network play, credits, movies); each window names its hidden buttons and why. A button opens its
   window over the current one; Cancel and Escape go back; Escape on the main window does nothing (as at the
   original's first opening; when the original's menu opens again later, Escape there exits the game).
 - **Texts and keys.** The labels and hotkey letters are the game's `mes\MainMenu.mes` (the first character of the
@@ -1485,8 +1486,8 @@ when closed unused, ending the menu on a load), a controller's Exit. Native smok
 the start map: `ARC_AREA_MAP_SMOKE_ONLY=menu` with `--main-menu true` prints `ARC-UI-011 native-smoke main menu PASS`
 (the game's texts, Last Save with no save, the real first hero read and started at the map list's start
 (92958, 82592) with its prototype, gold and flag, then F7 and Last Save loading it); the `menu` stage runs only when
-named, as the open menu blocks the other stages. Not done: the character editor,
-credits, movies and network play, the original menu art and button sounds; the scene flow is
+named, as the open menu blocks the other stages. Not done: the character editor (the new-character window is
+[ARC-UI-030](#new-character-window-arc-ui-030)), credits, movies and network play, the original menu art and button sounds; the scene flow is
 [ARC-UI-012](#scene-flow-arc-ui-012).
 
 ### Scene flow (ARC-UI-012)
@@ -1630,6 +1631,44 @@ step reaching the session, the default combat mode going through the hero's turn
 Steamwoven on the session, the O key closing the menu). Not done: Brightness, Text Duration, Combat Taunts, Module,
 Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
 button sounds.
+
+### New-character window (ARC-UI-030)
+
+N10b, slice 1 (FR-CHAR-001, FR-CHAR-003, FR-CHAR-005): the original's window 12, which New Character opens from the New Game
+window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-arc-ui-030)); the art and layout are the project's.
+
+- **The character.** Opening the window makes the new character from the generic PC prototype 16066 (human, male, background 0,
+  level 1 with every primary stat 8 and 5 points unspent), read once a run as the pre-made heroes are
+  (`AreaStartingHero.NewCharacter`, which also reads the background table, ARC-DATA-044); a start that does not read keeps
+  the New Game window with the reason. Leaving the window (Cancel or Escape) drops the character; the next opening makes a new one.
+- **Rows.** Gender, Race and Background, each with the original's previous and next arrows. The race arrows step through the
+  eight player races and wrap; a woman steps only through human, elf, half-elf and half-orc (NW2, NW5). Both gender arrows
+  toggle the gender where the race allows a woman (NW4). A race or gender change clears the background (BD10); under the
+  Original rule setting a gender press on a race without women clears it too and changes nothing else (NW4, the setting of
+  the launcher and options window, read at each press). The background arrows step through the blocks the race and gender
+  may take and wrap (BD4), and each press sets the landed block with its description number and effect. The background
+  row shows the description's name and the text below it, the game's `mes\gameback.mes`; before any background press (or after
+  a clear) the window shows the default text 1000 and the character keeps background 0 without its effect, as in the
+  original. Race and gender names are the project's.
+- **Accept** starts a new game as that character, as Start does for a pre-made hero (the same session recipe and scene
+  flow): the session's hero is the generic prototype with the chosen race and gender, whose race effect (64 + race) and
+  female effect (330) are its innate effects (NW3), then the chosen background is set with its effect (cause 1,
+  [ARC-WORLD-097](../world/equipment-runtime.md#setting-and-clearing-the-background-arc-world-097)); no main-menu flag is
+  set. The new character's tables (effect rules, no kit) are adopted, and the scene's arguments name it, so a map
+  transfer reads the generic start again; a load that makes a fresh session instead of carrying it (the palette's reload, an
+  exterior scene load without a carried session) starts the generic human man with background 0, as it starts a pre-made hero
+  afresh.
+- **Keys.** The window's buttons are art only in the original: no letters. Escape and Cancel go back. A controller moves
+  over the rows, Accept and Cancel, and its confirm presses a row's next arrow or the button.
+
+Not built yet (later N10b slices): the name field and its check (NW6, FR-CHAR-002), the portrait arrows and the PC's
+portrait in the session (FR-CHAR-004), the character editor in creation mode that Accept opens in the original (point
+buying, FR-CHAR-015, FR-CHAR-020), and the opening shop with the background's money and items and the clothes
+(FR-CHAR-007); the body type and art by race and gender are N15. So the new character starts with no gold, no items and
+its 5 points unspent. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
+back and an Accept that starts a dwarf with a background and its effect); native smoke on the original data: the `menu` stage
+(`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
+accepts and checks the session (`ARC-UI-030 native-smoke new character PASS`).
 
 ### Interface bars (ARC-UI-018)
 

@@ -1,6 +1,7 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Reputation;
 using Arcanum.TerrainViewer.Core;
@@ -20,11 +21,14 @@ namespace Arcanum.TerrainViewer;
 // the start scene loads again from the launch arguments (the start map, a fresh session without a hero, no --sector) and the main
 // menu opens over it, its root Escape now exiting the game (MM6). A new game picked on another scene (another map, the cave, a
 // --sector start, a session a transfer or load brought) loads the start scene the same way and starts there. Saves are not touched.
+// ARC-UI-030 (N10b): "New Character" makes the new character from the generic prototype (read as the pre-made heroes are) and opens
+// its window: the gender, race and background buttons change it under the rule setting (NW4), Accept starts a new game as it the
+// same way a pre-made hero starts (its race and gender in the session's hero, its background set with its effect, no main-menu flag).
 public partial class TerrainViewerApp
 {
     /// <summary>ARC-UI-012: what the start scene does once it is published: open the main menu again, or start a new game as a hero.</summary>
     private enum SceneFlowKind { Menu, NewGame }
-    private sealed record SceneFlowRequest(SceneFlowKind Kind, int Hero, string? Map);
+    private sealed record SceneFlowRequest(SceneFlowKind Kind, int Hero, string? Map, AreaNewCharacter? Creation = null);
     /// <summary>What a new game needs to make its session as this scene's launch made it.</summary>
     private sealed record NewGameRecipe(ProfileBinding Clock, Guid Module, AreaStepCell Spawn, int RuntimeMap, ReputationCatalog? Reputations);
 
@@ -34,6 +38,7 @@ public partial class TerrainViewerApp
     private bool _mainMenuShown;
     private string? _mainMenuStatus;
     private readonly Dictionary<int, AreaHeroLoad> _mainMenuHeroes = [];
+    private AreaHeroLoad? _mainMenuNewCharacter;
     private Func<AreaPremadeHero, AreaHeroLoad>? _heroLoaderForSelfTest;
     private Action? _mainMenuExitForSelfTest;
     /// <summary>The pre-made hero whose tables the menu adopted last (null: none).</summary>
@@ -88,6 +93,8 @@ public partial class TerrainViewerApp
             _mainMenuPanel.AnswerRequested += yes => MainMenuCommand(() => _mainMenu!.Answer(yes));
             _mainMenuPanel.OptionChangeRequested += (index, direction) => MainMenuCommand(() => _mainMenu!.Change(index, direction));
             _mainMenuPanel.SoundRequested += id => PlayBarSound(id, "menu button");
+            _mainMenuPanel.CreationPressed += button => MainMenuCommand(() => { _mainMenu!.PressCreation(button, CreationRules()); return AreaMenuCommand.Nothing; });
+            _mainMenuPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
         }
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
@@ -133,14 +140,14 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-012: loads the start scene (the shown game ends with its scene; saves are not touched) and then runs
     /// <paramref name="kind"/> on it. Null when the load started, else why nothing changed.</summary>
-    private string? BeginSceneFlow(SceneFlowKind kind, int hero, string reason)
+    private string? BeginSceneFlow(SceneFlowKind kind, int hero, string reason, AreaNewCharacter? creation = null)
     {
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return "a reset or reload is in progress";
         if (_mapHandoff is { Kind: not MapHandoffKind.Stream }) return "another map is loading";
         // ARC-UI-026: a quit and a death (or two deaths) never load the start scene twice at once.
         if (_sceneFlow is not null) return "the start scene is loading";
         if (StartSceneArguments(out var why) is not { } next) return why;
-        _sceneFlow = new(kind, hero, next.AreaMapName);
+        _sceneFlow = new(kind, hero, next.AreaMapName, creation);
         GD.Print("ARC-UI-012 scene flow " + System.Text.Json.JsonSerializer.Serialize(new {
             Kind = kind.ToString(), Hero = hero, From = _readyMapName ?? (InCave ? "cave" : "exterior"), To = next.AreaMapName ?? "exterior", Reason = reason }));
         EndMainMenu(reason);
@@ -183,10 +190,10 @@ public partial class TerrainViewerApp
         if (flow.Kind == SceneFlowKind.NewGame)
         {
             // The start scene is the one a new game starts on; it never loads the start scene again.
-            refused = StartNewGame(flow.Hero, sceneFlow: false);
+            refused = StartNewGame(flow.Hero, sceneFlow: false, flow.Creation);
             if (refused is null)
             {
-                _mainMenuStatus = "new game as " + AreaStartingHero.Premade[flow.Hero].Name + " on the start scene";
+                _mainMenuStatus = "new game as " + (flow.Creation is { } creation ? CreationName(creation) : AreaStartingHero.Premade[flow.Hero].Name) + " on the start scene";
                 RefreshReadyStatus();
                 return;
             }
@@ -202,7 +209,24 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is null || _mainMenuPanel is null) return;
         BindOptionsWindow();
+        _mainMenu.Rules = CreationRules();
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero) : "");
+    }
+
+    /// <summary>ARC-UI-030: the character-creation rules of the rule setting the launcher and options window hold (NW4).</summary>
+    private CharacterCreationRuleProfile CreationRules() => GameRules.For(_ruleMode).Creation;
+
+    /// <summary>ARC-UI-030: the new character's name in the status lines (no player name yet: its race and gender).</summary>
+    private static string CreationName(AreaNewCharacter creation) => $"a new {creation.Race} {creation.Gender} character";
+
+    /// <summary>ARC-UI-030: the new character's start (the generic prototype), read once a run as the pre-made heroes are.</summary>
+    private AreaHeroLoad MainMenuNewCharacter()
+    {
+        if (_mainMenuNewCharacter is { } cached) return cached;
+        var generic = AreaStartingHero.NewCharacter;
+        var load = _heroLoaderForSelfTest?.Invoke(generic) ?? AreaStartingHero.Load(_arguments!.ModulePath, generic);
+        GD.Print($"ARC-UI-030 new character start status={load.Status} detail={load.Detail} backgrounds={load.Backgrounds?.Count.ToString() ?? load.BackgroundsDetail}");
+        return _mainMenuNewCharacter = load;
     }
 
     /// <summary>The browsed hero as the browser shows it (no original text: the project's name and the loaded start).</summary>
@@ -255,6 +279,19 @@ public partial class TerrainViewerApp
                 else if (_mainMenu is not null) { EndMainMenu("new game as " + AreaStartingHero.Premade[command.Hero].Name); return; }
                 else return; // the start scene loads first (ARC-UI-012)
                 break;
+            case AreaMenuCommandKind.OpenNewCharacter:
+                // ARC-UI-030: the original makes the PC when the window opens (0x5446F0); a start that does not read keeps window 11.
+                var generic = MainMenuNewCharacter();
+                if (generic.Status != AreaHeroStatus.Ready) { _mainMenu.Notice = $"the new character cannot be made ({generic.Status} {generic.Detail})"; break; }
+                _mainMenu.OpenNewCharacter(new AreaNewCharacter(generic));
+                GD.Print("ARC-UI-030 new character window open");
+                break;
+            case AreaMenuCommandKind.StartNewCharacter:
+                var made = _mainMenu.Creation!;
+                if (StartNewGame(-1, creation: made) is { } madeRefused) _mainMenu.Notice = madeRefused;
+                else if (_mainMenu is not null) { EndMainMenu("new game as " + CreationName(made)); return; }
+                else return; // the start scene loads first (ARC-UI-012)
+                break;
             case AreaMenuCommandKind.SaveGame:
                 // ARC-UI-012: the save window opens over the waiting in-play menu once the game is drawn without it (the preview).
                 _mainMenuPanel!.CloseView(); QuarantineWorld();
@@ -286,14 +323,19 @@ public partial class TerrainViewerApp
     /// start cell and reputations) with that hero, adopted as a load adopts its session. Null on success, else why nothing changed.</summary>
     /// <param name="sceneFlow">ARC-UI-012: on another scene than the start scene, load the start scene and start there (null is
     /// returned once that load began); false refuses instead.</param>
-    private string? StartNewGame(int index, bool sceneFlow = true)
+    /// <param name="creation">ARC-UI-030: start as this new character instead (<paramref name="index"/> is then ignored).</param>
+    private string? StartNewGame(int index, bool sceneFlow = true, AreaNewCharacter? creation = null)
     {
-        var hero = MainMenuHero(index);
+        AreaHeroLoad hero;
+        if (creation is null) hero = MainMenuHero(index);
+        else if (creation.Hero(out var why) is { } made) hero = made;
+        else return "new game refused: the new character cannot be made (" + why + ")";
         if (hero.Status != AreaHeroStatus.Ready) return $"new game refused: the hero cannot be read ({hero.Status} {hero.Detail})";
+        var name = creation is null ? hero.Hero.Name : CreationName(creation);
         if (StartSceneRefusal() is { } elsewhere)
         {
             if (!sceneFlow) return "new game refused: " + elsewhere;
-            return BeginSceneFlow(SceneFlowKind.NewGame, index, $"new game as {hero.Hero.Name}: {elsewhere}, the start scene loads first") is { } flowRefused
+            return BeginSceneFlow(SceneFlowKind.NewGame, index, $"new game as {name}: {elsewhere}, the start scene loads first", creation) is { } flowRefused
                 ? $"new game refused: {elsewhere} and the start scene cannot load ({flowRefused})" : null;
         }
         if (_newGameRecipe is not { } recipe) return "new game refused: no recipe";
@@ -301,6 +343,12 @@ public partial class TerrainViewerApp
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) return "new game refused: " + Describe(busy);
         var created = AreaTransitionCoordinator.CreateSession(recipe.Clock, Guid.NewGuid(), recipe.Module, recipe.Spawn, recipe.RuntimeMap, hero, recipe.Reputations);
         if (created.Owner is not { } owner) return $"new game refused: the session was not created ({created.Failure})";
+        // ARC-UI-030: the background the window set, with its effect, as the original's background buttons set it on the PC.
+        if (creation?.Apply(owner, hero.Effects ?? (_ => null)) is { } backgroundRefused)
+        {
+            owner.Dispose();
+            return "new game refused: " + backgroundRefused;
+        }
         // As a load: the maps' inventory seeds and the dialog host move to the new session before anything changes.
         if (_inventoryHost?.Attach(owner) is { } attached && attached != GameSessionFailure.None)
         {
@@ -316,9 +364,11 @@ public partial class TerrainViewerApp
         }
         AdoptHeroTables(hero);
         AdoptLoadedSession(owner, AreaRuntimes(), talk, "new game");
-        SetQuickStatus("new game as " + hero.Hero.Name);
+        SetQuickStatus("new game as " + name);
         GD.Print("ARC-UI-011 new game " + System.Text.Json.JsonSerializer.Serialize(new {
-            hero.Hero.Name, hero.Definition!.Prototype, hero.Flag, Map = recipe.RuntimeMap, Cell = recipe.Spawn, Revision = owner.Version.Revision }));
+            Name = name, hero.Definition!.Prototype, hero.Flag, Race = hero.Definition.Race.ToString(), Gender = hero.Definition.Gender.ToString(),
+            Background = owner.QueryHeroBackground(), Description = owner.QueryHeroBackgroundDescription(), Map = recipe.RuntimeMap, Cell = recipe.Spawn,
+            Revision = owner.Version.Revision }));
         return null;
     }
 
@@ -349,6 +399,9 @@ public partial class TerrainViewerApp
     private AreaHeroLoad? LoadedMenuHero(GameSessionOwner loaded)
     {
         if (loaded.QueryHero() is not { } hero) return null;
+        // ARC-UI-030: a new character's session takes the generic start's tables (its race and gender are the session's own).
+        if (hero.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset)
+            return MainMenuNewCharacter() is { Status: AreaHeroStatus.Ready } generic ? generic : null;
         for (var i = 0; i < AreaStartingHero.Premade.Count; i++)
             if (AreaStartingHero.Premade[i].BasicPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset == hero.Prototype)
                 return MainMenuHero(i) is { Status: AreaHeroStatus.Ready } ready ? ready : null;
@@ -519,6 +572,45 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-011 native-smoke main menu PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Texts = texts.Detail, Map = _readyMapName, Hero = first.Hero.Name, definition.Prototype, Flag = first.Flag, definition.Gold,
                 LastSave = "auto-save", Revision = _areaSession!.Version.Revision }));
+
+            // ARC-UI-030: New Character on the real generic start and background table: a dwarf's refused gender press keeps the
+            // background (Steamwoven, the automated run's setting), an elf woman takes a background, and Accept starts her.
+            OpenMainMenu(texts);
+            Choose(10); Choose(50); Choose(421);
+            Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter, "New Character opened its window: " + _mainMenu.Notice);
+            var creation = _mainMenu.Creation!;
+            Require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Human && creation.Gender == Arcanum.Simulation.Character.CharacterGender.Male
+                && creation.Background == 0 && creation.Chosen is null && creation.Generic.Backgrounds is not null && creation.BackgroundText() is not null,
+                "the generic human man with the real background table: " + creation.Generic.BackgroundsDetail);
+            void Press(AreaNewCharacterButton button) => _mainMenuPanel!.CreationPressForSelfTest(button);
+            Press(AreaNewCharacterButton.RaceNext); Press(AreaNewCharacterButton.BackgroundNext);
+            var dwarfBackground = creation.Chosen;
+            Press(AreaNewCharacterButton.GenderNext);
+            Require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf && creation.Gender == Arcanum.Simulation.Character.CharacterGender.Male
+                && dwarfBackground is not null && creation.Chosen == (CreationRules().RefusedGenderClearsBackground ? null : dwarfBackground),
+                $"the dwarf's gender press under {CreationRules().Name}: {creation.Chosen}");
+            Press(AreaNewCharacterButton.RaceNext); Press(AreaNewCharacterButton.GenderNext);
+            Require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Elf && creation.Gender == Arcanum.Simulation.Character.CharacterGender.Female
+                && creation.Chosen is null, "an elf woman, background cleared");
+            Press(AreaNewCharacterButton.BackgroundNext);
+            var chosen = creation.Chosen ?? throw new InvalidOperationException("ARC-UI-030 new character smoke: no background landed");
+            var beforeAccept = _areaSession;
+            _mainMenuPanel!.AcceptForSelfTest();
+            var made = _areaSession!.QueryHero();
+            Require(!MainMenuOpen && !ReferenceEquals(beforeAccept, _areaSession) && made is { Race: Arcanum.Simulation.Character.CharacterRace.Elf,
+                Gender: Arcanum.Simulation.Character.CharacterGender.Female, Level: 1, UnspentPoints: 5 }
+                && made.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset
+                && _areaSession.QueryHeroBackground() == chosen.Background && _areaSession.QueryHeroBackgroundDescription() == chosen.Description
+                && _areaSession.QueryHeroEffects()!.Effects.Count(e => e.Cause == Arcanum.Simulation.Character.EffectCause.Background) == 1
+                && _areaSession.QueryGold() == 0, $"Accept started the elf woman: {_quickSaveStatus} {made?.Race} {made?.Gender} bg {_areaSession.QueryHeroBackground()}");
+            for (var i = 0; i < 3; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+            GD.Print("ARC-UI-030 native-smoke new character PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Backgrounds = creation.Generic.Backgrounds!.Count, DwarfBackground = dwarfBackground!.Background, Rules = CreationRules().Name,
+                chosen.Background, chosen.Description, chosen.Effect, made!.Prototype, Revision = _areaSession.Version.Revision }));
         }
         finally
         {
