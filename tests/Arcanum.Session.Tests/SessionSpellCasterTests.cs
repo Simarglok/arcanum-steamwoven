@@ -508,7 +508,8 @@ public sealed class SessionSpellCasterTests
     [TestMethod]
     public void Mg43_a_dropped_queued_cast_is_freed_unpaid_in_both_modes()
     {
-        foreach (var (mode, kept) in new[] { (RuleMode.Original, false), (RuleMode.Steamwoven, false) })
+        // A technical bug (the run leaks its slot): fixed in both modes, no switch (owner decision 2026-10-28).
+        foreach (var mode in new[] { RuleMode.Original, RuleMode.Steamwoven })
         {
             var record = SelfBolt();
             var (owner, caster) = Session(mode, record);
@@ -516,8 +517,8 @@ public sealed class SessionSpellCasterTests
             var before = Hero(owner).Fatigue;
             var run = Cast(caster, record);
             Assert.AreEqual(SpellCastQueueOutcome.Queued, caster.Queue(run, 0));
-            Assert.AreEqual(!kept, caster.DropQueued(run) is not null, $"{mode}");
-            Assert.AreEqual((kept, before), (owner.QuerySpellRuns()[run] is not null, Hero(owner).Fatigue), $"{mode}: unpaid");
+            Assert.IsNotNull(caster.DropQueued(run), $"{mode}");
+            Assert.AreEqual(((SpellRun?)null, before), (owner.QuerySpellRuns()[run], Hero(owner).Fatigue), $"{mode}: freed unpaid");
         }
         // A run whose BEGIN ran is no queued cast: nothing is freed.
         var begun = SelfBolt(duration: 30);
