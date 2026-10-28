@@ -803,6 +803,8 @@ public partial class TerrainViewerApp
                 area.Plan.Commands.Where(c => c.Identity is not null).GroupBy(c => c.Identity!.Value).ToDictionary(g => g.Key, g => g.First()),
                 area.Snapshot.Visuals.ToDictionary(v => v.Key));
             _fallenBodies = []; _fallenStamp = null;
+            // ARC-WORLD-111: the move ARTs drawn into the old overlay go with it.
+            ResetBodyMoves();
         }
         return overlay.Frames;
     }

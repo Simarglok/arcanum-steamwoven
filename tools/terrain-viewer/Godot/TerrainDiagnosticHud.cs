@@ -17,6 +17,8 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     private ScrollContainer? _scroll;
     private TerrainViewerMode _mode;
     private Button? _settings;
+    private Label? _failure;
+    private string? _failureText;
     public event Action? SettingsRequested;
     public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea; }
 
@@ -57,7 +59,8 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 
     public override void _Ready()
     {
-        _panel = new PanelContainer { Name = "TerrainDiagnosticPanel", MouseFilter = Control.MouseFilterEnum.Stop };
+        // ARC-DEV-052: the panel starts hidden; the debug mode or an automated run shows it (ShowPanel).
+        _panel = new PanelContainer { Name = "TerrainDiagnosticPanel", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
         _panel.SetAnchorsPreset(Control.LayoutPreset.TopWide);
         _panel.OffsetLeft = 16;
         _panel.OffsetTop = 16;
@@ -82,11 +85,21 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         _detail = new Label { Name = "DiagnosticDetail", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _detail.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         _scroll.AddChild(_detail);
+        _failure = new Label { Name = "DiagnosticFailure", AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore };
+        // Without the panel's backing the line keeps an outline, readable over any map.
+        _failure.AddThemeConstantOverride("outline_size", 4);
+        _failure.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _failure.SetAnchorsPreset(Control.LayoutPreset.TopWide);
+        _failure.OffsetLeft = 16;
+        _failure.OffsetRight = -16;
+        AddChild(_failure);
         GetViewport().SizeChanged += ResizeForViewport;
         ResizeForViewport();
     }
 
-    internal void SetDiagnosticText(string detail, bool automatedTestMode)
+    /// <param name="failure">ARC-DEV-052: the detail is a load or start failure, kept on screen while the panel is hidden.</param>
+    internal void SetDiagnosticText(string detail, bool automatedTestMode, bool failure = false)
     {
         var mode = _mode switch { TerrainViewerMode.CrashSiteArea => "crash-site-area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
             TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
@@ -96,6 +109,16 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         _stickyBase = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";
         ComposeSticky();
         if (_detail is not null) _detail.Text = detail;
+        _failureText = failure ? detail : null;
+        ComposeFailure();
+    }
+
+    // ARC-DEV-052: the failure line stands alone at the top of the window while the panel is hidden.
+    private void ComposeFailure()
+    {
+        if (_failure is null) return;
+        _failure.Text = _failureText ?? string.Empty;
+        _failure.Visible = _failureText is not null && !PanelShown;
     }
 
     // ARC-INPUT-003: a short notice (the last reserved key) shown in the sticky header, above the scrolled detail, so it
@@ -120,6 +143,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     {
         if (_panel is null || _panel.OffsetLeft == 16 + inset) return;
         _panel.OffsetLeft = 16 + inset;
+        if (_failure is not null) _failure.OffsetLeft = 16 + inset;
     }
 
     private void ResizeForViewport()
@@ -129,17 +153,33 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         var boundedHeight = Math.Min(Math.Max(1, viewportHeight - 32), Mathf.Clamp(viewportHeight * 0.35f, 110f, 360f));
         _panel.OffsetTop = 16 + _topInset;
         _panel.OffsetBottom = 16 + _topInset + boundedHeight;
+        if (_failure is not null) _failure.OffsetTop = 16 + _topInset;
     }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizeForViewport;
 
-    /// <summary>ARC-DEV-050: the panel is shown (it starts shown in every run; <see cref="TogglePanel"/> hides it).</summary>
-    internal bool PanelShown => _panel?.Visible != false;
+    /// <summary>ARC-DEV-050: the panel is shown (ARC-DEV-052: it starts hidden; <see cref="ShowPanel"/> and
+    /// <see cref="TogglePanel"/> show it).</summary>
+    internal bool PanelShown => _panel?.Visible == true;
+
+    /// <summary>ARC-DEV-052: the failure line is on screen (a failure detail while the panel is hidden).</summary>
+    internal bool FailureLineShown => _failure?.Visible == true;
+    internal string FailureLineText => _failure?.Text ?? string.Empty;
+
+    /// <summary>ARC-DEV-052: shows the panel (the debug mode, an automated run), as the chord would.</summary>
+    internal void ShowPanel(string source)
+    {
+        if (_panel is null || _panel.Visible) return;
+        _panel.Visible = true;
+        ComposeFailure();
+        GD.Print($"ARC-DEV-052 diagnostic panel shown=True source={source}");
+    }
 
     /// <summary>ARC-DEV-050: hides or shows the panel for this run, its text kept up to date while hidden.</summary>
     internal void TogglePanel()
     {
         if (_panel is null) return;
         _panel.Visible = !_panel.Visible;
+        ComposeFailure();
         GD.Print($"ARC-DEV-050 diagnostic panel shown={_panel.Visible}");
     }
 

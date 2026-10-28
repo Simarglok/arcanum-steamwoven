@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
             }
             StepAssessmentTiming[] Permits() => events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!).ToArray();
             bool Gait(StepAssessmentTiming permit, MovementGait gait) => permit.Provenance.Contains(GaitTiming.Provenance(gait))
-                && permit.Duration == GaitTiming.HumanFixed.For(gait, permit.Key.Direction);
+                && permit.Duration == _worldActor.AreaGaitTiming!.For(gait, permit.Key.Direction);
             double Seconds(IEnumerable<StepAssessmentTiming> permits) => permits.Sum(p => DiagnosticGridActor.Seconds(p.Duration!.Value.Value));
             RouteFollower Route() => _worldRoute ?? throw new InvalidOperationException("ARC-WORLD-020 gait smoke: no route");
             MovementState State() => _worldActor.Session!.State;
@@ -67,7 +67,8 @@ public partial class TerrainViewerApp
             var ran = Drive(far);
             var runPermits = Permits(); events.Clear();
             Require(runPermits.Length > 0 && runPermits.All(p => Gait(p, MovementGait.Run)), "every route step ran at the run time");
-            Require(ran.RunDrawn && ran.RunSelector == 0x20000180, $"the run ART was drawn while running: selector {ran.RunSelector:x}");
+            // ARC-UI-039: the hero's own body's run ART.
+            Require(ran.RunDrawn && (uint)ran.RunSelector == _worldActor.Profile.Run!.Selector, $"the run ART was drawn while running: selector {ran.RunSelector:x}");
             Require(_worldActor.State.Action == ActorDiagnosticAction.Idle, "settled idle");
 
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);

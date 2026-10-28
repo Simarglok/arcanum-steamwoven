@@ -54,6 +54,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-027 native-smoke hero PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             hero.Hero.Name, definition.Prototype, Flag = flag, definition.Gold, Kit = definition.Kit.Count, hero.DroppedChanges,
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
+        RunHeroBodySmoke(state!);
         RunAreaSheetSmoke(hero);
         RunAreaRepairSmoke();
         RunAreaProwlSmoke();

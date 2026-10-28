@@ -76,8 +76,8 @@ keyboards have no Num Lock key; the palette option works everywhere.
   `HumanFixedRun`) now has 150 keys, 1,259,440 RGBA bytes (195 keys, 1,705,144 bytes with the ARC-COMBAT-005 attack). The anchor moves linearly
   across the step and the cell commits at its half, not at the vault's action frame
   (research W4); the next step resumes the gait; two vaults in a row each play from the
-  first frame. A follower's window step takes the vault time too, but Virgil is drawn
-  with his T0 frame, and whether his (unique-NPC) ART may jump at all (research W2) is
+  first frame. A follower's window step takes the vault time too and is drawn with his walk
+  cycle (ARC-WORLD-111; his vault ART is not read), and whether his (unique-NPC) ART may jump at all (research W2) is
   NOT VERIFIED: his session reuses the PC's walker context.
 - Where to see it: map mode ([ARC-RENDER-017](../rendering/area-map-mode.md)), for
   example `./arcanum map "fal'kins maze"` or `"vendigroth underground"`: the two complete
@@ -94,6 +94,10 @@ Fatigue and encumbrance are not modelled, so running is never refused (L5) and c
 nothing; turn-based AP and the combat-mode fatigue counter (L9) wait for the combat
 round. No stealth walk, no Speed from the session hero (the profile is fixed at Speed
 8), no Shift-click flag. Parity NOT_VERIFIED.
+
+Since ARC-UI-039 the timing is the hero's body's ([hero body](../rendering/actor-visual-contract.md#hero-body-arc-ui-039)):
+its walk and run strides, and 4 more frames per second for a dwarf or halfling body (ledger HB2, 0x437990 asks the art id's body).
+The walk and run animations play at that gait rate (`GaitTiming.ArtRate`), which equals the human ART's own rate at Speed 8.
 
 ## Checks
 

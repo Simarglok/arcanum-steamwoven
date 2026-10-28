@@ -127,14 +127,15 @@ public partial class TerrainViewerApp
         }
     }
 
-    // A nearest 4× pack of every character and object frame of the loaded maps and the actor, in a
-    // temporary directory; returns its frame source (the caller disposes it and deletes the root).
-    private static HdFrameSource NearestPackSource(string root, IEnumerable<AreaLoadResult> areas, TerrainLoadResult result)
+    // A nearest 4× pack of every character and object frame of the loaded maps and the actor (ARC-UI-039: with the hero bodies
+    // read this run), in a temporary directory; returns its frame source (the caller disposes it and deletes the root).
+    private HdFrameSource NearestPackSource(string root, IEnumerable<AreaLoadResult> areas, TerrainLoadResult result)
     {
         var frames = areas.SelectMany(area => area.Plan.Commands.Where(command => command.Identity is not null && command.ArtClass != 1).Select(command => command.Frame).Distinct()
                 .Select(key => new HdNearestPack.Frame(HdFrameQueries.FromArea(key, area.Frames[key]), area.Frames[key].Rgba)))
             .GroupBy(frame => frame.Query).Select(group => group.First())
-            .Concat(result.ActorTextures.Values.Where(texture => texture.HdQuery is not null).Select(texture => new HdNearestPack.Frame(texture.HdQuery!, texture.Rgba)))
+            .Concat(result.ActorTextures.Values.Concat(_heroBodies.Values.SelectMany(body => body.Textures.Values)).DistinctBy(texture => texture.Key)
+                .Where(texture => texture.HdQuery is not null).Select(texture => new HdNearestPack.Frame(texture.HdQuery!, texture.Rgba)))
             .ToArray();
         var open = HdPack.Open(HdNearestPack.Write(System.IO.Path.Combine(root, "pack"), "ui006-nearest-4x", 4, frames));
         if (open.Status != HdPackOpenStatus.Opened) throw new InvalidOperationException("ARC-UI-006 pack " + open.Status);

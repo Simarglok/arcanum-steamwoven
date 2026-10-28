@@ -69,6 +69,8 @@ public partial class TerrainViewerApp
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             var frames = 0; var drawnMoved = false; var swing = false;
+            // ARC-WORLD-111: its steps are drawn with its own walk or run cycle.
+            var stepFrames = new HashSet<AreaFrameKey>(); var steppingFrames = 0;
             // Automated runs drive the clock themselves: a frame is 50 host milliseconds, as the world frame (the game clock runs 8x).
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
@@ -78,6 +80,11 @@ public partial class TerrainViewerApp
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 drawnMoved |= host.Movers.Of(entity) is { } mover && AreaMovingCommands()?.Any(c => c.Identity == target.Row.Key && c.MapX == mover.Cell.X && c.MapY == mover.Cell.Y) == true;
+                if (host.Movers.Of(entity)?.Stepping(WorldMilliseconds()) == true && AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key) is { } stepping)
+                {
+                    steppingFrames++;
+                    if (stepping.Frame.Policy == AreaBodyMoveArt.Policy) stepFrames.Add(stepping.Frame);
+                }
                 swing |= host.RunOf(entity)?.Top.Goal == AiGoalType.AttemptAttack;
             }
             var trace = host.TraceOf(entity);
@@ -88,6 +95,8 @@ public partial class TerrainViewerApp
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
             Require(drawnMoved, "its body was drawn on the cells it walked");
+            Require(stepFrames.Count >= 3, $"its steps were drawn with its move cycle: {stepFrames.Count} distinct frames over {steppingFrames} stepping frames; "
+                + string.Join(", ", _bodyMoves.Values.Select(m => $"{m.Status} {m.Detail}")));
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
             // ARC-WORLD-099: its attack run ends done, and in combat mode outside a round it starts its fidget (0x4B4320).
             var fidgets = _aiFidgets;
@@ -141,7 +150,7 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

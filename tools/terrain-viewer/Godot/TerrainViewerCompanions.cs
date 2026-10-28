@@ -14,8 +14,9 @@ namespace Arcanum.TerrainViewer;
 // block each other where they stand; a companion's T0 record no longer blocks its serialized cell. The group is
 // rebuilt from the session whenever the PC's session is (spawn, reset, reload, transfer, quick load); a companion's
 // cell is written to the session when the PC leaves the map and on F7, like the PC's. The body is the NPC's T0 frame
-// moved with the actor. ARC-WORLD-017: a following companion goes with the PC through the cave entrance and exit and is
-// drawn, lit, picked and talked to where it stands there; on the exterior its T0 body is not in the world while it is away.
+// moved with the actor, drawn with its walk or run cycle and facing since ARC-WORLD-111 (TerrainViewerBodyMoves.cs).
+// ARC-WORLD-017: a following companion goes with the PC through the cave entrance and exit and is drawn, lit, picked and
+// talked to where it stands there; on the exterior its T0 body is not in the world while it is away.
 public partial class TerrainViewerApp
 {
     private AreaCompanionGroup? _areaCompanions;
@@ -37,7 +38,9 @@ public partial class TerrainViewerApp
         // ARC-WORLD-049: a dead NPC is a corpse where it lies, never a moving companion.
         var templates = _readyMapName is null ? _companionTemplates
             : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
-        _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
+        _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time,
+            // ARC-UI-039: the companions keep the human timing, not the hero body's.
+            grid.Timing is null ? null : GaitTiming.HumanFixed);
         // ARC-WORLD-065: the companions step over what the session destroyed or switched off, as the PC does.
         _areaCompanions.Removed = AreaRemovedObjects;
         // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.
@@ -194,9 +197,9 @@ public partial class TerrainViewerApp
         if (waits.Count > 0 && _areaSession is { } session) _areaCompanions?.Refresh(session);
     }
 
-    /// <summary>The companions' bodies as they stand now, for the shown plan only.</summary>
+    /// <summary>The companions' bodies as they stand now, for the shown plan only, with their gait and facing (ARC-WORLD-111).</summary>
     private IReadOnlyList<AreaDrawCommand>? AreaCompanionCommands() =>
-        _areaCompanions is { } group && _readyArea is { } area && group.Map.RuntimeMap == area.Snapshot.RuntimeMap ? group.Commands() : null;
+        _areaCompanions is { } group && _readyArea is { } area && group.Map.RuntimeMap == area.Snapshot.RuntimeMap ? AnimateCompanions(group, group.Commands()) : null;
 
     /// <summary>ARC-WORLD-017: whether a dialog NPC is in the shown map's world: a companion standing here, or (on the
     /// exterior, the speakers' map) any other speaker that is not a companion away on another map.</summary>
@@ -337,6 +340,44 @@ public partial class TerrainViewerApp
             Require(_areaSession.QueryMapChange(new(1), AreaCompanionPlacement.Key(companion.Entity)) is { } value
                 && AreaCompanionPlacement.Decode(value)?.World == new CellCoord((int)world.X, (int)world.Y), "the session holds his cell");
             Require(host.Nearest(map.Chart.ToWorld(pc).X, map.Chart.ToWorld(pc).Y, SpeakerCell) == speaker, "within talk reach where he stands");
+
+            // ARC-WORLD-111: the PC 10 cells farther from his T0 cell (later stages need him away from it); on 50 ms frames (a whole-second frame ends each of his steps on a cell
+            // centre) his run and walk after the PC are drawn with his own move cycle, never his T0 frame slid along. A pause is a
+            // frame he stands before arriving.
+            var walkFrames = new HashSet<AreaFrameKey>(); var walkingFrames = 0; var t0Frames = 0; var pauses = 0;
+            var back = AreaSmokeStandable(map, origin with { X = origin.X + 22 }, 3);
+            _areaSmokeTime = 0; _worldTestTime = SimulationTime.At(0);
+            ConfigureAreaActor(map, back, NeighborDirection.XPlus);
+            companion = _areaCompanions!.Companions.Single();
+            var pcBack = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+            Require(FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pcBack) > FollowDistanceRules.Range + 2, "the PC stands away from him again");
+            var fine = 0;
+            for (var i = 1; i <= 2000 && (walkingFrames == 0 || companion.Grid.State.Phase != MovementPhase.Settled
+                || FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pcBack) > FollowDistanceRules.Range); i++)
+            {
+                fine = i;
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(i, 20));
+                if (companion.Grid.State.Action == MovementAction.Idle)
+                {
+                    if (walkingFrames > 0 && FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pcBack) > FollowDistanceRules.Range) pauses++;
+                    continue;
+                }
+                if (AreaCompanionCommands()?.FirstOrDefault(c => c.Identity == companion.Key) is not { } walking) continue;
+                walkingFrames++;
+                if (walking.Frame.Policy == AreaBodyMoveArt.Policy) walkFrames.Add(walking.Frame); else t0Frames++;
+            }
+            _areaSmokeTime = fine / 20 + 1;
+            Require(walkingFrames > 0 && t0Frames == 0 && walkFrames.Count >= 3,
+                $"his walk is drawn with his move cycle: {walkFrames.Count} distinct frames over {walkingFrames} walking frames, {t0Frames} with his T0 frame, {pauses} pauses; "
+                + string.Join(", ", _bodyMoves.Values.Select(m => $"{m.Status} {m.Detail}")));
+            var stood = AreaCompanionCommands()?.FirstOrDefault(c => c.Identity == companion.Key);
+            // Turned, he stands on frame 0 of his stand ART; facing as at T0, on his T0 frame.
+            Require(stood is not null && (stood.Frame.Policy != AreaBodyMoveArt.Policy || stood.Frame.Frame == 0),
+                $"he stands when he arrives: {stood?.Frame.Policy} frame {stood?.Frame.Frame}");
+            GD.Print("ARC-WORLD-111 native-smoke follower walk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Script = speaker.ScriptId, WalkingFrames = walkingFrames, DistinctFrames = walkFrames.Count, Pauses = pauses,
+                Stood = stood!.Frame.Policy == AreaBodyMoveArt.Policy ? "stand ART" : "T0 frame",
+                Moves = _bodyMoves.Values.Select(m => m.Detail).ToArray(), Parity = "NOT_VERIFIED" }));
 
             // ARC-WORLD-046: F4 (spread out) through the keyboard path sets his spread flag and steps him away from the PC; F3 (stay
             // close) clears it, and from beyond 4 cells he closes to 2 again. Then the portrait menu's wait makes him wait (his wait
@@ -546,7 +587,7 @@ public partial class TerrainViewerApp
         for (var x = 0; x < (int)size.X; x += 2)
         {
             var point = new Vector2(x + .5f, y + .5f);
-            if (!hud.HasPoint(point) && AreaAlphaAt(command, _readyArea!.Frames, transform, x, y) != 0 && AreaObjectAtScreen(point) == command.Identity) return point;
+            if (!hud.HasPoint(point) && AreaAlphaAt(command, AreaFrames(), transform, x, y) != 0 && AreaObjectAtScreen(point) == command.Identity) return point;
         }
         return null;
     }

@@ -61,7 +61,8 @@ public partial class TerrainViewerApp : Node
         AddChild(_hud);
         _hud.SetDiagnosticText("Editor diagnostic order | loading", automatedTestMode: false);
 
-        if (SelfTestBootstrap) return;
+        // ARC-DEV-052: automated runs read and measure the panel, so it is shown for them.
+        if (SelfTestBootstrap) { _hud.ShowPanel("self-test"); return; }
 
         var args = OS.GetCmdlineUserArgs().ToList();
         // The process hosting --self-test is automated too: its frame loop drives the frame-bound
@@ -71,6 +72,7 @@ public partial class TerrainViewerApp : Node
         if (_automatedHost || args.Contains("--native-smoke", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal))
         {
             ViewerAutomatedStorage.MarkAutomated();
+            _hud.ShowPanel("automated run");
             // ARC-DEV-045: an automated run keeps drawing while its window cannot draw (minimized).
             if (DisplayServer.GetName() != "headless") AddChild(new HiddenWindowDrawKeeper());
         }
@@ -100,7 +102,7 @@ public partial class TerrainViewerApp : Node
         {
             // Parsing has no resolved mode.  Keep the safe Arguments stage
             // explicit rather than emitting an ambiguous bare usage string.
-            ShowStatus("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+            ShowFailure("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
         }
     }
 
@@ -953,7 +955,7 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
-            try { TickAreaClock(); TickLightAnimation(delta); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(delta); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(delta); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1101,10 +1103,12 @@ public partial class TerrainViewerApp : Node
     private void ShowFailureStatus(TerrainViewerMode mode, TerrainViewerError error)
     {
         var progress = error.SafeProgress;
-        ShowStatus($"Diagnostic mode {ModeName(mode)} | failure stage={error.Stage} code={error.Code} | terrain {progress.TerrainResolved}/{progress.TerrainTiles}/{progress.TerrainFacades} | static census {progress.StaticCensus}/admitted {progress.StaticAdmitted}/outside-scope {progress.StaticOutsideScope}");
+        ShowFailure($"Diagnostic mode {ModeName(mode)} | failure stage={error.Stage} code={error.Code} | terrain {progress.TerrainResolved}/{progress.TerrainTiles}/{progress.TerrainFacades} | static census {progress.StaticCensus}/admitted {progress.StaticAdmitted}/outside-scope {progress.StaticOutsideScope}");
     }
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);
+    // ARC-DEV-052: a failure stays on screen as a line of its own while the panel is hidden.
+    private void ShowFailure(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
     public override void _ExitTree()
     {
         if (_exiting) return;

@@ -51,11 +51,14 @@ public partial class TerrainViewerApp
         await HdIdentitySmokeAsync("WORLD", statics.Concat(actor).ToArray(), views, () => _canvas!.WorldHdStats, $"statics={statics.Length} actor={actor.Length}");
     }
 
-    private static HdNearestPack.Frame[] ActorHdFrames(TerrainLoadResult result)
+    // ARC-UI-039: the hero bodies read this run are drawn actor frames too.
+    private HdNearestPack.Frame[] ActorHdFrames(TerrainLoadResult result)
     {
-        var frames = result.ActorTextures.Values.Where(texture => texture.HdQuery is not null)
+        var textures = result.ActorTextures.Values.Concat(_heroBodies.Values.SelectMany(body => body.Textures.Values))
+            .DistinctBy(texture => texture.Key).ToArray();
+        var frames = textures.Where(texture => texture.HdQuery is not null)
             .Select(texture => new HdNearestPack.Frame(texture.HdQuery!, texture.Rgba)).ToArray();
-        if (frames.Length != result.ActorTextures.Count) throw new InvalidOperationException("HD_SMOKE_ACTOR_IDENTITY");
+        if (frames.Length != textures.Length) throw new InvalidOperationException("HD_SMOKE_ACTOR_IDENTITY");
         return frames;
     }
 

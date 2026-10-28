@@ -157,6 +157,34 @@ For later HD work preserve this same world anchor and separately defined world
 footprint. Do not move the world position to compensate for a replacement
 image's dimensions. This task adds documentation only, no HD assets or system.
 
+## Hero body (ARC-UI-039)
+
+The AREA hero is no longer always the fixed human woman. `HeroBody.For(race, gender, armor = 0, palette = 0)`
+(`tools/terrain-viewer/Core/HeroBodyArt.cs`) gives the body and gender bits of the PC's art id from the race table (ledger
+[HB1](../research/ledger/character.md#hero-body-arc-ui-039)): `EFM` elf man, `GHM` halfling and gnome men, `DFM` dwarf man,
+`HGM` half-ogre man, `HMM` human, half-elf and half-orc men, `HMF` every woman (an elf woman takes the human body, rule N1).
+The `armor` part (art id bits 20..23, 0 underwear) names the armour code of the file and `palette` (bits 4..5) the ART palette
+decoded; the viewer passes 0 for both (a creatable PC's base art) until the worn body armour's use art sets them (ARC-WORLD-112).
+
+`HeroBodyArt.Load` reads the body's five ARTs (stand, walk, run, vault, unarmed attack: the `HumanFixedArea` selectors with the
+body, armour and palette bits) by name from the actor archive (resource 1), checks 8 groups and the palette, takes frames, rate and action frame from
+each header and the walk and run strides from the frame offsets of groups 1 and 2 (L7), and decodes the frames the facing table
+reaches (195 keys for every creatable body; caps `MaxKeys` 512 and 16 MiB RGBA). The profile has id `HeroBody` and no metadata
+commitment: the archive identity is authenticated by the map load. The opt-in test reads the human woman by name and gets the
+pinned `HumanFixedArea` back (ordinals, selectors, frames, rates, strides and its 1,705,144 RGBA bytes).
+
+The map load still publishes `HumanFixedArea`. Each frame the viewer compares the session hero's body with the drawn one; on a
+change (new game, loaded save, a map publication that brought the fixed human back) it loads the body once a run, uploads its
+textures and swaps the actor's profile, its plan and its gait timing (`DiagnosticGridActor.UseProfile`); a map publication swaps
+before its first frame. Companions and NPC movers keep the human timing. Without a hero, or for a race outside the creation table,
+the fixed human is drawn. A body that does not read or swap is drawn as the fixed human with the human timing, logs
+`ARC-UI-039 hero body=… FAILED reason` and is not retried that run. The HUD's gait line names the drawn body. The first sighting of a
+body reads the archive on the frame (about 0.05 s per body on the owner's Mac); the archive is the same file the map load
+authenticated, read again after that check.
+
+Not implemented: the worn armour, shield and weapon art (ARC-WORLD-112 and later), NPC walk animations, the PC's
+Speed (the timing stays at Speed 8).
+
 ## Support matrix
 
 | Condition | Result |

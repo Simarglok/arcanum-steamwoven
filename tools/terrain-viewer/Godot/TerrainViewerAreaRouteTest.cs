@@ -183,7 +183,7 @@ public partial class TerrainViewerApp
         _alwaysRunOption = false; _numLockRun = false;
         StepAssessmentTiming[] Permits() => events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!).ToArray();
         bool Gait(StepAssessmentTiming permit, MovementGait gait) => permit.Provenance.Contains(GaitTiming.Provenance(gait))
-            && permit.Duration == GaitTiming.HumanFixed.For(gait, permit.Key.Direction);
+            && permit.Duration == _worldActor.AreaGaitTiming!.For(gait, permit.Key.Direction);
         // macOS reports Ctrl+left as a right press with Ctrl held; both are Ctrl+LMB.
         void CtrlClick(CellCoord cell, bool macRight = false)
         {

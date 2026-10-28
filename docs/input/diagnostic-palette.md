@@ -24,10 +24,18 @@ The standalone (non-WORLD) viewer modes and the Gamepad Lab keyboard scaffolding
 (`GodotInputAdapter` with `WorldRoute = false`) keep their historical lab keys; they
 are not an original-controls gate.
 
-## Hiding the diagnostic panel (ARC-DEV-050)
+## Showing and hiding the diagnostic panel (ARC-DEV-050, ARC-DEV-052)
 
-**Ctrl+Shift+F10** hides the diagnostic HUD panel (the text panel at the top of the window, with the palette button) and
-shows it again, in every mode and window, with or without the debug mode. It is per run: every start shows the panel. The
+The diagnostic HUD panel (the text panel at the top of the window: the mode and DIAGNOSTIC lines, the status detail, the
+reserved-key notice and the palette button) starts **hidden** unless the run is in the debug mode (`--debug-mode` or the
+launcher's Debug mode box) or automated (`--self-test`, `--native-smoke`, `--world-settings-test`, and the self-test's own
+bootstrapped apps), which show it from the start (ARC-DEV-052). While it is hidden, a start or load failure (the
+`failure stage=… code=…` status) stays on screen as a separate line at the top of the window; a later status clears it,
+and showing the panel hides the line, as the panel holds the same text. Ctrl+Shift+F9 opens the palette whether the panel is
+shown or not.
+
+**Ctrl+Shift+F10** shows the panel and hides it again, in every mode and window, with or without the debug mode. It is
+per run: every start begins hidden or shown again as above. The
 HUD consumes the chord's press (and its release while Ctrl and Shift are still held) before the world's key routing, so F10
 alone stays the original's reserved interface key; a later bare F10 release does nothing, as reserved keys act on a press. The panel's text keeps updating while it is hidden.
 

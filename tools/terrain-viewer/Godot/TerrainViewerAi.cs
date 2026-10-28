@@ -78,7 +78,8 @@ public partial class TerrainViewerApp
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             Parameters = _companionData?.Data?.Table ?? (_arguments is { } arguments ? MapCompanionData(arguments.ModulePath)?.Table : null),
-            Timing = grid.Timing,
+            // ARC-UI-039: NPCs keep the human timing, not the hero body's.
+            Timing = grid.Timing is null ? null : GaitTiming.HumanFixed,
             HeroIdle = HeroIdleForRound,
             // ARC-WORLD-102: the spell answers and the casts go through the map's cast host; its eye candy times an NPC's casting goal.
             Spells = SpellCasterNow,
@@ -185,7 +186,8 @@ public partial class TerrainViewerApp
                     break;
             }
         }
-        if (redraw || host.Movers.All.Any(m => m.Progress(now) < 1)) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
+        // ARC-WORLD-111: a stepping NPC's cycle advances every frame, and its stand pose is drawn once its step ends.
+        if (AiMoversAnimating(host, now) | redraw) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
     }
 
     // An NPC's hit: the status line, a stun's end, a killed NPC's fall, the bodies and the inventory.
@@ -259,12 +261,13 @@ public partial class TerrainViewerApp
         _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(entity, out var row)
             ? $"NPC {row.PrototypeNumber}" : entity;
 
-    /// <summary>The moved NPCs' bodies: a fallen body where it stands, else its T0 body.</summary>
+    /// <summary>The moved NPCs' bodies: a fallen body where it stands, else its T0 body with the frame of its step and facing
+    /// (ARC-WORLD-111).</summary>
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
         var now = WorldMilliseconds();
-        return host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now);
+        return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now), now);
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>

@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
             // The first frame that draws the vault ART: optionally saved from the real viewport.
             async Task Sample()
             {
-                if (vaultDrawn || _worldActor.State.Action != ActorDiagnosticAction.Vault || _readyActorPlan?.Current.TextureKey.Selector != 0x20000340) return;
+                if (vaultDrawn || _worldActor.State.Action != ActorDiagnosticAction.Vault || _readyActorPlan?.Current.TextureKey.Selector != _worldActor.Profile.Vault!.Selector) return;
                 vaultDrawn = true;
                 if (string.IsNullOrWhiteSpace(capture)) return;
                 PublishWorldSelection();
@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
             { Frame(); await Sample(); }
             var permit = events.FirstOrDefault(e => e.Kind == MovementEventKind.StepStarted)?.Assessment;
             Require(permit is not null && permit.Key.From == jump.From && permit.Key.To == jump.To, "the stick started the window step: " + permit?.Key);
-            Require(permit!.Provenance.Contains(GaitTiming.VaultProvenance) && permit.Duration == GaitTiming.HumanFixed.Vault, "the window step is a vault: " + string.Join(",", permit.Provenance));
+            Require(permit!.Provenance.Contains(GaitTiming.VaultProvenance) && permit.Duration == _worldActor.AreaGaitTiming!.Vault, "the window step is a vault: " + string.Join(",", permit.Provenance));
             Require(vaultDrawn, "the vault ART was drawn mid-jump");
             var state = ((AreaGridSession)_worldActor.Session!).State;
             Require(state.CommittedCell == jump.To && state.Phase == MovementPhase.Settled, $"landed on the far side: {state.CommittedCell} {state.Phase}");
