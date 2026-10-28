@@ -88,6 +88,10 @@ public sealed record SessionRestockRegeneration(string Holder, SessionRestockOut
     public SessionNpcWield? Wield { get; init; }
 }
 
+/// <summary>ARC-UI-038: what a regeneration asked for directly did (<see cref="GameSessionOwner.RegenerateInventory"/>).</summary>
+public sealed record SessionRegenerateResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionRestockRegeneration? Regeneration,
+    GameSessionVersion Version);
+
 /// <summary>A restock event that came due (ARC-WORLD-094, ledger RK3): the object, its map, the rules' decision and the regenerations it
 /// made (the merchant's first, then the container's). <see cref="Postponed"/>: the session could not run it yet (no restock host, the
 /// map's seed not attached, a full deleted-item budget) and scheduled it again a minute on.</summary>
@@ -136,6 +140,48 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         return Array.AsReadOnly(_events.QueryPending(SessionEventKinds.Restock)
             .Select(e => (e.Payload.Entities[0].Code, new SessionMapId(e.Payload.Entities[0].Map), e.DeadlineMs)).ToArray());
+    }
+
+    /// <summary>
+    /// ARC-UI-038: a regeneration asked for directly (0x463E20, RK4–RK6, RK15), as the opening shop asks for its merchant's and then its
+    /// merchant's substitute container's (0x545F1D, 0x545F34, ledger OS7): none of the restock event's tests (death, a PC leader, the
+    /// screen) run. The <paramref name="holder"/> of the actor's map is cleared but for its persistent items (RK5), also when its source
+    /// (the host's <see cref="ISessionRestockWorld.RestockFacts"/>) is 0, which then ends it; otherwise it is generated from its set with
+    /// the session's labelled rolls (a container with flag 0x200 with the seeded draws of <see cref="GenerateContainerOnce"/>, and then
+    /// recorded as generated), and an NPC with a source then wields its best items (<see cref="SessionRestockRegeneration.Wield"/>). A
+    /// holder the session cannot regenerate (a set it does not admit, a transfer script, a spilled container, no seed facts from the host)
+    /// keeps its list (<see cref="SessionRestockOutcome.Unsupported"/>, no change). Refused before any effect: an invalid entity
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, a host not ready (<see cref="ISessionRestockWorld.RestockReady"/>) or no
+    /// seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), an object the seed or the host does not list as
+    /// an NPC or container of that kind (<see cref="GameSessionFailure.UnknownHolder"/>), a full record, list or generated budget
+    /// (<see cref="GameSessionFailure.BudgetExceeded"/>) and the revision. One revision. The host must not call back into the session
+    /// from its callbacks during the regeneration.
+    /// </summary>
+    public SessionRegenerateResult RegenerateInventory(GameSessionVersion expected, string holder, ISessionRestockWorld world)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(world);
+        SessionRegenerateResult Refuse(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, Version);
+        if (!SessionEventKinds.RestockHolder(holder)) return Refuse(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return Refuse(GameSessionFailure.StaleVersion);
+        var map = _actor.Map;
+        if (!world.RestockReady || !_inventory.Seeds.TryGetValue(map, out var seed)) return Refuse(GameSessionFailure.InventoryUnavailable);
+        if (!seed.Holders.TryGetValue(holder, out var row) || world.RestockFacts(map, holder) is not { } found ||
+            (found.Kind == RestockHolderKind.Npc ? SessionHolderKind.Npc : found.Kind == RestockHolderKind.Container ? SessionHolderKind.Container : (SessionHolderKind?)null) != row.Kind)
+            return Refuse(GameSessionFailure.UnknownHolder);
+        var facts = GeneratedFacts(map, holder, found);
+        var plan = PlanRestock(world, map, seed, holder, facts);
+        // A call back into the session from the host may have moved it on.
+        if (!IsCurrent(expected)) return Refuse(GameSessionFailure.StaleVersion);
+        if (plan.Outcome == SessionRestockOutcome.Unsupported)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, new(holder, plan.Outcome, 0, 0, null, [], 0, 0), Version);
+        if (!RestockFits([plan])) return Refuse(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return Refuse(GameSessionFailure.RevisionExhausted);
+        var done = Regenerate(world, map, plan);
+        // RK15: only a regeneration that read a set dresses the NPC; a source of 0 ends after the clear.
+        if (plan.Kind == SessionHolderKind.Npc && RestockRules.InventorySource(facts) != 0) done = done with { Wield = WieldNpcBest(world, map, seed, holder) };
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, done, Version);
     }
 
     // The holder's restock event replaced by a new one: after a restock.delay roll, or after the given delay (the retry). The rolled draw

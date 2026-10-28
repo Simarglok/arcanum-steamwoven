@@ -1860,10 +1860,7 @@ Accept starts the game, its Back returns to the editor.
   viewer rebuilds the kit's tables (wear, healing, lockpicks, durability, art, item spells, grid, use) from the session's own
   kit items by kit number (`AreaStartingHero.WithSessionKit`).
 
-**Not built:** the merchant. The original runs the new game on the shop map (`SHOPPING_MAP`, ShopMap) behind the menu and opens
-barter with its first NPC (OS2: the NPC forgets the PC, its inventory and its substitute container restock); Steamwoven's menu
-has no shop map behind it, so the shop is the kit alone (`AreaMainMenu.NoShopBarter` in the window's note), and the start-map
-teleport is the scene flow's (ARC-UI-012). The barter on the shop map is a later N10b slice.
+The merchant's barter on the shop map: [opening shop merchant](#opening-shop-merchant-arc-ui-038) (ARC-UI-038).
 
 Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: Return in the editor opens the shop on the dwarf's kit (120
 gold, the clothes skipped: no prototype reads in the fixture), Back returns to the editor where the strength bought before the
@@ -1871,6 +1868,52 @@ shop is taken back and bought again, Return opens the shop again and Accept star
 stage, original data): the elf woman's shop with her background's money and items and the clothes, Back, her willpower taken
 back and bought again, Return twice; `ARC-UI-036 native-smoke opening shop PASS` with the kit, the worn armour and the started
 session's gold. Checks: `AreaOpeningShopTests`, `OpeningKitRulesTests`, `EquipBestTests`, `PremadeHeroTests`.
+
+### Opening shop merchant (ARC-UI-038)
+
+N10b, slice 5 (FR-CHAR-007, FR-ITEM-014): the opening shop's barter with the shop map's merchant
+([ledger OS7–OS10](../research/ledger/character.md#opening-shop-merchant-arc-ui-038)). The original's new game runs on the map list's
+`SHOPPING_MAP` behind the menu (the PC stands at its start); each refresh of window 15 makes the kit, then the first NPC of that map
+forgets the PC, its inventory and its substitute container's regenerate, and the inventory window opens in barter mode; the start
+teleports the PC to the start map.
+
+- **The shop map** (`AreaShopMap.Load`): the map list's type (`MapList.OfType`, OS9: installed 5013 `SHOPPING_MAP`, ShopMap, runtime
+  map 14, start 31, 29) names the map, which loads in the background through the viewer's area load once a run, from the moment
+  New Character opens; its inventory map gives the seed, the rows and the merchant: the first NPC of the seed whose object flags
+  have neither destroyed nor off (OS7; installed: one NPC, price multiplier 58, no source of its own, its chest 2 tiles away with
+  source 19). A module without a shop map or a shop map without an NPC starts the game at once, as the original (OS2); a map the
+  project cannot load leaves the shop with the kit alone and the reason in the window's note (`AreaMainMenu.ShopUnavailable`); while
+  it loads the note says so (`AreaMainMenu.ShopLoading`) and Accept starts the game with the kit.
+- **The shop's session** (`AreaShopSession.Open`): when the shop opens with its map and the barter data loaded, the new character's
+  session is made as the start makes it (this scene's new-game recipe, the kit's hero, the window's choices and the editor's
+  presses) but with its actor at the shop map's start, as the original's PC stands there. On it the shop map's seed is attached, the
+  merchant forgets the PC (`ForgetReaction`, R6), its inventory regenerates (`GameSessionOwner.RegenerateInventory`, 0x463E20 asked
+  directly, OS8: a merchant without a source is only cleared, its persistent items stay) and then its substitute container's
+  (installed: 2000 coins and 59 items), and the barter opens as a conversation's does (`AreaBarter.Open`: the container's coins move
+  to the merchant, both lists are identified; then the container's restock schedule). The merchant's reaction is its effective
+  reaction with the diagnostic starting reaction 50, as the dialog host's (its name from the game's descriptions).
+- **The window**: the barter window sits at the top, above the shop's window, which moves to the bottom with a one-line summary
+  (the merchant, the map, the hero's gold) and keeps Back and Accept; the barter window has no Close (the shop's Back closes it,
+  OS1). The menu keeps the keys (Return accepts, Escape goes back) and a controller moves over Accept and Back; the wares and the
+  hero's goods take the pointer. Trades are the barter window's ([barter](#barter-window-arc-ui-050)).
+- **Accept** starts the game on the shop's session: the best weapon and body armour into empty slots (a ware bought in the shop
+  counts: its wear facts come from its shop row, or for an item the regeneration made from its prototype), then the PC is teleported
+  to the start map's tile (`AreaShopSession.Start`, OS5, OS10); the scene's seeds attach and the session is adopted as the start
+  adopts a new one. On a scene that is not the start scene the start scene loads first and the session it carries starts there.
+- **Back** drops the shop's session with its trades (the kit goes too): the next opening makes the kit, the merchant's clear and the
+  chest anew, as the original's next refresh redoes them; every point bought before the shop is still free (OS6).
+- **Not built.** The bought wares keep their facts only for the start's wield: in play a ware the regeneration made has no wear,
+  use or move facts in the viewer (as any made item, NOT READY) and one from a shop row has them only while the shop map's rows are
+  held (not after the start). The restock event the barter open schedules on the shop map postpones while that map is not loaded,
+  as for any merchant left behind. The window's drop on the map outside it, which the original skips while the menu is open
+  (0x574577), does not exist in the viewer's window.
+
+Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: the synthetic menu has no shop map, so the shop names the reason and
+is the kit alone. Native smoke (`menu` stage, original data): the elf woman's shop waits for the shop map, the barter opens with the
+merchant's coins and wares, the cheapest affordable ware is bought, Back returns to the editor with the shop's session dropped, the shop
+opens anew with the kit's gold, a ware is bought again and Return starts the game on the shop's session on the start map with the ware
+and the gold left; `ARC-UI-038 native-smoke shop merchant PASS`. Checks: `AreaShopMerchantTests` (with the opt-in
+`Original_shop_map_and_its_merchant`), `RestockStateTests`, `MapTransitionsTests`.
 
 ### Interface bars (ARC-UI-018)
 

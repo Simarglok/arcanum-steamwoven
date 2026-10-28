@@ -28,6 +28,16 @@ public partial class AreaBarterPanel : CanvasLayer
     public event Action<string>? SellRequested;
     public event Action<string>? BuyRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-038: the room the opening shop's window keeps below a docked window.</summary>
+    public const float DockReserve = 230;
+    private bool _docked;
+    /// <summary>ARC-UI-038: the opening shop's window: at the top, above the shop's Accept and Back (<see cref="DockReserve"/>), without a
+    /// Close of its own (the shop's Back closes it).</summary>
+    public bool Docked
+    {
+        get => _docked;
+        set { _docked = value; if (_close is not null) _close.Visible = !value; ResizePanel(); }
+    }
     public AreaBarterView? View { get; private set; }
     internal IReadOnlyList<Button> SellButtonsForSelfTest => _sellButtons;
     internal IReadOnlyList<Button> BuyButtonsForSelfTest => _buyButtons;
@@ -146,11 +156,12 @@ public partial class AreaBarterPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(1040, size.X - 48));
-        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260)));
+        var reserve = _docked ? DockReserve : 0;
+        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - reserve)));
         _panel.Size = new(width, 0);
-        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
+        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48 - reserve));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new((size.X - width) / 2, _docked ? 24 : Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
