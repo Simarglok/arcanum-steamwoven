@@ -164,7 +164,8 @@ The AREA hero is no longer always the fixed human woman. `HeroBody.For(race, gen
 [HB1](../research/ledger/character.md#hero-body-arc-ui-039)): `EFM` elf man, `GHM` halfling and gnome men, `DFM` dwarf man,
 `HGM` half-ogre man, `HMM` human, half-elf and half-orc men, `HMF` every woman (an elf woman takes the human body, rule N1).
 The `armor` part (art id bits 20..23, 0 underwear) names the armour code of the file and `palette` (bits 4..5) the ART palette
-decoded; the viewer passes 0 for both (a creatable PC's base art) until the worn body armour's use art sets them (ARC-WORLD-112).
+decoded; the viewer sets both from the hero's worn body armour (`HeroBody.Wearing`, its use art's subtype and palette, ledger BA1–BA6;
+[body armour art](../world/equipment-runtime.md#body-armour-art-arc-world-112)), 0 and the base art's palette (0 for a creatable PC) without one.
 
 `HeroBodyArt.Load` reads the body's five ARTs (stand, walk, run, vault, unarmed attack: the `HumanFixedArea` selectors with the
 body, armour and palette bits) by name from the actor archive (resource 1), checks 8 groups and the palette, takes frames, rate and action frame from

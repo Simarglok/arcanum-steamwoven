@@ -59,6 +59,26 @@ public sealed class HeroBodyArtTests
     }
 
     [TestMethod]
+    public void WornBodyArmourSetsTheArmourPartAndPalette()
+    {
+        // ARC-WORLD-112 (BA2): the worn item's use art (type 6) gives its subtype (bits 6..9) and its palette (bits 4..5).
+        static uint Use(int subtype, int palette = 0) => 0x60000000u | (uint)subtype << 6 | (uint)palette << 4;
+        var elf = HeroBody.For(CharacterRace.Elf, CharacterGender.Male)!.Value;
+        Assert.AreEqual(HeroBody.For(CharacterRace.Elf, CharacterGender.Male, 8, 1), elf.Wearing(Use(8, 1)), "clothes in palette 1");
+        Assert.AreEqual("art/critter/EFM/EFMCDXAa.art", elf.Wearing(Use(8))!.Value.ArtPath(0x2C800000));
+        // Plate on an elf man draws the human sexless art (N1).
+        Assert.AreEqual("HMX", elf.Wearing(Use(4))!.Value.Label);
+        // Taking it off: the underwear in the base palette, whatever was worn.
+        var dressed = HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male, 3, 2)!.Value;
+        Assert.AreEqual(HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male), dressed.Wearing(null));
+        Assert.AreEqual(HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male, 0, 1), dressed.Wearing(null, basePalette: 1));
+        // A subtype the critter art cannot hold: no body (the original refuses the item, BA6); a use art of another type gives part 0.
+        Assert.IsNull(elf.Wearing(Use(9)));
+        Assert.AreEqual(elf, elf.Wearing(0x20000840u));
+        Assert.IsNull(elf.Wearing(null, basePalette: 4));
+    }
+
+    [TestMethod]
     public void DwarfAndHalflingBodiesWalkAndRunFourFramesFaster()
     {
         Assert.AreEqual(4, HeroBody.For(CharacterRace.Dwarf, CharacterGender.Male)!.Value.GaitRateBonus);
@@ -120,6 +140,39 @@ public sealed class HeroBodyArtTests
             Assert.AreEqual(load.Profile.Idle.Selector, plan.Current.TextureKey.Selector, body.Label);
             report.Add($"{body.Label} keys={load.Textures.Count} bytes={load.RgbaBytes} " + string.Join(" ", load.Profile.Actions.Select(a =>
                 $"{a}:{load.Profile.Resource(a).FramesPerGroup}f/{load.Profile.Resource(a).RawFramesPerSecond}fps")) + $" walk={load.Profile.Walk.Stride} run={load.Profile.Run!.Stride}");
+        }
+        Console.WriteLine(string.Join("\n", report));
+    }
+
+    /// <summary>ARC-WORLD-112: every pre-made hero's worn body armour draws a body that loads from the installed art (prints the
+    /// body, armour part and palette per hero; no original text).</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void EveryPremadeHerosBodyArmourLoadsFromTheInstalledArt()
+    {
+        // Opt-in: ARC_AREA_ORIGINAL=1, ARC_AREA_RESOURCE1 (arcanum1.dat) and ARC_AREA_CONVERSATION_GAME_ROOT.
+        if (Environment.GetEnvironmentVariable("ARC_AREA_ORIGINAL") != "1") { Assert.Inconclusive("ARC_AREA_ORIGINAL=1 runs the original hero body check."); return; }
+        var path = Environment.GetEnvironmentVariable("ARC_AREA_RESOURCE1") ?? throw new AssertFailedException("ARC_AREA_RESOURCE1 is required");
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT") ?? throw new AssertFailedException("ARC_AREA_CONVERSATION_GAME_ROOT is required");
+        using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
+        var module = Path.Combine(root, "modules", "Arcanum.dat");
+        var report = new List<string>();
+        foreach (var (name, race, gender, _) in Premade)
+        {
+            var load = AreaStartingHero.Load(module, AreaStartingHero.Find(name)!);
+            Assert.AreEqual(AreaHeroStatus.Ready, load.Status, name);
+            var bare = HeroBody.For(race, gender)!.Value;
+            // The pre-made start wears the kit's best body armour (ARC-WORLD-034); the human woman's dress stays carried.
+            var armour = load.KitWear!.Where(item => item is not null && Arcanum.Simulation.Equipment.EquipmentRules.WearSlot(item.Item)
+                == Arcanum.Simulation.Equipment.EquipmentSlot.Armor).Select(item => item!).ToArray();
+            Assert.IsTrue(armour.Length > 0, $"{name}: the kit holds body armour");
+            foreach (var item in armour)
+            {
+                var worn = bare.Wearing(item.UseArt);
+                Assert.IsNotNull(worn, $"{name} {item.Kind.Prototype}: subtype has no art");
+                var body = HeroBodyArt.Load(archive, worn.Value);
+                Assert.AreEqual(195, body.Textures.Count, $"{name} {item.Kind.Prototype} {worn.Value.Label}");
+                report.Add($"{name} {item.Kind.Prototype}: {worn.Value.Label} armor={worn.Value.Armor} palette={worn.Value.Palette}");
+            }
         }
         Console.WriteLine(string.Join("\n", report));
     }

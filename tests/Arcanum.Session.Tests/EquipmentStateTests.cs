@@ -426,5 +426,9 @@ public sealed class EquipmentStateTests
         var plain = SessionEquipmentFacts.Wearable(kind, Stored(5, weapon: weapon with { Flags = CombatWeaponFlags.None }))!;
         Assert.AreEqual((false, false), (plain.IdentifiedFlag, plain.Throwable));
         Assert.IsNull(SessionEquipmentFacts.Wearable(new(SessionItemType.Food, 4600, 1, 2), Stored(9)), "food is worn nowhere");
+        // ARC-WORLD-112: the use art, which the host's body art reads.
+        var leather = Stored(7, armor: new CombatArmorFields(CombatArmorFlags.SizeMedium, 6, 0, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 0, 0, 0));
+        leather = leather with { Item = leather.Item! with { UseArtFragment = 0x600000A0 } };
+        Assert.AreEqual(0x600000A0u, SessionEquipmentFacts.Wearable(new(SessionItemType.Armor, 6100, 1, 2), leather)!.UseArt);
     }
 }

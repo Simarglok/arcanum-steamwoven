@@ -12,7 +12,7 @@ namespace Arcanum.Session;
 /// The host builds it from the item's data, for an original item with <see cref="SessionEquipmentFacts.FromCombatFields"/> or, with
 /// the facts the best-item choice reads too, <see cref="SessionEquipmentFacts.Wearable"/>. <see cref="Worth"/>,
 /// <see cref="IdentifiedFlag"/>, <see cref="Throwable"/> and <see cref="Weight"/> (the item's effective weight) are read only by
-/// <see cref="GameSessionOwner.EquipBest"/> (ARC-WORLD-034).
+/// <see cref="GameSessionOwner.EquipBest"/> (ARC-WORLD-034); <see cref="UseArt"/> only by the host's body art (ARC-WORLD-112).
 /// </summary>
 public sealed record SessionWearableItem(SessionItemKind Kind, IReadOnlyList<int> ScriptPoints, bool HasItemSpells, EquipmentItem Item)
 {
@@ -20,6 +20,9 @@ public sealed record SessionWearableItem(SessionItemKind Kind, IReadOnlyList<int
     public bool IdentifiedFlag { get; init; }
     public bool Throwable { get; init; }
     public int Weight { get; init; }
+    /// <summary>ARC-WORLD-112: the item's use art (item field 0x5F), whose armour subtype and palette a worn body armour gives the
+    /// wearer's art (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/>); 0 when not read.</summary>
+    public uint UseArt { get; init; }
 }
 
 /// <summary>One worn item: its slot, the PC's item entity (a kit item or an item taken from the world) and its saved values.</summary>
@@ -145,6 +148,7 @@ public static class SessionEquipmentFacts
             IdentifiedFlag = (stored.Flags & IdentifiedItemFlag) != 0,
             Throwable = fields.Weapon?.Flags.HasFlag(Arcanum.Data.Combat.CombatWeaponFlags.Throwable) == true,
             Weight = stored.Weight,
+            UseArt = stored.UseArtFragment,
         };
     }
 
