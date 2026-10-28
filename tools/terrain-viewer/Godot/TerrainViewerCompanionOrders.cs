@@ -96,6 +96,7 @@ public partial class TerrainViewerApp
     /// modal state changed.</summary>
     private void RefreshFollowerPortraits()
     {
+        RefreshHeroGauges();
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex);
         if (_portraitStamp == stamp) return;
         _portraitStamp = stamp;
@@ -112,8 +113,9 @@ public partial class TerrainViewerApp
             _followerPortraits.ItemChosen += FollowerMenuChosen;
         }
         var shown = group.Companions.ToDictionary(c => c.Entity, StringComparer.Ordinal);
+        // ARC-UI-020: each portrait's bars from the follower's life.
         _followerPortraits.Show(session.QueryParty().Followers.Where(f => shown.ContainsKey(f.Entity))
-            .Select(f => (f.Entity, CompanionName(shown[f.Entity]))).ToArray());
+            .Select(f => (f.Entity, CompanionName(shown[f.Entity]), CompanionLife(shown[f.Entity]))).ToArray());
     }
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)

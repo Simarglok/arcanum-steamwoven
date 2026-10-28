@@ -143,9 +143,9 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, junk, barter, menu, scene, options, plants, life)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
-                        // walk, census, barter, menu, scene, options and plants run.
+                        // walk, census, barter, menu, scene, options, plants and life run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
@@ -170,6 +170,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("scene")) await RunAreaSceneFlowSmokeAsync();
                                 // ARC-UI-013: the options window from the main menu and from play (start map, with --main-menu true).
                                 if (Stage("options")) await RunAreaOptionsSmokeAsync();
+                                // ARC-UI-020: the health and fatigue bars (with --hero, on a map with a speaker that can join).
+                                if (Stage("life")) await RunAreaLifeBarsSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
                             }

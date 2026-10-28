@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     private CanvasLayer? _hoverLayer;
     private PanelContainer? _hoverPanel;
     private Label? _hoverLabel;
+    // ARC-UI-020: the hovered critter's health and fatigue bars under its name.
+    private AreaHoverLifeBars? _hoverBars;
     private object? _hoverStamp;
     private AreaHoverAction _hoverAction;
     private AreaObjectKey? _hoverKey;
@@ -57,7 +59,10 @@ public partial class TerrainViewerApp
             ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 4, ContentMarginBottom = 4,
         });
         _hoverLabel = new Label { MouseFilter = Control.MouseFilterEnum.Ignore };
-        _hoverPanel.AddChild(_hoverLabel); _hoverLayer.AddChild(_hoverPanel); AddChild(_hoverLayer);
+        var lines = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _hoverBars = new AreaHoverLifeBars();
+        lines.AddChild(_hoverLabel); lines.AddChild(_hoverBars);
+        _hoverPanel.AddChild(lines); _hoverLayer.AddChild(_hoverPanel); AddChild(_hoverLayer);
     }
 
     /// <summary>Hides the tooltip and gives the default cursor back; the loaded names stay for the next publication.</summary>
@@ -212,6 +217,7 @@ public partial class TerrainViewerApp
             else
             {
                 _hoverLabel.Text = text;
+                _hoverBars?.Show(HoverLife(key!.Value));
                 _hoverPanel.ResetSize();
                 // Below-right of the pointer, flipped inside the viewport so the text never covers the pointed spot.
                 var size = _hoverPanel.GetCombinedMinimumSize(); var view = GetViewport().GetVisibleRect().Size;

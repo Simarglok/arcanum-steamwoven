@@ -78,7 +78,8 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`, bottom left): one button per follower in the array (in its order; none for a waiting
   one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
+  shown disabled. Since ARC-UI-020 each button has the follower's health and fatigue bars under it and turns red below 20 %
+  health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
   modifier, or a press on the ground that the world accepts closes it (that press does nothing else; a press while the world does
   not own input is ignored as any ground press is). A window resize closes it too. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
