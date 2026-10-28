@@ -1504,6 +1504,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var into = placed.Kind.Type == SessionItemType.Ammo ? HeroStackOfPrototype(placed.Kind.Prototype) : null;
         if (into is { } target && ((long)target.Units + _inventory.Ammo[placed.Entity].Units > int.MaxValue ||
             !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords)) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // ARC-WORLD-081: a created item enters the hero's list, so it needs the hero's room.
+        if (placed.Source == SessionPlacedSource.Created && _inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
         // ARC-WORLD-069: a seed item keeps its seed's complexity for the Technophobia refusal; ARC-WORLD-083: a made item the one it was
@@ -1690,7 +1692,10 @@ public sealed partial class GameSessionOwner : IDisposable
         inventory = new();
         if (saved.Gold < 0 || (saved.Gold > 0 && !hero) || (saved.Kit.Count > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
         inventory.Gold = saved.Gold;
-        if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count + saved.Placed.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        // ARC-WORLD-081: the items scripts created on the ground have a budget of their own.
+        var created = saved.Placed.Count(item => item?.Source == SessionPlacedSource.Created);
+        if (saved.Kit.Count + saved.Pc.Count + saved.Made.Count + saved.Placed.Count - created > limits.MaxPcItems || created > limits.MaxCreatedItems)
+            return GameSessionFailure.BudgetExceeded;
         // Kit items are kit:1, kit:2, … in order; a deleted one (ARC-WORLD-053) or one placed on the ground (ARC-WORLD-059) leaves
         // its number out.
         // ARC-WORLD-071: a kit item the hero gave an NPC leaves its number out too.
@@ -1779,14 +1784,15 @@ public sealed partial class GameSessionOwner : IDisposable
         var kitNumbers = saved.Kit.Count + placedKit.Count + destroyed.Count(entity => HeroDomain.KitNumber(entity) is not null);
         foreach (var item in saved.Placed)
         {
-            // Only the hero's drops place an item.
-            if (!hero) return GameSessionFailure.InvalidSnapshot;
+            // Only the hero's drops place an item; ARC-WORLD-081: a script creates an item with or without a hero.
+            if (!hero && item?.Source != SessionPlacedSource.Created) return GameSessionFailure.InvalidSnapshot;
             if (item is null || !SessionValidation.Entity(item.Entity) || !Enum.IsDefined(item.Source) || !Enum.IsDefined(item.Kind.Type) ||
                 !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
             var sourceFits = item.Source switch
             {
                 SessionPlacedSource.Kit => HeroDomain.KitNumber(item.Entity) is { } number && number <= kitNumbers && item.Origin is null,
-                SessionPlacedSource.Made => SessionMadeItem.Number(item.Entity) is not null && item.Origin is null,
+                SessionPlacedSource.Made or SessionPlacedSource.Created => SessionMadeItem.Number(item.Entity) is not null && item.Origin is null &&
+                    (item.Source == SessionPlacedSource.Made || InventoryDomain.KitAdmitted(item.Kind.Type)),
                 _ => item.Origin is { } origin && SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null &&
                     !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal),
             };

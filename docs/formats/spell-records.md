@@ -295,7 +295,7 @@ the reader modes cover them, and no installed record reaches any of them.
 | A missing `AoE:`, `Spell:`, `MagicTech:` or `Proto:` is logged, a missing `Type:` is not, and each is read on with a default (SC1, SC5, SC7, SC8). | The same default; strict mode refuses it (`MissingKey`). | strict |
 | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter bit (MG18); so might three other targets (MG21–MG23). | Kept: the data holds the original's values and both modes behave as the original; MT8 classifies them. | none |
 | `Proto:` is resolved to a prototype at load. | The basic prototype number is kept (resolution is the summon slice's). | both |
-| `Rules\SpellEyeCandy.mes` is parsed by the same init. | Not read. | both |
+| `Rules\SpellEyeCandy.mes` is parsed by the same init. | Read by its own reader since ARC-MAGIC-017 ([spell eye candy](spell-eye-candy.md)). | both |
 
 ## Not ready
 
@@ -303,4 +303,5 @@ the reader modes cover them, and no installed record reaches any of them.
   MT12–MT18); the auto-level scheme keeps its own willpower read. What the target names and the component data do at run
   time is those slices'.
 - The record 221 `Dmg_Flags:` data defect is data fix DF4, decided 2026-10-21 under the owner's data-fix rule and landed by ARC-MAGIC-012: with the Steamwoven profile (`SpellData.Open(..., fixes)`) the reader ORs a repeated `Dmg_Flags:` in; without a profile or with the Original one it reads the file as the original does. Under the original's damage rules the restored `Scaled` changes no amount ([spell damage and heal](../world/spell-damage-heal.md#data-fix-df4)).
-- The eye-candy file `Rules\SpellEyeCandy.mes` and the 512 run slots of the same init are not read here.
+- The 512 run slots of the same init are not read here; the eye-candy file `Rules\SpellEyeCandy.mes` has its own reader
+  ([spell eye candy](spell-eye-candy.md), ARC-MAGIC-017).

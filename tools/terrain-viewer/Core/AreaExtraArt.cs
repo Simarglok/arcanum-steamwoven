@@ -14,6 +14,9 @@ public sealed record AreaExtraFrame(AreaVisualRecord Visual, AreaFrameKey Key, D
 {
     /// <summary>ARC-COMBAT-016: the frames of the ART's group (a projectile's frame advances once per flight step).</summary>
     public int FramesPerGroup { get; init; } = 1;
+    /// <summary>ARC-MAGIC-017: the ART header's frame rate and action frame (an eye candy's pace and release frame).</summary>
+    public int FramesPerSecond { get; init; }
+    public int ActionFrame { get; init; }
 }
 
 public sealed record AreaExtraArtLoad(AreaExtraArtStatus Status, AreaExtraFrame? Frame, string Detail);
@@ -24,7 +27,8 @@ public sealed record AreaExtraArtLimits(int MaxArts = 4096, long MaxRgbaBytes = 
 
 /// <summary>
 /// ARC-RENDER-033: the frames of art ids that no body of the shown map drew at T0: a scenery's or trap's destroyed ART (field 24)
-/// and an item's ground ART once it lies on the ground (spilled from a container, dropped by an NPC, placed by the hero). The art
+/// and an item's ground ART once it lies on the ground (spilled from a container, dropped by an NPC, placed by the hero); since
+/// ARC-MAGIC-017 also the eye-candy overlays of spells (class 14). The art
 /// id names its file by the area owner's rules (<see cref="AreaObjectArt"/>, classes 4, 6 and 7), read from the game's content
 /// stack in its search order with the owner's frame rules: the frame the id selects, group 0 for a single-rotation ART, the ART's
 /// own extent when bytes follow its last frame. Each art id is read once; a failure is kept and reported, never retried.
@@ -90,7 +94,8 @@ public sealed class AreaExtraArt : IDisposable
                 selection.Palette, decoded.EffectivePaletteSlot, false, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
                 decoded.Frame.OffsetX, decoded.Frame.OffsetY, 0, 0, 100, decoded.Frame.EncodedPayloadLength, rgba.Length, pixels, Policy);
             return new(AreaExtraArtStatus.Ready, new(visual, AreaFrameKey.From(visual), new(decoded.Width, decoded.Height, rgba))
-                { FramesPerGroup = metadata.Header.FramesPerGroup }, $"{selection.Path} frame {selection.Frame}");
+                { FramesPerGroup = metadata.Header.FramesPerGroup, FramesPerSecond = metadata.Header.FramesPerSecond, ActionFrame = metadata.Header.ActionFrame },
+                $"{selection.Path} frame {selection.Frame}");
         }
         catch (Exception error) when (error is ArtException or ArgumentException)
         {

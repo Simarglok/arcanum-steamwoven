@@ -127,7 +127,7 @@ public partial class TerrainViewerApp
         _spellData = task.IsCompletedSuccessfully ? task.Result
             : new(AreaSpellDataStatus.DataFailed, null, "load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
         _spellDataTask = null;
-        GD.Print($"ARC-MAGIC-008 spell data status={_spellData.Status} detail={_spellData.Detail}");
+        GD.Print($"ARC-MAGIC-008 spell data status={_spellData.Status} detail={_spellData.Detail} {_spellData.EyeCandyDetail}");
     }
 
     private AreaSpellsPageView? BuildSpellsPage() => AreaSpellsPage.Build(_areaSession!, _spellData?.Data, _sheetCollege);

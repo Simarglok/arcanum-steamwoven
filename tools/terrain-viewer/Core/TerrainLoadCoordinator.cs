@@ -44,6 +44,8 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public Arcanum.Data.Maps.MapTransitionSet? MapTransitions { get; init; }
     public IReadOnlyDictionary<int, AreaMapDestination>? MapDestinations { get; init; }
     public string? MapTransitionsFailure { get; init; }
+    /// <summary>ARC-WORLD-081 (map mode, a window): the sector scripts of the window's template sectors (ledger PG9); empty for a whole map.</summary>
+    public IReadOnlyList<Arcanum.Data.Maps.MapPlacedScript> MapTemplateScripts { get; init; } = [];
     /// <summary>ARC-RENDER-024 (map mode): the centre sector of a window load (a map too large to load whole), else null.</summary>
     public Arcanum.Data.Area.AreaSectorCoordinate? AreaMapWindowCentre { get; init; }
     /// <summary>ARC-RENDER-034: a window's terrain overview beyond its core (null for a whole map, or when the terrain grid or

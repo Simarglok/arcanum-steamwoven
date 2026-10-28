@@ -289,6 +289,12 @@ command). A placed item stays taken, so its seed never shows it at its seed posi
 - **Pickup**: `PickUpItem` of a placed item on the actor's map returns it to its list, a kit item at its kit number's place (the
   kit stays in number order), a taken or made item at the end of its list. The host's insert check runs first (a call back into the
   owner from it is `StaleVersion`); one revision. On another map the item is not available.
+- **Created items** (ARC-WORLD-081, [template sector plants](template-sector-plants-runtime.md)): an item a script's create object adds
+  to the ground (`CreateGroundItem`, the plant generator's herbs) is a placed item of source `created`: a new `made:n` entity numbered with
+  the made items, with its prototype's weight facts and complexity, on the tile the create action draws next to its object. It needs no
+  hero, schedules no decay (ID9) and has a budget of its own (`MaxCreatedItems`, 8,192) outside the hero's; picked up it joins the made
+  items, which needs room in the hero's budget. Under Steamwoven no item is created next to an object with 6 created items within 3 tiles
+  (`CreatedItemRules`).
 - **Deletion**: a placed item the durability rules delete leaves the store.
 - **Seeds**: an attached seed must still list a placed world item of its map with its saved kind and no seed may list a placed kit
   or made item (`InventoryMismatch`), as for the hero's lists.
@@ -592,8 +598,9 @@ tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferSta
 - **Not modelled.** A refused new pile or stack, which the original leaves on the ground at the NPC's tile while it reports success (here
   nothing moves, `InsertRefused`); the transfer script's veto and the item and holder events (refused when present, not run); a source
   without a pile or stack, which the original credits from nothing (AMA6: refused here); the no-drop item flag
-  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers; the barter window's substitute
-  container, identified flag, payment order and restock (ARC-UI-050, NT4).
+  (0x20); NPC flag 0x40, which makes the AI re-wield its best items after a move; gold in containers. The barter window's trades
+  (item, then coins) are `BarterBuy` and `BarterSell` ([barter runtime](barter-runtime.md), ARC-UI-050); its substitute container,
+  identified flag and restock are not modelled.
 
 ## Made item complexity (ARC-WORLD-083)
 

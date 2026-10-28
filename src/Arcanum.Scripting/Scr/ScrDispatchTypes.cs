@@ -153,6 +153,47 @@ public interface IScrItemQueries
     bool ItemsBeingRewielded();
 }
 
+/// <summary>
+/// ARC-WORLD-081: what a host that runs <see cref="ScrAdmissionSet.S15"/> answers about the world around a run (ledger PG3, PG5). The
+/// interpreter asks only while a clause needs it.
+/// </summary>
+public interface IScrWorldQueries
+{
+    /// <summary>
+    /// The scenery in the vicinity of <paramref name="centre"/> (focus kind 15, 0x44B4E0 with 0x440FC0): every scenery object of the
+    /// centre's map whose tile is within <see cref="ScrWorld.VicinityReach"/> tiles of the centre's tile on both axes and that is not
+    /// destroyed or switched off, in the host's list order (the original's order is not read); empty when the host does not know the
+    /// centre or its place. The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under
+    /// <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre);
+
+    /// <summary>A number from <paramref name="low"/> to <paramref name="high"/>, both included (<paramref name="low"/> ≤
+    /// <paramref name="high"/>), from the game's generator (random between, 0x4CEF00; PG5).</summary>
+    int Random(int low, int high);
+}
+
+/// <summary>ARC-WORLD-081: the vicinity a script's object list reads (ledger PG3).</summary>
+public static class ScrWorld
+{
+    /// <summary>
+    /// The vicinity's reach in tiles on both axes from its centre. The original takes the bounding box, in tiles, of a screen rectangle
+    /// the size of the game window centred on the attachee (0x440FF0); that window is the fixed 800 × 400 play view, and with tiles of
+    /// 80 × 40 pixels the box reaches exactly 10 tiles on both axes (the reading of OL29, the same rectangle). Both rule modes use it: it
+    /// never depends on the viewer's window or zoom (owner decision 2026-10-28: a fixed reach).
+    /// </summary>
+    public const int VicinityReach = 10;
+
+    /// <summary>The objects the original's list copies at most (0x44B4E0, PG3); the rest are dropped silently.</summary>
+    public const int VicinityListCap = 100;
+}
+
+/// <summary>
+/// ARC-WORLD-081: a create-object action (52, ledger PG1): the prototype number as the script names it (the basic number; the host adds
+/// 20 to find the prototype, PG8) and the first object of operand 1, next to which the host places the new object.
+/// </summary>
+public readonly record struct ScrCreateRequest(int Prototype, ScrObjectRef Near);
+
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
 
@@ -350,8 +391,10 @@ public sealed class ScrEffects
         IReadOnlyList<ScrCallRequest>? calls = null, IReadOnlyList<ScrPrintLine>? lines = null, IReadOnlyList<ScrSound>? sounds = null,
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
-        IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null)
+        IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
+        IReadOnlyList<ScrCreateRequest>? creations = null)
     {
+        Creations = creations ?? Array.Empty<ScrCreateRequest>();
         States = states ?? Array.Empty<ScrStateRequest>();
         EffectChanges = effectChanges ?? Array.Empty<ScrEffectRequest>();
         EyeCandies = eyeCandies ?? Array.Empty<ScrEyeCandy>();
@@ -402,9 +445,11 @@ public sealed class ScrEffects
     /// own slot wins over a call-ex run of the same slot, as the original's outer run writes its copy back last.
     /// </summary>
     public IReadOnlyList<ScrWriteback> SlotWrites { get; }
+    /// <summary>ARC-WORLD-081: the objects to create, in action order (ledger PG1).</summary>
+    public IReadOnlyList<ScrCreateRequest> Creations { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
-        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0;
+        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -431,7 +476,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S14"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S15"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -452,7 +497,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S14)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S14.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S15)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S15.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -465,5 +510,7 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get skill needs a host that implements IScrSkillQueries.", nameof(Admission));
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
+        if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
+            throw new ArgumentException("A set with random, loop for or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
     }
 }

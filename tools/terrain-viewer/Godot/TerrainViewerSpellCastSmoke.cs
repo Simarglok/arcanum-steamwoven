@@ -16,7 +16,9 @@ public partial class TerrainViewerApp
     // college spell in its character editor (an experience award for the next level buys the point when it has none, with its
     // auto-level scheme suspended), stands three cells from the living NPC with the fewest hit points, opens the spell pane with M,
     // presses the spell, hovers the NPC (the cast cursor), clicks it, and the casting goal plays its start, release frame and end; the
-    // hero's fatigue drops by the spell's cost and the NPC resists or takes damage. A right click closes the cursor. The NPC and the
+    // hero's fatigue drops by the spell's cost and the NPC resists or takes damage. Since ARC-MAGIC-017 the goal is timed by the spell's
+    // cast eye candy, drawn on the hero: the release comes at its action frame as the rules time it, within one frame of the smoke's
+    // clock, and an EyeCandy component the run logs is drawn on its target when its entry plays. A right click closes the cursor. The NPC and the
     // hero's fatigue are restored for the later stages; the learned spell, the experience and the level stay. A map without a living
     // NPC that has combat values reports that and passes nothing.
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
@@ -116,6 +118,7 @@ public partial class TerrainViewerApp
             Require(hover == AreaHoverAction.Cast && _hoverCursor == Godot.Input.CursorShape.Cross, $"cast hover {hover} cursor {_hoverCursor}");
 
             var casts = _spellCasts;
+            var timings = _castTimingsForSelfTest.Count; _eyeCandyDrawnForSelfTest.Clear();
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
@@ -128,6 +131,26 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellGoal is null, $"the goal ended after {frames} frames");
+            // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
+            var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
+            Require(_castTimingsForSelfTest.Count == Math.Min(timings + 1, 16) && _castTimingsForSelfTest.Count > 0, "the goal recorded its eye-candy timing");
+            var timing = _castTimingsForSelfTest[^1];
+            var entry = EyeCandyTable?.At(castEntry);
+            Require(entry?.Art is { } && !timing.Immediate, $"the spell's cast eye candy plays: {_spellData?.EyeCandyDetail}, entry art {entry?.Art}");
+            Require(_eyeCandyDrawnForSelfTest.Contains(castEntry), "the cast eye candy was drawn on the hero");
+            var parts = PartsOf(entry!.Flags);
+            var (clip, back, pace) = EyeCandyClips(entry.Art!.Value, parts);
+            var expected = new CastEyeCandyAnimation(clip, back, parts.TimesRelease, 0, pace);
+            long? expectedRelease = null;
+            expected.Advance(long.MaxValue / 4, () => { expectedRelease = expected.DueMs; return true; });
+            var expectedEnd = expected.DueMs;
+            Require(expectedRelease is { } due ? timing.ReleaseMs >= due && timing.ReleaseMs < due + 50 : timing.ReleaseMs == timing.EndMs,
+                $"the release came at the eye candy's action frame: {timing.ReleaseMs} ms, expected {expectedRelease} ms (clip {clip})");
+            Require(timing.EndMs >= expectedEnd && timing.EndMs < expectedEnd + 50, $"the goal ended after the eye candy: {timing.EndMs} ms, expected {expectedEnd} ms");
+            var played = _spellCaster!.Log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded).ToArray();
+            foreach (var added in played)
+                if (EyeCandyTable?.At(added.Value) is { Art: { } } shown && EyeCandyAnimation.Plays((shown.Flags & SpellEyeCandyFlags.Animates) != 0, PartsOf(shown.Flags)))
+                    Require(_eyeCandyDrawnForSelfTest.Contains(added.Value), $"the component's eye candy {added.Value} was drawn on {added.Object}");
             Require(_spellTargeting is not null, "the cursor stays open after the cast (SU9)");
             var log = _spellCaster!.Log;
             var paid = log.Where(e => e.Kind == SpellCastEventKind.FatiguePaid).Sum(e => e.Value);
@@ -151,7 +174,8 @@ public partial class TerrainViewerApp
                 map.RuntimeMap, Spell = spell.Data.Number, Cost = spell.Data.Cost, Target = target.Row.PrototypeNumber, Frames = frames, Paid = paid,
                 Fatigue = $"{heroBefore.Fatigue}->{heroAfter.Fatigue}", HitPoints = $"{npcBefore}->{npcAfter}", Damaged = damaged, Resisted = resisted,
                 Log = string.Join(",", log.Select(e => e.Kind)), Hover = hover.ToString(),
-                Parity = "NOT_VERIFIED (spell UI read in the original executable; no original-runtime run; release frame timing is a stand-in)" }));
+                EyeCandy = $"release {timing.ReleaseMs} end {timing.EndMs} drawn {string.Join("/", _eyeCandyDrawnForSelfTest.Order())}",
+                Parity = "NOT_VERIFIED (spell UI and eye-candy timing read in the original executable; no original-runtime run)" }));
         }
         finally
         {

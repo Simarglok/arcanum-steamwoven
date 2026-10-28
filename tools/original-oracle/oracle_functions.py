@@ -229,6 +229,20 @@ ACID_ITEMS = tuple((0x5EED00A0 + i, 0x42) for i in range(9))      # the items a 
 DAMAGE_FLAG_BITS = (0x1, 0x2, 0x4, 0x40, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0x400000, 0x800000)
 SCHEDULE_CODE = ((0x454790, 0x4548D0), (0x4503E0, 0x450420), (0x45A950, 0x45A970), (0x455250, 0x455350))
 
+# The barter price and its checks (ARC-UI-050): the item worth and identified test, the sale and buy checks and the reaction scale
+# run as they are; every service function they call is a stub of one item, one PC and one NPC.
+PRICE_CODE = ((0x461F20, 0x461F80), (0x462170, 0x46222A), (0x462230, 0x462292), (0x464370, 0x4643D0), (0x4C1150, 0x4C11D0))
+PRICE_ITEM, PRICE_PC, PRICE_NPC = (0x5EED00B0, 0x42), (0x5EED00B1, 0x42), (0x5EED00B2, 0x42)
+PRICE_ART = 0x5EED00B3              # the item's current art as the stub answers it
+IS_PC = 0x40DA20                    # (handle) -> 1 for a PC
+GOLD_QUANTITY = 0x464780            # (handle) -> a gold pile's coins
+ITEM_HP, ITEM_MAX_HP = 0x43D600, 0x43D5A0  # (handle) -> current / maximum hit points
+SKILL_TRAINING = 0x4C60C0           # (handle, skill) -> training 0..3
+SCRIPT_EVENT = 0x441980             # (triggerer, attachee, extra, point, line) -> the script's answer
+DEALER_TEST = 0x464200              # (item, buyer) -> 1 when the buyer's buy list holds the item
+ART_BROKEN = 0x5045A0               # (art) -> 1 for a broken item's art
+ITEM_LOCATION = 0x461340            # (handle) -> inventory location
+STANDARD_REACTION = 0x4C0CC0        # (npc, other) -> effective reaction
 # The AI's global action-list build and the runtime's quicksort (ARC-WORLD-088).
 AI_LIST_INDEX = 0x5B7558        # the list being built (0..9), read by the value getter 0x4CC310
 AI_LISTS_LOADED = 0x6016F0      # the AI-list init's loaded flag
@@ -289,6 +303,7 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4518D0, "spell-damage", ((0x4518D0, 0x451AF0),), "spell-damage"),
     FunctionSpec(0x4521A0, "spell-heal", ((0x4521A0, 0x452294),), "spell-heal"),
     FunctionSpec(0x4B5810, "spell-acid", ((0x4B5810, 0x4B58BA),), "spell-acid"),
+    FunctionSpec(0x461F80, "item-price", ((0x461F80, 0x462170),) + PRICE_CODE, "item-price"),
     FunctionSpec(0x4CC380, "ai-global-list", ((0x4CC380, 0x4CC430),) + AI_LIST_CODE, "ai-global-list"),
 )}
 
@@ -1432,6 +1447,112 @@ def HEAP_BASE_OF(emulator) -> int:
 
 
 # --- runs ------------------------------------------------------------------------------------------------------------
+
+@dataclass
+class PriceCase:
+    """One barter quote (ARC-UI-050): whether the PC sells (else it buys), the item's type, stored worth, complexity and flags, the
+    merchant's price multiplier and NPC flags, the PC's haggle effectiveness and training, the merchant's buy-object script answer and
+    buy-list verdict, the broken art, the item's current and maximum hit points and inventory location, and the merchant's reaction."""
+    sell: int
+    type: int
+    worth: int
+    complexity: int
+    flags: int
+    multiplier: int
+    haggle: int
+    training: int
+    script: int
+    dealer: int
+    npc_flags: int
+    broken: int
+    current: int
+    maximum: int
+    location: int
+    reaction: int
+
+
+def draw_price_case(rng: random.Random) -> PriceCase:
+    """Items of the C# domain (types 5..14, gold one time in ten), worths mostly 0..5000 with the edges 0..2 and sometimes large
+    enough to wrap the buy markup, any multiplier now and then, haggle 0..95 and sometimes beyond, every training, the gates each way,
+    damage four times in ten, worn locations one time in five and reactions across all bands."""
+    def pick(common, rare, p=0.85):
+        return common() if rng.random() < p else rare()
+    worth = pick(lambda: rng.randint(0, 5000), lambda: rng.choice((0, 1, 2, rng.randint(100_000, 3_000_000))))
+    maximum = rng.randint(1, 300)
+    current = maximum if rng.random() < 0.6 else pick(lambda: rng.randint(0, maximum - 1), lambda: rng.choice((-5, maximum + 7)))
+    flags = rng.getrandbits(32) if rng.random() < 0.2 else 0
+    for bit in (0x1, 0x2, 0x8000):
+        if rng.random() < 0.3:
+            flags |= bit
+    return PriceCase(int(rng.random() < 0.5), 8 if rng.random() < 0.1 else rng.randint(5, 14), worth, rng.randint(-10, 10), flags,
+                     pick(lambda: rng.randint(0, 300), lambda: rng.choice((-50, 370, 1000, 2_000_000))),
+                     pick(lambda: rng.randint(0, 95), lambda: rng.randint(96, 200)), rng.randint(0, 3),
+                     rng.choice((1, 1, 1, 0, 2)), int(rng.random() < 0.7), rng.getrandbits(32) & ~0x4000 | (0x4000 if rng.random() < 0.3 else 0),
+                     int(rng.random() < 0.1), current, maximum,
+                     pick(lambda: rng.randint(0, 200), lambda: rng.choice((999, 1000, 1004, 1008, 1009, 2000)), 0.8), rng.randint(-60, 160))
+
+
+def price_stubs(case: PriceCase) -> dict:
+    """Stubs answering from the item (PRICE_ITEM), the PC (PRICE_PC) and the merchant (PRICE_NPC); anything else is rejected."""
+    from oracle_emu import StubRejected
+
+    def handle(argument, at: int = 0) -> tuple[int, int]:
+        return argument(at), argument(at + 1)
+
+    def require(value: bool, why: str) -> None:
+        if not value:
+            raise StubRejected(why)
+
+    def field(argument) -> int:
+        who, number = handle(argument), argument(2)
+        if who == PRICE_ITEM:
+            answers = {FIELD_TYPE: case.type, 0x5B: case.worth, 0x60: case.complexity, 0x57: case.flags, 0x1: PRICE_ART}
+        elif who == PRICE_NPC:
+            answers = {0x125: case.multiplier, 0x118: case.npc_flags}
+        else:
+            answers = {}
+        require(number in answers, f"field {number:#x} of {who}")
+        return answers[number] & 0xFFFFFFFF
+
+    def is_pc(argument) -> int:
+        require(handle(argument) in (PRICE_PC, PRICE_NPC), "a PC test of another object")
+        return int(handle(argument) == PRICE_PC)
+
+    def item_only(value: int):
+        def answer(argument) -> int:
+            require(handle(argument) == PRICE_ITEM, "an item answer for another object")
+            return value & 0xFFFFFFFF
+        return answer
+
+    def haggle(argument) -> int:
+        require(handle(argument) == PRICE_PC and argument(2) == 9 and handle(argument, 3) == PRICE_ITEM, "an effectiveness outside the model")
+        return case.haggle
+
+    def training(argument) -> int:
+        require(handle(argument) == PRICE_PC and argument(2) == 9, "a training outside the model")
+        return case.training
+
+    def script(argument) -> int:
+        require(handle(argument) == PRICE_ITEM and handle(argument, 2) == PRICE_NPC and handle(argument, 4) == PRICE_PC and argument(6) == 17,
+                "a script event outside the model")
+        return case.script
+
+    def dealer(argument) -> int:
+        require(handle(argument) == PRICE_ITEM and handle(argument, 2) == PRICE_NPC, "a buy-list test outside the model")
+        return case.dealer
+
+    def broken(argument) -> int:
+        require(argument(0) == PRICE_ART, "another art")
+        return case.broken
+
+    def reaction(argument) -> int:
+        require(handle(argument) == PRICE_NPC and handle(argument, 2) == PRICE_PC, "a reaction outside the model")
+        return case.reaction & 0xFFFFFFFF
+
+    return {FIELD_GETTER: field, IS_PC: is_pc, GOLD_QUANTITY: item_only(0), ITEM_HP: item_only(case.current), ITEM_MAX_HP: item_only(case.maximum),
+            0x4C62E0: haggle, SKILL_TRAINING: training, SCRIPT_EVENT: script, DEALER_TEST: dealer, ART_BROKEN: broken,
+            ITEM_LOCATION: item_only(case.location), STANDARD_REACTION: reaction}
+
 
 def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str, unicorn_version: str,
         progress: Callable[[int], None] | None = None) -> dict:
@@ -2587,6 +2708,17 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
                 progress(case_number)
         document.update(fields=["targetType", "amount", "flags", *(f"worn{s}" for s in range(1000, 1009)), *(f"resist{s}" for s in range(1000, 1009)),
                                 "steps", *(f"step{i}{n}" for i in range(10) for n in ("Slot", "Normal"))])
+    elif spec.model == "item-price":
+        for case_number in range(count):
+            case = draw_price_case(rng)
+            seller, buyer = (PRICE_PC, PRICE_NPC) if case.sell else (PRICE_NPC, PRICE_PC)
+            result = emulator.call(spec.address, (*PRICE_ITEM, *seller, *buyer, 0), code=code, stubs=price_stubs(case))
+            cases.append([case.sell, case.type, case.worth, case.complexity, case.flags, case.multiplier, case.haggle, case.training,
+                          case.script, case.dealer, case.npc_flags, case.broken, case.current, case.maximum, case.location, case.reaction, result])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=["sell", "type", "worth", "complexity", "flags", "multiplier", "haggle", "training", "script", "dealer",
+                                "npcFlags", "broken", "current", "maximum", "location", "reaction", "result"])
     elif spec.model == "ai-global-list":
         from oracle_emu import StubRejected
         table = emulator.write_heap(b"\0" * (SPELL_RECORD * SPELL_RECORDS), 0)

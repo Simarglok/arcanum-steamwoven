@@ -35,11 +35,27 @@ public sealed record ScrRuleProfile
     /// </summary>
     public bool CallDelayWraps { get; init; }
 
+    /// <summary>
+    /// PG3 (original, 0x44B4E0): an object list over a vicinity (focus kind 15) copies only the first <see cref="ScrWorld.VicinityListCap"/>
+    /// objects and drops the rest silently, so a crowded view can leave out the plant generator's marker. Steamwoven keeps every object
+    /// of the vicinity (ARC-WORLD-081).
+    /// </summary>
+    public bool VicinityListCapped { get; init; }
+
+    /// <summary>
+    /// ARC-WORLD-081 (owner decision 2026-10-28): the original's create object (52, PG1) adds an object every time, and the items the
+    /// plant generator creates never decay (ledger ID9), so crossing a sector border again and again piles them up without bound.
+    /// Steamwoven creates nothing next to an object that already has <c>CreatedItemRules.Limit</c> created items lying within
+    /// <c>CreatedItemRules.Reach</c> tiles of it (the host and the session apply it).
+    /// </summary>
+    public bool CreatedItemsUnbounded { get; init; }
+
     /// <summary>Recorded fixes; the default setting.</summary>
     public static readonly ScrRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail behaviour.</summary>
-    public static readonly ScrRuleProfile Original = new() { Name = "original", GlobalFlagWriteSpills = true, TileScriptChangesDiscarded = true, CallDelayWraps = true };
+    public static readonly ScrRuleProfile Original = new() { Name = "original", GlobalFlagWriteSpills = true, TileScriptChangesDiscarded = true, CallDelayWraps = true,
+        VicinityListCapped = true, CreatedItemsUnbounded = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ScrRuleProfile> All { get; } = new[] { Steamwoven, Original };
