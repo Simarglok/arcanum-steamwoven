@@ -42,9 +42,9 @@ public sealed partial class GameSessionOwner
     /// 2000 + entry. Refused before any effect, in order: input (<see cref="GameSessionFailure.InvalidHotkey"/>: a slot outside 0..9, an empty or
     /// malformed entry, a spell outside the record numbers), version, no hero (<see cref="GameSessionFailure.HotkeysUnavailable"/>), an item
     /// the hero does not hold, an item entry's item the hero wears or another item entry already holds
-    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>); for an item entry, ammunition or gold (<see cref="GameSessionFailure.InvalidHotkey"/>)
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original takes a worn item off the doll onto the bar: not ready); for an item entry, ammunition or gold (<see cref="GameSessionFailure.InvalidHotkey"/>)
     /// and an item of a prototype another item entry holds (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original's message 4000).
-    /// The same entry again is NoChange. One revision.
+    /// The same entry again is NoChange. An item that moves onto the bar or off it empties every other entry naming it (HK6). One revision.
     /// </summary>
     public GameSessionMutationResult AssignHotkey(GameSessionVersion expected, int slot, HotkeyEntry entry)
     {
@@ -63,8 +63,10 @@ public sealed partial class GameSessionOwner
                 return Reject(GameSessionFailure.ItemNotAvailable);
         }
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var before = ItemEntrySlots();
         _hotkeys[slot] = entry;
         _hotkeyPlaces[slot] = HotkeyPlace(entry.Item);
+        EmptyEntriesOfMovedItems(before);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
@@ -82,8 +84,10 @@ public sealed partial class GameSessionOwner
         if (_hotkeys[from].IsEmpty) return Reject(GameSessionFailure.InvalidHotkey);
         if (from == to) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var before = ItemEntrySlots();
         (_hotkeys[from], _hotkeys[to]) = (_hotkeys[to], _hotkeys[from]);
         (_hotkeyPlaces[from], _hotkeyPlaces[to]) = (_hotkeyPlaces[to], _hotkeyPlaces[from]);
+        EmptyEntriesOfMovedItems(before);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
@@ -98,7 +102,9 @@ public sealed partial class GameSessionOwner
         if (_hero is null) return Reject(GameSessionFailure.HotkeysUnavailable);
         if (_hotkeys[slot].IsEmpty) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var before = ItemEntrySlots();
         _hotkeys[slot] = HotkeyEntry.Empty;
+        EmptyEntriesOfMovedItems(before);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
@@ -133,6 +139,22 @@ public sealed partial class GameSessionOwner
     // An entry fits its kind; a spell lies below the empty spell field (10000).
     private static bool ValidHotkey(HotkeyEntry entry) => entry.IsWellFormed && (entry.Item is null || SessionValidation.Entity(entry.Item))
         && (entry.Kind is not (HotkeyKind.Spell or HotkeyKind.ItemSpell) || entry.Index < ItemSpellPaneRules.NoSpell);
+
+    // The item entries' items by entry: their locations 2000 + entry.
+    private Dictionary<string, int> ItemEntrySlots() => Enumerable.Range(0, HotkeyRules.Entries).Where(i => _hotkeys[i].Kind == HotkeyKind.Item)
+        .ToDictionary(i => _hotkeys[i].Item!, i => i, StringComparer.Ordinal);
+
+    // A drop or drag on the bar moves the items whose location 2000 + entry changed (onto the bar, between entries, back into the inventory),
+    // and each move runs the inventory callback (HK6): every other entry naming such an item empties; the item entry now holding it stays.
+    private void EmptyEntriesOfMovedItems(Dictionary<string, int> before)
+    {
+        var after = ItemEntrySlots();
+        var moved = before.Keys.Concat(after.Keys).Where(item => before.GetValueOrDefault(item, -1) != after.GetValueOrDefault(item, -1))
+            .ToHashSet(StringComparer.Ordinal);
+        for (var i = 0; i < _hotkeys.Length; i++)
+            if (_hotkeys[i].Item is { } item && moved.Contains(item) && !(_hotkeys[i].Kind == HotkeyKind.Item && after.GetValueOrDefault(item, -1) == i))
+                _hotkeys[i] = HotkeyEntry.Empty;
+    }
 
     // The items of the item entries: off the grid, in the locations 2000..2009.
     private IEnumerable<string> HotkeyItems() => _hotkeys.Where(entry => entry.Kind == HotkeyKind.Item).Select(entry => entry.Item!);

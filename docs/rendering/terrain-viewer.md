@@ -1560,8 +1560,8 @@ buttons' lit art the original sets from game events (0x556A90), the compact inte
 
 ### Hotkey bar (ARC-UI-022)
 
-With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries and `A` the latest recent action
-(on the press, not during another critter's turn of a turn-based round; [contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
+With an AREA session that has a hero, the keys `1`..`0` activate the session's ten hotkey entries (on the press, not during another critter's turn of a turn-based round) and `A` the latest
+recent action ([contract](../world/spell-cast-host.md#the-hotkey-bar-arc-ui-022),
 ledger [HK rows](../research/ledger/spell-runs.md#hotkey-bar-arc-ui-022)). The bar's hot-key slots and recent-action buttons are not
 drawn as working yet, so keys stand in for its drag and drop: `Ctrl`+`1`..`0` puts the latest recent action (a spell pressed in the
 spell pane, or the palette's Prowl action) on that entry, `Ctrl`+`Shift`+`1`..`0` empties it, and a key `1`..`0` while the

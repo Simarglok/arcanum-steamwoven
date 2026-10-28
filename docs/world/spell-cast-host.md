@@ -313,13 +313,14 @@ carries out the activations with the session and the cast host.
    spell, 4 an item and one of its spells. `AssignHotkey` is a drop on the bar from outside it (HK5): it overwrites the entry, and an
    item entry's item leaves the grid for the inventory location 2000 + entry; ammunition, gold and a second item of a prototype an item
    entry already holds are refused. `MoveHotkey` is a drag between entries (the two trade places), `ClearHotkey` a drag off the bar
-   (the item goes back to the grid). An entry empties when its item leaves the hero or moves: a wear, a take-off or a grid move runs
-   the original's inventory callback, which empties every entry naming the item, whatever its type (HK6).
+   (the item goes back to the grid). An entry empties when its item leaves the hero or moves: a wear, a take-off, a grid move or a move
+   onto, along or off the bar runs the original's inventory callback, which empties every entry naming the item, whatever its type,
+   except the item entry that now holds it (HK6).
 2. **Recent actions** (`RecordHotkeyAction`, `HotkeyRules.RecordAction` for 0x57EFA0, HK2). A press of the spell pane (a spell) or the
    skill bar (a button) becomes the latest; the same action as the latest changes nothing, any other pushes the latest to the second
    place. Only spells and skill-bar buttons are recorded, as only the bars write them.
-3. **Keys** (`KeyActivates`, HK8). The keys 1..0 activate their entries and A the latest recent action, on the press, not while another
-   critter has the turn of a turn-based round; an empty entry does nothing.
+3. **Keys** (`KeyActivates`, HK8). The keys 1..0 activate their entries on the press, not while another critter has the turn of a
+   turn-based round, and A the latest recent action (the character path has no turn test); an empty entry does nothing.
 4. **The activation** (0x54FCF0, `PcCanActivate`, `PlanItem`, `PlanItemSpell`, `SpellActivates` for 0x57C080; HK1, HK3, HK4).
    Nothing for a dead or unconscious hero. A spell is activated as a press of the spell pane is (SU1–SU3). An item-and-spell entry
    activates the spell with the item as its source when the item is the wielded weapon; any other item is first wielded into the weapon
@@ -375,7 +376,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 
 ## Not ready
 
-- The hotkey bar's art, its buttons and drag and drop, the sounds (sound 0, SN31), the item use and the cursor hold of an item entry,
+- A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
+  the hotkey bar's art, its buttons and drag and drop, the sounds (sound 0, SN31), the item use and the cursor hold of an item entry,
   the pick-pocket and disarm-traps buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and
   0x541680 (ARC-UI-022).
 - NPC casters' missiles and facing turns (the viewer casts for the hero only); the missile's light and sound.

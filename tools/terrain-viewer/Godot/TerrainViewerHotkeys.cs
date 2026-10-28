@@ -41,8 +41,9 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
+        // Another critter's turn ends the key handler for the digits (0x54DE50); the character A has no such test (HK8).
         var round = session.QueryCombatRound();
-        var otherActs = InTurnBasedRound && round is not null && !round.Actor.IsHero;
+        var otherActs = entry is not null && InTurnBasedRound && round is not null && !round.Actor.IsHero;
         var target = entry is { } index ? session.QueryHotkeys().Entries[index] : session.QueryHotkeys().Recent[0];
         if (!HotkeyRules.KeyActivates(true, otherActs, false, target, false))
         {
@@ -58,9 +59,15 @@ public partial class TerrainViewerApp
     private bool DropHeldOnHotkey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (!key.Pressed || key.Echo || routed is < Key.Key0 or > Key.Key9 || !HotkeysActive || _inventoryPanel?.Held is not { Worn: null } held) return false;
+        if (!key.Pressed || key.Echo || routed is < Key.Key0 or > Key.Key9 || !HotkeysActive || _inventoryPanel?.Held is not { } held) return false;
         var slot = routed == Key.Key0 ? 9 : routed - Key.Key1;
         var session = _areaSession!;
+        if (held.Worn is not null)
+        {
+            _inventoryStatus = "a worn item cannot go on the hotkey bar here (not ready)";
+            _inventoryPanel.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
+            return true;
+        }
         _inventoryPanel.Hold(null);
         var result = session.AssignHotkey(session.Version, (int)slot, HotkeyEntry.ForItem(held.Entity));
         GD.Print($"ARC-UI-022 hotkey-drop slot={slot} item={held.Entity} disposition={result.Disposition} failure={result.Failure}");
@@ -120,7 +127,8 @@ public partial class TerrainViewerApp
     // leaves it off when the wield fails (HK3).
     private string ActivateItemSpellHotkey(GameSessionOwner session, string item, int spell)
     {
-        var held = session.QueryHeroKit().Any(kit => kit.Entity == item) || session.QueryPcInventory().Any(pc => pc.Entity == item);
+        var held = session.QueryHeroKit().Any(kit => kit.Entity == item) || session.QueryPcInventory().Any(pc => pc.Entity == item)
+            || session.QueryMadeItems().Any(made => made.Entity == item);
         var plan = HotkeyRules.PlanItemSpell(held, HeroWeapon() == item);
         if (plan == HotkeyItemSpellAction.Nothing) return "the hero no longer holds the item";
         if (plan == HotkeyItemSpellAction.WieldThenActivate && WearFromHotkey(session, item, EquipmentSlot.Weapon) is { } refused) return refused;
@@ -133,8 +141,8 @@ public partial class TerrainViewerApp
     private string ActivateItemHotkey(GameSessionOwner session, string item)
     {
         if (SpellCasterNow() is not { } caster || caster.Item(item) is not { } facts) return "the item's facts do not read here";
-        var wear = _inventoryHost?.Wearable(session, item, _areaKitWear) is { } wearable && EquipmentRules.WearSlot(wearable.Item) is { } at ? (int)at : -1;
-        HotkeyItemFacts Facts(string entity, SessionItemSpells spells) => new(entity, spells.Type, spells.Flags, entity == item ? wear : -1);
+        int Wear(string entity) => _inventoryHost?.Wearable(session, entity, _areaKitWear) is { } wearable && EquipmentRules.WearSlot(wearable.Item) is { } at ? (int)at : -1;
+        HotkeyItemFacts Facts(string entity, SessionItemSpells spells) => new(entity, spells.Type, spells.Flags, Wear(entity));
         var other = session.QueryHotkeySameKind(item) is { } same && caster.Item(same) is { } sameFacts ? Facts(same, sameFacts) : (HotkeyItemFacts?)null;
         var plan = HotkeyRules.PlanItem(Facts(item, facts), other, true, Godot.Input.IsKeyPressed(Key.Shift), _inventoryPanel?.Held?.Entity);
         return plan.Action switch

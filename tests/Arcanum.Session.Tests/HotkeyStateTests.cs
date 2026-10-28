@@ -105,6 +105,29 @@ public sealed class HotkeyStateTests
     }
 
     [TestMethod]
+    public void An_item_moving_onto_along_or_off_the_bar_empties_the_other_entries_naming_it()
+    {
+        using var owner = Hero();
+        Changed(owner.AssignHotkey(owner.Version, 3, HotkeyEntry.ForItemSpell("rock", 63)), owner);
+        Changed(owner.AssignHotkey(owner.Version, 0, HotkeyEntry.ForItem("rock")), owner);
+        Assert.AreEqual(HotkeyEntry.ForItem("rock"), owner.QueryHotkeys().Entries[0]);
+        Assert.IsTrue(owner.QueryHotkeys().Entries[3].IsEmpty, "onto the bar: a move (HK6)");
+
+        Changed(owner.AssignHotkey(owner.Version, 3, HotkeyEntry.ForItemSpell("rock", 63)), owner);
+        Changed(owner.AssignHotkey(owner.Version, 5, HotkeyEntry.ForSpell(7)), owner);
+        Changed(owner.MoveHotkey(owner.Version, 0, 5), owner);
+        Assert.AreEqual(HotkeyEntry.ForItem("rock"), owner.QueryHotkeys().Entries[5], "the item entry keeps it");
+        Assert.IsTrue(owner.QueryHotkeys().Entries[3].IsEmpty, "along the bar: a move");
+
+        Changed(owner.AssignHotkey(owner.Version, 3, HotkeyEntry.ForItemSpell("rock", 63)), owner);
+        Changed(owner.MoveHotkey(owner.Version, 3, 4), owner);
+        Assert.AreEqual(HotkeyEntry.ForItemSpell("rock", 63), owner.QueryHotkeys().Entries[4], "an item-and-spell entry moved alone moves no item");
+        Changed(owner.ClearHotkey(owner.Version, 5), owner);
+        Assert.IsTrue(owner.QueryHotkeys().Entries[4].IsEmpty, "off the bar into the grid: a move");
+        Assert.IsTrue(InGrid(owner, "rock"));
+    }
+
+    [TestMethod]
     public void The_recent_actions_keep_the_latest_two_presses()
     {
         using var owner = Hero();
@@ -171,6 +194,7 @@ public sealed class HotkeyStateTests
             "one item on two item entries");
         Assert.AreEqual(GameSessionFailure.InvalidHotkey, Restored(text.Replace("],\"recent\":[{\"kind\":2,", "],\"recent\":[{\"kind\":1,\"item\":\"rock\",\"index\":-1},{\"kind\":2,")
             .Replace(",{\"kind\":3,\"item\":null,\"index\":62}]}", "]}")), "a recent action is a spell or a skill");
+        Assert.AreEqual(GameSessionFailure.InvalidHotkey, Restored(text.Replace("\"item\":\"kit:1\"", "\"item\":\"ghost\"")), "an item-and-spell entry's item not held");
         // A saved grid that still places an item entry's item disagrees with the bar.
         Assert.AreEqual(GameSessionFailure.InvalidGrid, Restored(text.Replace("]},\"equipment\"", ",{\"entity\":\"rock\",\"slot\":119,\"width\":1,\"height\":1}]},\"equipment\"")));
     }
