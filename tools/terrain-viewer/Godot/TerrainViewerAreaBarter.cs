@@ -11,7 +11,10 @@ namespace Arcanum.TerrainViewer;
 // the talk (the original's interface-mode change, ledger BT7) and the window opens with the speaker as merchant once nothing else
 // owns input. Like the schematic window it is modal (gate closed, clock paused, a walk stopped); Escape, a controller cancel or the
 // button closes it, and the talk does not resume. Trades run through the session (AreaBarter); a merchant's buy list, price multiplier
-// and fence flag come from its stored fields and the module's inventory sources, loaded once per module in the background.
+// and fence flag come from its stored fields and the module's inventory sources, loaded once per module in the background. ARC-UI-064:
+// with the game's art the window draws the original barter window (docs/ui/original-windows.md, ledger BW1–BW5): the open centres the
+// game view on the PC for the round view, a drag from the merchant's grid onto the hero's buys, one the other way sells, and a resting
+// pointer puts the item's quote on the frame's quote line.
 public partial class TerrainViewerApp
 {
     /// <summary>The trade sound the original requests after every completed move (0x578EA0, SN31).</summary>
@@ -127,14 +130,25 @@ public partial class TerrainViewerApp
             _barterPanel.CloseRequested += CloseBarterByPlayer;
             _barterPanel.SellRequested += SellToMerchant;
             _barterPanel.BuyRequested += BuyFromMerchant;
+            _barterPanel.DropRequested += BarterDrop;
+            _barterPanel.PointerStill += BarterPointerStill;
+            _barterPanel.HolderView = InventoryHolderView;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _barterMessage = null; _barterStatus = null; _barterSession = session; _barterInShop = shop;
         _barterPanel.Docked = shop;
         _mainMenuPanel?.SetDockedBelow(shop);
+        // ARC-UI-064: the window in the world shows the original look when the game's art read; the open centres the game view on the PC
+        // (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's. The opening shop's docked window keeps the diagnostic look.
+        _barterPanel.SetArtLook(shop ? null : InventoryArtLook());
+        if (!shop && _camera is not null)
+        {
+            var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
+            _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
+        }
         var view = _barter.View();
-        _barterPanel.Open(view);
+        _barterPanel.Open(view, null, BarterArt(view));
         _barterRevision = session.Version.Revision;
         GD.Print($"ARC-UI-050 barter open merchant={merchant.Entity} follower={merchant.Follower} multiplier={merchant.Multiplier} buys={merchant.BuyList.Status} fence={merchant.Fence} script={merchant.BuyScript} hero={view.Hero.Count} wares={view.Wares.Count} gold={view.HeroGold}/{view.MerchantGold} haggle={view.Haggle} reaction={view.Reaction}");
         GD.Print($"ARC-WORLD-090 barter stock container={merchant.Container ?? "none"} containerBuys={merchant.ContainerBuyList?.Status.ToString() ?? "-"} movedCoins={opened.Coins} movedPiles={opened.Piles} identified={opened.Identified}");
@@ -182,7 +196,43 @@ public partial class TerrainViewerApp
         var revision = _barterSession!.Version.Revision;
         if (!force && revision == _barterRevision) return;
         _barterRevision = revision;
-        _barterPanel!.Render(_barter!.View(), _barterMessage);
+        var view = _barter!.View();
+        _barterPanel!.Render(view, _barterMessage, BarterArt(view));
+    }
+
+    /// <summary>ARC-UI-064: the original look's view of the window: the hero's side and the shown object's grid (its substitute container when
+    /// it has one, BT4) from the inventory host, the merchant's image (0x553D10 with the merchant, not the container, IW35), the background
+    /// by the follower rule, the merchant's name and the quote line (the last quote or trade message). Null in the opening shop (its session
+    /// is not the area's) or without the art.</summary>
+    private (AreaInventoryView Inventory, AreaBarterFrame Frame)? BarterArt(AreaBarterView view)
+    {
+        if (_barterInShop || _inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
+        var merchant = view.Merchant;
+        var inventory = InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) };
+        var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);
+        return (inventory, frame);
+    }
+
+    /// <summary>ARC-UI-064: an item released in the original look: the merchant's on the hero's grid is bought, the hero's on the merchant's grid
+    /// sold (BT5; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole); anything else goes back.</summary>
+    private void BarterDrop(AreaInventoryDrop drop)
+    {
+        if (!BarterOpen || _barter is null || !BarterActive) return;
+        GD.Print($"ARC-UI-064 barter drag kind={drop.Kind} item={drop.Held.Entity} cell={drop.GridSlot?.ToString() ?? "-"}");
+        if (drop.Kind == AreaInventoryDropKind.Buy) Trade(drop.Held.Entity, sell: false);
+        else if (drop.Kind == AreaInventoryDropKind.Sell) Trade(drop.Held.Entity, sell: true);
+        else SyncAreaBarter(force: true);
+    }
+
+    /// <summary>ARC-UI-064: the pointer rested on an item of the original look: its quote goes on the quote line (PROJECT text, 0x578330 prints
+    /// a generated phrase); resting on no item keeps the line.</summary>
+    private void BarterPointerStill(string? item)
+    {
+        if (!BarterOpen || _barterPanel?.View is not { } view || item is null) return;
+        var quote = AreaBarterArtLayout.Quote(view, item);
+        if (quote.Length == 0 || quote == _barterMessage) return;
+        _barterMessage = quote;
+        SyncAreaBarter(force: true);
     }
 
     /// <summary>While the window is open it owns every key: Escape closes it on a fresh press.</summary>

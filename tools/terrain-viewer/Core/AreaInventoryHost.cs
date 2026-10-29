@@ -443,6 +443,10 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-UI-052: the loot window's image of a seed holder (<see cref="AreaLootArtLayout.HolderImage"/>) from its object row: a
     /// critter's flags and race, a container's description (its prototype file less 20, as the session's junk piles count it); and whether
     /// it is a container. No image when its row or fields do not read.</summary>
+    /// <summary>ARC-UI-064: the image of a seed holder (the barter window draws its merchant's, not its substitute container's); null when its
+    /// row or fields do not read.</summary>
+    public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
+
     private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
     {
         if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetRow(holder, out var row)) return (null, false);

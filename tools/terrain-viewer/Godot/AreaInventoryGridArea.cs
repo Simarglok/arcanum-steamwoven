@@ -17,6 +17,9 @@ namespace Arcanum.TerrainViewer;
 /// loot window with the art the frame is the loot window's (<see cref="AreaLootArtLayout"/>, IW26–IW32): the holder's grid on the left,
 /// whose items are pressed and released on the hero's grid to take them, and the Take all button. ARC-UI-065: the steal window (mode 3)
 /// draws the same frame without Take all; a release across the two grids, or a right release on an item, is a pick-pocket attempt (IW35–IW36).
+/// ARC-UI-064: in the barter panel (<see cref="SetBarter"/>) with the art the frame is the barter window's (<see cref="AreaBarterArtLayout"/>,
+/// BW1–BW5): the merchant's image, name and quote line, the shown object's grid from y 168, whose items released (or right-released) on the
+/// hero's grid are bought and the hero's released on it sold, and the gamble box.
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -48,15 +51,34 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
 
-    /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
-    public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
+    /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown, outside the barter panel).</summary>
+    public bool LootLook => _barter is null && Look is { LootReady: true } && _view is { Holder: not null };
 
-    /// <summary>ARC-UI-060: the window's interface mode (IW26): the own window, or a holder's loot or steal window.</summary>
-    internal AreaInventoryMode Mode => _view is { Holder: not null } view ? view.Steal ? AreaInventoryMode.Steal : AreaInventoryMode.Loot
-        : AreaInventoryMode.Own;
+    /// <summary>ARC-UI-064: the frame is the barter window's original look (the barter panel's, its art set and a shown object).</summary>
+    public bool BarterLook => _barter is not null && Look is { BarterReady: true } && _view is { Holder: not null };
 
-    /// <summary>ARC-UI-060: the mode the original look draws: the loot frame's while it is drawn, else the own window's.</summary>
-    internal AreaInventoryMode LookMode => LootLook ? Mode : AreaInventoryMode.Own;
+    /// <summary>ARC-UI-064: the barter window's own parts (null outside the barter panel).</summary>
+    internal AreaBarterFrame? BarterFrame => _barter;
+    private AreaBarterFrame? _barter;
+
+    /// <summary>ARC-UI-060: the window's interface mode (IW26): the own window, or a holder's loot or steal window; ARC-UI-064: the barter
+    /// window in the barter panel.</summary>
+    internal AreaInventoryMode Mode => _barter is not null ? AreaInventoryMode.Barter
+        : _view is { Holder: not null } view ? view.Steal ? AreaInventoryMode.Steal : AreaInventoryMode.Loot : AreaInventoryMode.Own;
+
+    /// <summary>ARC-UI-060: the mode the original look draws: the loot or barter frame's while it is drawn, else the own window's.</summary>
+    internal AreaInventoryMode LookMode => LootLook || BarterLook ? Mode : AreaInventoryMode.Own;
+
+    /// <summary>ARC-UI-064: the grid draws the barter window's frame with <paramref name="frame"/>'s parts (null: the inventory window's).</summary>
+    public void SetBarter(AreaBarterFrame? frame)
+    {
+        if (frame == _barter) return;
+        _barter = frame; QueueRedraw();
+    }
+
+    // The shown object's scroll maximum by the window's mode (IW31, IW37).
+    private int ScrollMax(AreaInventoryView view) =>
+        _barter is not null ? AreaBarterArtLayout.ScrollMax(view.HolderContainer) : AreaLootArtLayout.ScrollMax(view.HolderContainer);
 
     /// <summary>ARC-UI-054: screen pixels per frame pixel.</summary>
     internal float FrameScale => _scale;
@@ -126,7 +148,7 @@ public partial class AreaInventoryGridArea : Control
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
         if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; }
-        _lootScroll = Math.Clamp(_lootScroll, 0, AreaLootArtLayout.ScrollMax(view.HolderContainer));
+        _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
         if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity)
                 : held.Worn is { } worn ? view.Doll.FirstOrDefault(slot => slot.Slot == worn)?.Entity != held.Entity
@@ -149,8 +171,9 @@ public partial class AreaInventoryGridArea : Control
             return;
         }
         if (Blocked && @event is InputEventMouseButton) { AcceptEvent(); return; }
-        // ARC-UI-052: PROJECT: the wheel scrolls the holder's grid by a row (the original's scroll bar at 330, 136 is not drawn).
-        if (LootLook && @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel)
+        // ARC-UI-052: PROJECT: the wheel scrolls the holder's grid by a row (the original's scroll bar at 330, 136 is not drawn; ARC-UI-064:
+        // the barter window's at 330, 168 neither).
+        if ((LootLook || BarterLook) && @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel)
         {
             ScrollLoot(wheel.ButtonIndex == MouseButton.WheelUp ? -1 : 1);
             AcceptEvent();
@@ -183,7 +206,8 @@ public partial class AreaInventoryGridArea : Control
     internal void StillAt(Vector2 frame)
     {
         if (Held is not null || Blocked || _view is null) return;
-        var item = (LootLook ? AreaLootArtLayout.Press(_view, LootHit(frame)) : AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)))?.Entity;
+        var item = (BarterLook ? AreaBarterArtLayout.Press(_view, BarterHit(frame)) : LootLook ? AreaLootArtLayout.Press(_view, LootHit(frame))
+            : AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)))?.Entity;
         if (item == _stillItem) return;
         _stillItem = item;
         PointerStill?.Invoke(item);
@@ -199,7 +223,8 @@ public partial class AreaInventoryGridArea : Control
     internal void PressAt(Vector2 frame)
     {
         if (Held is not null || _view is null) return;
-        if (LootLook)
+        if (BarterLook) Held = AreaBarterArtLayout.Press(_view, BarterHit(frame));
+        else if (LootLook)
         {
             var hit = LootHit(frame);
             _takeAllDown = hit.TakeAll;
@@ -217,11 +242,18 @@ public partial class AreaInventoryGridArea : Control
         return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()));
     }
 
+    /// <summary>ARC-UI-064: the barter window's point under <paramref name="frame"/> with the current scroll.</summary>
+    private AreaBarterHit BarterHit(Vector2 frame)
+    {
+        var box = Look?.Art.GetValueOrDefault(AreaBarterArtLayout.GambleArt);
+        return AreaBarterArtLayout.HitTest(frame.X, frame.Y, _lootScroll, box is null ? (0, 0) : (box.GetWidth(), box.GetHeight()));
+    }
+
     /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
     internal void ScrollLoot(int rows)
     {
         if (_view is null) return;
-        var scroll = Math.Clamp(_lootScroll + rows, 0, AreaLootArtLayout.ScrollMax(_view.HolderContainer));
+        var scroll = Math.Clamp(_lootScroll + rows, 0, ScrollMax(_view));
         if (scroll == _lootScroll) return;
         _lootScroll = scroll; QueueRedraw();
     }
@@ -231,7 +263,13 @@ public partial class AreaInventoryGridArea : Control
     {
         if (Held is not null || _view is null) return;
         // ARC-UI-065: in the loot and steal windows the right release moves the item under it to the other side (IW36): a take, or in the
-        // steal window a theft or a plant attempt. ARC-UI-052: it uses an item only in the player's own window (mode 0, IW5).
+        // steal window a theft or a plant attempt; ARC-UI-064: in the barter window a buy or a sale. ARC-UI-052: it uses an item only in the
+        // player's own window (mode 0, IW5).
+        if (BarterLook)
+        {
+            if (AreaBarterArtLayout.RightRelease(_view, BarterHit(frame)) is { } trade) Callable.From(() => DropRequested?.Invoke(trade)).CallDeferred();
+            return;
+        }
         if (LootLook)
         {
             if (AreaLootArtLayout.RightRelease(_view, LootHit(frame), Mode) is { } drop) Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
@@ -267,7 +305,8 @@ public partial class AreaInventoryGridArea : Control
         }
         if (Held is not { } held) return;
         Held = null;
-        var drop = LootLook ? AreaLootArtLayout.Release(held, LootHit(frame), Mode) : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
+        var drop = BarterLook ? AreaBarterArtLayout.Release(held, BarterHit(frame)) : LootLook ? AreaLootArtLayout.Release(held, LootHit(frame), Mode)
+            : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
         // The app re-renders the window, which may put an occupant on the cursor: after this input event returns.
         Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
@@ -285,7 +324,7 @@ public partial class AreaInventoryGridArea : Control
 
     public override void _Draw()
     {
-        if (LootLook) { DrawLoot(Look!); return; }
+        if (LootLook || BarterLook) { DrawLoot(Look!); return; }
         if (Look is { } look) { DrawOriginal(look); return; }
         var font = GetThemeDefaultFont();
         var size = Math.Max(8, (int)(11 * _scale));
@@ -423,9 +462,12 @@ public partial class AreaInventoryGridArea : Control
 
     // ARC-UI-052: the redraw's order in the loot mode (0x576520): the loot and pack arts, the holder's image, the counts, the boxes, the hero's
     // grid items (no doll, no weight lines), the holder's grid items clipped to its shown rows; then the Take all button and the held item.
+    // ARC-UI-064: the barter mode the same way with its background, the merchant's name and quote line after its image, the gamble box after
+    // the drop and use boxes, the shown grid from y 168 (7 rows) and no Take all button.
     private void DrawLoot(AreaInventoryArtLook look)
     {
         var view = _view!;
+        var barter = BarterLook ? _barter : null;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         void Art(int number, float x, float y)
         {
@@ -451,13 +493,25 @@ public partial class AreaInventoryGridArea : Control
             var ratio = texture.GetHeight() / h;
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
-        Background(look, AreaLootArtLayout.LootArt, LookMode);
+        Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
         Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
         if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
-        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));
+        if (barter is not null)
+        {
+            // The merchant's name centred on x 215 (0x5766A4..0x57671A) and the quote line below it (0x57687F); PROJECT: the project's font.
+            var (_, ny, _, nh) = AreaBarterArtLayout.NameLine;
+            var width = font.GetStringSize(barter.Name, HorizontalAlignment.Left, -1, size).X;
+            DrawString(font, new(AreaBarterArtLayout.NameCentreX * _scale - width / 2, ny * _scale + (nh * _scale + size) / 2 - 2), barter.Name,
+                HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
+            var (qx, qy, qw, qh) = AreaBarterArtLayout.QuoteLine;
+            if (barter.Quote.Length > 0)
+                DrawMultilineString(font, new(qx * _scale, qy * _scale + size), barter.Quote, HorizontalAlignment.Left, qw * _scale, size, 2,
+                    AreaInventoryArtLook.TextColour);
+        }
+        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         var counts = new[] { view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < view.Ammo.Count ? view.Ammo[type] : 0)).ToArray();
         for (var i = 0; i < counts.Length; i++)
         {
@@ -466,26 +520,31 @@ public partial class AreaInventoryGridArea : Control
             DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
                 HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
         }
-        var over = Held is null ? null : LootHit(_pointer / _scale).Icon;
+        var over = Held is null ? null : barter is not null ? BarterHit(_pointer / _scale).Icon : LootHit(_pointer / _scale).Icon;
         foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
         {
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
         }
+        if (barter is not null) Art(AreaBarterArtLayout.GambleArt, AreaBarterArtLayout.GambleBox.X, AreaBarterArtLayout.GambleBox.Y);
         foreach (var item in view.Grid)
         {
             if (item.Entity == Held?.Entity) continue;
             Item(look.ItemArt(item.Entity), (AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
                 AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels), item.Name);
         }
-        const float shownTop = AreaLootArtLayout.GridY, shownBottom = AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels;
+        var (shownTop, shownBottom) = barter is not null
+            ? (AreaBarterArtLayout.GridY, AreaBarterArtLayout.GridY + AreaBarterArtLayout.ShownRows * AreaBarterArtLayout.CellPixels)
+            : (AreaLootArtLayout.GridY, AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels);
         foreach (var item in view.LootGrid)
         {
             // The held item stays in its place but is not drawn there (item flag 0x10, as in the hero's grid).
-            if (item.Entity == Held?.Entity || AreaLootArtLayout.ItemRect(item, _lootScroll) is null) continue;
-            Item(look.ItemArt(item.Entity), AreaLootArtLayout.FullRect(item, _lootScroll), item.Name, shownTop, shownBottom);
+            if (item.Entity == Held?.Entity) continue;
+            var full = barter is not null ? AreaBarterArtLayout.FullRect(item, _lootScroll) : AreaLootArtLayout.FullRect(item, _lootScroll);
+            if (full.Y + full.Height <= shownTop || full.Y >= shownBottom) continue;
+            Item(look.ItemArt(item.Entity), full, item.Name, shownTop, shownBottom);
         }
-        if (AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
+        if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
@@ -503,6 +562,9 @@ public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Ar
 {
     /// <summary>ARC-UI-052: the loot window's own arts read (<see cref="AreaInventoryArtContent.LootArtReady"/>).</summary>
     public bool LootReady { get; init; }
+
+    /// <summary>ARC-UI-064: the barter window's own arts read (<see cref="AreaInventoryArtContent.BarterArtReady"/>).</summary>
+    public bool BarterReady { get; init; }
 
     /// <summary>PROJECT: the lines' colour; the original's fonts (0x682C74 for the lines, 0x68345C for the counts) are not read.</summary>
     public static readonly Color TextColour = new(.92f, .86f, .72f);

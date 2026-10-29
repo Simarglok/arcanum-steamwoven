@@ -110,6 +110,9 @@ public partial class TerrainViewerApp
             Require(_barterPanel.View!.Hero.Single(line => line.Entity == "axe").Quote.Price > 0, "the axe sells back");
             Require(_barterPanel.BuyButtonsForSelfTest.Single().Text.Contains("kit:1", StringComparison.Ordinal), "the sword can be bought back");
             Require(_barterSounds.Count == sounds, "no sound without a move");
+            var art = await AreaBarterArtForSelfTestAsync(owner, Model);
+            // The original look's part closed the window through the round view; the diagnostic window opens again for the keys.
+            OpenBarterWindow(Model(owner));
 
             InventoryKey(Key.Escape);
             Require(!BarterOpen && !WorldModal, "Escape closed it");
@@ -120,12 +123,90 @@ public partial class TerrainViewerApp
             SyncAreaBarter();
             Require(!BarterOpen, "a replaced session closes the window");
             Require(!AreaBarter.HeroCanTrade(replacement), "a session without a hero cannot trade");
-            return "sell 55, buy 760, keys, close, replaced session";
+            return "sell 55, buy 760, keys, close, " + art + ", replaced session";
         }
         finally
         {
             if (BarterOpen) EndBarter();
             _worldFocusSimulationForSelfTest = simulatedFocus;
+        }
+    }
+
+    /// <summary>ARC-UI-064 over a synthetic art set (blank arts of the original sizes): the window opens in the original look (mode 1, background
+    /// 235, the merchant's name), a resting pointer puts a ware's quote on the quote line, the hero's item dragged onto the merchant's grid is
+    /// sold and the merchant's dragged onto the hero's grid bought (coins and the trade sound as the buttons'), a ware released back on its
+    /// grid changes nothing, the switch shows the diagnostic window and back, and a release on the round view closes the window.</summary>
+    private async Task<string> AreaBarterArtForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-064 barter art: " + why); }
+        static Vector2 Ware(int location) => new(AreaBarterArtLayout.GridX + (location % 10 + .5f) * AreaBarterArtLayout.CellPixels,
+            AreaBarterArtLayout.GridY + (location / 10 + .5f) * AreaBarterArtLayout.CellPixels);
+        static Texture2D Blank(int width, int height) => ImageTexture.CreateFromImage(Image.CreateEmpty(width, height, false, Image.Format.Rgba8));
+        InventoryKey(Key.Escape);
+        var host = _inventoryHost;
+        _inventoryHost ??= new AreaInventoryHost([]);
+        _inventoryArtLookForSelfTest = new(AreaInventoryArtContent.Numbers.ToDictionary(number => number, number => number switch
+        {
+            AreaBarterArtLayout.BarterArt or AreaBarterArtLayout.FollowerArt or AreaInventoryArtLayout.DollArt or AreaLootArtLayout.LootArt => Blank(358, 400),
+            AreaInventoryArtLayout.PackArt => Blank(442, 400),
+            _ => Blank(80, 43),
+        }), _ => null, AreaInventoryTexts.Project("self-test")) { LootReady = true, BarterReady = true };
+        try
+        {
+            OpenBarterWindow(model(owner));
+            var panel = _barterPanel!;
+            var area = panel.GridAreaForSelfTest;
+            Require(panel.ArtMode && area.BarterLook && area.LookMode == AreaInventoryMode.Barter && area.BarterFrame is { Background: 235, Name: "Smith" },
+                "the original look opened in mode 1 with background 235");
+            Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" } && !panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "the switch below the frame");
+            var view = panel.ArtView!;
+            var sword = view.LootGrid.Single(item => item.Entity == "kit:1");
+            var axe = view.Grid.Single(item => item.Entity == "axe");
+            Require(!view.LootGrid.Any(item => item.Entity == "vest"), "the worn vest is not in the grid");
+            area.StillAt(Ware(sword.Location));
+            Require(area.BarterFrame!.Quote.StartsWith("Buy kit:1: ", StringComparison.Ordinal), "the resting pointer quotes the ware: " + area.BarterFrame.Quote);
+
+            var revision = owner.Version.Revision;
+            area.PressAt(Ware(sword.Location)); area.ReleaseAt(Ware(69));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(owner.Version.Revision == revision && area.Held is null, "a ware released on its own grid goes back");
+
+            var (gold, merchantGold, sounds) = (owner.QueryGold(), owner.QueryNpcGold("merchant") ?? 0, _barterSounds.Count);
+            var sale = panel.View!.Hero.Single(line => line.Entity == "axe").Quote.Price;
+            area.PressAt(AreaInventoryGridArea.CellCentre(axe.Slot)); area.ReleaseAt(Ware(69));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var paid = Math.Min(sale, merchantGold);
+            Require(owner.QueryGold() == gold + paid && panel.ArtView!.LootGrid.Any(item => item.Entity == "axe") && _barterSounds.Count == sounds + 1,
+                $"the axe dragged onto the merchant's grid sold for {paid}: {area.BarterFrame!.Quote}");
+            Require(area.BarterFrame!.Quote == $"sold axe for {paid}", "the trade message is on the quote line: " + area.BarterFrame.Quote);
+
+            gold = owner.QueryGold();
+            var price = panel.View!.Wares.Single(line => line.Entity == "kit:1").Quote.Price;
+            Require(price > 0 && price <= gold, $"the sword is affordable ({price} of {gold})");
+            var ware = panel.ArtView!.LootGrid.Single(item => item.Entity == "kit:1");
+            area.PressAt(Ware(ware.Location)); area.ReleaseAt(AreaInventoryGridArea.CellCentre(119));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(owner.QueryGold() == gold - price && panel.ArtView!.Grid.Any(item => item.Entity == "kit:1") && _barterSounds.Count == sounds + 2,
+                $"the sword dragged onto the hero's grid was bought for {price}: {area.BarterFrame!.Quote}");
+
+            panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.ArtMode && panel.SellButtonsForSelfTest.Count > 0 && panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic window");
+            panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.ArtMode, "and the original look again");
+
+            var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Barter);
+            area.ReleaseAt(new(holeX + 10, holeY + 10));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!BarterOpen, "a release on the round view closed the window");
+            return $"original look: quote, sell {paid} and buy {price} by drag, switch, round-view close";
+        }
+        finally
+        {
+            if (BarterOpen) EndBarter();
+            _inventoryArtLookForSelfTest = null;
+            _inventoryHost = host;
         }
     }
 
@@ -264,6 +345,52 @@ public partial class TerrainViewerApp
             Firearms = build.Combat.Chooser(state).FirearmsLevel }));
     }
 
+    /// <summary>ARC-UI-064 native observation (stage `barter`, on the live window): with the game's art the window shows the original barter
+    /// window: mode 1, the background by the follower rule, the merchant's image and every shown item's inventory art read, the round view
+    /// shown; a resting pointer on the first shown ware puts its quote on the quote line, and that ware pressed and released on its own grid
+    /// goes back, changing nothing. <c>ARC_AREA_BARTER_CAPTURE=PATH.png</c> saves a readback of the window. Prints counts only.</summary>
+    private async Task<string> BarterArtForSmokeAsync()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-064 barter-art smoke: " + why); }
+        var panel = _barterPanel!;
+        var area = panel.GridAreaForSelfTest;
+        Require(panel.ArtMode && area.BarterLook && area.LookMode == AreaInventoryMode.Barter && area.Look is { } look
+            && AreaBarterArtLayout.ArtNumbers.All(look.Art.ContainsKey), "the barter window shows the original look: " + (_inventoryArtContent?.Detail ?? "no art read"));
+        var view = panel.ArtView!;
+        var merchant = panel.View!.Merchant;
+        var background = AreaBarterArtLayout.Background(merchant.Follower, _areaSession!.QueryParty().Followers.Count);
+        Require(area.BarterFrame is { } frame && frame.Background == background && frame.Name == merchant.Name, $"background {area.BarterFrame?.Background} name '{area.BarterFrame?.Name}'");
+        Require(view.HolderImage is not { } image || area.Look!.Art.ContainsKey(image), $"the merchant's image {view.HolderImage} reads");
+        Require(panel.RoundViewShown, "the round view shows the game view around the PC");
+        var drawn = view.LootGrid.Count(item => area.Look!.ItemArt(item.Entity) is not null);
+        Require(drawn == view.LootGrid.Count, $"every shown item has its art ({drawn}/{view.LootGrid.Count})");
+        var quote = "-";
+        if (view.LootGrid.FirstOrDefault(item => AreaBarterArtLayout.ItemRect(item, area.LootScroll) is not null) is { } ware)
+        {
+            var rect = AreaBarterArtLayout.ItemRect(ware, area.LootScroll)!.Value;
+            var point = new Vector2(rect.X + 16, rect.Y + 16);
+            area.StillAt(point);
+            quote = area.BarterFrame!.Quote;
+            Require(quote.Length > 0 || merchant.Follower || panel.View.Wares.All(line => line.Entity != ware.Entity), "the resting pointer quotes the ware");
+            area.PressAt(point);
+            Require(area.Held is { Partner: true }, "the ware is on the cursor");
+            area.ReleaseAt(new(AreaBarterArtLayout.GridX + 1, AreaBarterArtLayout.GridY + 1));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && panel.ArtView!.LootGrid.Any(item => item.Entity == ware.Entity), "released on its own grid it went back");
+        }
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_CAPTURE") is { Length: > 0 } capture)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var shot = GetViewport().GetTexture().GetImage();
+            if (shot.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_BARTER_CAPTURE_FAILED");
+        }
+        var line = $"background {background}, image {view.HolderImage?.ToString() ?? "none"}, shown {view.LootGrid.Count} (drawn {drawn}, container {view.HolderContainer}), "
+            + $"hero grid {view.Grid.Count}, quote '{quote}'";
+        GD.Print("ARC-UI-064 native-smoke barter-art PASS " + line);
+        return line;
+    }
+
     /// <summary>
     /// ARC-UI-050 native observation on the original data (stage `barter`, with --hero): a living NPC speaker of the shown map, a merchant
     /// when one is there, is passed to the production path a `b:` reply takes once its talk ended; the window opens over the live session
@@ -304,6 +431,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-090: the open's coins and identification; ARC-WORLD-096: the restock schedule of the shown object.
             Require(session.Version.Revision - revision is >= 0 and <= 2, "the open is two revisions at most");
             revision = session.Version.Revision;
+            var art = await BarterArtForSmokeAsync();
+            Require(session.Version.Revision == revision, "the original look's checks changed nothing");
             InventoryKey(Key.Escape);
             Require(!BarterOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
 
@@ -329,7 +458,7 @@ public partial class TerrainViewerApp
                 Merchant = $"speaker {chosen.Index} of {talk.Speakers.Count}, multiplier {live.Merchant.Multiplier}, buys {live.Merchant.BuyList.Status}, fence {live.Merchant.Fence}, script {live.Merchant.BuyScript}",
                 Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",
                 Live = $"hero items {live.Hero.Count} (priced {live.Hero.Count(l => l.Quote.Price > 0)}), wares {live.Wares.Count} (priced {live.Wares.Count(l => l.Quote.Price > 0)}), gold {live.HeroGold}/{live.MerchantGold}, haggle {live.Haggle} {live.Training}, reaction {live.Reaction}",
-                Sold = sold.Text, Bought = bought }));
+                Sold = sold.Text, Bought = bought, Art = art }));
             await RunAreaRestockSmokeAsync(talk, chosen.Entity, chosen.Index, live);
         }
         finally
