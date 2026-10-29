@@ -6,8 +6,9 @@ public enum AttackArtWeapon
     NoWeapon, Unarmed, Dagger, Sword, Axe, Mace, Pistol, TwoHandedSword, Bow, Type9, Rifle, Type11, Type12, Staff, Type14,
 }
 
-/// <summary>The two attack animations of a critter ART (the source's <c>TIG_ART_ANIM_ATTACK</c> and <c>ATTACK_LOW</c>).</summary>
-public enum AttackAnimation { Attack, AttackLow }
+/// <summary>The attack animations of a critter ART (the source's <c>TIG_ART_ANIM_ATTACK</c> and <c>ATTACK_LOW</c>) and, since
+/// ARC-RENDER-039, the throw (animation 14) a returning weapon attacks with, which keeps its ART's rate (ledger WA9).</summary>
+public enum AttackAnimation { Attack, AttackLow, Throw }
 
 /// <summary>Why a critter's combat mode did not change (<see cref="RealTimeCombatRules.ToggleRefusal"/>).</summary>
 public enum CombatModeRefusal
@@ -188,7 +189,8 @@ public static class RealTimeCombatRules
 
     /// <summary>
     /// Frames per second of an attack animation (the source's Speed-scaled rate): the ART's own rate for an ART that is not a
-    /// critter, monster or unique NPC, under a body-of-element spell, or for a weapon slot without an entry; otherwise from
+    /// critter, monster or unique NPC, under a body-of-element spell, for a weapon slot without an entry or for the throw (ARC-RENDER-039,
+    /// WA9); otherwise from
     /// the slot's low, middle and high values (no dwarf or halfling offset for attacks): Speed below 8 gives
     /// <c>low + Speed·(middle − low)/8</c>, 8 the middle, below 30 <c>middle + Speed·(high − middle)/30</c>, else the high
     /// value; divisions truncate toward zero.
@@ -207,8 +209,9 @@ public static class RealTimeCombatRules
     }
 
     // (middle, low, high) per weapon slot; null keeps the ART rate.
-    private static (int Middle, int Low, int High)? Rates(AttackAnimation animation, AttackArtWeapon weapon) => animation == AttackAnimation.Attack
-        ? weapon switch
+    private static (int Middle, int Low, int High)? Rates(AttackAnimation animation, AttackArtWeapon weapon) => animation switch
+    {
+        AttackAnimation.Attack => weapon switch
         {
             AttackArtWeapon.Unarmed or AttackArtWeapon.Sword => (15, 7, 23),
             AttackArtWeapon.Dagger or AttackArtWeapon.Bow => (10, 6, 14),
@@ -217,8 +220,8 @@ public static class RealTimeCombatRules
             AttackArtWeapon.Rifle => (6, 3, 10),
             AttackArtWeapon.Staff => (12, 8, 16),
             _ => null,
-        }
-        : weapon switch
+        },
+        AttackAnimation.AttackLow => weapon switch
         {
             AttackArtWeapon.Unarmed => (13, 8, 18),
             AttackArtWeapon.Dagger or AttackArtWeapon.Bow or AttackArtWeapon.Staff => (10, 6, 14),
@@ -227,7 +230,10 @@ public static class RealTimeCombatRules
             AttackArtWeapon.Pistol or AttackArtWeapon.Rifle => (6, 3, 10),
             AttackArtWeapon.TwoHandedSword => (13, 9, 17),
             _ => null,
-        };
+        },
+        // ARC-RENDER-039 (WA9): 0x437990's animation table sends the throw (14) to its default, the ART's rate.
+        _ => null,
+    };
 
     /// <summary>
     /// The pause per attack frame, real milliseconds: <c>1000 / fps</c> clamped to 30..800, then less
