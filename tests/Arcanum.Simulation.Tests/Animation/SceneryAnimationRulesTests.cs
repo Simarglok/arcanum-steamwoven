@@ -26,6 +26,7 @@ public sealed class SceneryAnimationRulesTests
         Assert.AreEqual(125, SceneryAnimationRules.PauseMs(8));
         Assert.AreEqual(333, SceneryAnimationRules.PauseMs(3), "unsigned division truncates");
         Assert.AreEqual(100, SceneryAnimationRules.PauseMs(0), "an unread rate takes the unread ART's pause");
+        Assert.AreEqual(1, SceneryAnimationRules.PauseMs(2000), "a rate above 1000 waits 1 ms, not 0");
         Assert.AreEqual(1, SceneryAnimationRules.NextFrame(0, 4));
         Assert.AreEqual(0, SceneryAnimationRules.NextFrame(3, 4));
         Assert.AreEqual(0, SceneryAnimationRules.NextFrame(9, 4), "a frame past the count goes to 0");

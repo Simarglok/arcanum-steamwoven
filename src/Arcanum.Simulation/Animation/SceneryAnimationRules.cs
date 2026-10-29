@@ -28,9 +28,10 @@ public static class SceneryAnimationRules
         type == SceneryType && (objectFlags & HiddenFlags) == 0 && (sceneryFlags & NoAutoAnimate) == 0 && (spellFlags & Stoned) == 0 && frameCount > 1;
 
     /// <summary>The pause between two frames: 1000 / the ART's frame rate, unsigned (AS3). A rate that was not read (0) takes the
-    /// unread ART's 100 ms; the original would divide by zero there, and no installed animated scenery has it.</summary>
+    /// unread ART's 100 ms (the original would divide by zero there), and a rate above 1000 waits 1 ms (the original 0); no
+    /// installed animated scenery has either.</summary>
     [OriginalFunction(0x42DA50, OriginalFunctionScope.Partial)]
-    public static long PauseMs(int framesPerSecond) => framesPerSecond > 0 ? 1000 / framesPerSecond : UnreadPauseMs;
+    public static long PauseMs(int framesPerSecond) => framesPerSecond > 0 ? Math.Max(1, 1000 / framesPerSecond) : UnreadPauseMs;
 
     /// <summary>The next frame: the following one, frame 0 after the last (AS5).</summary>
     [OriginalFunction(0x43F7F0, OriginalFunctionScope.Partial)]

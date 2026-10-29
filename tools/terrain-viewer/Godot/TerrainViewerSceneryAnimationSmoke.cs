@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-RENDER-035 native observation in map mode: the animated scenery nearest the PC steps one frame per 1000 / fps ms of the loop's
 // clock (ledger AS3-AS5), and the canvas draws each frame it reaches. The stage restarts the loops on its own clock, steps the chosen
 // loop four pauses and reads the drawn command of the scenery after each; three distinct drawn frames are required. Skips a map
-// without an animated scenery near the PC. Prints counts only.
+// without an animated scenery drawn near the PC. Prints counts only.
 public partial class TerrainViewerApp
 {
     private Task<object> RunSceneryAnimationSmokeAsync() => WithAreaSmokeCameraHeld(ObserveSceneryAnimationAsync);
@@ -26,16 +26,25 @@ public partial class TerrainViewerApp
         {
             var animation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects, start, pc);
             _sceneryAnimation = animation; _sceneryStamp = area.Plan; _sceneryBodies = [];
-            var loop = animation.Loops.Where(l => SceneryAnimationRules.Near(l.Loop.X, l.Loop.Y, pc))
-                .OrderBy(l => Math.Max(Math.Abs(l.Loop.X - pc.X), Math.Abs(l.Loop.Y - pc.Y))).FirstOrDefault();
+            _canvas!.SetAreaMovingBodies(AreaMovingCommands());
+            // The nearest loops near the PC whose T0 body the canvas draws (a roof or a fade can hide one).
+            AreaSceneryLoop? loop = null;
+            foreach (var candidate in animation.Loops.Where(l => SceneryAnimationRules.Near(l.Loop.X, l.Loop.Y, pc))
+                .OrderBy(l => Math.Max(Math.Abs(l.Loop.X - pc.X), Math.Abs(l.Loop.Y - pc.Y))).Take(4))
+            {
+                var t0 = area.Plan.Commands.Single(c => c.Identity == candidate.Key);
+                _camera!.ResetWorld(new GamepadLab.Core.Vec2(t0.Destination.X + t0.Destination.Width / 2d, t0.Destination.Y + t0.Destination.Height / 2d),
+                    WorldViewport, 1);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                if (_canvas.AreaVisibleCommands.Any(c => c.Identity == candidate.Key)) { loop = candidate; break; }
+            }
             if (loop is null)
             {
-                GD.Print($"ARC-RENDER-035 native-smoke scenery animation SKIP map={_readyMapName} loops={animation.Loops.Count} (none near the PC)");
+                GD.Print($"ARC-RENDER-035 native-smoke scenery animation SKIP map={_readyMapName} loops={animation.Loops.Count} (none drawn near the PC)");
                 return new { SceneryAnimation = "none" };
             }
-            var t0 = area.Plan.Commands.Single(c => c.Identity == loop.Key);
-            _camera!.ResetWorld(new GamepadLab.Core.Vec2(t0.Destination.X + t0.Destination.Width / 2d, t0.Destination.Y + t0.Destination.Height / 2d),
-                WorldViewport, 1);
             var expected = new List<int>(); var drawn = new List<int>();
             for (var step = 0; step <= 4; step++)
             {

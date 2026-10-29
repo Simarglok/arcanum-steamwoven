@@ -31,7 +31,8 @@ public partial class TerrainViewerApp
         {
             _sceneryStamp = area.Plan;
             _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects, now, pc);
-            _sceneryBodies = [];
+            // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
+            if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
             GD.Print($"ARC-RENDER-035 scenery-loops map={area.Snapshot.RuntimeMap} loops={_sceneryAnimation.Loops.Count} "
                 + $"frames={_sceneryAnimation.Loops.Sum(l => l.Frames.Count)}");
             changed = true;

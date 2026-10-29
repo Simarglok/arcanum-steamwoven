@@ -439,10 +439,27 @@ public sealed class AreaUprightOrder
     {
         if (moving is null || moving.Count == 0) return With(placement, actor, actorIdentity);
         var keys = moving.Select(command => command.Identity).ToHashSet();
+        // ARC-RENDER-035: a moved command whose key equals its T0 body's (an animated scenery on another frame) takes the T0
+        // place when no other body or moved command shares that key, which is where the insertion below would put it; so a frame
+        // change costs no insertion.
+        var upright = moving.Where(command => command.Phase == 4).ToArray();
+        var inPlace = upright.Where(command => command.Identity is not null)
+            .GroupBy(command => command.Identity!.Value).Where(g => g.Count() == 1).Select(g => g.Single())
+            .Where(command => upright.Count(other => AreaScenePlan.CompareUpright(other, command) == 0) == 1)
+            .ToDictionary(command => command.Identity!.Value);
+        var placed = new HashSet<AreaDrawCommand>(ReferenceEqualityComparer.Instance);
         var ordered = new AreaDrawCommand[_bodies.Length + moving.Count + 1];
         var count = 0;
-        foreach (var body in _bodies) if (!keys.Contains(body.Identity)) ordered[count++] = body;
-        foreach (var command in moving.Where(command => command.Phase == 4)) Insert(ordered, ref count, command);
+        for (var i = 0; i < _bodies.Length; i++)
+        {
+            var body = _bodies[i];
+            if (!keys.Contains(body.Identity)) { ordered[count++] = body; continue; }
+            if (body.Identity is { } identity && inPlace.TryGetValue(identity, out var moved) && AreaScenePlan.CompareUpright(body, moved) == 0
+                && (i == 0 || AreaScenePlan.CompareUpright(_bodies[i - 1], moved) < 0)
+                && (i + 1 == _bodies.Length || AreaScenePlan.CompareUpright(_bodies[i + 1], moved) > 0))
+            { ordered[count++] = moved; placed.Add(moved); }
+        }
+        foreach (var command in upright.Where(command => !placed.Contains(command))) Insert(ordered, ref count, command);
         Insert(ordered, ref count, AreaScenePlan.ActorMarker(placement, actor, actorIdentity, _chart));
         return Array.AsReadOnly(ordered[..count]);
     }

@@ -656,17 +656,18 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
   again on every third check, and a loop away from the PC checks again every 800 ms (AS4, AS5, `SceneryLoop`). A frame's
   non-zero delta would move the object's offsets (AS6); no installed animated scenery has one.
 - **Drawing.** A scenery off its T0 frame is drawn like a moved body, from its current frame placed by the frame's own
-  hot spot (`AreaScenePlan.SceneryFrame`); a busted scenery's ground body wins. A window move or a map change restarts the
-  loops at their T0 frames.
+  hot spot (`AreaScenePlan.SceneryFrame`); a busted scenery's ground body wins. A frame keeps the body's draw-order key, so
+  it takes its T0 place in the upright order without an insertion (`AreaUprightOrder.With`). A window move or a map change
+  restarts the loops at their T0 frames.
 - **Census.** 1,063 animated scenery on 60 of the 80 interiors, 10 to 30 frames at 8 to 15 frames per second; the Crash
   Site window holds 4 of them (76 more frames). Void needs 4,678 frame requests (116 more), within the repository's 16,384.
 - **Not modelled.** The loop's ambient sound, goal 77's fire damage, restarting a loop when a scenery's ART or off flag
   changes at runtime, the HD pack's frames (an HD pack draws the frames it holds).
 
 Native smoke (`ARC-RENDER-035 native-smoke scenery animation PASS`, after the light animation stage): the stage restarts
-the loops on its own clock, takes the animated scenery nearest the PC within 30 tiles and steps it four pauses; after each
+the loops on its own clock, takes the animated scenery nearest the PC within 30 tiles that the canvas draws (of the four nearest) and steps it four pauses; after each
 step the canvas must draw that scenery's expected frame, three distinct frames in all. It prints `SKIP` on a map without
-animated scenery near the PC.
+animated scenery drawn near the PC.
 
 ## The main world map (ARC-RENDER-024)
 
