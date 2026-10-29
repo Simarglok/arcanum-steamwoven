@@ -87,8 +87,10 @@ public partial class TerrainViewerApp
             return true;
         }
         // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
-        // ARC-RENDER-041: a pool playing its frames changes its body without a revision.
-        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp());
+        // ARC-RENDER-041: a pool playing its frames changes its body without a revision, and a pool decays as game time passes
+        // (which moves no revision either).
+        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp(),
+            session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count);
         if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;

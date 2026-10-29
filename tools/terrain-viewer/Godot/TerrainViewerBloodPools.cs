@@ -158,8 +158,11 @@ public partial class TerrainViewerApp
         Require(_groundBodies.TryGetValue(key, out var drawn) && drawn.Phase == 3 && !_groundOnly.ContainsKey(key), "the pool is drawn flat and not picked");
         Require(_bloodPoolTiming is { Frames: > 1 } timing && _bloodPoolStarts.ContainsKey(pool.Entity), "the pool plays its frames: " + _bloodPoolTiming);
         var last = ExtraArt()!.Load(WithSceneryFrame(_bloodPoolArt!.Value, _bloodPoolTiming!.Value.Frames - 1)).Frame!.Key;
+        // Wait by real time, not frames: a background window's frames may come far faster than the art's rate.
+        var deadline = Time.GetTicksMsec() + 3000;
         var waited = 0;
-        while (_bloodPoolStarts.ContainsKey(pool.Entity) && waited++ < 120) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+        while (_bloodPoolStarts.ContainsKey(pool.Entity) && Time.GetTicksMsec() < deadline)
+        { waited++; await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
         Require(!_bloodPoolStarts.ContainsKey(pool.Entity) && _groundBodies[key].Frame == last, $"the pool keeps its last frame after {waited} frames");
         Require(GameSessionSnapshotCodec.Encode(session.Capture()).Contains($"{{\"entity\":\"{pool.Entity}\",\"critter\":\"{npc}\"", StringComparison.Ordinal), "the save holds the pool");
         // A repeated sync leaves no second pool.

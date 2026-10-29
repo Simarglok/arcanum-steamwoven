@@ -134,5 +134,10 @@ public sealed class BloodPoolStateTests
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored(text.Replace(pool, pool.Replace("\"createdMs\":", "\"createdMs\":9"))), "not after the clock");
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored(text.Replace(pool, pool.Replace("\"deathTimeMs\":", "\"deathTimeMs\":9"))), "not before the death");
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(text.Replace(pool, pool.Replace("{\"entity\"", "{\"x2\":1,\"entity\""))).Failure);
+
+        // A live pool numbered at the integer bound takes no successor (its number would not restore).
+        using var highest = Restore(Decode(text.Replace(pool, pool.Replace("pool:1", "pool:2147483647"))));
+        Kill(highest, "oid:bear");
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, Leave(highest, "oid:bear").Failure);
     }
 }

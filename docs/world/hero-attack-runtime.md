@@ -491,7 +491,7 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
   event deletes the pool two game days after its creation.
 - **Session** (`GameSessionOwner.LeaveBloodPool`, `QueryBloodPools`; snapshot schema 58, `inventory.bloodPools`): the host leaves
   a pool for an NPC with a recorded death or for the dead hero (`pc`), at a map cell with the critter's pixel offsets; one pool
-  per recorded death (a repeated call is NoChange), a refusal is NoChange with its reason. A pool is `pool:n`, keeps the death time
+  per recorded death while its pool is kept (a repeated call is NoChange; the host asks once per death), a refusal is NoChange with its reason. A pool is `pool:n`, keeps the death time
   and its creation time, and is not returned from two game days on (the session keeps no queued event: a decayed pool is dropped
   when the next one is left). At most 4096 pools (project bound). A schema 57 save loads with no pools.
 - **Viewer (AREA)**: when a sync sees a recorded death on the shown map that it did not see when the map and session were first
@@ -502,8 +502,9 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
   log says `ARC-RENDER-041 blood-pool critter=… disposition=… refusal=…` for each death and `blood-pool-art 0x…` once.
 - **Not ready**: the original leaves the pool when the dying animation has played (ARC-RENDER-040), the view when it sees the
   death; an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
-  setting); the hit's blood eye candy (`Rules\AnimEyeCandy.mes`); the dead critter's own one-day decay; the multiplayer and
-  editor cases.
+  setting); the hit's blood eye candy (`Rules\AnimEyeCandy.mes`); the dead critter's own one-day decay; a visiting companion from another
+  map's seed (such as Virgil in the cave) that dies on the shown map leaves no pool (the view reads the shown map's seed holders
+  only); the multiplayer and editor cases.
 
 ## Not ready
 
