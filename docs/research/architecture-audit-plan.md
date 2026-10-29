@@ -23,7 +23,7 @@ Function-level parity did not catch this. On `origin/main` 63b55a33 the
 [function registry](../verification/README.md) holds 789 rows (F2 628, F1 123, F3 38;
 partial 499, full 266, not implemented 24) and the
 [coverage matrix](../requirements/coverage.md) 191 requirements (4 implemented,
-164 partial, 14 researched, 9 not started). Each row compares one function's rules;
+163 partial, 15 researched, 9 not started). Each row compares one function's rules;
 none asks *where an object lives, who owns it, how it is addressed, when it changes
 and what is saved*. Those questions belong to a few engine mechanisms that every
 domain stands on. This audit reads those mechanisms in the original first, maps
@@ -51,7 +51,7 @@ does today. "Known" names existing research; "open" is what a slice must read.
 
 | # | Spine | Original: known / open | Steamwoven today |
 | --- | --- | --- | --- |
-| SP1 | Object model and identity | Known: one object per thing with a persistent ID kept across maps (FM4), typed fields from the field table, prototypes. Open: the handle vs ID split, field ownership, what is copied from the prototype at creation and what is read through it later, object kinds the engine creates at run time | NPC identity `oid:` + hash of the object ID; base records are immutable rows of the loaded map (`Area`); mutable state in ~80 session domains, some keyed by entity, some by map, some by kind |
+| SP1 | Object model and identity | Known: one object per thing with a persistent ID kept across maps (FM4), typed fields from the field table, prototypes. Open: the handle vs ID split, field ownership, what is copied from the prototype at creation and what is read through it later, object kinds the engine creates at run time | NPC identity `oid:` + hash of the object ID; base records are immutable rows of the loaded map (`Area`); mutable state in 79 session domain files, some keyed by entity, some by map, some by kind |
 | SP2 | Residency and lifecycle | Known: sector cache (SS1–SS4), follower moved whole between maps with the source ID recorded as deleted (FM1–FM14). Open: create, destroy and move between sectors in general; what simulates on unloaded sectors; map change order | One shown map in the viewer (main map in 3×3 windows); records looked up per shown map; run-local caches (companion bodies) |
 | SP3 | Persistence | Known: per-map dynamic objects and deleted IDs, a global game file. Open: the full save layout, which state is global vs per map, load order and fix-ups | Snapshot schema 58: an overlay of keyed map changes over the immutable map plus per-domain stores ([session runtime](../world/game-session-runtime.md)); per-kind stores for objects the game creates (placed items, junk piles, blood pools, created items, ammunition, thrown items) |
 | SP4 | Time and the frame | Known: event types and map scope ([event queue](game-event-queue.md) P1–P7), AI cadence. Open: one frame's order (input, events, goals, AI, render), real vs game vs animation time, pause and turn-based gating as one model | Session clock and event queue; viewer pumps; a separate world clock for AI runs; per-host ticks |
@@ -94,7 +94,7 @@ Codes are not taken; the coordinator hands each one out when its thread starts.
 | R5 | SP5: the goal system for PC and NPCs, slots, priorities, interrupts, how input, AI and scripts start goals | `docs/architecture/original-goals.md` (GS*) |
 | R6 | SP6 + SP8 + SP9: script slots and state on objects, the change path the network layer uses, the interface mode machine | `docs/architecture/original-scripts-authority.md` (SA*) |
 
-R1 first; R2–R6 may run in parallel after it, within the three-threads-on-Mac limit.
+R1 first; R2–R6 may run in parallel after it, as many at once as the owner allows on the Mac.
 
 ### Phase 1b: Steamwoven's map (cloud, may start at once)
 
@@ -124,7 +124,7 @@ only for F0 rows it cannot class otherwise (then on the Mac).
 | D2 | Scene objects, doors, containers, roofs, rendering inputs | [scene](../requirements/scene.md) |
 | D3 | Items, inventory, economy, barter, decay | [items and economy](../requirements/items-economy.md) |
 | D4 | Combat in both modes, projectiles, damage, life | [combat, magic, technology](../requirements/combat-magic-tech.md) (FR-COMBAT) |
-| D5 | Magic, item spells and technology | [combat, magic, technology](../requirements/combat-magic-tech.md) (FR-MAGIC and the technology rows) |
+| D5 | Magic, item spells and technology | [combat, magic, technology](../requirements/combat-magic-tech.md) (FR-MAGIC), [characters and skills](../requirements/characters-skills.md) (technology ranks FR-CHAR-017, FR-CHAR-020) |
 | D6 | Character, skills, advancement | [characters and skills](../requirements/characters-skills.md) |
 | D7 | NPC AI, followers, reaction and reputation | [story, social, AI](../requirements/story-social-ai.md) (FR-AI, FR-SOCIAL) |
 | D8 | Scripts, dialogs, story state | [story, social, AI](../requirements/story-social-ai.md) (FR-SCRIPT, FR-DIALOG), [content and product](../requirements/content-product.md) |
@@ -151,9 +151,9 @@ proposed implementation slices. They live in `docs/architecture/concepts/`.
 | K7 | Sleep and rest | FR-TRAVEL-004 | Time model |
 | K8 | Transition effects and time on transitions | FR-WORLD-015 | Map change order |
 | K9 | Kill log and injury history, companions screen | FR-COMBAT-013, FR-UI-004 | Object relations and persistence |
-| K10 | Newspapers and gambling | FR-SOCIAL-009, FR-ITEM-019 | After alpha; listed for completeness |
-| K11 | Network readiness: the change path a future network game needs | FR-NET-001…008, FR-SOCIAL-006 | Owner decision: after alpha, but the single change path is decided in G1 |
-| K12 | Movies, slides, endings, credits | FR-MEDIA-001, FR-MEDIA-002 | After alpha |
+| K10 | Newspapers and gambling | FR-SOCIAL-009, FR-ITEM-019 | Proposed for after alpha; listed for completeness |
+| K11 | Network readiness: the change path a future network game needs | FR-NET-001…008, FR-SOCIAL-006 | Owner decision: after alpha ([network](../requirements/network.md)); the single change path is still decided in G1 |
+| K12 | Movies, slides, endings, credits | FR-MEDIA-001, FR-MEDIA-002 | Proposed for after alpha |
 
 The list is refreshed by G1: a part that the target model changes enough may get a
 concept document even if it is partly built today.
