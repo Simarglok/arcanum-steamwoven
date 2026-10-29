@@ -18,7 +18,7 @@ public static class AreaDialogBoxLayout
 {
     public const int BackgroundArt = 822, AcceptArt = 823, CancelArt = 824, FontArt = 229;
     public const int Width = 325, Height = 136;
-    /// <summary>The quit question's window point on the 800 × 600 screen (0x5416A0), centred on it.</summary>
+    /// <summary>The quit question's window point (its top left) on the 800 × 600 screen (0x5416A0), which centres the box there.</summary>
     public static (int X, int Y) QuitPoint { get; } = (237, 232);
     /// <summary>The text's rectangle in the window (0x51ED40).</summary>
     public static (int X, int Y, int Width, int Height) Text { get; } = (30, 14, 265, 65);

@@ -283,6 +283,8 @@ public sealed class AreaHeroDeath
                 // dead) asks again, with why.
                 if (host.LoadSettled && host.HeroDead)
                 {
+                    // The slide faded out meanwhile: the box asks again over the black screen.
+                    if (_slide is not null) { host.EndSlides(); _slide = null; }
                     Loaded = false; LoadRefusal = NoLivingHero;
                     Stage = AreaDeathStage.Asking;
                     host.Ask(_save!, NoLivingHero);

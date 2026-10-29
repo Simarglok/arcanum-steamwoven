@@ -37,6 +37,7 @@ public partial class TerrainViewerApp
     private AreaSlideTable? _deathSlidesForSelfTest;
     private string? _heroDeathStatus;
     private AreaDialogBoxContent? _dialogBoxContent;
+    private AreaDialogBoxArt? _dialogBoxArt;
     private string? _dialogBoxModule;
 
     /// <summary>The death screen covers the game: it owns the input and the world stands still under it.</summary>
@@ -165,16 +166,17 @@ public partial class TerrainViewerApp
         if (SelfTestBootstrap || module is null) return;
         if (_dialogBoxContent is null || module != _dialogBoxModule)
         {
-            _dialogBoxModule = module;
+            _dialogBoxModule = module; _dialogBoxArt = null;
             _dialogBoxContent = AreaDialogBoxContent.Load(module);
             GD.Print("ARC-WORLD-120 dialog box art " + _dialogBoxContent.Detail);
         }
+        if (_dialogBoxArt is { } built) { panel.SetDialogArt(built); return; }
         if (_dialogBoxContent.Font is not { } font) return;
         var art = _dialogBoxContent.Art;
         IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
         var glyphs = art[AreaDialogBoxLayout.FontArt].Frames.Select((frame, index) => (frame, index)).Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0)
             .ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
-        panel.SetDialogArt(new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
+        panel.SetDialogArt(_dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
             new Dictionary<int, IReadOnlyList<Texture2D>> { [AreaDialogBoxLayout.AcceptArt] = Frames(AreaDialogBoxLayout.AcceptArt), [AreaDialogBoxLayout.CancelArt] = Frames(AreaDialogBoxLayout.CancelArt) },
             font, glyphs, _dialogBoxContent.LineHeight));
     }
@@ -302,8 +304,9 @@ public partial class TerrainViewerApp
             var details = app.SaveLibrary.List().Entries.FirstOrDefault(entry => string.Equals(entry.Name, save, StringComparison.Ordinal));
             var panel = app.DeathPanel();
             app.AttachDeathDialogArt(panel);
-            // ARC-WORLD-120: the original's dialog box: the question, the save's description and a refused load's reason, a line each.
-            if (panel.ShowDialog(AreaHeroDeath.LoadQuestion + "\n" + (details?.DisplayDescription ?? save) + (notice is null ? "" : "\n" + notice)))
+            // ARC-WORLD-120: the original's dialog box: the question, then the save's description, or a refused load's reason in its
+            // place (the box holds four lines).
+            if (panel.ShowDialog(AreaHeroDeath.LoadQuestion + "\n" + (notice ?? details?.DisplayDescription ?? save)))
             {
                 GD.Print($"ARC-WORLD-120 hero death asks in the dialog box save={save}" + (notice is null ? "" : " notice=" + notice));
                 return;

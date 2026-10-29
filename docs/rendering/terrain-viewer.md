@@ -1918,8 +1918,9 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
   confirm loads the save as F8 does (on the shown map at once, a save on another map or beyond the main map's shown window
   after that map or window loads) while the slide fades to black (2 s); then the loaded game fades in (2 s, or after 2
   minutes without the map) and play goes on. A refused load (a damaged save, another map loading) keeps the box with the
-  reason as its third line, and so does a load that brings no living hero (the save's map failed to load and the old game
-  came back, or the save's hero is dead); a window stream held under the screen is dropped first, as the load replaces
+  reason in place of the description, and so does a load that brings no living hero (the save's map failed to load and the
+  old game came back, or the save's hero is dead; the slide has faded out by then, so this box stands over the black
+  screen and its No resets at once); a window stream held under the screen is dropped first, as the load replaces
   the scene. N, Escape, the cross or the controller's cancel fades the slide out and ends the game with the reset above.
   Without a save of this hero the show and the reset are the original's. The box acts on key presses (the slides on
   releases); its buttons take the mouse, nothing under the screen does. Without the game's art (the synthetic

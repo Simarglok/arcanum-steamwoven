@@ -255,15 +255,17 @@ public sealed class AreaHeroDeathTests
         again.Tick(AreaHeroDeath.FadeTime, other);
         Assert.AreEqual(AreaDeathStage.Asking, again.Stage);
         Assert.AreEqual("ask slot0001 " + AreaHeroDeath.NoLivingHero, other.Calls[^1]);
+        Assert.AreEqual("end slides", other.Calls[^2], "the faded-out slide ends before the box asks again");
+        Assert.IsNull(again.Slide);
         Assert.IsTrue(again.Answer(false, other));
-        again.Tick(AreaHeroDeath.FadeTime, other);
-        Assert.AreEqual(AreaDeathStage.Reset, again.Stage);
+        Assert.AreEqual(AreaDeathStage.Reset, again.Stage, "over the black screen No resets at once");
         Assert.AreEqual(2, other.Calls.Count(call => call.StartsWith("ask", StringComparison.Ordinal)));
         // Original never asks over the slide either.
         var (original, plain) = Died();
         plain.HeroSave = "slot0002"; plain.Rules = LifecycleRuleProfile.Original;
         original.Tick(AreaHeroDeath.DeathDelay, plain); original.Tick(AreaHeroDeath.FadeTime, plain); original.Tick(AreaHeroDeath.FadeTime, plain);
         Assert.AreEqual(AreaDeathStage.Slide, original.Stage);
+        Assert.IsFalse(plain.Calls.Any(call => call.StartsWith("ask", StringComparison.Ordinal)));
     }
 
     [TestMethod]
