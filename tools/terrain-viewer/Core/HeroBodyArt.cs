@@ -98,7 +98,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
             0 => (Weapon, Shield),
             1 => (Weapon, 0),
             WeaponArtRules.AttackAnimation or WeaponArtRules.LowAttackAnimation => (Weapon == 0 ? (int)(humanSelector & 15) : Weapon, Shield),
-            _ => (0, 0),
+            >= 6 and <= 19 => (0, 0),
+            _ => (Weapon, Shield),
         };
         return (humanSelector & ~0x0FF8003Fu) | BodyBits | ((uint)shield << 19) | (uint)weapon;
     }
@@ -185,9 +186,10 @@ public static class HeroBodyArt
             foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
-                // ARC-RENDER-037: the first of the repair's candidates (MA1) the archive holds once; an armed body walks without its weapon.
+                // ARC-RENDER-037: the first of the repair's candidates (MA1) the archive holds (a name held twice fails below); an armed
+                // body walks without its weapon.
                 var (selector, entries) = body.Candidates(humanSelector).Select(candidate => (Selector: candidate, Entries: Named(resource, body.ArtPath(candidate))))
-                    .FirstOrDefault(found => found.Entries.Length == 1, (body.Selector(humanSelector), []));
+                    .FirstOrDefault(found => found.Entries.Length != 0, (body.Selector(humanSelector), []));
                 if (entries.Length != 1)
                 {
                     if (optional) continue;

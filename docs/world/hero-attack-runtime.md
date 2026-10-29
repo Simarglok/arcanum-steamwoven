@@ -418,14 +418,17 @@ fixed in both rule modes.
 Viewer (AREA): the hero's body (`HeroBody`, ARC-UI-039) carries `Weapon` and `Shield`; `TerrainViewerHeroBody` builds it from the
 session's combat mode, the weapon slot's use art (the inventory host's wear facts, as the body armour's; one not read there is drawn
 bare-handed, NOT READY) and the shield slot's item kind (`HeroBody.Armed`), so entering or leaving combat mode or changing the weapon
-swaps the body at the next frame (its ARTs read once a run, as a worn armour's). An armed body whose ARTs do not read is drawn
-unarmed, logged. The attack clip takes the drawn attack ART's frames, action frame and weapon slot, so the rate follows the weapon
+swaps the body at the next frame, after a playing attack (its ARTs read once a run on the main thread, as a worn armour's: the first
+entry into combat mode with a new weapon decodes its seven ARTs in one frame; each weapon and shield variant keeps its own copy of
+every frame for the run). An armed body whose ARTs do not read is drawn without the shield, then unarmed, logged. The attack clip takes the drawn attack ART's frames, action frame and weapon slot, so the rate follows the weapon
 (`RealTimeCombatRules.AttackFramesPerSecond`); the log line `ARC-COMBAT-005 attack-start` names `weapon=` and `art=`.
 
 Native smoke: the `attack` stage (`ARC-COMBAT-005 native-smoke attack PASS`, now with `Weapon`) checks that in combat mode the
-attack and stand ARTs show the wielded weapon's part (bare hands 1 without one) and that out of combat mode the stand shows none.
+attack and stand ARTs show the wielded weapon's part (above 1 for a weapon whose use art reads, bare hands 1 without one) and that
+out of combat mode the stand shows none (the human man's kit staff: part 13, 8 frames, action frame 4).
 Opt-in real data (`HeroBodyArtTests.EveryPremadeHerosBodyArmourLoadsFromTheInstalledArt`): each pre-made hero's kit weapons and
-bare hands load an armed body (the dagger's attack 5 frames at 10 fps, action frame 3; the staff's 8 frames, action frame 4).
+bare hands load an armed body (the dagger's attack 5 frames at 10 fps, action frame 3; the staff's 8 frames, action frame 4), and a
+dagger with a shield loads the shield's stand and attack.
 
 Not ready: the NPCs' attack ART (ARC-RENDER-038: the AI host still times NPC attacks with the human stand-in), the low attack and
 the throw animation (ARC-RENDER-039), the wear check's art test (WA8), the auto-switch re-wield.

@@ -121,6 +121,8 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual("art/critter/HMM/HMMUWXAg.art", shielded.ArtPath(shielded.Selector(human.Run!.Selector)));
         Assert.AreEqual("art/critter/HMM/HMMUWXAn.art", shielded.ArtPath(shielded.Selector(human.Vault!.Selector)));
         Assert.AreEqual("art/critter/HMM/HMMUWXAh.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanFallDownSelector)));
+        // Animations outside 6..19 (stealth walk 3 here) keep both (MA2).
+        Assert.AreEqual("art/critter/HMM/HMMUWSCd.art", shielded.ArtPath(shielded.Selector(0x200000C0u)));
         Assert.AreEqual(shielded.BodyBits, shielded.Selector(human.Idle.Selector) & 0x0FF00030u);
         // MA3: a two-handed sword with a shield is written as the sword.
         var both = man.Armed(true, twoHanded, 7)!.Value;
@@ -234,6 +236,11 @@ public sealed class HeroBodyArtTests
                     (int)(body.Profile.Walk.Selector & 15)), $"{name} weapon {armed.Weapon}");
                 report.Add($"{name} combat: {armed.Label} weapon={armed.Weapon} attack={body.Profile.Attack.FramesPerGroup}f/{body.Profile.Attack.RawFramesPerSecond}fps action={body.Profile.Attack.ActionFrame}");
             }
+            // With a shield (no kit holds one): the dagger's stand and attack are the shield files, the walk the plain walk.
+            var shielded = dressed.Armed(true, 0x60000000u | 2u << 6, Arcanum.Simulation.Equipment.WeaponArtRules.ArmorItemType)!.Value;
+            var withShield = HeroBodyArt.Load(archive, shielded);
+            Assert.AreEqual((1, 1, 0), ((int)(withShield.Profile.Idle.Selector >> 19 & 1), (int)(withShield.Profile.Attack!.Selector >> 19 & 1),
+                (int)(withShield.Profile.Walk.Selector >> 19 & 1)), $"{name} shield");
         }
         Console.WriteLine(string.Join("\n", report));
     }

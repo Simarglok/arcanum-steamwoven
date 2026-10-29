@@ -89,14 +89,21 @@ public partial class TerrainViewerApp
             Require(session.QueryNpcKilled(target.Holder.Entity), $"killed after {frames} frames, attack {_attack is not null}: {_attackNotice}");
             Require(attackFrames > 0, "the attack ART was drawn");
             // ARC-RENDER-037: in combat mode the hero attacks and stands with its wielded weapon (bare hands without one, WA1).
-            var armed = ArmedBody(session, HeroBody.HumanFemale)!.Value.Weapon;
-            Require(armed >= 1 && WantedHeroBody().Weapon == armed && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector) == armed
+            // A wielded weapon whose use art reads shows its own part (above 1); bare hands show 1.
+            var wielded = session.QueryEquipment().Worn.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
+            var readUse = wielded is null ? null : _inventoryHost!.Wearable(session, wielded.Entity, _areaKitWear)?.UseArt;
+            var armedBody = ArmedBody(session, session.QueryEquipment().Worn, HeroBody.HumanFemale);
+            Require(armedBody is not null, "the wielded weapon has a weapon part");
+            var armed = armedBody!.Value.Weapon;
+            Require((readUse is { } use && Arcanum.Simulation.Equipment.BodyArmorArtRules.ItemArmor(use) > 0 ? armed > 1 : armed == 1) && WantedHeroBody().Weapon == armed && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector) == armed
                 && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Idle.Selector) == armed,
                 $"the attack and stand ARTs show weapon {armed}: attack 0x{_worldActor.Profile.Attack!.Selector:x8} idle 0x{_worldActor.Profile.Idle.Selector:x8} ({_heroBodyStatus})");
             Require(session.QueryRandom().Draws > draws, "the attacks rolled");
             // ARC-UI-042: every attack plays its result on the hero (a miss always has 4010, an unarmed hit the material sounds).
             Require(_audio is null || _cuePlays.GetValueOrDefault("attack") > attackSounds, "the attacks played their sounds: " + _cueNotice);
-            for (var i = 0; i < 4; i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            // The killing attack plays its ART to the last frame (a weapon's frames after the action frame may outlast 4 frames:
+            // the staff's 4 at 83 ms, ARC-RENDER-037), then the auto attack does not repeat.
+            for (var i = 0; i < 40 && (i < 4 || _attack is not null); i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
             Require(_attack is null && _worldActor.State.Action != ActorDiagnosticAction.Attack, "the attack stops with the death");
             Require(session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == target.Holder.Entity).Dead, "the corpse can be looted");
             Require(experience is null || session.QueryHeroExperience()!.Experience > experience, "the kill paid experience");
