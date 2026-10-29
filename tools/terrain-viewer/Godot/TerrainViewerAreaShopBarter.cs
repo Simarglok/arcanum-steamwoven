@@ -132,7 +132,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-069: the menu smoke's shop part: the opening shop in the original's look (MW30): the strips and the art buttons, the
     /// barter window's original look docked at the screen's (0, 41) with the merchant's wares in its grid, no round view (IW33); the pointer
-    /// over Back lights it, and with <paramref name="back"/> a click on it (pressed and released over itself) goes back to the editor.
+    /// over Back lights it, and with <paramref name="back"/> a click on it (pressed and released over itself) goes back to the editor. The
+    /// stage runs on the game's data, so the art is required (without it the shop's diagnostic window is the self-test's).
     /// ARC_AREA_SHOP_CAPTURE saves an in-app readback of the window to the caller's ignored path.</summary>
     private async Task ShopArtForSmoke(Action<bool, string> require, bool back)
     {

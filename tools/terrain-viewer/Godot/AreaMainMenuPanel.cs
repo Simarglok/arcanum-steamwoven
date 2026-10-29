@@ -77,6 +77,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     internal AreaNewCharacterArtView NewCharacterArtForSelfTest => _newCharacterArt;
     /// <summary>ARC-UI-069: the opening shop is drawn in the original's look.</summary>
     public bool ShopArtMode => Visible && _shopArt.Visible;
+    /// <summary>ARC-UI-069: the opening shop's art is set (its strips and buttons read), so the shop can be drawn in the original's look.</summary>
+    public bool ShopArtSet => _shopArt.ArtSet;
     internal AreaShopArtView ShopArtForSelfTest => _shopArt;
     /// <summary>ARC-UI-068: a press in the new-character art not on the name field.</summary>
     public event Action? PressedOutsideName;

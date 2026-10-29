@@ -141,8 +141,9 @@ public partial class TerrainViewerApp
         _mainMenuPanel?.SetDockedBelow(shop);
         // ARC-UI-064: the window in the world shows the original look when the game's art read; the open centres the game view on the PC
         // (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's. ARC-UI-069: the opening shop's docked window too (with
-        // the main menu up the view is not centred, IW33).
-        _barterPanel.SetArtLook(InventoryArtLook());
+        // the main menu up the view is not centred, IW33), when the shop's own strips and buttons can be drawn around it; else both stay
+        // diagnostic (the docked diagnostic window keeps room for the shop's panel below it).
+        _barterPanel.SetArtLook(!shop || _mainMenuPanel?.ShopArtSet == true ? InventoryArtLook() : null);
         if (!shop && _camera is not null)
         {
             var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
@@ -186,8 +187,10 @@ public partial class TerrainViewerApp
         if (_barterInShop)
         {
             _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false);
-            // ARC-UI-069: a session the start took is the game's now; its items' rows come from the game's maps.
+            // ARC-UI-069: a session the start took is the game's now; its items' rows come from the game's maps (the art and sizes
+            // read from the shop map's rows are read again).
             (_shopInventoryHost, _shopInventorySession) = (null, null);
+            _inventoryItemArtCache.Clear(); _inventoryItemSizeCache.Clear();
         }
         QuarantineWorld(); RefreshReadyStatus();
     }
