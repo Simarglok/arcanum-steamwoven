@@ -294,11 +294,14 @@ public partial class AreaInventoryGridArea : Control
         if (Held is { } held)
         {
             var placed = _view.Grid.FirstOrDefault(item => item.Entity == held.Entity);
-            var (w, h) = placed is null ? (1, 1) : (placed.Width, placed.Height);
+            var texture = look.ItemArt(held.Entity);
+            // ARC-UI-055: a worn item on the cursor takes its art's cells (0x461780), as it will in the grid.
+            var (w, h) = placed is not null ? (placed.Width, placed.Height)
+                : texture is not null ? Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)texture.GetWidth(), (uint)texture.GetHeight())) : (1, 1);
             var cell = AreaInventoryDrag.CellPixels * _scale;
             var origin = _pointer - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
             var name = placed?.Name ?? _view.Doll.FirstOrDefault(slot => slot.Entity == held.Entity)?.Name ?? "?";
-            Item(look.ItemArt(held.Entity), (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin, name);
+            Item(texture, (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin, name);
         }
     }
 }

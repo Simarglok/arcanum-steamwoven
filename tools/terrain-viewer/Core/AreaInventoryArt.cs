@@ -47,8 +47,9 @@ public static class AreaInventoryArtLayout
         : heldOver ? UseOnArt : UseOffArt;
 
     /// <summary>The place of an item's art in its rectangle: centred, as the redraw centres a grid item's art in its cells
-    /// ((cells × 32 − art) / 2) and a worn item's in its slot. PROJECT: an art larger than the rectangle is scaled down to fit (the viewer's
-    /// items are 1 × 1, their art sizes not read: IW22).</summary>
+    /// ((cells × 32 − art) / 2) and a worn item's in its slot. A grid item's cells come from its art's size (0x461780, ARC-UI-055), so its
+    /// art fits them. PROJECT: an art larger than the rectangle is scaled down to fit (a grid item sized without its art, when the game's
+    /// art did not read for the session, or an art larger than its doll slot).</summary>
     public static (float X, float Y, float Width, float Height) Place((float X, float Y, float Width, float Height) rect, int artWidth, int artHeight)
     {
         if (artWidth <= 0 || artHeight <= 0) throw new ArgumentOutOfRangeException(nameof(artWidth));

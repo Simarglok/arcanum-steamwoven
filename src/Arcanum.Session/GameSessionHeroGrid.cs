@@ -30,6 +30,39 @@ public sealed record SessionGridMoveItem(SessionItemKind Kind, bool NoDrop, IRea
 
 public sealed partial class GameSessionOwner
 {
+    private Func<string, SessionItemKind, (uint Width, uint Height)?>? _itemArtSizes;
+
+    /// <summary>
+    /// ARC-UI-055: attaches the host's inventory art frames: for an item (its entity and kind) the width and height in pixels of the frame
+    /// of its inventory art (field 0x5D), or null when the host cannot read it. The session turns a frame into the item's size in grid
+    /// cells as the original does (0x461780, ledger JP3: (pixels − 1) / 32 + 1 per side, a 0-pixel side never fits), for the hero's
+    /// grid and for the junk piles; without an answer it keeps the seed's size or 1 × 1. Not state: it is never saved and is attached again
+    /// after a restore; null detaches it. Attaching it lays out again every grid item whose kept size differs from its art's (a grid made
+    /// before the art was known, such as a new hero's kit or a save from before ARC-UI-055): those items leave their slots and take the
+    /// first free place for their size in list order (PROJECT; the original's sizes never change), one revision when anything moved.
+    /// </summary>
+    public void AttachItemArtSizes(Func<string, SessionItemKind, (uint Width, uint Height)?>? sizes)
+    {
+        ThrowIfDisposed();
+        _itemArtSizes = sizes;
+        if (sizes is null || !_inventory.Grid.Values.Any(SizeChanged) || _revision == long.MaxValue) return;
+        _revision++;
+        SettleHeroGrid();
+        MarkHotkeyPlaces();
+    }
+
+    // The size of an item's inventory art in cells, or null when no art source is attached or it does not answer for the item's kind.
+    private (int Width, int Height)? ArtCells(string entity, SessionSeedItem? row)
+    {
+        if (_itemArtSizes is null || (HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? row?.Facts.Kind) is not { } kind) return null;
+        var pixels = _itemArtSizes(entity, kind);
+        ThrowIfDisposed();
+        return pixels is { } frame ? InventoryGridRules.CellsOf(frame) : null;
+    }
+
+    // Whether a grid item's kept size differs from its art's (only while an art source answers for it).
+    private bool SizeChanged(SessionHeroGridItem item) => ArtCells(item.Entity, SeedRow(item.Entity)) is { } cells && cells != (item.Width, item.Height);
+
     /// <summary>ARC-UI-019: the hero's inventory grid (the PC's held items: kit, taken and made; worn items have no slot).</summary>
     public SessionHeroGrid QueryHeroGrid()
     {
@@ -168,13 +201,15 @@ public sealed partial class GameSessionOwner
     /// ARC-UI-019: after every change the grid follows the hero's list as the original's removal and insertion keep it (0x466E00, 0x466640):
     /// an item that left the list or was put on loses its slot first, then each held item without one takes the first free slot for its size
     /// (0x4675A0, ledger JP3), in list order, so an occupant a wear move puts back lands where the room the worn item left counts. An item
-    /// without room keeps none (see <see cref="SessionHeroGrid.Unplaced"/>).
+    /// without room keeps none (see <see cref="SessionHeroGrid.Unplaced"/>). ARC-UI-055: an item whose kept size differs from its art's
+    /// (<see cref="AttachItemArtSizes"/>) loses its slot too and is placed again with its art's size.
     /// </summary>
     private void SettleHeroGrid()
     {
         var members = GridMembers().ToList();
         var held = members.ToHashSet(StringComparer.Ordinal);
-        foreach (var gone in _inventory.Grid.Keys.Where(entity => !held.Contains(entity)).ToArray()) _inventory.Grid.Remove(gone);
+        foreach (var gone in _inventory.Grid.Values.Where(item => !held.Contains(item.Entity) || SizeChanged(item)).Select(item => item.Entity).ToArray())
+            _inventory.Grid.Remove(gone);
         bool[]? occupied = null;
         foreach (var entity in members)
         {

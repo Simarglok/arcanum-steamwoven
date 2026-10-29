@@ -161,10 +161,15 @@ public sealed partial class GameSessionOwner
             .Select(item => item.Item.Entity).ToArray();
     }
 
-    // An item's size in inventory cells: from the facts of the attached seed that lists it; 1 × 1 for the hero's kit and made items and
-    // a seed item whose seed is not attached (the original's size when the art does not read).
-    private (int Width, int Height) GridSize(string entity) =>
-        SeedRow(entity) is { } row ? (row.Facts.InventoryWidth, row.Facts.InventoryHeight) : (1, 1);
+    // An item's size in inventory cells (0x461780): the frame of its inventory art in 32-pixel cells when the attached art source answers
+    // for it (ARC-UI-055, AttachItemArtSizes); else from the facts of the attached seed that lists it; else 1 × 1 (the original's size
+    // when the art does not read).
+    private (int Width, int Height) GridSize(string entity)
+    {
+        var row = SeedRow(entity);
+        if (ArtCells(entity, row) is { } cells) return cells;
+        return row is not null ? (row.Facts.InventoryWidth, row.Facts.InventoryHeight) : (1, 1);
+    }
 
     // Whether the item's attached seed row shows the script point (unknown, so false, for a kit or made item).
     private bool Scripted(string entity, int point) => SeedRow(entity)?.Facts.HasScript(point) == true;

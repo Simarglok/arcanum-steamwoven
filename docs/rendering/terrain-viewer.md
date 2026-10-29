@@ -937,8 +937,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
   window's frame ([ledger IW14](../research/ledger/ui-audio.md#inventory-grid-arc-ui-019); `AreaInventoryDrag`, plain shapes and
   names, no original art), scaled to the window. The grid is the session's (`QueryHeroGrid`,
-  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (1 × 1 until the
-  inventory art's size is read, NOT READY) at the first free place, and the items without room are named in the hint line. A left
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (its inventory art's
+  frame in 32-pixel cells, ARC-UI-055; 1 × 1 without the game's art) at the first free place, and the items without room are named in the hint line. A left
   press on an item of the grid or the doll holds it (it stays in its place and is not drawn there, IW2); the next left release puts it
   where the pointer is: on a cell, the target is the cell minus the grab's offset in grid locations (IW10), a grid item moves there
   (`MoveHeroItem`) and a worn item comes off into it (`Unequip` with the slot); on a slot, `Equip` runs with its checks and an
@@ -990,7 +990,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger IW20–IW25](../research/ledger/ui-audio.md#inventory-window-art-arc-ui-051); `AreaInventoryArtLayout`, `AreaInventoryArtContent`):
   the 800 × 400 frame at its place between the interface bars, scaled to the free part, with the paper doll (223) and pack (221)
   arts, a cover art on every empty wear slot (241–249), each item's inventory art (field 0x5D) centred in its slot or cells
-  (scaled down when larger, since items are 1 × 1), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
+  (scaled down only when larger than its place; a grid item's cells fit its art since ARC-UI-055; a worn item on the cursor
+  takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
   18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
   grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
