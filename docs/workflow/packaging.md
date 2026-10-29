@@ -70,39 +70,44 @@ The full map smoke chain runs only here, and only when `main` changed since the 
 ([smoke scope](tasks.md#smoke-scope)). One command does the whole day:
 
     ./arcanum daily               # fetch origin main; skip if both packages hold it; else checks, smoke chain, packages
-    ./arcanum daily --dry-run     # say whether it would build and print the steps; run nothing
-    ./arcanum daily --force       # build again although both packages hold origin/main
-    ./arcanum daily --strict      # make no package when any smoke of the chain failed
+    ./arcanum daily --dry-run     # fetch, say whether it would build and print the steps; run nothing else
+    ./arcanum daily --force       # build although the packages hold origin/main or the last day failed on it
 
 It is `tools/local_dev/daily.py` (tests `tools/local_dev/test_daily.py`). It is not itself a queued run: each of its
 steps takes its own place in the [launch queue](toolchain.md#launch-queue-arc-dev-033), so it refuses to run inside
-`./arcanum run`, and one `daily` runs at a time per repository (a lock in the git folder).
+`./arcanum run`, and one `daily` runs at a time per repository (a lock in the git folder; `--dry-run` takes none).
 
-1. `git fetch origin main` in the main checkout (`--no-fetch` skips it). When the `commit` line of both
-   `artifacts/packages/macos/BUILD.txt` and `artifacts/packages/windows/BUILD.txt` is that commit, it prints `SKIP` and
-   ends with 0, writing nothing.
-2. A fresh detached `git worktree` of that commit in a temporary folder: the steps run the commit's own commands there,
-   never the owner's checkout or working tree. The worktree is removed at the end (`--keep-work` keeps it), also when
-   the run is stopped.
+**Any failure blocks the packages** (owner decision 2026-10-29): a failed check or smoke ends the day before packaging,
+the packages stay at their last commit, and the report names each failed step with its run log and first error, so a
+thread to find and fix it starts from the report; the first day after the fix packages.
+
+1. `git fetch origin main` in the main checkout (`--no-fetch` skips it). `SKIP` (exit 0, nothing written) when the
+   `BUILD.txt` of both `artifacts/packages/macos` and `artifacts/packages/windows` holds that commit with a
+   `map-smoke PASS` line, the mark of a package `daily` made: a package made by hand (`map-smoke NOT RUN`) does not
+   count, so the chain still runs for it. `SKIP` with exit 1 when the last `daily` report is a failure on that same
+   commit: a failing `main` is not run again every day; the fix's commit runs, or `--force`.
+2. A fresh detached `git worktree` of that commit in an `arcanum-daily-*` folder of the system temporary folder: the
+   steps run the commit's own commands there, never the owner's checkout or working tree. The worktree is removed at
+   the end, also when the run is stopped; one kept by `--keep-work` or left by a killed run is removed by the next
+   `daily` (under its lock, so never a running one's).
 3. The root checks (CLAUDE.md §2): the solution's locked restore, build and tests (`./arcanum run --kind dotnet`), then
-   the `dat_probe.py` and `oracle.py` self-tests. They run without the owner's opt-in variables (`DAT_ROOT`, `ARC_*`,
-   `ARCANUM_*` but the launcher's home), so no real-data test turns on. A failed check ends the run with no smoke and
-   no package (an oracle self-test that cannot load Unicorn is a failed check).
+   the `dat_probe.py` and `oracle.py` self-tests (30 minutes each at most). They run without the owner's opt-in
+   variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the launcher's home), so no real-data test turns on. The oracle
+   self-test uses the main checkout's `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`), its cache of the locked
+   Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
 4. `./arcanum smoke full` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)): its viewer build and import, the
-   Crash Site smoke and the map batteries. A failed viewer build or import, a stopped chain or one without its summary
-   ends the run with no package. Failed smokes do not, unless `--strict`: the packages are made and their `BUILD.txt`
-   says which smokes failed (below).
+   Crash Site smoke and the map batteries. A failed, not run or stopped step ends the day with no package.
 5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
-   `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line: `PASS (crash-site, main, ...)` or
-   `FAIL town, wild; passed crash-site, main (log .../smoke.log)`. A plain `./arcanum package` writes
-   `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.
+   `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins)`); a
+   plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.
 
 Every step's whole output goes to `artifacts/packages/logs/daily/STEP.log` (the queue's own run logs as well), and the
-report, one line per step and a `RESULT` line, to `artifacts/packages/logs/daily/report.txt`; stdout shows the same
-`DAILY` lines. Nothing else under `artifacts/packages` is written by `daily` itself, so the bug reports beside a
-package (`artifacts/packages/macos/reports/`) are never touched. Exit codes: 0 `RESULT PASS` (or `SKIP`), 3
-`RESULT PASS WITH SMOKE FAILURES` (both packages made, some smokes failed), 1 `RESULT FAIL` (a check, the smoke
-chain's build, or a package failed; a package that passed is still installed and named).
+report, one line per step, each failed smoke's run log and first error, and a `RESULT` line, to
+`artifacts/packages/logs/daily/report.txt` (the next run replaces the folder); stdout shows the same `DAILY` lines.
+Nothing else under `artifacts/packages` is written by `daily` itself, so the bug reports beside a package
+(`artifacts/packages/macos/reports/`) are never touched. Exit codes: 0 `RESULT PASS` or `SKIP` of a packaged commit;
+1 `RESULT FAIL` (a check, the smoke chain or a package failed; a package that passed is still installed and named) or
+`SKIP` of a commit that already failed.
 
 ## What makes the package different from a developer build
 

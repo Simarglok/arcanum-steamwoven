@@ -112,9 +112,9 @@ failed step, its log and the log's last lines.
 ```
 
 It skips when both packages already hold the newest `main` commit (their `BUILD.txt`), builds from a fresh worktree of
-that commit, and records the map smoke chain's result as `map-smoke` in each `BUILD.txt`; failed smokes mark the packages
-but do not stop them unless `--strict`. The report is `artifacts/packages/logs/daily/report.txt`
-([daily package build](docs/workflow/packaging.md#daily-package-build-arc-dev-062)).
+that commit, and writes `map-smoke PASS (...)` into each `BUILD.txt`. Any failed check or smoke stops it before packaging:
+the packages stay at their last commit and the report, `artifacts/packages/logs/daily/report.txt`, names each failed step
+with its log and first error ([daily package build](docs/workflow/packaging.md#daily-package-build-arc-dev-062)).
 
 ### Build from a specific commit
 
