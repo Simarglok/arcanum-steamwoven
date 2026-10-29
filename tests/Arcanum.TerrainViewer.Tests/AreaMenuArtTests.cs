@@ -4,7 +4,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-058 menu art (ledger MW1–MW6): the button windows' backgrounds, the labels' places and the art font's measure, on
-/// synthetic glyph frames. ARC-UI-059: the options window's background, page buttons and control slots (MW7, MW8).</summary>
+/// synthetic glyph frames. ARC-UI-059: the options window's background, page buttons and control slots (MW7, MW8). ARC-UI-061: the
+/// options controls' parts (MW9, MW10).</summary>
 [TestClass]
 public sealed class AreaMenuArtTests
 {
@@ -23,7 +24,7 @@ public sealed class AreaMenuArtTests
         Assert.AreEqual(556, AreaMenuArtLayout.Background(AreaMenuWindow.Options), "MW1/MW7: window 6 OptionsMenuBack");
         Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.PickCharacter));
         Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.NewCharacter));
-        CollectionAssert.AreEqual(new[] { 329, 331, 327, 556 }, AreaMenuArtLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEqual(new[] { 329, 331, 327, 556, 688, 671, 623, 667, 668, 27, 229 }, AreaMenuArtLayout.ArtNumbers.ToArray());
     }
 
     [TestMethod]
@@ -60,6 +61,37 @@ public sealed class AreaMenuArtTests
     }
 
     [TestMethod]
+    public void An_options_control_has_its_parts_at_the_originals_offsets()
+    {
+        Assert.AreEqual(688, AreaOptionsControlLayout.Background(AreaOptionKind.Slider), "MW9: 0x57FC20 OptionSlider");
+        Assert.AreEqual(671, AreaOptionsControlLayout.Background(AreaOptionKind.List), "OptionMultiChoice");
+        Assert.AreEqual(671, AreaOptionsControlLayout.Background(AreaOptionKind.Modules), "the module list is a list too");
+        var point = AreaOptionsControlLayout.Place(5);
+        Assert.AreEqual((531, 197), point, "PROJECT: the sixth shown control at slot 5");
+        Assert.AreEqual((531 + (213 - 100) / 2, 199), AreaOptionsControlLayout.Label(point, 213, 100), "the label centred on the background, 2 rows down");
+        Assert.AreEqual((531 + 6, 197 + 21), AreaOptionsControlLayout.Arrow(point, AreaOptionsArrow.Less));
+        Assert.AreEqual((531 + 180, 197 + 21), AreaOptionsControlLayout.Arrow(point, AreaOptionsArrow.More));
+        Assert.AreEqual((531 + 47, 197 + 24), AreaOptionsControlLayout.Field(point), "the slider's bar");
+        Assert.AreEqual((531 + 47 + (120 - 41) / 2, 197 + 30), AreaOptionsControlLayout.Value(point, 120, 41), "a list's value, odd room halved toward zero");
+        Assert.AreEqual(10 + (5 - 30) / 2, AreaOptionsControlLayout.Centred(10, 5, 30), "a text wider than its field: the signed half toward zero");
+        Assert.AreEqual(((byte)255, (byte)255, (byte)255), AreaOptionsControlLayout.LabelFace, "MW10");
+        Assert.AreEqual(((byte)255, (byte)0, (byte)0), AreaOptionsControlLayout.ValueFace);
+    }
+
+    [TestMethod]
+    public void A_sliders_bar_is_the_values_share_of_its_width()
+    {
+        Assert.AreEqual(0, AreaOptionsControlLayout.Filled(0, 10, 120), "MW9: value 0 draws no bar");
+        Assert.AreEqual(60, AreaOptionsControlLayout.Filled(5, 10, 120));
+        Assert.AreEqual(120, AreaOptionsControlLayout.Filled(10, 10, 120));
+        Assert.AreEqual(13, AreaOptionsControlLayout.Filled(1, 9, 120), "Brightness's top 9: 120 / 9 rounded toward zero");
+        Assert.AreEqual(93, AreaOptionsControlLayout.Filled(7, 9, 120));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaOptionsControlLayout.Filled(1, 0, 120));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaOptionsControlLayout.Filled(11, 10, 120));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaOptionsControlLayout.Filled(-1, 10, 120));
+    }
+
+    [TestMethod]
     public void The_three_passes_are_shadow_highlight_and_face()
     {
         var passes = AreaMenuArtLayout.Passes;
@@ -83,6 +115,30 @@ public sealed class AreaMenuArtTests
         Assert.IsNull(font.Glyph('\u0010'), "nor one below 31");
         Assert.AreEqual(font.Measure("AB"), font.Measure("AĀB"), "a character without a glyph is skipped");
         Assert.IsNull(Font(10).Glyph('A'), "a frame past the art's count");
+    }
+
+    /// <summary>The installed game's menu art reads (names, counts and sizes only).</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Original_menu_art_reads()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
+        var content = AreaMenuArtContent.Load(Path.Combine(root, "modules", "Arcanum.dat"));
+        foreach (var (number, load) in content.Art.OrderBy(pair => pair.Key))
+            Console.WriteLine($"{number} {load.Name} {load.Status} frames={load.Frames.Count} first={(load.Frames.Count > 0 ? $"{load.Frames[0].Width}x{load.Frames[0].Height} hot {load.Frames[0].HotX},{load.Frames[0].HotY}" : "-")}");
+        Assert.IsTrue(content.ArtReady, content.Detail);
+        (int, int) Size(int number) => (content.Art[number].Frames[0].Width, content.Art[number].Frames[0].Height);
+        Assert.AreEqual((213, 56), Size(688), "OptionSlider");
+        Assert.AreEqual((213, 56), Size(671), "OptionMultiChoice");
+        Assert.AreEqual((120, 27), Size(623), "SkilGauge");
+        Assert.AreEqual((29, 30), Size(667));
+        Assert.AreEqual(3, content.Art[667].Frames.Count, "an arrow has idle, down and lit frames");
+        Assert.AreEqual(3, content.Art[668].Frames.Count);
+        Assert.AreEqual(225, content.Art[27].Frames.Count, "morph15font, characters 31..255");
+        Assert.AreEqual(225, content.Art[229].Frames.Count, "Flare12Font");
+        var point = AreaOptionsControlLayout.Place(7);
+        Assert.IsTrue(AreaOptionsControlLayout.Arrow(point, AreaOptionsArrow.More).X + 29 <= point.X + 213, "the right arrow stands inside the background");
+        Assert.IsTrue(point.X + 213 <= AreaMenuArtLayout.ScreenWidth && point.Y + 56 <= AreaMenuArtLayout.ScreenHeight, "the last slot fits the screen");
     }
 
     [TestMethod]

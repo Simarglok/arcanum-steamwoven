@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// dark red, bright red while the pointer is over the button (event 2, back on event 3). The hit area is the label's measured size.
 /// ARC-UI-059: the options window (6) is drawn the same way over its own background 556 `OptionsMenuBack` (800 × 600), its four page
 /// buttons (window flags 0xD) at (130, 221 + 40 × i) (descriptor 0x5C44A0, button table 0x5C43D0; ledger MW7); its page's controls stand
-/// in two columns of four slots (0x589280, MW8). Godot-free.
+/// in two columns of four slots (0x589280, MW8), each drawn in its own art (ARC-UI-061, <see cref="AreaOptionsControlLayout"/>). Godot-free.
 /// </summary>
 public static class AreaMenuArtLayout
 {
@@ -32,7 +32,12 @@ public static class AreaMenuArtLayout
     /// <summary>The face colour of a hovered button (the second font set, 0x64C234, third entry).</summary>
     public static (byte R, byte G, byte B) HoverFace { get; } = (240, 15, 15);
 
-    public static IReadOnlyList<int> ArtNumbers { get; } = [MainArt, SinglePlayerArt, FontArt, OptionsArt];
+    /// <summary>ARC-UI-061: the options controls' art (control build 0x57FAD0, MW9): the slider's and the list's backgrounds (0x57FC20),
+    /// the slider's bar (whose size is also the list's value field), the two arrows, the label font and the value font (0x57F500).</summary>
+    public const int SliderArt = 688, ListArt = 671, BarArt = 623, LessArt = 667, MoreArt = 668, LabelFontArt = 27, ValueFontArt = 229;
+
+    public static IReadOnlyList<int> ArtNumbers { get; } = [MainArt, SinglePlayerArt, FontArt, OptionsArt, SliderArt, ListArt, BarArt, LessArt, MoreArt,
+        LabelFontArt, ValueFontArt];
 
     /// <summary>The background art of a button window (descriptor +0), or null for a window this look does not draw.</summary>
     public static int? Background(AreaMenuWindow window) => window switch
@@ -74,6 +79,62 @@ public static class AreaMenuArtLayout
             if (x >= left && x < left + width && y >= top && y < top + height) return i;
         }
         return -1;
+    }
+}
+
+/// <summary>ARC-UI-061: an options control's arrow (0x57FE60: the left lowers the value, 0x580390; the right raises it, 0x5803D0).</summary>
+public enum AreaOptionsArrow { Less, More }
+
+/// <summary>
+/// ARC-UI-061: an options control in the original's look (control build 0x57FAD0 and its parts, ledger MW9–MW10). The control stands
+/// at its slot's point (MW8): its background (688 `OptionSlider` for a slider, 671 `OptionMultiChoice` for a list) at the point, its
+/// label centred on the background's width 2 rows lower in the label font (27 `morph15font`, white; grey when disabled), and, when
+/// enabled, its two arrows (667 and 668, push buttons with the press sound 3000 and the release sound 3001, acting on the release) at
+/// (+6, +21) and (+180, +21). A slider's bar 623 `SkilGauge` is drawn from its left edge at (+47, +24) as wide as value × the bar's width
+/// / the top (rounded toward zero); the rest of the field is the background's. A list's value is its text centred on the bar's width at
+/// (+47, +30) in the value font (229 `Flare12Font`, red). PROJECT: Steamwoven's shown controls take the page's first slots in order
+/// (the hidden ones leave no gap, as the menu's hidden buttons, MW2); a text is one line (the text draw's line break 0x535C40 is not
+/// modelled; every installed label and value fits its field). Godot-free.
+/// </summary>
+public static class AreaOptionsControlLayout
+{
+    public const int LabelDown = 2, LessX = 6, MoreX = 180, ArrowY = 21, FieldX = 47, BarY = 24, ValueY = 30;
+
+    /// <summary>The label's face (font 0x6839B8) and a list value's (0x684244): the colour tables' entries 255 and red 255 alone
+    /// (0x57F52C..0x57F661; a disabled control's grey 130, 0x684240, is not drawn: no Steamwoven control is disabled, OP4).</summary>
+    public static (byte R, byte G, byte B) LabelFace { get; } = (255, 255, 255);
+    public static (byte R, byte G, byte B) ValueFace { get; } = (255, 0, 0);
+
+    /// <summary>The background art of a control (0x57FC20: a slider's 688, a list's 671).</summary>
+    public static int Background(AreaOptionKind kind) => kind == AreaOptionKind.Slider ? AreaMenuArtLayout.SliderArt : AreaMenuArtLayout.ListArt;
+
+    /// <summary>The point of the i-th shown control (PROJECT: the first slots in order).</summary>
+    public static (int X, int Y) Place(int shown) => AreaMenuArtLayout.OptionsSlot(shown);
+
+    /// <summary>The top-left of a text of <paramref name="width"/> centred on a field of <paramref name="fieldWidth"/> at x (font flag
+    /// 0x10 of the text draw 0x535570: the free width halved toward zero).</summary>
+    public static int Centred(int x, int fieldWidth, int width) => x + (fieldWidth - width) / 2;
+
+    /// <summary>The label's top-left: centred on the background's width, 2 rows below the point (0x57FD80).</summary>
+    public static (int X, int Y) Label((int X, int Y) point, int backgroundWidth, int width) => (Centred(point.X, backgroundWidth, width), point.Y + LabelDown);
+
+    /// <summary>An arrow's top-left (0x57FE60).</summary>
+    public static (int X, int Y) Arrow((int X, int Y) point, AreaOptionsArrow arrow) => (point.X + (arrow == AreaOptionsArrow.Less ? LessX : MoreX), point.Y + ArrowY);
+
+    /// <summary>The value field's top-left: a slider's bar (0x580000) and a list's field (0x580190) start there.</summary>
+    public static (int X, int Y) Field((int X, int Y) point) => (point.X + FieldX, point.Y + BarY);
+
+    /// <summary>A list value's top-left: centred on the bar's width, 6 rows below the field (0x58031C).</summary>
+    public static (int X, int Y) Value((int X, int Y) point, int barWidth, int width) => (Centred(point.X + FieldX, barWidth, width), point.Y + ValueY);
+
+    /// <summary>The width of a slider's bar drawn for <paramref name="value"/> of <paramref name="top"/> (0x580076: value × width / top,
+    /// a signed division).</summary>
+    public static int Filled(int value, int top, int barWidth)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(top);
+        ArgumentOutOfRangeException.ThrowIfNegative(barWidth);
+        if (value < 0 || value > top) throw new ArgumentOutOfRangeException(nameof(value));
+        return value * barWidth / top;
     }
 }
 
@@ -128,11 +189,15 @@ public sealed class AreaArtFont
 public sealed record AreaMenuArtContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
     /// <summary>True when every art read: the button windows then show the original look. All or nothing (ARC-UI-059: the options
-    /// background 556 too), as every one of them is in the installed game.</summary>
+    /// background 556 too; ARC-UI-061: the options controls' art), as every one of them is in the installed game.</summary>
     public bool ArtReady => AreaMenuArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
         && load.Frames.Count > 0);
 
     public AreaArtFont? Font => ArtReady ? new(Art[AreaMenuArtLayout.FontArt].Frames) : null;
+
+    /// <summary>ARC-UI-061: the options controls' label and value fonts (MW10).</summary>
+    public AreaArtFont? LabelFont => ArtReady ? new(Art[AreaMenuArtLayout.LabelFontArt].Frames) : null;
+    public AreaArtFont? ValueFont => ArtReady ? new(Art[AreaMenuArtLayout.ValueFontArt].Frames) : null;
 
     public static AreaMenuArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), reason);
 
