@@ -80,7 +80,7 @@ class QueueRunTests(unittest.TestCase):
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
                 environment: dict | None = None) -> subprocess.Popen:
         before = len(self.live())
-        argv = [sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, "--label", name,
+        argv = [sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, "--label", name, "--start-within", "0",
                 *(["--timeout", timeout] if timeout else []), "--", *command]
         process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    env={**os.environ, **(environment or {})})

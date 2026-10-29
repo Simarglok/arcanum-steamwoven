@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, launch, manifests, run_queue  # noqa: E402
+from tools.local_dev import clean, config, launch, manifests, run_queue, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -199,7 +199,12 @@ def oracle(args: argparse.Namespace) -> int:
 def queued(args: argparse.Namespace) -> int:
     """ARC-DEV-033: run one command through the launch queue (docs/workflow/toolchain.md#launch-queue-arc-dev-033)."""
     command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
-    return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose)
+    # ARC-DEV-059: a quiet run checks its own start (docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029).
+    check = start_check.for_run(args.kind, args.expect, args.start_within)
+    if check is not None and args.verbose:
+        run_queue.say("note: a --verbose run has no start check; check its start yourself")
+    return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose,
+                         start=check)
 
 
 def package_build(args: argparse.Namespace) -> int:
@@ -315,7 +320,8 @@ def parser() -> argparse.ArgumentParser:
     command.set_defaults(func=cleanup)
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
     command = commands.add_parser("run", help="run one command through the FIFO launch queue: Godot runs one at a time in "
-                                  "arrival order, an export also waits for running dotnet runs (ARC-DEV-033)")
+                                  "arrival order, an export also waits for running dotnet runs (ARC-DEV-033); a quiet Godot run "
+                                  "checks its own start and fails one that did not start (ARC-DEV-059)")
     command.add_argument("--kind", required=True, choices=run_queue.KINDS,
                          help="window: Godot with a window; headless: Godot --headless or an import; export: an export "
                               "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export)")
@@ -323,9 +329,19 @@ def parser() -> argparse.ArgumentParser:
                          help="minutes before the run is stopped (default " + ", ".join(
                              f"{kind} {value:g}" for kind, value in run_queue.DEFAULT_TIMEOUT_MINUTES.items()) + "; 0: no limit)")
     command.add_argument("--label", help="a short note shown in ./arcanum queue")
+    command.add_argument("--expect", metavar="REGEX",
+                         help="the start line the command prints when it started the intended mode (ARC-DEV-059); "
+                              "replaces the defaults of window, headless and export runs (the viewer's start, the "
+                              "self-test's first stage, the export steps) and gives a dotnet run a start check")
+    command.add_argument("--start-within", type=float, metavar="SEC",
+                         help=f"seconds from the command's start to its start line (default "
+                              f"{start_check.DEFAULT_WINDOW_SECONDS:g}; 0: no start check); a usage error before it, no "
+                              f"start line in time, or an end before it fails the run (exit "
+                              f"{start_check.FAILED_START_EXIT} when it was stopped)")
     command.add_argument("--verbose", action="store_true",
                          help="stream the command's output here instead of the quiet default (ARC-DEV-037): the whole "
-                              "output goes to a log file and only PASS or FAIL with the first error is printed")
+                              "output goes to a log file and only PASS or FAIL with the first error is printed; a "
+                              "--verbose run has no start check")
     command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
     command.set_defaults(func=queued)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "

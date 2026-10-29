@@ -116,7 +116,9 @@ class WrapperTests(unittest.TestCase):
         self.temp.cleanup()
 
     def run_wrapper(self, code: str, *extra: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", *extra, "--",
+        # The start check has its own tests (test_start_check); these commands print no start line.
+        return subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--start-within", "0",
+                               *extra, "--",
                                sys.executable, "-c", code], capture_output=True, text=True, env=self.env, timeout=60)
 
     def test_quiet_by_default_the_output_goes_to_the_log(self) -> None:
@@ -153,7 +155,8 @@ class WrapperTests(unittest.TestCase):
 
     def test_a_nested_run_writes_into_its_parents_log_with_one_summary(self) -> None:
         inner = f"{sys.executable} -B {ARCANUM} run --kind headless -- {sys.executable} -c \"print('inner says hi')\""
-        result = subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--", "sh", "-c", inner],
+        result = subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--start-within", "0",
+                                 "--", "sh", "-c", inner],
                                 capture_output=True, text=True, env=self.env, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         out = result.stdout.splitlines()
@@ -177,8 +180,8 @@ class WrapperTests(unittest.TestCase):
         code = (f"import os, time\nprint('first line')\ndeadline = time.time() + 30\n"
                 f"while not os.path.exists({str(release)!r}) and time.time() < deadline: time.sleep(0.05)\n"
                 f"print('second line')")
-        process = subprocess.Popen([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--",
-                                    sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        process = subprocess.Popen([sys.executable, "-B", str(ARCANUM), "run", "--kind", "headless", "--start-within",
+                                    "0", "--", sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, env=self.env)
         try:
             logs = Path(self.env["ARCANUM_LOCAL_HOME"]) / "run-logs"

@@ -68,7 +68,9 @@ from the exported developer builds, builds the player's alpha and puts every God
 exported by ARC-DEV-015 (the universal map-mode build, preferred) or ARC-RENDER-008, so a feature on `main` shows only
 after that build is exported again ([universal map-mode export](docs/workflow/local-development.md#universal-map-mode-candidate-arc-dev-015)).
 Runs are quiet: the whole output goes to a log file, the terminal keeps `PASS` or `FAIL` with the first error
-([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)).
+([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). A Godot run checks its own start: it waits up to
+60 s for the command's start line and fails a run that showed a usage error or did not start
+([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 
 Never delete `artifacts/` or a build in it by hand: the launcher and the export need the current builds. See
 [which builds may be deleted](docs/workflow/build-retention.md).

@@ -44,8 +44,10 @@ and its link holds the detail.
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). It is
   quiet: the whole output goes to a log file, stdout keeps PASS/FAIL and the
   first error ([quiet run output](docs/workflow/tasks.md#quiet-run-output)).
-  Within a minute of starting any Godot or launcher run, confirm it started the
-  intended mode, or stop it and fix the command ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
+  Every Godot or launcher run must be seen to start the intended mode within a
+  minute; a quiet `./arcanum run` checks it itself (start line, usage error),
+  so run it blocking in one step; check any other run by hand
+  ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **Pull requests.** Every change goes through a PR from a branch (never push
   to `main`) as GitHub user `Simarglok`. A fresh subagent reviews the exact
   diff first. Once the acceptance criteria, task checks and root checks pass
