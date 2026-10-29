@@ -1102,7 +1102,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   the original's copy replaces it; the doll art 223 is opaque there), with art 233 or 232 drawn over it when it reads.
   A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
-  frame. NOT READY: the barter window's round view (art 231), the own window's map drop and throw from it (IW18). The native smoke
+  frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
+  barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
+  goes back and the window closes outside the own window); the barter and steal windows draw the diagnostic look, so their round view
+  shows once their original look is built. NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
+  the window stays open). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through

@@ -90,7 +90,10 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 [IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054)): the open centres the game view on the PC and the window's
 89 × 89 rectangle, (11, 9) in the own window and (16, 17) in the loot window, shows the game view's square of 178 × 178 around the
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
-shader under the window; the barter window's view (art 231) is not built.
+shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
+(`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
+232; the barter and steal windows get their round view with their original look (not built yet). Left: the own window's map drop and
+throw of a held item released in it (IW18).
 
 ## Character sheet
 

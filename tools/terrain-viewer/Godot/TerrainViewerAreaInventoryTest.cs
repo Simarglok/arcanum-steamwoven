@@ -375,7 +375,7 @@ public partial class TerrainViewerApp
                     Require(_inventoryPanel.RoundViewShown, "the loot window's round view shows the game view");
                     if (lootArt == 1)
                     {
-                        grid.ReleaseAt(new Vector2(AreaInventoryHole.Corner(true).X + AreaInventoryHole.Side - 1, AreaInventoryHole.Corner(true).Y));
+                        grid.ReleaseAt(new Vector2(AreaInventoryHole.Corner(AreaInventoryMode.Loot).X + AreaInventoryHole.Side - 1, AreaInventoryHole.Corner(AreaInventoryMode.Loot).Y));
                         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                         Require(!InventoryOpen && !_inventoryPanel.RoundViewShown, "a release in the round view closed the loot window");
                         GD.Print("ARC-UI-054 round view release closed the loot window");

@@ -50,6 +50,13 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
     public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
 
+    /// <summary>ARC-UI-060: the window's interface mode (IW26): the own window, or a holder's loot or steal window.</summary>
+    internal AreaInventoryMode Mode => _view is { Holder: not null } view ? view.Steal ? AreaInventoryMode.Steal : AreaInventoryMode.Loot
+        : AreaInventoryMode.Own;
+
+    /// <summary>ARC-UI-060: the mode the original look draws: the loot frame's while it is drawn, else the own window's.</summary>
+    internal AreaInventoryMode LookMode => LootLook ? Mode : AreaInventoryMode.Own;
+
     /// <summary>ARC-UI-054: screen pixels per frame pixel.</summary>
     internal float FrameScale => _scale;
 
@@ -63,13 +70,13 @@ public partial class AreaInventoryGridArea : Control
     private bool _roundViewCut;
 
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
-    private void Background(AreaInventoryArtLook look, int number, bool loot)
+    private void Background(AreaInventoryArtLook look, int number, AreaInventoryMode mode)
     {
         if (look.Art.GetValueOrDefault(number) is not { } texture) return;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         float width = texture.GetWidth(), height = texture.GetHeight();
         if (!_roundViewCut) { DrawTextureRect(texture, Scaled(0, 0, width, height), false); return; }
-        var (x, y) = AreaInventoryHole.Corner(loot);
+        var (x, y) = AreaInventoryHole.Corner(mode);
         const float side = AreaInventoryHole.Side;
         foreach (var (px, py, pw, ph) in new[] { (0f, 0f, width, (float)y), (0f, y + side, width, height - y - side), (0f, (float)y, (float)x, side),
             (x + side, (float)y, width - x - side, side) })
@@ -239,11 +246,12 @@ public partial class AreaInventoryGridArea : Control
             if (LootHit(frame).TakeAll) Callable.From(() => TakeAllRequested?.Invoke()).CallDeferred();
             return;
         }
-        if (Look is not null && AreaInventoryHole.Contains(LootLook, frame.X, frame.Y) && (Held is null || LootLook))
+        // ARC-UI-054: a release in the round view closes the window (0x574559, IW34); ARC-UI-060: by the window's mode, a held item goes
+        // back first outside the own window. NOT READY: in the own window a held item released there is the map drop and throw of IW18
+        // (not built: the release below puts it back and the window stays open).
+        if (Look is not null && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y)
+            && AreaInventoryHole.Release(LookMode, Held is not null) != AreaRoundViewRelease.MapDrop)
         {
-            // ARC-UI-054: a release in the round view closes the window (0x574559, IW34); the loot window puts a held item back first
-            // (IW18). NOT READY: in the player's own window a held item released there is the map drop and throw of IW18 (not built: the
-            // release below puts it back).
             if (Held is not null) { Held = null; QueueRedraw(); }
             Callable.From(() => HoleReleased?.Invoke()).CallDeferred();
             return;
@@ -351,11 +359,11 @@ public partial class AreaInventoryGridArea : Control
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
             DrawTextureRect(texture, placed, false);
         }
-        Background(look, AreaInventoryArtLayout.DollArt, loot: false);
+        Background(look, AreaInventoryArtLayout.DollArt, AreaInventoryMode.Own);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
-        var (holeX, holeY) = AreaInventoryHole.Corner(false);
-        Art(AreaInventoryHole.Art(false), holeX, holeY);
+        var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
+        Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));
         void Text((int X, int Y, int Width, int Height) rect, string text)
@@ -434,9 +442,9 @@ public partial class AreaInventoryGridArea : Control
             var ratio = texture.GetHeight() / h;
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
-        Background(look, AreaLootArtLayout.LootArt, loot: true);
-        var (holeX, holeY) = AreaInventoryHole.Corner(true);
-        Art(AreaInventoryHole.Art(true), holeX, holeY);
+        Background(look, AreaLootArtLayout.LootArt, LookMode);
+        var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
+        Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
         if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         var font = GetThemeDefaultFont();
