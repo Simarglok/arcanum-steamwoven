@@ -108,9 +108,15 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
 
-    /// <summary>ARC-UI-051: the window shows the original look: its art read, the player's own window (mode 0; looting, stealing and the
-    /// other modes keep the diagnostic window) and the diagnostic view not chosen.</summary>
-    public bool ArtMode => _look is not null && !_diagnosticChosen && _view is { Holder: null };
+    /// <summary>ARC-UI-051: the window shows the original look: its art read, the player's own window (mode 0) and the diagnostic view not
+    /// chosen. ARC-UI-052: a loot window (mode 2) too when the loot arts read; stealing and the other modes keep the diagnostic window.</summary>
+    public bool ArtMode => _look is not null && !_diagnosticChosen && OriginalAvailable;
+
+    /// <summary>The open view has an original look: the player's own window, or a loot window with the loot arts.</summary>
+    private bool OriginalAvailable => _view is { Holder: null } || _view is { Steal: false } && _look is { LootReady: true };
+
+    /// <summary>ARC-UI-052: the open window's view (null when closed).</summary>
+    public AreaInventoryView? CurrentView => IsOpen ? _view : null;
 
     /// <summary>ARC-UI-051: sets the original look the window can show (null: the diagnostic window only).</summary>
     public void SetArtLook(AreaInventoryArtLook? look)
@@ -158,6 +164,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
         _area.PointerStill += item => PointerStill?.Invoke(item);
+        _area.TakeAllRequested += () => TakeAllRequested?.Invoke();
         _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
         _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
         _quantity.AddChild(_quantityLabel);
@@ -362,7 +369,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         var art = ArtMode;
         _area.SetLook(art ? _look : null);
         foreach (var control in new Control[] { _header, _scroll, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _look is not null && _view is { Holder: null };
+        _lookToggle.Visible = _look is not null && OriginalAvailable;
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }

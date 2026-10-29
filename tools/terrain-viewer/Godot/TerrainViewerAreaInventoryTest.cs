@@ -344,7 +344,7 @@ public partial class TerrainViewerApp
             // 3. Every dead NPC with items: the press opens the body, "take all" takes what the rules admit.
             var bodies = _areaSession.QueryMapInventory(new(map.RuntimeMap))!.Holders.Where(h => h.Dead && h.Items.Count > 0)
                 .Select(h => _inventoryHost!.Target(_areaSession, map.RuntimeMap, KeyOf(h.Entity))!).ToArray();
-            var looted = 0; var left = 0; var printed = 0;
+            var looted = 0; var left = 0; var printed = 0; var lootArt = 0; var lootDragged = false;
             foreach (var body in bodies)
             {
                 var scripted = _areaSession.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == body.Entity).Items
@@ -354,6 +354,11 @@ public partial class TerrainViewerApp
                 var before = _areaSession.QueryPcInventory().Count;
                 AreaSmokeClick(point);
                 Require(InventoryOpen && _inventoryPanel!.Holder == body.Entity, "the press opened the dead NPC");
+                if (_inventoryArtContent is { LootArtReady: true })
+                {
+                    lootDragged |= await LootArtForSmoke(lootArt == 0, !scripted && !lootDragged);
+                    lootArt++;
+                }
                 _inventoryPanel!.TakeAllForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 looted += _areaSession.QueryPcInventory().Count - before; left += _inventoryPanel.ViewForSelfTest!.Loot.Count;
@@ -363,6 +368,8 @@ public partial class TerrainViewerApp
             }
             // docs/world/inventory-runtime.md: four dead NPCs carry six items; the amulet's insert-item script runs (ARC-SCRIPT-013).
             Require((bodies.Length, looted, left, printed) == (4, 6, 0, 1), $"loot bodies {bodies.Length} taken {looted} left {left} printed {printed}");
+            Require(_inventoryArtContent is not { LootArtReady: true } || lootArt == bodies.Length && lootDragged,
+                $"every body's loot window showed the original look ({lootArt}/{bodies.Length}) and one item was dragged out ({lootDragged})");
 
             // 4. The Inventory key lists every taken item by its resolved name.
             AreaSmokePlace(map, map.Chart.Spawn);
@@ -422,13 +429,53 @@ public partial class TerrainViewerApp
         }
     }
 
+    /// <summary>ARC-UI-052: with the game's art a dead NPC's loot window shows the loot window's original look: the loot arts and the body's
+    /// image read, every item of its grid drawn with its inventory art; and (<paramref name="drag"/>: once, on a body without a scripted
+    /// item) one of its items taken by a press on the body's grid and a release on a free cell of the hero's grid.
+    /// <c>ARC_AREA_LOOT_CAPTURE=PATH.png</c> saves a readback of the <paramref name="first"/> window. Returns whether an item was dragged.</summary>
+    private async Task<bool> LootArtForSmoke(bool first, bool drag)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
+        var panel = _inventoryPanel!;
+        var area = panel.GridAreaForSelfTest;
+        var view = panel.ViewForSelfTest!;
+        Require(panel.ArtMode && area.LootLook && area.Look is { } look && AreaLootArtLayout.ArtNumbers.All(look.Art.ContainsKey), "the loot window shows the original look");
+        Require(view.HolderImage is { } image && area.Look!.Art.ContainsKey(image), $"the body's image {view.HolderImage?.ToString() ?? "none"} reads");
+        var drawn = view.LootGrid.Count(item => area.Look!.ItemArt(item.Entity) is not null);
+        Require(drawn == view.LootGrid.Count, $"every item of the body's grid has its art ({drawn}/{view.LootGrid.Count})");
+        if (first && System.Environment.GetEnvironmentVariable("ARC_AREA_LOOT_CAPTURE") is { Length: > 0 } capture)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var shot = GetViewport().GetTexture().GetImage();
+            if (shot.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_LOOT_CAPTURE_FAILED");
+        }
+        var dragged = "-";
+        if (drag && view.LootGrid.FirstOrDefault(item => view.Loot.FirstOrDefault(line => line.Entity == item.Entity)?.StackKind is null
+                && AreaLootArtLayout.ItemRect(item, area.LootScroll) is not null) is { } taken)
+        {
+            var rect = AreaLootArtLayout.ItemRect(taken, area.LootScroll)!.Value;
+            var free = Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).First(cell => AreaInventoryDrag.ItemAt(view.Grid, cell) is null);
+            var before = _areaSession!.QueryPcInventory().Count;
+            area.PressAt(new(rect.X + rect.Width / 2, rect.Y + rect.Height / 2));
+            Require(area.Held is { Partner: true } held && held.Entity == taken.Entity, "the press on the body's grid holds its item");
+            area.ReleaseAt(AreaInventoryGridArea.CellCentre(free));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_areaSession.QueryPcInventory().Any(item => item.Entity == taken.Entity) && _areaSession.QueryPcInventory().Count == before + 1
+                && !panel.ViewForSelfTest!.LootGrid.Any(item => item.Entity == taken.Entity), "the release on the hero's grid took it: " + _inventoryStatus);
+            dragged = taken.Entity;
+        }
+        GD.Print($"ARC-UI-052 native-smoke loot-art PASS holder={view.Holder} image={view.HolderImage} grid={view.LootGrid.Count} drawn={drawn} worn-left-out={view.Loot.Count - view.LootGrid.Count} dragged={dragged}");
+        return dragged != "-";
+    }
+
     /// <summary>ARC-UI-051: with the game's art the player's own window shows the original look: every window art read, every grid and worn
     /// item's inventory art read, and the switch to the diagnostic view and back.</summary>
     private void ArtForSmoke()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
         var panel = _inventoryPanel!;
-        Require(panel.ArtMode && panel.GridAreaForSelfTest.Look is { } look && look.Art.Count == AreaInventoryArtLayout.ArtNumbers.Distinct().Count(),
+        Require(panel.ArtMode && panel.GridAreaForSelfTest.Look is { } look && AreaInventoryArtLayout.ArtNumbers.All(look.Art.ContainsKey),
             "the original look shows with every window art");
         var view = panel.ViewForSelfTest!;
         var items = view.Grid.Select(item => item.Entity).Concat(view.Doll.Where(slot => slot.Entity is not null).Select(slot => slot.Entity!)).ToArray();
