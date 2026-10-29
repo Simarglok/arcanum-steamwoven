@@ -143,6 +143,9 @@ public sealed class ScrTalkCommandTests
         var absent = Host(Program(Do(C(ScrCatalogue.Action.GetArea, (ExtraObject, 0), (Local, 0)))), Pc);
         Assert.AreEqual(ScrStop.MissingObject, ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), absent, Options).Stop);
         Assert.AreEqual(0, absent.AreaAsked.Count);
+        // GA1: the area goes into operand 1, so a literal number there refuses the script.
+        var literal = ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArea, (Attachee, 0), N(0)))), ScrAdmissionSet.S19);
+        Assert.AreEqual((ScrRefusalCode.WriteToNumber, 1), (literal.Refusal!.Code, literal.Refusal.Slot));
     }
 
     [TestMethod]

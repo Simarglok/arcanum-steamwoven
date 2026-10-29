@@ -594,7 +594,7 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   `MapList.AreaOfRuntime` is 0x40FFE0), whatever the object's map; on the start map with area 0 the original takes the area at the
   object's location (GA3), which is not modelled: the host answers null and the dispatch ends with the stop `NotModelled` (skip default,
   nothing of it applied, a float line or a flag write before it included); the viewer reports such a talk or deferred call as not ready.
-  An absent object stops the run (`MissingObject`) as at every single-object read.
+  An absent object stops the run (`MissingObject`) as at every single-object read; a literal store is refused (`WriteToNumber`).
 - **Print line and the action field.** A DLG action field that holds only separators (space, tab, `,`, `;`, `:`, `(`, `)`) has no
   operation, as the conversation grammar reads it, so `ScrPrintedLine.Read` shows such a line (24 of the 30 floated lines whose field is
   not empty hold one or two spaces). This is the grammar's admission policy, not a reading of the original's scanner. A real operation is
