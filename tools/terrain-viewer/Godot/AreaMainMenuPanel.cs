@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer;
 /// (main, single player, new game, in-play) are drawn in the original's look (<see cref="AreaMenuArtView"/>) with a project line at the
 /// screen's bottom for the notice and the buttons not offered; the other windows and the quit box keep this panel. ARC-UI-059: the
 /// options window too, its page buttons in the art; ARC-UI-061: and its page's controls in their own art at their slots (MW8–MW10).
-/// ARC-UI-066: the pre-made browser in its own art (<see cref="AreaPremadeBrowserArtView"/>, MW17–MW21) when the browsed hero read.
+/// ARC-UI-066: the pre-made browser in its own art (<see cref="AreaPremadeBrowserArtView"/>, MW17–MW22) when the browsed hero read.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -68,6 +68,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-066: the pre-made browser is drawn in the original's look.</summary>
     public bool PremadeArtMode => Visible && _premadeArt.Visible;
     internal AreaPremadeBrowserArtView PremadeArtForSelfTest => _premadeArt;
+    /// <summary>The diagnostic window is shown (ARC-UI-066: the browser's, when its art is not drawn).</summary>
+    internal bool PanelVisibleForSelfTest => Visible && _panel.Visible;
     internal string ArtNoteForSelfTest => _artNote.Text;
     /// <summary>ARC-UI-013: the options window's controls as "label: value" (ARC-UI-061: the art's when it draws them).</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => _optionsArt ? _art.ControlsForSelfTest : _controls.Visible

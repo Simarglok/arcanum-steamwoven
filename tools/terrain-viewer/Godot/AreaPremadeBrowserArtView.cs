@@ -9,11 +9,11 @@ public sealed record AreaPremadeBrowserFonts(AreaArtFont Text, IReadOnlyDictiona
 
 /// <summary>
 /// ARC-UI-066: the pre-made character browser (window 13) in the original's look (<see cref="AreaPremadeBrowserArtLayout"/>, ledger
-/// MW17–MW21): the strips and the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the browsed
+/// MW17–MW22): the strips and the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the browsed
 /// hero's large portrait, its name, gender, race and background name centred in their fields, its story (or its race's text) and
 /// its fifteen stats, each field filled black first; the four art buttons with their idle, down and lit frames (GB4) and push
 /// behaviour (GB3: down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). PROJECT: a glyph's
-/// grey levels scale the font's colour (as MW5) and a story's lines below its field are not drawn (the text draw's clip is not read).
+/// grey levels scale the font's colour (as MW5). A story shows the lines its field holds, as the original's text draw (MW22).
 /// </summary>
 public partial class AreaPremadeBrowserArtView : Control
 {
@@ -108,7 +108,8 @@ public partial class AreaPremadeBrowserArtView : Control
         Glyphs(glyphs, font.Layout(text), AreaPremadeBrowserArtLayout.Centred(field, font.Measure(text).Width), field.Y, colour);
     }
 
-    /// <summary>A text from its field's top-left, wrapped at its width; lines below the field are not drawn (PROJECT).</summary>
+    /// <summary>A text from its field's top-left, broken at its width; a line the field's remaining height cannot hold ends the draw
+    /// (0x5356D8, MW22).</summary>
     private void Lines((int X, int Y, int Width, int Height) field, string text, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs,
         (byte R, byte G, byte B) colour)
     {

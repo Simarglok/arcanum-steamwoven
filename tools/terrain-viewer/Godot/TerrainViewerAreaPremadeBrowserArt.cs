@@ -3,7 +3,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-066: the pre-made character browser (window 13) in the original's look (docs/ui/original-windows.md; ledger MW17–MW21). The art
+// ARC-UI-066: the pre-made character browser (window 13) in the original's look (docs/ui/original-windows.md; ledger MW17–MW22). The art
 // and tables are read once a module, each hero's large portrait on its first showing; without a game folder (the synthetic self-tests)
 // or for a hero that did not read the browser keeps its diagnostic window.
 public partial class TerrainViewerApp
@@ -54,8 +54,10 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The menu smoke's browser part: the first hero in the original's look (its texts from the game: the name, the background's
-    /// story and fifteen stats, its large portrait read); the pointer over Next lights it, a click on Next shows the second hero and a
-    /// click on Previous the first again. ARC_AREA_PREMADE_CAPTURE saves an in-app readback of the window to the caller's ignored path.</summary>
+    /// story and fifteen stats, its large portrait read) and every hero's story broken into lines; the pointer over Next lights it, a
+    /// click on Next shows the second hero and a click on Previous the first again; a click on Back goes back to the new-game window and
+    /// Pick Character opens the browser again at the first hero. ARC_AREA_PREMADE_CAPTURE saves an in-app readback of the window to the
+    /// caller's ignored path.</summary>
     private async Task PremadeBrowserArtForSmoke(Action<bool, string> require)
     {
         async Task Frames(int count)
@@ -87,6 +89,18 @@ public partial class TerrainViewerApp
         require(first.Stats.Count == AreaPremadeBrowserArtLayout.StatOrder.Count && first.Stats[0].StartsWith("ST: ", StringComparison.Ordinal),
             "fifteen stats with their short labels: " + string.Join(", ", first.Stats));
         require(art.PortraitForSelfTest, "the hero's large portrait read: " + first.Portrait);
+        // The story's lines as the original breaks them (MW22); the field shows as many as fit, the original's draw stops there: the
+        // smoke reports each hero's line count (the installed stories are longer than the field).
+        var content = _premadeArtContent!;
+        var font = content.TextFont!;
+        var height = font.Measure("A").Height;
+        var fits = Enumerable.Range(0, AreaStartingHero.Premade.Count).Select(index =>
+        {
+            var view = content.View(index, MainMenuHero(index));
+            var field = view?.DescriptionTitle is null ? AreaPremadeBrowserArtLayout.Description : AreaPremadeBrowserArtLayout.RaceText;
+            return view is null ? 0 : AreaPremadeBrowserArtLayout.Wrap(font, view.Description, field.Width).Count;
+        }).ToArray();
+        require(height > 0 && fits.All(lines => lines > 1), "every hero's story breaks into lines: " + string.Join(",", fits));
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_PREMADE_CAPTURE") is { Length: > 0 } capture)
         {
@@ -105,10 +119,32 @@ public partial class TerrainViewerApp
         var (_, px, py) = AreaPremadeBrowserArtLayout.Button(AreaPremadeBrowserButton.Previous);
         await Click(art.ScreenPointForSelfTest(px + 15, py + 15));
         require(_mainMenu!.Hero == 0 && art.ViewForSelfTest?.Name == first.Name, "a click on Previous shows the first hero again: " + _mainMenu.Hero);
+        await ClickPremadeForSmoke(AreaPremadeBrowserButton.Back);
+        require(_mainMenu!.Window == AreaMenuWindow.NewGame && !panel.PremadeArtMode, "a click on Back went back to the new-game window: " + _mainMenu.Window);
+        var pick = _mainMenu.Shown.ToList().FindIndex(shown => shown.Message == 420);
+        MainMenuCommand(() => _mainMenu!.Activate(pick));
+        require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && _mainMenu.Hero == 0 && panel.PremadeArtMode, "Pick Character opened the browser again");
         var away = art.ScreenPointForSelfTest(400, 20);
         GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away });
         await Frames(1);
         GD.Print("ARC-UI-066 native-smoke browser art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-            _premadeArtContent!.Detail, first.Name, first.Gender, first.Race, first.BackgroundName, Stats = first.Stats, first.Portrait, Second = second!.Name }));
+            _premadeArtContent!.Detail, first.Name, first.Gender, first.Race, first.BackgroundName, Stats = first.Stats, first.Portrait, Second = second!.Name,
+            StoryLines = fits, ShownLines = AreaPremadeBrowserArtLayout.Description.Height / height }));
+    }
+
+    /// <summary>A click (press and release) on a browser button of the art, as the pointer gives it.</summary>
+    private async Task ClickPremadeForSmoke(AreaPremadeBrowserButton button)
+    {
+        var art = _mainMenuPanel!.PremadeArtForSelfTest;
+        var (_, x, y) = AreaPremadeBrowserArtLayout.Button(button);
+        var at = art.ScreenPointForSelfTest(x + 15, y + 15);
+        foreach (var pressed in new[] { true, false })
+        {
+            GetViewport().PushInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+            });
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
     }
 }

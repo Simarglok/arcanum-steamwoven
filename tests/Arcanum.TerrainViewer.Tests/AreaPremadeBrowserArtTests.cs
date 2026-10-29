@@ -8,7 +8,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-066 pre-made browser art (ledger MW17–MW21): the art, the buttons' and fields' places, the stats' order and labels,
+/// <summary>ARC-UI-066 pre-made browser art (ledger MW17–MW22): the art, the buttons' and fields' places, the stats' order and labels,
 /// the centring and the story's lines, and the browsed hero's view, on synthetic glyph frames and tables.</summary>
 [TestClass]
 public sealed class AreaPremadeBrowserArtTests
@@ -84,10 +84,14 @@ public sealed class AreaPremadeBrowserArtTests
         // "aaaa bbbb": the first word advances 16, the space 4, the second measures 17: 37 in all.
         var lines = AreaPremadeBrowserArtLayout.Wrap(font, "aaaa bbbb", 36);
         Assert.AreEqual(2, lines.Count);
-        Assert.AreEqual(0, lines[1][0].X, "the wrapped line starts at the left, its space dropped");
+        Assert.AreEqual(5, lines[0].Count, "the first line holds its breaking space (0x535C40)");
+        Assert.AreEqual(0, lines[1][0].X, "the next line starts after the space");
         Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "aaaa bbbb", 37).Count, "a line as wide as the field fits");
-        Assert.AreEqual(20, AreaPremadeBrowserArtLayout.Wrap(font, "aaaa bbbb", 37)[0][4].X, "the second word after the space");
-        Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "aaaaaaaaaa", 10).Count, "a word wider than the field stays on its line");
+        Assert.AreEqual(20, AreaPremadeBrowserArtLayout.Wrap(font, "aaaa bbbb", 37)[0][5].X, "the second word after the space");
+        var hyphen = AreaPremadeBrowserArtLayout.Wrap(font, "aa-bb", 15);
+        Assert.AreEqual((2, 3, 2), (hyphen.Count, hyphen[0].Count, hyphen[1].Count), "a line breaks after a hyphen, which it keeps");
+        Assert.AreEqual(0, AreaPremadeBrowserArtLayout.Wrap(font, "aaaaaaaaaa", 10).Count, "a line with no break ends the text (0x535708)");
+        Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "aa aaaaaaaaaa b", 10).Count, "the lines before it are drawn");
     }
 
     [TestMethod]
@@ -98,10 +102,11 @@ public sealed class AreaPremadeBrowserArtTests
         Assert.AreEqual(3, lines.Count, "two line feeds: a blank line between");
         Assert.AreEqual(0, lines[1].Count, "a carriage return has no glyph");
         Assert.AreEqual(20, lines[2][0].X, "a tab advances 20 (MW4)");
-        Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "", 10).Count);
+        Assert.AreEqual(0, AreaPremadeBrowserArtLayout.Wrap(font, "", 10).Count, "an empty text has no line");
+        Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "ab\n", 10).Count, "a closing line feed starts no line");
         var escaped = AreaPremadeBrowserArtLayout.Wrap(font, @"a\nb\tc", 395);
         Assert.AreEqual(2, escaped.Count, "the two characters \\n start a line (0x5418A0)");
-        Assert.AreEqual(4 + 5 * 4, escaped[1][1].X, "the two characters \\t are five spaces (0x541830)");
+        Assert.AreEqual(4 + 5 * 4, escaped[1][^1].X, "the two characters \\t are five spaces (0x541830)");
     }
 
     [TestMethod]

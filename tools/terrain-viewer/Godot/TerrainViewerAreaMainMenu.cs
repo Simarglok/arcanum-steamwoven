@@ -690,7 +690,8 @@ public partial class TerrainViewerApp
             MainMenuCommand(() => { _mainMenu!.Browse(1); return AreaMenuCommand.Nothing; });
             Require(MainMenuHero(1).Status == AreaHeroStatus.Ready && _mainMenuPanel!.HeroForSelfTest.StartsWith("2/12 gnome-male\n", StringComparison.Ordinal), "Next read the second hero");
             MainMenuCommand(() => { _mainMenu!.Browse(-1); return AreaMenuCommand.Nothing; });
-            MainMenuCommand(() => _mainMenu!.Start());
+            // ARC-UI-066: Start pressed and released over itself in the browser's art.
+            await ClickPremadeForSmoke(AreaPremadeBrowserButton.Start);
             var session = _areaSession!;
             var flags = session.Flags;
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));

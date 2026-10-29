@@ -13,7 +13,7 @@ public enum AreaPremadeBrowserButton { Start, Back, Previous, Next }
 /// <summary>
 /// ARC-UI-066: the original look of the pre-made character browser (window 13), read from its descriptor 0x5C5270, open 0x545870,
 /// redraw 0x5458D0, button callback 0x5459F0 and the character draw 0x5448E0 it shares with the new-character window (ledger
-/// MW17–MW21). The background 766 `PreGenCharacterBase` (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1).
+/// MW17–MW22). The background 766 `PreGenCharacterBase` (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1).
 /// Four art buttons: Start 321 `NextBut` and Back 323 `BackBut` in the bottom strip, Previous 283 `Big_Grn_L` and Next 284
 /// `Big_Grn_R` beside the portrait. The browsed hero shows its large portrait, its player name, gender, race and background name
 /// centred in their fields, its background's story (or its race's text) and fifteen stats "ST: 8" in the art fonts 27 `morph15font`
@@ -109,49 +109,59 @@ public static class AreaPremadeBrowserArtLayout
     public static int Centred((int X, int Y, int Width, int Height) field, int width) => width < field.Width ? field.X + (field.Width - width) / 2 : field.X;
 
     /// <summary>
-    /// The lines of a text in a field <paramref name="width"/> wide: each glyph with its x from the line's left. The two characters
-    /// <c>\n</c> start a line and <c>\t</c> are five spaces (0x5418A0, 0x541830, MW21). PROJECT: a line feed byte starts a line too, a
-    /// tab byte advances 20 (MW4), a carriage return has no glyph; a word that does not fit starts the next line (the text draw's line
-    /// break 0x535C40 is not read, F0) and spaces at the start of a wrapped line are dropped.
+    /// The lines of a text in a field <paramref name="width"/> wide, each glyph with its x from the line's left, as the text draw
+    /// 0x535570 breaks them with 0x535C40 (MW22): a line ends at a line feed, or before the character that would pass the width (the
+    /// last character counts its width, the others their advance) at the last space or after the last hyphen before it; the line
+    /// holds its break character and the next starts after it. A line with no space or hyphen to break at ends the text. The two
+    /// characters <c>\n</c> start a line and <c>\t</c> are five spaces (0x5418A0, 0x541830, MW21). PROJECT: a tab byte advances 20
+    /// (MW4) and draws nothing, another character without a glyph is skipped (the glyph lookup of 0x535D10 for them is not read).
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>> Wrap(AreaArtFont font, string text, int width)
     {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentOutOfRangeException.ThrowIfNegative(width);
+        text = text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\t", "     ", StringComparison.Ordinal);
         var lines = new List<IReadOnlyList<(int, AreaArtGlyph)>>();
-        foreach (var paragraph in text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\t", "     ", StringComparison.Ordinal).Split('\n'))
+        for (var start = 0; start < text.Length;)
         {
+            var end = Break(font, text, start, width);
+            if (end < 0) break;
             var line = new List<(int, AreaArtGlyph)>();
             var x = 0;
-            var wrapped = false;
-            for (var i = 0; i < paragraph.Length;)
+            for (var i = start; i <= end && i < text.Length; i++)
             {
-                var character = paragraph[i];
-                if (character == '\t') { x += TabAdvance; i++; continue; }
-                if (character == ' ')
-                {
-                    if (!(wrapped && line.Count == 0) && font.Glyph(' ') is { } space) x += space.Advance;
-                    i++;
-                    continue;
-                }
-                var end = i;
-                while (end < paragraph.Length && paragraph[end] is not (' ' or '\t')) end++;
-                var word = font.Layout(paragraph[i..end]);
-                var measured = font.Measure(paragraph[i..end]).Width;
-                if (line.Count > 0 && x + measured > width)
-                {
-                    lines.Add(line);
-                    (line, x, wrapped) = (new(), 0, true);
-                }
-                foreach (var (gx, glyph) in word) line.Add((x + gx, glyph));
-                if (word.Count > 0) x += word[^1].X + word[^1].Glyph.Advance;
-                i = end;
+                var (advance, _, glyph) = Metrics(font, text[i]);
+                if (glyph is { } shown) line.Add((x, shown));
+                x += advance;
             }
             lines.Add(line);
+            start = end + 1;
         }
         return lines;
     }
+
+    /// <summary>0x535C40: the index of the character a line from <paramref name="start"/> ends at (drawn with it), the text's length
+    /// when the rest fits, or -1 when it does not fit and has no break.</summary>
+    private static int Break(AreaArtFont font, string text, int start, int width)
+    {
+        var x = 0;
+        var candidate = -1;
+        for (var i = start; i < text.Length; i++)
+        {
+            var character = text[i];
+            if (character == '\n') return i;
+            var (advance, glyphWidth, _) = Metrics(font, character);
+            if (character == ' ') candidate = i;
+            if (x + (i + 1 < text.Length ? advance : glyphWidth) > width) return candidate;
+            x += advance;
+            if (character == '-') candidate = i;
+        }
+        return text.Length;
+    }
+
+    private static (int Advance, int Width, AreaArtGlyph? Glyph) Metrics(AreaArtFont font, char character) =>
+        character == '\t' ? (TabAdvance, 0, null) : font.Glyph(character) is { } glyph ? (glyph.Advance, glyph.Width, glyph) : (0, 0, null);
 
     /// <summary>The effective stats of a hero definition at its start, in <see cref="StatOrder"/>: its stored stats under its race and
     /// gender effects (as the session's hero owner reads them, no context); null when the owner refuses them.</summary>
@@ -162,8 +172,8 @@ public static class AreaPremadeBrowserArtLayout
             : ImmutableDictionary<CharacterRace, StatEffectDefinition>.Empty.Add(hero.Race, hero.RaceEffect);
         var genders = hero.GenderEffect is null ? ImmutableDictionary<CharacterGender, StatEffectDefinition>.Empty
             : ImmutableDictionary<CharacterGender, StatEffectDefinition>.Empty.Add(hero.Gender, hero.GenderEffect);
-        if (CharacterStatsOwner.Create(new(hero.Race, hero.Gender, new(races, genders), CharacterStatLimits.Default)).Owner is not { } owner
-            || hero.Stats.Count != SessionHeroLimits.StoredStats.Length) return null;
+        if (hero.Stats.Count != SessionHeroLimits.StoredStats.Length
+            || CharacterStatsOwner.Create(new(hero.Race, hero.Gender, new(races, genders), CharacterStatLimits.Default)).Owner is not { } owner) return null;
         for (var index = 0; index < hero.Stats.Count; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], hero.Stats[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
         if (owner.Query(new(0)).Snapshot is not { } snapshot) return null;
