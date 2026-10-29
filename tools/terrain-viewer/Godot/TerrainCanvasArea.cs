@@ -15,6 +15,12 @@ public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaV
     public Func<AreaDrawCommand, AreaLitColors?>? Moving { get; init; }
 }
 
+/// <summary>ARC-RENDER-036: the covered-tile masks and roofs one submission drew (ARC-RENDER-022), for pixel observations.</summary>
+public sealed record AreaVisibleCovers(IReadOnlyList<AreaDrawCommand> Masks, IReadOnlyList<AreaDrawCommand> Roofs)
+{
+    public static AreaVisibleCovers None { get; } = new(Array.Empty<AreaDrawCommand>(), Array.Empty<AreaDrawCommand>());
+}
+
 public partial class TerrainCanvas
 {
     private AreaAmbientView? _areaAmbient;
@@ -148,6 +154,9 @@ public partial class TerrainCanvas
     }
     /// <summary>ARC-RENDER-022: the frames of the roofs and covered-tile masks the last submission drew per item.</summary>
     public IReadOnlySet<AreaFrameKey> AreaVisibleRoofFrames { get; private set; } = new HashSet<AreaFrameKey>();
+    /// <summary>ARC-RENDER-036: what the last submission drew over <see cref="AreaVisibleCommands"/> outside that list: the
+    /// covered-tile masks (over the terrain only) and the roofs (over everything), in draw order.</summary>
+    public AreaVisibleCovers AreaVisibleCovers { get; private set; } = AreaVisibleCovers.None;
     public int AreaVisibleRoofCount { get; private set; }
     /// <summary>ARC-WORLD-016: moved body commands from the next submission (null or empty = every body at T0).</summary>
     public void SetAreaMovingBodies(IReadOnlyList<AreaDrawCommand>? moving)
@@ -308,6 +317,8 @@ public partial class TerrainCanvas
         draw = draw.Take(terrainCount).Concat(masks).Concat(draw.Skip(terrainCount)).Concat(roofs.Select(roof => roof.Command)).ToArray();
         var maskStart = terrainCount; var maskEnd = terrainCount + masks.Length; var roofStart = draw.Length - roofs.Length;
         AreaVisibleRoofFrames = masks.Concat(roofs.Select(roof => roof.Command)).Select(command => command.Frame).ToHashSet();
+        // A roof faded out at all four corners leaves the pixels beneath it as they are.
+        AreaVisibleCovers = new(Array.AsReadOnly(masks), Array.AsReadOnly(roofs.Where(roof => roof.Corners != Vector4.Zero).Select(roof => roof.Command).ToArray()));
         AreaVisibleRoofCount = roofs.Length;
         _textures.UploadAreaVisible(_areaFrames, draw.Where((command, index) => command.Identity != ActorSentinel
             && (!_areaChunkCommands.ContainsKey(command) || index >= maskStart && index < maskEnd)).Select(command => command.Frame).ToHashSet());
@@ -383,7 +394,7 @@ public partial class TerrainCanvas
         _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
-        _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
+        _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;
         _areaMappings.Clear(); // after the items stopped sampling the rows
         _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
         ReleaseAreaHd(); // after the items stopped sampling HD textures

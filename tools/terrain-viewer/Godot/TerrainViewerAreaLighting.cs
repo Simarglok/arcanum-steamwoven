@@ -278,7 +278,7 @@ public partial class TerrainViewerApp
                         var ambient = channel == AreaAmbientChannel.Indoor ? selection.Pair.Indoor : selection.Pair.Outdoor;
                         if (!TryAreaPixel(command, AreaFramesOf(area), _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
                             _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
-                            1, out _, out var diagnostics, ambient)) { rejections.Add(diagnostics.Rejections); continue; }
+                            1, out _, out var diagnostics, ambient, covers: _canvas.AreaVisibleCovers)) { rejections.Add(diagnostics.Rejections); continue; }
                         found = true; break;
                     }
                     if (found) { tinted[groupIndex]++; continue; }

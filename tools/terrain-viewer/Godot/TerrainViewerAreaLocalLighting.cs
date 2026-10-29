@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
             if (_camera.State != cameraView) throw new InvalidOperationException($"CAVE_LIGHTING_CAMERA_MOVED {cameraView} {_camera.State}");
             return TryAreaPixel(command, AreaFramesOf(area), _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
                 _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5, actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
-                1, out _, out _, plain, tintAt);
+                1, out _, out _, plain, tintAt, _canvas.AreaVisibleCovers);
         }
     }
 }

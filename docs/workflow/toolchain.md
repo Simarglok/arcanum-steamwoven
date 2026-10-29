@@ -104,7 +104,8 @@ history held about 500 runs of such copies of one template).
   (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
-  (1384, 239), and on `elven ruins` with `--hero elf-male`.
+  (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
+  the junk pile stage).
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
   `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.

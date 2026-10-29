@@ -39,7 +39,9 @@ FULL_CHAIN: tuple[tuple[str, str, str, str | None], ...] = (
     ("main", MAIN_MAP, "human-male", None),
     ("town", MAIN_MAP, "human-male", "1409,1314"),
     ("wild", MAIN_MAP, "human-male", "1384,239"),
-    ("ruins", "elven ruins", "elf-male", None),
+    # ARC-RENDER-036: the elf-female, as the elf-male's wielded boomerang (1-3 normal damage) never gets past a container's
+    # damage threshold, so the junk pile stage could not break one on the ruins.
+    ("ruins", "elven ruins", "elf-female", None),
 )
 # The viewer's settings files an automated run may be pointed at (ViewerStoragePaths and the stores that read them).
 SETTINGS = ("ALWAYS_RUN", "AUDIO_VOLUMES", "GAME_SETTINGS", "LAUNCHER_SETTINGS", "VISUAL_PROFILE",
