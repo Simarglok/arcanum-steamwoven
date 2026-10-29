@@ -21,6 +21,7 @@ public partial class TerrainViewerApp
         var numLock = _numLockRun; var option = _alwaysRunOption;
         _worldFocusSimulationForSelfTest = true;
         var events = new List<MovementEvent>();
+        var priorRules = session.Rules.Mode;
         try
         {
             static void Require(bool value, string why)
@@ -44,7 +45,6 @@ public partial class TerrainViewerApp
             // location in Steamwoven (CUA1).
             SyncCursorArt();
             Require(CursorShownForSelfTest?.Art == AreaCursorArt.Battle, $"the battle cursor in combat mode: {CursorShownForSelfTest}");
-            var priorRules = session.Rules.Mode;
             foreach (var rules in new[] { RuleMode.Steamwoven, RuleMode.Original })
             {
                 Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
@@ -143,7 +143,7 @@ public partial class TerrainViewerApp
             _worldAdvanceObserverForSelfTest = null;
             _areaSmokeTime = (_areaSmokeTime + 9) / 10;
             _numLockRun = numLock; _alwaysRunOption = option; _worldGait = MovementGait.Walk;
-            _attackAimForSelfTest = null;
+            _attackAimForSelfTest = null; session.SelectRules(priorRules);
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }

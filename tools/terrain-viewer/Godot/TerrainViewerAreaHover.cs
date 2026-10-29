@@ -212,7 +212,7 @@ public partial class TerrainViewerApp
             _ => Godot.Input.CursorShape.Arrow,
         };
         // ARC-UI-056: while the original's cursor art is shown these shapes are not (it does not change per target).
-        if (cursor != _hoverCursor) { _hoverCursor = cursor; if (_cursorShown is null) Godot.Input.SetDefaultCursorShape(cursor); }
+        if (cursor != _hoverCursor) { _hoverCursor = cursor; if (_cursorShown is null) SetCursorShape(cursor); }
         if (_hoverPanel is not null && _hoverLabel is not null)
         {
             if (text is null || screen is not { } at) _hoverPanel.Visible = false;

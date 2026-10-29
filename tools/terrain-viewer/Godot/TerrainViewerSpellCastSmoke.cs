@@ -145,8 +145,9 @@ public partial class TerrainViewerApp
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
+            // The targeting cursor stays open after a cast (SU9), and so does its art.
             SyncCursorArt();
-            Require(_spellTargeting is null && CursorShownForSelfTest?.Art != AreaCursorArt.Spell, $"the cast closed the spell cursor: {CursorShownForSelfTest}");
+            Require(_spellTargeting is not null && CursorShownForSelfTest?.Art == AreaCursorArt.Spell, $"the spell cursor stays after the cast: {CursorShownForSelfTest}");
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
             // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
@@ -429,7 +430,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            CancelSpellCast(null); _spellPane?.HidePane(); _lentItemSpellsForSelfTest = null; _itemPaneItem = null;
+            CancelSpellCast(null); _spellPane?.HidePane(); _lentItemSpellsForSelfTest = null; _itemPaneItem = null; SetCursorClockForSelfTest(null);
             // ARC-MAGIC-018: a missile still flying is lost; the later stages see the hero unturned.
             ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
             // The later stages see the map and the hero as they were (the learned spells and the experience stay).

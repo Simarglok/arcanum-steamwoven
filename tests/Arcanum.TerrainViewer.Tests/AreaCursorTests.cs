@@ -66,6 +66,10 @@ public sealed class AreaCursorTests
         Assert.IsFalse(new AreaCursorContent(missing, "synthetic").Ready);
         var empty = new Dictionary<int, AreaInterfaceArtLoad>(all) { [AreaCursorArt.Battle] = new(AreaCursorArt.Battle, AreaInterfaceArtStatus.Ready, "battlecur.art", [], "no frames") };
         Assert.IsFalse(new AreaCursorContent(empty, "synthetic").Ready);
+        var outside = new Dictionary<int, AreaInterfaceArtLoad>(all) { [AreaCursorArt.Gauntlet] = all[AreaCursorArt.Gauntlet] with { Frames = [frame with { HotX = 1 }] } };
+        Assert.IsFalse(new AreaCursorContent(outside, "synthetic").Ready, "a hot point outside the image");
+        var large = new Dictionary<int, AreaInterfaceArtLoad>(all) { [AreaCursorArt.Gauntlet] = all[AreaCursorArt.Gauntlet] with { Frames = [new(257, 1, new byte[257 * 4])] } };
+        Assert.IsFalse(new AreaCursorContent(large, "synthetic").Ready, "an image larger than a system cursor");
     }
 
     /// <summary>The installed game's cursor art read (sizes, frame counts, rates and hot points only).</summary>

@@ -19,10 +19,20 @@ public partial class TerrainViewerApp
     private int _cursorArt = AreaCursorArt.Gauntlet;
     private ulong _cursorSince;
     private ulong? _cursorClockForSelfTest;
+    // The system shape last given to Godot as the default (the display server's own answer is Arrow when headless).
+    private Godot.Input.CursorShape _cursorShapeSet = Godot.Input.CursorShape.Arrow;
     private AreaCursorContent? _cursorContentForSelfTest;
 
     internal int CursorArtForSelfTest => _cursorArt;
     internal (int Art, int Frame)? CursorShownForSelfTest => _cursorShown;
+    internal Godot.Input.CursorShape CursorShapeSetForSelfTest => _cursorShapeSet;
+
+    /// <summary>The default system cursor shape; every change goes through here so the self-test can read it.</summary>
+    private void SetCursorShape(Godot.Input.CursorShape shape)
+    {
+        _cursorShapeSet = shape;
+        Godot.Input.SetDefaultCursorShape(shape);
+    }
 
     /// <summary>Self-test: the cursor clock stands at <paramref name="at"/> ms and the shown art's animation starts there.</summary>
     internal void SetCursorClockForSelfTest(ulong? at, bool restart = false)
@@ -45,19 +55,20 @@ public partial class TerrainViewerApp
             {
                 _cursorShown = null;
                 Godot.Input.SetCustomMouseCursor(null);
-                Godot.Input.SetDefaultCursorShape(_hoverCursor);
+                SetCursorShape(_hoverCursor);
             }
             return;
         }
         var art = AreaCursorArt.Art(CursorMode, HeroInCombatMode, HeroInCombatMode ? HeldAim() : null,
             _areaSession?.Rules.Interface.CalledShotCursorsSwapped == true);
+        var now = CursorClock;
         if (art != _cursorArt)
         {
-            _cursorArt = art; _cursorSince = CursorClock;
+            _cursorArt = art; _cursorSince = now;
             GD.Print($"ARC-UI-056 cursor art={art} mode={CursorMode}");
         }
         var load = content.Art[art];
-        var frame = AreaCursorArt.Frame((long)(CursorClock - Math.Min(_cursorSince, CursorClock)), load.Frames.Count, load.FramesPerSecond);
+        var frame = AreaCursorArt.Frame((long)(now - Math.Min(_cursorSince, now)), load.Frames.Count, load.FramesPerSecond);
         if (_cursorShown == (art, frame) && ReferenceEquals(_cursorTexturesOf, content)) return;
         if (!ReferenceEquals(_cursorTexturesOf, content)) { _cursorTextures.Clear(); _cursorTexturesOf = content; }
         if (!_cursorTextures.TryGetValue(art, out var textures))
@@ -66,7 +77,7 @@ public partial class TerrainViewerApp
         var shown = load.Frames[frame];
         // The frame's hot point goes on the pointer (the mouse library, 0x4FFEC0).
         Godot.Input.SetCustomMouseCursor(textures[frame], Godot.Input.CursorShape.Arrow, new Vector2(shown.HotX, shown.HotY));
-        if (_cursorShown is null) Godot.Input.SetDefaultCursorShape(Godot.Input.CursorShape.Arrow);
+        if (_cursorShown is null) SetCursorShape(Godot.Input.CursorShape.Arrow);
         _cursorShown = (art, frame);
     }
 

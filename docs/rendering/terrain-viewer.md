@@ -707,7 +707,7 @@ modal, closed gate, focus and window guards, injected names) and, with the cave 
 pick PASS` (a faded wall is never picked, the same wall drawn opaque is) (Virgil walk to talk with his unknown description, the
 entrance walk to use, click-through sprites passed through to the body behind, the press
 does what the cursor showed). Not
-verified: original cursor or message-window parity, hover art (the animated underlay), a
+verified: original message-window parity (the cursor art follows the executable since ARC-UI-056), hover art (the animated underlay), a
 human on a physical mouse and display.
 
 ### Original cursor art (ARC-UI-056)
@@ -731,8 +731,8 @@ game's state, never the object under the pointer: what a click would do there st
   wrapping; the others have one frame. The same cursor serves the world, the bars and the windows, as in the original;
   controls with a cursor shape of their own (a text field's I-beam) keep it. The log prints `ARC-UI-056 cursor art ready=…`
   once and `ARC-UI-056 cursor art=N mode=M` at each change.
-- **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file) the
-  ARC-UI-005 system shapes stay, as before.
+- **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file, a frame
+  larger than 256 × 256 or with its hot point outside it) the ARC-UI-005 system shapes stay, as before.
 
 Not built (F0 rows of CU6): the cursor arts `Cursor_UP`/`Cursor_DWN` over two interface buttons not yet identified, the
 spell cursor of the world map's state 3, a held item's art on the cursor (the viewer's inventory drag keeps its own image),
@@ -742,8 +742,8 @@ Checks: `AreaCursorTests` (the art by mode, combat mode and key in both rule mod
 opt-in `Original_cursor_art_reads` checks the installed arts' names, frames, rate and hot points), `RuleModeTests`, the
 ARC-UI-005 self-test with injected synthetic art (the gauntlet over a walk target and under the palette, the system shapes
 back without the art), the ARC-COMBAT-004 combat-mode smoke (`battlecur` in combat mode, each called-shot key in both rule
-modes, the gauntlet after leaving) and the ARC-MAGIC-015 cast smoke (`spellcur` frame 0, frame 1 after 100 ms, gone after
-the cast). Not verified: a human on a physical mouse and display, original parity of the cursor's on-screen size.
+modes, the gauntlet after leaving) and the ARC-MAGIC-015 cast smoke (`spellcur` frame 0, frame 1 after 100 ms, still shown
+after the cast, as the targeting cursor stays open, SU9). Not verified: a human on a physical mouse and display, original parity of the cursor's on-screen size.
 
 ### Health and fatigue bars (ARC-UI-020)
 

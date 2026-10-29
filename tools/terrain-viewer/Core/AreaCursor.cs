@@ -44,7 +44,9 @@ public static class AreaCursorArt
     };
 
     /// <summary>The frame an animated cursor shows <paramref name="elapsedMs"/> after its art was set (CU5): the mouse library
-    /// steps to the next frame, wrapping to the first, once 1000 / fps milliseconds have passed; one frame or no rate stays on 0.</summary>
+    /// steps to the next frame, wrapping to the first, once 1000 / fps milliseconds have passed; one frame or no rate stays on 0.
+    /// This is the original's count with a ping every frame: after a long hitch the original steps one frame, this jumps to the
+    /// frame of the elapsed time.</summary>
     public static int Frame(long elapsedMs, int frames, int framesPerSecond)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(elapsedMs);
@@ -57,8 +59,14 @@ public static class AreaCursorArt
 /// <summary>ARC-UI-056: the cursor art read from the game folder (<see cref="AreaCursorArt.ArtNumbers"/>). Godot-free.</summary>
 public sealed record AreaCursorContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
-    /// <summary>True when every cursor art read with at least one frame.</summary>
-    public bool Ready => AreaCursorArt.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
+    /// <summary>The largest cursor image a system cursor takes (Godot's custom cursor limit).</summary>
+    public const int MaxSide = 256;
+
+    /// <summary>True when every cursor art read with at least one frame, each at most <see cref="MaxSide"/> square with its hot
+    /// point inside it; otherwise the system shapes stay.</summary>
+    public bool Ready => AreaCursorArt.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
+        && load.Frames.Count > 0 && load.Frames.All(f => f.Width is > 0 and <= MaxSide && f.Height is > 0 and <= MaxSide
+            && f.HotX >= 0 && f.HotX < f.Width && f.HotY >= 0 && f.HotY < f.Height));
 
     /// <summary>No game folder (the self-test) or an unreadable one: no art, the system cursor shapes stay.</summary>
     public static AreaCursorContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), reason);

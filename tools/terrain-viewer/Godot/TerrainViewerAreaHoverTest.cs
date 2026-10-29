@@ -107,20 +107,20 @@ public partial class TerrainViewerApp
             Require(CursorShownForSelfTest is null, "no cursor art without a game folder");
             _cursorContentForSelfTest = SyntheticCursorContent(); _cursorClockForSelfTest = 0;
             SyncCursorArt();
-            Require(CursorShownForSelfTest == (AreaCursorArt.Gauntlet, 0) && Godot.Input.GetCurrentCursorShape() == Godot.Input.CursorShape.Arrow,
+            Require(CursorShownForSelfTest == (AreaCursorArt.Gauntlet, 0) && CursorShapeSetForSelfTest == Godot.Input.CursorShape.Arrow,
                 $"the gauntlet out of combat mode: {CursorShownForSelfTest}");
             foreach (var (_, ground) in near.Where(c => AreaHover.Ground(Routes(), actor, c.Cell) == AreaHoverAction.Walk).Take(1))
             {
                 HoverAtForSelfTest(ground); SyncCursorArt();
                 Require(HoverCursorForSelfTest == Godot.Input.CursorShape.Cross && CursorShownForSelfTest == (AreaCursorArt.Gauntlet, 0)
-                    && Godot.Input.GetCurrentCursorShape() == Godot.Input.CursorShape.Arrow, "a walk target keeps the gauntlet");
+                    && CursorShapeSetForSelfTest == Godot.Input.CursorShape.Arrow, "a walk target keeps the gauntlet");
             }
             ToggleWorldSettings(); SyncCursorArt();
             Require(WorldModal && CursorArtForSelfTest == AreaCursorArt.Gauntlet, "a window shows the gauntlet");
             ToggleWorldSettings(); OpenHoverGate(steps);
             _cursorContentForSelfTest = null; _cursorClockForSelfTest = null;
             SyncCursorArt();
-            Require(CursorShownForSelfTest is null, "the system shapes come back without the art");
+            Require(CursorShownForSelfTest is null && CursorShapeSetForSelfTest == HoverCursorForSelfTest, "the system shapes come back without the art");
 
             // A native control (HUD, palette) under the pointer takes it: no tooltip, default cursor.
             point = await HoverPointAsync(host, body) ?? throw new InvalidOperationException("AREA hover: body not visible again");
