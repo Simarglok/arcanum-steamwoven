@@ -154,14 +154,14 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, premade, life, floaters, death, debug-travel, report)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, premade, life, floaters, death, debug-travel, report, hover)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
                             // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
@@ -206,6 +206,10 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
+                                // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
+                                if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
+                                // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
+                                if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
                                 if (Stage("report")) await RunAreaBugReportSmokeAsync();
                             }

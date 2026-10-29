@@ -101,6 +101,13 @@ public sealed class AreaUseScriptHostTests
             // 706: a tile script that keeps a local flag and teleports the player; 707: a sector script that sets a flag.
             Write("scr/00706tile.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))), Do(TeleportPc(5076)), Do(Skip)));
             Write("scr/00707sector.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(9))), Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(Skip)));
+            // 740, 741 (ARC-SCRIPT-046): a tile script for the NPC named 9000 that calls 741 with the player as the triggerer and the NPC as
+            // the attachee; 741 asks for node 3 of its own DLG (header local flags 0b10, which the NPC's use slot takes).
+            Write("scr/00740tile.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Triggerer, 0), N(9000)), new(0), new(ScrCatalogue.Action.Goto, N(2))),
+                Do(new(ScrCatalogue.Action.CallScript, N(741), N(0), (21, 0), (Triggerer, 0))), Do(Skip)));
+            var called = Program(Do(new(ScrCatalogue.Action.Dialog, N(3))), Do(Skip));
+            BinaryPrimitives.WriteUInt32LittleEndian(called, 0b10);
+            Write("scr/00741called.scr", called);
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -432,6 +439,48 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(once, session.Rules.Scripts).Outcome);
             Assert.AreEqual(0, host.PlacedSlot(once).Script);
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrStop.NoScript), (host.RunPlaced(once, session.Rules.Scripts).Outcome, host.RunPlaced(once, session.Rules.Scripts).Run!.Stop));
+        });
+    }
+
+    // ARC-SCRIPT-046: a tile script runs for an NPC that entered its tile as well (ledger TR3), and a conversation it or a script it calls
+    // asks for is handed to the caller with the run's effects applied.
+    [TestMethod]
+    public void A_tile_script_runs_for_an_npc_and_hands_over_the_conversation_its_callee_asks_for()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 740);
+            var host = Host(session, content, Gate(0));
+            var npc = new ScrObjectRef(1, Entity(9));
+
+            var ran = host.RunPlaced(tile, session.Rules.Scripts, null, npc);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(new ScrDialogStart(host.Pc, npc, 741, 0, 3), ran.Dialog);
+            Assert.AreEqual(new ScrSlot(0, 0b10, 0), host.Slot(npc, ScrPoint.Use), "the NPC's use slot took 741's flags before the conversation (0x447282)");
+            Assert.AreEqual(ScrStop.ReturnSkipDefault, ran.Run!.Stop, "the tile script went on after its call");
+
+            // The PC is not named 9000: nothing; a scenery triggerer and a sector script for an NPC are not runs of the original.
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, (ScrDialogStart?)null), (host.RunPlaced(tile, session.Rules.Scripts).Outcome, host.RunPlaced(tile, session.Rules.Scripts).Dialog));
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(1, AreaUseScriptHost.EntityId(Gate(0)))).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(2, Entity(9))).Outcome);
+            var sector = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, new(3, 4), -1, new(192, 256), 0, 0, 707);
+            Assert.ThrowsExactly<ArgumentException>(() => host.RunPlaced(sector, session.Rules.Scripts, null, npc));
+            // A tile script's own dialog has no NPC to talk to (a tile has no attachee): the run applies nothing and counts as refused, so a
+            // tile's unconditional teleport still fires.
+            var alone = host.RunPlaced(tile with { Tile = 73, Script = 741 }, session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.Refused, (ScrDialogStart?)null), (alone.Outcome, alone.Dialog), alone.Detail);
+            StringAssert.Contains(alone.Detail, "no NPC");
+
+            // An NPC with no loaded use element cannot keep the stored slot: the run is not applied, before anything applies.
+            var bare = Row(10, 16, 0, 9000);
+            bare = bare with { EffectiveFields = bare.EffectiveFields.Where(f => f.Slot != 31).ToArray() };
+            var other = Host(session, content, Gate(0), bare);
+            var held = session.Version;
+            var unkept = other.RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(1, AreaUseScriptHost.EntityId(bare)));
+            Assert.AreEqual((AreaScriptedUseOutcome.EffectsRejected, (ScrDialogStart?)null), (unkept.Outcome, unkept.Dialog), unkept.Detail);
+            StringAssert.Contains(unkept.Detail, "no loaded use element");
+            Assert.AreEqual(held, session.Version);
         });
     }
 

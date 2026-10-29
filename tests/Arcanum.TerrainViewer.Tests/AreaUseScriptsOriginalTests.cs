@@ -42,6 +42,36 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.AreEqual(0, transfers.LastScripted!.Lines.Count);
     }
 
+    // ARC-SCRIPT-046: at the plane wreck tile script 1695 waits for Virgil (name 6409) to step onto its tile; then it calls 1696, whose
+    // dialog asks for node 1 of its own DLG with the player and Virgil. The player stepping on it, or the flag 2304 its DLG sets, end it
+    // with nothing.
+    [TestMethod, TestCategory("RealData")]
+    public void Virgil_stepping_onto_the_wreck_tile_asks_for_his_flying_machine_conversation()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Path.Combine(root, "modules", "Arcanum.dat"),
+            "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test", "--actor-resource", Path.Combine(root, "arcanum1.dat"),
+            "--game-root", root, "--area-map", "Arcanum1-024-fixed", "--area-map-sector", "1451,1289"]);
+        var result = AreaLoadOperation.Execute(1, arguments, default);
+        var snapshot = result.Area!.Snapshot;
+        var wreck = result.MapTransitions!.Placed.Single(p => p.Script == 1695 && p.Location == new Arcanum.Data.Maps.WorldLocation(92915, 82552));
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var host = new AreaUseScriptHost(session, snapshot.RuntimeMap, snapshot.Objects, [], content);
+        var virgil = snapshot.Objects.Where(r => r.Type == 16).Select(r => new ScrObjectRef(snapshot.RuntimeMap, AreaUseScriptHost.EntityId(r)))
+            .Single(r => host.NameOf(r) == 6409);
+
+        Assert.IsNull(host.RunPlaced(wreck, session.Rules.Scripts).Dialog, "the player is not Virgil");
+        var ran = host.RunPlaced(wreck, session.Rules.Scripts, _ => "no teleport", virgil);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+        Assert.AreEqual(new ScrDialogStart(host.Pc, virgil, 1696, 0, 1), ran.Dialog);
+        Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 1696, 1, session.Rules.Data).Status);
+
+        var flags = session.Flags;
+        Assert.AreEqual(GlobalFlagWriteDisposition.Applied, flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2304), true)).Disposition);
+        Assert.IsNull(host.RunPlaced(wreck, session.Rules.Scripts, _ => "no teleport", virgil).Dialog, "once seen, never again");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void An_exit_tile_script_of_iron_clan_hq_takes_the_player_to_the_start_map()
     {

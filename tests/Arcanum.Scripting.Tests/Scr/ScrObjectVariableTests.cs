@@ -191,14 +191,47 @@ public sealed class ScrObjectVariableTests
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.UnreadableScript, (ScrRefusal?)null), (unreadable.Outcome, unreadable.Stop, unreadable.Refusal));
         Assert.AreSame(ScrEffects.None, unreadable.Effects);
 
-        // A refusal two levels down crosses the middle level; a dialog action in a callee is refused at its line.
+        // A refusal two levels down crosses the middle level.
         host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40))), Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
         host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(FloatLine))));
         var deep = Use(host);
         Assert.AreEqual((ScrOutcome.Refused, 611, ScrRefusalCode.ActionNotAdmitted, 1), (deep.Outcome, deep.Script, deep.Refusal!.Code, deep.Refusal.Line));
-        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(ScrCatalogue.Action.Dialog, (Attachee, 0), N(5)))));
+    }
+
+    [TestMethod]
+    public void A_dialog_action_in_a_callee_starts_its_conversation_stores_its_flags_and_lets_the_caller_go_on()
+    {
+        // ARC-SCRIPT-046 (0x447282, ledger X11): two levels down, 611 (header local flags 0b100, counters 0x0102) asks for node 5 of
+        // its own DLG with the PC and its attachee (the chest), which first takes 611's flags and counters at the run's point (use),
+        // its own script kept; only 611 ends, so 610 and the caller go on.
+        var host = With(Program(Do(C(7, N(610), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(100, N(9))), Do(C(1))));
+        host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40))), Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
+        host.Inner.Scripts[611] = ScrScriptLookup.Of(WithHeader(Program(Do(C(100, N(41))), Do(C(ScrCatalogue.Action.Dialog, N(5))), Do(C(100, N(42)))), 0b100, 0x0102));
         var talk = Use(host);
-        Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.Dialog, 1), (talk.Outcome, talk.Refusal!.Type, talk.Refusal.Line));
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, talk.Stop);
+        Assert.AreEqual(new ScrDialogStart(Pc, Chest, 611, 1, 5), talk.Effects.Dialog);
+        CollectionAssert.AreEqual(new[] { 9, 40, 41 }, talk.Effects.GlobalFlags.Select(f => f.Index).ToArray(), "611 ends at its dialog, 610 and the caller go on");
+        Assert.AreEqual(new ScrWriteback(ScrSource.Object, Chest, ScrPoint.Use, new ScrSlot(2793, 0b100, 0x0102)), talk.Effects.SlotWrites.Single());
+        Assert.IsNull(talk.Effects.Writeback, "the caller's own slot is unchanged");
+
+        // The callee runs at its caller's point: an event at point 2 (destroy) stores into the chest's slot of point 2.
+        var destroy = new FakeHost();
+        destroy.Attach(Chest, 2, 2794, Program(Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
+        var typed = new TypeHost(destroy);
+        typed.Inner.Scripts[611] = host.Inner.Scripts[611];
+        var stored = ScrDispatcher.RunObject(new(2, Chest, Pc, null), typed, S12);
+        Assert.AreEqual(new ScrWriteback(ScrSource.Object, Chest, 2, new ScrSlot(2794, 0b100, 0x0102)), stored.Effects.SlotWrites.Single());
+
+        // Equal flags and counters store nothing; a second conversation in one dispatch is refused at its line; a callee run for
+        // another triggerer than a PC starts none and ends there all the same.
+        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(ScrCatalogue.Action.Dialog, N(5)))));
+        Assert.AreEqual(0, Use(host).Effects.SlotWrites.Count);
+        host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
+        var twice = Use(host);
+        Assert.AreEqual((ScrOutcome.Refused, 611, ScrCatalogue.Action.Dialog, 0), (twice.Outcome, twice.Script, twice.Refusal!.Type, twice.Refusal.Line));
+        host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(7, N(611), N(0), (Attachee, 0), (Attachee, 0))), Do(C(100, N(40))), Do(C(1))));
+        var other = Use(host);
+        Assert.AreEqual((null, 2), (other.Effects.Dialog, other.Effects.GlobalFlags.Count));
     }
 
     [TestMethod]
