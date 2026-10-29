@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-072 native far-click check (part of the map stage on a map with a session): the player's click route on a goal more
 // than 32 tiles away, reachable over the shown chart, under both rule modes. Original: the goal is refused and the PC does not
 // move (ledger LR4, LR7); Steamwoven: the goal is walked along a corridor (ARC-WORLD-042). The session's mode and the actor's
-// place are restored afterwards.
+// place are restored afterwards. A scripted conversation a following companion's step would open is held (ARC-WORLD-118).
 public partial class TerrainViewerApp
 {
     private const int FarClickMinimum = RouteLimits.AxisDistanceMaximum + 8, FarClickSearchCells = 65536, FarClickFrames = 400;
