@@ -3,7 +3,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// ARC-UI-060: the inventory window's interface mode, the open's third argument (0x5727B0, ledger IW26, IW33): the player's own window
 /// (mode 0; modes 5 and 6 draw as it), barter (mode 1), loot (mode 2; mode 4, not traced, draws as it) and steal (mode 3, the loot
-/// window's frame). The viewer opens the own, loot and steal windows in the inventory panel; the barter window is its own panel.
+/// window's frame). The viewer opens the own, loot and steal windows in the inventory panel; the barter window is its own panel, whose
+/// original look (ARC-UI-064) draws the same frame in mode 1.
 /// </summary>
 public enum AreaInventoryMode { Own, Barter, Loot, Steal }
 
@@ -35,8 +36,8 @@ public static class AreaInventoryHole
     public const int Side = 89, SourceSide = 178;
     /// <summary>The source square's centre above the game view's middle (the square's centre (400, 185) of the 800 × 400 view, 0x5C63B0).</summary>
     public const int SourceRaise = 15;
-    /// <summary>The arts over the copy; the barter window's look, when built, loads 231 with its own arts (232 and 233 are in
-    /// <see cref="AreaInventoryArtContent.Numbers"/>).</summary>
+    /// <summary>The arts over the copy (all three in <see cref="AreaInventoryArtContent.Numbers"/>; ARC-UI-064 drew 231 in the barter
+    /// window's original look).</summary>
     public const int InventoryArt = 233, BarterArt = 231, LootArt = 232;
 
     /// <summary>The rectangle's corner in the frame.</summary>
