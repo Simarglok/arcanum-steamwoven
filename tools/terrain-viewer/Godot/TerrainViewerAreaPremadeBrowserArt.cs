@@ -34,8 +34,9 @@ public partial class TerrainViewerApp
                 && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
         panel.SetPremadeArt(frames, new(text, Glyphs(AreaPremadeBrowserArtLayout.TextFontArt), name, Glyphs(AreaPremadeBrowserArtLayout.NameFontArt)),
-            _premadeArtContent.ArtReady, _premadeArtContent.NewCharacterArtReady);
-        GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; browser={_premadeArtContent.ArtReady} new-character={_premadeArtContent.NewCharacterArtReady}; "
+            _premadeArtContent.ArtReady, _premadeArtContent.NewCharacterArtReady, _premadeArtContent.ShopArtReady);
+        GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; browser={_premadeArtContent.ArtReady} new-character={_premadeArtContent.NewCharacterArtReady} "
+            + $"shop={_premadeArtContent.ShopArtReady}; "
             + $"ms={Time.GetTicksMsec() - started}");
     }
 

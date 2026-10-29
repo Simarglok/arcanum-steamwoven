@@ -107,7 +107,7 @@ public sealed partial class GameSessionOwner : IDisposable
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
                 definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience,
                 definition.Advancement, definition.InnateSkills, background: definition.Background,
-                backgroundDescription: definition.BackgroundDescription, portrait: definition.Portrait);
+                backgroundDescription: definition.BackgroundDescription, playerName: definition.PlayerName, portrait: definition.Portrait);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);

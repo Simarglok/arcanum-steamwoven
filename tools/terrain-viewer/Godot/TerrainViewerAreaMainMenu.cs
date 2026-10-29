@@ -241,7 +241,7 @@ public partial class TerrainViewerApp
         var created = _mainMenu is { Window: AreaMenuWindow.NewCharacter, Creation: { } creation } ? NewCharacterArt(creation, out portrait) : null;
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
             : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "", browsed, portrait,
-            created);
+            created, ShopArtShown);
         RenderCharacterEditor();
     }
 
@@ -705,6 +705,9 @@ public partial class TerrainViewerApp
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));
             Require(!MainMenuOpen && !ReferenceEquals(placeholder, session) && session.QueryHero()?.Prototype == first.Definition!.Prototype
                 && session.QueryGold() == first.Definition.Gold && flag.Value == true, $"the new game is the first hero's: {_quickSaveStatus} {session.QueryHero()?.Prototype} flag {flag.Status} {flag.Value}");
+            // ARC-UI-069: and its player name (field 0x10E, MW21), the save info's name.
+            Require(session.QueryHero()!.PlayerName.Length > 0 && session.QueryHero()!.PlayerName.SequenceEqual(first.Read!.Hero!.PlayerName),
+                $"the started hero keeps its player name: {AreaStartingHero.Name(session.QueryHero()!)}");
             // ARC-UI-068: the hero keeps its story's number (field 0x102, MW19).
             Require(session.QueryHeroBackgroundDescription() == first.Read!.Hero!.BackgroundDescription && first.Read.Hero.BackgroundDescription > 1000,
                 $"the started hero keeps its background description: {session.QueryHeroBackgroundDescription()} (read {first.Read.Hero.BackgroundDescription})");
@@ -833,7 +836,8 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && _mainMenu.Window == AreaMenuWindow.Shop && !CharacterEditorShown && shopKit is { Background: var kitBackground, Clothes: not null }
                 && kitBackground == chosen.Background && shopKit.Gold == creation.Generic.Backgrounds!.Block(chosen.Background).Block!.Money
                 && shopKit.Items.Contains(shopKit.Clothes!.Value) && ReferenceEquals(beforeAccept, _areaSession)
-                && (_mainMenuPanel!.ShopForSelfTest.StartsWith($"gold {shopKit.Gold}", StringComparison.Ordinal) || _mainMenuPanel.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal)),
+                && (_mainMenuPanel!.ShopForSelfTest.StartsWith($"gold {shopKit.Gold}", StringComparison.Ordinal) || _mainMenuPanel.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal)
+                    || _mainMenuPanel.ShopArtMode),
                 $"Return opened the opening shop with her kit: {_mainMenu.Notice} '{_mainMenuPanel!.ShopForSelfTest}'");
             // ARC-UI-038: the shop map's merchant (loaded behind the menu since the new-character window) opens its barter above the shop:
             // the chest's regenerated coins are the merchant's; the cheapest ware she can pay is bought.
@@ -843,7 +847,8 @@ public partial class TerrainViewerApp
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var opened = _mainMenu?.Creation?.Shop ?? throw new InvalidOperationException("ARC-UI-038 shop barter smoke: no shop session (" + _mainMenu?.ShopNote + ")");
                 Require(BarterOpen && _barterInShop && ReferenceEquals(_barterSession, opened.Owner) && opened.Owner!.QueryActor().Map.RuntimeMap == opened.Map.RuntimeMap
-                    && _barter!.View() is { MerchantGold: > 0, Wares.Count: > 0 } && _mainMenuPanel!.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal),
+                    && _barter!.View() is { MerchantGold: > 0, Wares.Count: > 0 }
+                    && (_mainMenuPanel!.ShopForSelfTest.StartsWith("trading with ", StringComparison.Ordinal) || _mainMenuPanel.ShopArtMode),
                     $"the shop's barter opened on the shop map: {_mainMenu?.ShopNote} '{_mainMenuPanel!.ShopForSelfTest}'");
                 return opened;
             }
@@ -862,7 +867,8 @@ public partial class TerrainViewerApp
             var firstShopView = _barter!.View();
             var firstBuy = BuyCheapest();
             var firstOwner = firstShop.Owner!;
-            _mainMenuPanel.ShopPressForSelfTest(accept: false);
+            // ARC-UI-069: the shop in the original's look; its Back clicked in the art.
+            await ShopArtForSmoke(Require, back: true);
             Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "the shop's Back returned to the editor");
             Require(!BarterOpen && firstShop.Owner is null && _mainMenu.Creation.Shop is null, "the shop's Back closed the barter and dropped the shop's session");
             _editorPanel!.StatMinusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
@@ -875,6 +881,7 @@ public partial class TerrainViewerApp
             var shop = await ShopBarterAsync();
             Require(!ReferenceEquals(shop.Owner, firstOwner) && _barter!.View().HeroGold == shopKit.Gold, "the shop opened anew: the first trade went with its Back");
             var bought = BuyCheapest();
+            Require(_barterPanel!.ArtView?.Pc.Any(line => line.Entity == bought.Entity) == true, "the bought ware is on the hero's side of the original look");
             var shopMap = shop.Map;
             var shopOwner = shop.Owner;
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });

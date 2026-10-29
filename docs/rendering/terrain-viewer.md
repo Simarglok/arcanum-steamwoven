@@ -1764,7 +1764,7 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game); ARC-UI-068 the new-character window (its section). The quit box, editor and shop windows keep
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The quit box and editor windows keep
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
@@ -2211,6 +2211,27 @@ opens anew with the kit's gold, a ware is bought again and Return starts the gam
 and the gold left; `ARC-UI-038 native-smoke shop merchant PASS`. Checks: `AreaShopMerchantTests` (with the opt-in
 `Original_shop_map_and_its_merchant`), `RestockStateTests`, `MapTransitionsTests`.
 
+### Opening shop in the original's look (ARC-UI-069)
+
+Menu windows plan item 5, the shop's half (FR-UI-001, FR-CHAR-007): window 15 in the original's look
+([ledger MW30](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)). The window has no background of its own (the strips 336
+and 335 only, MW1) and two art buttons in the bottom strip, Accept 321 `NextBut` at the screen's (675, 496) and Back 323 `BackBut` at
+(69, 496) (`AreaShopArtLayout`, `AreaShopArtView`), with their frames, push behaviour and sounds as window 12's (GB3, GB4, GB7).
+The barter window shows the barter window's original look ([barter window](../ui/original-windows.md#barter-window-done-arc-ui-064))
+at the screen's (0, 41), the place of every game window, on the menu screen's factor: the shop session's hero grid and the merchant's
+shown object (its substitute container) from the shop map's inventory host with the kit's tables, the items' inventory art (the shop
+session's items lay out by their art, as the game's), the merchant's image, name and quote line; a drag buys or sells, as in play.
+With the main menu up the original turns on no round view (IW33) and tests no release in its square (IW34): the viewer draws neither
+the round view nor its art there, and a release in the square acts as anywhere else. The menu keeps the keys (Return, Escape) and the
+controller's focus row lights Accept or Back until the pointer moves (PROJECT); the hints (7003, 7002) are not shown. While the shop
+map loads, when the shop is the kit alone, without the game's art (the self-tests) or with the barter window's diagnostic view chosen
+in play, the shop keeps its diagnostic window and the docked barter window above it.
+
+Native smoke (`menu` stage, original data): the first shop shows the art with the barter window's original look docked at the
+screen's (0, 41), its merchant's wares in the grid and no round view; the pointer over Back lights it and a click on it returns to
+the editor; the ware bought in the second shop stands on the hero's side of the original look; `ARC-UI-069 native-smoke shop art
+PASS` (`ARC_AREA_SHOP_CAPTURE` saves a readback of the window to the caller's ignored path). Checks: `AreaShopArtTests`.
+
 ### Interface bars (ARC-UI-018)
 
 In crash-site-area (exterior, cave and map mode) the original's in-game interface bars are drawn over a session with the
@@ -2432,8 +2453,8 @@ a right release on an item moves it to the other side the same way (IW36); anyth
 `… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
 original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
-only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); the opening shop's docked window keeps the
-diagnostic look. NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
+only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
+the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
 goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
 generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll
 toggles, the scroll bar's art, a follower's portrait as the image, the original fonts.

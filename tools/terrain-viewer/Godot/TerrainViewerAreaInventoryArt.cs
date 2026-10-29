@@ -83,32 +83,36 @@ public partial class TerrainViewerApp
         if (InventoryItemIcons() is not { } icons) return null;
         if (!ReferenceEquals(_inventoryItemSizeSession, session)) { _inventoryItemSizeCache.Clear(); _inventoryItemSizeSession = session; }
         if (_inventoryItemSizeCache.TryGetValue(item, out var known)) return known;
-        var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item));
+        var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item, session));
         (uint, uint)? size = frame is null ? null : ((uint)frame.Width, (uint)frame.Height);
         if (frame is null) GD.Print($"ARC-UI-055 inventory item-size item={item} not read: {detail}");
         _inventoryItemSizeCache[item] = size;
         return size;
     }
 
-    // An item's stored fields from the map row that holds it, null when no map of this run does.
-    private CombatFields? InventoryItemRow(string item)
+    // An item's stored fields from the map row that holds it, null when no map of this run does (ARC-UI-069: the shop map's for the
+    // opening shop's session).
+    private CombatFields? InventoryItemRow(string item, GameSessionOwner? session = null)
     {
-        foreach (var map in _inventoryHost?.Maps ?? [])
+        var host = _shopInventoryHost is not null && session is not null && ReferenceEquals(session, _shopInventorySession) ? _shopInventoryHost : _inventoryHost;
+        foreach (var map in host?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) return CombatFieldReader.Read(found).Fields;
         return null;
     }
 
     /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.
-    /// ARC-UI-052: a looted holder's item too (its kind from the open window's grid).</summary>
+    /// ARC-UI-052: a looted holder's item too (its kind from the open window's grid). ARC-UI-069: the opening shop's barter window's items are
+    /// its session's.</summary>
     private Texture2D? InventoryItemArt(string item)
     {
-        if (_areaSession is not { } session || InventoryItemIcons() is not { } icons) return null;
+        var shown = _barterInShop && BarterOpen ? _barterSession : _areaSession;
+        if (shown is not { } session || InventoryItemIcons() is not { } icons) return null;
         if (!ReferenceEquals(_inventoryItemArtSession, session)) { _inventoryItemArtCache.Clear(); _inventoryItemArtSession = session; }
         if (_inventoryItemArtCache.TryGetValue(item, out var known)) return known;
         Texture2D? texture = null;
         if (InventoryItemKind(session, item) is { } kind)
         {
-            var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item));
+            var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item, session));
             if (frame is not null) texture = HotkeyTexture(frame);
             else GD.Print($"ARC-UI-051 inventory item-art item={item} not read: {detail}");
         }

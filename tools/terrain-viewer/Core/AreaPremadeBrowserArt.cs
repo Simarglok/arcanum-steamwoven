@@ -211,11 +211,16 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
     /// <summary>ARC-UI-068: the same for the new-character window (its background and arrows instead of the browser's background).</summary>
     public bool NewCharacterArtReady => Ready(AreaNewCharacterArtLayout.ArtNumbers);
 
+    /// <summary>ARC-UI-069: the opening shop's strips and buttons read (the shop draws no text of its own).</summary>
+    public bool ShopArtReady => AreaShopArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
+        && load.Frames.Count > 0);
+
     private bool Ready(IReadOnlyList<int> numbers) => numbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
         && load.Frames.Count > 0) && MainMenu is not null && Stats is not null && Backgrounds is not null;
 
-    /// <summary>Every art either character window draws (ARC-UI-068: one read serves both).</summary>
-    public static IReadOnlyList<int> AllArtNumbers { get; } = [.. AreaPremadeBrowserArtLayout.ArtNumbers.Union(AreaNewCharacterArtLayout.ArtNumbers)];
+    /// <summary>Every art either character window draws (ARC-UI-068: one read serves both; ARC-UI-069: and the opening shop).</summary>
+    public static IReadOnlyList<int> AllArtNumbers { get; } =
+        [.. AreaPremadeBrowserArtLayout.ArtNumbers.Union(AreaNewCharacterArtLayout.ArtNumbers).Union(AreaShopArtLayout.ArtNumbers)];
 
     public AreaArtFont? TextFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.TextFontArt].Frames) : null;
     public AreaArtFont? NameFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.NameFontArt].Frames) : null;

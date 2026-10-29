@@ -71,6 +71,10 @@ public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, Ch
     /// <summary>ARC-UI-068: the background's description number (the original's field 0x102, ledger MW19): a pre-made prototype's
     /// story (1039..1050 installed), 0 for none (the background texts then read 1000). Any number is kept, as the saved hero's is.</summary>
     public int BackgroundDescription { get; init; }
+    /// <summary>ARC-UI-069: the PC's player name (the original's string field 0x10E, ledger MW21), its bytes without the terminating NUL: a
+    /// pre-made prototype's name, empty for none (a new character's comes from its window's Accept, NW6). A name the session refuses
+    /// (<see cref="SessionHeroLimits.ValidPlayerName"/>) refuses the hero.</summary>
+    public IReadOnlyList<byte> PlayerName { get; init; } = [];
 }
 
 /// <summary>
