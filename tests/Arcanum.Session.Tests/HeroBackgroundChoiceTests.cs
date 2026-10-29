@@ -144,6 +144,23 @@ public sealed class HeroBackgroundChoiceTests
         Assert.AreEqual(8, Strength(restored));
     }
 
+    [TestMethod]
+    public void A_definitions_background_description_starts_the_hero_and_is_saved()
+    {
+        // ARC-UI-068: a pre-made hero's story number (field 0x102, MW19) comes with its definition, as its background does.
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Background = 39, BackgroundDescription = 1039 } });
+        using var owner = result.Owner!;
+        Assert.AreEqual(((int?)39, (int?)1039), Stored(owner));
+        Assert.AreEqual(0, Effects(owner).Length, "the definition's background adds no effect entry");
+        using var restored = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(GameSessionSnapshotCodec.Encode(owner.Capture())).Snapshot!,
+            RestoreOptions()).Owner!;
+        Assert.AreEqual(((int?)39, (int?)1039), Stored(restored));
+        Changed(owner.ClearHeroBackground(owner.Version), owner, 0, 1);
+        Assert.AreEqual(((int?)0, (int?)0), Stored(owner), "the clear zeroes it");
+        using var plain = Owner();
+        Assert.AreEqual(((int?)0, (int?)0), Stored(plain), "none: 0");
+    }
+
     private static MesFile Mes(string text)
     {
         var parsed = MesFile.Parse(Encoding.Latin1.GetBytes(text));

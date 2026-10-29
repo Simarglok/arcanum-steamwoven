@@ -564,6 +564,24 @@ public static class AreaStartingHero
         CharacterRace.HalfOrc, CharacterRace.HalfOgre, CharacterRace.DarkElf, CharacterRace.Ogre, CharacterRace.Orc,
     ];
 
+    private static StatModifierOperator Operator(EffectChangeOperator op) => op switch
+    {
+        EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
+        EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+        EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
+        _ => throw new ArgumentOutOfRangeException(nameof(op)),
+    };
+
+    /// <summary>ARC-UI-068: an effect rule's changes on the stats the character owner models (as <see cref="Definition"/> keeps a
+    /// pre-made hero's innate effects), or null when it has none: the stat part of a background's effect.</summary>
+    public static StatEffectDefinition? StatEffect(EffectRule? rule)
+    {
+        if (rule is null) return null;
+        StatModifier[] modifiers = [.. rule.Changes.Where(change => change.Kind == EffectAttributeKind.Stat && Stat(change.Attribute) is not null)
+            .Select(change => new StatModifier(Stat(change.Attribute)!.Value, Operator(change.Operator), change.Value))];
+        return modifiers.Length == 0 ? null : new(rule.Number, [.. modifiers]);
+    }
+
     // Source stat index → owner stat: 0..7 primary, 8..16 derived, 22 magick points, 23 tech points.
     private static CharacterStat? Stat(int source) => source switch
     {
@@ -587,13 +605,6 @@ public static class AreaStartingHero
         ArgumentNullException.ThrowIfNull(hero);
         var count = 0;
         var skills = new List<SessionInnateSkillChange>();
-        static StatModifierOperator Operator(EffectChangeOperator op) => op switch
-        {
-            EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-            EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
-            EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
-            _ => throw new ArgumentOutOfRangeException(nameof(op)),
-        };
         StatEffectDefinition? Effect(EffectRule? rule, EffectCause cause)
         {
             if (rule is null) return null;
@@ -632,6 +643,8 @@ public static class AreaStartingHero
         {
             // ARC-UI-033: the prototype's portrait (field 0xE7); a negative one (never installed) starts as 0, as the portrait code refuses it (PO2).
             Portrait = Math.Max(hero.Portrait, 0),
+            // ARC-UI-068: the prototype's background description (field 0x102, MW19): a pre-made hero's story.
+            BackgroundDescription = hero.BackgroundDescription,
         };
     }
 

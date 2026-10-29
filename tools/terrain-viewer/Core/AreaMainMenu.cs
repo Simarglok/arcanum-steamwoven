@@ -535,6 +535,14 @@ public sealed class AreaMainMenu
         Notice = null;
     }
 
+    /// <summary>ARC-UI-068: a press in the window not on the name field ends the name's typing first, as a click elsewhere (the window's
+    /// mouse handler runs the end call before the press reaches a button, NW8); nothing when the name is not being typed.</summary>
+    public void PressOutsideName()
+    {
+        if (QuitPending || Window != AreaMenuWindow.NewCharacter || Creation is not { TypingName: true } creation) return;
+        creation.EndName(enter: false);
+    }
+
     /// <summary>ARC-UI-033: Backspace (true) or Enter (false) while the name is typed; false when the name is not being typed (the key
     /// is then the window's).</summary>
     public bool NameKey(bool backspace)

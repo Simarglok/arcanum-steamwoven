@@ -169,8 +169,10 @@ public static class AreaPremadeBrowserArtLayout
         character == '\t' ? (TabAdvance, 0, null) : font.Glyph(character) is { } glyph ? (glyph.Advance, glyph.Width, glyph) : (0, 0, null);
 
     /// <summary>The effective stats of a hero definition at its start, in <see cref="StatOrder"/>: its stored stats under its race and
-    /// gender effects (as the session's hero owner reads them, no context); null when the owner refuses them.</summary>
-    public static IReadOnlyList<int>? StatValues(SessionHeroDefinition hero)
+    /// gender effects (as the session's hero owner reads them, no context); null when the owner refuses them. ARC-UI-068: with the
+    /// stat part of a chosen background's effect (<paramref name="background"/>, the background cause) too, as the new character's
+    /// object carries it (BD5).</summary>
+    public static IReadOnlyList<int>? StatValues(SessionHeroDefinition hero, StatEffectDefinition? background = null)
     {
         ArgumentNullException.ThrowIfNull(hero);
         var races = hero.RaceEffect is null ? ImmutableDictionary<CharacterRace, StatEffectDefinition>.Empty
@@ -181,6 +183,7 @@ public static class AreaPremadeBrowserArtLayout
             || CharacterStatsOwner.Create(new(hero.Race, hero.Gender, new(races, genders), CharacterStatLimits.Default)).Owner is not { } owner) return null;
         for (var index = 0; index < hero.Stats.Count; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], hero.Stats[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
+        if (background is not null && owner.AddEffect(background, EffectCause.Background).Disposition == CharacterStatsDisposition.Rejected) return null;
         if (owner.Query(new(0)).Snapshot is not { } snapshot) return null;
         return [.. StatOrder.Select(number => snapshot.GetEffective(Stat(number)))];
     }
@@ -203,11 +206,19 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
 {
     /// <summary>True when every art and text table read: the browser then shows the original look (all or nothing, as every one is in
     /// the installed game).</summary>
-    public bool ArtReady => AreaPremadeBrowserArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
+    public bool ArtReady => Ready(AreaPremadeBrowserArtLayout.ArtNumbers);
+
+    /// <summary>ARC-UI-068: the same for the new-character window (its background and arrows instead of the browser's background).</summary>
+    public bool NewCharacterArtReady => Ready(AreaNewCharacterArtLayout.ArtNumbers);
+
+    private bool Ready(IReadOnlyList<int> numbers) => numbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
         && load.Frames.Count > 0) && MainMenu is not null && Stats is not null && Backgrounds is not null;
 
-    public AreaArtFont? TextFont => ArtReady ? new(Art[AreaPremadeBrowserArtLayout.TextFontArt].Frames) : null;
-    public AreaArtFont? NameFont => ArtReady ? new(Art[AreaPremadeBrowserArtLayout.NameFontArt].Frames) : null;
+    /// <summary>Every art either character window draws (ARC-UI-068: one read serves both).</summary>
+    public static IReadOnlyList<int> AllArtNumbers { get; } = [.. AreaPremadeBrowserArtLayout.ArtNumbers.Union(AreaNewCharacterArtLayout.ArtNumbers)];
+
+    public AreaArtFont? TextFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.TextFontArt].Frames) : null;
+    public AreaArtFont? NameFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.NameFontArt].Frames) : null;
 
     public static AreaPremadeBrowserArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), null, null, null, null, reason);
 
@@ -221,7 +232,7 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaPremadeBrowserArtLayout.ArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
+        var art = AreaInterfaceArt.Load(stack, AllArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToList();
         var menu = AreaStartingHero.Table(stack, AreaMainMenuTexts.MainMenuPath, ContentLoadPhase.GameStart, required: true, out var menuDetail);
         var stats = AreaStartingHero.Table(stack, AreaLevelTexts.StatPath, ContentLoadPhase.GameStart, required: true, out var statDetail);
@@ -261,6 +272,32 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
             story ? null : Text(MainMenu, AreaPremadeBrowserArtLayout.RaceTitleMessage),
             story ? Latin1(description.Body.Span) : Text(MainMenu, AreaPremadeBrowserArtLayout.RaceTextBase + 2 * hero.Race + hero.Gender),
             Text(MainMenu, AreaPremadeBrowserArtLayout.StatsTitleMessage), stats, hero.Portrait);
+    }
+
+    /// <summary>
+    /// ARC-UI-068: the new-character window's view of <paramref name="creation"/>, or null when the art or the tables are not ready or the
+    /// character cannot be made. The character draw (MW18–MW20) of the window's object: its gender, race and portrait; the background's
+    /// name and story by the description number the last background press set (none: 0, which reads 1000; MW19); its stats under its
+    /// race, gender and that background's effect; the name field's text in the name's place (MW29).
+    /// </summary>
+    public AreaNewCharacterView? NewCharacterView(AreaNewCharacter creation)
+    {
+        ArgumentNullException.ThrowIfNull(creation);
+        if (!NewCharacterArtReady || creation.Hero(out _) is not { Definition: { } definition }) return null;
+        var background = creation.Chosen is { } chosen ? AreaStartingHero.StatEffect(creation.Generic.Effects?.Invoke(chosen.Effect)) : null;
+        if (AreaPremadeBrowserArtLayout.StatValues(definition, background) is not { } values) return null;
+        var number = creation.Chosen?.Description ?? 0;
+        var description = Backgrounds!.Text(number);
+        var story = number > AreaPremadeBrowserArtLayout.DefaultDescription && description.Status != BackgroundTextStatus.Missing;
+        var (race, gender) = ((int)creation.Race, creation.Gender == CharacterGender.Female ? 0 : 1);
+        var raceTitle = Text(MainMenu, AreaPremadeBrowserArtLayout.RaceTitleMessage);
+        var raceText = Text(MainMenu, AreaPremadeBrowserArtLayout.RaceTextBase + 2 * race + gender);
+        var stats = AreaPremadeBrowserArtLayout.StatOrder.Select((stat, slot) =>
+            $"{Text(Stats, AreaPremadeBrowserArtLayout.StatLabelBase + stat)}: {values[slot]}").ToArray();
+        var character = new AreaPremadeBrowserView(-1, Latin1(creation.Name.AsSpan()), Text(MainMenu, AreaPremadeBrowserArtLayout.GenderNameBase + gender),
+            Text(MainMenu, AreaPremadeBrowserArtLayout.RaceNameBase + race), Latin1(description.Name.Span), story ? null : raceTitle,
+            story ? Latin1(description.Body.Span) : raceText, Text(MainMenu, AreaPremadeBrowserArtLayout.StatsTitleMessage), stats, creation.Portrait);
+        return new(character, creation.TypingName, Text(MainMenu, AreaNewCharacterArtLayout.GenderTextBase + gender), raceTitle, raceText);
     }
 
     /// <summary>A message's bytes as characters, or "" when the table lacks it (the original draws its "Error! Missing line" text, F0).</summary>

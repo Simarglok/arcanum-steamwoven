@@ -29,10 +29,14 @@ public partial class TerrainViewerApp
         var art = _premadeArtContent.Art;
         IReadOnlyDictionary<int, Texture2D> Glyphs(int number) => art[number].Frames.Select((frame, index) => (frame, index))
             .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
-        var frames = AreaPremadeBrowserArtLayout.ArtNumbers.Where(number => number is not (AreaPremadeBrowserArtLayout.TextFontArt or AreaPremadeBrowserArtLayout.NameFontArt))
+        // ARC-UI-068: the new-character window's art comes with the same read.
+        var frames = AreaPremadeBrowserArtContent.AllArtNumbers.Where(number => number is not (AreaPremadeBrowserArtLayout.TextFontArt or AreaPremadeBrowserArtLayout.NameFontArt)
+                && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
-        panel.SetPremadeArt(frames, new(text, Glyphs(AreaPremadeBrowserArtLayout.TextFontArt), name, Glyphs(AreaPremadeBrowserArtLayout.NameFontArt)));
-        GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; ms={Time.GetTicksMsec() - started}");
+        panel.SetPremadeArt(frames, new(text, Glyphs(AreaPremadeBrowserArtLayout.TextFontArt), name, Glyphs(AreaPremadeBrowserArtLayout.NameFontArt)),
+            _premadeArtContent.ArtReady, _premadeArtContent.NewCharacterArtReady);
+        GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; browser={_premadeArtContent.ArtReady} new-character={_premadeArtContent.NewCharacterArtReady}; "
+            + $"ms={Time.GetTicksMsec() - started}");
     }
 
     /// <summary>The browsed hero in the browser's art with its large portrait (null when it did not read), or null when the art or the
@@ -41,16 +45,30 @@ public partial class TerrainViewerApp
     {
         portrait = null;
         if (_premadeArtContent is not { ArtReady: true } content || content.View(index, MainMenuHero(index)) is not { } view) return null;
-        if (!_premadePortraits.TryGetValue(view.Portrait, out portrait))
-        {
-            var file = content.Portrait(_arguments!.ModulePath, view.Portrait);
-            var image = new Image();
-            portrait = file is { Status: AreaPortraitStatus.Ready, Bytes: { } bytes } && image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty()
-                ? ImageTexture.CreateFromImage(image) : null;
-            GD.Print($"ARC-UI-066 browser portrait {view.Portrait}: {file.Status} {file.Detail} decoded={portrait is not null}");
-            _premadePortraits[view.Portrait] = portrait;
-        }
+        portrait = CharacterPortrait(content, view.Portrait);
         return view;
+    }
+
+    /// <summary>ARC-UI-068: the new character in its window's art with its large portrait, or null when the art or the character is not
+    /// ready (the window then keeps its diagnostic look).</summary>
+    private AreaNewCharacterView? NewCharacterArt(AreaNewCharacter creation, out Texture2D? portrait)
+    {
+        portrait = null;
+        if (_premadeArtContent is not { NewCharacterArtReady: true } content || content.NewCharacterView(creation) is not { } view) return null;
+        portrait = CharacterPortrait(content, view.Character.Portrait);
+        return view;
+    }
+
+    /// <summary>A large portrait, read and decoded on its first showing (null when it does not read).</summary>
+    private Texture2D? CharacterPortrait(AreaPremadeBrowserArtContent content, int id)
+    {
+        if (_premadePortraits.TryGetValue(id, out var portrait)) return portrait;
+        var file = content.Portrait(_arguments!.ModulePath, id);
+        var image = new Image();
+        portrait = file is { Status: AreaPortraitStatus.Ready, Bytes: { } bytes } && image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty()
+            ? ImageTexture.CreateFromImage(image) : null;
+        GD.Print($"ARC-UI-066 character portrait {id}: {file.Status} {file.Detail} decoded={portrait is not null}");
+        return _premadePortraits[id] = portrait;
     }
 
     /// <summary>The menu smoke's browser part: the first hero in the original's look (its texts from the game: the name, the background's
@@ -140,4 +158,86 @@ public partial class TerrainViewerApp
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         }
     }
+
+    /// <summary>ARC-UI-068: the menu smoke's new-character part: the generic human man in the window's art (its texts from the game:
+    /// the default name, "Male", "Human", the default background's name, the race's text and fifteen stats; its large portrait read); the
+    /// pointer over the gender's band shows the gender's text and over the race's band the race's; a click on the race's right arrow
+    /// makes a dwarf and one on its left arrow the human again; a click on the name field starts its typing (the caret drawn) and a
+    /// press beside it ends it with the old text. ARC_AREA_NEWCHAR_CAPTURE saves an in-app readback of the window to the caller's
+    /// ignored path.</summary>
+    private async Task NewCharacterArtForSmoke(Action<bool, string> require)
+    {
+        async Task Frames(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+        }
+        async Task Move(double x, double y)
+        {
+            var at = _mainMenuPanel!.NewCharacterArtForSelfTest.ScreenPointForSelfTest(x, y);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+            await Frames(1);
+        }
+        async Task Click(double x, double y)
+        {
+            var at = _mainMenuPanel!.NewCharacterArtForSelfTest.ScreenPointForSelfTest(x, y);
+            foreach (var pressed in new[] { true, false })
+            {
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+                });
+                await Frames(1);
+            }
+        }
+        var panel = _mainMenuPanel!;
+        var art = panel.NewCharacterArtForSelfTest;
+        var creation = _mainMenu!.Creation!;
+        require(panel.NewCharacterArtMode && _premadeArtContent is { NewCharacterArtReady: true } && art.ViewForSelfTest is not null,
+            "the new-character window shows the game's art: " + _premadeArtContent?.Detail);
+        var first = art.ViewForSelfTest!;
+        var character = first.Character;
+        var defaultName = System.Text.Encoding.Latin1.GetString(creation.DefaultName.AsSpan());
+        require(character.Name == defaultName && !first.Typing && character.Gender.Length > 0 && character.Race.Length > 0 && character.BackgroundName.Length > 0
+            && character.DescriptionTitle is { Length: > 0 } && character.Description.Length > 0 && first.GenderText.Length > 0
+            && character.Stats.Count == AreaPremadeBrowserArtLayout.StatOrder.Count && character.Stats[0].EndsWith(": 8", StringComparison.Ordinal),
+            $"the generic character's texts come from the game: {character.Name} | {character.Gender} | {character.Race} | {character.BackgroundName} | {string.Join(", ", character.Stats)}");
+        require(art.PortraitForSelfTest, "the character's large portrait read: " + character.Portrait);
+        await Frames(2);
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_NEWCHAR_CAPTURE") is { Length: > 0 } capture)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
+        }
+        var gender = AreaNewCharacterArtLayout.GenderBand;
+        await Move(gender.X + gender.Width / 2, gender.Y + gender.Height / 2);
+        require(art.HoverForSelfTest == AreaNewCharacterHover.Gender && art.DescriptionForSelfTest is { Title: null } shownGender && shownGender.Text == first.GenderText,
+            "the pointer over the gender's band shows the gender's text: " + art.HoverForSelfTest);
+        var race = AreaNewCharacterArtLayout.RaceBand;
+        await Move(race.X + race.Width / 2, race.Y + race.Height / 2);
+        require(art.HoverForSelfTest == AreaNewCharacterHover.Race && art.DescriptionForSelfTest?.Text == first.RaceText, "over the race's band the race's text");
+        var (_, rx, ry) = AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.RaceNext);
+        await Move(rx + 10, ry + 10);
+        require(art.FrameForSelfTest(AreaNewCharacterArtButton.RaceNext) == 2, "the pointer over the race's right arrow lights it: " + art.FrameForSelfTest(AreaNewCharacterArtButton.RaceNext));
+        await Click(rx + 10, ry + 10);
+        require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Dwarf && art.ViewForSelfTest?.Character.Race != character.Race,
+            $"a click on the race's right arrow made a dwarf: {creation.Race} {art.ViewForSelfTest?.Character.Race}");
+        var (_, lx, ly) = AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.RacePrevious);
+        await Click(lx + 10, ly + 10);
+        require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Human && art.ViewForSelfTest?.Character.Race == character.Race, "the left arrow the human again");
+        var name = AreaNewCharacterArtLayout.NameButton;
+        await Click(name.X + name.Width / 2, name.Y + name.Height / 2);
+        require(creation.TypingName && art.ViewForSelfTest is { Typing: true, Character.Name: "" }, "a click on the name field started its typing");
+        await Click(400, 20);
+        require(!creation.TypingName && creation.NameText() == defaultName && art.ViewForSelfTest is { Typing: false } after && after.Character.Name == defaultName,
+            "a press beside the field ended the typing with its old text: " + creation.NameText());
+        await Move(400, 20);
+        GD.Print("ARC-UI-068 native-smoke new character art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            _premadeArtContent!.Detail, character.Name, character.Gender, character.Race, character.BackgroundName, character.DescriptionTitle,
+            Stats = character.Stats, character.Portrait, first.GenderText }));
+    }
 }
+
