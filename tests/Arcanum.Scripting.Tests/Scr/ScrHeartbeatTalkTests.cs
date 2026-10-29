@@ -93,7 +93,8 @@ public sealed class ScrHeartbeatTalkTests
         // The talk: the PC with the NPC, the DLG of the dialog script at node 1, the dialog action's line, at the dialog point.
         Assert.AreEqual(new ScrDialogStart(Pc, Npc, Talk, 5, 1) { Point = ScrPoint.Dialog }, run.Effects.Dialog);
         // The dialog slot keeps the callee's local flag (X11's store and the call-ex writeback are the same slot), the heartbeat is removed.
-        Assert.AreEqual(new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Dialog, new ScrSlot(Talk, 1u << 3, 0)), run.Effects.SlotWrites[^1]);
+        // One writeback for the slot: the call-ex's supersedes the dialog action's store of the same slot.
+        CollectionAssert.AreEqual(new[] { new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Dialog, new ScrSlot(Talk, 1u << 3, 0)) }, run.Effects.SlotWrites.ToArray());
         Assert.AreEqual(new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Heartbeat, new ScrSlot(0, 0, 0)), run.Effects.Writeback);
     }
 
@@ -128,13 +129,30 @@ public sealed class ScrHeartbeatTalkTests
         var surrendered = Host(0, Pc);
         surrendered.Inner.Dialog = ScrDialogState.Surrendered;
         Assert.IsNull(Beat(surrendered).Effects.Dialog);
-        // Mind-controlled: script 2188 runs in place of the NPC's own from the same line, its own number stays in the slot.
+        // Mind-controlled: script 2188 runs in place of the NPC's own from the same line; though 2188 removes itself, the slot keeps the
+        // NPC's own number.
         var controlled = Host(0, Pc);
         controlled.Inner.Dialog = ScrDialogState.MindControlled;
-        controlled.Inner.Scripts[ScrDispatcher.MindControlScript] = ScrScriptLookup.Of(TalkProgram());
+        controlled.Inner.Scripts[ScrDispatcher.MindControlScript] = ScrScriptLookup.Of(Program(0,
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.RemoveThisScript)), Do(C(ScrCatalogue.Action.SetLocalFlag, N(3))),
+            Do(C(ScrCatalogue.Action.Dialog, N(1))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
         var swapped = Beat(controlled);
         Assert.AreEqual(ScrDispatcher.MindControlScript, swapped.Effects.Dialog!.Script);
-        Assert.AreEqual(Talk, swapped.Effects.SlotWrites[^1].Slot.Script);
+        CollectionAssert.AreEqual(new[] { new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Dialog, new ScrSlot(Talk, 1u << 3, 0)) }, swapped.Effects.SlotWrites.ToArray());
+    }
+
+    [TestMethod]
+    public void A_call_ex_of_the_dialog_point_refuses_a_callee_that_calls_a_script()
+    {
+        // The called script would run at the dialog point without the dialog gates, as RunObject refuses for a dialog-point event.
+        var host = Host(0, Pc);
+        host.Inner.Attach(Npc, ScrPoint.Dialog, Talk, Program(0, Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault)), Do(C(ScrCatalogue.Action.ReturnSkipDefault)),
+            Do(C(ScrCatalogue.Action.CallScript, N(Talk + 1), N(0), (Attachee, 0), (Attachee, 0))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+        var run = Beat(host);
+        Assert.AreEqual(ScrStop.Refused, run.Stop);
+        Assert.IsNull(run.Effects.Dialog);
     }
 
     [TestMethod]

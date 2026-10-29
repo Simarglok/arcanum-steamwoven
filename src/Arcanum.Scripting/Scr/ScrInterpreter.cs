@@ -527,7 +527,8 @@ internal sealed class ScrInterpreter
     /// point (a heartbeat's opening talk, ledger TG5) meets the runner's dialog gates as an event does (E6, 0x4449B0): a dead NPC without
     /// the death-speech file flag or a surrendered one without the surrender-speech flag runs nothing, a mind-controlled one runs 2188 in
     /// place of its own (its own number kept); a dialog action in the callee stores the run's flags and counters in the very slot the
-    /// call-ex then writes back (X11), so the writeback is the slot it leaves. Project limits: an absent object stops the caller's run; the
+    /// call-ex then writes back (X11), so the writeback is the slot it leaves; a callee that reaches call script is refused (the called
+    /// script would skip the gates). Project limits: an absent object stops the caller's run; the
     /// use point (the trap spot is not modelled for a nested run) and a trap object whose script becomes 0 refuse the dispatch, and a point
     /// outside 0..35 or the dialog-override slot ends it (<see cref="ScrStop.CallExPoint"/>).
     /// </summary>
@@ -572,6 +573,8 @@ internal sealed class ScrInterpreter
         }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
+        if (point == ScrPoint.Dialog) RefuseCallScriptIn(admission.Admitted!, number);
+        var writes = _shared.SlotWrites.Count;
         var ran = new ScrInterpreter(admission.Admitted!, number, own, ownFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
         var run = number == own.Script ? ran : ran with { Slot = ran.Slot with { Script = own.Script } };
@@ -579,7 +582,23 @@ internal sealed class ScrInterpreter
         if (run.Slot.Script == 0 && _host.IsTrapObject(obj))
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
         _shared.Slots[(obj, point)] = run.Slot;
+        // The callee's own dialog store of this slot (StoreDialogSlot) is superseded by the writeback; earlier call-exes keep theirs.
+        for (var i = _shared.SlotWrites.Count - 1; i >= writes; i--)
+            if (_shared.SlotWrites[i] is { Source: ScrSource.Object, Point: var p } w && p == point && w.Attachee == obj) _shared.SlotWrites.RemoveAt(i);
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
+    }
+
+    // As RunObject refuses a dialog-point event whose set holds call script, a call-ex of the dialog point refuses a callee that
+    // reaches one: the called script would run at the dialog point without the runner's dialog gates (E6), which call script skips.
+    private static void RefuseCallScriptIn(ScrAdmittedProgram admitted, int script)
+    {
+        foreach (var at in admitted.Region)
+        {
+            var row = admitted.Program.Lines[at];
+            var side = row.OnTrue.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnTrue
+                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
+            if (side is { } call) throw new CallRefusedStop(new(at, call, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScript), script, ScrStop.Refused);
+        }
     }
 
     private int Get(ScrClause c, int slot)

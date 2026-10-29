@@ -539,7 +539,9 @@ goes on as a call that ran default), a mind-controlled one runs script 2188 in p
 held script number. A dialog action in such a callee is allowed: the callee's dialog store is the slot the call-ex writes back (X11),
 so `ScrDialogStart` carries the callee, the line, the node and `Point = 9`; a host opens the talk and resumes that slot (TG8). A
 dialog action at any other point carries that point. Call-ex of the use point (1) stays refused (a nested use's trap spot is not
-modelled).
+modelled). A callee of the dialog point that reaches call script (7) is refused, as a dialog-point event's set may not hold
+call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's
+dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier call-ex of the slot keeps its own).
 
 - **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (below and
   [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,

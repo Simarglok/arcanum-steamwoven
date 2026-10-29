@@ -67,7 +67,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
     /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
     public const string OffProperty = "obj.off";
-    private const int NpcType = 16, OffObjectFlag = 0x2;
+    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
@@ -233,7 +233,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         static bool Near(CellCoord cell, CellCoord at) => Math.Abs((long)cell.X - at.X) <= ScrWorld.VicinityReach && Math.Abs((long)cell.Y - at.Y) <= ScrWorld.VicinityReach;
-        var list = _npcs.Where(n => _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
+        // Off in the play mask (0x5E2F88 = 3): destroyed or switched off in the map data (object flags 0x1, 0x2) or gone in the session.
+        var list = _npcs.Where(n => ((Number(n.Row, ObjectFlagsSlot) ?? 0) & (DestroyedObjectFlag | OffObjectFlag)) == 0 && _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
             .Select(n => new ScrObjectRef(_shownMap, n.Entity)).ToList();
         if (Place(Pc) is { } pc && Near(pc, at)) list.Add(Pc);
         return list;

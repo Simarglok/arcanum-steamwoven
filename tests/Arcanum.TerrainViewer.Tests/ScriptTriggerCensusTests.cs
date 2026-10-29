@@ -92,12 +92,12 @@ public sealed class ScriptTriggerCensusTests
                 opening_heartbeats = opening.GroupBy(o => o).Select(g => new { at = g.Key, rows = g.Count() }),
             }, new JsonSerializerOptions { WriteIndented = true }));
         Assert.AreEqual(79, maps);
-        // Nine heartbeats call an NPC's own dialog point; Virgil's at the Crash Site is the one the heartbeat set admits now: of the 141
-        // heartbeat rows it admits 33 from line 0, one more than before.
+        // Nine heartbeats call an NPC's own dialog point; Virgil's at the Crash Site is one the heartbeat set admits now. The data and the
+        // ARC-WORLD-114 set are fixed; the host's set may widen (audit slices), so its counts are pinned from below: 33 of 141 in 2026-10.
         Assert.AreEqual(9, opening.Count, string.Join(", ", opening));
         CollectionAssert.Contains(opening, "arcanum1-024-fixed:1100");
-        Assert.AreEqual((141, 33, 32), (rows[ScrPoint.Heartbeat], admitted[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat]));
-        Assert.AreEqual((23, 21, 21), (rows[ScrPoint.FirstHeartbeat], admitted[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
+        Assert.AreEqual((141, 32, 23, 21), (rows[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat], rows[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
+        Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 33 && admitted[ScrPoint.FirstHeartbeat] >= 21, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
     }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",

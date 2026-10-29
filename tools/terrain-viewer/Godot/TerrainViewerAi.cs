@@ -163,15 +163,23 @@ public partial class TerrainViewerApp
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
-    // ARC-SCRIPT-047: the conversation a heartbeat asked for during the last event pump, opened after it.
+    // ARC-SCRIPT-047: the conversation a heartbeat asked for, opened after the event pump that ran the tick (kept until it can open).
     private Arcanum.Scripting.Scr.ScrDialogStart? _heartbeatDialog;
 
-    /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100), after the event
-    /// pump that ran the tick; one asked for while another conversation or a window is open is dropped (the heartbeat removed itself, as
-    /// the original's start callback refuses a second dialog of the PC, G3).</summary>
+    /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
+    /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
+    /// or a window is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's behaviour in
+    /// those states is not read (audit U5). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;
+        if (talk.Npc?.Map != CurrentAreaMap)
+        {
+            _heartbeatDialog = null;
+            GD.Print($"ARC-SCRIPT-047 heartbeat-talk dropped: the NPC {talk.Npc?.Code} is not on the shown map");
+            return;
+        }
+        if (ConversationOpen || WorldModal || !LeaveCombatModeForDialog()) return;
         _heartbeatDialog = null;
         BeginScriptedConversation(talk);
     }
@@ -213,6 +221,7 @@ public partial class TerrainViewerApp
     {
         if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
         _aiHost = null;
+        _heartbeatDialog = null;
     }
 
     // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame.

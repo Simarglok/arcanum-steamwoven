@@ -37,7 +37,9 @@ public partial class TerrainViewerApp
         var reach = Math.Max(Math.Abs(pc.X - virgil!.WorldX!.Value), Math.Abs(pc.Y - virgil.WorldY!.Value));
         GD.Print($"ARC-SCRIPT-047 opening smoke start pc=({pc.X},{pc.Y}) virgil=({virgil.WorldX},{virgil.WorldY}) reach={reach}");
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
-        _worldFocusSimulationForSelfTest = true;
+        var takesScripted = _smokeTakesScriptedConversations;
+        // The talk is what this stage observes, so it is not held as other stages hold scripted conversations (ARC-WORLD-118).
+        _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
         _aiForSmoke = true;
         try
         {
@@ -81,7 +83,7 @@ public partial class TerrainViewerApp
         {
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
-            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _smokeTakesScriptedConversations = takesScripted;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
         }

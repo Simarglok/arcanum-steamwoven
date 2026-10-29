@@ -24,7 +24,7 @@ is **NOT_VERIFIED**.
 ## Answer
 
 - **Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
-  (22 of the 35 points the original fires have no host at all, section 2), (b) its host's admission set refuses one of its commands
+  (23 of the 35 points the original fires have no host at all, section 2), (b) its host's admission set refuses one of its commands
   (the interpreter runs 52 of 142 action types and 14 of 53 condition types; each host admits a subset, section 4), or (c) the host
   runs it but cannot apply an effect (a teleport from a heartbeat, a creation off the shown map). Per-script fixes would never end:
   the slices of section 6 are per trigger and per command group.
@@ -48,8 +48,11 @@ is **NOT_VERIFIED**.
 
 Steamwoven both rule modes: the same (the original's own behaviour, no anomaly). At the Crash Site the PC starts 2 tiles from
 Virgil, so the talk opens on the first ticks; the smoke stage `opening` observes it (2 frames, node 1, heartbeat removed, no second
-talk). The talk opened by a heartbeat while another conversation or a window is open is dropped (the heartbeat already removed
-itself; the original's start callback refuses a second dialog of the PC, G3).
+talk). The run is applied before the talk opens (the heartbeat has removed itself), so a talk asked for while another
+conversation or a window is open or the hero is under attack stays pending and opens once it can (Steamwoven's choice, U5). A
+call-ex of the dialog point refuses a callee that reaches call script, as a dialog-point event does (the called script would skip
+the dialog gates). The vicinity leaves out an NPC its map data has destroyed or off (object flags 0x1, 0x2) and one gone in the
+session.
 
 ## 2. Attachment points: who fires them
 
@@ -208,3 +211,6 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
   not observed in the running game.
 - **U4** The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
   dialog gates never trigger there.
+- **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
+  attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
+  Steamwoven keeps it pending until it can open.

@@ -196,6 +196,9 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("death")) await RunAreaHeroDeathSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
+                                // ARC-SCRIPT-047: only when named, Virgil's heartbeat opens his talk with the PC at the start (AI on, start map, --hero);
+                                // first of the AI stages: theirs run his heartbeat, which removes itself, and move the PC away.
+                                if (only?.Contains("opening") == true) await RunAreaOpeningTalkSmokeAsync(result);
                                 // ARC-WORLD-092: only when named, the first fight with the AI on (the other stages run with it off).
                                 if (only?.Contains("ai") == true) await RunAreaAiSmokeAsync(result);
                                 // ARC-WORLD-095: only when named, the fight in a turn-based round (the NPC acts in its own subturns).
@@ -206,8 +209,6 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
-                                // ARC-SCRIPT-047: only when named, Virgil's heartbeat opens his talk with the PC at the start (AI on, start map, --hero).
-                                if (only?.Contains("opening") == true) await RunAreaOpeningTalkSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
