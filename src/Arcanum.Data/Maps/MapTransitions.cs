@@ -85,6 +85,9 @@ public sealed class MapTransitionSet
     /// <summary>ARC-SCRIPT-017: every tile and sector script of the map's own sector files (script 0 left out), in sector
     /// file and node order, whether it teleports or not.</summary>
     public IReadOnlyList<MapPlacedScript> Placed { get; }
+    /// <summary>ARC-SCRIPT-050: whether the map is the map list's start map (0x40FF50 with 1), the map whose objects get area (84) places by
+    /// their location when its own area is 0 (0x4CB6A0).</summary>
+    public bool IsStartMap { get; init; }
     public IEnumerable<MapTransitionSite> Unconditional => Sites.Where(s => s.Unconditional);
 }
 
@@ -224,7 +227,10 @@ public static class MapTransitions
         var mobiles = catalog.ReadMobiles(map);
         issues.AddRange(mobiles.Issues);
         for (var index = 0; index < mobiles.Objects.Count; index++) Object(mobiles.Objects[index], null, index);
-        return new(map, entry, sites.AsReadOnly(), issues.AsReadOnly(), placed.AsReadOnly());
+        return new(map, entry, sites.AsReadOnly(), issues.AsReadOnly(), placed.AsReadOnly())
+        {
+            IsStartMap = entry is not null && list.OfType(MapListType.Start)?.Runtime == entry.Runtime,
+        };
     }
 
     private enum Reach { Unreached, Conditional, Always }

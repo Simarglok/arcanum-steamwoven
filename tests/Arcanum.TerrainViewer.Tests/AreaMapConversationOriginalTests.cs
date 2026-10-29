@@ -73,4 +73,55 @@ public sealed class AreaMapConversationOriginalTests
         Assert.AreEqual((19, 17), (offered, ended));
         CollectionAssert.AreEqual(new[] { "scienticians underground lev 2" }, unlisted);
     }
+
+    /// <summary>ARC-SCRIPT-050: the same walk with the shown map's use host answering the talks' queries (<see cref="AreaScriptHost.QueryHost"/>),
+    /// as map mode wires it: the PC beside the speaker, the map list's area. The talk set admits float line, get area, random and the guard
+    /// conditions, so more entries run; a floated line is shown or, with an action field the viewer does not run, leaves the talk unapplied.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Every_dialog_npc_of_every_interior_starts_with_the_talk_queries()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in map conversation check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var catalog = WorldCatalog.Open(stack);
+        var list = MapList.Read(stack);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var statuses = new SortedDictionary<string, int>(StringComparer.Ordinal); var stops = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var speakers = 0; var floated = new List<string>();
+        void Count(SortedDictionary<string, int> into, string key) => into[key] = into.GetValueOrDefault(key) + 1;
+        foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
+        {
+            AreaSnapshot snapshot;
+            using (var owner = AreaMapPlans.Create(stack, catalog, map.Name).Plan!.Open()) snapshot = owner.LoadStrict();
+            if (AreaConversationHost.FindSpeakers(snapshot).Count == 0 || snapshot.RuntimeMap == 0) continue;
+            using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+            var host = new AreaConversationHost(snapshot, scripts, session);
+            var entry = list.ByRuntime(snapshot.RuntimeMap)!;
+            var area = (entry.Area, list.OfType(MapListType.Start)?.Runtime == entry.Runtime);
+            Arcanum.Simulation.Movement.CellCoord? pc = null;
+            var use = new AreaUseScriptHost(session, snapshot.RuntimeMap, snapshot.Objects, [], scripts,
+                new AreaScriptWorld(() => pc, _ => false, _ => null, () => null, MapArea: () => area));
+            host.Scripts.QueryHost = () => use;
+            foreach (var speaker in host.Speakers)
+            {
+                speakers++;
+                pc = new(checked((int)speaker.WorldX), checked((int)speaker.WorldY));
+                var start = host.Begin(speaker);
+                Count(statuses, start.Status.ToString());
+                if (start.Status is AreaConversationStartStatus.EntryNotAdmitted or AreaConversationStartStatus.ScriptEffectsRejected)
+                    Count(stops, start.Status == AreaConversationStartStatus.ScriptEffectsRejected ? "effects " + host.LastRun!.Script
+                        : start.Detail[(start.Detail.IndexOf(": ", StringComparison.Ordinal) + 2)..]);
+                floated.AddRange(host.Scripts.TakeFloats().Select(f => $"{map.Name}:{host.LastRun!.Script}"));
+            }
+        }
+        Console.WriteLine($"speakers {speakers} statuses {string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}"))}");
+        Console.WriteLine("stops " + string.Join("; ", stops.Select(d => $"{d.Key}={d.Value}")));
+        Console.WriteLine($"floated {floated.Count}: " + string.Join(", ", floated));
+        Assert.AreEqual(182, speakers);
+        // 39 more talks start and 13 more end in their script (52 fewer entries refused); 12 of them float a line, and none reaches a floated
+        // line with an action field. The counts move only when the talk set or the dialog runtime grows.
+        Assert.AreEqual("EntryNotAdmitted=79, ScriptEnded=14, Started=89", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
+        Assert.AreEqual(12, floated.Count);
+        Assert.IsFalse(stops.Keys.Any(k => k.StartsWith("effects ", StringComparison.Ordinal)), string.Join("; ", stops.Keys));
+    }
 }

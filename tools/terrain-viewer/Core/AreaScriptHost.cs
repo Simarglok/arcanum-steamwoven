@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrAreaQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -48,12 +48,67 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     public static ScrAdmissionSet SkillAdmission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-skill", Admission.Conditions,
         Admission.Actions.Append(ScrCatalogue.Action.GetSkill), Admission.ValueKinds, Admission.FocusKinds);
 
-    /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>.</summary>
-    public ScrAdmissionSet RunAdmission => _session.QueryHero() is null ? Admission : SkillAdmission;
+    /// <summary>
+    /// ARC-SCRIPT-050 (slice 2 of the script trigger audit): <see cref="Admission"/> plus what the shown map's use host answers for a talk
+    /// (<see cref="QueryHost"/>): the guard conditions of <see cref="ScrAdmissionSet.S4"/> (PC quest state, holds an item named, is named,
+    /// wields an item named, has a reputation), random (37) of <see cref="ScrAdmissionSet.S15"/>, and float line (23) and get area (84) of
+    /// <see cref="ScrAdmissionSet.S18"/>.
+    /// </summary>
+    public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
+
+    /// <summary>ARC-SCRIPT-050: <see cref="SkillAdmission"/> with the commands of <see cref="TalkAdmission"/>.</summary>
+    public static ScrAdmissionSet SkillTalkAdmission { get; } = WithQueries("S3-area-talk-queries-skill", SkillAdmission);
+
+    private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id, set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions),
+        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]), set.ValueKinds, set.FocusKinds);
+
+    /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
+    /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
+    public ScrAdmissionSet RunAdmission => (_session.QueryHero() is null, Queries is null) switch
+    {
+        (true, true) => Admission,
+        (false, true) => SkillAdmission,
+        (true, false) => TalkAdmission,
+        (false, false) => SkillTalkAdmission,
+    };
+
+    /// <summary>
+    /// ARC-SCRIPT-050: the shown map's use host (<see cref="AreaUseScriptHost"/>), which answers this host's object, world and area
+    /// questions as it answers a use or heartbeat run's: the objects' items, names and reputations, the session's random draws labelled
+    /// <see cref="AreaUseScriptHost.RandomLabel"/>, the critters around an object at their live cells, and the shown map's area. It is used
+    /// only while its shown map is this host's map (a visitor's host, ARC-WORLD-048, keeps the narrower set). Null: none.
+    /// </summary>
+    public Func<AreaUseScriptHost?>? QueryHost { get; set; }
+
+    private AreaUseScriptHost? Queries => QueryHost?.Invoke() is { } host && host.ShownMap == _map.RuntimeMap ? host : null;
+
+    private AreaUseScriptHost Answering => Queries ?? throw new InvalidOperationException("AREA_SCRIPT_QUERIES_UNAVAILABLE: the run's set holds a query command and no use host of this map answers it.");
+
+    public int QuestState(ScrObjectRef obj, int quest) => Answering.QuestState(obj, quest);
+    public bool HoldsItemNamed(ScrObjectRef obj, int name) => Answering.HoldsItemNamed(obj, name);
+    public int NameOf(ScrObjectRef obj) => Answering.NameOf(obj);
+    public bool IsMindControlled(ScrObjectRef obj) => Answering.IsMindControlled(obj);
+    public int? WieldedItemName(ScrObjectRef obj, int location) => Answering.WieldedItemName(obj, location);
+    public bool HasReputation(ScrObjectRef obj, int reputation) => Answering.HasReputation(obj, reputation);
+    public int? ObjectType(ScrObjectRef obj) => Answering.ObjectType(obj);
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => Answering.SceneryInVicinity(centre);
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => Answering.CrittersInVicinity(centre);
+    public int Random(int low, int high) => Answering.Random(low, high);
+    public int? AreaOf(ScrObjectRef obj) => Answering.AreaOf(obj);
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
     private readonly List<ScrReadingRequest> _readings = [];
+    private readonly List<AreaScriptFloat> _floats = [];
+
+    /// <summary>ARC-SCRIPT-050: the float lines of the runs applied since the last call, in order, each with its text, for the viewer to
+    /// float over its speaker.</summary>
+    public IReadOnlyList<AreaScriptFloat> TakeFloats()
+    {
+        var floats = _floats.ToArray();
+        _floats.Clear();
+        return floats;
+    }
 
     /// <summary>ARC-SCRIPT-040: the effect sounds of the runs applied since the last call, in order, for the viewer to play
     /// (scheme requests go to the session in <see cref="Apply"/>).</summary>
@@ -93,6 +148,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     private readonly ScriptContent? _content;
     private readonly Func<string, SessionNpcAdvancement?>? _npcAdvancement;
     private readonly Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? _npcSheet;
+    private readonly AreaConversationProfile _profile;
 
     /// <param name="npcSheet">ARC-SKILLS-009: an NPC's sheet and effects as its map data holds them, by entity id, for get skill; null for
     /// an object that is not such an NPC (its level is 0).</param>
@@ -101,10 +157,13 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     /// <param name="npcAdvancement">ARC-SCRIPT-016: an NPC's advancement as its map data holds it (sheet and scheme), by entity id, or
     /// null for an object that is not such an NPC; a scheme request for one is ignored, as the original ignores an object that is
     /// neither a PC nor an NPC. Without it only the PC's scheme changes.</param>
+    /// <param name="profile">ARC-SCRIPT-050: the talks' PC facts and names, which a float line's text uses (null: the diagnostic profile).</param>
     public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, ScriptContent? content,
-        Func<string, SessionNpcAdvancement?>? npcAdvancement = null, Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? npcSheet = null)
+        Func<string, SessionNpcAdvancement?>? npcAdvancement = null, Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? npcSheet = null,
+        AreaConversationProfile? profile = null)
     {
         _session = session; _map = map; _speakers = speakers; _state = state; _content = content; _npcAdvancement = npcAdvancement; _npcSheet = npcSheet;
+        _profile = profile ?? AreaConversationProfile.Diagnostic;
         Pc = new ScrObjectRef(map.RuntimeMap, PcCode);
     }
 
@@ -222,6 +281,18 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
         ArgumentNullException.ThrowIfNull(effects);
         // The viewer's set admits no use item with skill; a trap object is not modelled.
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        // ARC-SCRIPT-050 (FL2, FL4): each float line's text, read before anything applies. A DLG that is missing or unreadable floats nothing,
+        // as the original's load fails; a line the NPC-line step would do more for (an action field, generated text) is not modelled and
+        // leaves the run unapplied.
+        var floats = new List<AreaScriptFloat>();
+        foreach (var line in effects.Floats)
+        {
+            if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
+            var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male, _profile.Names);
+            if (printed.Status != ScrPrintedLineStatus.Shown) return false;
+            floats.Add(new(line.Speaker, printed.Text));
+        }
+        _floats.AddRange(floats);
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
@@ -293,6 +364,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries
     /// <summary>A script object as a deferred call's session role (map and entity id), or null for an absent one.</summary>
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
 }
+
+/// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text.</summary>
+public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text);
 
 /// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
 public enum AreaSchematicScriptStatus

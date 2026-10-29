@@ -57,7 +57,7 @@ public sealed class ScrPrintLineTests
         var call = ScrDispatcher.RunCall(new(1341, 0, Pc, Item), host, S6);
         CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6), new ScrPrintLine(1341, 3, 2) }, call.Effects.Lines.ToArray());
 
-        var wider = new ScrAdmissionSet("wider", ScrAdmissionSet.S6.Conditions, ScrAdmissionSet.S6.Actions.Append(FloatLine),
+        var wider = new ScrAdmissionSet("wider", ScrAdmissionSet.S6.Conditions, ScrAdmissionSet.S6.Actions.Append(CritterDisband),
             ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(InsertItem, Item, Pc, null), host, new() { Admission = wider }));
         Assert.IsTrue(ScrAdmissionSet.S5.IsSubsetOf(ScrAdmissionSet.S6));
@@ -86,5 +86,10 @@ public sealed class ScrPrintLineTests
         Assert.AreEqual((ScrPrintedLineStatus.Shown, "g:x"), (ScrPrintedLine.Read(marked, 2, true, names).Status, ScrPrintedLine.Read(marked, 2, true, names).Text));
         foreach (var line in new[] { 2, 3, 4, 5, 6, 8 })
             Assert.AreEqual(ScrPrintedLineStatus.Unsupported, Show(line).Status, line.ToString());
+        // ARC-SCRIPT-050: an action field of separators only holds no operation (the conversation grammar's separators).
+        var spaced = Read(Record("1", "Spaced.", action: "  ") + Record("2", "Marks.", action: " ,;:()\t") + Record("3", "Acted.", action: " lf9 1"));
+        Assert.AreEqual((ScrPrintedLineStatus.Shown, "Spaced."), (ScrPrintedLine.Read(spaced, 1, false, names).Status, ScrPrintedLine.Read(spaced, 1, false, names).Text));
+        Assert.AreEqual(ScrPrintedLineStatus.Shown, ScrPrintedLine.Read(spaced, 2, false, names).Status);
+        Assert.AreEqual(ScrPrintedLineStatus.Unsupported, ScrPrintedLine.Read(spaced, 3, false, names).Status);
     }
 }

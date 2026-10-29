@@ -548,6 +548,37 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
   other host's set holds the critter kinds.
 
+## Talk set (ARC-SCRIPT-050)
+
+`ScrAdmissionSet.S18` is S17 plus float line (23) and get area (84); the interpreter runs at most S18. Slice 2 of the
+[script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised); both actions read in the executable (ledger
+[FL1–FL5, GA1–GA3, ML1](../research/ledger/scripts.md#talk-commands-arc-script-050)).
+
+- **Float line** (operands: the DLG line, the objects). Its dialog PC is the first PC in the game-window rectangle around the run's
+  **triggerer** (`IScrWorldQueries.CrittersInVicinity(triggerer)`, the first object the host's `IsPc` accepts); without a triggerer or a PC
+  there nothing happens and no operand is read. Otherwise each object of the object operand, in list order, gets one `ScrFloatLine`
+  (the running script's number as for print line, the line, the object as the speaker, the PC) in `ScrEffects.Floats`. No attachee is
+  needed. The host builds the text as print line does (`ScrPrintedLine.Read`, with the alternate text for a PC that is not male); the
+  original runs the line's action field between the PC and the speaker and hands the text to the dialog interface's speech display
+  (FL4, FL5).
+- **Get area** (operands: the object, the store). `IScrAreaQueries.AreaOf(object)` stores the area of the **current map** from its
+  map-list row (`MapListEntry.Area`, the row's optional `Area:` value read in the original's order after `Type:` and `WorldMap:`, ML1;
+  `MapList.AreaOfRuntime` is 0x40FFE0), whatever the object's map; on the start map with area 0 the original takes the area at the
+  object's location (GA3), which is not modelled: the host answers null and the run stops (`MissingObject`), as for an absent object.
+- **Print line and the action field.** A DLG action field that holds only separators (space, tab, `,`, `;`, `:`, `(`, `)`) has no
+  operation, as the conversation grammar reads it, so `ScrPrintedLine.Read` shows such a line (24 of the 30 floated lines whose field is
+  not empty hold one or two spaces). A real operation is still `Unsupported`.
+- **Hosts.** The AREA viewer's dialog host (`AreaScriptHost`) runs the talk set "S3-area-talk-queries" (with a session hero
+  "S3-area-talk-queries-skill"): its earlier set plus the guard conditions of S4 (PC quest state, holds an item named, is named, wields an
+  item named, has a reputation), random (37), float line and get area, while its `QueryHost` gives the shown map's use host
+  (`AreaUseScriptHost`) of the talk's map, which answers them as for a use or heartbeat run (map mode wires it; a visitor's host keeps
+  the earlier set). `AreaScriptWorld.MapArea` gives the use host the shown map's map-list area and whether it is the start map.
+  The dialog host applies a run's float lines first: a missing or unreadable DLG floats nothing (the original's load fails), a line
+  with an action field or generated text leaves the whole run unapplied; the shown texts go to the viewer (`TakeFloats`), which floats
+  them over the speaker in the floater field. Over the installed interiors (the opt-in walk of `AreaMapConversationOriginalTests`):
+  89 talks start and 14 end in their script, against 50 and 1 without the queries; 12 of them float a line and none reaches a floated
+  line with an action field. The census admits 110 of the 180 dialog rows from line 0 (52 before).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -582,7 +613,14 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   `MissingObject`, the S3 set.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrPrintLineTests.cs` (ARC-SCRIPT-013): print line refused below S6, its lines
   in order from an object event and a call, none without an attachee, options wider than S6 refused, and the printed
-  text rules (missing line, alternate text, tokens, action field, generated text).
+  text rules (missing line, alternate text, tokens, action field, generated text; ARC-SCRIPT-050: a separators-only action field).
+- `tests/Arcanum.Scripting.Tests/Scr/ScrTalkCommandTests.cs` (ARC-SCRIPT-050): S18 over S17; float line over one object and over a list
+  with the PC around the triggerer, nothing without a PC or a triggerer, an absent object floating nothing; get area storing the host's
+  area, a host without an answer or an absent object stopping the run; sets with either action refused for a host that cannot answer,
+  and a set wider than S18 refused. Viewer: `AreaTalkQueryTests` (the talk set through the use host, the floated text and the
+  separators-only action field, get area 0 off the start map and stopping on it, a floated action field leaving the run unapplied, the
+  set widening only for a use host of the talk's map); `MapTransitionsTests` (the map list's area, ML1); opt-in
+  `AreaMapConversationOriginalTests.Every_dialog_npc_of_every_interior_starts_with_the_talk_queries` and `ScriptTriggerCensusTests`.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
@@ -637,13 +675,15 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill", since ARC-SCRIPT-047
   "S2-area-heartbeat-state-kill-talk"); combat is a later slice. Which points the original fires and which have no host here: the
   [script trigger audit](../research/script-trigger-audit.md).
-- Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, float line, reactions and most other world
+- Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, reactions and most other world
   actions; create object makes items only (ARC-WORLD-081).
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
   location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
   loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081), toggle state and kill (S16, ARC-WORLD-114;
-  the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047).
+  the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
+  float line and get area (S18, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
+  with area 0 not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

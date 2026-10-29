@@ -182,7 +182,7 @@ public sealed class AreaConversationHost
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null,
             Speakers.Select(speaker => Scope(speaker.Row)).ToArray());
-        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet);
+        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet, Profile);
     }
 
     /// <summary>The map whose dialog state this host reads and writes (ARC-WORLD-048: a visitor's home map).</summary>
@@ -197,8 +197,14 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
-        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory, _npcSheet).KeepingGreetingTexts(_greetingTexts);
+    public AreaConversationHost Rebind(GameSessionOwner session)
+    {
+        var host = new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
+            _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory, _npcSheet).KeepingGreetingTexts(_greetingTexts);
+        // ARC-SCRIPT-050: the shown map's use host still answers the talk's queries (it follows the viewer's session).
+        host.Scripts.QueryHost = Scripts.QueryHost;
+        return host;
+    }
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;

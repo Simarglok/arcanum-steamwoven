@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S17"/>.
+/// <see cref="ScrAdmissionSet.S18"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -39,6 +39,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrCreateRequest> Creations = new();
         // ARC-WORLD-114: the toggle-state and kill requests (SU6, PM1).
         public readonly List<ScrObjectStateRequest> ObjectStates = new();
+        // ARC-SCRIPT-050: the float lines (FL4).
+        public readonly List<ScrFloatLine> Floats = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -165,7 +167,8 @@ internal sealed class ScrInterpreter
             _shared.EyeCandies.Count == 0 ? null : Array.AsReadOnly(_shared.EyeCandies.ToArray()),
             _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()),
             _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()),
-            _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()));
+            _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()),
+            _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -230,6 +233,25 @@ internal sealed class ScrInterpreter
                 // without an attachee nothing is printed.
                 var at = Get(a, 0); var kind = Get(a, 1);
                 if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.FloatLine:
+            {
+                // FL2–FL4: the PC is the first PC in the game-window rectangle around the triggerer (0x440FC0 with the PC mask 0x8000); without
+                // one nothing is read or floated. Then operand 0 selects the DLG line of the running script (the number this run executes, as
+                // print line) and each object of operand 1 in list order gets it floated, with that PC as the dialog's PC. The attachee is not
+                // needed (unlike print line).
+                if (_roles.Triggerer is not { } around || World.CrittersInVicinity(around).Where(_host.IsPc).Select(o => (ScrObjectRef?)o).FirstOrDefault() is not { } pc) return (Step.Next, 0);
+                var at = Get(a, 0);
+                foreach (var speaker in Objects(a, 1)) _shared.Floats.Add(new(_number, at, speaker, pc));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetArea:
+            {
+                // GA1: the first object of operand 0, its area into operand 1. The original reads an empty list's uninitialised first slot; an
+                // absent object, or one the host cannot answer for, stops the run (the project rule of the single-object commands).
+                var obj = Object(a, 0, line);
+                Set(a, 1, Areas.AreaOf(obj) ?? throw new MissingObjectStop(line), line);
                 return (Step.Next, 0);
             }
             // SN28: play sound plays the effect once without a position; play sound on plays it once on the object's tile;
@@ -697,6 +719,9 @@ internal sealed class ScrInterpreter
 
     private IScrWorldQueries World => _host as IScrWorldQueries
         ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");
+
+    private IScrAreaQueries Areas => _host as IScrAreaQueries
+        ?? throw new InvalidOperationException("SCR_AREA_QUERIES_REQUIRED: the admission set holds get area and the host cannot answer it.");
 
     // The basic (0..11) and tech (12..15) skill numbers.
     private const int SkillNumbers = 16;

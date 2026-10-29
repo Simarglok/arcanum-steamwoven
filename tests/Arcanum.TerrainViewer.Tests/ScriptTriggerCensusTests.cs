@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer.Tests;
 /// <summary>
 /// ARC-SCRIPT-047 opt-in census (DAT_ROOT = the game folder) for the script trigger audit (docs/research/script-trigger-audit.md): every
 /// object script attachment of the 79 maps map mode opens, by attachment point, and how many of them the host that runs that point here
-/// admits from line 0 (the use host for use and catching thief, the dialog host with a hero for dialog, the heartbeat set for the first
+/// admits from line 0 (the use host for use and catching thief, the dialog host with a hero and its query host (ARC-SCRIPT-050) for dialog, the heartbeat set for the first
 /// heartbeat and the heartbeat, the session's item set for the item points; any other point has no host). A run can still stop on an effect
 /// its host cannot apply; admission is the static half. <c>ARC_SCRIPT_TRIGGER_CENSUS</c>, when set, names a JSON file the numbers are
 /// written to (numbers only).
@@ -25,7 +25,7 @@ public sealed class ScriptTriggerCensusTests
     private static ScrAdmissionSet? HostSet(int point) => point switch
     {
         ScrPoint.Use or AreaUseScriptHost.CatchingThiefPoint => AreaUseScriptHost.Admission,
-        ScrPoint.Dialog => AreaScriptHost.SkillAdmission,
+        ScrPoint.Dialog => AreaScriptHost.SkillTalkAdmission,
         ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat => AreaUseScriptHost.HeartbeatAdmission,
         SessionScriptPoint.Get or SessionScriptPoint.Drop or SessionScriptPoint.InsertItem or SessionScriptPoint.WieldOn or SessionScriptPoint.WieldOff
             or SessionScriptPoint.RemoveItem or SessionScriptPoint.Transfer => SessionItemScripts.Admission,
@@ -98,6 +98,9 @@ public sealed class ScriptTriggerCensusTests
         CollectionAssert.Contains(opening, "arcanum1-024-fixed:1100");
         Assert.AreEqual((141, 32, 23, 21), (rows[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat], rows[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
         Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 33 && admitted[ScrPoint.FirstHeartbeat] >= 21, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
+        // ARC-SCRIPT-050: the talk set admits 110 of the 180 dialog rows (52 before float line, get area, random and the guard conditions).
+        Assert.AreEqual(180, rows[ScrPoint.Dialog]);
+        Assert.IsTrue(admitted[ScrPoint.Dialog] >= 110, admitted[ScrPoint.Dialog].ToString());
     }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",

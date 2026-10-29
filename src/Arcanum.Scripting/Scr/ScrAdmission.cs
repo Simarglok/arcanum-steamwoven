@@ -211,8 +211,17 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S17 { get; } = new("S17", S16.Conditions, S16.Actions, S16.ValueKinds,
         S16.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
-    /// <summary>The actions of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
-    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor };
+    /// <summary>
+    /// The talk set (ARC-SCRIPT-050, slice 2 of the script trigger audit): <see cref="S17"/> plus float line (23), which hands one
+    /// <see cref="ScrFloatLine"/> per object of its object operand to the host after finding the PC in the game-window rectangle around the
+    /// triggerer through <see cref="IScrWorldQueries.CrittersInVicinity"/> (ledger FL1–FL5), and get area (84), which stores the area the
+    /// host answers through <see cref="IScrAreaQueries"/> (GA1–GA3).
+    /// </summary>
+    public static ScrAdmissionSet S18 { get; } = new("S18", S17.Conditions, S17.Actions.Concat([ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]),
+        S17.ValueKinds, S17.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The actions of <see cref="S15"/> and <see cref="S18"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
+    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.FloatLine };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>

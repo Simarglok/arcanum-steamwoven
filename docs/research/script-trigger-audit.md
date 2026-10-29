@@ -154,7 +154,10 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
     script (focus 8) 5, change art (59) 4, then one each of unfog town map, grant fate point, eye candy, destroy item named, damage;
   - dialog (9), 127 of 180 refused, 1 missing: float line (23) 45, critter disband (22) 17, obj is wielding (condition 21) 14, get
     area (84) 10, random (37) 8, obj is dead (condition 22) 6, get reaction (29) 5, PC quest state (condition 6) 4, hours since
-    start (105) 3, loop for (18) 3;
+    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S18) 69 of 180 refused, 1 missing:
+    critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11, obj is dead (condition 22) 6,
+    obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, goto beyond the end 2, give gold (33) and adjust money
+    (36) 2 each;
   - heartbeat (19), 108 of 141 refused: obj is switched off (condition 27) 51, obj is named (condition 20) 26, set faction (134),
     damage (60) and distance between (71) 4 each, obj is dead and has reputation (conditions 22, 33) 3 each, call script in (54) and
     destroy (68) 2 each; first heartbeat (10): 21 of 23 admitted, 2 refused by condition 27;
@@ -173,7 +176,7 @@ Each slice is its own task and thread; codes come from the coordinator. "Reach" 
 | # | Slice | Covers | Reach |
 | ---: | --- | --- | --- |
 | 1 | Heartbeat conditions and world queries | conditions obj is switched off (27), obj is named (20), obj is dead (22), has reputation (33); actions distance between (71), call script in (54), set faction (134), damage (60), destroy (68) in the heartbeat set | most of the 108 refused heartbeats, the 2 refused first heartbeats, the eight other opening talks (1717 at the Crash Site first) |
-| 2 | Dialog-point commands | float line (23), critter disband (22), obj is wielding (21), get area (84), random (37), obj is dead (22), get reaction (29), loop for (18) in the talk set | most of the 127 refused dialog scripts (talks that now run default) |
+| 2 | Dialog-point commands | float line (23), critter disband (22), obj is wielding (21), get area (84), random (37), obj is dead (22), get reaction (29), loop for (18) in the talk set | most of the 127 refused dialog scripts (talks that now run default). **Done in part** by ARC-SCRIPT-050 (S18: float line, get area, random and the S4 guard conditions in the talk set; 58 more rows admitted). Left: obj is dead (22, with ARC-SCRIPT-049); critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); get reaction (29) with set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 |
 | 3 | Tile scripts for every moved critter | the location change of TG2 for AI movers, visitors, a jump or teleport arrival, a created or placed critter, and the path walk 0x455350 | traps, guards and story tiles NPCs step on |
 | 4 | Dying and destroy | points 12 and 2 (0x45DA57, 0x43CD0E), from the session's death and destroy; a heartbeat's kill then runs the dying script | 167 + 26 attachments |
 | 5 | Combat points | enter, exit, start, end combat (13–16), hit, miss, critter hits, critical hit and miss, taking damage (7, 8, 26, 34, 35, 23) from the combat hosts | 62 attachments (Virgil's 1997 at enter combat) |

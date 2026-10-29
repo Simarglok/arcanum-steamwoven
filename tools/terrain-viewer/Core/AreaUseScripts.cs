@@ -17,10 +17,12 @@ namespace Arcanum.TerrainViewer.Core;
 /// kill (58) to an NPC of the shown map, a death with no killer, and answers whether the session took it; <see cref="CanKill"/> says
 /// beforehand whether it can (the NPC's combat values read; null: always). Without <see cref="Kill"/>, or for an NPC it cannot kill, a
 /// kill leaves the run unapplied. ARC-SCRIPT-047: <see cref="CritterCell"/> is an NPC's live cell when it is not where its map data puts
-/// it (an NPC the AI moved, a companion; null: its row's cell), for the critters in a run's vicinity.
+/// it (an NPC the AI moved, a companion; null: its row's cell), for the critters in a run's vicinity. ARC-SCRIPT-050: <see cref="MapArea"/> is
+/// the shown map's map-list area and whether it is the start map, for get area (84); null when the map list does not list it.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
-    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null);
+    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
+    Func<(int Area, bool StartMap)?>? MapArea = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -57,7 +59,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrAreaQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -240,6 +242,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return list;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-050 (GA2, GA3): what get area stores for any object of a run on the shown map, the current map of the original: the shown
+    /// map's map-list area when it is not 0, else 0 unless the shown map is the start map, where the original places the object by its
+    /// location (the nearest area whose town map is the object's sector's, 0x4CB630), which is not modelled (null: the run stops). Null as
+    /// well without the map list's row.
+    /// </summary>
+    public int? AreaOf(ScrObjectRef obj) => _world?.MapArea?.Invoke() is not { } map ? null : map.Area != 0 ? map.Area : map.StartMap ? null : 0;
+
     /// <summary>ARC-WORLD-081 (PG5): a draw from the session's generator, labelled <see cref="RandomLabel"/>.</summary>
     public int Random(int low, int high)
     {
@@ -257,6 +267,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     public ScrObjectRef Pc => new(_session.QueryActor().Map.RuntimeMap, AreaScriptHost.PcCode);
+
+    /// <summary>ARC-SCRIPT-050: the shown map's runtime number (the dialog host borrows this host's answers only for its own map).</summary>
+    public int ShownMap => _shownMap;
 
     private AreaObjectRecord? Row(ScrObjectRef obj)
     {

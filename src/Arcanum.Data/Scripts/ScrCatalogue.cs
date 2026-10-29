@@ -102,7 +102,7 @@ public static class ScrCatalogue
             GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34,
             SetPcQuestState = 16, MarkMapLocation = 49, SetRumor = 50, AddReputation = 72, RemoveReputation = 73,
             AddEffect = 77, RemoveEffect = 78, MagickTechAdjustment = 91, PlayScriptEyeCandy = 120, Random = 37, CreateObject = 52,
-            ToggleState = 56, Kill = 58;
+            ToggleState = 56, Kill = 58, FloatLine = 23, GetArea = 84;
     }
 
     /// <summary>Script file flags.</summary>
