@@ -3,7 +3,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW6). The art is read once a
+// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW8). The art is read once a
 // module; without a game folder (the synthetic self-tests) the menu keeps its diagnostic window.
 public partial class TerrainViewerApp
 {

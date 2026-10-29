@@ -4,7 +4,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-058: a menu button window in the original's look (<see cref="AreaMenuArtLayout"/>, ledger MW1–MW6): the window's background
+/// ARC-UI-058: a menu button window in the original's look (<see cref="AreaMenuArtLayout"/>, ledger MW1–MW8): the window's background
 /// over the 800 × 600 screen at the whole factor the bars use, centred in the window, and its labels in the art font with their three
 /// colour passes. The pointer over a label lights its face and plays 3026, a press plays 3027, and a release over the pressed label
 /// chooses it (as the diagnostic window's buttons do). PROJECT: the shown buttons take the first slots in order (the original's

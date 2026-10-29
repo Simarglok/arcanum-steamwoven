@@ -4,13 +4,13 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// ARC-UI-058: the original look of the menu's button windows (main 2, single player 5, new game 11, in-play 3 and 26), read from the
-/// window table 0x5C3A40 and the window build 0x546340 (ledger MW1–MW6). Each window's background art fills the 800 × 600 screen (an
+/// window table 0x5C3A40 and the window build 0x546340 (ledger MW1–MW8). Each window's background art fills the 800 × 600 screen (an
 /// art 600 rows high is drawn at (0, 0); a shorter one goes to (0, 41) between the strips 336 and 335, which none of these windows
 /// uses); its buttons are text only (no art), the i-th at (410, 143 + 50 × i), centred on x (flag 4), in the font set of flag 8 (the
 /// Morph30 art font 327). A label is drawn three times: black at (−1, −1), brown at (+1, +1) and the face colour at (0, 0); the face is
 /// dark red, bright red while the pointer is over the button (event 2, back on event 3). The hit area is the label's measured size.
 /// ARC-UI-059: the options window (6) is drawn the same way over its own background 556 `OptionsMenuBack` (800 × 600), its four page
-/// buttons (flags 0xD) at (130, 221 + 40 × i) (descriptor 0x5C44A0, button table 0x5C43D0; ledger MW7); its page's controls stand
+/// buttons (window flags 0xD) at (130, 221 + 40 × i) (descriptor 0x5C44A0, button table 0x5C43D0; ledger MW7); its page's controls stand
 /// in two columns of four slots (0x589280, MW8). Godot-free.
 /// </summary>
 public static class AreaMenuArtLayout
@@ -127,7 +127,8 @@ public sealed class AreaArtFont
 /// <summary>ARC-UI-058: the menu art read from the game folder (<see cref="AreaMenuArtLayout.ArtNumbers"/>).</summary>
 public sealed record AreaMenuArtContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
-    /// <summary>True when every art read: the button windows then show the original look.</summary>
+    /// <summary>True when every art read: the button windows then show the original look. All or nothing (ARC-UI-059: the options
+    /// background 556 too), as every one of them is in the installed game.</summary>
     public bool ArtReady => AreaMenuArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
         && load.Frames.Count > 0);
 

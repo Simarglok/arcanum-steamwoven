@@ -63,7 +63,8 @@ public partial class TerrainViewerApp
             Require(_mainMenu.Window == AreaMenuWindow.Options && texts.FromGame && _mainMenuPanel!.HeaderForSelfTest == "Options: Game",
                 $"Options opened the options window with the game's texts: {texts.Detail} {_mainMenuPanel?.HeaderForSelfTest}");
             var panel = _mainMenuPanel!;
-            // ARC-UI-059: the page buttons are the art's labels (no letters, as the original's) at the window's own points.
+            // ARC-UI-059: the page buttons are the art's labels (no letters, as the original's) at the window's own points; 33 is the
+            // installed Morph30 font's height (MW4).
             var art = panel.ArtForSelfTest;
             var places = art.ButtonsForSelfTest;
             Require(panel.ArtMode && _menuArtContent is { ArtReady: true } && panel.ButtonsForSelfTest.SequenceEqual(["Game", "Video", "Sound", "Done"]),
