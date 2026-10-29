@@ -637,6 +637,37 @@ The smoke prints `NONE` on a map without a door that opens. An opt-in test
 every multi-frame door and window are in the map's repository, and a step from
 the tile of every closed, unlocked door opens it.
 
+## Animated scenery (ARC-RENDER-035)
+
+Scenery whose ART has several frames (fires, torches, braziers, magic effects) plays them as the original's scenery
+animation loop does ([ledger AS1–AS7](../research/ledger/world.md#animated-scenery-arc-render-035), read in the executable).
+It is fixed in both rule modes: the frame that stood still was a technical bug of the viewer (the owner's report of
+2026-10-29, the fire on the Crash Site wreck at night).
+
+- **Frames.** On a whole map or a main-map window, the area owner decodes every other frame of a scenery ART with more
+  than one frame as `SceneryFrame` visuals, unless the scenery has scenery flag 0x1 (no auto-animation). The plan copies
+  them into the map's repository (`AreaScenePlan.SceneryFrames`). The pinned Crash Site exterior profile keeps its
+  oracle-checked visual set and does not animate.
+- **Start.** When the map is shown, each scenery that is not destroyed or off, has no scenery flag 0x1, is not stoned
+  (spell flag 0x10000) and has more than one frame starts its loop at its T0 frame (`SceneryAnimationRules.Starts`, AS1–AS3).
+  Fires (scenery flag 0x10) loop the same way; their fire damage is not modelled.
+- **Loop.** One step every 1000 / fps ms of the world clock (the clock of the goal runs); after the last frame comes
+  frame 0. The loop steps only while the PC is within 30 tiles (largest coordinate difference). The distance is measured
+  again on every third check, and a loop away from the PC checks again every 800 ms (AS4, AS5, `SceneryLoop`). A frame's
+  non-zero delta would move the object's offsets (AS6); no installed animated scenery has one.
+- **Drawing.** A scenery off its T0 frame is drawn like a moved body, from its current frame placed by the frame's own
+  hot spot (`AreaScenePlan.SceneryFrame`); a busted scenery's ground body wins. A window move or a map change restarts the
+  loops at their T0 frames.
+- **Census.** 1,063 animated scenery on 60 of the 80 interiors, 10 to 30 frames at 8 to 15 frames per second; the Crash
+  Site window holds 4 of them (76 more frames). Void needs 4,678 frame requests (116 more), within the repository's 16,384.
+- **Not modelled.** The loop's ambient sound, goal 77's fire damage, restarting a loop when a scenery's ART or off flag
+  changes at runtime, the HD pack's frames (an HD pack draws the frames it holds).
+
+Native smoke (`ARC-RENDER-035 native-smoke scenery animation PASS`, after the light animation stage): the stage restarts
+the loops on its own clock, takes the animated scenery nearest the PC within 30 tiles and steps it four pauses; after each
+step the canvas must draw that scenery's expected frame, three distinct frames in all. It prints `SKIP` on a map without
+animated scenery near the PC.
+
 ## The main world map (ARC-RENDER-024)
 
 The 2000 × 2000-sector start map (`Arcanum1-024-fixed`, catalogue 5000, runtime 1; 621 sector files, the rest
@@ -887,6 +918,7 @@ inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on th
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
   of a wall can still be hidden by it (parity with the original not verified).
+- Animated scenery plays its frames since ARC-RENDER-035 (above), without its sound or fire damage.
 - Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
   not held, NPCs do not open doors, an unlock script is not run, and a door the
   original destroys when busted has no destroyed state.

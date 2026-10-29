@@ -299,6 +299,9 @@ public sealed partial class AreaDataOwner
     private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror, string? Policy = null);
     /// <summary>Doors and windows are drawn only by plans that bind the portal names.</summary>
     private bool PortalsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
+    /// <summary>ARC-RENDER-035: the other frames of animated scenery are decoded for whole-map plans (those bind the portal
+    /// names); the pinned Crash Site exterior keeps its oracle-checked visual set.</summary>
+    private bool AnimatedSceneryAdmitted => PortalsAdmitted;
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
     // Wall piece file codes by piece index: the file naming order of the source's wall file name builder,
     // docs/research/cave-transition-evidence.md T7.

@@ -287,3 +287,29 @@ distance), Steamwoven walks on. The pause is one host frame; the action points a
 companion moves in a turn-based round yet). An ordered goal (walk here) stopped there ends, as goal 4 does (LR5); the
 spread-out step, goal 69 in the original, ends too (an approximation). The companion's combat mode is the session's; nothing in
 the viewer puts a companion in combat mode yet.
+
+## Animated scenery (ARC-RENDER-035)
+
+Source: [animated scenery](../../rendering/area-map-mode.md#animated-scenery-arc-render-035) in map mode, for the owner's report that the
+fire on the Crash Site wreck shows a still frame. Question: when does the original animate a scenery's ART, at which rate, how does
+it loop, and what stops it? Read on 2026-10-29 by this task alone (F1) in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`):
+the goal table 0x5B03D0 with its goal names (goal 1 `ag_animate_loop`, goal 77 `ag_animate_loop_fire_dmg`), the start 0x43F710 and
+its callers, the starter 0x433580, the nodes 0x42CA90, 0x42DA50, 0x42DCF0, 0x42DDE0, the frame step 0x43F7F0, the ART frame
+functions 0x502BC0, 0x502C40, 0x5030B0, 0x5031C0 and the goal runner's delay codes (0x423AD7). Field numbers are indexes of the
+field-name table as in the lights rows above (19 object flags, 20 spell flags, 69 scenery flags). Every direct branch stays inside
+`.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| AS1 | start (0x43F710); callers: object-list insert (0x4F2020, a static object: 0x43D940), object flags clear (0x43D280, when OFF clears outside the editor), ART set (0x43EB30), 0x450CD9 | Nothing for an object whose flags have 0x1 or 0x2 (destroyed, off) or that is not scenery (type 3). Scenery flag 0x1 (no auto-animation): its runs stop (0x423FF0) unless a run is being processed (0x44CB60). Otherwise, when the current ART has more than one frame (0x5030B0, +0x10), or a one-frame ART has a misc sound of kind 2 (0x4F1050), the loop starts (0x433580); else its runs stop. | Original |
+| AS2 | starter (0x433580) | Only when the object runs no animation (0x423300). Goal 77 `ag_animate_loop_fire_dmg` for scenery flag 0x10, else goal 1 `ag_animate_loop`, with the current ART as its parameter; the run is added (0x44D520). | Original |
+| AS3 | begin node (0x42DA50, row 4 of goal 1) | The ART parameter, or the current ART at frame 0 when it is −1. Refused (the goal ends) for spell flag 0x10000 (stoned), and for a critter (types 15, 16) with field 218 bit 0x60 unless its animation is 17–19. The pause is 1000 / the ART header's frame rate (unsigned division; 100 ms when the ART cannot be read; a rate of 0 would divide by zero). It measures the distance (AS4), sets run flag 0x10, starts the misc sound kind 2 unless run flag 0x20000, then waits one pause. | Original |
+| AS4 | distance node (0x42DCF0, row 2); runner delays (0x423AD7) | A counter counts the checks; on every third one the distance (0x441AE0, tiles, the largest coordinate difference) from the local PC (0x40DA50) is measured again, the others reuse the last answer; in the editor (0x62AC6C bit 0x1) it is always near. Near is below 30 tiles. Not near: the node runs again after 800 ms without a step. Near: the update node (AS5). Delay −2 is the run's pause (+0xCFC). | Original |
+| AS5 | update node (0x42DDE0, row 3); frame step (0x43F7F0); next frame (0x502BC0); frame set (0x502C40) | Spell flag 0x10000: no step. Else the frame steps (an object with flag 0x1 does not); the next frame is the following one, frame 0 when it reaches the count (tile, wall and item ARTs, types 0, 1 and 6, keep theirs). The run waits one pause and checks again (AS4), forever. Goal 77 has the same nodes and adds its fire-damage node (0x42A720) after a step whose frame is 1 modulo 3; that node answers 1 after its damage pass, so the loop goes on (its damage rules were not read: combat, not drawing). | Original |
+| AS6 | frame step (0x43F7F0), frame delta (0x5031C0) | A changed ART is written to field 1; when the new frame's delta is non-zero the object's offsets (fields 3, 4) move by it (0x4423E0). Render flag 0x8000000 is cleared and the old and new areas are invalidated. The light frame step (LT7) shares 0x502BC0 and 0x5031C0. | Original |
+| AS7 | goal header (0x5A5BD0, 0x5AEFD0) | Both goals have priority 1, so the animations-complete count (priority 2 and above) leaves them out and any other goal replaces them (as the fidget's, TH9). | Original |
+
+Anomalies: none. Steamwoven follows AS1–AS6 in both rule modes (ARC-RENDER-035): a missing animation is a technical bug of the
+viewer, not a rule. The installed data has no frame delta and no zero rate on any animated scenery (whole-map census), so AS6's
+offset move and the zero-rate fault are not met. Not modelled: the misc sound (audio), goal 77's fire damage (combat), restarting
+a loop when the ART or the off flag changes at runtime (AS1's other callers), the critter refusal of AS3.

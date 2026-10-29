@@ -48,22 +48,31 @@ public sealed record AreaRoofDraw(AreaRoofRecord Roof, AreaDrawCommand Command);
 public sealed class AreaScenePlan
 {
     private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage, AreaChart chart,
-        IReadOnlyList<AreaRoofDraw> roofs, IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> portalFrames)
-    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; Roofs = roofs; PortalFrames = portalFrames; }
+        IReadOnlyList<AreaRoofDraw> roofs, IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> portalFrames,
+        IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> sceneryFrames)
+    {
+        WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; Roofs = roofs; PortalFrames = portalFrames;
+        SceneryFrames = sceneryFrames;
+    }
     /// <summary>ARC-WORLD-051: every frame of each drawn door or window whose ART has more than one, in frame order (its T0
     /// body visual among them), for the open and close steps at runtime.</summary>
     public IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> PortalFrames { get; }
+    /// <summary>ARC-RENDER-035: every frame of each drawn scenery whose ART has more than one and that the area owner decoded
+    /// for its animation loop, in frame order (its T0 body visual among them).</summary>
+    public IReadOnlyDictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> SceneryFrames { get; }
     /// <summary>ARC-RENDER-022: the roof blocks of a whole map, outside <see cref="Commands"/> (they are neither terrain nor
     /// bodies); none for a pinned profile.</summary>
     public IReadOnlyList<AreaRoofDraw> Roofs { get; }
     /// <summary>The frames the plan draws: its commands' and its roofs'.</summary>
     public IEnumerable<AreaFrameKey> Frames => Commands.Select(command => command.Frame).Concat(Roofs.Select(roof => roof.Command.Frame))
-        .Concat(PortalFrames.Values.SelectMany(frames => frames).Select(AreaFrameKey.From));
+        .Concat(PortalFrames.Values.SelectMany(frames => frames).Select(AreaFrameKey.From))
+        .Concat(SceneryFrames.Values.SelectMany(frames => frames).Select(AreaFrameKey.From));
     /// <summary>The chart whose origin every projection and sort key of this plan is relative to.</summary>
     public AreaChart Chart { get; }
     /// <summary>ARC-RENDER-024: the same plan with its chart's spawn moved (a window move stands the actor where it walked
     /// meanwhile); every projection keeps the chart origin.</summary>
-    public AreaScenePlan WithSpawn(Arcanum.Simulation.Movement.CellCoord spawn) => new(WorldBounds, Commands, Coverage, Chart with { Spawn = spawn }, Roofs, PortalFrames);
+    public AreaScenePlan WithSpawn(Arcanum.Simulation.Movement.CellCoord spawn) => new(WorldBounds, Commands, Coverage, Chart with { Spawn = spawn }, Roofs, PortalFrames,
+        SceneryFrames);
     public TerrainRect WorldBounds { get; }
     public IReadOnlyList<AreaDrawCommand> Commands { get; }
     public IReadOnlyList<AreaCoverage> Coverage { get; }
@@ -167,12 +176,17 @@ public sealed class AreaScenePlan
         }
         // ARC-WORLD-051: the other frames of each drawn portal (the area owner decodes them for a portal ART of several frames).
         var drawn = commands.Where(command => command.Identity is not null && command.ArtClass == 3).Select(command => command.Identity!.Value).ToHashSet();
-        var portalFrames = catalog.Values.Where(v => v.Key.Layer == AreaLayerKind.PortalFrame && v.Key.Object is { } owner && drawn.Contains(owner))
-            .GroupBy(v => v.Key.Object!.Value)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<AreaVisualRecord>)Array.AsReadOnly(g.Append(bodyVisuals[g.Key]!)
-                .OrderBy(v => (int)((v.RawArt >> 14) & 31)).ToArray()));
+        var portalFrames = OtherFrames(AreaLayerKind.PortalFrame, drawn);
+        // ARC-RENDER-035: the other frames of each drawn animated scenery (decoded on whole maps only).
+        var bodies = commands.Where(command => command.Identity is not null).Select(command => command.Identity!.Value).ToHashSet();
+        var sceneryFrames = OtherFrames(AreaLayerKind.SceneryFrame, bodies);
         return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart,
-            roofDraws.AsReadOnly(), portalFrames);
+            roofDraws.AsReadOnly(), portalFrames, sceneryFrames);
+        Dictionary<AreaObjectKey, IReadOnlyList<AreaVisualRecord>> OtherFrames(AreaLayerKind layer, HashSet<AreaObjectKey> owners) =>
+            catalog.Values.Where(v => v.Key.Layer == layer && v.Key.Object is { } owner && owners.Contains(owner))
+                .GroupBy(v => v.Key.Object!.Value)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<AreaVisualRecord>)Array.AsReadOnly(g.Append(bodyVisuals[g.Key]!)
+                    .OrderBy(v => (int)((v.RawArt >> 14) & 31)).ToArray()));
     }
 
     /// <summary>
@@ -187,13 +201,35 @@ public sealed class AreaScenePlan
         ArgumentNullException.ThrowIfNull(frame);
         if (command.Identity != body.Key || command.Visual != visual.Key || visual.RawArt >> 28 != 3 || frame.Key.Object != body.Key)
             throw new ArgumentException("AREA_PORTAL_FRAME_BODY");
+        return OtherFrame(command, body, visual, frame, 0, 0);
+    }
+
+    /// <summary>
+    /// ARC-RENDER-035: <paramref name="command"/> (the T0 body of the scenery <paramref name="body"/>, drawn from
+    /// <paramref name="visual"/>) on another frame of its animation loop, <paramref name="frame"/>, with the object offset the
+    /// loop's frame deltas moved it by (<paramref name="offsetX"/>, <paramref name="offsetY"/>, ledger AS6): placed as
+    /// <see cref="PortalFrame"/> places a portal's frame.
+    /// </summary>
+    public static AreaDrawCommand SceneryFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame,
+        int offsetX, int offsetY)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (command.Identity != body.Key || command.Visual != visual.Key || body.Type != 3 || frame.Key.Object != body.Key)
+            throw new ArgumentException("AREA_SCENERY_FRAME_BODY");
+        return OtherFrame(command, body, visual, frame, offsetX, offsetY);
+    }
+
+    private static AreaDrawCommand OtherFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame,
+        int offsetX, int offsetY)
+    {
         var state = State(body);
         int Scaled(int value) => checked(value * state.Scale / 100) / (state.Shrunk ? 2 : 1);
         var (hotX, hotY) = Hotspot(visual); var (frameX, frameY) = Hotspot(frame);
         var w = Scaled(frame.Width); var h = Scaled(frame.Height);
         if (w <= 0 || h <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
-        var destination = new TerrainRect(checked(command.Destination.X + (hotX - frameX) * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
-            checked(command.Destination.Y + (hotY - frameY) * state.Scale / 100 / (state.Shrunk ? 2 : 1)), w, h);
+        var destination = new TerrainRect(checked(command.Destination.X + offsetX + (hotX - frameX) * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
+            checked(command.Destination.Y + offsetY + (hotY - frameY) * state.Scale / 100 / (state.Shrunk ? 2 : 1)), w, h);
         return command with
         {
             // The visual key stays the body's (ambient channel, pick and wall check go by it); only the frame changes.
