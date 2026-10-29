@@ -375,14 +375,15 @@ def command_environment(kind: str, seq: int, base: dict[str, str] | None = None)
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
         hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False,
-        start: start_check.StartCheck | None = None) -> int:
+        start: start_check.StartCheck | None = None, log_sink: Callable[[Path], None] | None = None) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
     TIMEOUT_EXIT when it ran out of time, or 128+N when this wrapper was stopped by signal N. `hold`, called after the
     command succeeded, keeps the place while something the command left running is still open (the detached viewer).
     `quiet` (ARC-DEV-037) writes the command's output to a log file and prints only PASS or FAIL with the first error
     (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes. `start`
     (ARC-DEV-059) watches a quiet run's log for its start line and stops a run that did not start (FAILED_START_EXIT);
-    a nested or --verbose run is not checked."""
+    a nested or --verbose run is not checked. `log_sink` is told a quiet run's log file (ARC-DEV-063: the smoke runner
+    reads its stages' PASS lines there)."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not command:
@@ -407,6 +408,8 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             os.close(fd)
             raise
         say(f"log ticket={ticket['seq']} {log}")
+        if log_sink is not None:
+            log_sink(log)
     child: subprocess.Popen[bytes] | None = None
     legacy = None
     stopped: list[int] = []
