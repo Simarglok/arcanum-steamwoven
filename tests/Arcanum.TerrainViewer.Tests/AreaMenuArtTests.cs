@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-058 menu art (ledger MW1–MW6): the button windows' backgrounds, the labels' places and the art font's measure, on
-/// synthetic glyph frames.</summary>
+/// synthetic glyph frames. ARC-UI-059: the options window's background, page buttons and control slots (MW7, MW8).</summary>
 [TestClass]
 public sealed class AreaMenuArtTests
 {
@@ -20,9 +20,10 @@ public sealed class AreaMenuArtTests
         Assert.AreEqual(329, AreaMenuArtLayout.Background(AreaMenuWindow.NewGame));
         Assert.AreEqual(329, AreaMenuArtLayout.Background(AreaMenuWindow.InPlay));
         Assert.AreEqual(329, AreaMenuArtLayout.Background(AreaMenuWindow.InPlayLimited));
-        Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.Options), "the options window is not a button window of this look");
+        Assert.AreEqual(556, AreaMenuArtLayout.Background(AreaMenuWindow.Options), "MW1/MW7: window 6 OptionsMenuBack");
         Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.PickCharacter));
-        CollectionAssert.AreEqual(new[] { 329, 331, 327 }, AreaMenuArtLayout.ArtNumbers.ToArray());
+        Assert.IsNull(AreaMenuArtLayout.Background(AreaMenuWindow.NewCharacter));
+        CollectionAssert.AreEqual(new[] { 329, 331, 327, 556 }, AreaMenuArtLayout.ArtNumbers.ToArray());
     }
 
     [TestMethod]
@@ -36,6 +37,26 @@ public sealed class AreaMenuArtTests
         Assert.AreEqual(-1, AreaMenuArtLayout.HitTest(buttons, 460, 150), "the right edge is outside");
         Assert.AreEqual(1, AreaMenuArtLayout.HitTest(buttons, 410, 200));
         Assert.AreEqual(-1, AreaMenuArtLayout.HitTest(buttons, 410, 180), "between the labels");
+    }
+
+    [TestMethod]
+    public void The_options_page_buttons_stand_at_their_own_points()
+    {
+        Assert.AreEqual((130 - 31, 221, 63, 33), AreaMenuArtLayout.Button(AreaMenuWindow.Options, 0, (63, 33)), "MW7: x 130, y 221, centred");
+        Assert.AreEqual((130 - 30, 221 + 120, 60, 33), AreaMenuArtLayout.Button(AreaMenuWindow.Options, 3, (60, 33)), "Done at y 341");
+        Assert.AreEqual(AreaMenuArtLayout.Button(2, (60, 33)), AreaMenuArtLayout.Button(AreaMenuWindow.SinglePlayer, 2, (60, 33)), "the other windows keep MW2");
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaMenuArtLayout.Button(AreaMenuWindow.Options, -1, (1, 1)));
+    }
+
+    [TestMethod]
+    public void The_options_controls_have_two_columns_of_four_slots()
+    {
+        Assert.AreEqual((261, 122), AreaMenuArtLayout.OptionsSlot(0), "MW8: the first column");
+        Assert.AreEqual((261, 347), AreaMenuArtLayout.OptionsSlot(3));
+        Assert.AreEqual((531, 122), AreaMenuArtLayout.OptionsSlot(4), "the second column");
+        Assert.AreEqual((531, 272), AreaMenuArtLayout.OptionsSlot(6));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaMenuArtLayout.OptionsSlot(8));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaMenuArtLayout.OptionsSlot(-1));
     }
 
     [TestMethod]
