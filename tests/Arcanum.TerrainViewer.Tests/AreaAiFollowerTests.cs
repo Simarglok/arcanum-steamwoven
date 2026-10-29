@@ -84,7 +84,7 @@ public sealed class AreaAiFollowerTests
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -93,9 +93,13 @@ public sealed class AreaAiFollowerTests
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var start = companionAt ?? CompanionCell;
         // A healer companion holds a healing item (2) and has heal 5 points.
-        var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
+        // ARC-DEV-065: a visitor from another home map has no holder or row on this map (so no combat fields here).
+        var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) }
+            : visitor ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
+        SessionSeedHolder[] holders = visitor ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [])]
+            : [new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])];
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])],
+            new(holders,
                 healer ? [new SessionSeedItem(Entity(2), new(Healing, 1, 0, 0, null, []), null)] : []),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
@@ -330,6 +334,24 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual((DangerState.CombatFocus, enemy), (danger.State, danger.Source?.Entity),
             $"the victim's follower reacts to the attacker: {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Reaction}");
         StringAssert.StartsWith(host.TraceOf(companion)!.Event, "told Victim ReactToAttack");
+    }
+
+    [TestMethod]
+    public void A_visiting_companion_the_world_does_not_know_is_kept_out_of_the_rules()
+    {
+        // ARC-DEV-065: the Crash Site cave's rat bit the hero with Virgil visiting from the main map: the follower rule met an object
+        // the host's world could not describe and the whole game stopped (ActorPlan).
+        var (session, host, _, enemy, companion) = Open(visitor: true);
+        Assert.IsNull(host.Find(companion), "a visitor has no combat fields on this map");
+        Assert.AreEqual(1, host.RunCompanions.Count, "its walk is still the host's follower walk");
+        host.PerformAttack(enemy, Pc);
+        var notices = Run(host, enemy);
+        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy), "the enemy struck at the hero");
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State, "the visitor is not told of the attack");
+        Assert.IsNull(host.TraceOf(companion)?.Event);
+        host.HeroAttacked(enemy);
+        CollectionAssert.DoesNotContain(host.Square(enemy, 20).ToList(), companion, "a scan's or noise's square holds only known critters");
+        CollectionAssert.DoesNotContain(host.Followers(Pc).ToList(), companion, "the flee test's party count holds only known followers");
     }
 
     [TestMethod]

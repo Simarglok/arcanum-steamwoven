@@ -69,6 +69,12 @@ the leaver's run (`ObserveLeaves`: the removal's interrupt at priority 5 ends ev
 or less; seen by the pump, by perform, and right after an order), a join keeps it (C5). An order's attack event (the curse's,
 FO2) runs through `OrderAttack` after the order's leave and before the former follower's pass.
 
+Since ARC-DEV-065 a companion the host's world does not know never reaches the rules (the rules refuse an object `Find` does not
+know, and before this the refusal stopped the whole game with failure stage `ActorPlan`): a visitor from another home map (Virgil
+carried from the main map into the Crash Site cave) has no combat fields on the shown map, so it is not told of attack events, stands
+in no scan's or noise's square (`Square`), and is not in the hero's party a flee test counts (`Followers`, which also leaves out a
+follower on another map). Its walk still follows the hero through the group.
+
 | Part | Original | What it does |
 | --- | --- | --- |
 | Tell followers | 0x4A9B80, 0x4A9C00 (FO1–FO19) | Every attack event of the host (the hero's hits, the NPCs' hits and throws) tells the attacker's direct followers right after its early exits, then, after a PC victim's combat-mode entry, the victim's, before the noise. Only the hero leads here: its followers in the party's array order that follow it (not the waiting ones) and stand on this map. The follower rule's case 5 is the follower's reaction to an attack by the other side (`MoraleRules.ReactToAttack` through the setter, as a victim's: fight or flee); a lock, a focus on an object and a complaint (−5 toward the hero) go through `ApplyFollowerRule`. The host's attacks are deliberate (never accidental) and never ordered. The upset line is not floated. |
@@ -285,7 +291,8 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   run; a leave and a join between two looks, as a second join's leave-first, C5, is not seen at all: the run is kept), an attack order on a non-critter object (the host's world knows critters only), the
   menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
   line), the world-map travel's stop and allow calls, the companion's loyalty step still on its own tick beside
-  the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
+  the AI tick (one tick in the original), a visiting companion's combat facts (its home map's fields: it neither fights nor is
+  fought here, is told of no attack and is left out of the flee test's party count, ARC-DEV-065), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
   art plays for a companion's heal too). Since ARC-WORLD-116 a companion heals the hero with a healing item through the heal skill's
   rung, and one that knows a healing spell through the spell rungs.
 - **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
@@ -308,7 +315,8 @@ is held, starts its attack run, walks up through its own walk and strikes throug
 tells the victim's follower; a waiting companion is not told; a peaceful companion's follow is its own walk's; without followers in
 the scene nothing is run; next to the enemy past a corner object there is no first step and no route (AP1, AP2), while the enemy's
 own T0 record on its cell does not block the first step; after the fight (state NONE, no run) the companion is released to its walk;
-its step onto its own home record is not refused; out of danger a companion holding a healing item heals the hurt hero through the
+its step onto its own home record is not refused; since ARC-DEV-065 a visiting companion the world does not know (no row on the
+map) is told of neither attack event, is not in the enemy's square and the hero's attack's flee test runs without it; out of danger a companion holding a healing item heals the hurt hero through the
 heal step's heal-skill rung, goal 33 and the session (ARC-WORLD-116); since ARC-WORLD-117 the attack order's target is the highlighted
 object's entity (none, an object without one, another map's: none), an attack order through the host locks the companion on its target
 and its AI pass starts the attack, which walks up and strikes, an attack order without a target or on the party does nothing but the
@@ -376,7 +384,9 @@ as the highlighted object locks the follower on it, its pass starts the attack a
 runs and asks its reaction before its pass, and the same host runs it on as a free NPC for 200 frames; marker
 `ARC-WORLD-119 native-smoke ai-free PASS`, before the stage's own; the stage restores life and combat mode but leaves the session's
 danger records, who-hit-me-last, team and the follower's lowered reaction toward the hero, so a later stage in the same run meets a
-cursed Virgil);
+cursed Virgil); since ARC-DEV-065 the `transfer` stage with `--hero` (Virgil carried into the Crash Site cave as a visitor, after
+his visitor talk) turns the AI on, the hero strikes the cave's living monstrous NPC with the fewest hit points and that NPC bites
+back while the visitor stands there: marker `ARC-DEV-065 native-smoke visitor-fight PASS` (without a hero it prints `NONE`);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.

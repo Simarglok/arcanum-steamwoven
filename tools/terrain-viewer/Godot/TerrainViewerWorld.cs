@@ -63,10 +63,24 @@ public partial class TerrainViewerApp
             if (error.Message.StartsWith("GRID_", StringComparison.Ordinal)
                 && error.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
                 GD.Print("ARC-WORLD-003 observation-failure=" + error.Message);
+            // ARC-DEV-065: the exception's type and its methods (no message, no file paths) name the failing code in a player's log.
+            GD.Print("ARC-DEV-065 observation-fault " + ObservationFaultTrace(error));
             PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
             if (SelfTestBootstrap || _nativeSmoke) throw;
         }
         finally { _worldObservationTime = null; }
+    }
+    internal static string ObservationFaultTrace(Exception error)
+    {
+        var type = $"type={error.GetType().FullName}";
+        // The trace must never replace the fault it reports.
+        try
+        {
+            var frames = new System.Diagnostics.StackTrace(error, false).GetFrames()
+                .Select(f => f.GetMethod() is { } m ? $"{m.DeclaringType?.FullName}.{m.Name}" : "?").Take(24);
+            return type + " at " + string.Join(" < ", frames);
+        }
+        catch (Exception) { return type; }
     }
     private void RetireWorldLifecycle()
     {
