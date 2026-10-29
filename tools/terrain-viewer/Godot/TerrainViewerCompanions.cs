@@ -45,6 +45,8 @@ public partial class TerrainViewerApp
         _areaCompanions.Removed = AreaRemovedObjects;
         // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.
         _areaCompanions.Dead = AreaCritterDeadNow;
+        // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
+        _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
         if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,

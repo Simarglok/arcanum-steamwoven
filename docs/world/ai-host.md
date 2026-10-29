@@ -46,7 +46,7 @@ take chart cells.
 
 | Part | What it does |
 | --- | --- |
-| Ticks | Every NPC of the map that is not a companion (not in the companion group, not led by the hero) and not dead gets a delayed AI tick (0x4AD6E0, the loaded NPC's start) unless one is pending. The viewer's event world (`AreaEventWorld`) forwards the tick's host questions to the host of the current session, also through the cast host's pass world (`SessionSpellCaster`); without one an NPC counts as gone and its sector as not loaded, so the tick schedules no next one. The host is built again when a follower joins or leaves; an NPC that joined since counts as gone. |
+| Ticks | Every NPC of the map that is not a companion (not in the companion group, not led by the hero) and not dead gets a delayed AI tick (0x4AD6E0, the loaded NPC's start) unless one is pending; since ARC-WORLD-115 so does every companion the hero leads (following or waiting, see [followers in combat](#followers-in-combat-arc-world-115)). The viewer's event world (`AreaEventWorld`) forwards the tick's host questions to the host of the current session, also through the cast host's pass world (`SessionSpellCaster`); without one an NPC counts as gone and its sector as not loaded, so the tick schedules no next one. The host is built again when a follower joins or leaves; an NPC that joined since counts as gone. |
 | Scheduler host (`IAiHost`) | Distance to the hero; no SCR at the AI points (every point continues), no waypoints, standpoints, spawner or encounter creatures; generator, sleeping and hidden from the NPC's flags; the animation priority of the goal its run is at (the goal table's header word 1, AH3), 0 without a run; an animation runs while it has a run. Heal and item search choose nothing yet. |
 | Danger stage | `HostilityRules.DangerUpdate` and its plan through the session: the flee path's flee-spell step (no flee action is chosen), the unlock, and the setter (`SetDangerState`) with the NPC's setter facts (invulnerable, NO_FLEE: the stored flag ORed with the session bit, the leader's extraordinary charisma) and, for a fight on the hero, its reaction facts and AI parameter 10. No spell or item choice yet. |
 | Perform stage | `AiExecutorRules.Perform` with the danger source as the pass's target and no choice; a started run replaces the NPC's run (the old one's end nodes run when its goal differs). |
@@ -57,6 +57,22 @@ take chart cells.
 | Attack event | `HostilityRules.AttackEvent` for the hero's resolved attacks on an NPC (the viewer's attack hook) and the NPCs' hits: a PC victim enters combat mode (0x4A9AD0, AH4); the noise's witnesses (`NoiseWitnesses`, `Witness`) react; the session's who-hit-me-last and team writes (`ApplyAttackEvent`); the victim turns; a deliberate hit lowers its reaction toward the hero (`ReactToPcHit`); its reaction (`MoraleRules.ReactToAttack`) asks the setter. |
 | Hostility and morale world | `Find` from the NPC's fields, life, danger record and combat mode; parameters from the AI table row (out of the table: 0); sight and hearing (`AwarenessRules`) over the line of fire, no tile soundproof; faction-same as far as this host knows (the hero and its followers, one leader, one non-zero faction; the PC's reputations granting a faction are not read); kill-on-sight scripts allow. |
 | Viewer | Per frame after the hero's attack: the runs step, the hits reach the status line (" | AI: …" with each fighting NPC's state, target, goal and last reason), a stun's end, a killed NPC's fall, and a hero knocked down or out stops its walk and attack; the walked NPCs are drawn where they stand (a fallen body too), block the hero's walk, stand in the line of fire, the drop map and the round's scan, and the hero's attack, loot and criticals find them on their cells. Automated runs keep the AI off unless their stage turns it on (`ARC_AREA_MAP_SMOKE_ONLY=ai`). |
+
+## Followers in combat (ARC-WORLD-115)
+
+I9's host part: the hero's companions on the shown map (the group's companions the session says the hero leads, following or
+waiting; `AreaAiScene.Followers`, `IAreaAiFollowers`) are run by the host like its NPCs, over the follower rules of
+[AI followers](ai-followers.md) (FO1–FO19). Free companions still get no AI (not ready).
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Tell followers | 0x4A9B80, 0x4A9C00 (FO1–FO19) | Every attack event of the host (the hero's hits, the NPCs' hits and throws) tells the attacker's direct followers right after its early exits, then, after a PC victim's combat-mode entry, the victim's, before the noise. Only the hero leads here: its followers in the party's array order that follow it (not the waiting ones) and stand on this map. The follower rule's case 5 is the follower's reaction to an attack by the other side (`MoraleRules.ReactToAttack` through the setter, as a victim's: fight or flee); a lock, a focus on an object and a complaint (−5 toward the hero) go through `ApplyFollowerRule`. The host's attacks are deliberate (never accidental) and never ordered. The upset line is not floated. |
+| Ticks and passes | 0x4AD6E0 | The companions get their AI ticks and passes (gate, heal step, danger update, perform) as the NPCs do; their spells, items, attacks and turn-based subturns go the same ways. |
+| Follow | 0x4346A0, A6 | A follower follows only in state NONE (the non-combat perform): the follow goal is the companion's own walk's ([companion follow](companion-follow-runtime.md)), so a follow that perform starts for a companion is not run by the host (trace "Follow by its own walk"). |
+| Hold | — | `AreaAiHost.Holds`: while a companion has a goal run of the host or its danger state is not NONE, its walk makes no follow decision (`AreaCompanionGroup.HeldByAi`) and drives only the host's steps. |
+| Steps and turns | — | The host's step of a companion (`BeginStep`) orders its own walk one step onto the next cell (`AreaCompanionGroup.StepTo`, the walk-here order's ordered goal `CompanionFollower.WalkTo`); its cell is that walk's, so the host reads it from the scene's companions. A turn stands its settled grid again with the new facing (`FaceTo`). Its body is the companion group's (the T0 frame with the walk or run cycle). |
+| Step tests | 0x425130 (inference) | The first-step test and the step's terrain test read the map without the critters' T0 records (the map's NPCs and the companions, wherever they stand now): the occupants are the walk's own test. Before, an attacker next to an NPC standing on its own record's cell read that record as an object in its way. |
+| Attack path | inference | Next to the target with no clear first step toward it (a diagonal past a corner object), the approach planner finds no route; the attack path is then a route into the target's cell without its last step, so the walk goes around the corner (the original plans the attack's path to the target's tile). |
 
 ## Turn-based round (ARC-WORLD-095)
 
@@ -240,8 +256,12 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
-- **Followers in combat.** Companions keep their follow goal; the follower rule, the attack order's target and pass, the comment
-  lines and the world-map travel's stop and allow calls are I9's host part.
+- **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events). Not ready: the attack
+  order's target (the highlighted object) and the AI pass after an order, the comment lines (taunts, near-death, the complaint's upset
+  line), the world-map travel's stop and allow calls, free companions' AI, the companion's loyalty step still on its own tick beside
+  the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn). The heal skill's rung (a companion
+  healing the hero with a healing item through the heal skill) stays NOT READY; a companion that knows a healing spell already heals
+  through the heal step's spell rung.
 - **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
   throws" weapon is thrown through goal 37 (ARC-WORLD-113).
 - **Scripts and routines.** Of the AI points only the first heartbeat and the heartbeat run their scripts, and only within the
@@ -256,7 +276,11 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
 
 ## Tests
 
-`NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
+`AreaAiFollowerTests` (viewer Core, synthetic rows, ARC-WORLD-115): the hero's hit tells its companion, which focuses the victim,
+is held, starts its attack run, walks up through its own walk and strikes through the session in combat mode; an NPC's hit on the hero
+tells the victim's follower; a waiting companion is not told; a peaceful companion's follow is its own walk's; without followers in
+the scene nothing is run; next to the enemy past a corner object the attack path goes around the corner (and the enemy's own T0
+record on its cell does not block the first step). `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
 paying nothing; an NPC victim's pool and the kill award for a PC-led killer only; the hero's critical-miss fate; the refusals.
 `AreaAiHostTests` (viewer Core): the movers' steps and slide; on the installed original (`ARC_AREA_CONVERSATION_GAME_ROOT`,
 `ARC_CAVE_MOBILE`) an animal of the Crash Site cave that the hero hits reacts, focuses the hero through its tick's danger update,
@@ -306,4 +330,7 @@ the hero, as its pass record's choice: the missile flies from it, is drawn and a
 `MissileSteps` in the marker); `premade` on `Arcanum1-024-fixed` with `--hero` (ARC-WORLD-114): the hero stands by the north and then the
 south group of the twelve pre-made heroes' NPCs until their heartbeats have run; the chosen hero's NPC is switched off and not drawn,
 the eleven others are killed, drawn fallen and lootable as dead NPCs, the map data's own dead NPCs stay drawn and lootable; marker
-`ARC-WORLD-114 native-smoke premade PASS` (`ARC_PREMADE_SMOKE_SHOT` names an optional PNG of the view).
+`ARC-WORLD-114 native-smoke premade PASS` (`ARC_PREMADE_SMOKE_SHOT` names an optional PNG of the view); `ai-follower` on
+`Arcanum1-024-fixed` with `--hero` (ARC-WORLD-115): a free speaker (Virgil) joins, the hero stands a few cells from the nearest living
+NPC that is not a pre-made hero's and attacks it; the follower is told, held, walks up through its own walk and strikes; marker
+`ARC-WORLD-115 native-smoke ai-follower PASS`.

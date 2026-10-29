@@ -30,7 +30,7 @@ public sealed record AreaAiScene
     public required int RuntimeMap { get; init; }
     public required AreaChart Chart { get; init; }
     public required AreaStepSnapshot Steps { get; init; }
-    /// <summary>The NPCs the host runs (companions are left out: their follow goal moves them).</summary>
+    /// <summary>The NPCs the host runs (companions are left out: ARC-WORLD-115 runs the hero's through <see cref="Followers"/>).</summary>
     public required IReadOnlyList<AreaAiNpc> Npcs { get; init; }
     public required AreaCombatHost Combat { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
@@ -73,6 +73,25 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
+    /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
+    /// the companions run no AI (their follow goal moves them).</summary>
+    public IAreaAiFollowers? Followers { get; init; }
+}
+
+/// <summary>
+/// ARC-WORLD-115: the companions of the shown map as the AI host runs them. A companion stands where its own walk put it (the
+/// scene's <see cref="AreaAiScene.Companions"/> answers its cell); the host's step and turn of one go through the viewer's walk of
+/// that companion, which follows nothing else while the host holds it (<see cref="AreaAiHost.Holds"/>).
+/// </summary>
+public interface IAreaAiFollowers
+{
+    /// <summary>The companions standing on the map: their session entity, T0 row and home map data's world cell.</summary>
+    IReadOnlyList<AreaAiNpc> Npcs { get; }
+    /// <summary>Walks the companion one step onto the world cell <paramref name="next"/> (a neighbour of its cell); false when its walk
+    /// refuses it.</summary>
+    bool Step(string entity, CellCoord next, bool running);
+    /// <summary>Turns the companion toward the world cell <paramref name="toward"/>.</summary>
+    void Face(string entity, CellCoord toward);
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
@@ -133,8 +152,11 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// a "default throws" weapon plays the throw goal 37 (<see cref="ThrowItem"/>, the session's <see cref="GameSessionOwner.ThrowByNpc"/>).
 /// ARC-WORLD-108: the NPCs' items are listed (<see cref="Inventory"/>, <see cref="Item"/>), the pass's heal step chooses among them
 /// (<see cref="Heal"/>), perform casts from an item (<see cref="Cast"/>) and goal 39 uses one through the cast host's item use.
+/// ARC-WORLD-115 (I9's host part): the companions of the shown map are run too (<see cref="AreaAiScene.Followers"/>): their ticks, passes
+/// and goal runs, their steps and turns through their own walk, which the host holds while they fight (<see cref="Holds"/>); every
+/// attack event tells the attacker's and the victim's followers (the follower rule, <see cref="TellFollowers"/>).
 /// NOT READY (later slices): the heal skill's rung and goal 40, pickups, a thrown item's flight,
-/// grenades, the back-off's away path, followers in combat (the companions keep their follow goal), the follower rule and the comment lines, NPC
+/// grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
 public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
@@ -178,6 +200,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private readonly ISessionScriptWorld _events;
     private readonly ISessionCombatWorld _round;
     private readonly Dictionary<string, AreaAiNpc> _npcs;
+    // ARC-WORLD-115: the companions the host runs (their cells are their walk's, never the movers').
+    private readonly Dictionary<string, AreaAiNpc> _followers;
     private readonly Dictionary<string, (AiGoalRun Run, long DueMs)> _runs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
     private readonly List<AreaAiNotice> _notices = [];
@@ -217,6 +241,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _round = round ?? throw new ArgumentNullException(nameof(round));
         _npcs = scene.Npcs.ToDictionary(n => n.Entity, StringComparer.Ordinal);
+        _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
     }
 
     public AreaAiScene Scene => _scene;
@@ -309,7 +334,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public int ScheduleTicks()
     {
         var refused = 0;
-        foreach (var npc in _scene.Npcs)
+        foreach (var npc in _scene.Npcs.Concat(_followers.Values))
         {
             if (_session.QueryAiTick(npc.Entity) is not null || Life(npc.Entity) is null) continue;
             var result = _session.ScheduleAiTick(_session.Version, new SessionAiTickRequest
@@ -371,8 +396,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// The attack event of the hero's attack on the NPC <paramref name="victim"/> (0x4A9650, <see cref="HostilityRules.AttackEvent"/>):
     /// the session's who-hit-me-last and team writes, the reaction change toward the hero, the victim's turn and its reaction to the
     /// attack (fight or flee, <see cref="MoraleRules.ReactToAttack"/>) through the setter, and the witnesses of the noise
-    /// (<see cref="HostilityRules.NoiseWitnesses{T}"/>, <see cref="HostilityRules.Witness"/>). The attacker's and the victim's followers
-    /// (the follower rule) are not told yet.
+    /// (<see cref="HostilityRules.NoiseWitnesses{T}"/>, <see cref="HostilityRules.Witness"/>). ARC-WORLD-115: the attacker's and the
+    /// victim's followers are told (<see cref="TellFollowers"/>).
     /// </summary>
     public void HeroAttacked(string victim) => AttackEvent(Pc, victim);
 
@@ -444,15 +469,58 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         Trace(victim).Event = $"{plan.Stop}";
         if (plan.Stop is AttackEventStop.Missing or AttackEventStop.VictimProtected or AttackEventStop.VictimDead or AttackEventStop.VictimGone
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
+        // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
+        if (plan.TellsAttackerFollowers) TellFollowers(attacker, victim, FollowerSide.Attacker);
         // A PC victim responds (0x4A9AD0): it enters combat mode (its call of 0x4B3F50).
         if (plan.PcVictimResponds) HeroIntoCombatMode();
+        // ARC-WORLD-115: then the victim's followers (side victim, the attacker the other), before the noise.
+        if (plan.TellsVictimFollowers) TellFollowers(victim, attacker, FollowerSide.Victim);
         if (plan.RaisesNoise) Witnesses(attacker, victim);
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
-        if (plan.TurnsVictim && Tile(attacker) is { } there && _npcs.TryGetValue(victim, out var npc)) Movers.Face(victim, npc.Row.Key, npc.Origin, there);
+        if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there);
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
         if (plan.ReactsToAttack) React(victim, attacker);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-115 (I9 host part): tell followers (0x4A9B80, <see cref="FollowerRules.TellFollowers"/>) of <paramref name="leader"/>
+    /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (only the hero leads here: the
+    /// party's followers that follow it, not the waiting ones, that stand on this map), each through the follower rule (never ordered,
+    /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
+    /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>); the reaction to an attack by the other (case 5) is
+    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is not floated (the line
+    /// texts are the host's, not read yet).
+    /// </summary>
+    private void TellFollowers(string leader, string other, FollowerSide side)
+    {
+        if (leader != Pc || Find(other) is null) return;
+        var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following && _followers.ContainsKey(f.Entity))
+            .Select(f => f.Entity).ToArray();
+        if (followers.Length == 0) return;
+        foreach (var outcome in FollowerRules.TellFollowers(this, leader, other, followers, side, accidental: false, _session.Rules.Combat))
+        {
+            var follower = outcome.Follower;
+            Trace(follower).Event = $"told {side} {outcome.Step}{(outcome.Upset == UpsetReason.None ? "" : " " + outcome.Upset)} {other}";
+            switch (outcome.Step)
+            {
+                case FollowerRuleStep.ReactToAttack:
+                    React(follower, other);
+                    break;
+                case FollowerRuleStep.Lock or FollowerRuleStep.Focus or FollowerRuleStep.Complain:
+                    var facts = ReactionFacts(follower);
+                    if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
+                    var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
+                    {
+                        Outcome = outcome, Leader = SessionCombatant.Hero, Target = Combatant(other)!, Setter = SetterFacts(follower),
+                        Reaction = other == Pc && facts is { } pc ? new SessionDangerReaction(pc.Npc, pc.Pc, Row(follower)?.HostileReaction ?? 0) : null,
+                        Complaint = facts is { } f ? new SessionPeaceReaction(f.Npc, f.Pc) : null,
+                    });
+                    Trace(follower).Setter = $"follower rule {outcome.Step} {other} {result.Disposition} {result.Failure}";
+                    break;
+            }
+        }
     }
 
     // The witnesses of an attack's noise: the attacker's square when under 30 tiles apart, then the victim's (AW16 under the switch).
@@ -463,7 +531,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var witnesses = HostilityRules.NoiseWitnesses(distance, Square(attacker, radius), Square(victim, radius), _session.Rules.Combat);
         foreach (var witness in witnesses)
         {
-            if (witness == Pc || witness == attacker || witness == victim || !_npcs.ContainsKey(witness)) continue;
+            if (witness == Pc || witness == attacker || witness == victim || !Walks(witness)) continue;
             var outcome = HostilityRules.Witness(this, witness, attacker, victim, Loudness.Normal);
             switch (outcome.Response)
             {
@@ -576,7 +644,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The perform stage: <see cref="AiExecutorRules.Perform"/> with the danger source as the pass's target; a started run
-    /// replaces the NPC's (the old one's end nodes run, <see cref="AiExecutorRules.EndRun"/>) and steps at the next pump.</summary>
+    /// replaces the NPC's (the old one's end nodes run, <see cref="AiExecutorRules.EndRun"/>) and steps at the next pump.
+    /// ARC-WORLD-115: a companion's follow goal (the non-combat perform's, 0x4346A0) is its own walk's, which follows the hero while
+    /// the host does not hold it (<see cref="Holds"/>), so a follow the perform starts for one is not run here.</summary>
     public void Perform(string npc)
     {
         var danger = _session.QueryDanger(npc);
@@ -584,8 +654,25 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var current = RunOf(npc);
         // ARC-WORLD-102: the pass record's choice from this pass's danger update (none: the action type 0).
         _passChoices.Remove(npc, out var choice);
-        Started(npc, current, AiExecutorRules.Perform(this, npc, target, choice, null, current));
+        var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
+        if (_followers.ContainsKey(npc) && result.Kind == AiPerformKind.Follow)
+        {
+            Trace(npc).Perform = $"{result.Kind} by its own walk";
+            return;
+        }
+        Started(npc, current, result);
     }
+
+    /// <summary>
+    /// ARC-WORLD-115: whether the host holds the companion <paramref name="entity"/>, so its own walk follows nothing: while it has a
+    /// goal run here, or its danger state is not NONE (a follower follows only in state NONE, the non-combat perform, A6). Else
+    /// false (a map NPC or an unknown one too).
+    /// </summary>
+    public bool Holds(string entity) =>
+        _followers.ContainsKey(entity) && (_runs.ContainsKey(entity) || _session.QueryDanger(entity).State != DangerState.None);
+
+    /// <summary>ARC-WORLD-115: the companions the host runs.</summary>
+    public IReadOnlyCollection<string> RunCompanions => _followers.Keys;
 
     /// <summary>ARC-WORLD-113 test seam: the attack starter (0x434B00, <see cref="AiExecutorRules.StartAttack"/>) on
     /// <paramref name="target"/>, as combat perform's attack starts it: a "default throws" weapon starts the throw goal 37.</summary>
@@ -623,8 +710,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         PerformChoice(npc, new AiPassChoice(AiPassAction.UseSkill, -1, skill, item, target));
     }
 
-    // An NPC that joined the hero since the host was built is the companions' (it counts as gone here).
-    public SessionLifeTarget? AiLifeTarget(string entity) => _session.QueryCompanion(entity).LedByPc ? null : Build(entity)?.Target;
+    // An NPC that joined the hero since the host was built is the companions' (it counts as gone here); ARC-WORLD-115: a companion the
+    // host runs is its own.
+    public SessionLifeTarget? AiLifeTarget(string entity) =>
+        !_followers.ContainsKey(entity) && _session.QueryCompanion(entity).LedByPc ? null : Build(entity)?.Target;
 
     private void DropRun(string npc)
     {
@@ -698,22 +787,34 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The terrain step from the object's tile toward the other's: walls, doors and objects other than critters decide
-    /// (inference: the step test 0x425130 measures the way, the occupants are the walk's own test).</summary>
+    /// (inference: the step test 0x425130 measures the way, the occupants are the walk's own test). ARC-WORLD-115: the critters' T0
+    /// records (the map's NPCs and the companions, wherever they stand now) do not decide either: an attacker next to an NPC standing
+    /// on its own record's cell read the record as an object in its way, so its approach found no first step and no path.</summary>
     public bool FirstStepClear(string id, string toward, bool ignoreTarget)
     {
         if (Tile(id) is not { } from || Tile(toward) is not { } to) return false;
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(_scene.Steps, _scene.Chart).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(_scene.Steps, _scene.Chart, CrittersAway).Assess(chart, direction) == RouteStepVerdict.Open;
+    }
+
+    // ARC-WORLD-115: the map without the critters' T0 records (the terrain step tests; the occupants are the walk's own test).
+    private AreaOccupancy CrittersAway()
+    {
+        var keys = _npcs.Values.Concat(_followers.Values).Select(n => n.Row.Key).Concat((_scene.Companions?.Invoke() ?? []).Select(c => c.Key));
+        var occupancy = new AreaOccupancy(keys, []);
+        return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
     {
         var line = Line(id, target, out var targetRow);
         var foreign = line?.Blocker is { } blocker && !ReferenceEquals(blocker, targetRow);
-        return new(AttackerInactive: !Active(id), TargetGone: Gone(target), TargetDead: DeadCritter(target), ForeignBlocker: foreign,
+        var facts = new AiAttackFacts(AttackerInactive: !Active(id), TargetGone: Gone(target), TargetDead: DeadCritter(target), ForeignBlocker: foreign,
             NoPathToTarget: foreign && PlanPath(id, new AiPathRequest(AiPathKind.Attack, target, null, 1, false, false)) is null);
+        Trace(id).Attack = $"{target} blocker={line?.Blocker?.PrototypeNumber.ToString() ?? "-"}@{line?.Blocker?.WorldX},{line?.Blocker?.WorldY} from={Tile(id)} to={Tile(target)} hero={Tile(Pc)} {facts}";
+        return facts;
     }
 
     public AiReachFacts Reach(string id, string target)
@@ -739,7 +840,17 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         RoutePlan plan;
         switch (request.Kind)
         {
-            case AiPathKind.Attack: plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to)); break;
+            case AiPathKind.Attack:
+                plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to));
+                // ARC-WORLD-115: next to the target with no clear first step toward it (a diagonal past a corner object) the approach
+                // finds no route; a route into the target's cell, without its last step, walks around the corner (inference: the
+                // original plans the attack's path to the target's tile, and the walk ends next to it).
+                if (plan.Outcome != RouteOutcome.Found && AiExecutorRules.Distance(from, to) == 1)
+                {
+                    var into = RoutePlanner.Plan(source, ToChart(from), ToChart(to));
+                    return into.Outcome == RouteOutcome.Found && into.Cells.Count > 1 ? new([.. into.Cells.Take(into.Cells.Count - 1).Select(ToWorld)]) : null;
+                }
+                break;
             case AiPathKind.Near:
                 plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to));
                 if (plan.Outcome != RouteOutcome.Found) return null;
@@ -777,19 +888,22 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(_scene.Steps, _scene.Chart).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(_scene.Steps, _scene.Chart, CrittersAway).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 
+    /// <summary>The step onto <paramref name="next"/>: a map NPC's mover takes the cell at once and slides its body there over the step's
+    /// time; ARC-WORLD-115: a companion's own walk is told to step there (<see cref="IAreaAiFollowers.Step"/>), its cell changing as
+    /// that walk goes.</summary>
     public int BeginStep(string id, CellCoord next, bool running)
     {
-        if (!_npcs.TryGetValue(id, out var npc)) return 1;
-        var from = Movers.CellOf(id, npc.Origin);
+        if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running);
+        if (_followers.ContainsKey(id)) _scene.Followers!.Step(id, next, running);
+        else Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running);
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }
@@ -799,7 +913,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     public void Face(string id, string toward)
     {
-        if (_npcs.TryGetValue(id, out var npc) && Tile(toward) is { } there) Movers.Face(id, npc.Row.Key, npc.Origin, there);
+        if (TryNpc(id, out var npc) && Tile(toward) is { } there) FaceNpc(npc, there);
     }
 
     public void PlaySound(string id, int sound) => _notices.Add(new(AreaAiNoticeKind.Sound, id, null) { Sound = sound });
@@ -811,7 +925,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// </summary>
     public AiAttackSwing BeginAttack(string id, string target)
     {
-        if (!_npcs.TryGetValue(id, out var npc) || Values(id) is not { } values) return new(1, 1);
+        if (!TryNpc(id, out var npc) || Values(id) is not { } values) return new(1, 1);
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
         if (target == Pc || _session.QueryCompanion(target).LedByPc && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
         Face(id, target);
@@ -973,13 +1087,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // ---- the skill goals (ARC-WORLD-109) ----
 
     /// <summary>The turn to an action's target object or tile (0x42C0F0, 0x42C390): refused for an object the host does not walk (the
-    /// hero and the companions run no goals here), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
+    /// hero, a companion the host does not run), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
     /// (critter flags 0x60, or the session's stun).</summary>
     public bool FaceForAction(string id, string? target, CellCoord? tile)
     {
-        if (!_npcs.TryGetValue(id, out var npc) || !CanAct(id)) return false;
+        if (!TryNpc(id, out var npc) || !CanAct(id)) return false;
         if ((target is null ? tile : Tile(target)) is not { } there) return false;
-        Movers.Face(id, npc.Row.Key, npc.Origin, there);
+        FaceNpc(npc, there);
         return true;
     }
 
@@ -992,7 +1106,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// </summary>
     public AiActionSwing BeginAction(string id, AiActionAnimation animation)
     {
-        if (!_npcs.ContainsKey(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
+        if (!Walks(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
         var art = FixedSkillArt;
         var frameMs = 1000.0 / art.RawFramesPerSecond;
         if (animation == AiActionAnimation.PickLocks)
@@ -1075,7 +1189,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// </summary>
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
-        if (!_npcs.ContainsKey(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
+        if (!Walks(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
         if (_scene.Combat.HeldItemFields(_session, _scene.RuntimeMap, id, item) is not { Item: { } stored } fields)
         {
             Trace(id).Throw = $"throw {item}: not held";
@@ -1123,7 +1237,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     {
         if (_scene.LineOfFire?.Invoke() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, _session.Rules.Combat).Blocker is { } row)
             return _scene.Combat.Entity(_scene.RuntimeMap, row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
-                && (_npcs.ContainsKey(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
+                && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
         if (Tile(Pc) == tile && !DeadCritter(Pc)) return (Pc, tile, null);
         foreach (var npc in _scene.Npcs)
             if (npc.Entity != id && Tile(npc.Entity) == tile && !DeadCritter(npc.Entity)) return (npc.Entity, tile, npc.Row.Key);
@@ -1311,7 +1425,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// holds) is answered as not throwable, so the NPC attacks with it instead of starting a throw that always fails.</summary>
     public string? ThrowableWeapon(string npc)
     {
-        if (!_npcs.ContainsKey(npc) || _scene.Combat.Worn(_session, _scene.RuntimeMap, npc) is not { } worn) return null;
+        if (!Walks(npc) || _scene.Combat.Worn(_session, _scene.RuntimeMap, npc) is not { } worn) return null;
         foreach (var item in worn)
             if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop
                 && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity))
@@ -1325,7 +1439,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// which removes it (<see cref="GameSessionOwner.ThrowByNpc"/>). Nothing changes here.</summary>
     public void Unwield(string npc, string item) => Trace(npc).Throw = $"unwield {item} (kept until the throw)";
     /// <summary>ARC-WORLD-109: the skill animation's art (0x436220's test) is the fixed stand-in's, so every NPC the host walks has it.</summary>
-    public bool HasSkillArt(string npc) => _npcs.ContainsKey(npc);
+    public bool HasSkillArt(string npc) => Walks(npc);
     public bool NpcPickupsOn => false;
     public bool BoomerangInFlight(string npc) => false;
     public bool InterruptLowerAnimations(string id) => true;
@@ -1592,7 +1706,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         bool Inside(CellCoord cell) => Math.Abs((long)cell.X - center.X) <= halfSize && Math.Abs((long)cell.Y - center.Y) <= halfSize;
         var critters = new List<AreaScanCritter>();
         if (Tile(Pc) is { } hero && Inside(hero)) critters.Add(new(SessionCombatant.Hero, hero, 0, null));
-        foreach (var other in _scene.Npcs)
+        foreach (var other in _scene.Npcs.Concat(_followers.Values))
             if (Tile(other.Entity) is { } cell && Inside(cell)) critters.Add(new(SessionCombatant.Critter(other.Entity), cell, 0, other.Row.Key));
         return AreaCombatScan.Order(critters).Select(c => Id(c.Combatant)).ToArray();
     }
@@ -1620,7 +1734,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private SessionCombatant? Combatant(string id) => id == Pc ? SessionCombatant.Hero : SessionCombatant.Critter(id);
 
-    private AreaObjectKey? Key(string id) => _npcs.TryGetValue(id, out var npc) ? npc.Row.Key : null;
+    private AreaObjectKey? Key(string id) => TryNpc(id, out var npc) ? npc.Row.Key : null;
+
+    // ARC-WORLD-115: an NPC the host walks: one of the map's or a companion the host runs.
+    private bool TryNpc(string id, out AreaAiNpc npc) => _npcs.TryGetValue(id, out npc!) || _followers.TryGetValue(id, out npc!);
+    private bool Walks(string id) => _npcs.ContainsKey(id) || _followers.ContainsKey(id);
+
+    // The turn of a walked NPC toward a world cell: a map NPC's mover, a companion's own walk.
+    private void FaceNpc(AreaAiNpc npc, CellCoord there)
+    {
+        if (_followers.ContainsKey(npc.Entity)) _scene.Followers!.Face(npc.Entity, there);
+        else Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there);
+    }
 
     private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(_scene.RuntimeMap, id);
 
@@ -1711,7 +1836,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // The line of fire from the object's tile to the target's, and the target's row (null for the hero).
     private LineOfFireTrace<AreaObjectRecord>? Line(string id, string target, out AreaObjectRecord? targetRow)
     {
-        targetRow = _npcs.TryGetValue(target, out var npc) ? npc.Row : null;
+        targetRow = TryNpc(target, out var npc) ? npc.Row : null;
         if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return null;
         return LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
     }
@@ -1758,4 +1883,6 @@ public sealed class AreaAiTrace
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
     public string? Throw { get; set; }
+    /// <summary>ARC-WORLD-115: the last attack facts asked (the target, the line's first blocker, the facts).</summary>
+    public string? Attack { get; set; }
 }

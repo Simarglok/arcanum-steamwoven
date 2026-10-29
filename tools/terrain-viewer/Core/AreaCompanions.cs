@@ -237,6 +237,8 @@ public sealed class AreaCompanion
     public bool PassesCritters { get; internal set; }
     /// <summary>ARC-WORLD-111: the gait clock of its drawn walk cycle; a rebuilt group starts a fresh one (its body at T0 until it moves).</summary>
     public AreaBodyCycle Cycle { get; } = new();
+    /// <summary>ARC-WORLD-115: whether the AI host's last step of it runs (its gait while the host holds it).</summary>
+    public bool AiRunning { get; internal set; }
 }
 
 /// <summary>
@@ -337,6 +339,37 @@ public sealed class AreaCompanionGroup
     /// <summary>ARC-WORLD-075: whether a T0 critter record is dead in the session, for the critter checks of a companion's walk that
     /// passes critters (a living critter on its goal, DC2, or before a segment's last step, LR5). Null is none dead.</summary>
     public Func<AreaObjectKey, bool>? Dead { get; set; }
+
+    /// <summary>ARC-WORLD-115: whether the AI host holds a companion (by entity) while it fights: its follow decisions are not made, its
+    /// walk goes only where the host's steps send it (<see cref="StepTo"/>). Null is none held.</summary>
+    public Func<string, bool>? HeldByAi { get; set; }
+
+    /// <summary>
+    /// ARC-WORLD-115: the AI host's step of the companion <paramref name="entity"/> onto the neighbouring chart cell
+    /// <paramref name="next"/>: its walk's ordered goal to that cell (<see cref="CompanionFollower.WalkTo"/>, observed at its grid's
+    /// time), driven by <see cref="Drive"/>. False for a companion not here or a cell outside the step evidence.
+    /// </summary>
+    public bool StepTo(string entity, CellCoord next, bool running)
+    {
+        if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion) return false;
+        companion.AiRunning = running;
+        return companion.Follow.WalkTo(next, companion.Grid.State.Time);
+    }
+
+    /// <summary>ARC-WORLD-115: the AI host's turn of a settled companion toward the chart cell <paramref name="toward"/> (its grid stands
+    /// again on its cell with the new facing; a companion mid-step keeps its facing).</summary>
+    public void FaceTo(string entity, CellCoord toward)
+    {
+        if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion) return;
+        var grid = companion.Grid;
+        var state = grid.State;
+        if (state.Phase != MovementPhase.Settled || state.CommittedCell == toward) return;
+        var facing = RoutePlanner.Toward(state.CommittedCell, toward);
+        if (facing == state.Facing) return;
+        companion.Grid = new AreaGridSession(_steps, state.Time, chart: _chart, start: state.CommittedCell, facing: facing,
+            actorId: state.Binding.ActorId, capabilities: Capabilities)
+            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
+    }
 
     // ARC-WORLD-075: the session's rule switch SegmentEndCritterEndsWalk, read at each drive.
     private bool _segmentEndCritter;
@@ -442,10 +475,13 @@ public sealed class AreaCompanionGroup
             companion.PassesCritters = !session.QueryCombatMode(SessionCombatant.Critter(companion.Entity));
             var grid = companion.Grid;
             if (frontier.Value <= grid.State.Time.Value) continue;
-            var update = companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following, frontier);
+            // ARC-WORLD-115: a companion the AI host holds makes no follow decision; its walk drives only the host's steps.
+            var held = HeldByAi?.Invoke(companion.Entity) == true;
+            var update = held ? new CompanionFollowUpdate(companion.AiRunning ? FollowAction.Run : FollowAction.Walk, null)
+                : companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following, frontier);
             companion.LastUpdate = update;
             // ARC-WORLD-045: an approach starts the follow goal, which then lives until something interrupts it.
-            if (record.Standing != CompanionStanding.Following) companion.FollowGoal = false;
+            if (record.Standing != CompanionStanding.Following || held) companion.FollowGoal = false;
             else if (update.Action is FollowAction.Walk or FollowAction.Run or FollowAction.Jump) companion.FollowGoal = true;
             if (update.JumpTo is { } jump)
             {

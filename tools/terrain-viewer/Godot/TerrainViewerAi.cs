@@ -17,12 +17,13 @@ namespace Arcanum.TerrainViewer;
 // runs the NPCs' subturn hooks with this host and their runs pay action points. ARC-WORLD-102: an NPC that knows a spell may choose it
 // at its danger update and cast it through the map's cast host (the hero's); its casting goal is timed by its cast eye candy (not
 // drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. ARC-WORLD-108: an NPC heals
-// and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item. NOT
-// READY: throws, pickups, skills, followers in combat, NPC ranged attacks, saved NPC positions.
+// and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item.
+// ARC-WORLD-115: the hero's companions here are run too and fight beside it, stepping through their own walk. NOT READY: pickups,
+// the attack order's target, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
-    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party)? _aiHostStamp;
+    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party, AreaCompanionGroup? Group)? _aiHostStamp;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
@@ -51,8 +52,8 @@ public partial class TerrainViewerApp
             if (_aiHost is not null) { RetireAiHost(); _aiHostStamp = null; _aiPcOccupancy = null; }
             return null;
         }
-        // A follower joining or leaving changes who the host runs.
-        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)));
+        // A follower joining or leaving changes who the host runs; ARC-WORLD-115: so does a rebuilt companion group (their walks).
+        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)), _areaCompanions);
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         RetireAiHost();
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
@@ -89,14 +90,30 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk.
+            Followers = _areaCompanions is { } group ? new AiFollowers(group, chart, session) : null,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
         var refused = host.ScheduleTicks();
-        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} ticks-refused={refused} table={scene.Parameters is not null}");
+        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
         return host;
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (those the hero leads, following or waiting), with their
+    /// home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
+    private sealed class AiFollowers(AreaCompanionGroup group, AreaChart chart, GameSessionOwner session) : IAreaAiFollowers
+    {
+        public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions.Where(c => session.QueryCompanion(c.Entity).LedByPc)
+            .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
+
+        public bool Step(string entity, CellCoord next, bool running) => group.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running);
+
+        public void Face(string entity, CellCoord toward) => group.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
+
+        private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
