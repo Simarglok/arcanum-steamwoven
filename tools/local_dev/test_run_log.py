@@ -2,6 +2,8 @@
 error; --verbose streams it as before."""
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -11,7 +13,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from tools.local_dev import run_log
+from tools.local_dev import run_log, run_queue
 
 REPO = Path(__file__).resolve().parents[2]
 ARCANUM = REPO / "arcanum"
@@ -139,6 +141,16 @@ class WrapperTests(unittest.TestCase):
         self.assertIn(f"ARCANUM_QUEUE log ticket=", result.stderr)
         self.assertIn("ARCANUM_QUEUE start ticket=", result.stderr)
         self.assertIn("ARCANUM_QUEUE end ticket=", result.stderr)
+
+    def test_a_quiet_run_tells_the_log_sink_its_log(self) -> None:
+        # ARC-DEV-063: the smoke runner reads its stages' PASS lines from the log the sink names; a loud run has none.
+        logs: list[Path] = []
+        with patch.dict(os.environ, self.env, clear=True), redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+            code = run_queue.run("headless", [sys.executable, "-c", "print('ARC-X stage PASS')"], quiet=True,
+                                 log_sink=logs.append)
+            loud = run_queue.run("headless", [sys.executable, "-c", "pass"], log_sink=logs.append)
+        self.assertEqual((code, loud, len(logs)), (0, 0, 1))
+        self.assertIn("ARC-X stage PASS", logs[0].read_text())
 
     def test_a_pass_prints_one_line(self) -> None:
         result = self.run_wrapper("print('hello')")

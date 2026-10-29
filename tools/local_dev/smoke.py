@@ -86,7 +86,7 @@ BATTERY_STAGES = ("map", "resources")
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
                          "floaters", "ai", "ai-turn-based", "ai-cast", "premade", "pickpocket"})
-AUTO_HERO = "human-male"  # the full chain's hero on the main map
+AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
@@ -94,7 +94,7 @@ MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
                           "ai-turn-based", "ai-cast", "premade", "pickpocket", "wreck"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report"})
-SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP)\b")
+SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 
 
 @dataclass(frozen=True)
@@ -190,11 +190,12 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
                 requires=tuple(stages) or BATTERY_STAGES)
 
 
-def map_runs(name: str, stages: Sequence[str], *, hero: str | None, main_menu: bool,
+def map_runs(name: str, map_name: str, stages: Sequence[str], *, hero: str | None, main_menu: bool,
              say: Callable[[str], None]) -> tuple[str | None, list[tuple[str, tuple[str, ...]]]]:
     """ARC-DEV-063: the hero and the viewer runs (step name, stage list; () the whole map battery) in which every requested
-    stage runs. A stage that needs a hero gets AUTO_HERO when none is given (refused with --main-menu, which starts
-    without one); a menu stage needs --main-menu; the stages the viewer runs only without `map` get a run of their own."""
+    stage runs. A stage that needs a hero gets the full chain's hero of that map, else AUTO_HERO, when none is given
+    (refused with --main-menu, which starts without one); a menu stage needs --main-menu; the stages the viewer runs only
+    without `map` get a run of their own."""
     wanted = tuple(stages) or ("map",)
     menu = [stage for stage in wanted if stage in MENU_STAGES]
     if menu and not main_menu:
@@ -204,7 +205,7 @@ def map_runs(name: str, stages: Sequence[str], *, hero: str | None, main_menu: b
         if main_menu:
             raise ValueError(f"{'the whole map battery' if not stages else 'stage ' + ', '.join(needs)} needs a hero, "
                              "and --main-menu starts without one: run it in a smoke of its own")
-        hero = AUTO_HERO
+        hero = next((chain_hero for _, chain_map, chain_hero, _ in FULL_CHAIN if chain_map == map_name), AUTO_HERO)
         say(f"SMOKE hero {hero} (auto): {', '.join(needs)} need a hero; --hero picks another")
     alone = tuple(stage for stage in stages if stage in ALONE_STAGES)
     if "map" not in stages or not alone:
@@ -239,7 +240,7 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         if args.crash_site:
             steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
         if stages:
-            hero, runs = map_runs("stages", stages, hero=args.hero, main_menu=args.main_menu, say=say)
+            hero, runs = map_runs("stages", args.map, stages, hero=args.hero, main_menu=args.main_menu, say=say)
             steps.extend(map_step(name, inputs, prefs_root, environ, godot, args.map, hero=hero, sector=args.sector,
                                   stages=run_stages, main_menu=args.main_menu, extra=extra) for name, run_stages in runs)
         elif args.map != MAIN_MAP or args.hero or args.sector or args.main_menu or extra:
@@ -247,7 +248,7 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         if len(steps) == prepared:
             raise ValueError("nothing to run: give --stages (the touched stages) or --crash-site")
         return steps
-    hero, runs = map_runs("map", stages, hero=args.hero, main_menu=args.main_menu, say=say)
+    hero, runs = map_runs("map", args.name, stages, hero=args.hero, main_menu=args.main_menu, say=say)
     steps.extend(map_step(name, inputs, prefs_root, environ, godot, args.name, hero=hero, sector=args.sector,
                           stages=run_stages, main_menu=args.main_menu, extra=extra) for name, run_stages in runs)
     return steps
@@ -259,14 +260,16 @@ def shown(command: Sequence[str]) -> str:
 
 
 def stages_not_run(log: Path | None, stages: Sequence[str]) -> tuple[list[str], list[str]]:
-    """The requested stages whose PASS line the log lacks, and the log's first NONE/SKIP lines (the viewer's reasons)."""
+    """The requested stages whose PASS line the log lacks, and up to three NONE/SKIP lines of the log (the viewer's
+    reasons), those with a missing stage's task code first."""
     try:
         text = log.read_text(encoding="utf-8", errors="replace") if log is not None else ""
     except OSError:
         text = ""
     missing = [stage for stage in stages if STAGE_PASS[stage] not in text]
-    reasons = [line.strip()[:200] for line in text.splitlines() if SKIP_LINE.search(line)][:3] if missing else []
-    return missing, reasons
+    codes = tuple(STAGE_PASS[stage].split()[0] + " " for stage in missing)
+    skips = [line.strip()[:200] for line in text.splitlines() if missing and SKIP_LINE.search(line)]
+    return missing, sorted(skips, key=lambda line: not line.startswith(codes))[:3]
 
 
 def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
@@ -283,7 +286,8 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         if code == 0 and step.requires:
             missing, reasons = stages_not_run(logs[-1] if logs else None, step.requires)
             if missing:
-                say(f"  FAIL stages not run: {', '.join(missing)} (no PASS line in {logs[-1] if logs else 'the log'})")
+                say(f"  FAIL exit={STAGE_NOT_RUN} stages not run: {', '.join(missing)} "
+                    f"(no PASS line in {logs[-1] if logs else 'the log'})")
                 for reason in reasons:
                     say(f"  viewer: {reason}")
                 code = STAGE_NOT_RUN

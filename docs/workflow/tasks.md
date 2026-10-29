@@ -161,8 +161,10 @@ narrowed the same day in ARC-DEV-061):
   `./arcanum smoke full` for the chain; no scratch smoke scripts.
 - `SMOKE PASS` means every requested stage ran and printed its `PASS` line
   (ARC-DEV-063): a skipped stage fails the smoke, a stage that needs a hero
-  gets `human-male` unless `--hero` names another
-  ([every requested stage runs](toolchain.md#smoke-runner-arc-dev-061)).
+  gets the chain's hero of the map (else `human-male`) unless `--hero` names
+  another. A whole map battery (`full`) vouches only for its `map` and
+  `resources` stages; its other stages may report NONE where the map lacks
+  what they need ([every requested stage runs](toolchain.md#smoke-runner-arc-dev-061)).
 
 Why: in the token audit of 2026-10-29, a merged PR took 162 steps (94 before),
 much of it the full check and smoke ritual every thread repeats; smoke runs

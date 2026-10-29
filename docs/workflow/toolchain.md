@@ -110,10 +110,13 @@ history held about 500 runs of such copies of one template).
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
   `resources`; a stage the viewer skipped (silently, as the AI stages without a hero, or with a `NONE`/`SKIP` line)
-  makes the step `FAIL exit=3` with `FAIL stages not run: ...` and the log's first `NONE`/`SKIP` lines. Before
+  makes the step `FAIL exit=3` with `FAIL exit=3 stages not run: ...` and up to three of the log's `NONE`/`SKIP`
+  lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
+  need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
   `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`) gets
-  `--hero human-male` when no `--hero` is given, and says so (`SMOKE hero human-male (auto): ...`); with
+  the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
+  given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
   `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`, `wreck`) get a run of their

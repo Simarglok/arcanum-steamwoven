@@ -154,6 +154,7 @@ class PlanTests(unittest.TestCase):
         text = (REPO / smoke.VIEWER / "TerrainViewerApp.cs").read_text(encoding="utf-8")
         start, end = text.index('if (Stage("map"))'), text.index("else await RunAreaSmokeAsync(result);")
         battery, *branch = text[start:end].splitlines()
+        battery_calls = set(re.findall(r"Run\w+", battery))
         alone, also = set(), set()
         for line in branch:
             named = re.search(r'(?:Stage|only\?\.Contains)\("([a-z-]+)"\)', line)
@@ -161,7 +162,7 @@ class PlanTests(unittest.TestCase):
                 continue
             calls = re.findall(r"Run\w+", line)
             self.assertTrue(calls, line)
-            (also if all(call in battery for call in calls) else alone).add(named.group(1))
+            (also if set(calls) <= battery_calls else alone).add(named.group(1))
         self.assertEqual((alone, also), (set(smoke.ALONE_STAGES), set(smoke.BATTERY_ALSO)))
 
     def test_a_stage_that_needs_a_hero_gets_one(self) -> None:
@@ -173,7 +174,9 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(step.command[step.command.index("--hero") + 1], "elf-male")
         self.assertNotIn("--hero", self.plan("pr", "--stages", "hover,report", "--no-build")[0].command)
         battery = self.plan("map", "elven ruins", "--no-build")[0]  # the whole battery plays the hero's stages
-        self.assertEqual(battery.command[battery.command.index("--hero") + 1], smoke.AUTO_HERO)
+        self.assertEqual(battery.command[battery.command.index("--hero") + 1], "elf-female")  # the chain's hero there
+        cave = self.plan("map", "crash site cave", "--stages", "junk", "--no-build")[0]
+        self.assertEqual(cave.command[cave.command.index("--hero") + 1], smoke.AUTO_HERO)
         self.assertEqual(battery.requires, smoke.BATTERY_STAGES)
         for full in self.plan("full")[1:]:
             self.assertIn("--hero", full.command)
@@ -266,10 +269,15 @@ class ExecuteTests(unittest.TestCase):
         skipped = f"{smoke.STAGE_PASS['cast']} {{}}\nARC-UI-050 native-smoke barter SKIP (no living hero: start with --hero)\n"
         code, _, lines = self.run_steps(steps, {}, {"stages": skipped})
         self.assertEqual(code, 1)
-        self.assertTrue(any(line.startswith("  FAIL stages not run: ai (no PASS line in ") for line in lines), lines)
+        self.assertTrue(any(line.startswith(f"  FAIL exit={smoke.STAGE_NOT_RUN} stages not run: ai (no PASS line in ")
+                            for line in lines), lines)
         self.assertIn("  viewer: ARC-UI-050 native-smoke barter SKIP (no living hero: start with --hero)", lines)
         self.assertIn(f"  stages  FAIL exit={smoke.STAGE_NOT_RUN}", lines)
         self.assertEqual(lines[-1], "SMOKE FAIL 1 of 2 steps passed")
+        early = "ARC-UI-050 native-smoke barter SKIP (x)\nARC-UI-021 native-smoke floaters NONE (y)\n" * 2
+        _, _, lines = self.run_steps(steps, {}, {"stages": early + "ARC-WORLD-092 native-smoke ai x NONE (no NPC)\n"})
+        self.assertEqual([line for line in lines if line.startswith("  viewer: ")][0],
+                         "  viewer: ARC-WORLD-092 native-smoke ai x NONE (no NPC)")  # the missing stage's own line first
         code, _, lines = self.run_steps(steps, {})  # no log: nothing shows the stages ran
         self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 1 of 2 steps passed"))
         code, _, lines = self.run_steps(steps, {"stages": 1}, {"stages": ""})  # a failed run keeps its own exit
