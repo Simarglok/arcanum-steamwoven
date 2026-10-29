@@ -208,7 +208,7 @@ are F0 and are read by the slice.
    141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
    (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
    (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
-   the list. Slice (b) done by ARC-UI-067, ledger MW17–MW20: the save's picture under the cover 748 `SaveShotCover`, the info texts and
+   the list. Slice (b) done by ARC-UI-067, ledger MW22–MW25: the save's picture under the cover 748 `SaveShotCover`, the info texts and
    the save's portrait over it (details schema 2), the toggle 747 at (499, 82) and the lens's art 746 at the screen's (84, 51). Left:
    what the lens shows (0x4B8CE0 with the hero's location and 0x550DA0, not a portrait), the scroll bar's art (0x5804E0) and the
    buttons' hints (7002, 7020–7022, 7025; where the menu shows hints is not read).

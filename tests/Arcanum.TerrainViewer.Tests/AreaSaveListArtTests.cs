@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-062 save and load window art (ledger MW11–MW15): the art, the buttons' places, the rows' places, the scroll top, the
-/// row a press picks and the "..." fit, on synthetic glyph frames; ARC-UI-067 (MW17–MW20): the info display's places, placements,
+/// row a press picks and the "..." fit, on synthetic glyph frames; ARC-UI-067 (MW22–MW25): the info display's places, placements,
 /// formats and line breaks.</summary>
 [TestClass]
 public sealed class AreaSaveListArtTests
@@ -91,7 +91,7 @@ public sealed class AreaSaveListArtTests
     [TestMethod]
     public void The_info_texts_stand_at_the_exes_places()
     {
-        Assert.AreEqual((499, 82), AreaSaveListArtLayout.Toggle, "MW20: a screen point (table flag 0)");
+        Assert.AreEqual((499, 82), AreaSaveListArtLayout.Toggle, "MW25: a screen point (table flag 0)");
         Assert.AreEqual((84, 51, 89, 89), AreaSaveListArtLayout.Lens);
         Assert.AreEqual((484, 139), AreaSaveListArtLayout.Portrait);
         Assert.AreEqual((289, 233, 451, 18), AreaSaveListArtLayout.HeroNameText, "the window's (289, 192)");
@@ -109,7 +109,7 @@ public sealed class AreaSaveListArtTests
             new AreaSaveInfoText("Shrouded Hills", 281 + (465 - 57) / 2, 253, false),
             new AreaSaveInfoText("3/14/1885", 448 - 37, 167, false),
             new AreaSaveInfoText("09:05:07", 448 - 33, 179, false),
-        }, texts.ToArray(), "MW19: centred, the date and time ending at their rectangles' x");
+        }, texts.ToArray(), "MW24: centred, the date and time ending at their rectangles' x");
         Assert.AreEqual("Unknown", AreaSaveListArtLayout.InfoTexts(font, Info with { Location = "" }, AreaSaveInfoMessages.Project, AreaSaveDateOrder.MonthDayYear)[3].Text,
             "a location without a name shows 5050");
         Assert.AreEqual(7, AreaSaveListArtLayout.InfoTexts(font, Info with { StoryText = "Find the ring" }, AreaSaveInfoMessages.Project, AreaSaveDateOrder.MonthDayYear).Count,

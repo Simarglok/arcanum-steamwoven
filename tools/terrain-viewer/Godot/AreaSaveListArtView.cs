@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 /// the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the list's rows in the art font from the
 /// scroll top, the selected row gold; the three art buttons with their idle, down and lit frames (GB4) and push behaviour (GB3:
 /// down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). A press on a row selects it.
-/// ARC-UI-067 (MW18–MW20): the selected save's picture at its own size from the preview's corner, its info texts and portrait over it
+/// ARC-UI-067 (MW23–MW25): the selected save's picture at its own size from the preview's corner, its info texts and portrait over it
 /// while the info display is on, 5005 in red when its info did not read, black with no save (or the save window's new-save row), the
 /// cover 748 over the preview, the lens 746, and the toggle 747: a toggle button (GB3) whose press turning it on hides the info and
 /// whose next press shows it again (3000 on, 3001 off, as the bar's toggles); the info display's state outlives the window while the
@@ -86,7 +86,7 @@ public partial class AreaSaveListArtView : Control
         ArgumentNullException.ThrowIfNull(rows);
         if (_font is null) throw new InvalidOperationException("ARC-UI-062: the save window art is not set");
         var opened = !Visible;
-        // MW20: the toggle is made anew (up) with the window; the info display keeps its state.
+        // MW25: the toggle is made anew (up) with the window; the info display keeps its state.
         if (opened) { _top = 0; _hovered = null; _pressed = null; _toggleDown = false; }
         var follow = opened || selected != _selected;
         (_mode, _rows, _selected, _preview, _blocked, _info, _portrait, _unread) = (mode, rows, selected, preview, blocked, info, portrait, unread);
@@ -142,7 +142,7 @@ public partial class AreaSaveListArtView : Control
     private bool ToggleAt(Vector2 at) => Art(AreaSaveListArtLayout.ToggleArt) is { } texture
         && AreaSaveListArtLayout.Contains((AreaSaveListArtLayout.Toggle.X, AreaSaveListArtLayout.Toggle.Y, texture.GetWidth(), texture.GetHeight()), at.X, at.Y);
 
-    /// <summary>MW18/MW19: the info texts while the display is on and the save's info read; 5005 (red) whatever the display when it did
+    /// <summary>MW23/MW24: the info texts while the display is on and the save's info read; 5005 (red) whatever the display when it did
     /// not.</summary>
     private IReadOnlyList<AreaSaveInfoText> InfoTexts() => _font is not { } font ? []
         : _unread ? [AreaSaveListArtLayout.Unread(font, _messages)]
@@ -166,7 +166,7 @@ public partial class AreaSaveListArtView : Control
             foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
                 DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
         var (px, py, pw, ph) = AreaSaveListArtLayout.Preview;
-        // MW18: the picture at its own size from the preview's corner (the rectangle takes its size); none, the new-save row or an
+        // MW23: the picture at its own size from the preview's corner (the rectangle takes its size); none, the new-save row or an
         // unread info leave the preview black. Kept within the preview here (a stored picture is at most 468 × 300).
         if (_info is not null && !_unread && _preview is not null && _preview.GetWidth() > 0 && _preview.GetHeight() > 0)
         {
@@ -190,7 +190,7 @@ public partial class AreaSaveListArtView : Control
                 if (_glyphs.TryGetValue(glyph.Frame, out var texture))
                     DrawTextureRect(texture, new Rect2(x + gx, y, glyph.Width, glyph.Height), false, colour);
         }
-        // MW19: the hero's name, then the portrait at its own size (PO3, size 0), then the other texts.
+        // MW24: the hero's name, then the portrait at its own size (PO3, size 0), then the other texts.
         var texts = InfoTexts();
         for (var i = 0; i < texts.Count; i++)
         {
@@ -198,9 +198,9 @@ public partial class AreaSaveListArtView : Control
             if (i == 0 && !_unread && _portrait is not null && _info is { Portrait: > 0 })
                 DrawTextureRect(_portrait, new Rect2(AreaSaveListArtLayout.Portrait.X, AreaSaveListArtLayout.Portrait.Y, _portrait.GetWidth(), _portrait.GetHeight()), false);
         }
-        // MW18: the cover over the preview, whatever it shows.
+        // MW23: the cover over the preview, whatever it shows.
         if (Art(AreaSaveListArtLayout.CoverArt) is { } cover) DrawTextureRect(cover, new Rect2(px, py, cover.GetWidth(), cover.GetHeight()), false);
-        // MW20: the lens (what the original draws into it is not read, F0).
+        // MW25: the lens (what the original draws into it is not read, F0).
         if (Art(AreaSaveListArtLayout.LensArt) is { } lens)
             DrawTextureRect(lens, new Rect2(AreaSaveListArtLayout.Lens.X, AreaSaveListArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         foreach (var button in AllButtons)
@@ -251,7 +251,7 @@ public partial class AreaSaveListArtView : Control
                 if (_blocked) { AcceptEvent(); break; }
                 // The press lights what is under it even when the pointer did not move since the opening (GB3: down over it).
                 _hovered = at;
-                // MW20: a press on the toggle turns it on (the info hidden, 3000) or off (shown again, 3001); its release does nothing.
+                // MW25: a press on the toggle turns it on (the info hidden, 3000) or off (shown again, 3001); its release does nothing.
                 if (button.Pressed && at is null && _pressed is null && ToggleAt(button.Position))
                 {
                     _toggleDown = !_toggleDown;

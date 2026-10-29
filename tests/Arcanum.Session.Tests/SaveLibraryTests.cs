@@ -166,7 +166,7 @@ public sealed class SaveLibraryTests
         Assert.IsTrue(library.Create(owner.Capture(), Summary()).Saved);
         var entries = library.List().Entries;
         Assert.AreEqual((GameSaveDetails.Present, summary), (entries.Single(e => e.Name == "slot0000").Details, entries.Single(e => e.Name == "slot0000").Summary),
-            "ARC-UI-067: schema 2 records what the original's save info shows (ledger MW17).");
+            "ARC-UI-067: schema 2 records what the original's save info shows (ledger MW22).");
         Assert.IsNull(entries.Single(e => e.Name == "slot0001").Summary!.StoryState, "No story state was given: written as null.");
 
         // A details file of schema 1 (written before ARC-UI-067) reads without the new fields.

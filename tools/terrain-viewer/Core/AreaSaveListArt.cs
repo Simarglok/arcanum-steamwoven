@@ -16,7 +16,7 @@ public enum AreaSaveListArtButton { Confirm, Back, Delete }
 /// rectangle (42, 120, 145, 213): a row every 20 pixels from its top, eleven rows shown from the scroll top, each the save's
 /// description in the 19-row art font 27 `morph15font`, near-white, the selected row gold; a description too wide for the row's 141
 /// pixels ends in "...". Coordinates here are the 800 × 600 screen's. Godot-free.
-/// ARC-UI-067 (ledger MW17–MW20): the preview rectangle shows the selected save's picture at its own size from the corner, its info
+/// ARC-UI-067 (ledger MW22–MW25): the preview rectangle shows the selected save's picture at its own size from the corner, its info
 /// texts over it while the info display is on (the toggle button 747 `TextToggle`), and the cover 748 `SaveShotCover` over all; the
 /// lens 746 `SaveLoadPCLens` stands at the window's (84, 10).
 /// </summary>
@@ -24,7 +24,7 @@ public static class AreaSaveListArtLayout
 {
     public const int ScreenWidth = 800, ScreenHeight = 600;
     public const int BackgroundArt = 745, TopStripArt = 336, BottomStripArt = 335, ConfirmArt = 321, BackArt = 323, DeleteArt = 32, FontArt = 27;
-    /// <summary>ARC-UI-067: the lens, the info toggle (two frames) and the preview's cover (MW18, MW20).</summary>
+    /// <summary>ARC-UI-067: the lens, the info toggle (two frames) and the preview's cover (MW23, MW25).</summary>
     public const int LensArt = 746, ToggleArt = 747, CoverArt = 748;
     /// <summary>The window's top (a background not 600 rows high, MW1) and the bottom strip's (the art buttons' y origin, MW12).</summary>
     public const int WindowTop = 41, BottomStripTop = 441, TopStripHeight = 41, BottomStripHeight = 159;
@@ -33,7 +33,7 @@ public static class AreaSaveListArtLayout
     /// Previous Screen, 7022 Delete Save Game).</summary>
     public const int NewSaveMessage = 5055, SaveHint = 7021, LoadHint = 7020, BackHint = 7002, DeleteHint = 7022;
     /// <summary>ARC-UI-067, MainMenu.mes: the info that did not read (5005), a location without a name (5050), the level's format (5051)
-    /// and the toggle's hint (7025 "Toggle Info Display"); MW19, MW20.</summary>
+    /// and the toggle's hint (7025 "Toggle Info Display"); MW24, MW25.</summary>
     public const int UnreadMessage = 5005, UnknownLocationMessage = 5050, LevelMessage = 5051, ToggleHint = 7025;
     public const string Ellipsis = "...";
 
@@ -55,18 +55,18 @@ public static class AreaSaveListArtLayout
     public static (byte R, byte G, byte B) RowColour { get; } = (250, 250, 250);
     public static (byte R, byte G, byte B) SelectedColour { get; } = (255, 210, 0);
 
-    /// <summary>The info texts' colour: the error text's font 0x64C218 is art 27 in (255, 50, 50) (MW14, MW18); the others take the
+    /// <summary>The info texts' colour: the error text's font 0x64C218 is art 27 in (255, 50, 50) (MW14, MW23); the others take the
     /// rows' (250, 250, 250).</summary>
     public static (byte R, byte G, byte B) WarningColour { get; } = (255, 50, 50);
 
     public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, TopStripArt, BottomStripArt, ConfirmArt, BackArt, DeleteArt, FontArt, LensArt, ToggleArt, CoverArt];
 
-    /// <summary>ARC-UI-067: the toggle's top-left (table 0x5C45D8, flag 0: the screen's point; MW20) and the lens's rectangle
+    /// <summary>ARC-UI-067: the toggle's top-left (table 0x5C45D8, flag 0: the screen's point; MW25) and the lens's rectangle
     /// (0x5C4780, the window's (84, 10, 89 × 89)) on the screen.</summary>
     public static (int X, int Y) Toggle { get; } = (499, 82);
     public static (int X, int Y, int Width, int Height) Lens { get; } = (84, WindowTop + 10, 89, 89);
 
-    /// <summary>ARC-UI-067: the info texts' rectangles (0x5C46D0..0x5C4770, the window's, 18 rows high) on the screen (MW19).</summary>
+    /// <summary>ARC-UI-067: the info texts' rectangles (0x5C46D0..0x5C4770, the window's, 18 rows high) on the screen (MW24).</summary>
     public static (int X, int Y, int Width, int Height) HeroNameText { get; } = (289, WindowTop + 192, 451, 18);
     public static (int X, int Y, int Width, int Height) DescriptionText { get; } = (294, WindowTop + 173, 441, 18);
     public static (int X, int Y, int Width, int Height) LocationText { get; } = (281, WindowTop + 212, 465, 18);
@@ -247,7 +247,7 @@ public static class AreaSaveListArtLayout
         return texts;
     }
 
-    /// <summary>What a listed save's info shows, or null when it has no readable details (the original's info read failing, MW18):
+    /// <summary>What a listed save's info shows, or null when it has no readable details (the original's info read failing, MW23):
     /// the summary's texts, the auto slot's fixed description when it has none (the original's F7 passes "Auto-Save"), and the story
     /// state's text when <paramref name="stories"/> has one (a details file of schema 1 recorded no story state).</summary>
     public static AreaSaveInfo? Info(GameSaveEntry entry, IReadOnlyDictionary<int, string> stories)
@@ -268,13 +268,13 @@ public static class AreaSaveListArtLayout
     }
 }
 
-/// <summary>ARC-UI-067: the order of a date's parts (MW19).</summary>
+/// <summary>ARC-UI-067: the order of a date's parts (MW24).</summary>
 public enum AreaSaveDateOrder { MonthDayYear, DayMonthYear, YearMonthDay }
 
 /// <summary>ARC-UI-067: one info text at its top-left on the screen; <see cref="Warning"/> draws it in the warning colour.</summary>
 public sealed record AreaSaveInfoText(string Text, int X, int Y, bool Warning);
 
-/// <summary>ARC-UI-067: what the selected save's info shows (the original's save info file, MW17; here the details file's summary).
+/// <summary>ARC-UI-067: what the selected save's info shows (the original's save info file, MW22; here the details file's summary).
 /// <see cref="StoryText"/> is the story state's message in storystate.mes, null when it has none.</summary>
 public sealed record AreaSaveInfo(string HeroName, string Description, int Level, string Location, GameSaveTime Time, int Portrait, string? StoryText);
 
@@ -289,7 +289,7 @@ public sealed record AreaSaveInfoMessages(string Unread, string UnknownLocation,
 public sealed record AreaSaveListArtContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string NewSaveLabel, string Detail,
     AreaSaveInfoMessages Messages, IReadOnlyDictionary<int, string> StoryTexts)
 {
-    /// <summary>The story state's file (the original's mes\storystate.mes, read by the script state's module load 0x444890; MW19).</summary>
+    /// <summary>The story state's file (the original's mes\storystate.mes, read by the script state's module load 0x444890; MW24).</summary>
     public const string StoryStatePath = "mes/storystate.mes";
 
     /// <summary>True when every art read: the windows then show the original look (all or nothing, as every one is in the installed
@@ -325,7 +325,7 @@ public sealed record AreaSaveListArtContent(IReadOnlyDictionary<int, AreaInterfa
         var menuDetail = menu is null ? $"{AreaMainMenuTexts.MainMenuPath} not read ({menuRead})"
             : "texts " + string.Join(",", new[] { AreaSaveListArtLayout.NewSaveMessage, AreaSaveListArtLayout.UnreadMessage, AreaSaveListArtLayout.UnknownLocationMessage,
                 AreaSaveListArtLayout.LevelMessage }.Select(number => $"{number} {(Text(menu, number) is null ? "missing" : "read")}"));
-        // A module-load table (MW19): every source. required: true only names why it did not read; no story text is shown then.
+        // A module-load table (MW24): every source. required: true only names why it did not read; no story text is shown then.
         var story = AreaStartingHero.Table(stack, StoryStatePath, ContentLoadPhase.ModuleLoaded, required: true, out var storyRead);
         var stories = new Dictionary<int, string>();
         foreach (var message in story?.Messages ?? [])

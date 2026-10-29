@@ -169,7 +169,7 @@ public sealed class AreaSaveList
     }
 
     /// <summary>The details a save records: the hero's name and level (or the diagnostic profile), the location and the game time;
-    /// ARC-UI-067: the hero's portrait and the story state, as the original's save info (ledger MW17).</summary>
+    /// ARC-UI-067: the hero's portrait and the story state, as the original's save info (ledger MW22).</summary>
     public static GameSaveSummary Summary(GameSessionOwner session, string description, string location)
     {
         ArgumentNullException.ThrowIfNull(session);

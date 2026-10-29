@@ -372,7 +372,7 @@ is not separately synced. One process per slot; there is no cross-process lock.
 `NAME.meta.json` and an optional preview `NAME.png`. The rules are the original's
 ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)). The details file (schema 2 since ARC-UI-067) holds the
 description, hero name, level, place, map, game date and time with seconds, the hero's portrait id and the story state, the facts the
-original's save info keeps ([MW17](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)); a schema 1 file still reads, with
+original's save info keeps ([MW22](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)); a schema 1 file still reads, with
 portrait 0, no story state and second 0.
 
 | Entry | Contract |

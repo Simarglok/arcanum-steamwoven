@@ -1656,7 +1656,7 @@ window's frame, buttons and list are the original's with the game's art (below),
   the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
   the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
   saves each window's picture to an ignored path (`-load` / `-save` added to the name).
-- **Picture and info (ARC-UI-067,** [ledger MW17–MW20](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the selected
+- **Picture and info (ARC-UI-067,** [ledger MW22–MW25](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the selected
   save's picture at its own size from the preview's corner (281, 96); over it, while the info display is on, the hero's name, the
   small portrait at (484, 139), "Level N" (MainMenu.mes 5051), the description (the auto-save's "Auto-Save"), the place (5050 when
   it has no name), the date ("%d/%d/%d" in the locale's order) and time ("%02d:%02d:%02d") ending at x 448, and the story state's

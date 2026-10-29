@@ -44,7 +44,7 @@ public readonly record struct GameSaveTime(long Year, int Month, int Day, int Ho
 
 /// <summary>The player-facing details of one save, supplied by the host (the session holds no hero name or map title).
 /// Texts are single-line and bounded by <see cref="GameSaveLimits"/>. ARC-UI-067: the hero's portrait id (0 for none) and the story
-/// state (null in a details file of schema 1, which did not record it), as the original's save info holds them (ledger MW17).</summary>
+/// state (null in a details file of schema 1, which did not record it), as the original's save info holds them (ledger MW22).</summary>
 public sealed record GameSaveSummary(string Description, string HeroName, int Level, string Location, int RuntimeMap, GameSaveTime GameTime,
     int Portrait = 0, int? StoryState = null);
 

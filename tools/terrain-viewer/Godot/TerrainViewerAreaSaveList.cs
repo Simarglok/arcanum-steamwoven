@@ -268,8 +268,8 @@ public partial class TerrainViewerApp
             Mode = list.Mode.ToString(), _saveListArtContent!.Detail, Rows = shown, Top = art.TopForSelfTest, list.Selected }));
     }
 
-    /// <summary>ARC-UI-067: the smokes' info display part on a selected save with details: its texts at the exe's places (MW19) and
-    /// its portrait; a click on the toggle hides them with the button down and the next shows them again (MW20).
+    /// <summary>ARC-UI-067: the smokes' info display part on a selected save with details: its texts at the exe's places (MW24) and
+    /// its portrait; a click on the toggle hides them with the button down and the next shows them again (MW25).
     /// ARC_AREA_SAVE_CAPTURE adds "-info" before the extension.</summary>
     private async Task SaveInfoForSmoke(Action<bool, string> require, Func<Vector2, Task> click)
     {
