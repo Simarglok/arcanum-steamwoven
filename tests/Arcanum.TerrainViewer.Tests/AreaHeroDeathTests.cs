@@ -31,7 +31,7 @@ public sealed class AreaHeroDeathTests
         public bool Lasting { get; set; }
         public string? Reset(out bool lasting) { Calls.Add("reset"); lasting = Lasting; return Refusal; }
         public LifecycleRuleProfile Rules { get; set; } = LifecycleRuleProfile.Steamwoven;
-        public string? LastSave { get; set; }
+        public string? HeroSave { get; set; }
         public string? LoadRefusal { get; set; }
         public bool LoadSettled { get; set; } = true;
         public void Ask(string save, string? notice) => Calls.Add($"ask {save}" + (notice is null ? "" : " " + notice));
@@ -104,7 +104,7 @@ public sealed class AreaHeroDeathTests
     {
         var (death, host) = Died();
         host.Slides = AreaSlideTable.None("t");
-        host.LastSave = save; host.Rules = rules;
+        host.HeroSave = save; host.Rules = rules;
         death.Tick(AreaHeroDeath.DeathDelay, host); death.Tick(AreaHeroDeath.FadeTime, host);
         return (death, host);
     }
@@ -190,16 +190,82 @@ public sealed class AreaHeroDeathTests
         var (none, other) = ShowEnded(null, LifecycleRuleProfile.Steamwoven);
         Assert.AreEqual(AreaDeathStage.Reset, none.Stage, "nothing to load: the reset");
         CollectionAssert.AreEqual(new[] { "windows", "fade out 2000", "reset" }, other.Calls);
-        // After the slides the box comes at the same point.
+        // Without a save of this hero the slide plays as the original's and the game resets.
         var (shown, slides) = Died();
-        slides.LastSave = "slot0002";
         shown.Tick(AreaHeroDeath.DeathDelay, slides); shown.Tick(AreaHeroDeath.FadeTime, slides); shown.Tick(AreaHeroDeath.FadeTime, slides);
+        Assert.AreEqual(AreaDeathStage.Slide, shown.Stage);
         Assert.IsTrue(shown.Input(true, slides));
         shown.Tick(AreaHeroDeath.FadeTime, slides);
-        Assert.AreEqual(AreaDeathStage.Asking, shown.Stage);
-        CollectionAssert.AreEqual(new[] { "end slides", "ask slot0002" }, slides.Calls.TakeLast(2).ToArray());
-        shown.Stop(true);
-        Assert.IsNull(shown.OfferedSave);
+        Assert.AreEqual(AreaDeathStage.Reset, shown.Stage);
+        Assert.IsFalse(slides.Calls.Any(call => call.StartsWith("ask", StringComparison.Ordinal)));
+    }
+
+    /// <summary>A death of a hero with a save whose slide has just faded in (the box asks over it).</summary>
+    private static (AreaHeroDeath Death, Host Host) AskedOverTheSlide(string save)
+    {
+        var (death, host) = Died();
+        host.HeroSave = save;
+        death.Tick(AreaHeroDeath.DeathDelay, host); death.Tick(AreaHeroDeath.FadeTime, host); death.Tick(AreaHeroDeath.FadeTime, host);
+        return (death, host);
+    }
+
+    [TestMethod]
+    public void The_box_asks_over_the_faded_in_slide_and_yes_loads_while_the_slide_fades_out()
+    {
+        var (death, host) = AskedOverTheSlide("slot0007");
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage, "the box asks as soon as the slide has faded in");
+        Assert.AreEqual("slot0007", death.OfferedSave);
+        Assert.IsNotNull(death.Slide);
+        CollectionAssert.AreEqual(new[] { "show slide/death.bmp", "fade in 2000", "voice sound/speech/slide/DeathSound.mp3", "ask slot0007" },
+            host.Calls.TakeLast(4).ToArray(), "the voice plays under the box");
+        // Neither the voice's end nor a key ends the slide while the box asks.
+        host.VoicePlaying = false;
+        death.Tick(10_000, host);
+        Assert.IsFalse(death.Input(false, host));
+        Assert.AreEqual(AreaDeathStage.Asking, death.Stage);
+        host.LoadSettled = false;
+        Assert.IsTrue(death.Answer(true, host));
+        Assert.AreEqual(AreaDeathStage.Loading, death.Stage);
+        CollectionAssert.AreEqual(new[] { "load slot0007", "end ask", "end slide", "fade out 2000" }, host.Calls.TakeLast(4).ToArray(),
+            "the save loads while the slide fades to black");
+        host.LoadSettled = true; host.HeroDead = false;
+        death.Tick(AreaHeroDeath.FadeTime - 16, host);
+        Assert.AreEqual(AreaDeathStage.Loading, death.Stage, "the fade to black ends first");
+        death.Tick(16, host);
+        Assert.AreEqual(AreaDeathStage.MenuFadeIn, death.Stage);
+        CollectionAssert.AreEqual(new[] { "end slides", "fade in 2000" }, host.Calls.TakeLast(2).ToArray(), "the slide's music stops, the loaded game fades in");
+        death.Tick(AreaHeroDeath.FadeTime, host);
+        Assert.AreEqual(AreaDeathStage.Watching, death.Stage);
+        Assert.IsFalse(host.Calls.Contains("reset"));
+    }
+
+    [TestMethod]
+    public void No_over_the_slide_fades_it_out_and_resets_without_asking_again()
+    {
+        var (death, host) = AskedOverTheSlide("quicksave");
+        Assert.IsTrue(death.Answer(false, host));
+        Assert.AreEqual(AreaDeathStage.SlideOut, death.Stage, "the slide fades out as the original's");
+        death.Tick(AreaHeroDeath.FadeTime, host);
+        Assert.AreEqual(AreaDeathStage.Reset, death.Stage, "then the reset, no second box");
+        CollectionAssert.AreEqual(new[] { "end ask", "end slide", "fade out 2000", "end slides", "reset" }, host.Calls.TakeLast(5).ToArray());
+        Assert.AreEqual(1, host.Calls.Count(call => call.StartsWith("ask", StringComparison.Ordinal)));
+        // A load that brought no living hero asks again over the black screen; No then fades the slide out and resets.
+        var (again, other) = AskedOverTheSlide("slot0001");
+        again.Answer(true, other);
+        again.Tick(AreaHeroDeath.FadeTime, other);
+        Assert.AreEqual(AreaDeathStage.Asking, again.Stage);
+        Assert.AreEqual("ask slot0001 " + AreaHeroDeath.NoLivingHero, other.Calls[^1]);
+        Assert.AreEqual("end slides", other.Calls[^2], "the faded-out slide ends before the box asks again");
+        Assert.IsNull(again.Slide);
+        Assert.IsTrue(again.Answer(false, other));
+        Assert.AreEqual(AreaDeathStage.Reset, again.Stage, "over the black screen No resets at once");
+        Assert.AreEqual(2, other.Calls.Count(call => call.StartsWith("ask", StringComparison.Ordinal)));
+        // Original never asks over the slide either.
+        var (original, plain) = Died();
+        plain.HeroSave = "slot0002"; plain.Rules = LifecycleRuleProfile.Original;
+        original.Tick(AreaHeroDeath.DeathDelay, plain); original.Tick(AreaHeroDeath.FadeTime, plain); original.Tick(AreaHeroDeath.FadeTime, plain);
+        Assert.AreEqual(AreaDeathStage.Slide, original.Stage);
+        Assert.IsFalse(plain.Calls.Any(call => call.StartsWith("ask", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -392,7 +458,7 @@ public sealed class AreaHeroDeathTests
         public void EndSlides() => inner.EndSlides();
         public string? Reset(out bool lasting) { lasting = false; death.MenuReady(this); return null; }
         public LifecycleRuleProfile Rules => inner.Rules;
-        public string? LastSave => inner.LastSave;
+        public string? HeroSave => inner.HeroSave;
         public bool LoadSettled => inner.LoadSettled;
         public void Ask(string save, string? notice) => inner.Ask(save, notice);
         public void EndAsk() => inner.EndAsk();

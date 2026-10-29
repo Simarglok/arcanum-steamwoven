@@ -187,4 +187,19 @@ public sealed class AreaSaveList
             level, Fit(location, limits.MaxLocationLength), session.QueryActor().Map.RuntimeMap,
             new(clock.Year, clock.Month, clock.DayOfMonth, clock.Hour, clock.Minute, clock.Second), hero?.Portrait ?? 0, session.QueryStoryState());
     }
+
+    /// <summary>
+    /// ARC-WORLD-120 (owner decision): the newest save of the hero <paramref name="hero"/> describes (the summary a save of the running
+    /// session would record), or null when the list holds none. A save is this hero's when its details name the same hero (ordinal)
+    /// and, when both record a portrait, the same portrait (a details file of schema 1 records none). A save without readable
+    /// details, or with details written for another snapshot (stale), is no hero's. Newest by file date (ties: the higher name), as <see cref="GameSaveLibrary.Latest"/> orders.
+    /// </summary>
+    public static GameSaveEntry? HeroSave(IEnumerable<GameSaveEntry> saves, GameSaveSummary hero)
+    {
+        ArgumentNullException.ThrowIfNull(saves);
+        ArgumentNullException.ThrowIfNull(hero);
+        return saves.Where(entry => entry.Details == GameSaveDetails.Present && entry.Summary is { } saved && string.Equals(saved.HeroName, hero.HeroName, StringComparison.Ordinal)
+                && (saved.Portrait == 0 || hero.Portrait == 0 || saved.Portrait == hero.Portrait))
+            .OrderByDescending(entry => entry.SavedAtUtc).ThenByDescending(entry => entry.Name, StringComparer.Ordinal).FirstOrDefault();
+    }
 }

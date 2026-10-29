@@ -93,9 +93,11 @@ public enum AreaDeathStage
     Slide,
     /// <summary>The slide fades out.</summary>
     SlideOut,
-    /// <summary>ARC-UI-028 (Steamwoven only): the black screen asks whether to load the newest save.</summary>
+    /// <summary>ARC-UI-028 (Steamwoven only): the box asks whether to load the hero's newest save; ARC-WORLD-120: over the shown
+    /// death slide (over the black screen when no slide showed).</summary>
     Asking,
-    /// <summary>ARC-UI-028: the newest save loads under the black screen (a save on another map loads that map first).</summary>
+    /// <summary>ARC-UI-028: the hero's newest save loads under the black screen (a save on another map, or beyond the shown window
+    /// of this one, loads that map first); ARC-WORLD-120: the slide fades to black meanwhile.</summary>
     Loading,
     /// <summary>The game resets to the main menu; the screen stays black until the menu is there.</summary>
     Reset,
@@ -133,10 +135,11 @@ public interface IAreaDeathHost
     string? Reset(out bool lasting);
     /// <summary>ARC-UI-028: the session's rule setting (the settings' one when no session is there).</summary>
     LifecycleRuleProfile Rules { get; }
-    /// <summary>ARC-UI-028: the newest save's name, null when there is none.</summary>
-    string? LastSave { get; }
-    /// <summary>ARC-UI-028: shows the box over the black screen asking whether to load <paramref name="save"/>, with the
-    /// <paramref name="notice"/> of a refused load (null: none); a box shown already is shown again.</summary>
+    /// <summary>ARC-WORLD-120: the name of the newest save of the dead hero (the owner's rule: only this hero's saves are offered),
+    /// null when there is none.</summary>
+    string? HeroSave { get; }
+    /// <summary>ARC-UI-028: shows the box asking whether to load <paramref name="save"/>, with the <paramref name="notice"/> of a
+    /// refused load (null: none); a box shown already is shown again. ARC-WORLD-120: over the shown slide, else the black screen.</summary>
     void Ask(string save, string? notice);
     /// <summary>ARC-UI-028: the box goes.</summary>
     void EndAsk();
@@ -160,11 +163,13 @@ public interface IAreaDeathHost
 /// is missing is skipped. Then the game resets to the main menu (whose Escape exits, MM6), which fades in (2 s). There is no
 /// window with a choice in the original: a load is the main menu's.
 /// ARC-UI-028 (a Steamwoven addition the owner asked for; <see cref="LifecycleRuleProfile.DeathResetsToMainMenu"/> keeps the
-/// original under the Original setting): at the point of the reset, when a save exists, the black screen asks in a box like the
-/// original's quit box (SF3) whether to load the newest save. Yes loads it as the newest-save key does and the loaded game fades in
-/// (2 s) once its map is there; a refused load, or one that brought no living hero, keeps the box with the reason; No resets
-/// as the original. Without a save the
-/// original's reset follows at once. Caller-serialized; the host ticks it every frame.
+/// original under the Original setting), as the owner settled it in ARC-WORLD-120: when the dead hero has a save, the box asks
+/// whether to load the newest of them as soon as the death slide has faded in (its voice and the slides' music go on under it;
+/// the slide no longer ends on a key or the voice's end); when no slide showed, at the point of the reset over the black screen.
+/// Yes loads it as the newest-save key does while the slide fades to black, and the loaded game fades in (2 s) once its map is
+/// there; a refused load, or one that brought no living hero, keeps the box with the reason; No ends the slide as the original
+/// does (it fades out) and resets. Without a save of this hero the original's show and reset follow. Caller-serialized; the host
+/// ticks it every frame.
 /// </summary>
 public sealed class AreaHeroDeath
 {
@@ -173,8 +178,8 @@ public sealed class AreaHeroDeath
     public const int FadeTime = 2000;
     public const int DefaultSlide = 0;
     /// <summary>ARC-UI-028: the box's question, the project's text (the game's message files hold none that asks this; its buttons
-    /// are the quit box's Yes and No).</summary>
-    public const string LoadQuestion = "You have died. Load the newest save?";
+    /// are the quit box's Yes and No). ARC-WORLD-120: only the dead hero's saves are offered.</summary>
+    public const string LoadQuestion = "You have died. Load this hero's last save?";
     /// <summary>ARC-UI-028: the box's notice when a load ended without a living hero.</summary>
     public const string NoLivingHero = "the load brought no living hero (the save's map did not load, or its hero is dead)";
     /// <summary>The original's slide queue holds up to 100 slides.</summary>
@@ -189,6 +194,8 @@ public sealed class AreaHeroDeath
     private AreaSlidePair? _slide;
     private double _resetElapsed;
     private string? _save;
+    // ARC-WORLD-120: the box asked during this death (over the slide or the black screen), so the end of the show resets.
+    private bool _asked;
 
     public AreaDeathStage Stage { get; private set; }
     /// <summary>The time left in a waiting or fading stage (ms).</summary>
@@ -247,8 +254,11 @@ public sealed class AreaHeroDeath
             case AreaDeathStage.SlideIn:
                 if ((Remaining -= milliseconds) > 0) return;
                 Stage = AreaDeathStage.Slide;
+                var voiced = host.StartVoice(_slide!);
+                // ARC-WORLD-120: the box asks over the slide, which stays until the answer.
+                if (Offer(host)) return;
                 // Without a voice the slide ends at once (PD7).
-                if (!host.StartVoice(_slide!)) EndSlide(host);
+                if (!voiced) EndSlide(host);
                 return;
             case AreaDeathStage.Slide:
                 if (!host.VoicePlaying) EndSlide(host);
@@ -265,18 +275,23 @@ public sealed class AreaHeroDeath
                 BeginReset(host);
                 return;
             case AreaDeathStage.Loading:
-                // Waiting for the loaded game's map; a load that never settles gives up as a reset does.
+                // The slide's fade to black first; then the loaded game's map. A load that never settles gives up as a reset does.
+                Remaining -= milliseconds;
                 if (!host.LoadSettled && (_resetElapsed += milliseconds) < ResetTimeout) return;
+                if (Remaining > 0) return;
                 // A load that brought no living hero (the other map failed and the old game came back, or the save's hero is
                 // dead) asks again, with why.
                 if (host.LoadSettled && host.HeroDead)
                 {
+                    // The slide faded out meanwhile: the box asks again over the black screen.
+                    if (_slide is not null) { host.EndSlides(); _slide = null; }
                     Loaded = false; LoadRefusal = NoLivingHero;
                     Stage = AreaDeathStage.Asking;
                     host.Ask(_save!, NoLivingHero);
                     return;
                 }
                 LoadAbandoned = !host.LoadSettled;
+                if (_slide is not null) { host.EndSlides(); _slide = null; }
                 host.Fade(false, FadeTime);
                 Stage = AreaDeathStage.MenuFadeIn; Remaining = FadeTime;
                 return;
@@ -300,16 +315,25 @@ public sealed class AreaHeroDeath
     }
 
     /// <summary>ARC-UI-028: the box's answer (Yes, Return or Y; No, Escape or N). Yes loads the offered save, or keeps the box with
-    /// the refusal; No resets as the original. True when it acted; in any other stage it does nothing.</summary>
+    /// the refusal; No resets as the original. ARC-WORLD-120: a slide still shown fades out first, on Yes while the save loads, on No
+    /// before the reset. True when it acted; in any other stage it does nothing.</summary>
     public bool Answer(bool yes, IAreaDeathHost host)
     {
         ArgumentNullException.ThrowIfNull(host);
         if (Stage != AreaDeathStage.Asking) return false;
-        if (!yes) { LoadRefusal = null; host.EndAsk(); BeginReset(host); return true; }
+        if (!yes)
+        {
+            LoadRefusal = null; host.EndAsk();
+            if (_slide is not null) { _stopShow = true; EndSlide(host); }
+            else BeginReset(host);
+            return true;
+        }
         if (host.LoadLastSave(_save!) is { } refused) { LoadRefusal = refused; host.Ask(_save!, refused); return true; }
         LoadRefusal = null; Loaded = true;
         host.EndAsk();
-        Stage = AreaDeathStage.Loading; Remaining = 0; _resetElapsed = 0;
+        Remaining = 0; _resetElapsed = 0;
+        if (_slide is not null) { host.EndSlide(); host.Fade(true, FadeTime); Remaining = FadeTime; }
+        Stage = AreaDeathStage.Loading;
         return true;
     }
 
@@ -329,7 +353,7 @@ public sealed class AreaHeroDeath
         host.CloseWindows();
         if (host.MenuOpen) { host.CloseMenu(); Remaining = MenuRetryDelay; return; }
         _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetElapsed = 0;
-        _save = null; LoadRefusal = null; Loaded = false; LoadAbandoned = false;
+        _save = null; _asked = false; LoadRefusal = null; Loaded = false; LoadAbandoned = false;
         if (host.Slides.Loaded) _queue.Add(DefaultSlide);
         host.Fade(true, FadeTime);
         Stage = AreaDeathStage.FadeOut; Remaining = FadeTime;
@@ -366,17 +390,23 @@ public sealed class AreaHeroDeath
         EndOfShow(host);
     }
 
-    /// <summary>The point of the original's reset: under the Steamwoven setting, with a save there, the box asks first (ARC-UI-028).</summary>
+    /// <summary>The point of the original's reset: under the Steamwoven setting, with a save of this hero there and no box shown
+    /// over a slide, the box asks first (ARC-UI-028).</summary>
     private void EndOfShow(IAreaDeathHost host)
     {
-        if (!host.Rules.DeathResetsToMainMenu && host.LastSave is { } save)
-        {
-            _save = save;
-            Stage = AreaDeathStage.Asking; Remaining = 0;
-            host.Ask(save, null);
-            return;
-        }
+        if (!_asked && Offer(host)) return;
         BeginReset(host);
+    }
+
+    /// <summary>ARC-UI-028 / ARC-WORLD-120: under the Steamwoven setting, once per death, the box asks to load the hero's newest save
+    /// when there is one; true when it asks.</summary>
+    private bool Offer(IAreaDeathHost host)
+    {
+        if (_asked || host.Rules.DeathResetsToMainMenu || host.HeroSave is not { } save) return false;
+        _save = save; _asked = true;
+        Stage = AreaDeathStage.Asking; Remaining = 0;
+        host.Ask(save, null);
+        return true;
     }
 
     private void BeginReset(IAreaDeathHost host)
@@ -401,6 +431,6 @@ public sealed class AreaHeroDeath
     /// caller's to clear.</summary>
     public void Stop(bool heroDead)
     {
-        Stage = AreaDeathStage.Watching; Remaining = 0; _wasDead = heroDead; _slide = null; _stopShow = false; _save = null;
+        Stage = AreaDeathStage.Watching; Remaining = 0; _wasDead = heroDead; _slide = null; _stopShow = false; _save = null; _asked = false;
     }
 }

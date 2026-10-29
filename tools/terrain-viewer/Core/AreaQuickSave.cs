@@ -95,6 +95,17 @@ public static class AreaQuickSave
             $"quick loaded: map {actor.Map.RuntimeMap} cell ({actor.Cell.X},{actor.Cell.Y}), session rev {restored.Owner.Version.Revision}");
     }
 
+    /// <summary>ARC-WORLD-120: true when <paramref name="cell"/> lies in one of the shown map's core sectors. A map too large to load
+    /// whole shows a window of sectors around the actor (ARC-RENDER-024), and a save on that map but beyond the window is loaded with
+    /// the window moved to its cell, as a save on another map is loaded with that map, instead of being refused as not admitted.</summary>
+    public static bool InShownSectors(IEnumerable<Arcanum.Data.Area.AreaSectorCoordinate> coreSectors, Arcanum.Simulation.Movement.CellCoord cell)
+    {
+        ArgumentNullException.ThrowIfNull(coreSectors);
+        if (cell.X < 0 || cell.Y < 0) return false;
+        var (x, y) = (cell.X >> 6, cell.Y >> 6);
+        return coreSectors.Any(sector => sector.X == x && sector.Y == y);
+    }
+
     private static AreaHeroLoad? HeroTable(GameSessionSnapshot snapshot, AreaHeroLoad? tables) =>
         snapshot.Hero is not null && tables is { Status: AreaHeroStatus.Ready } ? tables : null;
 

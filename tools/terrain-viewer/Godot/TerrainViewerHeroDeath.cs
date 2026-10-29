@@ -13,9 +13,11 @@ namespace Arcanum.TerrainViewer;
 // and the slides' music; then the game ends as a quit does: the start scene loads from the launch arguments with a fresh session
 // and the main menu reopens, fading in. There is no screen with a choice in the original: a load is the main menu's. Automated runs
 // (self-tests, native smokes) keep it off unless their own check turns it on, as many of them kill or wound the hero for other checks.
-// ARC-UI-028 (Steamwoven addition, Original keeps the reset): before the reset, when the save list has a save, a box like the quit
-// box asks over the black screen whether to load the newest one; Yes (Y, Return, the button or the controller's confirm) loads it as
-// F8 does and the loaded game fades in, No (N, Escape, the button or cancel) resets to the main menu as the original.
+// ARC-UI-028 (Steamwoven addition, Original keeps the reset): a box asks whether to load a save; Yes (Y, Return, the button or the
+// controller's confirm) loads it as F8 does and the loaded game fades in, No (N, Escape, the button or cancel) resets to the main menu
+// as the original. ARC-WORLD-120 (owner decision): the box is the original's dialog box (DialogueBox, Lil_Accept, Lil_Cancel; DB1–DB4)
+// over the death slide once it has faded in, it offers only the dead hero's newest save, and without one the original's show and reset
+// follow; the load of a save beyond the shown window of the main map moves the window to it (D1).
 public partial class TerrainViewerApp
 {
     /// <summary>The music the original plays under the slides (PD6).</summary>
@@ -34,6 +36,9 @@ public partial class TerrainViewerApp
     private Func<bool>? _deathVoicePlayingForSelfTest;
     private AreaSlideTable? _deathSlidesForSelfTest;
     private string? _heroDeathStatus;
+    private AreaDialogBoxContent? _dialogBoxContent;
+    private AreaDialogBoxArt? _dialogBoxArt;
+    private string? _dialogBoxModule;
 
     /// <summary>The death screen covers the game: it owns the input and the world stands still under it.</summary>
     private bool HeroDeathCovering => _heroDeath.Covering;
@@ -153,6 +158,41 @@ public partial class TerrainViewerApp
         return _heroDeathPanel;
     }
 
+    /// <summary>ARC-WORLD-120: gives the death panel the dialog box's art of the shown module, read once a module; nothing without a
+    /// game folder (the self-test) or when it did not read (the diagnostic box then asks).</summary>
+    private void AttachDeathDialogArt(AreaDeathPanel panel)
+    {
+        var module = _arguments?.ModulePath;
+        if (SelfTestBootstrap || module is null) return;
+        if (_dialogBoxContent is null || module != _dialogBoxModule)
+        {
+            _dialogBoxModule = module; _dialogBoxArt = null;
+            _dialogBoxContent = AreaDialogBoxContent.Load(module);
+            GD.Print("ARC-WORLD-120 dialog box art " + _dialogBoxContent.Detail);
+        }
+        if (_dialogBoxArt is { } built) { panel.SetDialogArt(built); return; }
+        if (_dialogBoxContent.Font is not { } font) return;
+        var art = _dialogBoxContent.Art;
+        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
+        var glyphs = art[AreaDialogBoxLayout.FontArt].Frames.Select((frame, index) => (frame, index)).Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0)
+            .ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
+        panel.SetDialogArt(_dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
+            new Dictionary<int, IReadOnlyList<Texture2D>> { [AreaDialogBoxLayout.AcceptArt] = Frames(AreaDialogBoxLayout.AcceptArt), [AreaDialogBoxLayout.CancelArt] = Frames(AreaDialogBoxLayout.CancelArt) },
+            font, glyphs, _dialogBoxContent.LineHeight));
+    }
+
+    /// <summary>ARC-WORLD-120: the newest save of the session's hero (the details a save of it would record), null without a session or
+    /// such a save.</summary>
+    private string? DeadHeroSave()
+    {
+        if (_areaSession is not { } session) return null;
+        var list = SaveLibrary.List();
+        var hero = AreaSaveList.Summary(session, "", "");
+        var found = list.Failure == GameSaveFailure.None ? AreaSaveList.HeroSave(list.Entries, hero) : null;
+        GD.Print($"ARC-WORLD-120 hero death save hero={hero.HeroName} portrait={hero.Portrait} listed={list.Entries.Count} list={list.Failure} found={found?.Name ?? "-"}");
+        return found?.Name;
+    }
+
     /// <summary>A test's or smoke's cleanup: drops a death in any stage with its screen and sounds.</summary>
     private void StopHeroDeath()
     {
@@ -256,16 +296,25 @@ public partial class TerrainViewerApp
         }
 
         public LifecycleRuleProfile Rules => (app._areaSession?.Rules ?? GameRules.For(app._ruleMode)).Lifecycle;
-        public string? LastSave => app.SaveLibrary.Latest()?.Name;
+        public string? HeroSave => app.DeadHeroSave();
         public bool LoadSettled => app._mapHandoff is null;
 
         public void Ask(string save, string? notice)
         {
             var details = app.SaveLibrary.List().Entries.FirstOrDefault(entry => string.Equals(entry.Name, save, StringComparison.Ordinal));
-            app.DeathPanel().ShowChoice(AreaHeroDeath.LoadQuestion, details is { } shown ? $"{shown.DisplayDescription} ({shown.Name})" : save,
+            var panel = app.DeathPanel();
+            app.AttachDeathDialogArt(panel);
+            // ARC-WORLD-120: the original's dialog box: the question, then the save's description, or a refused load's reason in its
+            // place (the box holds four lines).
+            if (panel.ShowDialog(AreaHeroDeath.LoadQuestion + "\n" + (notice ?? details?.DisplayDescription ?? save)))
+            {
+                GD.Print($"ARC-WORLD-120 hero death asks in the dialog box save={save}" + (notice is null ? "" : " notice=" + notice));
+                return;
+            }
+            panel.ShowChoice(AreaHeroDeath.LoadQuestion, details is { } shown ? $"{shown.DisplayDescription} ({shown.Name})" : save,
                 $"Yes  ({AreaMainMenu.YesLetter})", $"No  ({AreaMainMenu.NoLetter})", notice ?? "",
-                "Y, Return or Yes loads the newest save; N, No or Escape ends the game to the main menu | PROJECT window (Steamwoven setting; "
-                + "the original resets to the main menu)");
+                "Y, Return or Yes loads this hero's last save; N, No or Escape ends the game to the main menu | diagnostic box (no game art; "
+                + "Steamwoven setting, the original resets to the main menu)");
             GD.Print($"ARC-UI-028 hero death asks to load save={save}" + (notice is null ? "" : " notice=" + notice));
         }
 

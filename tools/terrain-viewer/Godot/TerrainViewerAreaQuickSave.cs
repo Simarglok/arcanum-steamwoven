@@ -24,7 +24,9 @@ namespace Arcanum.TerrainViewer;
 // stands on another map that map mode can open loads that map through the ordinary load path, carrying the loaded
 // session and standing the actor on the saved cell (the running session is kept until the map is published with the
 // loaded one, and comes back with the origin map when the destination does not load or refuses the loaded session; the
-// saved cell and that map's inventory seed can only be checked once it is loaded).
+// saved cell and that map's inventory seed can only be checked once it is loaded). ARC-WORLD-120: a save on the shown map whose
+// cell lies beyond the shown window of a map too large to load whole (the main map, ARC-RENDER-024) loads the same way, the
+// window opening around the saved cell; it was refused as not admitted before (bug report triage D1).
 // ARC-UI-010: the slot is the save list's auto slot (the original's SlotAuto "Auto-Save"): F7 writes it with its details and a
 // preview, and F8 loads the newest save of the list by file date, which is the auto slot only when it is the newest (ledger
 // SL1, SL2). The save and load window (TerrainViewerAreaSaveList) writes, loads and deletes the other saves of the same folder.
@@ -156,11 +158,14 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
         var maps = AreaRuntimes();
-        // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed.
+        // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed. ARC-WORLD-120: so is
+        // a save on the shown map beyond its window (a map too large to load whole), the window then opening around the saved cell.
         AreaMapDestination? elsewhere = null;
         string? Refusal(ActorPlacement placement)
         {
-            if (_readyMapName is null || maps.ContainsKey(placement.Map.RuntimeMap)) return PlacementRefusal(maps, placement);
+            if (_readyMapName is null || (maps.TryGetValue(placement.Map.RuntimeMap, out var shown) && (_mapWindowCentre is null
+                || AreaQuickSave.InShownSectors(shown.Snapshot.Sectors.Where(s => s.Scope == Arcanum.Data.Area.AreaScope.Core && s.Present).Select(s => s.Coordinate), placement.Cell))))
+                return PlacementRefusal(maps, placement);
             if (_mapTransfers?.Destinations.TryGetValue(placement.Map.RuntimeMap, out var destination) != true) return "map mode cannot open that map";
             elsewhere = destination; return null;
         }
