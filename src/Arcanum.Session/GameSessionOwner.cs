@@ -787,7 +787,7 @@ public sealed partial class GameSessionOwner : IDisposable
                          .Select(g => (g.Entity, Origin: g.Origin!.Value, _inventory.AddedTo(_inventory.NpcOf(g.Entity)!).First(e => e.Entity == g.Entity).Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
-            if (item.Origin == map ? listed ? row!.Facts.Kind != item.Kind : !admitted.Source.Window : listed) return Reject(GameSessionFailure.InventoryMismatch);
+            if (item.Origin == map ? (listed ? row!.Facts.Kind != item.Kind : !admitted.Source.Window) : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||

@@ -204,6 +204,8 @@ public sealed class HeroDropStateTests
         Assert.AreEqual(-7, Complexity(owner), "the earlier seed's row is kept");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, window).Disposition);
         Assert.AreEqual(-7, Complexity(owner), "and kept again by the next window");
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.AttachMapInventory(Cave, new([], [cog]) { Window = true }).Failure,
+            "another map's window may not list it");
 
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual(GameSessionFailure.InventoryMismatch, restored.AttachMapInventory(Exterior, window with { Window = false }).Failure);

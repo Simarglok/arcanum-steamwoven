@@ -34,7 +34,8 @@ list an item the session took from the map (a taken, placed or given item, or an
 elsewhere: the map's previous seed's row of that item is kept with the new one (for lookups only, as its complexity, decay flag
 and scripts; it joins no ground and no holder's list), and with no previous seed (a restored game whose window does not reach
 the item) the item has no row and its row-read facts are not read here (NOT READY, as a taken item's wear art). An item a
-window seed does list is checked as in any seed. Before, a window that no longer reached the sector an item was taken from
+window seed does list is checked as in any seed; one it does not list is not checked, so a save of other data is caught
+only for the items its window reaches. Before, a window that no longer reached the sector an item was taken from
 was refused (`InventoryMismatch`), and the scene was published without its inventory and combat hosts: killed NPCs stood,
 the hero was drawn without its armour, nothing could be looted or attacked; a quick load of such a save was refused.
 
