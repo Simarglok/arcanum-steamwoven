@@ -89,6 +89,11 @@ public partial class TerrainViewerApp
             await Hover(view.SlotCentreForSelfTest(2));
             Require(!_messageLog.PaneMode && log.ShownKindForSelfTest == AreaMessageKind.SpellHint && log.IconForSelfTest == Arcanum.Presentation.Hud.HotkeyBarRules.CollegeIcon(spell / 5)
                 && log.DrawnTextsForSelfTest >= 3, $"entering slot 2 shows the spell's hint: {log.ShownKindForSelfTest} texts={log.DrawnTextsForSelfTest}");
+            // ARC-DEV-060: a system pointer move (one parsed as the system's, off the bar) never reaches an automated run's GUI.
+            var dropped = AutomatedPointerGate.Dropped;
+            Godot.Input.ParseInputEvent(new InputEventMouseMotion { Position = away, GlobalPosition = away });
+            await Frames(2);
+            Require(AutomatedPointerGate.Dropped > dropped && log.ShownKindForSelfTest == AreaMessageKind.SpellHint, "a system pointer move kept slot 2's hint");
             hovers.Add($"spell texts={log.DrawnTextsForSelfTest}");
             await Hover(away);
             Require(log.ShownKindForSelfTest != AreaMessageKind.SpellHint, "leaving slot 2 takes the hint away");
