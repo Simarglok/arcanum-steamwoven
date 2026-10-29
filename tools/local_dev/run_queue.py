@@ -569,7 +569,7 @@ def _watch_start(child: subprocess.Popen[bytes], minutes: float, seq: int, check
         now = time.monotonic()
         if ended:
             code = child.returncode
-            if code == 0 and failed_at is None:
+            if code == 0 and failed_at is None and not check.expected:
                 say(f"note: ticket={seq} ended with 0 before a start line; its mode was not checked")
                 return None
             reason.append(f"the command did not start: {failure}" if failed_at is not None else

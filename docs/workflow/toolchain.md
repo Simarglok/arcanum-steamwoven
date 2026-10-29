@@ -65,7 +65,7 @@ it again; a failed start is never a result of the change under test.
   itself and its quiet output may print nothing for minutes), so they are not checked.
 - **Start failure lines.** An argparse usage error (`usage: `, `PROG: error: unrecognized arguments ...`), the viewer's
   `failure stage=Arguments` or `failure stage=GameFolder` (the viewer now also prints every failure it draws on its HUD
-  as `ARC-DEV-059 viewer failure TEXT`), the shell's or `env`'s own `command not found` or `No such file or directory`
+  as `ARC-DEV-059 viewer failure TEXT`, except in the self-test's bootstrap apps, whose failures are expected), the shell's or `env`'s own `command not found` or `No such file or directory`
   (`zsh: command not found: Godot`, `sh: ./x: No such file or directory`; an engine line about a missing file is not
   one), Python's `can't open file` and Godot's `Invalid project path` or `Couldn't load project`. A failure after the start line is the run's result, not a start failure.
 - **`--expect REGEX`** replaces the default start lines (a Python search on each log line), and gives a `dotnet` run a

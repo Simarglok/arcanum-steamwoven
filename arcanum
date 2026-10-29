@@ -200,7 +200,7 @@ def queued(args: argparse.Namespace) -> int:
     """ARC-DEV-033: run one command through the launch queue (docs/workflow/toolchain.md#launch-queue-arc-dev-033)."""
     command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
     # ARC-DEV-059: a quiet run checks its own start (docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029).
-    check = start_check.for_run(args.kind, args.expect, args.start_within)
+    check = start_check.for_run(args.kind, args.expect, args.start_within, command)
     if check is not None and args.verbose and not os.environ.get(run_queue.TICKET_ENV):  # a nested run is never checked
         run_queue.say("note: a --verbose run has no start check; check its start yourself")
     return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose,

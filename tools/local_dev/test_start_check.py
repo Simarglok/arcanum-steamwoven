@@ -24,10 +24,16 @@ class PatternTests(unittest.TestCase):
         for line in (VIEWER_START, "ARC-RENDER-004 load stage=begin smoke=True",
                      "ARC-DEV-043 self-test stage AreaRaster begin t=3ms can-draw=False focused=True forced-draws=0",
                      "export-endpoint: validate ARC-RENDER-007 abc123 evidence=/x", "validate-macos: step build",
-                     "package: fetch origin main", "[   0% ] first_scan_filesystem | Started Project initialization"):
+                     "package: fetch origin main"):
             self.assertEqual(start_check.scan(check, [line]), ("started", line))
         # Godot's banner and the build line also come from the project manager or a start that then fails.
         self.assertIsNone(start_check.scan(check, ["Godot Engine v4.7.2.stable.mono.official", "ARC-DEV-047 build x"]))
+        # Import progress is a start only for an import: a first import also shows it before the viewer's arguments.
+        progress = "[   0% ] first_scan_filesystem | Started Project initialization"
+        self.assertIsNone(start_check.scan(check, [progress]))
+        importing = start_check.for_run("headless", None, None, ["Godot", "--headless", "--import"])
+        assert importing is not None
+        self.assertEqual(start_check.scan(importing, [progress]), ("started", progress))
         # The phase lines' own failures are not starts.
         self.assertIsNone(start_check.scan(check, ["export-endpoint: validate FAILED exit=1", "package: could not start x",
                                                    "package: stopped after 3s", "validate-macos: step build FAILED exit=2 log=/x"]))
@@ -39,7 +45,7 @@ class PatternTests(unittest.TestCase):
                      "arcanum: error: unrecognized arguments: --game-root", "sh: Godot: command not found",
                      "ARC-DEV-059 viewer failure Diagnostic mode unresolved | failure stage=GameFolder code=StartFailed |",
                      "python3: can't open file '/x/smoke.py': [Errno 2] No such file or directory",
-                     "zsh: command not found: Godot", "/bin/sh: line 1: ./run.sh: No such file or directory",
+                     "zsh: command not found: Godot", "zsh:1: command not found: Godot", "/bin/sh: line 1: ./run.sh: No such file or directory",
                      "env: godot: No such file or directory"):
             self.assertEqual(start_check.scan(check, ["Godot Engine v4.7.2", line, VIEWER_START]), ("failed", line))
         # After the start line a failure is the run's result, not a failed start.
@@ -88,10 +94,12 @@ class WrapperStartTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def run_wrapper(self, code: str, *extra: str, kind: str = "headless") -> tuple[subprocess.CompletedProcess, float]:
+    def run_wrapper(self, code: str, *extra: str, kind: str = "headless",
+                    args: tuple[str, ...] = ()) -> tuple[subprocess.CompletedProcess, float]:
         began = time.monotonic()
         result = subprocess.run([sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, *extra, "--",
-                                 sys.executable, "-c", code], capture_output=True, text=True, env=self.env, timeout=90)
+                                 sys.executable, "-c", code, *args], capture_output=True, text=True, env=self.env,
+                                timeout=90)
         return result, time.monotonic() - began
 
     def test_a_run_that_started_runs_to_its_end(self) -> None:
@@ -149,7 +157,7 @@ class WrapperStartTests(unittest.TestCase):
     def test_a_start_line_in_a_progress_line_or_without_a_newline_counts(self) -> None:
         for code in (f"import sys, time; sys.stdout.write('[  1% ] scan\\r'); sys.stdout.flush(); time.sleep(3)",
                      f"import sys; sys.stdout.write({VIEWER_START!r})"):
-            result, _ = self.run_wrapper(code, "--start-within", "2")
+            result, _ = self.run_wrapper(code, "--start-within", "2", args=("--import",))
             self.assertEqual(result.returncode, 0, (code, result.stdout))
             self.assertIn("ARCANUM_QUEUE started ticket=", result.stderr, code)
 
@@ -162,6 +170,8 @@ class WrapperStartTests(unittest.TestCase):
         result, _ = self.run_wrapper("print('Passed!  - Failed: 0, Passed: 3')", "--expect", "^Passed!", kind="dotnet")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("ARCANUM_QUEUE started ticket=", result.stderr)
+        result, _ = self.run_wrapper("print('nothing')", "--expect", "^Passed!", kind="dotnet")
+        self.assertEqual(result.returncode, start_check.FAILED_START_EXIT, result.stdout)  # a given start line is required
         result, _ = self.run_wrapper(f"import time; print({VIEWER_START!r}, flush=True); time.sleep(30)", "--expect",
                                      "^SMOKE ", "--start-within", "1")
         self.assertEqual(result.returncode, start_check.FAILED_START_EXIT, result.stdout)
