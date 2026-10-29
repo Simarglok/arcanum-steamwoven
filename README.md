@@ -244,6 +244,7 @@ are this project's own.
 | Left click on a quick bar slot or recent-action button | Use it (with an item held in the inventory: put the item on the slot) |
 | Right press and drag from a quick bar slot, a spell of the spell pane or a slot of the weapon pane | Move it on the bar, put it on a slot, or drag it off the bar to empty the slot |
 | Click on a follower's portrait | That follower's order menu (a walk order takes the next left click as its tile) |
+| Left click on a spell icon in the five top slots | End that maintained spell (hovering it shows the spell) |
 
 **Inside windows** (the open window takes every key)
 

@@ -1992,7 +1992,9 @@ diagnostic HUD moves below the top strip and the follower portraits and spell pa
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
 the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
-right-button drag). The top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+right-button drag). Since ARC-MAGIC-026 the top strip's five slots are the
+[maintain bar](../world/spell-cast-host.md#the-maintain-bar-arc-magic-026): they show the hero's maintained spells and a click on one
+ends its spell. The top strip's clock is drawn as the art shows it and does nothing yet. Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the

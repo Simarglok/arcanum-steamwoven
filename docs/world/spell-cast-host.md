@@ -412,6 +412,45 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (marker `ARC-UI-035 native-smoke hotkey-hover PASS`); the inventory smoke rests the pointer on a grid item (marker
    `ARC-UI-035 native-smoke inventory-still PASS`).
 
+## The maintain bar (ARC-MAGIC-026)
+
+Magic plan slice MT20b (owner bug report 2026-10-29: the five top slots did not show or end maintained spells;
+[FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006)). The top strip's five slots SplSlt1–5 show the hero's maintained
+spells and a click on one ends its spell (ledger [MB1–MB9](../research/ledger/spell-runs.md#maintain-bar-arc-magic-026), two readers, F2).
+Code: [`MaintainBarRules`](../../src/Arcanum.Simulation/Magic/MaintainBarRules.cs) (Simulation), the session's bar
+(`GameSessionOwner.QueryMaintainBar`, `QueryMaintainBarOpenSlots`, `MaintainBarTakes`, `StopMaintainedSpell` in
+[`GameSessionSpellRuns`](../../src/Arcanum.Session/GameSessionSpellRuns.cs)), `SessionSpellCaster.StopMaintainedSpell`,
+[`AreaMaintainBarLayout`](../../tools/terrain-viewer/Core/AreaMaintainBar.cs) (Core),
+[`AreaMaintainBarView`](../../tools/terrain-viewer/Godot/AreaMaintainBarView.cs) and the host
+[`TerrainViewerMaintainBar`](../../tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs). Tests:
+[`MaintainBarRulesTests`](../../tests/Arcanum.Simulation.Tests/Magic/MaintainBarRulesTests.cs), the bar case of
+[`SessionSpellRunTests`](../../tests/Arcanum.Session.Tests/SessionSpellRunTests.cs) and
+[`AreaMaintainBarTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaMaintainBarTests.cs).
+
+1. **Slots** (MB1, MB7). Five slots, each empty, showing its run, or stopping (its stop asked). The hero's effective intelligence / 4
+   slots are open, at most five (MG12); the others are closed.
+2. **Add** (MB2, MB3). At a maintained magic spell's maintenance tick the scheduler asks the bar for the run (0x4604A0): a run the bar
+   shows in an open slot stays; otherwise the first open slot whose run is none takes it. The session answers against its bar after the
+   notes the acting run rules left so far (a run ended earlier in the same call frees its slot first) and adds the run when the change
+   is committed, with the table. A full bar refuses the run and the scheduler ends it (MG12: the original writes slot −1).
+3. **Remove** (MB4). The run rules' "maintain bar" note (0x4604C0: a run's end, release or failed maintenance) frees the first slot
+   holding the run. A slot whose run the table no longer holds is emptied too (a technical guard: a freed run's id is reused).
+4. **Click** (MB5). The slots are push buttons: a press plays 3000, the release over the slot 3001; the release over a slot showing a run
+   turns it to stopping and interrupts the run through the cast host (0x457110: MAINTAIN turns to END, its ticks go, it is processed);
+   the run's end frees the slot. An empty or stopping slot does nothing. The stopping state is a session change even when the interrupt
+   changes no run.
+5. **Hover** (MB6). The pointer entering a slot that shows a run describes its spell as the hotkey bar's spell entry does (the spell's
+   hint, or its name in a pane's text area).
+6. **Look** (MB8). A slot holding a run (showing or stopping) draws the spell's icon (`HotkeyBarRules.SpellIcon`, idle frame, the down
+   frame while held); an open empty slot its art 188 + i; a closed slot art 188 + i with SP_Plugged 628 + i one pixel up and left, and
+   takes no pointer. The arts load with the bars' art, the icons with the hotkey bar's.
+7. **Closing** (MB8). When the open count drops, each slot it closes while showing a run is clicked, so its spell ends.
+8. **Saving** (MB9). The bar is not saved, like the runs (MT9b): a loaded game starts with an empty bar.
+9. **Smoke.** Inside the cast stage, before the hotkey bar: the hero casts the first maintained college spell (no damage at BEGIN) at
+   itself or the NPC, released at once; slot 0 shows its icon, the closed slots their plugged art, the open ones their slot art;
+   hovering slot 0 describes the spell; a click plays 3000 and 3001, ends the spell and empties the slot (marker
+   `ARC-MAGIC-026 native-smoke maintain-bar PASS`).
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -450,6 +489,10 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The type icon's tables are read without a bound, so an index past them reads the next table or what follows (HK17). | The same within the five tables and the message window's icons; past them no icon (the item's name shows). | — (latent: the installed items stay inside the tables) |
 | An inventory art that does not read leaves the bar with what the art library gives for it (not read). | The type icon. | — |
 | A broken item's inventory art carries the destroyed bit 10 (DU4), whose effect on the drawing was not read. | Drawn as stored; the bit is ignored. | — (not ready) |
+| A full maintain bar, or one with no open slot, writes the run into slot −1 (a neighbouring variable) and answers that it took it; more than five open slots (intelligence 24 and above) index past the table (MB3, MG12). | A full bar refuses the run, so the scheduler ends it; at most five slots open. With intelligence 24 and above the cap allows a sixth maintained spell, which ends at its first tick. | — (out-of-bounds write, fixed in both modes by the owner rule of 2026-10-17) |
+| The maintain bar is saved with the game (MB9). | Not saved, like the runs (MT9b). | — (not ready) |
+| Hovering a maintain slot also marks the run's target (or first target, or parent) as the hovered object (0x43C270, MB6). | Only the spell's description. | — (not ready) |
+| A freed run whose bar note never came keeps its slot, and the next run given its id shows there (no such path read). | A slot whose run the table no longer holds is emptied. | — (technical guard) |
 
 Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Friendly cast.** Goal 73 (the friendly cast) has no end and frees nothing on its refusals.
@@ -477,6 +520,8 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
   0x57C080, IP7–IP9): later slices of ARC-UI-016. The host runs an item's own spells with the item as source since ARC-MAGIC-020
   ([item spell triggers](item-spell-triggers.md)); the weapon's spell pane is [above](#the-weapons-spell-pane-arc-ui-016).
 - The weapon's pane draws no spell icons and shows no hover description (0x5507E0).
+- The maintain bar (ARC-MAGIC-026): the hovered object of a slot's hover (0x43C270), the bar's save with the runs (MT9b), the
+  multiplayer stop message and the second set of slot buttons in their own windows (0x5C6E90, the compact interface).
 - The pick's stand-ins (ARC-MAGIC-021): the hero is no drawn pick target, so the pick finds it only through its tile; the order of
   the objects on one tile is the host's (the hero, then the map's rows in file order; the original's sector list order is not
   read); the dead critters seen through are the whole map's, where the original takes those in a window-sized rectangle around the
