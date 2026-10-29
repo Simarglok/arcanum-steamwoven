@@ -30,6 +30,8 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
     {
+        // ARC-MAGIC-026: a drop of the maintain bar's open count ends the closed slots' spells whether the bars show or not.
+        SyncMaintainClosing();
         if (!GameBarActive)
         {
             if (_gameBarPanel is { Visible: true } hidden)

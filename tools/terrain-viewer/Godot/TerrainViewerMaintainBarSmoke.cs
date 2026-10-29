@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
             for (var i = 1; i < MaintainBarRules.Slots; i++)
             {
                 Require(view!.PluggedForSelfTest(i) == (i >= open), $"slot {i} plugged exactly when closed (open {open})");
-                Require(view.SlotArtForSelfTest(i) == _gameBarPanel!.ArtFrame(AreaMaintainBarLayout.SlotArt(i)), $"slot {i} shows its slot art");
+                Require(view.SlotArtForSelfTest(i) is { } art && art == _gameBarPanel!.ArtFrame(AreaMaintainBarLayout.SlotArt(i)), $"slot {i} shows its slot art");
             }
 
             // The hover describes the spell (as the hotkey bar does), from off the strip first.
@@ -98,7 +98,7 @@ public partial class TerrainViewerApp
                 "the slot played 3000 then 3001: " + string.Join(",", _gameBarSoundsForSelfTest.Select(s => s.Id)));
             Require(_maintainStopsForSelfTest == stops + 1 && session.QuerySpellRuns()[run.Value] is null, "the click ended the spell");
             Require(session.QueryMaintainBar().SameAs(MaintainBar.Empty), "the bar is empty again");
-            Require(view.SlotArtForSelfTest(0) == _gameBarPanel!.ArtFrame(AreaMaintainBarLayout.SlotArt(0)), "slot 0 shows its slot art again");
+            Require(view.SlotArtForSelfTest(0) is { } empty && empty == _gameBarPanel!.ArtFrame(AreaMaintainBarLayout.SlotArt(0)), "slot 0 shows its slot art again");
             GD.Print($"ARC-MAGIC-026 native-smoke maintain-bar PASS spell={spell.Data.Number} target={(at == SessionSpellCaster.Hero ? "hero" : "npc")} "
                 + $"open={open} run={run}");
         }

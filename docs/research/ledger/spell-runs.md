@@ -729,8 +729,9 @@ callers in the in-game handlers 0x54B5D0 and 0x54C8E0; the save and load 0x57BB6
 | MB8 | slot draw (0x553620 → 0x5533C0, 0x553910 → 0x553670; records 0x5C6E40) | The five buttons stand at (281 + 50 i, 3) on the top strip (window 0) with art 188 + i (SplSlt1–5); a second, identical set (0x5C6E90) is drawn in five 32 × 32 windows (0x5C6378, rectangles 0x5C6EE0). A slot with an icon gets the icon as its button art; an emptied slot gets art 188 + i and, at or beyond intelligence / 4 (5 without a PC), art 628 + i (SP_Plugged1–5) blitted one pixel up and left of the button. Disabling a slot: one already plugged stays; an empty one is disabled and plugged; one showing an icon is clicked (0x57C370 at 0x5538F8), so a drop of the open count ends the spell of every slot it closes. Enabling: the plug is drawn over with the strip and the button enabled. | Original |
 | MB9 | save and load (0x57BB60, 0x57BBB0; the Spell-UI module table 0x5C2CB0) | The five entries are saved with the game (state 2 included) and read back on load, each non-empty slot redrawn with its icon; the cached count is not saved. | Original (not modelled: runs and the bar are not saved until MT9b) |
 
-**F0 facts raised:** the maintain bar of [FR-MAGIC-006](../../requirements/combat-magic-tech.md#fr-magic-006) (0x57C290, 0x57C320, 0x57C370,
-0x57C3F0, 0x57C470, 0x57C4B0, 0x57C520, 0x5533C0, 0x553670: F2, implemented but the hovered object and the save). Left at F0: the
+**F0 facts raised:** the maintain bar of [FR-MAGIC-006](../../requirements/combat-magic-tech.md#fr-magic-006): 0x57C290, 0x57C320, 0x57C370,
+0x57C3F0 and 0x57C4B0 at F2, implemented (registry rows; but the hovered object and the save); 0x57C470, 0x57C520, 0x5533C0 and 0x553670 at
+F2, read only (the reset is the session's empty bar, the slot query and the draws the viewer's; no registry row). Left at F0: the
 button library calls 0x5389F0, 0x5387E0, 0x538840 and 0x5388B0 (named by use only), the hovered-object routine 0x43C270 and the
 multiplayer message 0x5295F0.
 

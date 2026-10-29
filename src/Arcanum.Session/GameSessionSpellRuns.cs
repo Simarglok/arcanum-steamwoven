@@ -59,12 +59,12 @@ public sealed partial class GameSessionOwner
     /// <summary>ARC-MAGIC-026: the local player's maintain bar (not saved, like the runs).</summary>
     public MaintainBar QueryMaintainBar() { ThrowIfDisposed(); return _maintainBar; }
 
-    /// <summary>ARC-MAGIC-026: the maintain bar's open slots (0x57C4B0): the hero's effective intelligence / 4, at most 5; 0 without a
-    /// hero.</summary>
+    /// <summary>ARC-MAGIC-026: the maintain bar's open slots (0x57C4B0): the hero's effective intelligence / 4, at most 5; all 5
+    /// without a hero, as the slot draw takes it (0x5533C0).</summary>
     public int QueryMaintainBarOpenSlots()
     {
         ThrowIfDisposed();
-        return HeroEffectiveStat(CharacterStat.Intelligence) is { } intelligence ? MaintainBarRules.OpenSlots(intelligence) : 0;
+        return HeroEffectiveStat(CharacterStat.Intelligence) is { } intelligence ? MaintainBarRules.OpenSlots(intelligence) : MaintainBarRules.Slots;
     }
 
     /// <summary>
@@ -155,16 +155,17 @@ public sealed partial class GameSessionOwner
     private SessionSpellRunResult ActCore(ISpellRunHost host, SessionSpellRunAction action, MaintainBar bar)
     {
         var before = _maintainBar;
-        _maintainBar = bar;
         var system = NewSpellSystem(host);
         _spellRunsBusy = true;
         _activeSpellSystem = system;
-        try { Act(system, action); }
+        try { _maintainBar = bar; Act(system, action); }
         finally { _spellRunsBusy = false; _activeSpellSystem = null; _maintainBar = before; }
         if (!system.Changed(_spellRuns))
         {
             // Its payments come back for the host to apply, so their last cost follows (not saved, no revision).
             _spellLastCost = system.LastCostCharged;
+            // Only the bar can have changed (a clicked slot's stopping state with an interrupt that changed no run; defensive, as an
+            // interrupt of a run the bar holds always sets it).
             var after = MaintainBarAfter(system, bar);
             if (after.SameAs(_maintainBar)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
             if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
@@ -215,6 +216,7 @@ public sealed partial class GameSessionOwner
         finally { _spellRunsBusy = false; _activeSpellSystem = null; }
         if (!system.Changed(_spellRuns))
         {
+            // No bar change without a table change here: a removal comes with its run's end or free, an add with its tick.
             _spellLastCost = system.LastCostCharged;
             _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
             return GameEventHandlerOutcome.Completed;
