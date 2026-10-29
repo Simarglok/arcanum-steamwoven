@@ -1763,7 +1763,8 @@ and layout (below), the other windows the project's.
   under the pointer. The pointer over a label plays 3026, a press 3027, a release over it chooses it; letters, Escape and the
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
-  names them and the window's notice. ARC-UI-059: the options window too (below). The quit box, the save and load, browser, new-character, editor and shop windows keep
+  names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
+  pre-made browser (under New game). The quit box, new-character, editor and shop windows keep
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
@@ -1790,6 +1791,20 @@ and layout (below), the other windows the project's.
   `--sector`; on another map, in the cave, with `--sector` or with a session a transfer carried, Start first loads the
   start scene ([scene flow](#scene-flow-arc-ui-012), ARC-UI-012). The original's start movies, fade, newspaper event and
   random-encounter schedule are not modelled.
+- **Browser's original look (ARC-UI-066,** [ledger MW17–MW21, MW26](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
+  game's art the browser is window 13's screen (`AreaPremadeBrowserArtView`): the strips, the background 766 and the browsed hero
+  as the original draws it: the large portrait at (95, 69), the player name (`Cloister18Font`, red), the gender, race and
+  background names (`morph15font`, red) centred in their fields, the hero's story from `gameback.mes` (its background description,
+  field 0x102: 1039..1050), "Initial Stats" and fifteen stats "ST: 8" of the start's effective values (the stored stats under the
+  race and gender effects), each field filled black first. Start and Back stand in the bottom strip, Previous and Next beside the
+  portrait; they light under the pointer, play 3000 on the press and 3001 on the release and act on a release over themselves.
+  The story breaks into lines as the original's text draw does (MW26) and shows its first 11, as the original's: every installed
+  story is longer (14–18 lines). PROJECT: the hints are not shown; a portrait that does not read leaves its field black. A hero that does not read, and every self-test
+  without a game folder, keeps the diagnostic window. The menu stage checks it after opening the browser
+  (`ARC-UI-066 native-smoke browser art PASS`: the art read, the first hero's texts, its portrait, Next lit under the pointer, a
+  click on Next showing the second hero and on Previous the first again, Back to the new-game window, each story's line count
+  in the PASS line; the menu smoke's new game then starts by a click on Start); `ARC_AREA_PREMADE_CAPTURE=PATH` saves the browser's
+  picture to an ignored path.
 - **Last Save.** Loads the newest save of the [save list](#save-list-arc-ui-010) (F8's choice) through the load path
   and closes the menu; with no save the window stays (the original says nothing; here the window says "no save to
   continue from"); a load refused before anything changes keeps the menu and names the reason. A save of another map
