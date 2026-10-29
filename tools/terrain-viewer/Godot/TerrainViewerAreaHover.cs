@@ -130,7 +130,7 @@ public partial class TerrainViewerApp
         var screen = _hoverPointerForSelfTest ?? GetViewport().GetMousePosition();
         var overGui = _hoverPointerForSelfTest is not null ? _hoverOverGuiForSelfTest : GetViewport().GuiGetHoveredControl() is not null;
         // ARC-DEV-060: an automated run's pointer is only the one its test places; the system pointer resting inside the window is
-        // never over the world (AutomatedPointerGate).
+        // never over the world (the GUI's side: AutomatedPointerGate; a headless run or a self-test's bootstrap app has no gate).
         var overWorld = _pointerInWindow && (_hoverPointerForSelfTest is not null || !AutomatedVisualRun) && !overGui
             && GetViewport().GetVisibleRect().HasPoint(screen);
         // A modal surface or lost focus hides the tooltip; the other click guards (closed gate, lifecycle, pending

@@ -14,7 +14,9 @@ namespace Arcanum.TerrainViewer;
 internal sealed partial class AutomatedPointerGate : Node
 {
     /// <summary>The device of a pointer event a test parses through <c>Input.ParseInputEvent</c> (system mouse events carry
-    /// <see cref="InputEvent.DeviceIdMouse"/>); no handler of the viewer reads a pointer event's device.</summary>
+    /// <see cref="InputEvent.DeviceIdMouse"/>); no handler of the viewer reads a pointer event's device. Buffered motions merge
+    /// without comparing devices, so a parsed test motion must not directly follow a system one (the terrain smoke's follows a
+    /// button event).</summary>
     internal const int TestDevice = 48;
     /// <summary><c>InputEvent::DEVICE_ID_INTERNAL</c> (not bound in C#): the window sends no <c>window_input</c> signal for it.</summary>
     private const int InternalDevice = -2;
@@ -26,6 +28,7 @@ internal sealed partial class AutomatedPointerGate : Node
 
     public AutomatedPointerGate() => Name = "AutomatedPointerGate";
 
+    // The callback is not given back: the node lives as long as the process.
     public override void _EnterTree()
     {
         _window = GetWindow();

@@ -292,14 +292,17 @@ same GUI through the window, and on macOS the key window receives the pointer's 
 replays a motion at the system pointer on every cursor shape change (`Input.set_default_cursor_shape`), and the AREA
 hover changed the shape whenever the system pointer rested inside the window over the world. Either took the GUI's hover
 off the control a test had just entered, one frame later: the hotkey bar smoke's `entering slot 2 shows the spell's hint:
-Plain texts=2` (15 of 43 runs in the run logs before the fix) and the bar smoke's button hover and release failures.
+Plain texts=2` (15 of 43 runs in the launch queue's run logs on the owner's Mac before the fix; the logs are outside
+git) and the bar smoke's button hover and release failures.
 Whether a run failed depended on where the owner's pointer was and whether it moved.
 
 The process that hosts an automated run (as for the draw keeper above) adds an `AutomatedPointerGate` node and prints
 `ARC-DEV-060 automated pointer gate window=0`. It takes the main window's input callback and passes every event as the
 window would (the `window_input` signal for all but internal events, then the window's input), except mouse and gesture
-events, which pass only when a test parsed them with the gate's test device (48). The AREA hover of an automated run
-reads no system pointer either: it is over the world only where a test places the pointer. The hotkey bar smoke checks
+events, which pass only when a test parsed them with the gate's test device (48; buffered motions merge without
+comparing devices, so a parsed test motion must not directly follow a system one). The AREA hover of an automated run
+reads no system pointer either (headless runs and the self-test's bootstrap apps too): it is over the world only where a
+test places the pointer. The hotkey bar smoke checks
 the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
 every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
 

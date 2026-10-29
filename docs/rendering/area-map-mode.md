@@ -137,12 +137,16 @@ With compaction, in four runs, the samples equal the live bytes to within about
 
 Since ARC-DEV-060 a growth over the bound gets one more reload before the check
 fails. After the whole map chain on `elven ruins` (about 400 MB live heap, a 16 MB
-bound) the reload grew the heap by 21 to 24 MB in three of four runs in the run
-logs; with two extra reloads in one run the growth was 14.2 MB after the overlapped
-pair, 20.8 MB after the next reload and the same after the one after it: the first
-reloads fill content once, then the heap stays flat. A retention that every replaced
-generation adds grows the heap again by as much, so the check takes the smaller of
-the two growths, and the generation the extra reload replaces must be collected too.
+bound) the reload grew the heap by 21 to 24 MB in three of four runs (the launch
+queue's run logs on the owner's Mac, outside git); with two extra reloads in one run
+the growth from the baseline was 14.2 MB after the overlapped pair, 20.8 MB after the
+next reload and 20.8 MB after the one after it: the first reloads fill content once,
+then the heap stays flat. A retention that every replaced generation adds grows the
+heap again by as much, so the check takes the smaller of the two growths, and the
+extra reload must publish and the generation it replaces must be collected too. The
+bound then holds one generation's retention rather than the overlapped pair's: a
+retention between half the bound and the bound per generation, which the pair alone
+showed, now passes.
 
 ## Body blends and wading (ARC-RENDER-018)
 
