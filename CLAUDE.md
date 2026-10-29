@@ -20,10 +20,13 @@ and its link holds the detail.
   subagent returning at most 40 lines ([lean orientation](docs/workflow/tasks.md#lean-orientation)).
   Reviews run on Sonnet by default; Opus for a diff over about 800 lines or one
   that changes original-game mechanics, the save schema or threading
-  ([review model](docs/workflow/tasks.md#review-model)). Per PR, run the touched
-  smoke stages plus the Crash Site smoke; the full map smoke chain runs before
-  every `./arcanum package` and once a day on main, not per PR
-  ([smoke scope](docs/workflow/tasks.md#smoke-scope)).
+  ([review model](docs/workflow/tasks.md#review-model)). Per PR, run only the
+  smoke stages the change touches or is directly related to, the Crash Site
+  smoke only when related; the full map smoke chain runs only in the daily
+  package build, when main changed since the last package
+  ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
+  `./arcanum smoke pr --stages S,... [--crash-site]` and `./arcanum smoke full`,
+  never a scratch smoke script ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
