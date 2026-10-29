@@ -513,8 +513,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
                     if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
                     {
+                        // The leader is the hero, so the other side never is (the rule says nothing then): no reaction facts.
                         Outcome = outcome, Leader = SessionCombatant.Hero, Target = Combatant(other)!, Setter = SetterFacts(follower),
-                        Reaction = other == Pc && facts is { } pc ? new SessionDangerReaction(pc.Npc, pc.Pc, Row(follower)?.HostileReaction ?? 0) : null,
                         Complaint = facts is { } f ? new SessionPeaceReaction(f.Npc, f.Pc) : null,
                     });
                     Trace(follower).Setter = $"follower rule {outcome.Step} {other} {result.Disposition} {result.Failure}";
@@ -657,7 +657,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
         if (_followers.ContainsKey(npc) && result.Kind == AiPerformKind.Follow)
         {
+            // A run left from the fight (a flight, a back-off) ends as a replaced one would, so the walk is no longer held by it.
             Trace(npc).Perform = $"{result.Kind} by its own walk";
+            if (current is not null) DropRun(npc);
             return;
         }
         Started(npc, current, result);
@@ -787,34 +789,26 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     /// <summary>The terrain step from the object's tile toward the other's: walls, doors and objects other than critters decide
-    /// (inference: the step test 0x425130 measures the way, the occupants are the walk's own test). ARC-WORLD-115: the critters' T0
-    /// records (the map's NPCs and the companions, wherever they stand now) do not decide either: an attacker next to an NPC standing
-    /// on its own record's cell read the record as an object in its way, so its approach found no first step and no path.</summary>
+    /// (inference: the step test 0x425130 measures the way, the occupants are the walk's own test). ARC-WORLD-115 (ledger AP1: the
+    /// target is made no-block for the test, other critters still block): the walker's overlay toward the target
+    /// (<see cref="Occupancy"/>: the target's T0 record and every moved record away, the live cells of the hero, the companions and the
+    /// other movers held). Before, an attacker next to an NPC standing on its own record's cell read that record as an object in its
+    /// way, so its approach found no first step and no path.</summary>
     public bool FirstStepClear(string id, string toward, bool ignoreTarget)
     {
         if (Tile(id) is not { } from || Tile(toward) is not { } to) return false;
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(_scene.Steps, _scene.Chart, CrittersAway).Assess(chart, direction) == RouteStepVerdict.Open;
-    }
-
-    // ARC-WORLD-115: the map without the critters' T0 records (the terrain step tests; the occupants are the walk's own test).
-    private AreaOccupancy CrittersAway()
-    {
-        var keys = _npcs.Values.Concat(_followers.Values).Select(n => n.Row.Key).Concat((_scene.Companions?.Invoke() ?? []).Select(c => c.Key));
-        var occupancy = new AreaOccupancy(keys, []);
-        return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
+        return new AreaRouteSource(_scene.Steps, _scene.Chart, () => Occupancy(id, toward)).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
     {
         var line = Line(id, target, out var targetRow);
         var foreign = line?.Blocker is { } blocker && !ReferenceEquals(blocker, targetRow);
-        var facts = new AiAttackFacts(AttackerInactive: !Active(id), TargetGone: Gone(target), TargetDead: DeadCritter(target), ForeignBlocker: foreign,
+        return new(AttackerInactive: !Active(id), TargetGone: Gone(target), TargetDead: DeadCritter(target), ForeignBlocker: foreign,
             NoPathToTarget: foreign && PlanPath(id, new AiPathRequest(AiPathKind.Attack, target, null, 1, false, false)) is null);
-        Trace(id).Attack = $"{target} blocker={line?.Blocker?.PrototypeNumber.ToString() ?? "-"}@{line?.Blocker?.WorldX},{line?.Blocker?.WorldY} from={Tile(id)} to={Tile(target)} hero={Tile(Pc)} {facts}";
-        return facts;
     }
 
     public AiReachFacts Reach(string id, string target)
@@ -840,17 +834,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         RoutePlan plan;
         switch (request.Kind)
         {
-            case AiPathKind.Attack:
-                plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to));
-                // ARC-WORLD-115: next to the target with no clear first step toward it (a diagonal past a corner object) the approach
-                // finds no route; a route into the target's cell, without its last step, walks around the corner (inference: the
-                // original plans the attack's path to the target's tile, and the walk ends next to it).
-                if (plan.Outcome != RouteOutcome.Found && AiExecutorRules.Distance(from, to) == 1)
-                {
-                    var into = RoutePlanner.Plan(source, ToChart(from), ToChart(to));
-                    return into.Outcome == RouteOutcome.Found && into.Cells.Count > 1 ? new([.. into.Cells.Take(into.Cells.Count - 1).Select(ToWorld)]) : null;
-                }
-                break;
+            case AiPathKind.Attack: plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to)); break;
             case AiPathKind.Near:
                 plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to));
                 if (plan.Outcome != RouteOutcome.Found) return null;
@@ -888,7 +872,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(_scene.Steps, _scene.Chart, CrittersAway).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(_scene.Steps, _scene.Chart).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 
@@ -902,7 +886,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        if (_followers.ContainsKey(id)) _scene.Followers!.Step(id, next, running);
+        if (_followers.ContainsKey(id)) { if (!_scene.Followers!.Step(id, next, running)) Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
         else Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running);
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
@@ -1883,6 +1867,4 @@ public sealed class AreaAiTrace
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
     public string? Throw { get; set; }
-    /// <summary>ARC-WORLD-115: the last attack facts asked (the target, the line's first blocker, the facts).</summary>
-    public string? Attack { get; set; }
 }

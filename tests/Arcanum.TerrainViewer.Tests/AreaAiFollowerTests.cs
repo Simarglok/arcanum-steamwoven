@@ -188,24 +188,34 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
-    public void Next_to_the_enemy_past_a_corner_object_its_attack_path_goes_around_the_corner()
+    public void Next_to_the_enemy_past_a_corner_object_there_is_no_first_step_and_no_route()
     {
-        // The companion stands diagonally next to the enemy, a scenery object on one corner of the diagonal and the enemy's neighbour
-        // (10, 21) on the other free: the diagonal step is not clear, so the approach plans a route into the enemy's cell (inference),
-        // and the attack is possible (its "no path" fact is false). This scene has no line of fire, so the reach is clear and it strikes
-        // from where it stands; the native ai-follower smoke walks the corner where a blocked line of fire sends it around.
-        var (session, host, walks, enemy, companion) = Open(companionAt: new(11, 21), corner: new(11, 20));
+        // The companion stands diagonally next to the enemy, a scenery object on one corner of the diagonal: the first step is not
+        // clear and the approach gives no route for a target next to the walker (ledger AP1, AP2), as in the original.
+        var (_, host, _, enemy, companion) = Open(companionAt: new(11, 21), corner: new(11, 20));
         Assert.IsFalse(host.FirstStepClear(companion, enemy, false), "the diagonal past the corner object is not a clear first step");
-        var path = host.PlanPath(companion, new AiPathRequest(AiPathKind.Attack, enemy, null, 1, false, false));
-        Assert.IsNotNull(path, "the attack path walks around the corner");
-        Assert.IsTrue(AiExecutorRules.Distance(path.Steps[^1], EnemyCell) == 1 && path.Steps[^1] != EnemyCell, "it ends next to the enemy, not on it");
+        Assert.IsNull(host.PlanPath(companion, new AiPathRequest(AiPathKind.Attack, enemy, null, 1, false, false)), "no route next to the target (AP2)");
+        // Without the corner object the diagonal is clear: the enemy's own T0 record on its cell does not block (AP1, the target no-block).
+        var (_, open, _, _, next) = Open(companionAt: new(11, 21));
+        Assert.IsTrue(open.FirstStepClear(next, enemy, false));
+    }
+
+    [TestMethod]
+    public void After_its_fight_the_companion_is_released_to_its_own_walk()
+    {
+        var (session, host, _, enemy, companion) = Open(companionAt: new(11, 20));
         host.HeroAttacked(enemy);
         host.Perform(companion);
-        Assert.IsFalse(host.AttackFacts(companion, enemy).NoPathToTarget);
-        var notices = Run(host, companion);
-        var hit = notices.Single(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion).Result ?? throw new AssertFailedException("no hit result");
-        Assert.AreEqual(AttackRefusal.None, hit.Resolution!.Refusal, $"{hit.Failure} {host.TraceOf(companion)?.Step}");
-        Assert.AreNotEqual(GameSessionDisposition.Rejected, hit.Disposition);
-        Assert.IsNotNull(session.QueryDanger(companion).Source);
+        Assert.IsTrue(host.Holds(companion));
+        Run(host, companion);
+        Assert.IsTrue(host.Holds(companion), "still fighting: its danger state is not NONE");
+        // The fight ends: the setter's NONE (as the danger update's calm-down asks it).
+        var calm = session.SetDangerState(session.Version, new SessionDangerRequest { Entity = companion, State = DangerState.None });
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, calm.Disposition, calm.Failure.ToString());
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
+        Assert.IsFalse(host.Holds(companion), "in state NONE without a run its own walk follows the hero again");
+        host.Perform(companion);
+        Assert.IsNull(host.RunOf(companion));
+        Assert.AreEqual("Follow by its own walk", host.TraceOf(companion)?.Perform);
     }
 }

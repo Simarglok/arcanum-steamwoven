@@ -23,7 +23,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
-    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party, AreaCompanionGroup? Group)? _aiHostStamp;
+    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party, string Companions)? _aiHostStamp;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
@@ -52,8 +52,10 @@ public partial class TerrainViewerApp
             if (_aiHost is not null) { RetireAiHost(); _aiHostStamp = null; _aiPcOccupancy = null; }
             return null;
         }
-        // A follower joining or leaving changes who the host runs; ARC-WORLD-115: so does a rebuilt companion group (their walks).
-        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)), _areaCompanions);
+        // A follower joining or leaving changes who the host runs; ARC-WORLD-115: so do the companions standing here (a rebuilt group
+        // with the same ones keeps the host: their walks are read from the group of the moment).
+        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)),
+            string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         RetireAiHost();
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
@@ -91,7 +93,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk.
-            Followers = _areaCompanions is { } group ? new AiFollowers(group, chart, session) : null,
+            Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart, session) : null,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -104,14 +106,14 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (those the hero leads, following or waiting), with their
     /// home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
-    private sealed class AiFollowers(AreaCompanionGroup group, AreaChart chart, GameSessionOwner session) : IAreaAiFollowers
+    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart, GameSessionOwner session) : IAreaAiFollowers
     {
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions.Where(c => session.QueryCompanion(c.Entity).LedByPc)
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
 
-        public bool Step(string entity, CellCoord next, bool running) => group.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running);
+        public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;
 
-        public void Face(string entity, CellCoord toward) => group.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
+        public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 
         private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
@@ -342,6 +344,26 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>
+    // ARC-WORLD-115: the AI's moved NPCs on a companion's overlay, one value per base overlay while the movers do not change (a planner
+    // asks at every step it assesses).
+    private readonly Dictionary<AreaOccupancy, AreaOccupancy> _aiCompanionOccupancy = new(ReferenceEqualityComparer.Instance);
+    private long _aiCompanionOccupancyVersion = -1;
+
+    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy)
+    {
+        if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;
+        if (_aiCompanionOccupancyVersion != host.Movers.Version || _aiCompanionOccupancy.Count > 64)
+        {
+            _aiCompanionOccupancy.Clear();
+            _aiCompanionOccupancyVersion = host.Movers.Version;
+        }
+        if (_aiCompanionOccupancy.TryGetValue(occupancy, out var known)) return known;
+        var value = new AreaOccupancy(occupancy.Moved.Concat(host.Movers.Moved),
+            occupancy.Occupied.Concat(host.Movers.Held().Select(cell => grid.Chart.ToChart(new(cell.X, cell.Y)))));
+        _aiCompanionOccupancy[occupancy] = value;
+        return value;
+    }
+
     private AreaOccupancy? WithAiMovers(AreaOccupancy? occupancy)
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;

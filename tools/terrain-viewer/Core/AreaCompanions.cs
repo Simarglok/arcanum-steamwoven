@@ -316,8 +316,8 @@ public sealed class AreaCompanionGroup
             if (!Admitted(steps, chart, start)) { skipped.Add(entity + " cell not admitted"); continue; }
             var index = list.Count;
             // Every companion and route source reads the group's live overlay at assessment time.
-            AreaOccupancy Admission() => group!.OccupancyFor(index, leader: true);
-            AreaOccupancy Planning() => group!.OccupancyFor(index, leader: false);
+            AreaOccupancy Admission() => group!.WithExtra(group.OccupancyFor(index, leader: true));
+            AreaOccupancy Planning() => group!.WithExtra(group.OccupancyFor(index, leader: false));
             // ARC-WORLD-075: its plan and its steps pass living critters while it is not in combat mode (read at each drive).
             bool Passes() => group!._companions[index].PassesCritters;
             var grid = new AreaGridSession(steps, time, chart: chart, start: start, facing: facing,
@@ -339,6 +339,12 @@ public sealed class AreaCompanionGroup
     /// <summary>ARC-WORLD-075: whether a T0 critter record is dead in the session, for the critter checks of a companion's walk that
     /// passes critters (a living critter on its goal, DC2, or before a segment's last step, LR5). Null is none dead.</summary>
     public Func<AreaObjectKey, bool>? Dead { get; set; }
+
+    /// <summary>ARC-WORLD-115: what the host adds to every companion's overlay (the AI's moved NPCs: their T0 records away, their live
+    /// cells held); null adds nothing.</summary>
+    public Func<AreaOccupancy, AreaOccupancy>? Extra { get; set; }
+
+    private AreaOccupancy WithExtra(AreaOccupancy occupancy) => Extra?.Invoke(occupancy) ?? occupancy;
 
     /// <summary>ARC-WORLD-115: whether the AI host holds a companion (by entity) while it fights: its follow decisions are not made, its
     /// walk goes only where the host's steps send it (<see cref="StepTo"/>). Null is none held.</summary>
@@ -462,7 +468,10 @@ public sealed class AreaCompanionGroup
     /// following companion decides and drives to the same boundary. A jump stands it settled on the PC's cell (the
     /// next decision steps it off). Returns every companion advance's results in order (for logging).
     /// </summary>
-    public IReadOnlyList<(AreaCompanion Companion, GridAdvance Advance)> Drive(GameSessionOwner session, MovementState pc, SimulationTime frontier)
+    /// <param name="heldOnly">ARC-WORLD-115: drive only the companions the AI host holds (a turn-based round: a companion moves only on
+    /// its own subturn, by its AI).</param>
+    public IReadOnlyList<(AreaCompanion Companion, GridAdvance Advance)> Drive(GameSessionOwner session, MovementState pc, SimulationTime frontier,
+        bool heldOnly = false)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(pc);
         Pc = Held(pc).ToArray();
@@ -477,6 +486,7 @@ public sealed class AreaCompanionGroup
             if (frontier.Value <= grid.State.Time.Value) continue;
             // ARC-WORLD-115: a companion the AI host holds makes no follow decision; its walk drives only the host's steps.
             var held = HeldByAi?.Invoke(companion.Entity) == true;
+            if (heldOnly && !held) continue;
             var update = held ? new CompanionFollowUpdate(companion.AiRunning ? FollowAction.Run : FollowAction.Walk, null)
                 : companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following, frontier);
             companion.LastUpdate = update;

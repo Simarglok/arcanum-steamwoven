@@ -558,18 +558,10 @@ public partial class TerrainViewerApp
             var join = session.ForceJoinParty(session.Version, follower);
             Require(join.Disposition != GameSessionDisposition.Rejected, "the speaker joined: " + join.Failure);
             joined = true;
-            // The hero a few cells from the NPC (the placement rebinds the companions, the joined one among them); the follower follows it
-            // there (beyond 30 tiles it jumps to the hero, OL9) before the fight.
+            // The hero next to the NPC, so the NPC fights it where it stands (the placement rebinds the companions, the joined one among
+            // them); the follower follows the hero there (beyond 30 tiles it jumps to the hero, OL9) before the fight.
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            CellCoord? stand = null;
-            foreach (var (dx, dy) in new[] { (5, 0), (-5, 0), (0, 5), (0, -5), (4, 4), (-4, -4), (4, -4), (-4, 4) })
-            {
-                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
-                if (!map.Chart.Contains(near)) continue;
-                try { stand = AreaSmokeStandable(map, near, 1); break; } catch (InvalidOperationException) { }
-            }
-            Require(stand is not null, "a standable cell a few cells from the NPC");
-            AreaSmokePlace(map, stand!.Value);
+            AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 1));
             var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower);
             Require(companion is { Standing: CompanionStanding.Following }, "the speaker is a following companion: " + _areaCompanions?.Status());
             var heroAt = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
@@ -595,7 +587,7 @@ public partial class TerrainViewerApp
             Require(host.Holds(follower), "the fighting follower is held by the AI host");
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
-            var frames = 0; var walked = false; var swing = false; string? lastStep = null;
+            var frames = 0; var walked = false; var swing = false;
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
             for (; frames < 4000 && host.TraceOf(follower)?.Hit is null; frames++)
@@ -605,12 +597,6 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 walked |= _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower)?.Grid.State.CommittedCell is { } now && now != startCell;
                 swing |= host.RunOf(follower)?.Top.Goal == AiGoalType.AttemptAttack;
-                if (host.TraceOf(follower)?.Step is { } st && st != lastStep)
-                {
-                    lastStep = st;
-                    GD.Print($"ARC-WORLD-115 ai-follower step frame={frames} {st} at={host.Tile(follower)} enemy={host.Tile(enemy)} perform={host.TraceOf(follower)?.Perform} danger={session.QueryDanger(follower).State} "
-                        + $"path={host.PlanPath(follower, new AiPathRequest(AiPathKind.Attack, enemy, null, 1, false, false))?.Steps.Length} asked={host.TraceOf(follower)?.Attack}");
-                }
             }
             var trace = host.TraceOf(follower);
             GD.Print($"ARC-WORLD-115 ai-follower smoke trace event={trace?.Event} danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
