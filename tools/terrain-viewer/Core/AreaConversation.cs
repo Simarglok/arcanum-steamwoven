@@ -391,7 +391,9 @@ public sealed class AreaConversationHost
     /// the DLG's LF reads and writes for such a start is not read in the executable (level F0; the action stored the callee's into the
     /// speaker's use slot, X11), so a DLG with any LF operation is refused (<see cref="AreaConversationStartStatus.EntryNotAdmitted"/>)
     /// rather than run on the speaker's dialog slot. A "return to script" end has no dialog script of the speaker to resume (the
-    /// caller does not resume it).
+    /// caller does not resume it). ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex of the speaker's dialog point, ledger
+    /// TG5) stored the flags in the speaker's dialog slot, the one the DLG's LF reads, so its DLG may use LF; its "return to script" end
+    /// resumes the speaker's dialog slot as a talk's does (<see cref="Resume"/>, the original's dialog UI runs point 9 of the NPC).
     /// </summary>
     public AreaConversationStart BeginScripted(AreaSpeaker speaker, ScrDialogStart dialog, CancellationToken token = default)
     {
@@ -404,7 +406,7 @@ public sealed class AreaConversationHost
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var loaded = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node, _session.Rules.Data);
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
-        if (UsesLocalFlags(loaded.Document!))
+        if (dialog.Point != ScrPoint.Dialog && UsesLocalFlags(loaded.Document!))
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags (not modelled)");
         token.ThrowIfCancellationRequested();
         return Open(speaker, dialog, loaded.Document!);
