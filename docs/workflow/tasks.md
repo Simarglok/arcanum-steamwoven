@@ -151,8 +151,9 @@ narrowed the same day in ARC-DEV-061):
   to; the Crash Site smoke only when the change is related to it (the pinned
   exterior, the cave, their inputs). A PR whose change no smoke stage covers
   runs none and says so.
-- The full map smoke chain runs only as part of the daily package build, and
-  only when main changed since the last package; not per PR.
+- The full map smoke chain runs only as part of the daily package build
+  (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062)),
+  and only when main changed since the last package; not per PR.
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):

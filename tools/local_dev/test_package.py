@@ -84,10 +84,10 @@ class PackageTests(unittest.TestCase):
             for name in self.windows["assemblies"]:
                 (data / name).write_bytes(b"x")
 
-    def run_package(self, smoke_folder: Path | None = None, platform: str = "mac") -> Path:
+    def run_package(self, smoke_folder: Path | None = None, platform: str = "mac", **options) -> Path:
         with mock.patch.object(package, "game_folder", return_value=smoke_folder):
             return package.package(package.PLATFORMS[platform], root=self.repo, output=self.root / "out", ref="HEAD", fetch=False,
-                                   smoke=True, keep_work=False, runner=self.runner, base=self.base)
+                                   smoke=True, keep_work=False, runner=self.runner, base=self.base, **options)
 
     def test_steps_build_from_the_archive_with_the_pinned_toolchain_and_stamp(self) -> None:
         installed = self.run_package()
@@ -110,6 +110,7 @@ class PackageTests(unittest.TestCase):
         build = (self.root / "out" / "macos" / "BUILD.txt").read_text()
         self.assertIn(f"commit {self.commit}", build)
         self.assertIn("smoke SKIPPED", build)
+        self.assertIn(f"map-smoke {package.MAP_SMOKE_NOT_RUN}\n", build)
         self.assertEqual((self.root / "out" / "macos" / "README.md").read_text(), "instruction\n")
         self.assertFalse(Path(export[export.index("--path") + 1]).parents[3].exists())  # the work folder is removed
 
@@ -124,6 +125,12 @@ class PackageTests(unittest.TestCase):
         self.assertTrue((self.root / "out" / "macos" / "previous" / "README.md").is_file())
         self.assertEqual(sorted(path.name for path in (self.root / "out" / "macos").iterdir()),
                          ["Arcanum Steamwoven.app", "BUILD.txt", "README.md", "previous"])
+
+    def test_the_daily_build_records_the_map_smoke_chain_in_build_txt(self) -> None:
+        self.run_package(map_smoke="FAIL town; passed main (log /l/smoke.log)")
+        self.assertIn("map-smoke FAIL town; passed main (log /l/smoke.log)\n", (self.root / "out" / "macos" / "BUILD.txt").read_text())
+        with self.assertRaisesRegex(package.PackageError, "one line"):
+            self.run_package(map_smoke="PASS\ncommit 0")
 
     def test_an_export_without_the_pinned_sdk_is_refused_and_nothing_installed(self) -> None:
         self.export_text = "dotnet /opt/homebrew/bin/dotnet publish 8.0.131\n"
