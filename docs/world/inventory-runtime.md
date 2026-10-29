@@ -28,6 +28,17 @@ there, distinct script points 0..35 (`SAP_EXAMINE`..`SAP_CRITICAL_MISS`); at mos
 copied; at most `MaxMaps` seeds are attached (`BudgetExceeded`). Attaching moves no revision, is never saved, and is
 repeated after every restore.
 
+**Window seeds (ARC-COMBAT-024).** A streamed main map is shown as a window of sectors (ARC-RENDER-024), and the viewer builds
+its seed from that window only, marked `Window` (`AreaInventoryMap.Build` sets it for a window snapshot). Such a seed need not
+list an item the session took from the map (a taken, placed or given item, or an item of a junk pile on the map) that lies
+elsewhere: the map's previous seed's row of that item is kept with the new one (for lookups only, as its complexity, decay flag
+and scripts; it joins no ground and no holder's list), and with no previous seed (a restored game whose window does not reach
+the item) the item has no row and its row-read facts are not read here (NOT READY, as a taken item's wear art). An item a
+window seed does list is checked as in any seed; one it does not list is not checked, so a save of other data is caught
+only for the items its window reaches. Before, a window that no longer reached the sector an item was taken from
+was refused (`InventoryMismatch`), and the scene was published without its inventory and combat hosts: killed NPCs stood,
+the hero was drawn without its armour, nothing could be looted or attacked; a quick load of such a save was refused.
+
 **State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind);
 `QueryPcInventory` returns it. Since ARC-WORLD-015 the session also holds the hero's gold (`QueryGold`) and starting kit
 (`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)), and since ARC-TECHNOLOGY-004 the items it made from schematics (`SessionMadeItem`: `made:1`, … with no origin map; `QueryMadeItems`; [schematic assembly](schematic-assembly-runtime.md#made-items-snapshot-schema-24)),
@@ -192,7 +203,7 @@ Decoding keeps the list order and refuses an entity listed twice, in either list
 transfer cannot produce (gold, key, key ring: `InvalidItem`; ammunition without its stack record: `InvalidSnapshot`, ARC-WORLD-066), a repeated entity (`InvalidSnapshot`) and the
 caller's lower limit, kit and taken items together (`BudgetExceeded`); gold or a kit item without a hero, and a kit
 item that is not the next `kit:n`, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
-(`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
+(`InventoryMismatch`) a seed that lacks an item the PC took from that map (a window seed may, see above), gives it another kind, or lists an item the
 PC took from another map, so a save of other data cannot silently duplicate or lose an item. For the same reason a seed
 may not list an item another attached seed lists (one object lies on one map).
 
@@ -384,7 +395,7 @@ order the piles were made. Decoding refuses a width outside 1..10, a height outs
 outside 0..2^24 − 1 (`OutOfRange`) and more than the bounds (`BudgetExceeded`); restore refuses a pile entity that is not `junk:n` or
 repeats, an item in two piles, a rectangle past the grid or overlapping another, a placed item away from its pile's map and cell, a
 deleted item, an item the hero holds or an NPC's added item (`InvalidSnapshot`). An attached seed must list every item of a pile on its
-map that is no placed item, and no seed of another map may (`InventoryMismatch`). Schemas 1..45 are refused, not migrated.
+map that is no placed item (a window seed only when its window holds it), and no seed of another map may (`InventoryMismatch`). Schemas 1..45 are refused, not migrated.
 
 **Viewer.** The AREA viewer draws each pile at its cell from the pile prototype's current art (prototype 3043, read through the
 object field reader; flat, as every placed pile of the interiors carries `OF_FLAT`) instead of its items, picks it as a junk pile

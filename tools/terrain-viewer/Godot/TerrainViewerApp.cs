@@ -230,6 +230,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.
                         if (_readyMapName is not null && Stage("stream")) await RunAreaMapStreamSmokeAsync();
+                        // ARC-COMBAT-024: only when named, a window published while the hero is dead (last: the hero stays dead).
+                        if (_readyMapName is not null && only?.Contains("dead-window") == true) await RunAreaDeadHeroWindowSmokeAsync();
                         // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.

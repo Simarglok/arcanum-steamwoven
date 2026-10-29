@@ -69,7 +69,12 @@ public partial class TerrainViewerApp
     private void AdoptAreaInventory(AreaInventoryHost host)
     {
         var failure = host.Attach(_areaSession!);
-        if (failure != GameSessionFailure.None) { _inventoryStatus = $"inventory: unavailable (seed {failure})"; return; }
+        if (failure != GameSessionFailure.None)
+        {
+            // ARC-COMBAT-024: without a host the map has no loot, combat or fallen bodies: the log says why.
+            GD.Print($"ARC-UI-004 inventory-attach refused failure={failure}");
+            _inventoryStatus = $"inventory: unavailable (seed {failure})"; return;
+        }
         _inventoryHost = host;
         _inventoryStatus = "inventory: left-click an item to pick it up or a dead NPC to loot; I opens the window";
         // ARC-COMBAT-005: the combat targets are the seeds' NPCs.

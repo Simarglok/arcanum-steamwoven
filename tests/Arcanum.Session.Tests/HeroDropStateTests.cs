@@ -179,4 +179,37 @@ public sealed class HeroDropStateTests
         public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
         public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, $"line {line} of {script}", "test");
     }
+
+    // ARC-COMBAT-024: a window of the streamed main map lists only its own objects. An item the hero took (and dropped) where the
+    // window no longer reaches is no mismatch there; the row of the map's earlier seed keeps its facts, and a restored game whose
+    // window lists none of it attaches without them. A whole map's seed must still list it, and a listed item must agree.
+    [TestMethod]
+    public void A_window_seed_need_not_list_an_item_taken_outside_it_and_keeps_its_earlier_row()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var cog = new SessionSeedItem("cog", Item(5004) with { Complexity = -7 }, new CellCoord(92, 200));
+        var pear = new SessionSeedItem("pear", Item(5005), new CellCoord(300, 200));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, new([], [cog, pear]) { Window = true }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "cog", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DropHeroItem(owner.Version, "cog", Facts(owner, "cog")).Disposition);
+        int Complexity(GameSessionOwner session) => session.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == "cog").Item.Facts.Complexity;
+        Assert.AreEqual(-7, Complexity(owner));
+
+        var window = new SessionMapInventorySeed([], [pear]) { Window = true };
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.AttachMapInventory(Exterior, window with { Window = false }).Failure, "a whole map lists it");
+        var renamed = cog with { Facts = cog.Facts with { Kind = cog.Facts.Kind with { Name = 11 } } };
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.AttachMapInventory(Exterior, window with { Items = [pear, renamed] }).Failure, "a listed item agrees");
+        var attached = owner.AttachMapInventory(Exterior, window);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (attached.Disposition, attached.Failure));
+        Assert.AreEqual(-7, Complexity(owner), "the earlier seed's row is kept");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, window).Disposition);
+        Assert.AreEqual(-7, Complexity(owner), "and kept again by the next window");
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.AttachMapInventory(Cave, new([], [cog]) { Window = true }).Failure,
+            "another map's window may not list it");
+
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, restored.AttachMapInventory(Exterior, window with { Window = false }).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, window).Disposition);
+        Assert.AreEqual(0, Complexity(restored), "no row: its facts are not read here");
+    }
 }

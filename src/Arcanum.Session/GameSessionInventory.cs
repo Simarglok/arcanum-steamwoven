@@ -91,6 +91,10 @@ public sealed record SessionSeedHolder(string Entity, SessionHolderKind Kind, bo
 /// </summary>
 public sealed record SessionMapInventorySeed(IReadOnlyList<SessionSeedHolder> Holders, IReadOnlyList<SessionSeedItem> Items)
 {
+    /// <summary>ARC-COMBAT-024: the seed covers a window of its map (the streamed main map), not the whole map: an item the session
+    /// took from the map elsewhere is not in it (<see cref="GameSessionOwner.AttachMapInventory"/>).</summary>
+    public bool Window { get; init; }
+
     public const int MaxItems = 2048;
     public const int MaxHolders = 2048;
     public const int MaxListLength = 512;
@@ -719,7 +723,7 @@ internal sealed class InventoryDomain
         }
         // Every item is either listed once or on the ground.
         if (items.Values.Any(item => item.Cell is null && !holderOf.ContainsKey(item.Entity))) return null;
-        return new(new(Array.AsReadOnly(holderOrder.ToArray()), Array.AsReadOnly(itemOrder.ToArray())), items, holders, holderOf);
+        return new(new(Array.AsReadOnly(holderOrder.ToArray()), Array.AsReadOnly(itemOrder.ToArray())) { Window = source.Window }, items, holders, holderOf);
     }
 
     // ARC-WORLD-066: an ammunition item carries its type in the original's range (a type out of it indexes past the original's tables,
