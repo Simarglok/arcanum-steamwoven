@@ -38,6 +38,11 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
     /// When it cancels the use (<see cref="AreaTrapMeeting.Cancels"/>) the script did not run: the outcome is
     /// <see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run.</summary>
     public AreaTrapMeeting? Trap { get; init; }
+
+    /// <summary>ARC-SCRIPT-046: the conversation a tile or sector script asked for (its own or a called script's dialog action, which
+    /// the original starts between the PC and the action's attachee, an NPC of the shown map), with the run's other effects applied and
+    /// no teleport; the caller opens it. Null for every other run.</summary>
+    public ScrDialogStart? Dialog { get; init; }
 }
 
 /// <summary>
@@ -89,6 +94,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S4.ValueKinds,
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-SCRIPT-046: the set a tile or sector script runs (<see cref="RunPlaced"/>): <see cref="Admission"/> with the dialog action, which
+    /// such a run, or a script it calls, uses to start a conversation of the PC with an NPC (<see cref="AreaScriptedUse.Dialog"/>).
+    /// </summary>
+    public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog", Admission.Conditions,
+        Admission.Actions.Append(ScrCatalogue.Action.Dialog), Admission.ValueKinds, Admission.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// ARC-WORLD-114: the set an NPC's first-heartbeat (10) and heartbeat (19) scripts run from the AI tick (<see cref="RunHeartbeat"/>):
@@ -517,19 +529,25 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// ARC-SCRIPT-017: runs a tile script (the PC entered its tile) or a sector script (the PC entered its sector) of the
     /// shown map, from line 0 as a use with the PC as the triggerer and no attachee, and applies its effects as
     /// <see cref="Run"/> does. A changed slot is written back as map changes on its sector; the dispatcher discards a tile
-    /// script's changes under the original's rule (ledger X3).
+    /// script's changes under the original's rule (ledger X3). ARC-SCRIPT-046: a tile script runs for an NPC of the shown map that
+    /// entered its tile as well (<paramref name="triggerer"/>; ledger TR3: for a PC or an NPC), and a dialog action of the run is
+    /// handed to the caller (<see cref="AreaScriptedUse.Dialog"/>, set <see cref="PlacedAdmission"/>).
     /// </summary>
-    public AreaScriptedUse RunPlaced(MapPlacedScript placed, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
+    public AreaScriptedUse RunPlaced(MapPlacedScript placed, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null, ScrObjectRef? triggerer = null)
     {
         ArgumentNullException.ThrowIfNull(placed); ArgumentNullException.ThrowIfNull(rules);
         if (placed.Trigger is not (MapTransitionTrigger.TileEntry or MapTransitionTrigger.SectorEntry)) throw new ArgumentException("Not a tile or sector script.", nameof(placed));
+        // The original runs a sector script for the PC only.
+        if (triggerer is not null && placed.Trigger != MapTransitionTrigger.TileEntry) throw new ArgumentException("A sector script runs for the PC only.", nameof(triggerer));
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (triggerer is { } npc && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType }))
+            return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.
         var slot = PlacedSlot(placed);
-        var options = new ScrRunOptions { Rules = rules, Admission = Admission };
+        var options = new ScrRunOptions { Rules = rules, Admission = PlacedAdmission };
         var run = placed.Trigger == MapTransitionTrigger.TileEntry
-            ? ScrDispatcher.RunTile(new(slot, Pc), this, options)
+            ? ScrDispatcher.RunTile(new(slot, triggerer ?? Pc), this, options)
             : ScrDispatcher.RunSector(new(slot, Pc), this, options);
         var source = placed.Trigger == MapTransitionTrigger.TileEntry ? ScrSource.Tile : ScrSource.Sector;
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
@@ -563,8 +581,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
         if (ObjectStateRefusal(effects) is { } refusedState)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
+        // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map and not with a teleport (not modelled together); such a run
+        // applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
+        if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || effects.Teleports.Count > 0))
+            return new(AreaScriptedUseOutcome.Refused, null, lines, run, $"script {run.Script}: a conversation of script {dialog.Script} with "
+                + (dialog.Npc?.Code ?? "no NPC") + (effects.Teleports.Count > 0 ? " and a teleport" : "") + " is not modelled");
+        // A slot a callee's dialog stored is kept as the object's use-slot map changes, which need its loaded use element; an object
+        // without one (the original writes its sparse attachment array) leaves the run unapplied, checked before anything applies.
+        if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || w.Point != ScrPoint.Use || w.Attachee is not { } owner
+            || Row(owner) is not { } held || LoadedSlot(held, ScrPoint.Use) is null) is { } unkept)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the use slot of {unkept.Attachee?.Code ?? "no object"} that a dialog stored is not kept (no loaded use element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         var teleport = effects.Teleports.FirstOrDefault();
+        if (effects.Dialog is { } talk)
+            return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
+            { Dialog = talk };
         return teleport is null
             ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport")
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})");
@@ -616,6 +647,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
             if (toggled.Disposition == GameSessionDisposition.Rejected) return false;
         }
+        // ARC-SCRIPT-046: the slots a called script's dialog action stored (an object's use slot), as map changes.
+        foreach (var stored in effects.SlotWrites)
+            if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 

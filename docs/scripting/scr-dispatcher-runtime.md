@@ -404,9 +404,14 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   requests), nothing it changes about itself is kept (its remove or change this script included), its return code is
   ignored and the caller goes on; a callee that stops on an absent object, an index or its line budget ends only itself.
   A missing callee runs nothing, and so do a trap script and a monster-generator attachee (the runner's gates E4, E5).
-  A callee outside the set refuses the whole dispatch (`Refused`, the callee's refusal), and so does a dialog action in
-  its admitted lines (the original's dialog store for a called run is not read; refused at that line as
-  `ActionNotAdmitted`). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
+  A callee outside the set refuses the whole dispatch (`Refused`, the callee's refusal). A dialog action of a callee
+  (ARC-SCRIPT-046, ledger X11) asks for its conversation as at the top (`Effects.Dialog`: the PC triggerer, the callee's
+  attachee, the callee's number, line and node) and ends only the callee, so its caller goes on; the callee runs at its
+  caller's attachment point (0x44B030 copies it), and before the conversation the attachee's slot of that point takes the
+  callee's local flags and counters when they differ, its script number kept (`Effects.SlotWrites`, as call-ex keeps a
+  slot). A second conversation in one dispatch is refused at its line (`ActionNotAdmitted`, a project limit; the original's
+  dialog start for an open dialog is not read). A dialog action in a call-ex run stays refused (its store would write the
+  slot the run itself changes). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
   `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles; kept at 16 by the owner's decision of 2026-10-21, [rule modes](../world/rule-modes.md)) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
   top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
@@ -499,7 +504,7 @@ ran at most S15 until S16 (below).
 - **Create object** hands `ScrCreateRequest(prototype, near)` to the host (`ScrEffects.Creations`): the number as named (the host adds 20,
   PG8) and the first object of operand 1; an absent object asks for nothing.
 - **Counters** read and write counter (index mod 4) for any index (PG6), the original's five-bit shift.
-- **Hosts.** The viewer's use, tile and sector set "S4-area-use-reading-objects-story-world" (`AreaUseScriptHost.Admission`) holds the
+- **Hosts.** The viewer's use, tile and sector set "S4-area-use-reading-objects-story-world" (`AreaUseScriptHost.Admission`; tile and sector runs add the dialog action, `PlacedAdmission` "S4-area-placed-dialog", since ARC-SCRIPT-046) holds the
   S15 world commands (not S14's item commands); its host answers the vicinity from the shown map and draws from the session, and hands
   each creation to `GameSessionOwner.CreateGroundItem`, which applies the Steamwoven limit (`ScrRuleProfile.CreatedItemsUnbounded`,
   Original: none).

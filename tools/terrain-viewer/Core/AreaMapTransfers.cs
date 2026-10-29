@@ -88,6 +88,25 @@ public sealed class AreaMapTransfers
     /// tile fires only its jump point or unconditional tile teleport (ARC-WORLD-031) and a sector nothing.</summary>
     public Func<MapPlacedScript, Func<ScrTeleport, string?>, AreaScriptedUse>? PlacedRunner { get; set; }
 
+    /// <summary>ARC-SCRIPT-046: runs the tile script of this map for an NPC (by its session entity) that entered the tile, with the NPC
+    /// as the triggerer, and returns what it did; set by the host. Without it an NPC's step fires nothing.</summary>
+    public Func<MapPlacedScript, string, AreaScriptedUse>? CritterTileRunner { get; set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-046: an NPC (<paramref name="entity"/>, a companion of the shown map) entered <paramref name="cell"/>: the original runs
+    /// the tile's script for a PC or an NPC after every move (ledger TR3), the jump point for a PC only, so only the tile's script runs,
+    /// through <see cref="CritterTileRunner"/>; the run's teleport is the runner's to refuse. Null when the tile has no script or no runner
+    /// is set. <see cref="LastScripted"/> stays the player's.
+    /// </summary>
+    public AreaScriptedUse? EnterByCritter(AreaStepCell cell, string entity)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(entity);
+        return CritterTileRunner is { } runner && _tiles.TryGetValue(cell, out var placed) ? runner(placed, entity) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-046: the script of a tile, or null.</summary>
+    public MapPlacedScript? TileScript(AreaStepCell cell) => _tiles.GetValueOrDefault(cell);
+
     /// <summary>ARC-SCRIPT-017: the tiles and sectors with a script.</summary>
     public IReadOnlyCollection<AreaStepCell> ScriptTiles => _tiles.Keys;
     public IReadOnlyCollection<WorldSectorCoordinate> ScriptSectors => _sectors.Keys;
