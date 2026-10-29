@@ -19,7 +19,9 @@ public partial class TerrainViewerApp
     // points; E ends it and round 2 begins one game second later with the points granted again; next to the NPC a click attacks it and
     // the attack's start charges its cost; a long walk then spends the rest, overexerts and is refused, which passes the turn on (round
     // 3). Space turns the setting off (the round ends, combat mode stays), the game clock flows and the hero's fatigue recovers through
-    // the event pump; R leaves combat mode. The NPC, the hero's fatigue and the setting are restored for the later stages.
+    // the event pump; R leaves combat mode. ARC-COMBAT-022: a right click first, in real time, keeps combat mode while the hero walks,
+    // leaves it once the hero stands, never enters it and ends prowling; at the end, on the hero's subturn of a new round, it leaves
+    // combat mode and ends the round. The NPC, the hero's fatigue and the setting are restored for the later stages.
     private async Task RunAreaTurnBasedSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
@@ -42,7 +44,7 @@ public partial class TerrainViewerApp
         if (candidates.Length == 0) { GD.Print($"ARC-COMBAT-020 native-smoke turn-based NO-TARGET map={map.RuntimeMap}"); return; }
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
-        var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting;
+        var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting; var concealed = HeroConcealed;
         _worldFocusSimulationForSelfTest = true;
         var target = candidates[0];
         var npc = target.Build.Combat!.Target;
@@ -83,6 +85,40 @@ public partial class TerrainViewerApp
             bool HeroTurn() => session.QueryCombatRound() is { Actor.IsHero: true };
             SessionCombatRound Round() => session.QueryCombatRound() ?? throw new InvalidOperationException("ARC-COMBAT-020 smoke: no round");
             _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
+
+            // ARC-COMBAT-022: in real time a right click keeps combat mode while the hero walks, leaves it once the hero stands, never
+            // enters it, and out of combat mode ends prowling. The hero goes back to its start for the round.
+            // The placement restarts the smoke clock at whole units; the frames here count tenths.
+            void PlaceAtStart()
+            {
+                AreaSmokePlace(map, start);
+                _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
+                PublishWorldSelection();
+                Frame();
+            }
+            void RightClick(Vector2 at)
+            {
+                _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = at, GlobalPosition = at });
+                _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false, Position = at, GlobalPosition = at });
+            }
+            var startScreen = Screen(start);
+            Tap(Key.R);
+            Require(HeroInCombatMode && session.QueryCombatRound() is null, "R entered combat mode in real time: " + _combatModeNotice);
+            var walkGoal = RunGoal(map, start);
+            Require(walkGoal is not null, "a cell to walk to");
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(walkGoal!.Value), GlobalPosition = Screen(walkGoal.Value) });
+            Require(_worldRoute is { Status: RouteFollowStatus.Following }, "the hero walks: " + _worldRouteClick);
+            RightClick(startScreen);
+            Require(HeroInCombatMode, "a right click while the hero walks keeps combat mode");
+            FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
+            RightClick(startScreen);
+            Require(!HeroInCombatMode, "a right click left combat mode: " + _combatModeNotice);
+            RightClick(startScreen);
+            Require(!HeroInCombatMode, "a right click does not enter combat mode");
+            Require(session.ToggleHeroConcealment(session.Version).Disposition == GameSessionDisposition.Changed && HeroConcealed, "the hero prowls");
+            RightClick(startScreen);
+            Require(!HeroConcealed, "a right click ended prowling: " + _prowlNotice);
+            PlaceAtStart();
 
             // Space out of combat mode: the setting only.
             Tap(Key.Space);
@@ -169,6 +205,15 @@ public partial class TerrainViewerApp
             var recovered = $"{damage}->{session.QueryHeroLife()!.Record.State.FatigueDamage}";
             Tap(Key.R);
             Require(!HeroInCombatMode, "R left combat mode");
+            // ARC-COMBAT-022: on the hero's own subturn a right click leaves combat mode, which ends the round.
+            PlaceAtStart();
+            Tap(Key.Space);
+            Tap(Key.R);
+            FramesUntil(HeroTurn, 20);
+            Require(HeroTurn() && HeroIdleForRound(), "a new round reached the idle hero's subturn: " + _combatModeNotice);
+            RightClick(startScreen);
+            Require(!HeroInCombatMode && session.QueryCombatRound() is null, "a right click left combat mode and ended the round: " + _combatModeNotice);
+            Tap(Key.Space);
             RefreshAreaStatus();
             GD.Print("ARC-COMBAT-020 native-smoke turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Grant = grant, AttackCost = cost, Attack = attack.Charge.ToString(),
@@ -180,6 +225,7 @@ public partial class TerrainViewerApp
         {
             if (session.QueryCombatRound() is not null) session.EndCombatRound(session.Version);
             _turnBasedSetting = setting;
+            if (HeroConcealed != concealed) session.ToggleHeroConcealment(session.Version);
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);
             var npcNow = session.QueryLife(npc).View?.Status;
