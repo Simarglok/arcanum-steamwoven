@@ -127,6 +127,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="hotkey-bar-art-and-drag-arc-ui-027"></a>[Hotkey bar art and drag (ARC-UI-027)](ledger/spell-runs.md#hotkey-bar-art-and-drag-arc-ui-027) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK10–HK16 |
 | <a id="hotkey-bar-item-icons-arc-ui-032"></a>[Hotkey bar item icons (ARC-UI-032)](ledger/spell-runs.md#hotkey-bar-item-icons-arc-ui-032) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK17–HK19 |
 | <a id="hotkey-bar-hover-descriptions-arc-ui-035"></a>[Hotkey bar hover descriptions (ARC-UI-035)](ledger/spell-runs.md#hotkey-bar-hover-descriptions-arc-ui-035) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK20–HK23 |
+| <a id="spell-pane-arc-ui-053"></a>[Spell pane (ARC-UI-053)](ledger/spell-runs.md#spell-pane-arc-ui-053) | [Magic: casting and spell runs](ledger/spell-runs.md) | SPN1–SPN6 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |
@@ -220,6 +221,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="pick-pocket-arc-skills-010"></a>[Pick pocket (ARC-SKILLS-010)](ledger/skills.md#pick-pocket-arc-skills-010) | [Skills](ledger/skills.md) | PP1–PP11 |
 | <a id="npc-firearms-level-arc-world-106"></a>[NPC firearms level (ARC-WORLD-106)](ledger/skills.md#npc-firearms-level-arc-world-106) | [Skills](ledger/skills.md) | NF1 |
 | <a id="inventory-window-art-arc-ui-051"></a>[Inventory window art (ARC-UI-051)](ledger/ui-audio.md#inventory-window-art-arc-ui-051) | [Interface windows and audio](ledger/ui-audio.md) | IW20–IW25 |
+| <a id="loot-window-art-arc-ui-052"></a>[Loot window art (ARC-UI-052)](ledger/ui-audio.md#loot-window-art-arc-ui-052) | [Interface windows and audio](ledger/ui-audio.md) | IW26–IW32 |
 | <a id="cursor-art-arc-ui-056"></a>[Cursor art (ARC-UI-056)](ledger/ui-audio.md#cursor-art-arc-ui-056) | [Interface windows and audio](ledger/ui-audio.md) | CU1–CU6, CUA1 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 

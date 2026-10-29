@@ -13,7 +13,9 @@ namespace Arcanum.TerrainViewer;
 /// (<see cref="UseRequested"/>, IW5; on the right release, ARC-UI-032: the original's mouse subtype 3); the drop and use icons right of the grid take a held item (IW6). Plain diagnostic shapes and text, no
 /// original art. ARC-UI-035: once the pointer rests (the engine's still-pointer message, subtype 7) with nothing held, a new item under it
 /// (or none) is reported (<see cref="PointerStill"/>, 0x573C74), once until another rests there. ARC-UI-051: with the window's art
-/// (<see cref="Look"/>) the frame draws the original look instead (<see cref="AreaInventoryArtLayout"/>, IW20–IW25).
+/// (<see cref="Look"/>) the frame draws the original look instead (<see cref="AreaInventoryArtLayout"/>, IW20–IW25). ARC-UI-052: in a
+/// loot window with the art the frame is the loot window's (<see cref="AreaLootArtLayout"/>, IW26–IW32): the holder's grid on the left,
+/// whose items are pressed and released on the hero's grid to take them, and the Take all button.
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -25,6 +27,12 @@ public partial class AreaInventoryGridArea : Control
     public event Action<AreaInventoryHeld>? UseRequested;
     /// <summary>ARC-UI-035: the pointer rested with nothing held over another item than the last report (its entity) or over none (null).</summary>
     public event Action<string?>? PointerStill;
+    /// <summary>ARC-UI-052: the loot window's Take all button was pressed and released.</summary>
+    public event Action? TakeAllRequested;
+    // ARC-UI-052: the holder's grid's scroll in rows, the holder it belongs to and a press on Take all waiting for its release.
+    private int _lootScroll;
+    private string? _lootHolder;
+    private bool _takeAllDown;
     private ulong _movedAt;
     private bool _stillReported = true;
     private string? _stillItem;
@@ -36,6 +44,12 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
+
+    /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
+    public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
+
+    /// <summary>ARC-UI-052: the holder's grid's scroll in rows.</summary>
+    internal int LootScroll => _lootScroll;
 
     public override void _Ready()
     {
@@ -68,14 +82,18 @@ public partial class AreaInventoryGridArea : Control
     public void SetLook(AreaInventoryArtLook? look)
     {
         if (ReferenceEquals(look, Look)) return;
-        Look = look; QueueRedraw();
+        Look = look; _takeAllDown = false; QueueRedraw();
     }
 
     public void Render(AreaInventoryView view)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
+        // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; }
+        _lootScroll = Math.Clamp(_lootScroll, 0, AreaLootArtLayout.ScrollMax(view.HolderContainer));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
-        if (Held is { } held && (held.Worn is { } worn ? view.Doll.FirstOrDefault(slot => slot.Slot == worn)?.Entity != held.Entity
+        if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity)
+                : held.Worn is { } worn ? view.Doll.FirstOrDefault(slot => slot.Slot == worn)?.Entity != held.Entity
                 : !view.Grid.Any(item => item.Entity == held.Entity))) Held = null;
         QueueRedraw();
     }
@@ -95,6 +113,13 @@ public partial class AreaInventoryGridArea : Control
             return;
         }
         if (Blocked && @event is InputEventMouseButton) { AcceptEvent(); return; }
+        // ARC-UI-052: PROJECT: the wheel scrolls the holder's grid by a row (the original's scroll bar at 330, 136 is not drawn).
+        if (LootLook && @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel)
+        {
+            ScrollLoot(wheel.ButtonIndex == MouseButton.WheelUp ? -1 : 1);
+            AcceptEvent();
+            return;
+        }
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right } right)
         {
             // The original uses the item on the right release (mouse subtype 3, IW5); the press does nothing in the window.
@@ -122,7 +147,7 @@ public partial class AreaInventoryGridArea : Control
     internal void StillAt(Vector2 frame)
     {
         if (Held is not null || Blocked || _view is null) return;
-        var item = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y))?.Entity;
+        var item = (LootLook ? AreaLootArtLayout.Press(_view, LootHit(frame)) : AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)))?.Entity;
         if (item == _stillItem) return;
         _stillItem = item;
         PointerStill?.Invoke(item);
@@ -131,18 +156,44 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>The window opened or closed: the still pointer forgets the last item it reported and waits for a move.</summary>
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
+    /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; }
+
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
     {
         if (Held is not null || _view is null) return;
-        Held = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y));
+        if (LootLook)
+        {
+            var hit = LootHit(frame);
+            _takeAllDown = hit.TakeAll;
+            Held = AreaLootArtLayout.Press(_view, hit);
+        }
+        else Held = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-052: the loot window's point under <paramref name="frame"/> with the current scroll.</summary>
+    private AreaLootHit LootHit(Vector2 frame)
+    {
+        var button = Look?.Art.GetValueOrDefault(AreaLootArtLayout.TakeAllArt);
+        return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()));
+    }
+
+    /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
+    internal void ScrollLoot(int rows)
+    {
+        if (_view is null) return;
+        var scroll = Math.Clamp(_lootScroll + rows, 0, AreaLootArtLayout.ScrollMax(_view.HolderContainer));
+        if (scroll == _lootScroll) return;
+        _lootScroll = scroll; QueueRedraw();
     }
 
     /// <summary>ARC-UI-025: a right release at a point of the frame: with nothing held, the item under it is offered for use (IW5).</summary>
     internal void RightReleaseAt(Vector2 frame)
     {
-        if (Held is not null || _view is null || AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
+        // ARC-UI-052: the right release uses an item only in the player's own window (mode 0, IW5).
+        if (Held is not null || _view is null || LootLook || AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
         Callable.From(() => UseRequested?.Invoke(item)).CallDeferred();
     }
 
@@ -153,9 +204,16 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {
+        if (LootLook && _takeAllDown)
+        {
+            // ARC-UI-052: a button acts on its release over it.
+            _takeAllDown = false;
+            if (LootHit(frame).TakeAll) Callable.From(() => TakeAllRequested?.Invoke()).CallDeferred();
+            return;
+        }
         if (Held is not { } held) return;
         Held = null;
-        var drop = AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
+        var drop = LootLook ? AreaLootArtLayout.Release(held, LootHit(frame)) : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
         // The app re-renders the window, which may put an occupant on the cursor: after this input event returns.
         Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
@@ -173,6 +231,7 @@ public partial class AreaInventoryGridArea : Control
 
     public override void _Draw()
     {
+        if (LootLook) { DrawLoot(Look!); return; }
         if (Look is { } look) { DrawOriginal(look); return; }
         var font = GetThemeDefaultFont();
         var size = Math.Max(8, (int)(11 * _scale));
@@ -301,12 +360,88 @@ public partial class AreaInventoryGridArea : Control
             Item(look.ItemArt(held.Entity), (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin, name);
         }
     }
+
+    // ARC-UI-052: the redraw's order in the loot mode (0x576520): the loot and pack arts, the holder's image, the counts, the boxes, the hero's
+    // grid items (no doll, no weight lines), the holder's grid items clipped to its shown rows; then the Take all button and the held item.
+    private void DrawLoot(AreaInventoryArtLook look)
+    {
+        var view = _view!;
+        Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
+        void Art(int number, float x, float y)
+        {
+            if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
+        }
+        // An item's art centred in its rectangle (scaled down when larger) and cut to the band from clipTop to clipBottom of the frame.
+        void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, string name, float clipTop = float.MinValue, float clipBottom = float.MaxValue)
+        {
+            var (top, bottom) = (Math.Max(rect.Y, clipTop), Math.Min(rect.Y + rect.Height, clipBottom));
+            if (bottom <= top) return;
+            if (texture is null)
+            {
+                // An item whose art does not read keeps the diagnostic look: a framed box with its name.
+                var box = Scaled(rect.X, top, rect.Width, bottom - top).Grow(-2 * _scale);
+                DrawRect(box, new Color(.2f, .3f, .38f, .85f));
+                DrawRect(box, new Color(.5f, .65f, .75f), false);
+                DrawString(GetThemeDefaultFont(), box.Position + new Vector2(3, 11 * _scale + 2), name, HorizontalAlignment.Left, Math.Max(1, box.Size.X - 6), Math.Max(8, (int)(11 * _scale)), AreaInventoryArtLook.TextColour);
+                return;
+            }
+            var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
+            var (from, to) = (Math.Max(y, clipTop), Math.Min(y + h, clipBottom));
+            if (to <= from) return;
+            var ratio = texture.GetHeight() / h;
+            DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
+        }
+        Art(AreaLootArtLayout.LootArt, 0, 0);
+        if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
+        Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        var font = GetThemeDefaultFont();
+        var size = Math.Max(6, (int)Math.Round(12 * _scale));
+        var counts = new[] { view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < view.Ammo.Count ? view.Ammo[type] : 0)).ToArray();
+        for (var i = 0; i < counts.Length; i++)
+        {
+            var (cx, cy, cw, ch) = AreaInventoryArtLayout.Counts[i];
+            var box = Scaled(cx, cy, cw, ch);
+            DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
+                HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
+        }
+        var over = Held is null ? null : LootHit(_pointer / _scale).Icon;
+        foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
+        {
+            var (x, y) = AreaInventoryArtLayout.Box(icon);
+            Art(AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
+        }
+        foreach (var item in view.Grid)
+        {
+            if (item.Entity == Held?.Entity) continue;
+            Item(look.ItemArt(item.Entity), (AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
+                AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels), item.Name);
+        }
+        const float shownTop = AreaLootArtLayout.GridY, shownBottom = AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels;
+        foreach (var item in view.LootGrid)
+        {
+            // The held item stays in its place but is not drawn there (item flag 0x10, as in the hero's grid).
+            if (item.Entity == Held?.Entity || AreaLootArtLayout.ItemRect(item, _lootScroll) is null) continue;
+            Item(look.ItemArt(item.Entity), AreaLootArtLayout.FullRect(item, _lootScroll), item.Name, shownTop, shownBottom);
+        }
+        Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
+        if (Held is { } held)
+        {
+            var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
+                : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name) : (1, 1, "?");
+            var cell = AreaInventoryDrag.CellPixels;
+            var origin = _pointer / _scale - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
+            Item(look.ItemArt(held.Entity), (origin.X, origin.Y, w * cell, h * cell), name);
+        }
+    }
 }
 
 /// <summary>ARC-UI-051: the inventory window's original look for the frame: the interface arts by number, an item's inventory art by
 /// entity (null when it does not read) and the line texts.</summary>
 public sealed record AreaInventoryArtLook(IReadOnlyDictionary<int, Texture2D> Art, Func<string, Texture2D?> ItemArt, AreaInventoryTexts Texts)
 {
+    /// <summary>ARC-UI-052: the loot window's own arts read (<see cref="AreaInventoryArtContent.LootArtReady"/>).</summary>
+    public bool LootReady { get; init; }
+
     /// <summary>PROJECT: the lines' colour; the original's fonts (0x682C74 for the lines, 0x68345C for the counts) are not read.</summary>
     public static readonly Color TextColour = new(.92f, .86f, .72f);
 }

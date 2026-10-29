@@ -412,6 +412,36 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (marker `ARC-UI-035 native-smoke hotkey-hover PASS`); the inventory smoke rests the pointer on a grid item (marker
    `ARC-UI-035 native-smoke inventory-still PASS`).
 
+## The spell pane in the bottom strip (ARC-UI-053)
+
+While the interface bars show, the spell pane (`M` or the Spells button) is the original's bar mode 1 in the bottom strip's message
+window (ledger [SPN1–SPN6](../research/ledger/spell-runs.md#spell-pane-arc-ui-053)); `SpellPaneRules` (Presentation) holds the layout and
+which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` wires it.
+
+1. **Look** (SPN1, SPN2). The mode's background art 8 (`spell_ro.art`, 410 × 107) at (196, 492); the college buttons on the upper row at
+   y 497, x 201 + 25 × college for colleges 0–7 and 400 + 25 × (college − 8) for 8–15, each with its own 24 × 24 art (`s_conveyance.art`
+   … `s_temporal.art`, three frames); the selected college's spells on the lower row at y 528, x 284, 334, 384, 435 and 485 by rank, each
+   with its 32 × 32 icon (the hotkey bar's spell icons). A hover's name is written over the background in the mode's text area
+   (208, 574, 387 × 18). The buttons are the bar's push buttons: down while held over them, lit under the pointer; the selected college
+   shows down. A button whose art does not read is not shown.
+2. **What shows** (SPN3). A college's button shows when the hero has a rank in it; the selected college's spells show rank by rank while
+   the hero knows them. The selection starts on college 0, which shows no spell when the hero has no rank in conveyance, until a college
+   is pressed.
+3. **Presses** (SPN4). A college is selected on its button's press and its spells replace the old college's; a spell is activated on the
+   left release over its icon (the latest recent action first, then the spell's activation, as the diagnostic pane's press did); a right
+   press on a spell starts the hotkey drag (ARC-UI-027). Each button plays 3000 on the press and 3001 on the release over it.
+4. **Names** (SPN5). The pointer entering a college's button writes the college's name (`spell.mes` 500 + college), entering a spell's
+   icon the spell's name, in the mode's text area; leaving keeps it.
+5. **Window** (SPN6). The pane shows only while it holds the message window: the pointer above the strip gives the window back to the
+   log and the pane hides, a move back over the strip shows it again (ML8); the pane stays open meanwhile, so `M` then closes it, as the
+   original's toggle acts on the Spells button's state, not on the mode shown (0x54DBF0). Without the bars or the pane's art (automated runs without a
+   bar smoke, the self-test) the diagnostic pane lists the spells as before. The weapon button and the weapon's pane (bar mode 8) stay in
+   the diagnostic pane, which shows only while the weapon has something to show.
+6. **Smoke.** Inside the hotkey-bar smoke (cast stage): `M` shows the pane in the strip with its background and the colleges the hero has a
+   rank in; a click on the spell's college selects it (drawn down, 3000 and 3001) and shows its spells with their icons; entering the
+   spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
+   (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -443,6 +473,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | That wield takes the old weapon off first and leaves it off when the wield is refused (HK3). | The session's wear swaps in one step; a refusal changes nothing. | — (technical, fixed in both modes) |
 | A drag between entries leaves the source an entry without its object and puts a target item back into the inventory (HK5). | The two entries trade places. | — (technical, fixed in both modes) |
 | A load replays the two recent actions through 0x57EFA0 in saved order, so they trade places on every load; a new action's object goes to the second slot (HK2, HK7). | The bar comes back as saved; recent actions are only spells and skill-bar buttons. | — (technical, fixed in both modes) |
+| The selected college is kept in the save with the bar mode (0x54A1C4, 0x54A252). The press handler does not set the pressed college down: only the pane's build sets the selected college's button down (0x5512DD), so the look follows a new selection when the pane is built again (SPN4). | The selection lasts the viewer's run and does not follow a load or a new game; the selected college is always the one drawn down. | — (not ready: the save; display only) |
 | An entry dragged off the bar keeps its hidden flag: it stays in the bar's data, undrawn and skipped by its key, until a drop on it or a load brings it back (HK15). | The entry is emptied (an item entry's item back to the grid). | — (technical, a lost state; fixed in both modes) |
 | An item entry dragged off the bar leaves its item on the cursor for the inventory or the map to place (HK15). | The item goes back to the grid at once. | — (not ready: the map's cursor hold) |
 | An item entry's count is set on its drop and on a load and recounted when an item leaves its place (HK6, HK12): an item picked up later shows only after such a change. | The count is read at every redraw, so a pickup shows at once. | — (display only) |
@@ -462,6 +493,9 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
+- The spell pane (ARC-UI-053): the selected college in the save, the weapon button at (161, 443) and the weapon's pane (bar mode 8:
+  background 564, five slots at y 542) on the strip, the skills pane (bar mode 2), the compact interface's pane, a spell's icon beyond
+  spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79, the item window's lines after the name (a
   weapon's value, the effects, weapon, armour, quantity and usage lines, the magick or tech aptitude, the mana store, uses or ammunition
   per shot, the weight and the hit points, HK22), the item's examine script run by its description, the turn-based action-point preview
