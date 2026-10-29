@@ -907,13 +907,17 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-COMBAT-005 fallen-pose entity={holder.Entity} animation={anim} status={load.Status} used={load.Pose?.Animation} detail={load.Detail}");
             }
             if (load.Pose is null) continue;
-            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, load, now, firstSight);
+            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, session.QueryLifeRecord(holder.Entity)?.DeathTimeMs, load, now,
+                firstSight);
             lying.Add((map.RuntimeMap, holder.Entity));
             var pose = show.Load.Frames[show.FrameAt(now)];
             frames.Add(pose.Key, pose.Frame);
             fallen[row.Key] = AreaScenePlan.Repose(command, row, visual, pose.Key, pose.Frame.Width, pose.Frame.Height, pose.HotX, pose.HotY);
         }
         foreach (var key in _lyingShows.Keys.Where(k => k.Map == map.RuntimeMap && !lying.Contains(k)).ToArray()) _lyingShows.Remove(key);
+        // The shows this sync started are in the stamp, so the next frame does not draw the same frames again.
+        _lyingFramesDrawn = LyingFramesStamp(now);
+        _fallenStamp = (area, session, session.Version.Revision, _lyingFramesDrawn);
         _fallenBodies = fallen;
     }
 

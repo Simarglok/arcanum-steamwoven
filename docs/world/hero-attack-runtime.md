@@ -516,9 +516,11 @@ ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040))
   0x42E4B0): the delay 1000 / the ART's frame rate (integer division; 100 ms when the header does not read). `Frame`: frame 1 at
   once, one more per delay, the last kept (the dying step 0x42D6F0, the knockdown's animate step 0x42CC80 alike). `EndMs`: the dying
   goal ends (frames − 1) delays after its start, when the step finds the last frame; its pool node and its end run then.
-- **Viewer (AREA)**: the pose read (`AreaFallenPoses`) decodes every frame of the animation for the body's facing. A death or
+- **Viewer (AREA)**: the pose read (`AreaFallenPoses`) decodes every frame of the animation for the body's facing (kept per NPC and
+  animation for the session, so a fallen body costs its frame count times one frame's pixels). A death or
   knockout the view sees plays from that moment on the world clock and keeps its last frame; a body already lying when the map and
-  session are first shown (a load, a map change) holds its last frame. An NPC killed while lying in its fall keeps the fall. A
+  session are first shown (a load, a map change) holds its last frame. An NPC killed while lying in its fall keeps the fall (after a
+  load too). The hero's pool waits until the dead hero lies down (its fall, ARC-COMBAT-021). A
   recovered or raised NPC stands at once. The pool of blood comes when the dying goal ends ([above](#pool-of-blood-arc-render-041)).
   The log says `ARC-RENDER-040 lying entity=… wanted=… shows=… frames=… delay=… plays|held|kept ends-in=…` once per change.
 - **Smoke** (stage `attack`): the killed NPC's dying animation draws its frames on the world clock, no pool lies before its dying

@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-// ARC-RENDER-040: how the original plays the dying animation and the knockdown fall (ledger DA1–DA7).
+// ARC-RENDER-040: how the original plays the dying animation and the knockdown fall (ledger DA1–DA6).
 [TestClass]
 public sealed class DyingAnimationRulesTests
 {

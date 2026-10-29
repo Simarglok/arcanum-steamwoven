@@ -7,14 +7,15 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-RENDER-040: what each NPC lying on the shown map shows. Wanted is the animation the session's life state asks for (the kill's
-    // dying animation or the fall); Load the pose drawn (the fall kept when the dying start refused to replay); StartMs the world time its
+    // ARC-RENDER-040: what each NPC lying on the shown map shows. Wanted, Dead and DeathMs are what the session's life state asks for
+    // (the kill's dying animation or the fall, and the death they belong to); Load the pose drawn (the fall kept when the dying start refused to replay); StartMs the world time its
     // frames started (null: its last frame held, as for a body already lying when the map and session were first shown); EndsAtMs the
     // world time its dying goal ends and leaves its pool (null for a fall or a held body).
-    private sealed record LyingShow(int Wanted, AreaFallenLoad Load, long? StartMs, int DelayMs, long? EndsAtMs)
+    private sealed record LyingShow(int Wanted, bool Dead, long? DeathMs, AreaFallenLoad Load, long? StartMs, int DelayMs, long? EndsAtMs)
     {
         public int Frames => Load.Frames.Count;
-        public int FrameAt(long now) => StartMs is { } start ? DyingAnimationRules.Frame(now - start, Frames, DelayMs) : Frames - 1;
+        // A clock set back before the start (a self-test restoring its time) shows the last frame, not the animation again.
+        public int FrameAt(long now) => StartMs is { } start && now >= start ? DyingAnimationRules.Frame(now - start, Frames, DelayMs) : Frames - 1;
         public bool Playing(long now) => FrameAt(now) < Frames - 1;
     }
 
@@ -23,24 +24,28 @@ public partial class TerrainViewerApp
     private string? _lyingFramesDrawn;
 
     /// <summary>
-    /// ARC-RENDER-040: what an NPC the session knocked out or killed shows now, as the original plays it (ledger DA1–DA7). A body lying
+    /// ARC-RENDER-040: what an NPC the session knocked out or killed shows now, as the original plays it (ledger DA1–DA6). A body lying
     /// when the map and session are first seen holds its last frame (the original's load sets the dead art's last frame). A new fall or
     /// death plays from now: frame 1 at once, one more per 1000 / rate ms, the last kept (<see cref="DyingAnimationRules.Frame"/>); a
     /// death's goal ends one delay after its last frame shows. A death of an NPC lying in its fall (knocked out) is not played (0x45D730):
-    /// it keeps the fall and its goal ends at once.
+    /// it keeps the fall (also after a map change or load: the kill's animation becomes the fall) and its goal ends at once. A new death
+    /// or knockout (another death time, or dead again after standing) plays again.
     /// </summary>
-    private LyingShow ObserveLying((int Map, string Entity) key, int wanted, bool dead, AreaFallenLoad load, long now, bool firstSight)
+    private LyingShow ObserveLying((int Map, string Entity) key, int wanted, bool dead, long? deathMs, AreaFallenLoad load, long now, bool firstSight)
     {
-        if (_lyingShows.TryGetValue(key, out var shown) && shown.Wanted == wanted) return shown;
+        if (_lyingShows.TryGetValue(key, out var shown) && shown.Wanted == wanted && shown.Dead == dead && shown.DeathMs == deathMs) return shown;
         LyingShow next;
-        if (firstSight) next = new(wanted, load, null, 0, null);
-        else if (dead && shown is not null && DyingAnimationRules.LiesFallen(shown.Load.Pose!.Animation))
-            next = shown with { Wanted = wanted, EndsAtMs = now };
+        if (firstSight) next = new(wanted, dead, deathMs, load, null, 0, null);
+        else if (dead && shown is { Dead: false } && DyingAnimationRules.LiesFallen(shown.Load.Pose!.Animation))
+        {
+            next = shown with { Wanted = wanted, Dead = true, DeathMs = deathMs, EndsAtMs = now };
+            _deathAnimations[key] = AreaFallenPoses.FallDown;
+        }
         else
         {
             // 0x42BC10 has set frame 0 of the dying animation, so the start (0x42D570) plays it.
             var delay = dead ? DyingAnimationRules.Start(load.Pose!.Animation, 0, load.FramesPerSecond)!.Value : DyingAnimationRules.Delay(load.FramesPerSecond);
-            next = new(wanted, load, now, delay, dead ? now + DyingAnimationRules.EndMs(load.Frames.Count, delay) : null);
+            next = new(wanted, dead, deathMs, load, now, delay, dead ? now + DyingAnimationRules.EndMs(load.Frames.Count, delay) : null);
         }
         _lyingShows[key] = next;
         GD.Print($"ARC-RENDER-040 lying entity={key.Entity} wanted={wanted} dead={dead} shows={next.Load.Pose!.Animation} frames={next.Frames}"
@@ -60,12 +65,13 @@ public partial class TerrainViewerApp
 
     /// <summary>Whether the critter's dying goal has not ended yet: its pool of blood waits (0x42FED0 runs when the frames have played).
     /// An NPC with no played dying (its pose does not read, or it is not drawn) ends at once; the hero's dying is its fall
-    /// (ARC-COMBAT-021), so its pool waits while the hero is falling or still finishing a step before it falls.</summary>
+    /// (ARC-COMBAT-021), so where the hero's knockdown runs its pool waits until the dead hero lies down (standing before the fall
+    /// starts, or falling).</summary>
     private bool DyingPending(int map, string critter, long now)
     {
         if (critter == Arcanum.Session.SessionEventKinds.PlayerEntity)
-            return _heroKnockdown.Stage == AreaKnockdownStage.Falling
-                || !_heroKnockdown.Lying && _worldActor.Session is AreaGridSession grid && grid.State.Phase != MovementPhase.Settled;
+            return _readyMode == TerrainViewerMode.CrashSiteArea && _worldActor.Session is AreaGridSession
+                && _heroKnockdown.Stage is AreaKnockdownStage.Standing or AreaKnockdownStage.Falling;
         return _lyingShows.TryGetValue((map, critter), out var show) && show.EndsAtMs is { } end && end > now;
     }
 
