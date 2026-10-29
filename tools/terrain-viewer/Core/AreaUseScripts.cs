@@ -384,8 +384,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     private const int TrapObjectType = 17, ObjectFlagsSlot = 18;
-    // The NPC faction field (0x124), as the conversation's scope reads it (AreaConversationHost.Scope).
-    private const int FactionSlot = 81;
 
     /// <summary>
     /// ARC-COMBAT-011: whether the object's use script is a trap (0x4BBDD0, ledger OD6): the script of its point-1 slot as the
@@ -724,7 +722,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             {
                 // HW4: an NPC only (ObjectStateRefusal checked the map); a faction equal to its map data's clears the key.
                 if (IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc) continue;
-                var loaded = Number(npc, FactionSlot) is { } f ? unchecked((int)f) : 0;
+                var loaded = AreaConversationHost.Scope(npc).Faction;
                 var set = _session.ApplyChanges(_session.Version, null, [new(new SessionMapId(request.Object.Map),
                     MapChangeKey.ForEntity(request.Object.Code, FactionProperty), request.Value == loaded ? null : request.Value)]);
                 if (set.Disposition == GameSessionDisposition.Rejected) return false;
@@ -752,8 +750,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
             if (request.Change == ScrObjectStateChange.SetFaction)
             {
-                if (!IsPc(request.Object) && Row(request.Object) is { Type: NpcType } && request.Object.Map != _shownMap)
+                // An object of no loaded row may be an NPC as well: not modelled either.
+                if (!IsPc(request.Object) && Row(request.Object) is null or { Type: NpcType } && request.Object.Map != _shownMap)
                     return $"set faction of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+                if (!IsPc(request.Object) && Row(request.Object) is null)
+                    return $"set faction of {request.Object.Code} is not modelled (no loaded row)";
                 continue;
             }
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";

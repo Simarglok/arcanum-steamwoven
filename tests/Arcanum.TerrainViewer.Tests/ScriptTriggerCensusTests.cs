@@ -42,7 +42,7 @@ public sealed class ScriptTriggerCensusTests
         var rows = new int[ScrPoint.Count]; var missing = new int[ScrPoint.Count]; var admitted = new int[ScrPoint.Count]; var old = new int[ScrPoint.Count];
         var scripts = Enumerable.Range(0, ScrPoint.Count).Select(_ => new HashSet<int>()).ToArray();
         var refusals = new Dictionary<(int Point, string Refusal), int>();
-        var maps = 0; var opening = new List<string>();
+        var maps = 0; var opening = new List<string>(); var openingAdmitted = new List<string>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -75,7 +75,10 @@ public sealed class ScriptTriggerCensusTests
                 if (point is ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat && ScrAdmission.AdmitFrom(program, World114Heartbeat, 0).IsAdmitted) old[point]++;
                 // The heartbeats that call an NPC's own dialog point (1100's opening talk).
                 if (point == ScrPoint.Heartbeat && program.Lines.Any(l => l.OnTrue.Type == ScrCatalogue.Action.CallScriptEx && l.OnTrue.Value(1) == ScrPoint.Dialog))
+                {
                     opening.Add($"{destination.Name}:{slot.Script}");
+                    if (ScrAdmission.AdmitFrom(program, AreaUseScriptHost.HeartbeatAdmission, 0).IsAdmitted) openingAdmitted.Add(slot.Script.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
             }
         }
         if (Environment.GetEnvironmentVariable("ARC_SCRIPT_TRIGGER_CENSUS") is { Length: > 0 } output)
@@ -97,6 +100,8 @@ public sealed class ScriptTriggerCensusTests
         // 81 of 141 and 23 of 23 after ARC-SCRIPT-049 (slice 1).
         Assert.AreEqual(9, opening.Count, string.Join(", ", opening));
         CollectionAssert.Contains(opening, "arcanum1-024-fixed:1100");
+        // ARC-SCRIPT-049: five of them run (1717, 2602, 1490 and 1015 stop on commands of later slices).
+        CollectionAssert.IsSubsetOf(new[] { "1100", "2700", "1130", "3081", "2106" }, openingAdmitted, string.Join(", ", openingAdmitted));
         Assert.AreEqual((141, 32, 23, 21), (rows[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat], rows[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
         Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 81 && admitted[ScrPoint.FirstHeartbeat] >= 23, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
     }

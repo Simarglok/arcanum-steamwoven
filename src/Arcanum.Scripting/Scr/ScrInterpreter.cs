@@ -39,6 +39,9 @@ internal sealed class ScrInterpreter
         public readonly List<ScrCreateRequest> Creations = new();
         // ARC-WORLD-114: the toggle-state and kill requests (SU6, PM1).
         public readonly List<ScrObjectStateRequest> ObjectStates = new();
+        // ARC-SCRIPT-049: the objects the dispatch's toggle states left flipped (odd count) and the ones it killed, which its later dead and
+        // switched-off tests read (the original flips the flag and kills at once).
+        public readonly HashSet<ScrObjectRef> Toggled = new(), Killed = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -188,8 +191,8 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.ItemsBeingRewielded => Items.ItemsBeingRewielded(),
         // HW1, HW2: the dead test (0x45D8D0) and the "off" object flag over the operand's objects, true by the list rule of SG6; an object the
         // host does not know stops the run.
-        ScrCatalogue.Condition.IsDead => ListHolds(c, obj => States.IsDead(obj) ?? throw new MissingObjectStop(line)),
-        ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsDead => ListHolds(c, obj => _shared.Killed.Contains(obj) || (States.IsDead(obj) ?? throw new MissingObjectStop(line))),
+        ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => _shared.Toggled.Contains(obj) != (States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line))),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -387,7 +390,12 @@ internal sealed class ScrInterpreter
                 // SU6, PM1: each object of operand 0 in turn (0x44B4E0's list); toggle state flips its "off" flag, kill is a death with no
                 // killer. An empty list does nothing.
                 var change = a.Type == ScrCatalogue.Action.Kill ? ScrObjectStateChange.Kill : ScrObjectStateChange.ToggleOff;
-                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(change, obj));
+                foreach (var obj in Objects(a, 0))
+                {
+                    _shared.ObjectStates.Add(new(change, obj));
+                    if (change == ScrObjectStateChange.Kill) _shared.Killed.Add(obj);
+                    else if (!_shared.Toggled.Remove(obj)) _shared.Toggled.Add(obj);
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MagickTechAdjustment:
@@ -411,8 +419,8 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.DistanceBetween:
             {
                 // HW3: the first objects of operands 0 and 1 (0x44B960), their tile distance (0x441AE0 → 0x4B96F0: the larger of the two axis
-                // differences) into operand 2, cut to 32 bits as the original stores it. An absent object, or one without a place, stops the run
-                // (the original reads a null handle's location field).
+                // differences, as WorldTravelGeometry.Distance, which this assembly cannot reference) into operand 2, cut to 32 bits as the
+                // original stores it. An absent object, or one without a place, stops the run (the original reads a null handle's location).
                 var from = World.Location(Object(a, 0, line)) ?? throw new MissingObjectStop(line);
                 var to = World.Location(Object(a, 1, line)) ?? throw new MissingObjectStop(line);
                 Set(a, 2, unchecked((int)Math.Max(Math.Abs(from.X - to.X), Math.Abs(from.Y - to.Y))), line);

@@ -287,6 +287,13 @@ public sealed class AreaHeartbeatScriptTests
             var host = HostAt(session, content, null, new(30, 20), npc);
             Assert.AreEqual((false, false), (host.IsSwitchedOff(host.Pc), host.IsDead(host.Pc)), "the PC is neither");
             Assert.IsNull(host.IsDead(new ScrObjectRef(1, "oid:unknown")), "no loaded row");
+            // Dead as the session holds it (a kill).
+            var dead = Row(3, 16, 787);
+            Assert.AreEqual(GameSessionDisposition.Changed,
+                session.Kill(session.Version, SessionLifeTarget.Critter(Entity(3), new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+            var killed = HostAt(session, content, null, new(30, 20), dead);
+            Assert.IsTrue(killed.IsDead(Ref(3)));
+            Assert.AreEqual(1, killed.RunHeartbeat(dead, ScrPoint.Heartbeat, session.Rules.Scripts).Run!.StopLine);
         });
     }
 

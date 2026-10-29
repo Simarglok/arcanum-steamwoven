@@ -530,8 +530,9 @@ at most S17. Both name the list `IScrWorldQueries.CrittersInVicinity(centre)`: t
 `ScrWorld.VicinityReach` (10) tiles of the attachee's on both axes, the attachee itself and dead critters included, destroyed or
 switched-off ones left out, at most 100 (`VicinityListCapped` past that; ledger
 [TG4](../research/ledger/scripts.md#script-triggers-arc-script-047)). An action names the whole list (loop for, or one request per
-object), an optional single object takes its first object. A condition over a list kind (SG6: every object, or any) is not modelled,
-so `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`).
+object), an optional single object takes its first object. `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`);
+the list rule of SG6 (every object, or any) is the interpreter's since S18 for the dead and switched-off conditions, which a set may
+pair with the scenery list (15).
 
 Call-ex (81) now runs the dialog point (9): it goes through the object entry as the original's 0x44B170 does, so the dialog gates of
 0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
@@ -543,6 +544,11 @@ modelled). A callee of the dialog point that reaches call script (7) is refused,
 call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's
 dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier call-ex of the slot keeps its own).
 
+- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world", below and
+  [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,
+  call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
+  other host's set holds the critter kinds.
+
 ## Heartbeat world questions (ARC-SCRIPT-049, set S18)
 
 `ScrAdmissionSet.S18` is S17 plus the conditions obj is dead (22) and obj is switched off (27) and the actions distance between (71)
@@ -552,18 +558,22 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   the run options refuse a set with them for a host without it). Each tests the objects of operand 0 and holds by the list rule of SG6: at least one holds,
   and all of them or the focus kind is an "any" kind; an empty list (an absent single object) is false. Dead is the original's test
   0x45D8D0 (current hit points 0 or less), switched off the object flag 0x2. A null answer is an object the host does not know: the
-  run stops (`MissingObject`). The list kinds stay refused in a condition operand, so the list is one object today.
+  run stops (`MissingObject`). The critter list kinds stay refused in a condition operand; the scenery list (15) is the one list a
+  set may test (the viewer's heartbeat set has none).
 - **Distance between.** The first objects of operands 0 and 1, their tile distance (the larger of the two axis differences, 0x441AE0 →
   0x4B96F0) into operand 2, cut to 32 bits; a literal store is refused (`WriteToNumber`). The places come from
   `IScrWorldQueries.Location`; an absent object, or one without a place, stops the run (the original reads the null handle's
   location).
 - **Set faction.** One `ScrObjectStateRequest` (`SetFaction`, the first object of operand 0, the faction as `Value`); an absent object
   asks nothing. The original (0x45D0C0) writes the faction field 0x124 of an NPC only; the host leaves any other object as it is.
-
-- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (below and
-  [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,
-  call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
-  other host's set holds the critter kinds.
+- **Run order.** A toggle state (56) or kill (58) earlier in the same dispatch counts for a later dead or switched-off test of that
+  object (the original flips the flag and kills at once): the interpreter keeps the toggles' parity and the killed objects of the
+  dispatch over the host's answers.
+- **Hosts.** The viewer's heartbeat set (since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world",
+  [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits the four with following (18), is named (20), has a
+  reputation (33) and call script in (54). A heartbeat's call script in is queued; the call runs later under the talk host's set when it
+  fires, and is refused there when that set does not admit the callee or no talk host is open on the map (the census counts the
+  heartbeat, not its callee).
 
 ## Checks
 
@@ -652,7 +662,7 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
   the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); since ARC-WORLD-114
   an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill", since ARC-SCRIPT-047
-  "S2-area-heartbeat-state-kill-talk"); combat is a later slice. Which points the original fires and which have no host here: the
+  "S2-area-heartbeat-state-kill-talk", since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world"); combat is a later slice. Which points the original fires and which have no host here: the
   [script trigger audit](../research/script-trigger-audit.md).
 - Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, float line, reactions and most other world
   actions; create object makes items only (ARC-WORLD-081).

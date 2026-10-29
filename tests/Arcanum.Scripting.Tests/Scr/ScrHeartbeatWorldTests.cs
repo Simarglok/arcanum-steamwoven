@@ -26,6 +26,7 @@ public sealed class ScrHeartbeatWorldTests
         public Dictionary<ScrObjectRef, bool> Dead { get; } = new();
         public Dictionary<ScrObjectRef, bool> Off { get; } = new();
         public Dictionary<ScrObjectRef, (long X, long Y)> Tiles { get; } = new();
+        public List<ScrObjectRef> Scenery { get; } = new();
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => Inner.Slot(attachee, point);
         public ScrScriptLookup Script(int number) => Inner.Script(number);
@@ -42,7 +43,7 @@ public sealed class ScrHeartbeatWorldTests
         public bool? IsDead(ScrObjectRef obj) => Dead.TryGetValue(obj, out var dead) ? dead : null;
         public bool? IsSwitchedOff(ScrObjectRef obj) => Off.TryGetValue(obj, out var off) ? off : null;
         public (long X, long Y)? Location(ScrObjectRef obj) => Tiles.TryGetValue(obj, out var tile) ? tile : null;
-        public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => [];
+        public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => Scenery.ToArray();
         public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => [];
         public int Random(int low, int high) => low;
     }
@@ -132,9 +133,47 @@ public sealed class ScrHeartbeatWorldTests
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S18).IsAdmitted);
         Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S17).IsAdmitted);
         Assert.IsTrue(ScrAdmissionSet.S17.IsSubsetOf(ScrAdmissionSet.S18) && Set.IsSubsetOf(ScrAdmissionSet.S18));
-        // A host without the state questions cannot run a set with the conditions.
+        // A host without the state questions cannot run a set with the conditions (no other question in the set).
+        var conditions = new ScrAdmissionSet("test-conditions", ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff]),
+            ScrAdmissionSet.S2.Actions, ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
         var plain = new FakeHost();
-        plain.Attach(Npc, ScrPoint.Heartbeat, Script, program);
-        Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), plain, Options));
+        plain.Attach(Npc, ScrPoint.Heartbeat, Script, Test(ScrCatalogue.Condition.IsDead, Attachee));
+        var refused = Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), plain, new() { Admission = conditions }));
+        StringAssert.Contains(refused.Message, nameof(IScrObjectStateQueries));
+    }
+
+    [TestMethod]
+    public void A_toggle_or_kill_earlier_in_the_run_counts_for_a_later_test()
+    {
+        // The original flips the flag and kills at once: toggled twice is on again, a kill is dead.
+        foreach (var (action, condition, toggles, held) in new[]
+        {
+            (ScrCatalogue.Action.ToggleState, ScrCatalogue.Condition.IsSwitchedOff, 1, true), (ScrCatalogue.Action.ToggleState, ScrCatalogue.Condition.IsSwitchedOff, 2, false),
+            (ScrCatalogue.Action.Kill, ScrCatalogue.Condition.IsDead, 1, true),
+        })
+        {
+            var lines = Enumerable.Repeat(Do(C(action, (Attachee, -1))), toggles)
+                .Append(L(C(condition, (Attachee, -1)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))).ToArray();
+            var host = Host(Program(lines));
+            host.Dead[Npc] = false; host.Off[Npc] = false;
+            var set = new ScrAdmissionSet("test-order", Set.Conditions, Set.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill]), Set.ValueKinds, Set.FocusKinds);
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), host, new() { Admission = set });
+            Assert.AreEqual(held ? ScrOutcome.SkipDefault : ScrOutcome.RunDefault, run.Outcome, $"action {action} × {toggles}");
+        }
+    }
+
+    [TestMethod]
+    public void A_condition_over_the_scenery_list_holds_only_when_every_object_does()
+    {
+        // SG6 for an "every" kind (15): all switched off is true; some, or an empty list, is false.
+        var set = new ScrAdmissionSet("test-scenery", Set.Conditions, Set.Actions, Set.ValueKinds, Set.FocusKinds.Append(ScrFocusKind.EverySceneryInVicinity));
+        ScrObjectRef tree = new(1, "sector:7:1"), rock = new(1, "sector:7:2");
+        foreach (var (offs, held) in new[] { (new[] { true, true }, true), (new[] { true, false }, false), (Array.Empty<bool>(), false) })
+        {
+            var host = Host(Test(ScrCatalogue.Condition.IsSwitchedOff, (byte)ScrFocusKind.EverySceneryInVicinity));
+            foreach (var (obj, off) in new[] { tree, rock }.Zip(offs)) { host.Scenery.Add(obj); host.Off[obj] = off; }
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), host, new() { Admission = set });
+            Assert.AreEqual(held ? ScrOutcome.SkipDefault : ScrOutcome.RunDefault, run.Outcome, string.Join(",", offs));
+        }
     }
 }
