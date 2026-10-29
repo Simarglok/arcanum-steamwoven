@@ -9,13 +9,20 @@ namespace Arcanum.TerrainViewer.Core;
 /// uses); its buttons are text only (no art), the i-th at (410, 143 + 50 × i), centred on x (flag 4), in the font set of flag 8 (the
 /// Morph30 art font 327). A label is drawn three times: black at (−1, −1), brown at (+1, +1) and the face colour at (0, 0); the face is
 /// dark red, bright red while the pointer is over the button (event 2, back on event 3). The hit area is the label's measured size.
-/// Godot-free.
+/// ARC-UI-059: the options window (6) is drawn the same way over its own background 556 `OptionsMenuBack` (800 × 600), its four page
+/// buttons (flags 0xD) at (130, 221 + 40 × i) (descriptor 0x5C44A0, button table 0x5C43D0; ledger MW7); its page's controls stand
+/// in two columns of four slots (0x589280, MW8). Godot-free.
 /// </summary>
 public static class AreaMenuArtLayout
 {
     public const int ScreenWidth = 800, ScreenHeight = 600;
     public const int MainArt = 329, SinglePlayerArt = 331, FontArt = 327;
     public const int ButtonX = 410, FirstButtonY = 143, ButtonStep = 50;
+    public const int OptionsArt = 556, OptionsButtonX = 130, OptionsFirstButtonY = 221, OptionsButtonStep = 40;
+
+    /// <summary>The x of the options page's two slot columns (0x5CCD38) and the y of their four rows (0x5CCD58).</summary>
+    public static IReadOnlyList<int> OptionsSlotColumns { get; } = [261, 531];
+    public static IReadOnlyList<int> OptionsSlotRows { get; } = [122, 197, 272, 347];
 
     /// <summary>The colours of the three passes (r, g, b of the table 0x5C4040), in drawing order, with their offsets (table 0x5C4070,
     /// added in turn: −1, +2, −1).</summary>
@@ -25,22 +32,36 @@ public static class AreaMenuArtLayout
     /// <summary>The face colour of a hovered button (the second font set, 0x64C234, third entry).</summary>
     public static (byte R, byte G, byte B) HoverFace { get; } = (240, 15, 15);
 
-    public static IReadOnlyList<int> ArtNumbers { get; } = [MainArt, SinglePlayerArt, FontArt];
+    public static IReadOnlyList<int> ArtNumbers { get; } = [MainArt, SinglePlayerArt, FontArt, OptionsArt];
 
     /// <summary>The background art of a button window (descriptor +0), or null for a window this look does not draw.</summary>
     public static int? Background(AreaMenuWindow window) => window switch
     {
         AreaMenuWindow.Main or AreaMenuWindow.NewGame or AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => MainArt,
         AreaMenuWindow.SinglePlayer => SinglePlayerArt,
+        AreaMenuWindow.Options => OptionsArt,
         _ => null,
     };
 
     /// <summary>The place of the i-th label of <paramref name="size"/> on the 800 × 600 screen: its top-left is the button's point moved
     /// left by half the label's width (0x5469B3, the half rounded toward zero) and its size is the label's.</summary>
-    public static (int X, int Y, int Width, int Height) Button(int slot, (int Width, int Height) size)
+    public static (int X, int Y, int Width, int Height) Button(int slot, (int Width, int Height) size) => Button(AreaMenuWindow.Main, slot, size);
+
+    /// <summary>As <see cref="Button(int, ValueTuple{int, int})"/> at <paramref name="window"/>'s button points (the options window's
+    /// own, MW7; every other button window's MW2).</summary>
+    public static (int X, int Y, int Width, int Height) Button(AreaMenuWindow window, int slot, (int Width, int Height) size)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
-        return (ButtonX - size.Width / 2, FirstButtonY + ButtonStep * slot, size.Width, size.Height);
+        var (x, y, step) = window == AreaMenuWindow.Options ? (OptionsButtonX, OptionsFirstButtonY, OptionsButtonStep) : (ButtonX, FirstButtonY, ButtonStep);
+        return (x - size.Width / 2, y + step * slot, size.Width, size.Height);
+    }
+
+    /// <summary>The point of the options page's control slot 0..7 (the first column's four rows, then the second's; MW8).</summary>
+    public static (int X, int Y) OptionsSlot(int slot)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, OptionsSlotColumns.Count * OptionsSlotRows.Count);
+        return (OptionsSlotColumns[slot / OptionsSlotRows.Count], OptionsSlotRows[slot % OptionsSlotRows.Count]);
     }
 
     /// <summary>The label under a point of the 800 × 600 screen, or -1.</summary>

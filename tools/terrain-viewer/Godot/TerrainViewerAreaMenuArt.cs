@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-058 menu art not ready: {_menuArtContent.Detail}");
             return;
         }
-        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt }
+        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt, AreaMenuArtLayout.OptionsArt }
             .ToDictionary(number => number, number => (Texture2D)HotkeyTexture(_menuArtContent.Art[number].Frames[0]));
         var glyphs = _menuArtContent.Art[AreaMenuArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
             .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));

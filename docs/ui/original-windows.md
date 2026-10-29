@@ -153,7 +153,9 @@ are F0 and are read by the slice.
    Sound, Done; messages 4000–4003) are text buttons with flags 0xD like the main menu's, but at x 130, y 221 + 40 × i. The page's
    controls (sliders, value arrows, the checkbox look) come from the options window's own open 0x541C70 and close 0x541D70 and its
    control table (OP1–OP8, [options window](../research/ledger/ui-audio.md#options-window-arc-ui-013)); the slice reads their art and
-   places the existing controls. Smallest next step: the background and the page buttons reuse `AreaMenuArtView`.
+   places the existing controls. Done by ARC-UI-059: the background and the page buttons (`AreaMenuArtView`, MW7) and the slot
+   points, x 261 / 531 and y 122 + 75 × row (MW8); the controls are still the project's rows at slot 0. Next slice: the control
+   build 0x57FAD0 and its arts 623, 667, 668, 669 (and 670 of the open), each control drawn at its slot.
 2. **Save and load** (windows 8 save, 7 load; the palette's and F-keys' windows too): background 745 `SaveLoadBackground` (800 × 400)
    at (0, 41) with the strips 336 at the top and 335 at the bottom (MW1); art buttons 321 `NextBut` (61 × 61, 3 frames) at (675, 55)
    (Save / Load, hint 7021 / 7020), 323 `BackBut` at (69, 55) (hint 7002) and 32 `cncl_big` (38 × 37) at (115, 396) (hint 7022).
