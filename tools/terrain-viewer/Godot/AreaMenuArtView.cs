@@ -3,6 +3,16 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
+/// <summary>ARC-UI-061: the options controls' art: the backgrounds by art number (688, 671), the bar 623, the arrows' frames and the
+/// label and value fonts with their glyph frames by frame index.</summary>
+public sealed record AreaMenuControlArt(IReadOnlyDictionary<int, Texture2D> Backgrounds, Texture2D Bar, IReadOnlyList<Texture2D> Less,
+    IReadOnlyList<Texture2D> More, AreaArtFont LabelFont, IReadOnlyDictionary<int, Texture2D> LabelGlyphs, AreaArtFont ValueFont,
+    IReadOnlyDictionary<int, Texture2D> ValueGlyphs);
+
+/// <summary>ARC-UI-061: one shown options control: its label, kind, value of <paramref name="Top"/> (a slider's bar) and value text
+/// (a list's).</summary>
+public readonly record struct AreaMenuControlView(string Label, AreaOptionKind Kind, int Value, int Top, string ValueText);
+
 /// <summary>
 /// ARC-UI-058: a menu button window in the original's look (<see cref="AreaMenuArtLayout"/>, ledger MW1–MW8): the window's background
 /// over the 800 × 600 screen at the whole factor the bars use, centred in the window, and its labels in the art font with their three
@@ -14,16 +24,6 @@ namespace Arcanum.TerrainViewer;
 /// pointer over it shows its third frame, a press its second and sound 3000, the release over it sound 3001 and the change); PROJECT:
 /// the focused control's label is lit in the page buttons' hover face.
 /// </summary>
-/// <summary>ARC-UI-061: the options controls' art: the backgrounds by art number (688, 671), the bar 623, the arrows' frames and the
-/// label and value fonts with their glyph frames by frame index.</summary>
-public sealed record AreaMenuControlArt(IReadOnlyDictionary<int, Texture2D> Backgrounds, Texture2D Bar, IReadOnlyList<Texture2D> Less,
-    IReadOnlyList<Texture2D> More, AreaArtFont LabelFont, IReadOnlyDictionary<int, Texture2D> LabelGlyphs, AreaArtFont ValueFont,
-    IReadOnlyDictionary<int, Texture2D> ValueGlyphs);
-
-/// <summary>ARC-UI-061: one shown options control: its label, kind, value of <paramref name="Top"/> (a slider's bar) and value text
-/// (a list's).</summary>
-public readonly record struct AreaMenuControlView(string Label, AreaOptionKind Kind, int Value, int Top, string ValueText);
-
 public partial class AreaMenuArtView : Control
 {
     private Texture2D? _background;
@@ -57,8 +57,9 @@ public partial class AreaMenuArtView : Control
     /// <summary>ARC-UI-061: the shown controls as "label: value" (a slider's value as value/top).</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => Visible
         ? [.. _controls.Select(control => $"{control.Label}: {control.ValueText}")] : [];
-    /// <summary>ARC-UI-061: the controls' points on the 800 × 600 screen.</summary>
-    internal IReadOnlyList<(int X, int Y)> ControlPlacesForSelfTest => Visible ? [.. _controls.Select((_, index) => AreaOptionsControlLayout.Place(index))] : [];
+    /// <summary>ARC-UI-061: the points on the 800 × 600 screen where the last draw put the controls' backgrounds.</summary>
+    internal IReadOnlyList<(int X, int Y)> ControlPlacesForSelfTest => Visible ? _drawnPlaces : [];
+    private readonly List<(int X, int Y)> _drawnPlaces = [];
     /// <summary>ARC-UI-061: an arrow's frame as drawn now (-1 none).</summary>
     internal int ArrowFrameForSelfTest(int control, AreaOptionsArrow arrow) => Visible && _controlArt is { } art && control >= 0 && control < _controls.Count
         ? ArrowFrame(control * 2 + (int)arrow, arrow == AreaOptionsArrow.Less ? art.Less.Count : art.More.Count) : -1;
@@ -175,6 +176,7 @@ public partial class AreaMenuArtView : Control
 
     private void DrawControls()
     {
+        _drawnPlaces.Clear();
         if (_controlArt is not { } art) return;
         for (var i = 0; i < _controls.Count; i++)
         {
@@ -182,6 +184,7 @@ public partial class AreaMenuArtView : Control
             var point = AreaOptionsControlLayout.Place(i);
             var background = art.Backgrounds[AreaOptionsControlLayout.Background(control.Kind)];
             DrawTextureRect(background, new Rect2(point.X, point.Y, background.GetWidth(), background.GetHeight()), false);
+            _drawnPlaces.Add(point);
             var labelWidth = art.LabelFont.Measure(control.Label).Width;
             DrawText(art.LabelFont, art.LabelGlyphs, control.Label, AreaOptionsControlLayout.Label(point, background.GetWidth(), labelWidth),
                 i == _controlFocus ? AreaMenuArtLayout.HoverFace : AreaOptionsControlLayout.LabelFace);
@@ -231,7 +234,7 @@ public partial class AreaMenuArtView : Control
         switch (input)
         {
             case InputEventMouseMotion motion:
-                // ARC-UI-061: while an arrow is held only it takes the pointer (GB3); an arrow has no sound for the pointer.
+                // ARC-UI-061: while an arrow is held no other arrow takes the pointer (GB3); an arrow has no sound for the pointer.
                 var arrowOver = AreaMenuArtLayout.HitTest(_arrows, motion.Position.X, motion.Position.Y);
                 if (_arrowHeld >= 0 && arrowOver != _arrowHeld) arrowOver = -1;
                 if (arrowOver != _arrowHovered) { _arrowHovered = arrowOver; QueueRedraw(); }

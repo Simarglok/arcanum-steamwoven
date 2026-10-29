@@ -15,7 +15,7 @@ public partial class TerrainViewerApp
     // shows its background 556 and the page buttons in the original's look at (130, 221 + 40 i) (MW7), and a click on Sound's label shows
     // the Sound page; ARC_AREA_OPTIONS_CAPTURE saves an in-app readback of the Game page to the caller's ignored path. ARC-UI-061: the
     // controls stand in their art at the first slots (MW8–MW10), and the pointer on Music's left arrow lights it, a press shows it down
-    // with sound 3000, and the release over it plays 3001 and lowers the music; with ARC_AREA_OPTIONS_CAPTURE the Sound page is saved
+    // with sound 3000, and the release over it plays 3001 and lowers the music (a release away from it changes nothing); with ARC_AREA_OPTIONS_CAPTURE the Sound page is saved
     // too, next to it with "-sound" before the extension.
     private async Task RunAreaOptionsSmokeAsync()
     {
@@ -77,7 +77,8 @@ public partial class TerrainViewerApp
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
             Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
-            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top.
+            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
+            await Frames(1);
             Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 5).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
@@ -103,6 +104,7 @@ public partial class TerrainViewerApp
             }
             Require(_mainMenu!.Window == AreaMenuWindow.Options && _mainMenu.Page == AreaOptionsPage.Sound && panel.ArtMode
                 && Controls().SequenceEqual(["Effects: 5/10", "Voice: 5/10", "Music: 5/10"]), "a click on Sound showed the Sound page: " + string.Join("|", Controls()));
+            await Frames(1);
             Require(art.ControlPlacesForSelfTest.SequenceEqual([(261, 122), (261, 197), (261, 272)]), "the Sound page's sliders at slots 0..2: "
                 + string.Join(" ", art.ControlPlacesForSelfTest));
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OPTIONS_CAPTURE") is { Length: > 0 } soundCapture)
@@ -133,6 +135,22 @@ public partial class TerrainViewerApp
             finally { art.SoundRequested -= Heard; }
             Require(sounds.SequenceEqual([3000, 3001]) && _audioVolumes.Music == 4 && Controls()[2] == "Music: 4/10",
                 "the release over it played 3001 and lowered the music one step: " + string.Join(",", sounds) + " " + _audioVolumes.Music);
+            // A press on the arrow released away from it lets it go silently and changes nothing (GB3).
+            sounds.Clear();
+            art.SoundRequested += Heard;
+            try
+            {
+                var less = art.ArrowCentreForSelfTest(2, AreaOptionsArrow.Less)!.Value;
+                var away = less + new Vector2(0, 40 * art.Scale.Y);
+                GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = less, GlobalPosition = less, ButtonMask = MouseButtonMask.Left });
+                await Frames(1);
+                GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away, ButtonMask = MouseButtonMask.Left });
+                GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = away, GlobalPosition = away });
+                await Frames(1);
+            }
+            finally { art.SoundRequested -= Heard; }
+            Require(sounds.SequenceEqual([3000]) && _audioVolumes.Music == 4 && art.ArrowFrameForSelfTest(2, AreaOptionsArrow.Less) == 0,
+                "a release away from the arrow changed nothing, silently, and left it idle: " + string.Join(",", sounds) + " " + _audioVolumes.Music);
             panel.ChangeForSelfTest(2, 1);
             Choose(4003);
             Require(_mainMenu!.Window == AreaMenuWindow.Main && _audioVolumes.Music == 5, "Done went back to the main menu, music restored");
