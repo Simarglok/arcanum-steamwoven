@@ -90,7 +90,10 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 [IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054)): the open centres the game view on the PC and the window's
 89 × 89 rectangle, (11, 9) in the own window and (16, 17) in the loot window, shows the game view's square of 178 × 178 around the
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
-shader under the window; the barter window's view (art 231) is not built.
+shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
+(`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
+232; the barter and steal windows get their round view with their original look (not built yet). Left: the own window's map drop and
+throw of a held item released in it (IW18).
 
 ## Character sheet
 
@@ -153,7 +156,10 @@ are F0 and are read by the slice.
    Sound, Done; messages 4000–4003) are text buttons with flags 0xD like the main menu's, but at x 130, y 221 + 40 × i. The page's
    controls (sliders, value arrows, the checkbox look) come from the options window's own open 0x541C70 and close 0x541D70 and its
    control table (OP1–OP8, [options window](../research/ledger/ui-audio.md#options-window-arc-ui-013)); the slice reads their art and
-   places the existing controls. Smallest next step: the background and the page buttons reuse `AreaMenuArtView`.
+   places the existing controls. Done by ARC-UI-059: the background and the page buttons (`AreaMenuArtView`, MW7) and the slot
+   points, x 261 / 531 and y 122 + 75 × row (MW8). Done by ARC-UI-061: each control in its own art at its slot (control build
+   0x57FAD0, MW9–MW10): background 688 (slider) or 671 (list), the label in `morph15font`, the arrows 667 and 668 as push buttons,
+   a slider's bar 623, a list's value in `Flare12Font`; the shown controls take the first slots. The window is done.
 2. **Save and load** (windows 8 save, 7 load; the palette's and F-keys' windows too): background 745 `SaveLoadBackground` (800 × 400)
    at (0, 41) with the strips 336 at the top and 335 at the bottom (MW1); art buttons 321 `NextBut` (61 × 61, 3 frames) at (675, 55)
    (Save / Load, hint 7021 / 7020), 323 `BackBut` at (69, 55) (hint 7002) and 32 `cncl_big` (38 × 37) at (115, 396) (hint 7022).

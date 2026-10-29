@@ -57,19 +57,40 @@ public sealed class AreaInventoryArtTests
     [TestMethod]
     public void TheRoundViewIsAnHalfScaleSquareOfTheGameViewAroundTheHolder()
     {
-        // ARC-UI-054 (IW33, IW34): (11, 9) with art 233 in the player's own window, (16, 17) with art 232 in a loot window, 89 × 89.
-        Assert.AreEqual((11, 9), AreaInventoryHole.Corner(loot: false));
-        Assert.AreEqual((16, 17), AreaInventoryHole.Corner(loot: true));
-        Assert.AreEqual((233, 232), (AreaInventoryHole.Art(false), AreaInventoryHole.Art(true)));
+        // ARC-UI-054 (IW33, IW34): (11, 9) with art 233 in the player's own window, (16, 17) with art 232 in a loot window, 89 × 89;
+        // ARC-UI-060: (16, 17) with art 231 in the barter window and the loot window's in the steal window.
+        Assert.AreEqual((11, 9), AreaInventoryHole.Corner(AreaInventoryMode.Own));
+        foreach (var mode in new[] { AreaInventoryMode.Barter, AreaInventoryMode.Loot, AreaInventoryMode.Steal })
+            Assert.AreEqual((16, 17), AreaInventoryHole.Corner(mode), mode.ToString());
+        CollectionAssert.AreEqual(new[] { 233, 231, 232, 232 }, Enum.GetValues<AreaInventoryMode>().Select(AreaInventoryHole.Art).ToArray());
         CollectionAssert.IsSubsetOf(new[] { 232, 233 }, AreaInventoryArtContent.Numbers.ToArray());
         CollectionAssert.DoesNotContain(AreaInventoryArtLayout.ArtNumbers.ToArray(), 233, "the round view's art is no reason for the diagnostic window");
-        Assert.IsTrue(AreaInventoryHole.Contains(true, 16, 17) && AreaInventoryHole.Contains(true, 104.9f, 105.9f), "a square: its corners are in");
-        Assert.IsFalse(AreaInventoryHole.Contains(true, 105, 50) || AreaInventoryHole.Contains(true, 50, 106) || AreaInventoryHole.Contains(true, 15.9f, 50));
-        Assert.IsTrue(AreaInventoryHole.Contains(false, 11, 9) && !AreaInventoryHole.Contains(false, 100, 9));
+        Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Loot, 16, 17) && AreaInventoryHole.Contains(AreaInventoryMode.Loot, 104.9f, 105.9f),
+            "a square: its corners are in");
+        Assert.IsFalse(AreaInventoryHole.Contains(AreaInventoryMode.Loot, 105, 50) || AreaInventoryHole.Contains(AreaInventoryMode.Loot, 50, 106)
+            || AreaInventoryHole.Contains(AreaInventoryMode.Loot, 15.9f, 50));
+        Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Own, 11, 9) && !AreaInventoryHole.Contains(AreaInventoryMode.Own, 100, 9));
+        Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Barter, 16, 17) && !AreaInventoryHole.Contains(AreaInventoryMode.Barter, 11, 9));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Corner((AreaInventoryMode)4));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Art((AreaInventoryMode)(-1)));
         // The game window's (311, 96, 178, 178) with the view centred on the holder at (400, 200): the square's centre is 15 pixels higher.
         Assert.AreEqual((311f, 96f, 178f), AreaInventoryHole.Source(400, 200, 1));
         Assert.AreEqual((400f - 178, 200f - 30 - 178, 356f), AreaInventoryHole.Source(400, 200, 2), "at zoom 2 the square doubles");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Source(0, 0, 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Source(0, 0, float.NaN));
+    }
+
+    [TestMethod]
+    public void ARoundViewReleaseClosesTheWindowAndOnlyTheOwnWindowDropsAHeldItemOnTheMap()
+    {
+        // ARC-UI-060 (IW34, IW18): nothing held closes the window in every mode; a held item goes back and the window closes outside
+        // the own window, and in the own window it takes the map drop (NOT READY in the viewer).
+        foreach (var mode in Enum.GetValues<AreaInventoryMode>())
+        {
+            Assert.AreEqual(AreaRoundViewRelease.Close, AreaInventoryHole.Release(mode, held: false), mode.ToString());
+            Assert.AreEqual(mode == AreaInventoryMode.Own ? AreaRoundViewRelease.MapDrop : AreaRoundViewRelease.PutBackAndClose,
+                AreaInventoryHole.Release(mode, held: true), mode.ToString());
+        }
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Release((AreaInventoryMode)7, held: false));
     }
 }

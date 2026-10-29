@@ -93,7 +93,7 @@ public sealed class ActorGaitTests
         var session = (AreaGridSession)actor.Session!;
         // The human's resources as a hero body profile (another profile object, as an elf man's would be).
         var body = ActorDiagnosticProfile.ForHeroBody(human.Idle, human.Walk, human.Run, human.Vault, human.Attack!, human.DistinctKeys);
-        actor.AttackPose = (5, 3);
+        actor.AttackPose = (ActorDiagnosticAction.Attack, 5, 3);
         actor.UseProfile(body, fast);
         Assert.AreSame(body, actor.Profile);
         Assert.AreSame(fast, actor.AreaGaitTiming);

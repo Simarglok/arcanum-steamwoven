@@ -71,6 +71,8 @@ public partial class TerrainViewerApp
             var frames = 0; var drawnMoved = false; var swing = false;
             // ARC-WORLD-111: its steps are drawn with its own walk or run cycle.
             var stepFrames = new HashSet<AreaFrameKey>(); var steppingFrames = 0;
+            // ARC-RENDER-038: its attack is drawn with its body's attack ART, and in combat mode it stands with what it shows.
+            _npcAttackFrames.Clear(); var attackFrames = 0; var armedStands = _npcArmedStandDraws;
             // Automated runs drive the clock themselves: a frame is 50 host milliseconds, as the world frame (the game clock runs 8x).
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
@@ -107,6 +109,10 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_aiFidgets > fidgets, "its done attack run was followed by its fidget");
+            Require(_npcAttackFrames.Count - attackFrames >= 3, $"its attack was drawn with its attack ART: {_npcAttackFrames.Count - attackFrames} distinct frames; "
+                + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
+            var shown = host.ShownWeapon(entity);
+            Require(shown.Weapon >= 1, $"in combat mode it shows its weapon or bare hands (WA1): {shown}");
             // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
             var skills = _aiSkills;
             Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
@@ -150,7 +156,8 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
+                AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
@@ -234,6 +241,8 @@ public partial class TerrainViewerApp
             var hostMs = 31_000_000L;
             TickAreaClock(hostMs);
             var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
+            // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART (distinct frames counted from here).
+            _npcAttackFrames.Clear(); var attackFrames = 0;
             string? hit = null;
             for (; frames < 6000 && hit is null; frames++)
             {
@@ -267,6 +276,8 @@ public partial class TerrainViewerApp
             Require(!offTurn, "it never walked on another participant's subturn");
             Require(_roundLog.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended and passed on");
             Require(trace?.EndCombatScripts > 0, "its subturn end asked its end-combat script (point 16)");
+            Require(_npcAttackFrames.Count - attackFrames >= 2, $"its attack was drawn with its attack ART: {_npcAttackFrames.Count - attackFrames} distinct frames; "
+                + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
             var at = host.Tile(entity)!.Value;
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
@@ -275,7 +286,7 @@ public partial class TerrainViewerApp
             Require(hud.Contains("turn-based: round", StringComparison.Ordinal) && hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the round and the AI");
             GD.Print("ARC-WORLD-095 native-smoke ai-turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Frames = frames, Held = held, HeroTurns = heroTurns, Hit = hit,
-                EndCombatScripts = trace!.EndCombatScripts,
+                EndCombatScripts = trace!.EndCombatScripts, AttackFrames = _npcAttackFrames.Count - attackFrames,
                 Rounds = _roundLog.Count(e => e.Kind == SessionCombatEventKind.RoundBegan),
                 Parity = "NOT_VERIFIED (round hooks read in the original executable; no original-runtime run)" }));
         }
@@ -506,5 +517,137 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
         }
+    }
+
+    // Native observation (ARC-WORLD-115, ARC_AREA_MAP_SMOKE_ONLY=ai-follower, map mode with --hero, a map with a free living speaker
+    // that can join and another living NPC with combat values near it: the Crash Site window of Arcanum1-024-fixed): the AI on, the
+    // speaker joins the hero, which stands next to it; the nearest other living NPC is told of the hero's attack. The attack event tells
+    // the hero's follower (0x4A9B80): it focuses the hero's victim, the AI host holds it (its own walk follows nothing), walks it up
+    // through its own walk and it strikes through the session's NPC hit step. The NPC, the follower and the hero are restored after.
+    private async Task RunAreaAiFollowerSmokeAsync(TerrainLoadResult? mapMode = null)
+    {
+        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area
+            || _conversationHost is not { PartyWired: true }) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NONE map={_readyMapName} (needs a hero, combat values and the session party)"); return; }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-WORLD-115 ai-follower smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_AI_FOLLOWER_SMOKE_FAILED");
+        }
+        var map = mapMode is { Area: { } loaded, AreaStepSnapshot: { } mapSteps }
+            ? new AreaMapRuntime(loaded.Snapshot, mapSteps, loaded.Plan.Chart) : _areaTransitions!.Current;
+        var inventory = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap);
+        var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
+        var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && !SpeakerDead(t.Speaker)
+            && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free && AreaLife.Of(session, _combatHost, CurrentAreaMap, t.Entity) is not null);
+        if (template is null) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-FOLLOWER map={map.RuntimeMap}"); return; }
+        var home = map.Chart.ToWorld(template.HomeOrigin);
+        static long Apart(long ax, long ay, long bx, long by) => Math.Max(Math.Abs(ax - bx), Math.Abs(ay - by));
+        // The nearest other living free NPC with combat values, drawn, that is not a pre-made hero's NPC (their heartbeat scripts
+        // 1781–1792 kill the unchosen ones once the AI runs, ARC-WORLD-114).
+        var candidates = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
+            .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && h.Entity != template.Entity && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
+            .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key) && c.Row.WorldX is not null && c.Row.WorldY is not null
+                && AreaUseScriptHost.LoadedSlot(c.Row, Arcanum.Scripting.Scr.ScrPoint.Heartbeat)?.Script is not (>= 1781 and <= 1792)
+                && session.QueryLife(c.Build.Combat!.Target).View is { Status.IsActive: true })
+            .OrderBy(c => Apart(c.Row.WorldX!.Value, c.Row.WorldY!.Value, home.X, home.Y)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        if (candidates.Length == 0) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-TARGET map={map.RuntimeMap}"); return; }
+        var follower = template.Entity;
+        var heroBefore = session.QueryHeroLife()!.Record.State;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        _worldFocusSimulationForSelfTest = true;
+        _aiForSmoke = true;
+        var joined = false;
+        var target = candidates[0];
+        var enemy = target.Holder.Entity;
+        var enemyLife = target.Build.Combat!.Target;
+        var enemyBefore = session.QueryLife(enemyLife).View!.Status.HitPoints;
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest();
+            var join = session.ForceJoinParty(session.Version, follower);
+            Require(join.Disposition != GameSessionDisposition.Rejected, "the speaker joined: " + join.Failure);
+            joined = true;
+            // The hero next to the NPC, so the NPC fights it where it stands (the placement rebinds the companions, the joined one among
+            // them); the follower follows the hero there (beyond 30 tiles it jumps to the hero, OL9) before the fight.
+            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 1));
+            var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower);
+            Require(companion is { Standing: CompanionStanding.Following }, "the speaker is a following companion: " + _areaCompanions?.Status());
+            var heroAt = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+            for (var f = 0; f < 600 && FollowDistance() > 4; f++) AreaSmokeFrame();
+            long FollowDistance() => _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower) is { } now
+                ? Arcanum.Simulation.Party.FollowDistanceRules.Distance(now.Grid.State.CommittedCell, heroAt) : long.MaxValue;
+            Require(FollowDistance() <= 4, "the follower came up to the hero: " + _areaCompanions?.Status());
+            companion = _areaCompanions!.Companions.Single(c => c.Entity == follower);
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            var host = AreaAiHostNow();
+            Require(host is not null && host.RunCompanions.Contains(follower), $"the AI host runs the follower: {host?.RunCompanions.Count}");
+            Require(!host!.Holds(follower), "before the fight its own walk follows the hero");
+            var startCell = companion!.Grid.State.CommittedCell;
+            GD.Print($"ARC-WORLD-115 ai-follower target={target.Row.PrototypeNumber}@{target.Row.WorldX},{target.Row.WorldY} follower={host.Tile(follower)} hero={host.Tile(AiSchedulerRules.Pc)}");
+            var apart = AiExecutorRules.Distance(host.Tile(follower)!.Value, host.Tile(enemy)!.Value);
+            Require(apart <= 1 || host.PlanPath(follower, new AiPathRequest(AiPathKind.Attack, enemy, null, 1, false, false)) is not null, "the follower's attack path reaches the NPC");
+
+            host.HeroAttacked(enemy);
+            var danger = session.QueryDanger(follower);
+            Require(danger.State == DangerState.CombatFocus && danger.Source?.Entity == enemy,
+                $"the follower fights the hero's victim: {danger.State} {host.TraceOf(follower)?.Event} {host.TraceOf(follower)?.Reaction} {host.TraceOf(follower)?.Setter}");
+            Require(host.Holds(follower), "the fighting follower is held by the AI host");
+
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var frames = 0; var walked = false; var swing = false;
+            var hostMs = 30_000_000L;
+            TickAreaClock(hostMs);
+            for (; frames < 4000 && host.TraceOf(follower)?.Hit is null; frames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                walked |= _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower)?.Grid.State.CommittedCell is { } now && now != startCell;
+                swing |= host.RunOf(follower)?.Top.Goal == AiGoalType.AttemptAttack;
+            }
+            var trace = host.TraceOf(follower);
+            GD.Print($"ARC-WORLD-115 ai-follower smoke trace event={trace?.Event} danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
+            Require(trace?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal), $"the follower's blow was resolved after {frames} frames: {trace?.Hit}");
+            Require(swing, "its attempt-attack goal ran");
+            Require(walked || apart <= 1, "it walked up through its own walk");
+            var at = host.Tile(follower)!.Value;
+            var there = host.Tile(enemy)!.Value;
+            Require(AiExecutorRules.Distance(at, there) == 1, $"it struck from the cell next to the NPC: {at} {there}");
+            Require(session.QueryCombatMode(SessionCombatant.Critter(follower)), "the attempt put it into combat mode (goal 19 node 5)");
+            RefreshAreaStatus();
+            GD.Print("ARC-WORLD-115 native-smoke ai-follower PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                map.RuntimeMap, Follower = template.Speaker.Row.PrototypeNumber, Target = target.Row.PrototypeNumber, Apart = apart, Walked = walked, Frames = frames,
+                Hit = trace!.Hit, Event = trace.Event,
+                Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+        }
+        finally
+        {
+            if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+            CancelAreaAttack(null);
+            _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
+            // Both NPCs leave combat mode, their life and the hero's are restored, and the follower is free again (their danger records
+            // stay: the AI is off after this stage, which runs only when named).
+            foreach (var npc in new[] { follower, enemy })
+                if (session.QueryCombatMode(SessionCombatant.Critter(npc)))
+                    session.SetCombatMode(session.Version, SessionCombatant.Critter(npc), false, SessionCombatModeContext.RealTime);
+            if (session.QueryLife(enemyLife).View?.Status is { } now && (now.HitPoints != enemyBefore || now.IsDead))
+                session.Heal(session.Version, enemyLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            if (_combatHost.Build(session, map.RuntimeMap, follower).Combat?.Target is { } followerLife)
+                session.Heal(session.Version, followerLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var heroNow = session.QueryHeroLife()!.Record.State;
+            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            if (joined) session.LeaveParty(session.Version, follower, new PartyLeave(Force: true));
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
+            BindAreaCompanions();
+            PublishWorldSelection();
+        }
+        await Task.CompletedTask;
     }
 }

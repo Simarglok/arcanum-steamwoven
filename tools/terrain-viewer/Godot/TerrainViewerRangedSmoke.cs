@@ -43,6 +43,8 @@ public partial class TerrainViewerApp
         { GD.Print($"ARC-COMBAT-015 native-smoke ranged NONE map={_readyMapName} (the hero wields no kit weapon to lend a bow's values)"); return; }
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var runtime = CurrentAreaMap;
+        // ARC-RENDER-039: the animation and drawn action of the last attack ShootOnce started.
+        (int Animation, ActorDiagnosticAction Action) lastStart = default;
         var npcs = area.Snapshot.Objects.Where(row => row.Type == 16 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null
                 && !IsAreaCompanion(row.Key))
             .Select(row => _combatHost.Target(session, runtime, row.Key))
@@ -397,6 +399,9 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 _projectileEndsForSelfTest.Clear(); _boomerangTurnsForSelfTest.Clear();
                 var result = await ShootOnce(pick.Target, expectWalk: false);
+                // ARC-RENDER-039: a returning weapon attacks with the throw (WA4), drawn with the body's throw ART.
+                Require(lastStart == (Arcanum.Simulation.Equipment.WeaponArtRules.ThrowAnimation, ActorDiagnosticAction.Throw),
+                    $"the boomerang plays the throw ({lastStart.Animation} {lastStart.Action}, throw ART {_worldActor.Profile.Throw is not null})");
                 // A critical miss may drop or break the lent boomerang: the check ends there.
                 if (session.QueryHeroAttack() is not { Skill: CombatSkill.Throwing }) { ClearAreaProjectiles("the boomerang was lost"); break; }
                 Require(result?.Shot is { } shot && session.QueryShotReturns(shot) && session.QueryBoomerangInFlight() && _projectiles.Count == 1
@@ -460,6 +465,7 @@ public partial class TerrainViewerApp
             }
             Require(_attack is not null && _attack.Approaching == expectWalk && (expectWalk || _attack.Player is not null),
                 $"the attack {(expectWalk ? "walks first" : "starts without a walk")}: {_attackNotice}");
+            if (_attack!.Player is not null) lastStart = (_attack.Animation, _attack.Action);
             for (var frames = 0; frames < 4000 && _attack is not null && _attack.Attacks == 0; frames++)
             {
                 _areaSmokeTime++;

@@ -197,7 +197,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="container-loot-window-arc-world-101"></a>[Container loot window (ARC-WORLD-101)](ledger/items.md#container-loot-window-arc-world-101) | [Items and inventory](ledger/items.md) | LW1–LW4 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="body-armour-art-arc-world-112"></a>[Body armour art (ARC-WORLD-112)](ledger/items.md#body-armour-art-arc-world-112) | [Items and inventory](ledger/items.md) | BA1–BA6 |
-| <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA8 |
+| <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA10 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -229,7 +229,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="round-view-arc-ui-054"></a>[Round view (ARC-UI-054)](ledger/ui-audio.md#round-view-arc-ui-054) | [Interface windows and audio](ledger/ui-audio.md) | IW33–IW34 |
 | <a id="cursor-art-arc-ui-056"></a>[Cursor art (ARC-UI-056)](ledger/ui-audio.md#cursor-art-arc-ui-056) | [Interface windows and audio](ledger/ui-audio.md) | CU1–CU6, CUA1 |
 | <a id="hovered-object-arc-ui-057"></a>[Hovered object (ARC-UI-057)](ledger/ui-audio.md#hovered-object-arc-ui-057) | [Interface windows and audio](ledger/ui-audio.md) | OH1–OH9 |
-| <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW6 |
+| <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW10 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |

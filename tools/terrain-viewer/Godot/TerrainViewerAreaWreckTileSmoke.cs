@@ -10,6 +10,7 @@ namespace Arcanum.TerrainViewer;
 // the follow smoke joins its NPC) and stands next to a plane wreck tile whose script 1695 waits for him, the PC four cells past the
 // tile on the same line; following the PC, his first step goes onto the tile, its script runs with him as the triggerer and calls 1696,
 // whose dialog opens his conversation with the PC at node 1 of DLG 1696 (no dialog script run); the smoke then closes it.
+// It is the stage that lets a scripted conversation open in a native smoke; the other stages hold them (ARC-WORLD-118).
 public partial class TerrainViewerApp
 {
     private const int WreckTileScript = 1695, WreckDialogScript = 1696;
@@ -51,7 +52,8 @@ public partial class TerrainViewerApp
         Require(line is not null, $"a walkable line through a wreck tile ({wrecks.Length} tiles: {string.Join(" ", wrecks)})");
         var wreck = line!.Value.Tile;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
-        _worldFocusSimulationForSelfTest = true;
+        var takesScripted = _smokeTakesScriptedConversations;
+        _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -84,7 +86,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _smokeTakesScriptedConversations = takesScripted;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
         await Task.CompletedTask;

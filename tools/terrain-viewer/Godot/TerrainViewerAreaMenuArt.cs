@@ -3,7 +3,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW6). The art is read once a
+// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW8). The art is read once a
 // module; without a game folder (the synthetic self-tests) the menu keeps its diagnostic window.
 public partial class TerrainViewerApp
 {
@@ -23,11 +23,19 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-058 menu art not ready: {_menuArtContent.Detail}");
             return;
         }
-        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt }
+        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt, AreaMenuArtLayout.OptionsArt }
             .ToDictionary(number => number, number => (Texture2D)HotkeyTexture(_menuArtContent.Art[number].Frames[0]));
-        var glyphs = _menuArtContent.Art[AreaMenuArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
+        var art = _menuArtContent.Art;
+        IReadOnlyDictionary<int, Texture2D> Glyphs(int number) => art[number].Frames.Select((frame, index) => (frame, index))
             .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
+        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
+        var glyphs = Glyphs(AreaMenuArtLayout.FontArt);
         panel.SetArt(backgrounds, font, glyphs);
+        // ARC-UI-061: the options controls' art (MW9, MW10).
+        panel.SetControlArt(new AreaMenuControlArt(
+            new[] { AreaMenuArtLayout.SliderArt, AreaMenuArtLayout.ListArt }.ToDictionary(number => number, number => Frames(number)[0]),
+            Frames(AreaMenuArtLayout.BarArt)[0], Frames(AreaMenuArtLayout.LessArt), Frames(AreaMenuArtLayout.MoreArt),
+            _menuArtContent.LabelFont!, Glyphs(AreaMenuArtLayout.LabelFontArt), _menuArtContent.ValueFont!, Glyphs(AreaMenuArtLayout.ValueFontArt)));
         GD.Print($"ARC-UI-058 menu art ready {_menuArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
     }
 

@@ -32,15 +32,17 @@ public sealed class DiagnosticGridActor
     public bool IsPlaying => _timeline.IsPlaying;
     public DiagnosticActorState State => Session is { } session ? Render(session.State)
         : new(new(6, 1), 5, ActorDiagnosticAction.Idle);
-    /// <summary>ARC-COMBAT-005: the attack pose the host draws while the settled actor attacks in place (facing octant and
-    /// attack frame); null otherwise. A moving actor is drawn by its movement whatever the pose says.</summary>
-    public (int Octant, int Frame)? AttackPose { get; set; }
+    /// <summary>ARC-COMBAT-005: the attack pose the host draws while the settled actor attacks in place (the profile's
+    /// <see cref="ActorDiagnosticAction.Attack"/>, and since ARC-RENDER-039 its <see cref="ActorDiagnosticAction.LowAttack"/> or
+    /// <see cref="ActorDiagnosticAction.Throw"/>, facing octant and frame); null otherwise. A moving actor is drawn by its movement
+    /// whatever the pose says.</summary>
+    public (ActorDiagnosticAction Action, int Octant, int Frame)? AttackPose { get; set; }
     /// <summary>ARC-COMBAT-021: the pose the host draws while the settled hero falls, lies unconscious or gets up (the profile's
     /// <see cref="ActorDiagnosticAction.FallDown"/> or <see cref="ActorDiagnosticAction.GetUp"/>, facing octant and frame); it wins over
     /// <see cref="AttackPose"/>. Null otherwise.</summary>
     public (ActorDiagnosticAction Action, int Octant, int Frame)? DownPose { get; set; }
     private (ActorDiagnosticAction Action, int Octant, int Frame)? Pose => Session?.State.Phase != MovementPhase.Settled ? null
-        : DownPose ?? (AttackPose is { } attack ? (ActorDiagnosticAction.Attack, attack.Octant, attack.Frame) : null);
+        : DownPose ?? AttackPose;
     /// <summary>ARC-MAGIC-018: the octant a settled actor was turned to in place (the casting goal's facing turn, 0x42C850) and the
     /// movement facing it was turned from; drawn while the actor stays settled with that facing, dropped when it moves. Null otherwise.</summary>
     public (int Octant, NeighborDirection From)? TurnedFacing { get; set; }

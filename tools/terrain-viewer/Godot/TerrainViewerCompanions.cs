@@ -45,6 +45,9 @@ public partial class TerrainViewerApp
         _areaCompanions.Removed = AreaRemovedObjects;
         // ARC-WORLD-075: outside combat mode they walk through living critters; the dead are not checked on a goal or a segment end.
         _areaCompanions.Dead = AreaCritterDeadNow;
+        // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
+        _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
+        _areaCompanions.Extra = AiMoversOverlay;
         if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
         // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
         if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
@@ -158,10 +161,11 @@ public partial class TerrainViewerApp
     private void DriveAreaCompanions(IGridSession session, SimulationTime frontier)
     {
         if (_areaCompanions is not { } group || _areaSession is not { } owner || session is not AreaGridSession pc) return;
-        // ARC-COMBAT-020: in a turn-based round a companion moves only on its own subturn, by its AI (none yet): it stands.
-        if (owner.QueryCombatRound() is not null) { RefreshFollowerPortraits(); return; }
+        // ARC-COMBAT-020: in a turn-based round a companion moves only on its own subturn, by its AI (ARC-WORLD-115: the steps the AI
+        // host gives the companion it holds); the others stand.
+        var round = owner.QueryCombatRound() is not null;
         var entered = new List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)>();
-        foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier))
+        foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier, heldOnly: round))
         {
             // The steps it started into a tile, as the player's (NoteMapEntries), for its tile scripts after the drive.
             if (_mapTransfers is { } transfers)
@@ -175,7 +179,7 @@ public partial class TerrainViewerApp
         }
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
             GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
-        RunCompanionLoyalty(group, owner, pc, frontier);
+        if (!round) RunCompanionLoyalty(group, owner, pc, frontier);
         RunCompanionTileScripts(entered);
         RefreshFollowerPortraits();
     }

@@ -1102,7 +1102,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   the original's copy replaces it; the doll art 223 is opaque there), with art 233 or 232 drawn over it when it reads.
   A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
-  frame. NOT READY: the barter window's round view (art 231), the own window's map drop and throw from it (IW18). The native smoke
+  frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
+  barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
+  goes back and the window closes outside the own window); the barter and steal windows draw the diagnostic look, so their round view
+  shows once their original look is built. NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
+  the window stays open). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
@@ -1686,7 +1690,7 @@ and layout (below), the other windows the project's.
   under the pointer. The pointer over a label plays 3026, a press 3027, a release over it chooses it; letters, Escape and the
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
-  names them and the window's notice. The quit box, the options, save and load, browser, new-character, editor and shop windows keep
+  names them and the window's notice. ARC-UI-059: the options window too (below). The quit box, the save and load, browser, new-character, editor and shop windows keep
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
@@ -1850,7 +1854,20 @@ animation.
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
 in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
-project's.
+project's, except as below.
+
+- **Original look (ARC-UI-059,** [ledger MW7–MW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
+  art the window draws its background 556 `OptionsMenuBack` over the 800 × 600 screen as the main menu's windows do, and its page
+  buttons Game, Video, Sound and Done as art-font labels centred on (130, 221 + 40 × i), lit under the pointer, sounding and
+  choosing as the main menu's labels (the focused one lit while the focus is on a page button). ARC-UI-061
+  ([ledger MW9–MW10](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): each control in its own art at its slot (MW8):
+  its background (688 `OptionSlider` or 671 `OptionMultiChoice`, 213 × 56), its label centred on it in `morph15font` (white), the
+  arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
+  list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
+  press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122)); the control with the keyboard or controller
+  focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
+  notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
 - **Pages.** The buttons Game, Video, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
@@ -1897,9 +1914,12 @@ from play, Done going back from the main menu, the Rules line switching the sess
 texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
 Done back to the main menu, a new game as the first hero beginning under the Original rules, then in play a difficulty
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
-Steamwoven on the session, the O key closing the menu). Not done: Brightness, Text Duration, Combat Taunts, Module,
-Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
-button sounds.
+Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
+while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
+saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
+pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
+the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration, Combat
+Taunts, Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 
