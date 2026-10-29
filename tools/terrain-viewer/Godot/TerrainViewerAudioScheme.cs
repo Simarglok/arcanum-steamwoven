@@ -163,12 +163,17 @@ public partial class TerrainViewerApp
         switch (command.Kind)
         {
             case SchemeCommandKind.StartSong:
-                if (command.Sound!.File is { } song && Play(catalog.OpenPayload(catalog.ResolveFile(song)), AudioChannel.Music,
-                        AudioVolumeRules.StartVolume(command.Volume, music), command.Loop) is { } songHandle)
-                    _schemeVoices[command.Voice] = songHandle;
+                ViewerAudioHandle? songHandle = command.Sound!.File is { } song ? Play(catalog.OpenPayload(catalog.ResolveFile(song)), AudioChannel.Music,
+                    AudioVolumeRules.StartVolume(command.Volume, music), command.Loop) : null;
+                if (songHandle is { } started) _schemeVoices[command.Voice] = started;
+                // ARC-RES-075: every song start and fade is in the log, so a report of silence shows whether a song was due.
+                GD.Print($"ARC-UI-041 song start entry={command.Sound.ListNumber} file={command.Sound.File ?? "none"} "
+                    + $"window={command.Sound.HourStart}-{command.Sound.HourEnd} hour={session.QueryClockSnapshot().Hour} loop={command.Loop} started={songHandle is not null}");
                 break;
             case SchemeCommandKind.FadeOut:
-                if (_schemeVoices.Remove(command.Voice, out var fading)) _audio!.FadeOut(fading, command.FadeMs);
+                var faded = _schemeVoices.Remove(command.Voice, out var fading);
+                if (faded) _audio!.FadeOut(fading, command.FadeMs);
+                GD.Print($"ARC-UI-041 song fade entry={command.Sound?.ListNumber} hour={session.QueryClockSnapshot().Hour} faded={faded}");
                 break;
             case SchemeCommandKind.PlayAmbient:
                 if (command.Sound!.File is { } ambient)
