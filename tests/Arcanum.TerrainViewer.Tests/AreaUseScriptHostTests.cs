@@ -5,6 +5,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -108,6 +109,12 @@ public sealed class AreaUseScriptHostTests
             var called = Program(Do(new(ScrCatalogue.Action.Dialog, N(3))), Do(Skip));
             BinaryPrimitives.WriteUInt32LittleEndian(called, 0b10);
             Write("scr/00741called.scr", called);
+            // 750 (ARC-SCRIPT-052, 1724's and 1779's shape): a tile that stops the NPC named 9000 who steps on it attacking and destroys him.
+            Write("scr/00750exit.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Triggerer, 0), N(9000)), new(0), new(ScrCatalogue.Action.Goto, N(3))),
+                Do(new(ScrCatalogue.Action.StopAttacking, (Triggerer, 0))), Do(new(ScrCatalogue.Action.Destroy, (Triggerer, 0))), Do(Skip)));
+            // 751: the same for whoever steps on it; 752: whoever steps on it stops attacking.
+            Write("scr/00751any.scr", Program(Do(new(ScrCatalogue.Action.Destroy, (Triggerer, 0))), Do(Skip)));
+            Write("scr/00752stop.scr", Program(Do(new(ScrCatalogue.Action.StopAttacking, (Triggerer, 0))), Do(Skip)));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -481,6 +488,91 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual((AreaScriptedUseOutcome.EffectsRejected, (ScrDialogStart?)null), (unkept.Outcome, unkept.Dialog), unkept.Detail);
             StringAssert.Contains(unkept.Detail, "point 1 slot"); StringAssert.Contains(unkept.Detail, "no loaded element");
             Assert.AreEqual(held, session.Version);
+        });
+    }
+
+    // ARC-SCRIPT-052 (TD1–TD3): a tile's stop attacking and destroy of the NPC who steps on it; the destroyed NPC leaves the map's objects.
+    [TestMethod]
+    public void A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 750);
+            var npcRow = Row(9, 16, 0, 9000);
+            var stops = new List<SessionPeaceStep>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, Stopped: stops.Add);
+            var host = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, world);
+            var npc = new ScrObjectRef(1, Entity(9));
+            var targets = new AreaObjectTargets(1, [npcRow], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+
+            // The PC is not named 9000: nothing.
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(tile, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(AreaUseScriptHost.Destroyed(session, 1, Entity(9)));
+            var ran = host.RunPlaced(tile, session.Rules.Scripts, null, npc);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { Entity(9) }, stops.Select(s => s.Entity).ToArray(), "the stop's host part ran for the NPC");
+            Assert.IsTrue(AreaUseScriptHost.Destroyed(session, 1, Entity(9)));
+            CollectionAssert.AreEqual(new[] { npcRow.Key }, targets.Gone(session).ToArray(), "the view no longer draws or reaches him");
+            // TD2: an NPC already destroyed is left as it is.
+            var version = session.Version;
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunPlaced(tile with { Tile = 74, Script = 751 }, session.Rules.Scripts, null, npc).Outcome);
+            Assert.AreEqual(version, session.Version);
+
+            // The PC is not destroyed (not modelled), nor an NPC with a destroy-point script (the destroy event is not run): nothing applies.
+            var held = session.Version;
+            var pc = host.RunPlaced(tile with { Tile = 75, Script = 751 }, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, pc.Outcome, pc.Detail);
+            var scripted = Row(10, 16, 0, 9000);
+            scripted = scripted with { EffectiveFields = scripted.EffectiveFields.Select(f => f.Slot != 31 ? f
+                : f with { Elements = [.. f.Elements, new AreaSparseElement(ScrPoint.Destroy, [0, 0, 760])] }).ToArray() };
+            var guarded = new AreaUseScriptHost(session, 1, [Gate(0), scripted], [Inventory()], content, world)
+                .RunPlaced(tile with { Tile = 76 }, session.Rules.Scripts, null, new ScrObjectRef(1, Entity(10)));
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, guarded.Outcome, guarded.Detail);
+            StringAssert.Contains(guarded.Detail, "destroy script 760");
+            Assert.AreEqual(held, session.Version);
+            Assert.IsFalse(AreaUseScriptHost.Destroyed(session, 1, Entity(10)));
+        });
+    }
+
+    // ARC-SCRIPT-052 (TD3): the PC's stop reaches its followers; a stop the session would refuse (an NPC fighting the hero without reaction
+    // facts) and a destroy of an NPC destroyed in its map data change nothing.
+    [TestMethod]
+    public void A_tile_stop_reaches_the_pcs_followers_and_a_stop_or_destroy_that_would_not_apply_changes_nothing()
+    {
+        WithContent(content =>
+        {
+            var stopTile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 752);
+            var npc = new ScrObjectRef(1, Entity(9));
+            var stops = new List<SessionPeaceStep>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, Stopped: stops.Add);
+            using (var session = ConversationSessionFixture.Create())
+            {
+                Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(9)).Disposition);
+                var ran = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, world).RunPlaced(stopTile, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                CollectionAssert.AreEqual(new[] { Entity(9) }, stops.Select(s => s.Entity).ToArray(), "the PC's stop is each follower's");
+            }
+            stops.Clear();
+            using (var session = ConversationSessionFixture.Create())
+            {
+                // Its focus is a follower of the PC, so the peace is with the hero's side.
+                Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(4)).Disposition);
+                var focus = session.SetDangerState(session.Version, new SessionDangerRequest { Entity = Entity(9), State = DangerState.CombatFocus, Target = SessionCombatant.Critter(Entity(4)) });
+                Assert.AreNotEqual(GameSessionDisposition.Rejected, focus.Disposition, focus.Failure.ToString());
+                var held = session.Version;
+                var refused = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, world).RunPlaced(stopTile, session.Rules.Scripts, null, npc);
+                Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+                StringAssert.Contains(refused.Detail, "reaction facts");
+                Assert.AreEqual((held, 0), (session.Version, stops.Count));
+
+                var gone = Row(10, 16, 0, 9000);
+                gone = gone with { EffectiveFields = [.. gone.EffectiveFields, new AreaFieldValue(18, AreaPresence.Value, AreaValueOrigin.Instance, 0x1, [], null)] };
+                var destroyTile = stopTile with { Script = 751 };
+                var again = new AreaUseScriptHost(session, 1, [Gate(0), gone], [Inventory()], content, world).RunPlaced(destroyTile, session.Rules.Scripts, null, new ScrObjectRef(1, Entity(10)));
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, again.Outcome, again.Detail);
+                Assert.AreEqual(held, session.Version, "TD2: one destroyed in its map data is left as it is");
+            }
         });
     }
 

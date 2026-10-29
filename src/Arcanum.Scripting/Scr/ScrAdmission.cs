@@ -232,6 +232,13 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S19 { get; } = new("S19", S18.Conditions, S18.Actions.Concat([ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]),
         S18.ValueKinds, S18.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The tile-script actor set (ARC-SCRIPT-052, slice 8 of the script trigger audit, ledger TD1–TD3): <see cref="S19"/> plus destroy (68)
+    /// and stop attacking (109), which hand one <see cref="ScrObjectStateRequest"/> for the first object of their operand to the host.
+    /// </summary>
+    public static ScrAdmissionSet S20 { get; } = new("S20", S19.Conditions, S19.Actions.Concat([ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking]),
+        S19.ValueKinds, S19.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

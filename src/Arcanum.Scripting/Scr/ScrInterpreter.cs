@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S19"/>.
+/// <see cref="ScrAdmissionSet.S20"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -444,6 +444,15 @@ internal sealed class ScrInterpreter
                 // HW4: the first object of operand 0 and the faction; an absent object changes nothing (0x45D0C0 returns at a null handle).
                 var faction = Get(a, 1);
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.SetFaction, obj, faction));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Destroy:
+            case ScrCatalogue.Action.StopAttacking:
+            {
+                // TD1, TD3: the first object of operand 0 (0x44B960) goes to the object destroy (0x43CCA0) or to stop attacking (0x4AA4A0), and the
+                // run goes on. An absent object changes nothing (a project choice: both read the null handle's fields).
+                var change = a.Type == ScrCatalogue.Action.Destroy ? ScrObjectStateChange.Destroy : ScrObjectStateChange.StopAttacking;
+                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CallScriptEx:

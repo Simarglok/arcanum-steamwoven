@@ -113,10 +113,10 @@ only; the guard's crime notice 0x4AEFCD is not hosted).
 
 | Entry | Original | Steamwoven |
 | --- | --- | --- |
-| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). **Not** the AI movers, visitors, a jump or teleport arrival, a created or placed critter, or the path walk. Of 3,012 tile scripts 684 run and 2,198 are refused by their set (the tile census of `AreaUseScriptsOriginalTests`). |
+| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). **Not** the AI movers, visitors, a jump or teleport arrival, a created or placed critter, or the path walk. Of 3,012 tile scripts 829 run and 2,053 are refused by their set (the tile census of `AreaUseScriptsOriginalTests`; 684 and 2,198 before ARC-SCRIPT-052). |
 | Sector script | 0x4F2330 for the local player entering a sector (TS3); followers then get point 27. | Map mode, PC crossing a sector. Point 27 not run. |
 | Call script (7) | 0x44B030: the callee from its header at the caller's point, every triggerer × attachee pair (OV1, X11). | Use, tile and sector sets; not the talk or heartbeat sets. |
-| Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set; point 1 refused. |
+| Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set, since ARC-SCRIPT-052 the tile and sector set; point 1 refused. |
 | Deferred calls (54, 55) | Game-time events (one shared handler, TG7). | Call in (54) through the session queue (talk and use sets); call at (55) refused. |
 | End-game slides | Scripts 997–999 from the slide UI (0x569720). | None. |
 | Native trap scripts | Inside the interpreter (0x4BCB70). | Trap state (ARC-WORLD-110). |
@@ -174,7 +174,7 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
   ARC-SCRIPT-049 the set admits 1100, 2700, 1130, 3081 and 2106. The other four still stop on a command outside the set: 1717 on set day
   standpoint (45), then set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then
   obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1).
-- **Tile scripts** (not object slots): 684 of 3,012 run, 2,198 refused (ARC-SCRIPT-046's census, unchanged).
+- **Tile scripts** (not object slots): 829 of 3,012 run, 2,053 refused (684 and 2,198 before ARC-SCRIPT-052, slice 8's first group).
 
 ## 6. Fix slices (prioritised)
 
@@ -189,7 +189,7 @@ Each slice is its own task and thread; codes come from the coordinator. "Reach" 
 | 5 | Combat points | enter, exit, start, end combat (13–16), hit, miss, critter hits, critical hit and miss, taking damage (7, 8, 26, 34, 35, 23) from the combat hosts | 62 attachments (Virgil's 1997 at enter combat) |
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
-| 8 | Tile-script command groups | the first refusals of the 2,198 refused tile scripts, counted and admitted by group | tile scripts |
+| 8 | Tile-script command groups | the first refusals of the 2,198 refused tile scripts, counted and admitted by group. **First group done** by ARC-SCRIPT-052 (S20, ledger TD1–TD3): call-ex (81), destroy (68) and stop attacking (109) in the tile set; Virgil's altar talk (1328 → 1324 line 14, node 250) opens, 145 more tiles run. First refusals left (rows): get stat (33) 608, a loop over everyone in the vicinity (focus 8) 443, action 32 98, action 22 93, change art (59) 91, sector is blocked (condition 45) 89, condition 51 85, damage (60) 75, play script eye candy (120) 68, action 112 62, set day standpoint (45) 61, monster generator disabled (condition 46) 57; 1779 now stops at a computed goto. The agent's exit tile 1724 (destroy) needs slice 3 (tiles for AI movers) | tile scripts |
 | 9 | Examine, new sector, resurrect | points 0 (0x57CD93), 27 for followers (0x4F24A3, Virgil's 1568), 18 (0x4B5A46) | 65 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
 | 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |

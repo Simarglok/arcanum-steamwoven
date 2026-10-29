@@ -79,7 +79,7 @@ STAGE_PASS = {
     "premade": "ARC-WORLD-114 native-smoke premade PASS", "opening": "ARC-SCRIPT-047 native-smoke opening PASS",
     "life": "ARC-UI-020 native-smoke life PASS", "floaters": "ARC-UI-021 native-smoke floaters PASS",
     "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS",
-    "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
+    "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "altar": "ARC-SCRIPT-052 altar smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
     "report": "ARC-DEV-051 native-smoke bug report PASS", "hover": "ARC-UI-057 native-smoke hover-window PASS",
     "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS",
 }
@@ -96,7 +96,7 @@ DEBUG_STAGES = frozenset({"debug-travel"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
-                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck"})
+                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck", "altar"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report"})
 SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 

@@ -324,8 +324,9 @@ the start map), one per tile.
   a companion's step runs the tile's script too, with the companion as the triggerer (below). A load, a reset, a transfer arrival and an F8
   restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
   a teleport takes is not read.
-- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-placed-dialog" (the use set
-  "S4-area-use-reading-objects-story-world" with the dialog action, since ARC-SCRIPT-046). The slot
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-placed-dialog-actor" (the use set
+  "S4-area-use-reading-objects-story-world" with the dialog action since ARC-SCRIPT-046, and call-ex, destroy and stop attacking since
+  ARC-SCRIPT-052). The slot
   is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
   `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
   there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
@@ -342,11 +343,12 @@ the start map), one per tile.
   is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   6 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722), and since
-  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 678 tile scripts and 16 sector scripts run without one,
-  2,198 tile and 4 sector scripts are refused because they need actions or conditions outside the set, and since ARC-WORLD-081
+  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 823 tile scripts and 16 sector scripts run without one,
+  2,053 tile and 4 sector scripts are refused because they need actions or conditions outside the set, and since ARC-WORLD-081
   the 130 tiles of script 1629 on the start map run to a create object of a critter prototype (28464, eight next to the PC), which the
   viewer does not create, so their effects are refused (before ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and
-  2,368; before ARC-WORLD-081: 678 and 1 run, 2,328 and 19 refused).
+  2,368; before ARC-WORLD-081: 678 and 1 run, 2,328 and 19 refused; before ARC-SCRIPT-052's call-ex, destroy and stop attacking: 678
+  and 2,198).
 - **Generated sectors** (ARC-WORLD-081, [template sector plants](../world/template-sector-plants-runtime.md)): a main-map window
   also lists the sector scripts of its template sectors (the template's script section, ledger PG9), and they run on entry like an own
   sector's. The only one, the plant generator 30285, creates herbs next to the template's marker when the marker stands within 10 tiles
