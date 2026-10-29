@@ -65,8 +65,9 @@ public sealed partial class GameSessionOwner
     private (int Width, int Height)? ArtCells(string entity, SessionSeedItem? row)
     {
         if (_itemArtSizes is null) return null;
-        var added = row is null && _inventory.NpcOf(entity) is { } npc ? _inventory.AddedTo(npc).FirstOrDefault(item => item.Entity == entity) : null;
-        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? added?.Kind ?? row?.Facts.Kind) is not { } kind) return null;
+        var added = row is null && _inventory.NpcOf(entity) is { } npc
+            ? _inventory.AddedTo(npc).Where(item => item.Entity == entity).Select(item => (SessionItemKind?)item.Kind).FirstOrDefault() : null;
+        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? added ?? row?.Facts.Kind) is not { } kind) return null;
         var pixels = _itemArtSizes(entity, kind);
         ThrowIfDisposed();
         return pixels is { } frame ? InventoryGridRules.CellsOf(frame) : null;

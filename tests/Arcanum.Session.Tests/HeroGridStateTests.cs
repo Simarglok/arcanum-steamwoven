@@ -227,6 +227,10 @@ public sealed class HeroGridStateTests
         owner.AttachItemArtSizes(Frame);
         Assert.AreEqual(revision + 1, owner.Version.Revision, "nothing to lay out again: no revision");
 
+        Assert.AreEqual((2, 1), owner.QueryItemCells("apple"), "a seed item on the ground: the art's size");
+        Assert.AreEqual((2, 3), owner.QueryItemCells("crate"), "no frame: the seed's size");
+        Assert.AreEqual((1, 1), owner.QueryItemCells("nothing"), "an unknown item");
+        Assert.ThrowsExactly<ArgumentException>(() => owner.QueryItemCells(""));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
         Assert.AreEqual("apple@5:2x1", Layout(owner).Split(' ')[^1], "the art's 2 × 1 wins over the seed's 1 × 1");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "pebble", Accept).Disposition);
