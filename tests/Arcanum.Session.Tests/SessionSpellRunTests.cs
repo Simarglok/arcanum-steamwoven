@@ -45,7 +45,9 @@ public sealed class SessionSpellRunTests
         public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) => new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
         public ISpellRollSource Rolls { get; } = new NoRolls();
         public ISpellFateSave FateSave => SpellFateSave.None;
-        public bool IsLocalPlayer(SpellRunObject? who) => false;
+        /// <summary>ARC-MAGIC-026: with a bar session, "hero" is the local player and that session's maintain bar answers.</summary>
+        public GameSessionOwner? Bar { get; set; }
+        public bool IsLocalPlayer(SpellRunObject? who) => Bar is not null && who?.Id == Hero.Id;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => [new(run.Target, run.TargetTile)];
         public bool UseSpellAtMaximum(SpellRunObject pc) => false;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
@@ -57,7 +59,7 @@ public sealed class SessionSpellRunTests
         }
         public SpellTimeFacts TimeFacts(SpellRun run) => new(true);
         public int? Stat(SpellRunObject who, int stat) => 12;
-        public bool MaintainBarHasSlot(SpellRun run) => true;
+        public bool MaintainBarHasSlot(SpellRun run) => Bar?.MaintainBarTakes(run) ?? true;
         public IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run) => Charge;
     }
 
@@ -192,5 +194,54 @@ public sealed class SessionSpellRunTests
         var cast = owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, trap));
         var reflection = cast.Notes.Single(n => n.Kind == SpellRunNoteKind.ReflectionPayment);
         Assert.AreEqual(("hero", (int?)7), (reflection.Target!.Object!.Id, reflection.Payments!.Single().LastCost));
+    }
+
+    [TestMethod]
+    public void Maintained_spells_fill_the_bar_up_to_its_open_slots_and_a_click_ends_one_Arc_magic_026()
+    {
+        // The hero's INT 8: two open slots (0x57C4B0); the run cap reads the host's INT 12 (three runs), so the bar is the limit.
+        using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        Assert.AreEqual(2, owner.QueryMaintainBarOpenSlots());
+        var maintained = Instant with { MaintainPeriod = 2 };
+        var world = new Spells(maintained) { Bar = owner };
+        int Cast()
+        {
+            var id = Start(owner, new(33, Hero, Hero, Orc, SpellLocation.None), maintained).Creation!.Run!.Id;
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, id)).Disposition);
+            return id;
+        }
+        var first = Cast();
+        var second = Cast();
+        var bar = owner.QueryMaintainBar();
+        Assert.AreEqual((first, MaintainSlotState.Shown, second), (bar[0].Run, bar[0].State, bar[1].Run), "each takes the next open slot at its first tick");
+
+        // A click on slot 0 interrupts its run: END, freed, the slot empty; the other stays.
+        var revision = owner.Version.Revision;
+        var stop = owner.StopMaintainedSpell(owner.Version, world, 0);
+        Assert.AreEqual(GameSessionDisposition.Changed, stop.Disposition);
+        Assert.IsNull(owner.QuerySpellRuns()[first], "the run ended");
+        Assert.IsTrue(stop.Notes.Any(n => n.Kind == SpellRunNoteKind.MaintainBar && n.Run == first));
+        bar = owner.QueryMaintainBar();
+        Assert.AreEqual((MaintainSlot.Empty, second), (bar[0], bar[1].Run));
+        Assert.IsTrue(owner.Version.Revision > revision);
+
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.StopMaintainedSpell(owner.Version, world, 0).Disposition, "an empty slot");
+        Assert.AreEqual(GameSessionFailure.InvalidSpellRun, owner.StopMaintainedSpell(owner.Version, world, 5).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.StopMaintainedSpell(new(owner.Version.Owner, owner.Version.Revision - 1), world, 1).Failure);
+
+        // The freed slot 0 is taken first by the next run; with both open slots taken, the next run's first tick is refused by the bar
+        // (MG12 fixed: the original writes slot -1), which ends it although the cap would allow a third run.
+        var third = Cast();
+        bar = owner.QueryMaintainBar();
+        Assert.AreEqual((third, second, MaintainSlot.Empty), (bar[0].Run, bar[1].Run, bar[2]));
+        var fourth = Start(owner, new(33, Hero, Hero, Orc, SpellLocation.None), maintained).Creation!.Run!.Id;
+        owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, fourth));
+        Assert.IsNull(owner.QuerySpellRuns()[fourth], "no slot for the third maintained run: it ends");
+        Assert.IsNull(owner.QueryMaintainBar().SlotOf(fourth));
+        Assert.IsNotNull(owner.QuerySpellRuns()[second]);
+
+        // Neither the bar nor the runs are saved (MT9b).
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.IsTrue(restored.QueryMaintainBar().SameAs(MaintainBar.Empty));
     }
 }
