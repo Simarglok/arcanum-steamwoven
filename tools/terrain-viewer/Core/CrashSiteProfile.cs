@@ -72,8 +72,10 @@ public sealed class TerrainViewerProgress
     public static TerrainViewerProgress Empty { get; } = new();
 }
 
+/// <param name="Reason">ARC-DEV-066: what failed in words (a name or path, never bytes), shown on the failure screen; null when
+/// the code and stage say it all.</param>
 public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0,
-    TerrainViewerFailureStage Stage = TerrainViewerFailureStage.Arguments, TerrainViewerProgress? Progress = null)
+    TerrainViewerFailureStage Stage = TerrainViewerFailureStage.Arguments, TerrainViewerProgress? Progress = null, string? Reason = null)
 {
     public TerrainViewerProgress SafeProgress => Progress ?? TerrainViewerProgress.Empty;
     public override string ToString() => $"{Code} stage={Stage} (resolved={ResolvedCount}, issues={IssueCount})";

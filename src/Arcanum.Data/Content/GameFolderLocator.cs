@@ -47,11 +47,16 @@ public sealed record GameFolderCandidate(string Path, GameFolderOrigin Origin);
 /// <summary>Why a folder is or is not a game folder the game can open: <see cref="Ready"/>, a content-stack refusal of
 /// <see cref="ContentMountPlan.Discover"/> (missing folder, <c>tig.dat</c> or module, an ambiguous name, an unsupported layout,
 /// unreadable), or an input the game's map mode needs that the stack does not require (the module archive
-/// <c>modules/Arcanum.dat</c>, <c>arcanum1.dat</c>, <c>arcanum2.dat</c>).</summary>
+/// <c>modules/Arcanum.dat</c>, <c>arcanum1.dat</c>, <c>arcanum2.dat</c>, and since ARC-DEV-066 the prototype files
+/// <c>data/proto/*.pro</c>: <see cref="MissingPrototypes"/>).</summary>
 public enum GameFolderStatus
 {
     Ready, MissingFolder, MissingTig, MissingModule, AmbiguousName, UnsupportedLayout, Unreadable,
     MissingModuleArchive, MissingActorArchive, MissingTerrainArchive,
+    /// <summary>ARC-DEV-066: no base source holds a <c>proto/NNNNNN - label.pro</c> file. The installed game ships no prototype
+    /// file: <c>Arcanum.exe</c> builds every prototype in code and writes it to <c>data\proto</c> at its first start
+    /// (0x4681B0 → 0x468660 → 0x468890), so an installation the original never ran has none.</summary>
+    MissingPrototypes,
 }
 
 /// <summary>An archive's file name in the game folder (as found) and its size in bytes.</summary>
@@ -185,7 +190,7 @@ public static class GameFolderLocator
     }
 
     /// <summary>Checks one folder: <see cref="ContentMountPlan.Discover"/> of the <c>Arcanum</c> module, then the map inputs, then
-    /// the identity. Never throws for a path; a path that is empty, too long or has a control character is a missing folder.</summary>
+    /// the prototype files, then the identity. Never throws for a path; a path that is empty, too long or has a control character is a missing folder.</summary>
     public static GameFolderCheck Check(string path, GameFolderOrigin origin = GameFolderOrigin.Chosen)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -219,12 +224,40 @@ public static class GameFolderLocator
             return new(GameFolderStatus.UnsupportedLayout, full, origin, "archive name", plan);
         try
         {
+            if (!HasPrototypes(plan)) return new(GameFolderStatus.MissingPrototypes, full, origin, PrototypeFolder, plan);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
+        {
+            return new(GameFolderStatus.Unreadable, full, origin, "proto", plan);
+        }
+        try
+        {
             return new(GameFolderStatus.Ready, plan.GameRoot, origin, null, plan, new(plan.GameRoot, module.Path, actor.Path, terrain.Path), Identify(plan));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
         {
             return new(GameFolderStatus.Unreadable, full, origin, "identity", plan);
         }
+    }
+
+    /// <summary>The folder the original writes its prototypes to at its first start (<see cref="GameFolderStatus.MissingPrototypes"/>).</summary>
+    public const string PrototypeFolder = "data/proto";
+
+    /// <summary>ARC-DEV-066: whether a base source holds a prototype file <see cref="ContentPrototypes"/> reads. The loose base
+    /// folders (the game folder and <c>data/</c>) are looked at first, where the original writes them; only without one is the
+    /// stack opened, for prototypes inside a base archive (the installed archives hold none). A stack that does not open holds none.</summary>
+    private static bool HasPrototypes(ContentMountPlan plan)
+    {
+        foreach (var source in plan.SearchOrder.Where(source => source.Kind == ContentSourceKind.Directory && !ContentPrototypes.IsModule(source.Role)))
+        {
+            var folder = Directory.EnumerateDirectories(source.Path).FirstOrDefault(entry => ContentMountPlan.AsciiLower(Path.GetFileName(entry)) == "proto");
+            if (folder is not null && Directory.EnumerateFiles(folder)
+                    .Any(file => ContentPrototypes.TryNumber(ContentMountPlan.AsciiLower(Path.GetFileName(file)), out _))) return true;
+        }
+        var opened = ContentStack.Open(plan);
+        if (opened.Status != ContentStackStatus.Ready) return false;
+        using var stack = opened.Stack!;
+        return ContentPrototypes.Open(stack).Numbers.Count > 0;
     }
 
     private static ContentSource? BaseArchive(ContentMountPlan plan, string name)

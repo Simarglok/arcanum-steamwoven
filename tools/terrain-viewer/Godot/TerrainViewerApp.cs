@@ -308,9 +308,12 @@ public partial class TerrainViewerApp : Node
                     ? exception.Message : exception.GetType().Name;
                 GD.Print("ARC-RENDER-007 frontier=" + frontier);
             }
+            // ARC-DEV-066: a whole-map plan refusal names what is missing in the log and on the failure screen.
+            var plan = exception as AreaMapPlanException;
+            if (plan is not null) GD.Print($"ARC-DEV-066 area map plan status={plan.Status} detail={plan.Detail ?? "none"}");
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload,
-                Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
+                Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result), Reason: plan?.Reason);
             if (CensusLoadFailed(exception.Message.StartsWith("AREA_", StringComparison.Ordinal) && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                 ? exception.Message : exception.GetType().Name)) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
@@ -1123,7 +1126,8 @@ public partial class TerrainViewerApp : Node
     private void ShowFailureStatus(TerrainViewerMode mode, TerrainViewerError error)
     {
         var progress = error.SafeProgress;
-        ShowFailure($"Diagnostic mode {ModeName(mode)} | failure stage={error.Stage} code={error.Code} | terrain {progress.TerrainResolved}/{progress.TerrainTiles}/{progress.TerrainFacades} | static census {progress.StaticCensus}/admitted {progress.StaticAdmitted}/outside-scope {progress.StaticOutsideScope}");
+        ShowFailure($"Diagnostic mode {ModeName(mode)} | failure stage={error.Stage} code={error.Code}" + (error.Reason is { } reason ? $" | {reason}" : string.Empty)
+                    + $" | terrain {progress.TerrainResolved}/{progress.TerrainTiles}/{progress.TerrainFacades} | static census {progress.StaticCensus}/admitted {progress.StaticAdmitted}/outside-scope {progress.StaticOutsideScope}");
     }
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);

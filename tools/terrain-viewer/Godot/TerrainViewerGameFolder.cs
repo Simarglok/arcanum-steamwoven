@@ -150,7 +150,13 @@ public partial class TerrainViewerApp
     private void LauncherPlay()
     {
         if (_launcher is not { } launcher) return;
-        if (launcher.Play() is not { } settings) { _launcherPanel?.Render(launcher); return; }
+        // ARC-DEV-066: a folder that was not ready is checked again (the original may have been started meanwhile).
+        if (launcher.Play(stale =>
+            {
+                var check = GameFolderLocator.Check(stale.Path, stale.Origin);
+                PrintGameFolder("recheck", check);
+                return check;
+            }) is not { } settings) { _launcherPanel?.Render(launcher); return; }
         var path = LauncherSettingsPath();
         var saved = path is null ? null : (LauncherSettingsSaveStatus?)LauncherSettingsFile.Save(path, settings);
         // A refused or failed save does not stop the start: the chosen folder and rules apply to it.

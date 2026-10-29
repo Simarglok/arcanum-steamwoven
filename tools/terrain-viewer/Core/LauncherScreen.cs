@@ -28,7 +28,9 @@ public sealed class LauncherScreen
         Reason = reason;
         FileStatus = read.Status;
         Settings = read.Settings;
-        Folder = startup.Folder ?? startup.StoredCheck;
+        // ARC-DEV-066: a found installation the original never ran is shown with what to do, not hidden as "none found".
+        Folder = startup.Folder ?? startup.StoredCheck
+                 ?? startup.Detection?.Checked.FirstOrDefault(check => check.Status == GameFolderStatus.MissingPrototypes);
         _candidates = (startup.Detection?.Checked ?? []).Where(check => check.Ready).ToList();
     }
 
@@ -42,6 +44,9 @@ public sealed class LauncherScreen
     /// <summary>The ready fixed candidates the start found (GOG registry, default folders, CrossOver bottles).</summary>
     public IReadOnlyList<GameFolderCheck> Candidates => _candidates;
     public bool CanPlay => Folder is { Ready: true, Identity: not null };
+    /// <summary>ARC-DEV-066: Play is offered for a ready folder and for one whose prototypes the original has not written yet, which
+    /// Play checks again (the player may have started <c>Arcanum.exe</c> while the screen showed).</summary>
+    public bool PlayOffered => CanPlay || Folder is { Status: GameFolderStatus.MissingPrototypes };
     public bool FileUsable => FileStatus is LauncherSettingsReadStatus.Missing or LauncherSettingsReadStatus.Read or LauncherSettingsReadStatus.Invalid;
     public string? Notice { get; private set; }
 
@@ -89,9 +94,11 @@ public sealed class LauncherScreen
     public void SetDebugMode(bool on) { Settings = Settings with { DebugMode = on }; Notice = null; }
 
     /// <summary>The settings to store and open: the ready folder with its source and identity, the rule mode, "show at start" and the debug mode;
-    /// null (with the notice) when no ready folder is chosen.</summary>
-    public LauncherSettings? Play()
+    /// null (with the notice) when no ready folder is chosen. A folder that is not ready is checked again first with
+    /// <paramref name="recheck"/> when given (the host's <see cref="GameFolderLocator.Check"/>).</summary>
+    public LauncherSettings? Play(Func<GameFolderCheck, GameFolderCheck>? recheck = null)
     {
+        if (Folder is { Ready: false } stale && recheck is not null) UseFolder(recheck(stale));
         if (!CanPlay)
         {
             Notice = Folder is null ? "Choose the game folder first." : "Not a game folder the game can open: " + Describe(Folder);
@@ -152,6 +159,8 @@ public sealed class LauncherScreen
             GameFolderStatus.MissingModuleArchive => "no modules/Arcanum.dat here",
             GameFolderStatus.MissingActorArchive => "no arcanum1.dat here",
             GameFolderStatus.MissingTerrainArchive => "no arcanum2.dat here",
+            GameFolderStatus.MissingPrototypes => "the original game was never started from this folder, so its prototype files "
+                + $"({GameFolderLocator.PrototypeFolder}) are not written yet: start Arcanum.exe here once until its main menu, quit it, then press Play",
             _ => check.Status + detail,
         };
     }

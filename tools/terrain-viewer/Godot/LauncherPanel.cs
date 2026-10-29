@@ -138,7 +138,7 @@ public partial class LauncherPanel : CanvasLayer
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
             _debugMode.ButtonPressed = screen.Settings.DebugMode;
-            _play.Disabled = !screen.CanPlay;
+            _play.Disabled = !screen.PlayOffered;
             _notice.Text = screen.Notice ?? "";
         }
         finally { _rendering = false; }

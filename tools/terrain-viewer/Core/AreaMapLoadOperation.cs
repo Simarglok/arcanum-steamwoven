@@ -15,6 +15,22 @@ namespace Arcanum.TerrainViewer.Core;
 /// (ARC-DATA-032) around the transfer arrival, <see cref="TerrainViewerArguments.AreaMapSector"/> or the map-list start
 /// tile, with window step evidence (ARC-DATA-034); the viewer moves the window as the actor walks.
 /// The pinned exterior path (<see cref="AreaLoadOperation"/>) is untouched.</summary>
+/// <summary>ARC-DEV-066: a whole-map plan refusal. <see cref="Exception.Message"/> stays the frontier code
+/// (<c>AREA_MAP_PLAN_STATUS</c>); <see cref="Detail"/> is the plan's own detail (what is missing, a name or path, never bytes),
+/// which the viewer logs and shows on the failure screen.</summary>
+public sealed class AreaMapPlanException(AreaMapPlanStatus status, string? detail)
+    : InvalidOperationException("AREA_MAP_PLAN_" + status.ToString().ToUpperInvariant())
+{
+    public AreaMapPlanStatus Status { get; } = status;
+    public string? Detail { get; } = detail;
+
+    /// <summary>The detail in words for the failure screen: a missing prototype also says that the original writes the
+    /// prototypes at its first start (an installation it never ran has none).</summary>
+    public string Reason => Status == AreaMapPlanStatus.MissingSource && Detail?.StartsWith("prototype ", StringComparison.Ordinal) == true
+        ? $"missing {Detail}: Arcanum.exe writes the prototypes ({Arcanum.Data.Content.GameFolderLocator.PrototypeFolder}) at its first start; start it once from the game folder"
+        : $"{Status}: {Detail ?? "no detail"}";
+}
+
 internal static class AreaMapLoadOperation
 {
     private static readonly DatReaderOptions ViewerArchiveOptions = new() { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
@@ -36,7 +52,7 @@ internal static class AreaMapLoadOperation
         var data = arguments.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven;
         var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)), data: data)
             : AreaMapPlans.Create(stack, catalog, mapName, data);
-        if (created.Status != AreaMapPlanStatus.Ready) throw new InvalidOperationException("AREA_MAP_PLAN_" + created.Status.ToString().ToUpperInvariant());
+        if (created.Status != AreaMapPlanStatus.Ready) throw new AreaMapPlanException(created.Status, created.Detail);
         var mapPlan = created.Plan!;
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource2).Select(f => f.Path), arguments.ResourcePath);
         RequireSame(mapPlan.Files.Where(f => f.Key.Role == AreaSourceRole.Resource1).Select(f => f.Path), arguments.ActorResourcePath!);

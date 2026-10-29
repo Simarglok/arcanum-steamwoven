@@ -63,7 +63,14 @@ public partial class TerrainViewerApp
             "a non-game folder is named in words: " + Lines()[5]);
         _launcherPanel.PlayForSelfTest();
         Require(started is null, "Play does nothing without a ready folder");
+        // ARC-DEV-066: a folder the original never ran (no prototype files) is named with what to do; Play stays offered and checks again.
         _launcherPanel.ChooseForSelfTest(game);
+        Require(_launcherPanel.PlayEnabledForSelfTest && _launcher is { CanPlay: false }
+                && Lines()[5].StartsWith("Not a game folder the game can open: the original game was never started from this folder", StringComparison.Ordinal),
+            "a folder without prototypes says to start the original once: " + Lines()[5]);
+        var proto = System.IO.Path.Combine(game, "data", "proto");
+        System.IO.Directory.CreateDirectory(proto);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(proto, "000001 - Synthetic.pro"), [0]);
         _launcherPanel.RulesForSelfTest(RuleMode.Original);
         _launcherPanel.ShowAtStartForSelfTest(true);
         // ARC-DEV-050: the debug mode is off until ticked; Play stores it and turns the run's debug mode on.
@@ -72,7 +79,7 @@ public partial class TerrainViewerApp
         var debugBefore = DebugMode;
         Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on"
                 && Lines()[6] == "Debug mode: on", "a game folder, Original, show at start and debug mode: " + string.Join(" | ", Lines()));
-        _launcherPanel.PlayForSelfTest();
+        _launcherPanel.PlayForSelfTest(); // checks the folder again: its prototypes are there now
         Require(DebugMode && Stored().DebugMode, "Play stored the debug mode and turned it on");
         DebugMode = debugBefore;
         Require(started?.GameRoot is { } root && System.IO.Path.GetFullPath(root) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen,

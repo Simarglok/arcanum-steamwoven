@@ -26,6 +26,7 @@ public sealed class GameFolderLocatorTests
             System.IO.File.WriteAllBytes(path, Enumerable.Range(0, bytes).Select(i => (byte)i).ToArray());
         }
         File("tig.dat", 3); File("arcanum1.dat", 5); File("arcanum2.dat", 7); File("modules/Arcanum.dat", 11); File("Arcanum.exe", 13);
+        File("data/proto/000001 - Synthetic.pro", 1);
         if (gog) File(GameFolderLocator.GogMarkerFile, 1);
         if (version is not null) System.IO.File.WriteAllText(Path.Combine(folder, "Version.txt"), version + "\r\n");
         return folder;
@@ -54,6 +55,34 @@ public sealed class GameFolderLocatorTests
     }
 
     [TestMethod]
+    public void An_installation_the_original_never_ran_has_no_prototypes()
+    {
+        // ARC-DEV-066: Arcanum.exe writes data/proto at its first start; a fresh installation holds no prototype file.
+        var game = Game(Path.Combine(_root, "Arcanum"));
+        var proto = Path.Combine(game, "data", "proto");
+        Directory.Delete(proto, recursive: true);
+        Assert.AreEqual((GameFolderStatus.MissingPrototypes, GameFolderLocator.PrototypeFolder), Pair(GameFolderLocator.Check(game)));
+        Assert.AreEqual(game, GameFolderLocator.Check(game).Path);
+        Assert.IsNull(GameFolderLocator.Check(game).Identity);
+
+        // Only NNNNNN - label.pro names count; a module folder's copy is never read at game start.
+        Directory.CreateDirectory(proto);
+        File.WriteAllBytes(Path.Combine(proto, "readme.pro"), [0]);
+        File.WriteAllBytes(Path.Combine(proto, "000001 - Synthetic.txt"), [0]);
+        var module = Directory.CreateDirectory(Path.Combine(game, "modules", "Arcanum", "proto")).FullName;
+        File.WriteAllBytes(Path.Combine(module, "000001 - Synthetic.pro"), [0]);
+        Assert.AreEqual(GameFolderStatus.MissingPrototypes, GameFolderLocator.Check(game).Status);
+
+        // The game folder's own proto/ is a base source too; data/proto is where the original writes them.
+        var root = Directory.CreateDirectory(Path.Combine(game, "proto")).FullName;
+        File.WriteAllBytes(Path.Combine(root, "000001 - Synthetic.pro"), [0]);
+        Assert.AreEqual(GameFolderStatus.Ready, GameFolderLocator.Check(game).Status);
+        Directory.Delete(root, recursive: true);
+        File.WriteAllBytes(Path.Combine(proto, "000001 - Synthetic.pro"), [0]);
+        Assert.AreEqual(GameFolderStatus.Ready, GameFolderLocator.Check(game).Status);
+    }
+
+    [TestMethod]
     public void A_changed_installation_has_another_identity()
     {
         var game = Game(Path.Combine(_root, "Arcanum"));
@@ -72,6 +101,8 @@ public sealed class GameFolderLocatorTests
         Directory.CreateDirectory(Path.Combine(game, "MODULES"));
         foreach (var (name, bytes) in new[] { ("TIG.DAT", 1), ("ARCANUM1.DAT", 2), ("Arcanum2.Dat", 3), ("MODULES/arcanum.DAT", 4), ("ARCANUM.EXE", 5) })
             File.WriteAllBytes(Path.Combine(game, name), new byte[bytes]);
+        Directory.CreateDirectory(Path.Combine(game, "DATA", "PROTO"));
+        File.WriteAllBytes(Path.Combine(game, "DATA", "PROTO", "000002 - Upper.PRO"), [0]);
         File.WriteAllText(Path.Combine(game, "VERSION.TXT"), "1.0\u0001");
         var check = GameFolderLocator.Check(game);
         Assert.AreEqual(GameFolderStatus.Ready, check.Status, check.Detail);

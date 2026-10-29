@@ -26,6 +26,9 @@ public sealed class LauncherScreenTests
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, new byte[bytes]);
         }
+        var proto = Path.Combine(folder, "data", "proto");
+        Directory.CreateDirectory(proto);
+        File.WriteAllBytes(Path.Combine(proto, "000001 - Synthetic.pro"), [0]);
         return folder;
     }
 
@@ -77,6 +80,32 @@ public sealed class LauncherScreenTests
         Assert.IsTrue(played.GameIdentity!.SameAs(startup.Folder!.Identity), "Play stores the identity, so a later change is noticed");
         Assert.AreEqual(LauncherSettings.Defaults.Display, played.Display, "the display at start is kept as stored");
         Assert.Throws<ArgumentOutOfRangeException>(() => screen.SelectRules((RuleMode)7));
+    }
+
+    [TestMethod]
+    public void A_detected_installation_the_original_never_ran_says_to_start_it_and_Play_checks_again()
+    {
+        // ARC-DEV-066: a fresh installation has no data/proto until Arcanum.exe's first start writes it.
+        var detected = Game(Path.Combine(_root, "Applications", "Arcanum"));
+        var proto = Path.Combine(detected, "data", "proto");
+        Directory.Delete(proto, recursive: true);
+        var screen = new LauncherScreen(Read(LauncherSettings.Defaults), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()), LauncherShowReason.FirstRun);
+        Assert.AreEqual((GameFolderStatus.MissingPrototypes, detected), (screen.Folder!.Status, screen.Folder.Path), "shown, not hidden as none found");
+        Assert.AreEqual((false, true), (screen.CanPlay, screen.PlayOffered));
+        Assert.AreEqual(0, screen.Candidates.Count, "ready candidates only");
+        StringAssert.Contains(screen.FolderText, "start Arcanum.exe here once until its main menu");
+        StringAssert.Contains(screen.FolderText, GameFolderLocator.PrototypeFolder);
+        var rechecks = 0;
+        GameFolderCheck Recheck(GameFolderCheck stale) { rechecks++; return GameFolderLocator.Check(stale.Path, stale.Origin); }
+        Assert.IsNull(screen.Play(Recheck));
+        Assert.AreEqual(1, rechecks);
+        StringAssert.StartsWith(screen.Notice, "Not a game folder the game can open: the original game was never started from this folder");
+        Directory.CreateDirectory(proto);
+        File.WriteAllBytes(Path.Combine(proto, "000001 - Synthetic.pro"), [0]);
+        Assert.AreEqual(detected, screen.Play(Recheck)!.GameRoot, "Play checks the folder again once the original wrote its prototypes");
+        Assert.AreEqual(2, rechecks);
+        screen.Play(Recheck);
+        Assert.AreEqual(2, rechecks, "a ready folder is not checked again");
     }
 
     [TestMethod]

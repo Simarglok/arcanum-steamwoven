@@ -32,6 +32,9 @@ public sealed class LauncherSettingsTests
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, new byte[bytes]);
         }
+        var proto = Path.Combine(folder, "data", "proto");
+        Directory.CreateDirectory(proto);
+        File.WriteAllBytes(Path.Combine(proto, "000001 - Synthetic.pro"), [0]);
         return folder;
     }
 
