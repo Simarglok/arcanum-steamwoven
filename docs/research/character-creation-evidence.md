@@ -206,7 +206,21 @@ only in multiplayer
 | CC-07 | `mes\MainMenu.mes` exists in `arcanum3.dat` (`ed7307cc4a6978eb5a4a17929da0a5e135a464b5d02d8f7ee41335b9057f1192`) and `arcanum4.dat` (`ffa80260c7a0f22321def8bbf8ae9b5dc251628a55ef92af19e44d9ff4c6a72a`). In both, messages 551..562 are global-flag numbers **2350..2361** in order, and 500 and 506 exist. So each of the twelve pre-made heroes has its own flag; 551..558 cover the base eight. |
 | CC-08 | The level-scheme file `rules\gamelevel.mes` (both copies) and the name file `mes\gamelevelname.mes` (`arcanum3.dat`) contain records 76..87; `rules\InvenSource.mes` (both copies) contains sets 20, 22..26 and 108; `portrait\gameport.mes` (`arcanum3.dat`) contains the twelve portrait ids in the table. Only presence was checked, not contents. |
 | CC-09 | The loose `data/proto` folder holds 13 `PC` prototype files, `016086`..`016098`, i.e. descriptions 16066..16078 (file number = description + 20, mapping (0x468860)), all with the same timestamp as the other 1,410 files of the folder. That is consistent with the engine writing its built-in prototypes on first start, but does not prove it (an installer copy would look the same). The files were **not** decoded here: that their fields equal the built-in table is expected, not verified. No PC prototype was found inside the DAT archives. Settled later by [ARC-RES-027 SH-02](starting-hero-evidence.md#local-observations): the fields equal the built-in table. |
+| CC-11 | ARC-WORLD-114: of the installed scripts, exactly twelve read the pre-made flags: `scr\01781..01792` (the base archives' only copies), one per hero in main-menu order, so script 1781 + i tests flag 2350 + i. Each is six lines: line 0 tests "flag 2350 + i equals 1"; when it holds, toggle state (56) on the attachee, remove this script, return and skip the default; otherwise kill (58) on the attachee and return and run the default. Each is attached at the heartbeat point (19) of one NPC (type 16) of the start map `Arcanum1-024-fixed`, standing among the wreck at cells x 92947..92968, y 82557..82632 (the map-list start is (92958, 82592)); no other object, map or point attaches them. Besides these, two dialogs test two of the flags in reply conditions (`dlg\01068` tests 2352, `dlg\01953` tests 2353); no script or dialog writes any of them. |
 | CC-10 | Whether prototype 16075's ART exists here (and so whether this installation shows eight or twelve heroes and gender buttons) was **not** checked here. Settled later by [ARC-RES-027 SH-04](starting-hero-evidence.md#local-observations): the art exists, so twelve heroes and the gender buttons. |
+
+## Unchosen pre-made heroes (ARC-WORLD-114)
+
+The flags the main menu writes (one true for the chosen hero, false for the others) are read by the Crash Site's own scripts, not by
+the executable (ledger PM1): the twelve pre-made heroes stand on the start map as ordinary living NPCs, each with its heartbeat
+script (CC-11). When the AI tick of such an NPC runs its heartbeat (the NPC within 30 tiles of the PC, ledger CL7), the script
+kills it with no killer when it is not the chosen hero (PM3), so it falls and lies as a corpse whose inventory can be looted, or
+switches the chosen hero's double off (PM2), which takes it out of the drawing and the object lists, and removes itself. So the
+original neither places the unchosen heroes dead nor removes them: it kills them in play, at the first heartbeat, in both rule
+modes. Steamwoven runs these scripts from its AI host ([heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)).
+
+The NPCs the start map stores as dead (their critter flags; the inventory seed counts four on the exterior) are a different group:
+they lie as corpses from the start, with the stored art of a corpse, and carry no such script.
 
 ## What Steamwoven has today
 
@@ -256,7 +270,9 @@ of the 13 loose PC prototypes (CC-09: they equal the built-in table) and the ART
 76..87, the background, race and female effects, the context backgrounds of
 FR-CHAR-006 and the starting-kit prototypes of FR-CHAR-007.
 
+Answered by ARC-WORLD-114 (2026-10-29): the Crash Site scripts 1781..1792 read the pre-made flags 2350..2361
+([unchosen pre-made heroes](#unchosen-pre-made-heroes-arc-world-114)).
+
 Still open:
 
-- Whether Crash Site scripts read the pre-made flags 2350..2361.
 - What the shop NPC on `ShopMap` sells (barter inventory).
