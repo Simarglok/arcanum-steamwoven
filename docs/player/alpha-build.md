@@ -225,7 +225,7 @@ nobody returns to it.
   `/Applications/reports/archive/2026-10-28_17-43-30/`, or the user folder's `reports/archive/` for a report that went
   there). Never delete a report, and never move one that is not handled yet.
 - Append one line per report to `reports/archive/INDEX.md` (create it with the first one):
-  `- <report folder name> · <date handled> · <task code, or "not a bug"> · <short summary>`.
+  `- <report folder name> · <date handled, YYYY-MM-DD> · <task code, or "not a bug"> · <short summary>`.
 - Reports to read are the dated folders directly in `reports/`; an agent asked to read the reports skips `archive/`
   unless it is asked for an archived one. The archive holds the same original content as the reports: it never goes
   into the repository either.
