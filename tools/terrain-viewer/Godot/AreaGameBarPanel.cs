@@ -20,7 +20,6 @@ public partial class AreaGameBarPanel : CanvasLayer
     private AreaMessageLogView _messageLog = null!;
     // ARC-UI-024: the hovered critter's portrait and name in the message window (PA6).
     private TextureRect _hoverImage = null!;
-    private Label _hoverName = null!;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -44,9 +43,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
     public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
     internal string HoverTextForSelfTest => _messageLog.HoverTextForSelfTest;
-    /// <summary>The message window's hovered portrait (its texture, null none) and name ("" none).</summary>
-    internal (Texture2D? Image, string Name, Rect2 Rect) HoverPortraitForSelfTest =>
-        (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverName.Visible ? _hoverName.Text : "", _hoverImage.GetGlobalRect());
+    /// <summary>The message window's hovered portrait (its texture, null none).</summary>
+    internal (Texture2D? Image, Rect2 Rect) HoverPortraitForSelfTest => (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverImage.GetGlobalRect());
 
     /// <summary>The whole factor at which the original's 800 × 600 screen fits a window of <paramref name="size"/> (at least 1).</summary>
     public static int ScreenFactor(Vector2 size) =>
@@ -99,14 +97,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             Name = "HoverPortrait", Position = new Vector2(ix, iy - AreaGameBarLayout.BottomTop), MouseFilter = Control.MouseFilterEnum.Ignore,
             Size = new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize), Visible = false,
         };
-        var (nx, ny, nw, nh) = AreaGameBarLayout.HoverNameLine;
-        _hoverName = new Label
-        {
-            Name = "HoverCritterName", Position = new Vector2(nx, ny - AreaGameBarLayout.BottomTop), Size = new Vector2(nw, nh),
-            MouseFilter = Control.MouseFilterEnum.Ignore, ClipText = true, Visible = false, Modulate = new Color(1f, .93f, .75f),
-        };
         _strips[AreaBarStrip.Bottom].AddChild(_hoverImage);
-        _strips[AreaBarStrip.Bottom].AddChild(_hoverName);
         GetViewport().SizeChanged += Place;
         VisibilityChanged += Place;
         Place();
@@ -122,17 +113,13 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (IsNodeReady()) Render();
     }
 
-    /// <summary>ARC-UI-024: shows a hovered critter's portrait (drawn at its own size from the image's top left) and name in the
-    /// message window, as the original's hovered-object panel does for the PC and its followers with a portrait (PA6); null hides
-    /// them.</summary>
-    public void ShowHoverPortrait(Texture2D? portrait, string? name)
+    /// <summary>ARC-UI-024: shows a hovered critter's portrait (drawn at its own size from the image's top left) in the message window, as
+    /// the original's hovered-object panel does for the PC and its followers with a portrait (PA6); null hides it. ARC-UI-057: the panel's
+    /// name and bars are the message window's object window (<see cref="AreaMessageKind.Object"/>), drawn under the portrait.</summary>
+    public void ShowHoverPortrait(Texture2D? portrait)
     {
         _hoverImage.Texture = portrait;
         _hoverImage.Visible = portrait is not null;
-        _hoverName.Text = portrait is null ? "" : name ?? "";
-        _hoverName.Visible = portrait is not null && !string.IsNullOrEmpty(name);
-        // The original's hovered-object panel takes the message window: the log's texts give way while it is shown.
-        _messageLog.Visible = portrait is null;
     }
 
     /// <summary>ARC-UI-027: puts <paramref name="part"/> on <paramref name="strip"/>, in the strip's own frame (scaled and placed with it),
