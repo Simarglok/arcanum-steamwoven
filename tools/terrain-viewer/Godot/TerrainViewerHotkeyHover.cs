@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
     /// text area. The item's examine script is not run (not ready, HK22).</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        if (HeroItemKind(session, item) is not { } kind) return;
+        if (InventoryItemKind(session, item) is not { } kind) return;
         AreaObjectRecord? row = null;
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) { row = found; break; }

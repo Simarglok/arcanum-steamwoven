@@ -405,6 +405,12 @@ public partial class TerrainViewerApp
             case AreaInventoryDropKind.DropToGround:
                 DropToGround(item);
                 return;
+            case AreaInventoryDropKind.Take:
+                // ARC-UI-052: the holder's item released on the hero's grid is taken as its Take button takes it (PROJECT: into the hero's
+                // first free cells, not the cell it was released on; a stack asks how many first, QW1).
+                GD.Print($"ARC-UI-052 loot drag take item={item} cell={drop.GridSlot?.ToString() ?? "-"}");
+                TakeFromBody(item);
+                return;
             case AreaInventoryDropKind.UseIcon:
                 // The item goes back to its place and is used: at the hero with a Shift key held, with no target otherwise (IW6).
                 UseHeroItem(item, AreaItemUseSource.UseIcon, Godot.Input.IsKeyPressed(Key.Shift));
