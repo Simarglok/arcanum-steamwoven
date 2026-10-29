@@ -227,8 +227,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _holeLayer.Visible = holder is not null;
         _area.RoundViewCut = holder is not null;
         if (holder is not { } shown) return;
-        var loot = _area.LootLook;
-        var (x, y) = AreaInventoryHole.Corner(loot);
+        var (x, y) = AreaInventoryHole.Corner(_area.LookMode);
         var side = AreaInventoryHole.Side * _area.FrameScale;
         var origin = _area.GlobalPosition + new Vector2(x, y) * _area.FrameScale;
         _hole.Position = origin; _hole.Size = new(side, side);
