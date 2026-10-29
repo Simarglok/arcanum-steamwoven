@@ -62,10 +62,9 @@ public static class AreaAiAttackArtRules
 
     /// <summary>
     /// The attack's frame rate: the rates of the <paramref name="wanted"/> animation (low attack 21 or attack 20: the critter's art id keeps
-    /// the wanted animation, the missing-art repair lives in the name resolver only, MA1–MA3, so a low attack drawn with the attack's file
-    /// keeps the low-attack rates; the rate's reading of the art id is F0) for the drawn ART's weapon slot (<see cref="ClipWeapon"/>,
-    /// <see cref="RealTimeCombatRules.AttackFramesPerSecond"/>); the throw (14) is drawn without a weapon (MA2) and so plays at the ART's
-    /// own rate (the original's rate table for animation 14 is not read: F0).
+    /// the wanted animation and the missing-art repair names the file only, WA9, so a low attack drawn with the attack's file keeps the
+    /// low-attack rates) for the drawn ART's weapon slot (<see cref="ClipWeapon"/>, <see cref="RealTimeCombatRules.AttackFramesPerSecond"/>);
+    /// the throw (14) takes the rate's default, the ART's own rate (WA9).
     /// </summary>
     public static int FramesPerSecond(AreaAiAttackArt art, int wanted, int speed)
     {

@@ -182,7 +182,7 @@ public sealed class AreaBodyMoveTests
     {
         WithArchive([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 6, 2)), ("art/critter/hmm/hmmuwsdu.art", Art(7, 12, 6, 2, action: 4)),
             ("art/critter/hmm/hmmuwxao.art", Art(5, 9, 6, 2, action: 3)), ("art/critter/hmm/hmmuwxbu.art", Art(9, 15, 6, 2, action: 6)),
-            ("art/critter/hmm/hmmuwsda.art", Art(1, 10, 6, 2))], (path, identity) =>
+            ("art/critter/hmm/hmmuwsda.art", Art(1, 10, 6, 2)), ("art/critter/hmm/hmmuwxju.art", Art(9, 15, 6, 2, action: 6))], (path, identity) =>
         {
             var visual = Visual(identity(0));
             var low = AreaBodyMoveArt.LoadArmed(visual, path, 21, 3, 1);
@@ -198,6 +198,9 @@ public sealed class AreaBodyMoveTests
             var bare = AreaBodyMoveArt.LoadArmed(visual, path, 20, 4, 1);
             Assert.AreEqual(("art/critter/hmm/hmmuwxbu.art", 20, 1, 0), (bare.Art!.Name, bare.Animation, bare.Weapon, bare.Shield),
                 "an axe and shield without their ARTs attack bare-handed");
+            var unrepaired = AreaBodyMoveArt.LoadArmed(visual, path, 21, 9, 0);
+            Assert.AreEqual(("art/critter/hmm/hmmuwxbu.art", 20, 1), (unrepaired.Art!.Name, unrepaired.Animation, unrepaired.Weapon),
+                "weapon 9's low attack is not repaired to its attack (WA10): bare hands attack");
             var stand = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 3, 1);
             Assert.AreEqual(("art/critter/hmm/hmmuwsda.art", 0), (stand.Art!.Name, stand.Animation), "the combat stand keeps weapon and shield");
             var missing = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 2, 0);

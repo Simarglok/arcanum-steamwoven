@@ -193,8 +193,8 @@ public static class AreaBodyMoveArt
     /// ARC-RENDER-038: the ART of an armed animation of the body (an NPC in combat mode: its stand, attack, low attack or throw), named as
     /// the original resolves it (MA2, MA3): the stand and the attacks keep weapon and shield, the throw (14, among 6..19) clears both; the
     /// shield letter is <c>S</c> or <c>X</c>, the weapon letter <see cref="HeroBody.WeaponCode"/>'s (a two-handed sword with a shield is
-    /// written as the sword). Tried in order: the missing-art repair turns a missing low attack into the attack (MA1; the original checks
-    /// ten (low attack, weapon) pairs from its masks, this repair takes every weapon: generalised); then, as for the
+    /// written as the sword). Tried in order: the missing-art repair turns a missing low attack into the attack for bare hands and weapons
+    /// 2..8, 10 and 13 (MA1, WA10; another weapon's low attack is not repaired); then, as for the
     /// hero (the session's wear check does not test the art, WA8: NOT READY), without the shield, then bare-handed. The first readable one
     /// is the load's, with the animation, weapon and shield it names.
     /// </summary>
@@ -206,10 +206,9 @@ public static class AreaBodyMoveArt
         if (visual.RawArt >> 28 is not (2 or 12 or 13) || visual.Policy.Contains("badart", StringComparison.Ordinal))
             return new(AreaBodyMoveStatus.NotACritterArt, null, animation, weapon, shield, $"art class {visual.RawArt >> 28}");
         if (archivePath is null || !File.Exists(archivePath)) return new(AreaBodyMoveStatus.SourceUnavailable, null, animation, weapon, shield, visual.Entry.Source.ToString());
-        var animations = animation == WeaponArtRules.LowAttackAnimation ? new[] { animation, WeaponArtRules.AttackAnimation } : [animation];
         var tries = new List<(int Animation, int Weapon, int Shield)>();
         foreach (var (w, s) in new[] { (weapon, shield), (weapon, 0), (WeaponArtRules.Unarmed, 0) })
-        foreach (var a in animations)
+        foreach (var a in animation == WeaponArtRules.LowAttackAnimation && HeroBody.LowAttackRepaired(w) ? new[] { animation, WeaponArtRules.AttackAnimation } : [animation])
         {
             // MA2: animations 6..19 clear weapon and shield.
             var named = a is >= 6 and <= 19 ? (a, 0, 0) : (a, w, s);

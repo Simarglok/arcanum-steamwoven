@@ -405,23 +405,36 @@ fatigue −3 kept standing and acting.
 
 A playtest of the packaged build (bug report of 2026-10-29) showed the hero punching with a wielded dagger: the hero's body had one
 fixed bare-handed attack ART. The original shows a critter's weapon only in combat mode and attacks with its weapon's ART; read in
-the retail 1.0.7.4 executable ([ledger WA1–WA8](../research/ledger/items.md#weapon-art-arc-render-037)). A technical bug of ours,
+the retail 1.0.7.4 executable ([ledger WA1–WA10](../research/ledger/items.md#weapon-art-arc-render-037)). A technical bug of ours,
 fixed in both rule modes.
 
 | Rule | Behaviour |
 | --- | --- |
 | Weapon art (WA1–WA3) | `WeaponArtRules.WieldedArt` (0x465020): out of combat mode the art id's weapon part (bits 0..3) and shield bit (19) are 0; in combat mode the weapon part is the use-art subtype of the weapon slot's item (`WeaponPart`; bare hands 1 without an item or for a subtype of 0), the shield bit 1 for an armour item in the shield slot (`ShieldPart`). The combat-mode toggle and the wield-on and wield-off hooks set it. `WithWeapon`/`WithShield` (0x504100, 0x504180) keep the parts in range. |
 | Files (MA1–MA3) | The stand shows weapon and shield, the walk the weapon only, the attack and low attack both, the animations 6..19 (run, vault, fall, get up) neither; a two-handed sword with a shield is written as the sword. A missing armed walk is the walk without the weapon: no installed creatable body has an armed walk, so the armed hero walks without its weapon and stands and attacks with it (`HeroBody.Selector`, `Candidates`, `ArtPath`). |
-| Attack animation (WA4–WA6) | `WeaponArtRules.Animation` (the attempt-attack goal's node 0x42B9C0): the throw (14) for a weapon with flag 0x40 (a boomerang), the low attack (21) against a shrunk target (object flag 0x80), one playing animation 7..11 or a short one (`Height`, 0x503F60: every critter is middle, a monster by its species table), else the attack (20). The viewer plays only the attack (20): the low attack and the throw are ARC-RENDER-039. |
+| Attack animation (WA4–WA6) | `WeaponArtRules.Animation` (the attempt-attack goal's node 0x42B9C0): the throw (14) for a weapon with flag 0x40 (a boomerang), the low attack (21) against a shrunk target (object flag 0x80), one playing animation 7..11 (`AnimationOf`, 0x503E20: 0 for an art that is not a critter's, monster's or unique NPC's) or a short one (`Height`, 0x503F60: every critter is middle, a monster by its species table), else the attack (20). Since ARC-RENDER-039 the viewer plays all three (below). |
+| Rate and repair (WA9, WA10) | The rate (0x437990) reads the art id's animation: the attack and low attack take their Speed tables (`RealTimeCombatRules.AttackFramesPerSecond`, `AttackAnimation.Attack`/`AttackLow`), the throw its ART's own rate (`AttackAnimation.Throw`). A missing low attack of bare hands or weapons 2..8, 10 and 13 is the attack's file (MA1); the art id keeps 21, so it plays the attack ART at the low attack's rate. A missing throw, or a low attack of another weapon, fails the goal (WA5). |
 | Wear check (WA7, WA8) | The original refuses to wield a weapon or shield whose attack art (combat mode, animation 20) the body lacks. Not ready: the session's wear check leaves the art test to the host (as BA6). |
 
 Viewer (AREA): the hero's body (`HeroBody`, ARC-UI-039) carries `Weapon` and `Shield`; `TerrainViewerHeroBody` builds it from the
 session's combat mode, the weapon slot's use art (the inventory host's wear facts, as the body armour's; one not read there is drawn
 bare-handed, NOT READY) and the shield slot's item kind (`HeroBody.Armed`), so entering or leaving combat mode or changing the weapon
 swaps the body at the next frame, after a playing attack (its ARTs read once a run on the main thread, as a worn armour's: the first
-entry into combat mode with a new weapon decodes its seven ARTs in one frame; each weapon and shield variant keeps its own copy of
+entry into combat mode with a new weapon decodes its nine ARTs in one frame; each weapon and shield variant keeps its own copy of
 every frame for the run). An armed body whose ARTs do not read is drawn without the shield, then unarmed, logged. The attack clip takes the drawn attack ART's frames, action frame and weapon slot, so the rate follows the weapon
-(`RealTimeCombatRules.AttackFramesPerSecond`); the log line `ARC-COMBAT-005 attack-start` names `weapon=` and `art=`.
+(`RealTimeCombatRules.AttackFramesPerSecond`); the log line `ARC-COMBAT-005 attack-start` names `weapon=`, `animation=`, `drawn=` and `art=`.
+
+Low attack and throw (ARC-RENDER-039): the hero body also reads its low attack (21, with weapon and shield) and throw (14, without
+them; MA2) when they read (`HeroBodyArt`, `ActorDiagnosticProfile.LowAttack`/`Throw`; a low attack the repair turns into the attack is
+not read again). The installed creatable bodies have the throw and the low attack of bare hands (with and without a shield) and the bow
+(`v` files of weapons `B` and `I`): in underwear the low attack is 7 frames at 13 fps (action frame 5), the throw 11 at 12 fps (action
+frame 4), 435 keys a body; every other weapon's low attack is the attack's ART. At each attack start `HeroAttackArt.Animation` picks the
+animation from the session's weapon skill (the throwing skill is the returning weapon) and the target's placed art and object flags,
+with the fall (7) or dying animation of an NPC the session knocked out or killed; `HeroAttackArt.Clip` gives the ART, the drawn action
+(`DiagnosticGridActor.AttackPose` carries it) and the rate table. A hero body without the chosen ART (none installed) does not
+attack, and the refusal comes before the turn-based action-point charge (whether the original charges first is not read, F0); the
+fixed human stand-in drawn when the body does not load plays its attack ART at the chosen rate. Not ready: no session shrink state (only the placed object flag
+makes a target shrunk; the shrink spell does not set it), and the NPC's own animation while the AI walks it is its placed art's.
 
 Native smoke: the `attack` stage (`ARC-COMBAT-005 native-smoke attack PASS`, now with `Weapon`) checks that in combat mode the
 attack and stand ARTs show the wielded weapon's part (above 1 for a weapon whose use art reads, bare hands 1 without one) and that
@@ -430,8 +443,12 @@ Opt-in real data (`HeroBodyArtTests.EveryPremadeHerosBodyArmourLoadsFromTheInsta
 bare hands load an armed body (the dagger's attack 5 frames at 10 fps, action frame 3; the staff's 8 frames, action frame 4), and a
 dagger with a shield loads the shield's stand and attack.
 
-Not ready: the NPCs' attack ART (ARC-RENDER-038: the AI host still times NPC attacks with the human stand-in), the low attack and
-the throw animation (ARC-RENDER-039), the wear check's art test (WA8), the auto-switch re-wield.
+Native smoke (ARC-RENDER-039): the `attack` check knocks the NPC out after raising it and requires the next attack to be the low
+attack (`LowAttack` in its PASS line: the drawn action, the attack ART for a repaired weapon); the `ranged` stage's boomerang check
+requires each throw to play the throw ART.
+
+Not ready: the NPCs' attack ART (ARC-RENDER-038: the AI host still times NPC attacks with the human stand-in), the wear check's art
+test (WA8), the auto-switch re-wield.
 
 ## Not ready
 

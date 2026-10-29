@@ -878,15 +878,17 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// <summary>
     /// ARC-RENDER-038: the attack ART an NPC's attack on <paramref name="target"/> wants (WA1, WA4): its wielded weapon's part and flags,
     /// its shield, and the target's stored object flags (the shrunk flag), its art (its height; the hero's is a critter's) and its current
-    /// animation, read as lying (7) while it is unconscious or dead, else 0 (a target mid-fall or getting up is NOT READY).
+    /// animation, read as lying (7) while it is unconscious or dead, else its stored art's (<see cref="WeaponArtRules.AnimationOf"/>; a
+    /// target mid-fall, getting up or knocked down is NOT READY).
     /// </summary>
     public AreaAiAttackArtRequest AttackRequest(string id, string target)
     {
         var (use, flags, shield) = Wielded(id);
         var targetFields = Fields(target);
         var lying = Status(target) is { IsUnconscious: true } or { IsDead: true };
-        return AreaAiAttackArtRules.Request(use, flags, shield, targetFields?.Object.Flags ?? 0, lying ? AreaAiAttackArtRules.LyingAnimation : 0,
-            targetFields?.Object.CurrentArt ?? BodyArmorArtRules.CritterArt << 28);
+        var targetArt = targetFields?.Object.CurrentArt ?? BodyArmorArtRules.CritterArt << 28;
+        return AreaAiAttackArtRules.Request(use, flags, shield, targetFields?.Object.Flags ?? 0,
+            lying ? AreaAiAttackArtRules.LyingAnimation : WeaponArtRules.AnimationOf(targetArt), targetArt);
     }
 
     // The use art and weapon flags of the item in the NPC's weapon slot and the type of the item in its shield slot.

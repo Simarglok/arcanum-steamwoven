@@ -88,7 +88,7 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// The fixed human's art selector with this body, gender, armour part and palette, the same animation, and the weapon and shield the
     /// file of that animation shows (ARC-RENDER-037, MA2): the stand both, the walk the weapon only, the attacks (20, 21) both (the
     /// human's bare hands when the body shows no weapon: out of combat mode nothing attacks), the animations 6..19 (run, fall, get up,
-    /// vault) neither.
+    /// vault, and since ARC-RENDER-039 the throw, 14) neither.
     /// </summary>
     public uint Selector(uint humanSelector)
     {
@@ -106,7 +106,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
 
     /// <summary>
     /// The selectors <see cref="HeroBodyArt"/> tries for an action, in order (the missing-art repair, MA1): <see cref="Selector"/>, then
-    /// for an armed walk the walk without the weapon, and for a stand without a weapon the stand with bare hands.
+    /// for an armed walk the walk without the weapon, for a stand without a weapon the stand with bare hands, and (ARC-RENDER-039) for
+    /// a low attack with one of the ten repaired weapons (bare hands, 2..8, 10, 13) the attack with the same weapon and shield.
     /// </summary>
     public IReadOnlyList<uint> Candidates(uint humanSelector)
     {
@@ -114,8 +115,14 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
         var animation = (selector >> 6) & 31;
         return animation == 1 && (selector & 15) != 0 ? [selector, selector & ~15u]
             : animation == 0 && (selector & 15) == 0 ? [selector, selector | WeaponArtRules.Unarmed]
+            : animation == WeaponArtRules.LowAttackAnimation && LowAttackRepaired((int)(selector & 15))
+                ? [selector, (selector & ~(31u << 6)) | (uint)WeaponArtRules.AttackAnimation << 6]
             : [selector];
     }
+
+    // MA1: the missing-art pairs of the low attack (0x5A10B8 animation 21) name these weapons (0x5A1104); the repair turns each into
+    // the attack (0x5A1150). A low attack with another weapon is not repaired (its attack goal fails, WA5).
+    internal static bool LowAttackRepaired(int weapon) => weapon is >= 1 and <= 8 or 10 or 13;
 
     /// <summary>The critter ART file a selector's shield, weapon and animation name for this body, armour part and palette:
     /// <c>art/critter/{label}/{label}{armour}{X or S}{weapon}{animation}.art</c>, rules N1 and MA3 (a two-handed sword with a shield is
@@ -165,7 +172,9 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
 /// (resource 1, where every critter ART of the installation is; SH-04) and decodes the frames the fixed facing table draws. The
 /// header gives frames, rate and action frame; the walk and run strides are the frame offsets of one cycle (research L7). Since
 /// ARC-COMBAT-021 also the fall-down and get-up ARTs (animations 7 and 8) when the body has both. Since ARC-RENDER-037 the stand and
-/// attack show the body's weapon and shield (<see cref="HeroBody.Selector"/>), a missing armed walk the walk without it. Typed failures as
+/// attack show the body's weapon and shield (<see cref="HeroBody.Selector"/>), a missing armed walk the walk without it. Since
+/// ARC-RENDER-039 also the low attack (21, with the weapon and shield) and the throw (14, without them) when the body has them; a low
+/// attack the repair turns into the attack is not read again (the attack ART plays it). Typed failures as
 /// <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
 public static class HeroBodyArt
 {
@@ -186,10 +195,12 @@ public static class HeroBodyArt
         {
             // ARC-COMBAT-021: the fall-down and get-up ARTs follow the five; a body without both, or with one that is not one entry
             // with a readable header in the body's palette (none of the installed creatable bodies), loads without them, and its hero
-            // then lies down without a drawn fall.
+            // then lies down without a drawn fall. ARC-RENDER-039: the low attack and throw likewise, each on its own.
             var wanted = human.Actions.Select(action => (Action: action, Selector: human.Resource(action).Selector, Optional: false))
                 .Append((ActorDiagnosticAction.FallDown, ActorDiagnosticProfile.HumanFallDownSelector, true))
-                .Append((ActorDiagnosticAction.GetUp, ActorDiagnosticProfile.HumanGetUpSelector, true));
+                .Append((ActorDiagnosticAction.GetUp, ActorDiagnosticProfile.HumanGetUpSelector, true))
+                .Append((ActorDiagnosticAction.LowAttack, ActorDiagnosticProfile.HumanLowAttackSelector, true))
+                .Append((ActorDiagnosticAction.Throw, ActorDiagnosticProfile.HumanThrowSelector, true));
             foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
@@ -197,6 +208,8 @@ public static class HeroBodyArt
                 // body walks without its weapon.
                 var (selector, entries) = body.Candidates(humanSelector).Select(candidate => (Selector: candidate, Entries: Named(resource, body.ArtPath(candidate))))
                     .FirstOrDefault(found => found.Entries.Length != 0, (body.Selector(humanSelector), []));
+                // ARC-RENDER-039: a low attack the repair turned into the attack is the attack's ART, already read.
+                if (action == ActorDiagnosticAction.LowAttack && ((selector >> 6) & 31) != WeaponArtRules.LowAttackAnimation) continue;
                 if (entries.Length != 1)
                 {
                     if (optional) continue;
@@ -208,7 +221,7 @@ public static class HeroBodyArt
                 catch (ArtException) when (optional) { continue; }
                 var h = metadata.Header;
                 if (h.PhysicalGroupCount != 8 || h.FramesPerGroup <= 0 || h.FramesPerSecond <= 0 || h.PalettePresenceWords.Count <= palette
-                    || h.PalettePresenceWords[palette] == 0 || (action == ActorDiagnosticAction.Attack && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup)))
+                    || h.PalettePresenceWords[palette] == 0 || (Attacks(action) && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup)))
                 {
                     if (optional) continue;
                     throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
@@ -216,22 +229,29 @@ public static class HeroBodyArt
                 var descriptor = new ActorDiagnosticResource(action, selector, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                 {
                     Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
-                    ActionFrame = action == ActorDiagnosticAction.Attack ? h.ActionFrame : 0,
+                    ActionFrame = Attacks(action) ? h.ActionFrame : 0,
                 };
                 if (descriptor.Stride is { IsValid: false }) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 read.Add(action, (descriptor, bytes, entries[0], metadata));
             }
             // Every action shares the fixed facing table, so the human's used groups are every action's. The fall and get-up come only
-            // together and only within the key cap.
+            // together and only within the key cap; then the low attack and the throw, each only within it.
             var groups = human.UsedGroups(ActorDiagnosticAction.Idle).Count();
             var keys = human.Actions.Sum(action => groups * read[action].Resource.FramesPerGroup);
             var falls = read.TryGetValue(ActorDiagnosticAction.FallDown, out var fall) && read.TryGetValue(ActorDiagnosticAction.GetUp, out var rise)
                 && keys + groups * (fall.Resource.FramesPerGroup + rise.Resource.FramesPerGroup) <= MaxKeys;
             if (falls) keys += groups * (read[ActorDiagnosticAction.FallDown].Resource.FramesPerGroup + read[ActorDiagnosticAction.GetUp].Resource.FramesPerGroup);
             if (keys > MaxKeys) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
+            ActorDiagnosticResource? Extra(ActorDiagnosticAction action)
+            {
+                if (!read.TryGetValue(action, out var extra) || keys + groups * extra.Resource.FramesPerGroup > MaxKeys) return null;
+                keys += groups * extra.Resource.FramesPerGroup;
+                return extra.Resource;
+            }
+            var low = Extra(ActorDiagnosticAction.LowAttack); var thrown = Extra(ActorDiagnosticAction.Throw);
             var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
                 read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
-                falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null);
+                falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown);
             var frames = new List<ActorDiagnosticFrame>(keys);
             var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
             long rgbaBytes = 0;
@@ -285,6 +305,9 @@ public static class HeroBodyArt
         var (axisX, axisY) = Sum(1); var (diagonal, _) = Sum(2);
         return new(metadata.Header.FramesPerGroup, metadata.Header.FramesPerSecond, Math.Abs(axisX), Math.Abs(axisY), Math.Abs(diagonal));
     }
+
+    private static bool Attacks(ActorDiagnosticAction action) =>
+        action is ActorDiagnosticAction.Attack or ActorDiagnosticAction.LowAttack or ActorDiagnosticAction.Throw;
 
     private static DatEntry[] Named(DatArchive resource, string path) =>
         resource.Entries.Where(entry => string.Equals(Name(entry), path, StringComparison.OrdinalIgnoreCase)).ToArray();
