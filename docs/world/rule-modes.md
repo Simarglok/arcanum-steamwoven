@@ -94,6 +94,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Combat | `CombatAnomalyProfile` | `GrenadeIgnoresPcsInBlast` | SP15 | the grenade's friendly-fire scan covers NPCs only, so a PC in the blast never stops a throw (ARC-WORLD-088) |
 | Combat | `CombatAnomalyProfile` | `HealFatigueRungForOthers` | SP17 | the heal ladder's fatigue-recovery rung tests the healer's fatigue but is tried for the leader and followers too (ARC-WORLD-088) |
 | Combat | `CombatAnomalyProfile` | `RedirectTestsTargetIntelligence` | P3 | the AI redirect tests the spell target's intelligence against `MinIQ:` for every candidate, so it redirects all or none (ARC-WORLD-088; no installed spell sets a threshold) |
+| Combat | `CombatAnomalyProfile` | `PcThrowCostsNothing` | TT4 | the throw goal's charge exempts the local PC, so in a round the PC throws any number of items for no action points (Steamwoven charges 2, ARC-COMBAT-023) |
 | Event queue | `GameEventQueueProfile` | `RebuildOnLoad` | OQ2 | AI ticks are rebuilt with fresh jitter on load |
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 | Scripts | `ScrRuleProfile` | `GlobalFlagWriteSpills` | X10 | a value written into a global flag is ORed, shifted, into the flag's 32-flag word (ARC-SCRIPT-008) |

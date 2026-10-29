@@ -384,9 +384,32 @@ no-drop item), TW3 without the throw script (no installed weapon has one), TW4 (
 range, the line of fire and the redirect as for any ranged shot), TW5 (the weight is the host's) and TW6. Steamwoven differences: the
 item lands after its strike in the session (the original lands it just before the hit, PF8; nothing of the hit reads it), and a
 snapshot taken while it flies keeps it on the thrower's cell, shown (the session keeps no projectile). Not ready: a throw at a tile
-without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (PF11's scale arc), NPC throws (no
+without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (since ARC-COMBAT-023, [TT rows](#inventory-throw-arc-combat-023); PF11's scale arc not ready), NPC throws (no
 AI), the struck object's alert and the item event 0x800000 at the landing (PF10), a missed throw's scatter (RH2, in since ARC-COMBAT-018), and a
 "default throws" weapon of another skill than melee (none installed: the session refuses its throw).
+
+## Inventory throw (ARC-COMBAT-023)
+
+Source: the [hero attack runtime](../../world/hero-attack-runtime.md#inventory-throw-arc-combat-023). Question: how the inventory
+throws any item the hero holds (when it leaves the hero, what the press in the game view starts, what the throw checks with no
+target object, what it costs in a round and what damage a thrown item deals). Read on 2026-10-29 by this task, once, with
+`llvm-objdump` in the retail 1.0.7.4 executable, so the rows are F1; they extend TW1–TW7 and WB8. Every direct branch stays inside
+`.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TT1 | item move (0x5788C0), its message handler (0x579008, 0x5792D9), lift (0x573740), view square (0x5745A5) | An item taken onto the game cursor with no destination holder and flag 4 (the lift 0x573740; the inventory window's view square in mode 0 before it closes) passes the remove check 0x466DA0 (a refusal keeps it) and leaves its holder through 0x466E00 (the holder's removal 0x467860 with its wield-off and remove-item events). Gold (type 8) and ammunition (type 6) take the quantity split instead (0x464830, 0x4658E0). The hotkey bar puts an item on the cursor without a removal (0x57E674 → 0x573630); what its throw then does was not read further. | Original (the hotkey case F0) |
+| TT2 | game-view left press (0x54DF28–0x54E050) | With an item on the cursor: a PC that is not active (0x45D790) puts it back (0x575770); an active one clears the cursor (0x573840) and starts the throw goal (0x434F80) with the item and the pressed location, no target object. The start's answer is not read, so a refused start (the gate 0x4348E0, a goal that cannot be set) leaves the item in no holder and on no tile. | Original (the lost item: technical bug) |
+| TT3 | dispatcher (0x4B3170, 0x4B347B–0x4B34BE) | When the line of fire names no object the target stays none and the shared check (0x4C7090) still runs; only a target that is not a critter (type 15 or 16) skips it (flag 0x2, a hit). Its outcome decides the ranged path (0x4B39B0): a flight to the location or a scatter. | Original |
+| TT4 | throw starter (0x434F80), attack start (0x434B00), shared goal callback (0x433270) | The starter's gate (0x4348E0) is called with cost 0 and passes the PC whose subturn it is; the attack start's throw branch skips the attack cost (0x4B7C30); the throw goal's end charges 2 through 0x433270, which exempts the local PC (0x40D9F0), and the end step's pending cost exempts it too (EX6). So in a round the local PC throws, from the inventory or with a "default throws" weapon, for no action points. | Original bug (gameplay); Original switch `PcThrowCostsNothing` |
+| TT5 | weapon damage range (0x465F70) for skill 3, weapon range (0x465E30) | For the throwing skill the item's damage comes from 0x462330 (WB8) in place of fields 0x74/0x75; the rest is the common tail: no strength bonus (melee only), a weapon's (type 5) magic damage adjustment (0x461590, field 0x76), each bound clamped to 0 .. 3 × the maximum. The weapon range of an item that is not a weapon is 1 (a weapon's: field 0x79 plus its magic adjustment 0x7A), so a thrown non-weapon carries the melee bit of the item triggers' parent hit (0x4CBAD0). | Original |
+
+Anomalies: TT2's lost item is a technical bug (as TA1), fixed in both modes: the session refuses a throw before the item leaves.
+TT4 is a gameplay bug under the owner's rule (2026-10-28): Original keeps the free throw, Steamwoven charges the PC the goal's 2.
+Implemented by ARC-COMBAT-023 in the session and rules (`ThrowHeroItem`, `ThrowRules.ItemDamage`/`ThrownWeapon`,
+`TurnBasedRules.ThrowActionCost`). Steamwoven difference: the item leaves the hero at the throw, not at the lift. Not ready: TT3's
+target-less check (the session flies the item to the location unrolled), gold and ammunition, the throw script (point 6) and the
+removal's scripts (an item with any is refused), the hotkey bar's held item, the viewer's cursor and press (ARC-UI-063).
 
 ## Second projectile and scatter (ARC-COMBAT-018)
 

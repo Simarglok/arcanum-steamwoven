@@ -164,6 +164,7 @@ taken), each to be checked against the requirements and read in the executable w
 | ARC-COMBAT-017 Thrown weapons | Done ([below](#thrown-weapons-arc-combat-017)): the "default throws" weapon (the throwing dagger 6072) leaves the hand at the attack, is checked with the throwing skill and its thrown range, flies hidden and lands where its projectile ends (ledger TW1–TW7); the original wields nothing again afterwards (TW3). |
 | ARC-COMBAT-018 Second projectile and scatter | Done ([below](#second-projectile-and-scatter-arc-combat-018)): a bow shot from expert training flies as two projectiles for one arrow, and a missed throw scatters from its target location (ledger PS1–PS6). |
 | ARC-COMBAT-019 Returning weapons | Done ([below](#boomerangs-arc-combat-019)): a boomerang stays in the hand, is checked with the thrown range of its own weight, keeps the hero from attacking while it is away, turns back at its first end, flies back striking nothing and is back where the hero stood at the turn; then the hero attacks again with auto attack (ledger BR1–BR7). |
+| ARC-COMBAT-023 Inventory throw | Done in the session ([below](#inventory-throw-arc-combat-023)): any held item thrown at a location as the inventory throws it, with the damage of its weight, its thrown range, the line of fire's struck critter, the scatter and the landing (ledger TT1–TT5); the viewer's cursor and press are ARC-UI-063. |
 
 ## Ranged hero attack (ARC-COMBAT-015)
 
@@ -328,6 +329,27 @@ Not ready: the return's hit script and item event (BR5, as PS5), the turn-based 
 tests, the re-attack after a flight given up, NPC boomerangs (no AI), the struck object's alert, and a boomerang across a save (the
 session keeps neither the shot nor the mark: a restored hero has it in the hand).
 
+## Inventory throw (ARC-COMBAT-023)
+
+Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (throws resolved by item type, partly) and
+[FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-combat-005) (the throw's check, partly). Read in the retail 1.0.7.4
+executable ([ledger TT1–TT5](../research/ledger/combat.md#inventory-throw-arc-combat-023), with TW1–TW7 and WB8). Session and
+rules only: the viewer's game cursor holding the item and its press in the game view are ARC-UI-063.
+
+| Rule | Value |
+| --- | --- |
+| Request (TT1, TT2) | `GameSessionOwner.ThrowHeroItem(expected, SessionHeroThrow(Item, Facts, Target))`: a held item, listed or worn, its kind, no-drop flag and script points (`SessionGridMoveItem`), the pressed tile; a listed weapon's `Combat` facts and weapon flag 0x10 (`Throwable`); the critter the line of fire to the tile names (`Struck`, `StruckCell`, `LineOfFire`, TW4) or none. |
+| Leaving the hero (TT1, TW3) | The original takes the item out when it is lifted onto the game cursor (remove check 0x466DA0, removal 0x466E00); a PC's throw (0x4B3C00) leaves it there. The session takes it out at the throw: the no-drop flag refuses (`ItemNotDroppable`), the item leaves its list or slot in a revision of its own and lies hidden on the hero's cell without decay until `LandThrownItem` or `EndShot`, as a thrown weapon (TW6). A weapon the hero wields stays in the hand. |
+| Check (TT3, TW4, TW5) | With a struck critter: `AttackCritter`'s flight with the throwing skill's level and training, the thrown range `ThrowRules.Range` of the item's weight (the session's weight row, the hero as holder; `QueryHeroThrowRange`), the struck critter's distance and the line's cover, no reach test, no ammunition of the wielded weapon and no boomerang test (the throw starter 0x434F80 has none). A miss scatters from the tile (RH2). Without one the shot flies to the tile unrolled (`Destination`); in the original the shared check still runs without a target (TT3, not ready). |
+| Damage (TT5, WB8) | `ThrowRules.ThrownWeapon`: a throwable weapon (flag 0x10) its own damage, any other weapon `ThrowRules.ItemDamage` of its weight with its magic damage adjustment, anything else a `WeaponKind.ThrownItem` with `ItemDamage`: normal `(W + 99) / 100 .. (W + 49) / 50`. No strength bonus (melee only). |
+| Action points (TT4) | `TurnBasedRules.ThrowActionCost` / `QueryHeroThrowCost`: the throw goal charges 2 to every thrower but the local PC (0x433270), so the original PC throws for nothing in a round; Original switch `PcThrowCostsNothing`, Steamwoven charges the hero 2. The turn-based host charges it. |
+
+Not ready: gold and ammunition (the lift's quantity split, `AttackUnsupported`), the item's throw script (point 6) and the removal's
+wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck
+object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (TT1:
+it stays in the inventory while held; not read further). The original's lost item when the throw start fails after the cursor was
+cleared (TT2) does not arise: the session refuses before the item leaves.
+
 ## Viewer (AREA)
 
 - In combat mode (R) the cursor over a living NPC is the closed hand (`attack` / `walk to attack`), over a corpse nothing
@@ -490,7 +512,8 @@ and range end; the shot decided at once and struck on arrival, the forced hit, t
 ARC-COMBAT-018 the bow's projectile count, the end of a shot without a target, an expert bow's two shots for one arrow, the second on
 a corpse and the limit for two), `tests/Arcanum.Simulation.Tests/Combat/ThrowRulesTests.cs` and
 `tests/Arcanum.Session.Tests/ThrowStateTests.cs` (ARC-COMBAT-017 and ARC-COMBAT-018's scatter tiles, walk, map edge and target
-location), `tests/Arcanum.Session.Tests/BoomerangStateTests.cs` and the boomerang cases of `ProjectileRulesTests.cs`
+location), `tests/Arcanum.Session.Tests/HeroItemThrowStateTests.cs` and the item damage cases of `ThrowRulesTests.cs` (ARC-COMBAT-023:
+a pack or worn item thrown at a critter or an empty tile, its damage, scatter, landing and refusals), `tests/Arcanum.Session.Tests/BoomerangStateTests.cs` and the boomerang cases of `ProjectileRulesTests.cs`
 (ARC-COMBAT-019: the boomerang kept in the hand and checked with its thrown range, the mark and the refused attack, the turn at a
 strike or a range end, the harmless return, its end and no mark after a restore), `tests/Arcanum.Session.Tests/CriticalEffectsStateTests.cs` (ARC-COMBAT-009 and the ammunition per shot of ARC-COMBAT-012: a critical hit disarms
 an NPC and the weapon lies at its cell after a restore, items without a cell stay, the hero's dropped weapon lies at its cell until it is picked up (ARC-WORLD-059), a crippled

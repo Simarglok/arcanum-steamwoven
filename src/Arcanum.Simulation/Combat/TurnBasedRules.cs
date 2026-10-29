@@ -68,6 +68,8 @@ public static class TurnBasedRules
     public const int CastSpellCost = 4;
     public const int UseSkillCost = 4;
     public const int UseItemCost = 4;
+    /// <summary>ARC-COMBAT-023: the throw goal's charge (goal 37's end, the shared goal callback 0x433270, ledger AG10, TT rows).</summary>
+    public const int ThrowCost = 2;
     /// <summary>Getting up in a round: only on the critter's own subturn, for this cost (anomaly A3, as the original).</summary>
     public const int GetUpCost = 5;
     /// <summary>The weapon speed of an unarmed attack.</summary>
@@ -180,6 +182,19 @@ public static class TurnBasedRules
     /// <summary>Picking up an item: 1, plus the move to its cell when not on it.</summary>
     public static int PickUpActionCost(bool sameCell, int pathSteps, bool alwaysRunningPc) =>
         PickUpCost + (sameCell ? 0 : MoveCost(pathSteps, alwaysRunningPc));
+
+    /// <summary>
+    /// ARC-COMBAT-023 (ledger TT rows): what a throw (goal 37, from the inventory or a "default throws" weapon) costs its thrower in a
+    /// round: the goal charges <see cref="ThrowCost"/> through the shared goal callback (0x433270), which exempts the local PC, and
+    /// nothing else of the throw charges (the starter's gate 0x4348E0 is called with 0, the attack cost 0x4B7C30 is skipped). With
+    /// <see cref="CombatAnomalyProfile.PcThrowCostsNothing"/> the local PC throws for 0, as in the original; Steamwoven charges it
+    /// <see cref="ThrowCost"/> too. An NPC's end-step charge of its pending cost (EX6) is the AI host's.
+    /// </summary>
+    public static int ThrowActionCost(bool localPc, CombatAnomalyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return localPc && profile.PcThrowCostsNothing ? 0 : ThrowCost;
+    }
 
     /// <summary>
     /// The preview check of a cost: affordable when the action points cover it, or for the local PC with action points

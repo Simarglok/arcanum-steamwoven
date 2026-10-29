@@ -175,6 +175,13 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool RedirectTestsTargetIntelligence { get; init; }
 
+    /// <summary>
+    /// TT4 (ARC-COMBAT-023, under the owner's rule on gameplay bugs of 2026-10-28): the throw goal's charge (0x433270) exempts the local
+    /// PC and nothing else of a throw charges it, so in a round the PC throws any number of items for no action points (see
+    /// <see cref="TurnBasedRules.ThrowActionCost"/>). Steamwoven charges the PC the goal's 2, as every other thrower.
+    /// </summary>
+    public bool PcThrowCostsNothing { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -208,6 +215,7 @@ public sealed record CombatAnomalyProfile
         GrenadeIgnoresPcsInBlast = true,
         HealFatigueRungForOthers = true,
         RedirectTestsTargetIntelligence = true,
+        PcThrowCostsNothing = true,
     };
 
     /// <summary>Both settings, default first.</summary>

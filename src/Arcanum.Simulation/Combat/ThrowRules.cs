@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Simulation.Combat;
@@ -28,6 +29,36 @@ public static class ThrowRules
         if (throwing >= SkillTraining.Expert) arm = unchecked(arm + arm / 2);
         var per = Math.Max(1, weight / 10);
         return Math.Max(1, arm / per / 5);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-023 (0x462330, ledger WB8): the damage of a thrown item that is not a throwable weapon (weapon flag 0x10): normal
+    /// <c>(weight + 99) / 100 .. (weight + 49) / 50</c> from its effective <paramref name="weight"/> (0x461370 with its holder), signed
+    /// and toward zero, and no other type.
+    /// </summary>
+    [OriginalFunction(0x462330, OriginalFunctionScope.Partial)]
+    public static DamageRanges ItemDamage(int weight)
+    {
+        if (weight is < 0 or > MaxWeight) throw new ArgumentOutOfRangeException(nameof(weight));
+        return DamageRanges.None with { Normal = new((weight + 99) / 100, (weight + 49) / 50) };
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-023 (the weapon damage range 0x465F70 for skill 3 → 0x462330, ledger WB8, TT rows): what a thrown item strikes with at
+    /// the thrown <paramref name="range"/>. A weapon (an item with its weapon block) keeps its own values for this thrower
+    /// (<see cref="EquipmentRules.Weapon"/>: to-hit, charts, magic adjustments under <paramref name="aptitude"/>); only a throwable one
+    /// (<paramref name="throwable"/>) keeps its own damage, any other weapon strikes with <see cref="ItemDamage"/> of its weight and
+    /// keeps its magic damage adjustment (0x461590, a weapon's only). Anything else (null, or an item without a weapon block) is a
+    /// <see cref="WeaponKind.ThrownItem"/> with <see cref="ItemDamage"/> and its uber flag.
+    /// </summary>
+    public static CombatWeapon ThrownWeapon(EquipmentItem? item, bool throwable, int weight, int aptitude, int range)
+    {
+        if (range is < 0 or > AttackResolver.MaxMagnitude) throw new ArgumentOutOfRangeException(nameof(range));
+        var damage = ItemDamage(weight);
+        if (item is not { Kind: EquipmentItemKind.Weapon, Weapon: not null })
+            return new CombatWeapon { Kind = WeaponKind.ThrownItem, Damage = damage, Range = range, Uber = item?.Uber ?? false };
+        var weapon = EquipmentRules.Weapon(new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = item }, aptitude);
+        return weapon with { Damage = throwable ? weapon.Damage : damage, Range = range };
     }
 
     /// <summary>

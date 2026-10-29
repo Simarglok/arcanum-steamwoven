@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -62,5 +63,44 @@ public sealed class ThrowRulesTests
         Assert.AreEqual(from, ThrowRules.Scatter(from, 4, -1, Open), "no tiles: no walk");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ThrowRules.Scatter(from, 8, 1, Open));
         Assert.ThrowsExactly<ArgumentNullException>(() => ThrowRules.Scatter(from, 1, 1, null!));
+    }
+
+    // ARC-COMBAT-023 (0x462330, ledger WB8): an item that is not a throwable weapon strikes with the damage of its weight.
+    [TestMethod]
+    public void AThrownItemsDamageIsAHundredthToAFiftiethOfItsWeight()
+    {
+        Assert.AreEqual(DamageRanges.None, ThrowRules.ItemDamage(0), "99 / 100 and 49 / 50 are 0");
+        Assert.AreEqual(new DamageRange(1, 1), ThrowRules.ItemDamage(1).Normal);
+        Assert.AreEqual(new DamageRange(1, 1), ThrowRules.ItemDamage(15).Normal, "114 / 100, 64 / 50");
+        Assert.AreEqual(new DamageRange(2, 3), ThrowRules.ItemDamage(150).Normal, "249 / 100, 199 / 50");
+        Assert.AreEqual(DamageRanges.None with { Normal = new(5, 10) }, ThrowRules.ItemDamage(500), "no other type");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ThrowRules.ItemDamage(-1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ThrowRules.ItemDamage(ThrowRules.MaxWeight + 1));
+    }
+
+    [TestMethod]
+    public void OnlyAThrowableWeaponKeepsItsOwnDamage()
+    {
+        var sword = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, MagickTechComplexity = 50,
+            Weapon = new EquipmentWeapon
+            {
+                Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(4, 12) }, MagicDamage = new(3, 0, 0, 0, 0), ToHit = 7,
+                Range = 1, CriticalHitChart = CriticalHitChart.Edged,
+            },
+        };
+        var thrown = ThrowRules.ThrownWeapon(sword, throwable: false, weight: 150, aptitude: 0, range: 5);
+        Assert.AreEqual((WeaponKind.Weapon, 5, 7, CriticalHitChart.Edged), (thrown.Kind, thrown.Range, thrown.ToHitBonus, thrown.CriticalHitChart),
+            "a weapon keeps its own values but the range");
+        Assert.AreEqual(ThrowRules.ItemDamage(150), thrown.Damage, "a weapon without flag 0x10 strikes with its weight's damage");
+        Assert.AreEqual(3, thrown.MagicDamageAdjustment.Normal, "and keeps its magic damage adjustment (a weapon's, 0x461590)");
+        Assert.AreEqual(sword.Weapon!.Damage, ThrowRules.ThrownWeapon(sword, throwable: true, 150, 0, 5).Damage, "a throwable weapon keeps its own");
+
+        var rock = ThrowRules.ThrownWeapon(null, throwable: true, weight: 500, aptitude: 0, range: 3);
+        Assert.AreEqual((WeaponKind.ThrownItem, 3, ThrowRules.ItemDamage(500), false), (rock.Kind, rock.Range, rock.Damage, rock.Uber));
+        var armour = new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor(), Uber = true };
+        Assert.AreEqual((WeaponKind.ThrownItem, true), (ThrowRules.ThrownWeapon(armour, false, 500, 0, 3) is var plate ? plate.Kind : default, plate.Uber));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ThrowRules.ThrownWeapon(null, false, 500, 0, -1));
     }
 }
