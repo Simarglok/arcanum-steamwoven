@@ -242,6 +242,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="talk-commands-arc-script-050"></a>[Talk commands (ARC-SCRIPT-050)](ledger/scripts.md#talk-commands-arc-script-050) | [Scripts and events](ledger/scripts.md) | FL1–FL5, GA1–GA3, ML1 |
 | <a id="tile-script-actors-arc-script-052"></a>[Tile-script actors (ARC-SCRIPT-052)](ledger/scripts.md#tile-script-actors-arc-script-052) | [Scripts and events](ledger/scripts.md) | TD1–TD3 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
+| <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 
 ## Decisions to revisit
 
@@ -330,5 +331,5 @@ Details the second reading added or sharpened:
   are answered by the [combat-domain data census](combat-data-census.md): the description header's
   labels match the art, and no shipped `Resist:` uses an LM17 key.)
 - Code left for later: wilderness A2 (editor only); locomotion W4 and the frame-time clamp;
-  companion C2, C4, C10; how often the loyalty step runs in play (read statically as [OL19](ledger/social.md#companion-orders-and-loyalty-arc-res-064), an observation is still needed); what a teleport does after it is processed (followers, the destination map, W9); poison ticks on a switched-off critter ([TE11](ledger/scripts.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)); reputation A6
+  companion C2, C4, C10; how often the loyalty step runs in play (read statically as [OL19](ledger/social.md#companion-orders-and-loyalty-arc-res-064), an observation is still needed); what a teleport does after it is processed (W9; its followers and the destination map are read by [FM1–FM14](ledger/social.md#followers-across-maps-arc-res-076)); poison ticks on a switched-off critter ([TE11](ledger/scripts.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019)); reputation A6
   and A7; the first-tick marker after a load (OQ2, H1).
