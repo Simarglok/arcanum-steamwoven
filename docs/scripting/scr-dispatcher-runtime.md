@@ -511,7 +511,7 @@ ran at most S15 until S16 (below).
 
 ## Object state actions (ARC-WORLD-114, set S16)
 
-`ScrAdmissionSet.S16` is S15 plus toggle state (56) and kill (58); the interpreter runs at most S16. Both hand one
+`ScrAdmissionSet.S16` is S15 plus toggle state (56) and kill (58); the interpreter ran at most S16 until S17 (below). Both hand one
 `ScrObjectStateRequest(change, object)` per object of their object operand to the host, in action order (`ScrEffects.ObjectStates`;
 an absent single object asks for nothing): `ToggleOff` flips the object's "off" flag 0x2 by the raw field writes, not the object flag
 setter, so its lights are left as they are (ledger [PM2](../research/ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114)); `Kill`
@@ -522,6 +522,31 @@ pre-made heroes' heartbeat scripts 1781..1792 ([character creation evidence](../
   single-object focus kinds plus 56 and 58) runs an NPC's first-heartbeat and heartbeat scripts from the AI host
   ([heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)); its host applies a kill through the world's
   `AreaScriptWorld.Kill` and an NPC's toggle as the map change `obj.off`. No other host's set holds them.
+
+## Critter vicinity and the dialog point in call-ex (ARC-SCRIPT-047, set S17)
+
+`ScrAdmissionSet.S17` is S16 plus the focus kinds everyone in the vicinity (8) and anyone in the vicinity (9); the interpreter runs
+at most S17. Both name the list `IScrWorldQueries.CrittersInVicinity(centre)`: the PCs and NPCs whose tile is within
+`ScrWorld.VicinityReach` (10) tiles of the attachee's on both axes, the attachee itself and dead critters included, destroyed or
+switched-off ones left out, at most 100 (`VicinityListCapped` past that; ledger
+[TG4](../research/ledger/scripts.md#script-triggers-arc-script-047)). An action names the whole list (loop for, or one request per
+object), an optional single object takes its first object. A condition over a list kind (SG6: every object, or any) is not modelled,
+so `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`).
+
+Call-ex (81) now runs the dialog point (9): it goes through the object entry as the original's 0x44B170 does, so the dialog gates of
+0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
+goes on as a call that ran default), a mind-controlled one runs script 2188 in place of its slot's script, whose slot keeps the
+held script number. A dialog action in such a callee is allowed: the callee's dialog store is the slot the call-ex writes back (X11),
+so `ScrDialogStart` carries the callee, the line, the node and `Point = 9`; a host opens the talk and resumes that slot (TG8). A
+dialog action at any other point carries that point. Call-ex of the use point (1) stays refused (a nested use's trap spot is not
+modelled). A callee of the dialog point that reaches call script (7) is refused, as a dialog-point event's set may not hold
+call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's
+dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier call-ex of the slot keeps its own).
+
+- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (below and
+  [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,
+  call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
+  other host's set holds the critter kinds.
 
 ## Checks
 
@@ -609,14 +634,16 @@ pre-made heroes' heartbeat scripts 1781..1792 ([character creation evidence](../
   clicks on guarded use sites run it under "S4-area-use-reading-objects-story" (since ARC-WORLD-081 "S4-area-use-reading-objects-story-world"), and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
   the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); since ARC-WORLD-114
-  an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill"); combat is a later slice.
-- Not in any admitted set yet: focus groups other than the vicinity's scenery, loop break, float line, reactions and most other world
+  an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill", since ARC-SCRIPT-047
+  "S2-area-heartbeat-state-kill-talk"); combat is a later slice. Which points the original fires and which have no host here: the
+  [script trigger audit](../research/script-trigger-audit.md).
+- Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, float line, reactions and most other world
   actions; create object makes items only (ARC-WORLD-081).
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
   location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
   loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081), toggle state and kill (S16, ARC-WORLD-114;
-  the viewer applies them to an NPC of the shown map only).
+  the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

@@ -196,6 +196,9 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("death")) await RunAreaHeroDeathSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
+                                // ARC-SCRIPT-047: only when named, Virgil's heartbeat opens his talk with the PC at the start (AI on, start map, --hero);
+                                // first of the AI stages: theirs run his heartbeat, which removes itself, and move the PC away.
+                                if (only?.Contains("opening") == true) await RunAreaOpeningTalkSmokeAsync(result);
                                 // ARC-WORLD-092: only when named, the first fight with the AI on (the other stages run with it off).
                                 if (only?.Contains("ai") == true) await RunAreaAiSmokeAsync(result);
                                 // ARC-WORLD-095: only when named, the fight in a turn-based round (the NPC acts in its own subturns).

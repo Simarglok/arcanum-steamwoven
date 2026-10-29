@@ -51,8 +51,8 @@ Left for the next inventory slices (each its own task):
   [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
-- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at
-  (703, 236)), steal (done by ARC-UI-065, below); the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
+- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064 without the doll views and the
+  gamble, below), steal (done by ARC-UI-065, below); the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
@@ -100,9 +100,38 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
 shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
 (`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
-232; the barter window gets its round view with its original look (not built yet), the steal window has it since ARC-UI-065.
-ARC-UI-063: in the own window a held item released in it goes onto the game cursor and the window closes (IW18); a left press in the
-game view throws it, and the cursor shows the held item's art ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
+232; the barter window has its round view since ARC-UI-064 and the steal window since ARC-UI-065. ARC-UI-063: in the own window a held item
+released in it goes onto the game cursor and the window closes (IW18); a left press in the game view throws it, and the cursor shows
+the held item's art ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
+
+## Barter window (done: ARC-UI-064)
+
+Read in the open 0x5727B0, the background 0x5782D0, the redraw 0x576520, the hit test 0x575CB0, the move handler 0x573D74, the release
+0x574248 and the hover quote 0x578330; rows [BW1–BW5](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064). The barter window is
+interface mode 1 (a `b:` reply, BT7); the frame is the inventory window's.
+
+| Part | Art | Place in the window | Notes |
+| --- | --- | --- | --- |
+| Barter background | 235 `Barter` 358 × 400; 825 `Barter_Follower` | (0, 0) | 825 while the follower's cycle buttons exist: a follower's window when the PC leads another follower (BW1) |
+| Pack background, hero's grid, counts, drop and use boxes | as in the inventory window | as there | the hero's doll and weight lines are not drawn (doll toggle clear at every open) |
+| Merchant's image | as the loot window's (0x553D10) | (183, 33) | the merchant's, not its substitute container's; a follower's portrait is not built |
+| Merchant's name | font 0x682418 | centred on x 215, line (y 102, 200 × 20) | 0x441B60 at the open (BW2) |
+| Quote line | font 0x682C74 | (89, 128), 253 × 30 | the hover quote 0x578330 and the trade messages; a follower's window prints the follower's weight lines there (BW2, BW5) |
+| Shown grid | item inventory art | 10 × 7 cells of 32 from (8, 168), scrolled by rows | the substitute container's items when there is one, else the merchant's; scroll maximum 5 or 89 (BW4) |
+| Gamble box | 345 off, 344 on, 346 refused | (703, 236), hit area = art | on / refused by the gamble check 0x579840 while an item is held over it (BW3) |
+| Round view | 231 | (16, 17) | IW33–IW34 |
+
+Done in the viewer: the backgrounds, the image, the name and quote line in the project's font, the shown grid with its items' art and the
+wheel as its scroll (PROJECT: the scroll bar at (330, 168) is not drawn), the hero's grid, counts and boxes, the gamble box in its off art,
+the round view; a merchant's item released on the hero's grid is bought and a hero's item released on the merchant's grid sold through the
+session (PROJECT: into the hero's first free cells, a stack whole), and a right release on an item moves it to the other side the same
+way (IW36); the quote line shows a PROJECT quote text (`Buy NAME: N`) on a resting
+pointer and the trade messages; the "Diagnostic view" switch shows the diagnostic window. The opening shop keeps the diagnostic look.
+
+Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
+generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
+boxes inside the barter window, the follower's weight lines and cycle buttons 757 / 758 at (155, 55), (253, 55), the merchant's doll view
+(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30), the scroll bar's art, the opening shop's window in this look.
 
 ## Character sheet
 

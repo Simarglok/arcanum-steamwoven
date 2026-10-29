@@ -118,7 +118,7 @@ public sealed class AreaInventoryTexts
 }
 
 /// <summary>ARC-UI-051: what the inventory window draws from the game folder: its interface art (<see cref="AreaInventoryArtLayout.ArtNumbers"/>;
-/// ARC-UI-052: and the loot window's, <see cref="Numbers"/>) and its texts.</summary>
+/// ARC-UI-052, ARC-UI-064: and the loot and barter windows', <see cref="Numbers"/>) and its texts.</summary>
 public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, AreaInventoryTexts Texts, string Detail)
 {
     /// <summary>True when every art number read: the window then shows the original look.</summary>
@@ -128,13 +128,17 @@ public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterf
     /// shows the original look. A holder image that does not read is left out, not a reason for the diagnostic window.</summary>
     public bool LootArtReady => ArtReady && AreaLootArtLayout.ArtNumbers.All(Ready);
 
+    /// <summary>ARC-UI-064: true when the barter window's own arts read too (<see cref="AreaBarterArtLayout.ArtNumbers"/>): the barter
+    /// window then shows the original look.</summary>
+    public bool BarterArtReady => ArtReady && AreaBarterArtLayout.ArtNumbers.All(Ready);
+
     private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready;
 
-    /// <summary>Every art number the window reads: the inventory window's, the loot window's, the holders' images and (ARC-UI-054) the
-    /// arts over the round view, which are drawn when they read and are no reason for the diagnostic window.</summary>
+    /// <summary>Every art number the window reads: the inventory window's, the loot window's, (ARC-UI-064) the barter window's, the holders'
+    /// images and (ARC-UI-054) the arts over the round view, which are drawn when they read and are no reason for the diagnostic window.</summary>
     public static IReadOnlyList<int> Numbers { get; } =
-        AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers)
-            .Concat([AreaInventoryHole.InventoryArt, AreaInventoryHole.LootArt]).Distinct().ToArray();
+        AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaBarterArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers)
+            .Concat([AreaInventoryHole.InventoryArt, AreaInventoryHole.BarterArt, AreaInventoryHole.LootArt]).Distinct().ToArray();
 
     public static AreaInventoryArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaInventoryTexts.Project(reason), reason);
 

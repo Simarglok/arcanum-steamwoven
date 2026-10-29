@@ -54,27 +54,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     private Button _lookToggle = null!;
     private StyleBoxFlat _diagnosticStyle = null!;
     private readonly StyleBoxEmpty _originalStyle = new();
-    // ARC-UI-054: the round view's copy of the game view, on a layer under the window so the copy reads the world, not the window
-    // (PROJECT: it reads what layers 1 and 2 drew too, floaters and the spell pane, where the original copies the game view alone).
-    private CanvasLayer _holeLayer = null!;
-    private ColorRect _hole = null!;
-    private ShaderMaterial _holeMaterial = null!;
-    private const string HoleShader = """
-        shader_type canvas_item;
-        render_mode unshaded, blend_disabled;
-        uniform sampler2D screen_texture : hint_screen_texture, filter_nearest, repeat_disable;
-        // The hole's and the source square's corners and sides in canvas units (the same layer transform).
-        uniform vec2 hole_origin;
-        uniform float hole_side = 1.0;
-        uniform vec2 source_origin;
-        uniform float source_side = 1.0;
-        void fragment() {
-            // The screen span of one UV unit of the hole: the canvas-to-screen scale (and a flipped axis) without knowing the stretch.
-            vec2 span = vec2(dFdx(SCREEN_UV.x) / dFdx(UV.x), dFdy(SCREEN_UV.y) / dFdy(UV.y));
-            vec2 delta = (source_origin - hole_origin) + UV * (source_side - hole_side);
-            COLOR = vec4(texture(screen_texture, SCREEN_UV + delta / hole_side * span).rgb, 1.0);
-        }
-        """;
+    // ARC-UI-054: the round view's copy of the game view (ARC-UI-064: the component the barter panel shares).
+    private AreaRoundView _roundView = null!;
     public event Action? CloseRequested;
     /// <summary>ARC-UI-054: the window's holder on the screen for the round view: its foot point in canvas units and the game view's
     /// zoom (canvas units per game pixel); null when it is not drawn.</summary>
@@ -214,33 +195,15 @@ public partial class AreaInventoryPanel : CanvasLayer
             if (_view is { } view) Render(view, _message.Text);
         }).CallDeferred();
         foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
-        _holeMaterial = new ShaderMaterial { Shader = new Shader { Code = HoleShader } };
-        _hole = new ColorRect { Name = "RoundView", MouseFilter = Control.MouseFilterEnum.Ignore, Material = _holeMaterial };
-        _holeLayer = new CanvasLayer { Name = "RoundViewLayer", Layer = 3, Visible = false };
-        _holeLayer.AddChild(_hole); AddChild(_holeLayer);
+        _roundView = new AreaRoundView(); AddChild(_roundView);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
     /// <summary>ARC-UI-054: the round view shows the game view around the holder (IW33) while the original look is up.</summary>
-    internal bool RoundViewShown => _holeLayer.Visible;
+    internal bool RoundViewShown => _roundView.Visible;
 
-    private void UpdateRoundView()
-    {
-        var holder = IsOpen && ArtMode ? HolderView?.Invoke() : null;
-        _holeLayer.Visible = holder is not null;
-        _area.RoundViewCut = holder is not null;
-        if (holder is not { } shown) return;
-        var (x, y) = AreaInventoryHole.Corner(_area.LookMode);
-        var side = AreaInventoryHole.Side * _area.FrameScale;
-        var origin = _area.GlobalPosition + new Vector2(x, y) * _area.FrameScale;
-        _hole.Position = origin; _hole.Size = new(side, side);
-        var source = AreaInventoryHole.Source(shown.Foot.X, shown.Foot.Y, shown.Zoom);
-        _holeMaterial.SetShaderParameter("hole_origin", origin);
-        _holeMaterial.SetShaderParameter("hole_side", side);
-        _holeMaterial.SetShaderParameter("source_origin", new Vector2(source.X, source.Y));
-        _holeMaterial.SetShaderParameter("source_side", source.Side);
-    }
+    private void UpdateRoundView() => _roundView.Update(_area, IsOpen && ArtMode ? HolderView?.Invoke() : null);
 
     public void Open(AreaInventoryView view, string? message = null)
     {
@@ -259,7 +222,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         EndQuantity();
         // An item held on the cursor goes back first (0x575770, IW1): it never left its place.
         _area.Hold(null);
-        _view = null; Hide(); _holeLayer.Visible = false;
+        _view = null; Hide(); _roundView.Visible = false;
         GetViewport().GuiReleaseFocus();
     }
 
