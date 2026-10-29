@@ -60,6 +60,7 @@ from the exported developer builds, builds the player's alpha and puts every God
 ./arcanum package mac|win         # the player's alpha (below)
 ./arcanum run --kind window|headless|export|dotnet -- COMMAND   # any Godot run, export or dotnet build/test through the queue
 ./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones)
+./arcanum smoke pr --stages S,... # the per-PR smoke: only the touched stages (--crash-site when related); `smoke full`: the full map chain (ARC-DEV-061)
 ./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle, then the OriginalExe tests
 ./arcanum clean                   # which builds are protected and which may go (dry run; --apply removes only those)
 ```

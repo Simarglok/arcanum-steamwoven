@@ -85,6 +85,62 @@ Known pitfalls:
 - A windowed native smoke needs its window visible: a hidden or covered window is one cause of a stop at the first pixel stage (`AREA_CLASS_PIXEL_NOT_OBSERVED`). Since ARC-DEV-045 a minimized window keeps drawing in an automated run ([minimized window draw](#minimized-window-draw-arc-dev-045)), so a minimized window is no longer this cause; a covered window may still be. Make the window visible and rerun; a stop there with the window visible and unobstructed is a result. Before ARC-RENDER-029 the exterior smoke also stopped there with its window focus simulated on (the camera follow moved the sampled view back to the actor); its samplers now hold the camera and refuse a moved view with a `..._CAMERA_MOVED` code ([map mode](../rendering/area-map-mode.md#camera-held-during-smoke-samples-arc-render-023)). A run with real window focus was not observed; if the stop persists with a visible window, compare with `main` before blaming the change.
 - A command given to the owner is one you ran yourself, or one checked with the launcher's `--dry-run` (on `area`, `world` and `map`) or `--help` and [the launcher docs](local-development.md#project-launcher). A dry run checks the launcher's command and build, not the viewer's own arguments: a viewer argument is checked by a run.
 
+## Smoke runner (ARC-DEV-061)
+
+The viewer's smokes on the original data run through one shared runner; do not write a scratch smoke script (the queue
+history held about 500 runs of such copies of one template).
+
+    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--crash-site]
+    ./arcanum smoke full                       # the full map smoke chain
+    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
+    ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
+    ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
+    # each also takes --no-build, --keep-settings and --dry-run
+
+- **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
+  directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
+  `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the
+  Crash Site, or at `--sector`), with the Crash Site smoke first only when the change is related to it
+  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build (when main
+  changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
+  `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
+  (1384, 239), and on `elven ruins` with `--hero elf-male`.
+- **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
+  `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;
+  it needs the pinned Crash Site inputs that `./arcanum setup` recorded.
+- **Steps.** Each step is its own quiet run of the [launch queue](#launch-queue-arc-dev-033) from this checkout: the
+  viewer build (`dotnet restore` and `build` of `tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln`, kind
+  `dotnet`; `--no-build` skips it when the checkout's viewer is already built), a project import (kind `headless`)
+  when the project was never imported (no `.godot` folder), then each smoke as a `window` run (the self-test with
+  `--headless` as a `headless` run). The viewer arguments come from the launcher configuration
+  (`launch.map_arguments`, `launch.terrain_arguments`), as for `./arcanum map`.
+- **Start check.** A smoke's start line is the viewer's `ARC-DEV-059 viewer start mode=crash-site-area map=NAME
+  main-menu=B smoke=True` with the intended map (`-` for the Crash Site smoke) given as `--expect`
+  ([start check](#the-launchers-start-check-arc-dev-059)), so a viewer that started another map, or not as a smoke,
+  fails its start (exit 125); the self-test keeps the default start lines.
+- **Own settings and environment.** Each smoke gets its own folder in a fresh `arcanum-smoke-*` folder under the system
+  temporary folder, with every settings file pointed into it (`ALWAYS_RUN`, `AUDIO_VOLUMES`, `GAME_SETTINGS`,
+  `LAUNCHER_SETTINGS`, `VISUAL_PROFILE`, `WORLD_DIAGNOSTIC_SETTINGS`, `WORLD_DIAGNOSTIC_ZOOM` `_TEST_PATH`); the
+  folder is removed after a passing run and kept after a failure or with `--keep-settings`. The owner's variables
+  (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` except the queue's own, the settings paths) are dropped from the viewer's
+  environment, and Godot starts as `godot_canonical` does (the sentinel, the pinned SDK, a plain `PATH`). `--env
+  NAME=VALUE` adds one variable (a capture or probe switch) to the stages' smoke (not `PATH`, `DOTNET_ROOT`, `HOME`,
+  `GODOT`, the stage list or the settings paths).
+- **Limits.** A whole map battery (`full`, `map` without `--stages`) may run 60 minutes, any other step the queue's
+  default for its kind (30 for a smoke).
+- **Result.** A failed smoke does not stop the chain; a failed build or import, or a stopped run, does. Each step
+  prints the queue's `PASS`/`FAIL` lines with its log, then `SMOKE summary` lists every step (`PASS exit=0` or
+  `FAIL exit=E`, and the steps not run) and the last line is `SMOKE PASS N of N steps passed` or `SMOKE FAIL ...`;
+  the exit is 0 only when every step passed. `--dry-run` prints each step's command and start line and runs nothing
+  (it still checks the stage names and the configured inputs). Run `./arcanum smoke` on its own, never inside
+  `./arcanum run` (it refuses: each smoke takes its own place and checks its own start).
+- **Godot** is `/Applications/Godot_mono.app/Contents/MacOS/Godot`, or `$GODOT`. The import writes the viewer's
+  untracked `*.cs.uid` files into the checkout; never commit them (stage files by name).
+
+Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
+the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
+build or a stopped run, the launcher command).
+
 ## Launch queue (ARC-DEV-033)
 
 Several threads work on the owner's Mac at once. Every Godot run, every export and every `dotnet` build or test goes

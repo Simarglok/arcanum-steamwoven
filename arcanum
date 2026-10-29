@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, launch, manifests, run_queue, start_check  # noqa: E402
+from tools.local_dev import clean, config, launch, manifests, run_queue, smoke, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -345,6 +345,12 @@ def parser() -> argparse.ArgumentParser:
                               "--verbose run has no start check")
     command.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND", help="the command and its arguments, after --")
     command.set_defaults(func=queued)
+    # ARC-DEV-061: the shared smoke runner (docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
+    command = commands.add_parser("smoke", help="run the viewer's smokes from this checkout through the launch queue, each "
+                                  "with its own settings folder and start check: pr (Crash Site + touched stages), full (the "
+                                  "full map smoke chain), map NAME, crash-site, self-test (ARC-DEV-061)")
+    smoke.configure(command)
+    command.set_defaults(func=smoke.run)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "
                                   "into artifacts/packages/PLATFORM (ARC-DEV-047/048; through the launch queue as an export)")
     command.add_argument("platform", choices=("mac", "win"), help="mac: Arcanum Steamwoven.app, ad-hoc signed; win: the Windows "

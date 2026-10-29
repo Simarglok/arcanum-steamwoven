@@ -144,16 +144,24 @@ cache-read tokens (146 review subagents), all of them on Opus.
 
 ### Smoke scope
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 5):
+Owner decisions 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 5;
+narrowed the same day in ARC-DEV-061):
 
-- Per PR, run the smoke stages the diff touches plus the Crash Site smoke. The
-  full map smoke chain runs before every `./arcanum package` and once a day on
-  main, not per PR.
+- Per PR, run only the smoke stages the change touches or is directly related
+  to; the Crash Site smoke only when the change is related to it (the pinned
+  exterior, the cave, their inputs). A PR whose change no smoke stage covers
+  runs none and says so.
+- The full map smoke chain runs only as part of the daily package build, and
+  only when main changed since the last package; not per PR.
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
+- Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
+  `./arcanum smoke pr --stages S,... [--crash-site]` per PR and
+  `./arcanum smoke full` for the chain; no scratch smoke scripts.
 
 Why: in the token audit of 2026-10-29, a merged PR took 162 steps (94 before),
-much of it the full check and smoke ritual every thread repeats.
+much of it the full check and smoke ritual every thread repeats; smoke runs
+took long even on small fixes.
 
 ### Task code
 
