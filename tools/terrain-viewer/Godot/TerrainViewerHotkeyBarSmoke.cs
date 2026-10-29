@@ -58,25 +58,31 @@ public partial class TerrainViewerApp
             CancelSpellTargeting(null);
             foreach (var slot in Enumerable.Range(0, HotkeyBarRules.Entries)) session.ClearHotkey(session.Version, slot);
             await Frames(3);
-            Require(_gameBarPanel is { Visible: true } && _hotkeyBarView is { } && _hotkeyBarContent is { } content && content.ReadyCount == HotkeyBarRules.ArtNumbers.Count,
+            Require(_gameBarPanel is { Visible: true } && _hotkeyBarView is { } && _hotkeyBarContent is { } content && content.ReadyCount == AreaHotkeyBarContent.ArtNumbers.Count,
                 "the bar shows with its art: " + _hotkeyBarContent?.Detail);
             var view = _hotkeyBarView!;
             // The bars exist only from here in an automated run (they show because this smoke asks).
             var log = _gameBarPanel!.MessageLog;
             Require(Enumerable.Range(0, HotkeyBarRules.Entries).All(i => view.SlotArtForSelfTest(i) == Art(HotkeyBarRules.SlotArt)![0]), "every slot draws HKSlt1");
 
-            // A right drag from the spell pane onto slot 2.
+            // ARC-UI-053: the spell pane in the bottom strip (bar mode 1): its background, the colleges the hero has a rank in, the press of
+            // the spell's college shows that college's known spells as icons, entering a button names it in the mode's text area, and the
+            // release over the spell's icon activates it (the bar's button sounds).
+            await RunSpellPaneStripSmokeAsync(session, spell, Frames, Click, Hover);
+
+            // A right drag from the spell pane onto slot 2 (the spell's college selected).
+            _spellCollege = spell / SpellPaneRules.Ranks;
             ShowSpellPane();
             await Frames(3);
-            var paneButton = _spellPane!.SpellButtonCentreForSelfTest(spell);
-            Require(paneButton is not null, $"the pane shows spell {spell}");
+            var paneButton = _spellBarView!.SpellCentreForSelfTest(spell);
+            Require(paneButton is not null && _spellPane!.SpellButtonCentreForSelfTest(spell) is null, $"the strip, not the diagnostic pane, shows spell {spell}");
             await Button(paneButton!.Value, MouseButton.Right, true);
             Require(_hotkeyDrag is { Kind: HotkeyDragSourceKind.Spell } && view.GhostShownForSelfTest, "a right press on the pane's spell starts a drag with its icon");
             await Button(view.SlotCentreForSelfTest(2), MouseButton.Right, false);
             Require(_hotkeyDrag is null && session.QueryHotkeys().Entries[2] == HotkeyEntry.ForSpell(spell), "the release over slot 2 put the spell there: " + _hotkeyNotice);
             await Frames(1);
             Require(view.IconForSelfTest(2) is { } icon && icon == SpellArt(spell), "slot 2 shows the spell's icon");
-            _spellPane.HidePane();
+            _spellPane!.HidePane();
             await Frames(2);
 
             // ARC-UI-035: entering slot 2 shows the spell's hint (college icon, name, willpower and cost lines, description); leaving takes it away.

@@ -66,6 +66,8 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-032 hotkey item icons {detail}");
             }
             _hotkeyBarShown = null;
+            // ARC-UI-053: the spell pane draws the same art.
+            _spellBarShown = null;
         }
         var shown = (session, session.Version, _hotkeyDrag is not null, InventoryActive);
         if (_hotkeyBarShown == shown) return;
