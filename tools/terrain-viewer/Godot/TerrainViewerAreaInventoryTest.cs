@@ -364,7 +364,24 @@ public partial class TerrainViewerApp
                 looted += _areaSession.QueryPcInventory().Count - before; left += _inventoryPanel.ViewForSelfTest!.Loot.Count;
                 // The printed line follows " — " in the message; its text is not logged.
                 if (scripted) { Require(_inventoryStatus.Contains(" — ", StringComparison.Ordinal), "the amulet's script printed its line"); printed++; }
-                EndInventory();
+                if (_inventoryPanel.ArtMode && _inventoryPanel.GridAreaForSelfTest.LootLook)
+                {
+                    // ARC-UI-054: a message keeps the frame's scale; the round view shows the game view around the PC (IW33); on the first
+                    // body a left release in it closes the window (IW34).
+                    var grid = _inventoryPanel.GridAreaForSelfTest; var shown = _inventoryPanel.ViewForSelfTest!;
+                    _inventoryPanel.Render(shown, null); var quiet = grid.FrameScale;
+                    _inventoryPanel.Render(shown, "took 9 item(s) and a line long enough to reach past the window's right edge, cut there");
+                    Require(grid.FrameScale == quiet, $"a message kept the loot frame's scale ({quiet} → {grid.FrameScale})");
+                    Require(_inventoryPanel.RoundViewShown, "the loot window's round view shows the game view");
+                    if (lootArt == 1)
+                    {
+                        grid.ReleaseAt(new Vector2(AreaInventoryHole.Corner(true).X + AreaInventoryHole.Side - 1, AreaInventoryHole.Corner(true).Y));
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        Require(!InventoryOpen && !_inventoryPanel.RoundViewShown, "a release in the round view closed the loot window");
+                        GD.Print("ARC-UI-054 round view release closed the loot window");
+                    }
+                }
+                if (InventoryOpen) EndInventory();
             }
             // docs/world/inventory-runtime.md: four dead NPCs carry six items; the amulet's insert-item script runs (ARC-SCRIPT-013).
             Require((bodies.Length, looted, left, printed) == (4, 6, 0, 1), $"loot bodies {bodies.Length} taken {looted} left {left} printed {printed}");

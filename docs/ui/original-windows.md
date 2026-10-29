@@ -86,6 +86,12 @@ Left for the next loot slices (each its own task): the doll views (the body's wo
 item into the body, the steal window (mode 3, same frame), the button 340 at (763, 197) and the hot spots of IW30, a follower's
 portrait as the image.
 
+The round view at the window's top-left (done: ARC-UI-054, rows
+[IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054)): the open centres the game view on the PC and the window's
+89 × 89 rectangle, (11, 9) in the own window and (16, 17) in the loot window, shows the game view's square of 178 × 178 around the
+PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
+shader under the window; the barter window's view (art 231) is not built.
+
 ## Character sheet
 
 Entry: open 0x5597C0 (`C`, CS1). The open reads art 22 `char_maint` (800 × 400, at 0x55987C) and creates its

@@ -229,6 +229,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.DropRequested += DropItem;
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
+            _inventoryPanel.HolderView = InventoryHolderView;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -236,11 +237,22 @@ public partial class TerrainViewerApp
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         // ARC-UI-051: the player's own window shows the original look when the game's art read.
         _inventoryPanel.SetArtLook(InventoryArtLook());
+        // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33).
+        _camera?.ResetWorld(WorldAnchor, WorldViewport, _camera.State.Zoom);
         _inventoryPanel.Open(InventoryView(holder));
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");
         GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : holder == _pickPocketVictim ? "steal" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-UI-054: the PC's foot point in canvas units and the game view's zoom, for the window's round view (IW33).</summary>
+    private (Vector2 Foot, float Zoom)? InventoryHolderView()
+    {
+        if (_areaSession is null || _camera is null) return null;
+        var canvas = GetViewport().GetCanvasTransform();
+        var anchor = WorldAnchor;
+        return (canvas * new Vector2((float)anchor.X, (float)anchor.Y), canvas.Scale.X);
     }
 
     private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear, _areaKitUse)

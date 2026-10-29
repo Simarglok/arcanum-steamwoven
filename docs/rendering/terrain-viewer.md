@@ -1050,6 +1050,15 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   switch keeps the Take buttons. NOT READY: the doll views and their toggles, the scroll bar's art, a hero's item moved into the body,
   a follower's portrait, the steal window. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag).
+- **Round view (ARC-UI-054,** [ledger IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054); `AreaInventoryHole`): the
+  window's open centres the camera on the PC, and in the original look of the own window and the loot window the 89 × 89 rectangle
+  at (11, 9) or (16, 17) shows the screen's square of 178 game pixels around the PC (centred 15 game pixels above its foot point) at
+  half size, copied by a screen-texture shader on canvas layer 3 under the window (the background art leaves the square out, as
+  the original's copy replaces it; the doll art 223 is opaque there), with art 233 or 232 drawn over it when it reads.
+  A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
+  frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
+  frame. NOT READY: the barter window's round view (art 231), the own window's map drop and throw from it (IW18). The native smoke
+  checks it on the Crash Site bodies (`ARC-UI-054 round view release closed the loot window`).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
