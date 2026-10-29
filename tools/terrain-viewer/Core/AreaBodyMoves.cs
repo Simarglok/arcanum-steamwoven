@@ -193,7 +193,8 @@ public static class AreaBodyMoveArt
     /// ARC-RENDER-038: the ART of an armed animation of the body (an NPC in combat mode: its stand, attack, low attack or throw), named as
     /// the original resolves it (MA2, MA3): the stand and the attacks keep weapon and shield, the throw (14, among 6..19) clears both; the
     /// shield letter is <c>S</c> or <c>X</c>, the weapon letter <see cref="HeroBody.WeaponCode"/>'s (a two-handed sword with a shield is
-    /// written as the sword). Tried in order: the missing-art repair turns a missing low attack into the attack (MA1); then, as for the
+    /// written as the sword). Tried in order: the missing-art repair turns a missing low attack into the attack (MA1; the original checks
+    /// ten (low attack, weapon) pairs from its masks, this repair takes every weapon: generalised); then, as for the
     /// hero (the session's wear check does not test the art, WA8: NOT READY), without the shield, then bare-handed. The first readable one
     /// is the load's, with the animation, weapon and shield it names.
     /// </summary>
@@ -222,15 +223,15 @@ public static class AreaBodyMoveArt
             var name = AreaFallenPoses.Name(standing);
             var dot = name.LastIndexOf('.');
             if (dot < 4) return new(AreaBodyMoveStatus.WalkMissing, null, animation, weapon, shield, "name");
+            // One pass over the file records (no directory or ignored ones); a name held twice is ambiguous and never chosen.
+            var named = archive.Entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0)
+                .GroupBy(e => AreaFallenPoses.Name(e), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.First() : null, StringComparer.OrdinalIgnoreCase);
             var refused = new List<string>();
             foreach (var (a, w, s) in tries)
             {
                 var wanted = string.Concat(name.AsSpan(0, dot - 3), $"{(s != 0 ? 's' : 'x')}{char.ToLowerInvariant(HeroBody.WeaponCode(w, s))}{(char)('a' + a)}", name.AsSpan(dot));
-                var entries = archive.Entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0
-                    && string.Equals(AreaFallenPoses.Name(e), wanted, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-                // A name held twice is ambiguous and never chosen.
-                if (entries.Length != 1) continue;
-                var entry = entries[0];
+                if (!named.TryGetValue(wanted, out var entry) || entry is null) continue;
                 try
                 {
                     var identity = new AreaEntryIdentity(visual.Entry.Source, entry.Ordinal, entry.Flags, entry.StoredSize, entry.DeclaredOutputSize, entry.Offset,

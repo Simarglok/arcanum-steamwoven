@@ -61,16 +61,25 @@ public static class AreaAiAttackArtRules
             WeaponArtRules.ShieldPart(true, shieldItemType));
 
     /// <summary>
-    /// The attack's frame rate: the low-attack (21) and attack (20) rates of the drawn ART's weapon slot
-    /// (<see cref="RealTimeCombatRules.AttackFramesPerSecond"/>); the throw (14) is drawn without a weapon (MA2) and so plays at the ART's
+    /// The attack's frame rate: the rates of the <paramref name="wanted"/> animation (low attack 21 or attack 20: the critter's art id keeps
+    /// the wanted animation, the missing-art repair lives in the name resolver only, MA1–MA3, so a low attack drawn with the attack's file
+    /// keeps the low-attack rates; the rate's reading of the art id is F0) for the drawn ART's weapon slot (<see cref="ClipWeapon"/>,
+    /// <see cref="RealTimeCombatRules.AttackFramesPerSecond"/>); the throw (14) is drawn without a weapon (MA2) and so plays at the ART's
     /// own rate (the original's rate table for animation 14 is not read: F0).
     /// </summary>
-    public static int FramesPerSecond(AreaAiAttackArt art, int speed)
+    public static int FramesPerSecond(AreaAiAttackArt art, int wanted, int speed)
     {
         ArgumentNullException.ThrowIfNull(art);
-        var animation = art.Animation == WeaponArtRules.LowAttackAnimation ? AttackAnimation.AttackLow : AttackAnimation.Attack;
-        var weapon = art.Animation == WeaponArtRules.ThrowAnimation ? AttackArtWeapon.NoWeapon : (AttackArtWeapon)Math.Clamp(art.Weapon, 0, WeaponArtRules.WeaponParts - 1);
-        return RealTimeCombatRules.AttackFramesPerSecond(animation, weapon, Math.Clamp(speed, 1, RealTimeCombatRules.MaxStat),
+        var animation = wanted == WeaponArtRules.LowAttackAnimation ? AttackAnimation.AttackLow : AttackAnimation.Attack;
+        return RealTimeCombatRules.AttackFramesPerSecond(animation, ClipWeapon(art), Math.Clamp(speed, 1, RealTimeCombatRules.MaxStat),
             Math.Clamp(art.RawFramesPerSecond, 1, RealTimeCombatRules.MaxStat));
+    }
+
+    /// <summary>The weapon slot of an attack ART's rate and clip: none for the throw (drawn without a weapon, MA2), else the drawn
+    /// weapon part.</summary>
+    public static AttackArtWeapon ClipWeapon(AreaAiAttackArt art)
+    {
+        ArgumentNullException.ThrowIfNull(art);
+        return art.Animation == WeaponArtRules.ThrowAnimation ? AttackArtWeapon.NoWeapon : (AttackArtWeapon)Math.Clamp(art.Weapon, 0, WeaponArtRules.WeaponParts - 1);
     }
 }

@@ -231,9 +231,11 @@ public sealed class AreaBodyMoveTests
         Assert.AreEqual(21, AreaAiAttackArtRules.Request(null, 0, null, 0x80, 0, critter).Animation, "a shrunk target");
         Assert.AreEqual(21, AreaAiAttackArtRules.Request(null, 0, null, 0, 0, 12u << 28).Animation, "a short monster (species 0)");
 
-        Assert.AreEqual(10, AreaAiAttackArtRules.FramesPerSecond(new(20, 2, 0, 9, 6, 15), 8), "the dagger's attack rate");
-        Assert.AreEqual(13, AreaAiAttackArtRules.FramesPerSecond(new(21, 1, 0, 9, 6, 15), 8), "the bare hands' low attack rate");
-        Assert.AreEqual(9, AreaAiAttackArtRules.FramesPerSecond(new(14, 0, 0, 9, 6, 9), 8), "the throw plays at its ART's own rate");
+        Assert.AreEqual(10, AreaAiAttackArtRules.FramesPerSecond(new(20, 2, 0, 9, 6, 15), 20, 8), "the dagger's attack rate");
+        Assert.AreEqual(13, AreaAiAttackArtRules.FramesPerSecond(new(21, 1, 0, 9, 6, 15), 21, 8), "the bare hands' low attack rate");
+        Assert.AreEqual(14, AreaAiAttackArtRules.FramesPerSecond(new(20, 3, 0, 9, 6, 15), 21, 8), "a low attack drawn with the attack's file keeps the low-attack rate");
+        Assert.AreEqual(9, AreaAiAttackArtRules.FramesPerSecond(new(14, 0, 0, 9, 6, 9), 14, 8), "the throw plays at its ART's own rate");
+        Assert.AreEqual(Arcanum.Simulation.Combat.AttackArtWeapon.NoWeapon, AreaAiAttackArtRules.ClipWeapon(new(14, 0, 0, 9, 6, 9)));
 
         var moments = Arcanum.Simulation.Combat.RealTimeCombatRules.Schedule(new(4, 2, 100, Arcanum.Simulation.Combat.AttackArtWeapon.Dagger));
         var play = new AreaAiAttackPlay("npc", 1000, new(20, 2, 0), new(20, 2, 0, 4, 2, 10), moments);

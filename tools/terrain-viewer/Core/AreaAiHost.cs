@@ -213,6 +213,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private readonly Dictionary<int, SessionSpellCaster> _launched = [];
     // ARC-RENDER-038: each NPC's last attack animation (the viewer draws it while it plays).
     private readonly Dictionary<string, AreaAiAttackPlay> _attackPlays = new(StringComparer.Ordinal);
+    // ARC-RENDER-038: the weapon part and shield each NPC shows, for one session revision.
+    private readonly Dictionary<string, (int Weapon, int Shield)> _shown = new(StringComparer.Ordinal);
+    private long _shownRevision = -1;
 
     /// <param name="events">The viewer's event world: the pass's script calls, life facts, party and loot questions.</param>
     /// <param name="round">The turn-based round's world (the scan of the map's critters).</param>
@@ -441,6 +444,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
         _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
+        _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
     }
 
@@ -643,6 +647,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // still waits for its BEGIN is freed, unpaid.
     private void EndDroppedRun(AiGoalRun run)
     {
+        // ARC-RENDER-038: a dropped run's attack animation is not drawn on.
+        _attackPlays.Remove(run.Owner);
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
     }
@@ -829,8 +835,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var (frames, actionFrame, rate, weapon) = art is null
             ? (FixedAttackArt.Frames, FixedAttackArt.ActionFrame, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed,
                 Math.Clamp(values.Speed, 1, RealTimeCombatRules.MaxStat), FixedAttackArt.RawFramesPerSecond), AttackArtWeapon.Unarmed)
-            : (art.Frames, art.ActionFrame, AreaAiAttackArtRules.FramesPerSecond(art, values.Speed),
-                art.Animation == WeaponArtRules.ThrowAnimation ? AttackArtWeapon.NoWeapon : (AttackArtWeapon)Math.Clamp(art.Weapon, 0, WeaponArtRules.WeaponParts - 1));
+            : (art.Frames, art.ActionFrame, AreaAiAttackArtRules.FramesPerSecond(art, wanted.Animation, values.Speed), AreaAiAttackArtRules.ClipWeapon(art));
         var clip = new AttackClip(frames, actionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, Math.Clamp(values.WeaponSpeed, -RealTimeCombatRules.MaxStat, RealTimeCombatRules.MaxStat)),
             weapon);
         var moments = RealTimeCombatRules.Schedule(clip);
@@ -855,9 +860,19 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// </summary>
     public (int Weapon, int Shield) ShownWeapon(string id)
     {
-        if (id == Pc || !_session.QueryCombatMode(SessionCombatant.Critter(id))) return (0, 0);
-        var (use, _, shield) = Wielded(id);
-        return (WeaponArtRules.WeaponPart(true, use), WeaponArtRules.ShieldPart(true, shield));
+        if (id == Pc) return (0, 0);
+        // Asked per mover and frame: kept per session revision (combat mode and worn items change only with it).
+        var revision = _session.Version.Revision;
+        if (_shownRevision != revision) { _shown.Clear(); _shownRevision = revision; }
+        if (_shown.TryGetValue(id, out var known)) return known;
+        var shown = (0, 0);
+        if (_session.QueryCombatMode(SessionCombatant.Critter(id)))
+        {
+            var (use, _, shield) = Wielded(id);
+            shown = (WeaponArtRules.WeaponPart(true, use), WeaponArtRules.ShieldPart(true, shield));
+        }
+        _shown[id] = shown;
+        return shown;
     }
 
     /// <summary>

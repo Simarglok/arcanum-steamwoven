@@ -73,7 +73,7 @@ public partial class TerrainViewerApp
     private bool AiMoversAnimating(AreaAiHost host, long now)
     {
         // ARC-RENDER-038: an attack animation plays like a step; a weapon shown or put away (combat mode) is drawn once.
-        var stepping = host.Movers.All.Any(m => m.Stepping(now) || host.AttackPose(m.Entity, now) is not null);
+        var stepping = host.Movers.All.Any(m => m.Stepping(now) || host.AttackPose(m.Entity, now) is { Play.Art: not null });
         var armed = host.Movers.All.Aggregate(17L, (hash, m) => hash * 31 + host.ShownWeapon(m.Entity).GetHashCode());
         var animating = stepping || _aiMoversStepping || host.Movers.Version != _aiMoversDrawn || armed != _aiArmedDrawn;
         _aiMoversStepping = stepping; _aiMoversDrawn = host.Movers.Version; _aiArmedDrawn = armed;

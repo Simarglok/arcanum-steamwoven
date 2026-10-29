@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-111: its steps are drawn with its own walk or run cycle.
             var stepFrames = new HashSet<AreaFrameKey>(); var steppingFrames = 0;
             // ARC-RENDER-038: its attack is drawn with its body's attack ART, and in combat mode it stands with what it shows.
-            var attackFrames = _npcAttackFrames.Count; var armedStands = _npcArmedStandDraws;
+            _npcAttackFrames.Clear(); var attackFrames = 0; var armedStands = _npcArmedStandDraws;
             // Automated runs drive the clock themselves: a frame is 50 host milliseconds, as the world frame (the game clock runs 8x).
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
@@ -241,8 +241,8 @@ public partial class TerrainViewerApp
             var hostMs = 31_000_000L;
             TickAreaClock(hostMs);
             var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
-            // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART.
-            var attackFrames = _npcAttackFrames.Count;
+            // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART (distinct frames counted from here).
+            _npcAttackFrames.Clear(); var attackFrames = 0;
             string? hit = null;
             for (; frames < 6000 && hit is null; frames++)
             {
