@@ -354,7 +354,8 @@ public partial class AreaInventoryGridArea : Control
         Background(look, AreaInventoryArtLayout.DollArt, loot: false);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
-        Art(AreaInventoryHole.Art(false), AreaInventoryHole.Corner(false).X, AreaInventoryHole.Corner(false).Y);
+        var (holeX, holeY) = AreaInventoryHole.Corner(false);
+        Art(AreaInventoryHole.Art(false), holeX, holeY);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));
         void Text((int X, int Y, int Width, int Height) rect, string text)
@@ -434,7 +435,8 @@ public partial class AreaInventoryGridArea : Control
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
         Background(look, AreaLootArtLayout.LootArt, loot: true);
-        Art(AreaInventoryHole.Art(true), AreaInventoryHole.Corner(true).X, AreaInventoryHole.Corner(true).Y);
+        var (holeX, holeY) = AreaInventoryHole.Corner(true);
+        Art(AreaInventoryHole.Art(true), holeX, holeY);
         if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         var font = GetThemeDefaultFont();

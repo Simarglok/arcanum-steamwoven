@@ -1058,7 +1058,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
   frame. NOT READY: the barter window's round view (art 231), the own window's map drop and throw from it (IW18). The native smoke
-  checks it on the Crash Site bodies (`ARC-UI-054 round view release closed the loot window`).
+  checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
+  (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.

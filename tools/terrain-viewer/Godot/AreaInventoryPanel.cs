@@ -54,7 +54,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     private Button _lookToggle = null!;
     private StyleBoxFlat _diagnosticStyle = null!;
     private readonly StyleBoxEmpty _originalStyle = new();
-    // ARC-UI-054: the round view's copy of the game view, on a layer under the window so the copy reads the world, not the window.
+    // ARC-UI-054: the round view's copy of the game view, on a layer under the window so the copy reads the world, not the window
+    // (PROJECT: it reads what layers 1 and 2 drew too, floaters and the spell pane, where the original copies the game view alone).
     private CanvasLayer _holeLayer = null!;
     private ColorRect _hole = null!;
     private ShaderMaterial _holeMaterial = null!;
@@ -412,8 +413,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     }
 
     /// <summary>ARC-UI-054: the message line is always laid out. In the original look it keeps one line, empty or not, cut with an ellipsis,
-    /// so a message ("took N item(s)") never changes the frame's scale (PROJECT: the original prints none in the window); the diagnostic
-    /// window wraps it.</summary>
+    /// so a message ("took N item(s)") never changes the frame's scale (PROJECT: the original prints none in the window); the frame is
+    /// therefore always one line smaller than with no line at all. The diagnostic window wraps it.</summary>
     private void ShowMessageLine()
     {
         var art = ArtMode;

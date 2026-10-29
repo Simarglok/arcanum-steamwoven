@@ -391,6 +391,8 @@ public partial class TerrainViewerApp
             // 4. The Inventory key lists every taken item by its resolved name.
             AreaSmokePlace(map, map.Chart.Spawn);
             InventoryKey(Key.I);
+            // ARC-UI-054: the own window's original look shows the round view too (IW33).
+            Require(!_inventoryPanel!.ArtMode || _inventoryPanel.RoundViewShown, "the own window's round view shows the game view");
             var view = _inventoryPanel!.ViewForSelfTest!;
             Require(InventoryOpen && view.Pc.Count == _areaSession.QueryHeroKit().Count + start + 2 + looted && view.Pc.All(line => !line.Text.StartsWith('[')), "I lists the named items");
             // ARC-UI-015: with a hero, every worn item comes off through its take-off button and goes back on through its wear button.

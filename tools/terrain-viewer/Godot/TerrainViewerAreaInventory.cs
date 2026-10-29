@@ -237,8 +237,13 @@ public partial class TerrainViewerApp
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         // ARC-UI-051: the player's own window shows the original look when the game's art read.
         _inventoryPanel.SetArtLook(InventoryArtLook());
-        // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33).
-        _camera?.ResetWorld(WorldAnchor, WorldViewport, _camera.State.Zoom);
+        // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33), at the current zoom;
+        // the palette's Fit view ends there at the preferred zoom, as at the other centrings.
+        if (_camera is not null)
+        {
+            var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
+            _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
+        }
         _inventoryPanel.Open(InventoryView(holder));
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");
