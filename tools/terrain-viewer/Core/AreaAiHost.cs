@@ -1751,7 +1751,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (a == b) return a != Pc;
         if (a == Pc || b == Pc) return Leader(a == Pc ? b : a) == Pc;
         if (Leader(a) is { } la && la == Leader(b)) return true;
-        return Fields(a)?.Npc?.Faction is { } fa && fa != 0 && fa == Fields(b)?.Npc?.Faction;
+        return Faction(a) is { } fa && fa != 0 && fa == Faction(b);
     }
 
     public int HostilityReaction(string npc, string pc)
@@ -1864,6 +1864,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(_scene.RuntimeMap, id);
 
+    // ARC-SCRIPT-049: an NPC's faction now: a script's set faction (AreaUseScriptHost.FactionProperty), else its fields'.
+    private int? Faction(string id) => Fields(id)?.Npc?.Faction is not { } loaded ? null
+        : _session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), MapChangeKey.ForEntity(id, AreaUseScriptHost.FactionProperty)) is { } set ? unchecked((int)set) : loaded;
+
     private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, _scene.RuntimeMap, id).Combat;
 
     private LifeState? LifeState(string id) => Build(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
@@ -1896,7 +1900,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private (ReactionNpcFacts Npc, ReactionPcFacts Pc)? ReactionFacts(string npc)
     {
         if (Fields(npc) is not { Critter: { } critter, Npc: { } fields } || Build(npc) is not { } build) return null;
-        if (_session.QueryHeroReactionFacts(0, fields.Faction) is not { } pc) return null;
+        if (_session.QueryHeroReactionFacts(0, Faction(npc) ?? fields.Faction) is not { } pc) return null;
         return (new ReactionNpcFacts(fields.ReactionBase, build.Race, (fields.Flags & AloofNpc) != 0, build.Monstrous), pc);
     }
 

@@ -93,11 +93,12 @@ public sealed class ScriptTriggerCensusTests
             }, new JsonSerializerOptions { WriteIndented = true }));
         Assert.AreEqual(79, maps);
         // Nine heartbeats call an NPC's own dialog point; Virgil's at the Crash Site is one the heartbeat set admits now. The data and the
-        // ARC-WORLD-114 set are fixed; the host's set may widen (audit slices), so its counts are pinned from below: 33 of 141 in 2026-10.
+        // ARC-WORLD-114 set are fixed; the host's set may widen (audit slices), so its counts are pinned from below: 33 of 141 after ARC-SCRIPT-047,
+        // 81 of 141 and 23 of 23 after ARC-SCRIPT-049 (slice 1).
         Assert.AreEqual(9, opening.Count, string.Join(", ", opening));
         CollectionAssert.Contains(opening, "arcanum1-024-fixed:1100");
         Assert.AreEqual((141, 32, 23, 21), (rows[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat], rows[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
-        Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 33 && admitted[ScrPoint.FirstHeartbeat] >= 21, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
+        Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 81 && admitted[ScrPoint.FirstHeartbeat] >= 23, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
     }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",

@@ -543,6 +543,23 @@ modelled). A callee of the dialog point that reaches call script (7) is refused,
 call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's
 dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier call-ex of the slot keeps its own).
 
+## Heartbeat world questions (ARC-SCRIPT-049, set S18)
+
+`ScrAdmissionSet.S18` is S17 plus the conditions obj is dead (22) and obj is switched off (27) and the actions distance between (71)
+and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../research/ledger/scripts.md#heartbeat-world-questions-arc-script-049)).
+
+- **Obj is dead, obj is switched off.** A host that admits them implements `IScrObjectStateQueries` (`IsDead`, `IsSwitchedOff`;
+  the run options refuse a set with them for a host without it). Each tests the objects of operand 0 and holds by the list rule of SG6: at least one holds,
+  and all of them or the focus kind is an "any" kind; an empty list (an absent single object) is false. Dead is the original's test
+  0x45D8D0 (current hit points 0 or less), switched off the object flag 0x2. A null answer is an object the host does not know: the
+  run stops (`MissingObject`). The list kinds stay refused in a condition operand, so the list is one object today.
+- **Distance between.** The first objects of operands 0 and 1, their tile distance (the larger of the two axis differences, 0x441AE0 →
+  0x4B96F0) into operand 2, cut to 32 bits; a literal store is refused (`WriteToNumber`). The places come from
+  `IScrWorldQueries.Location`; an absent object, or one without a place, stops the run (the original reads the null handle's
+  location).
+- **Set faction.** One `ScrObjectStateRequest` (`SetFaction`, the first object of operand 0, the faction as `Value`); an absent object
+  asks nothing. The original (0x45D0C0) writes the faction field 0x124 of an NPC only; the host leaves any other object as it is.
+
 - **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (below and
   [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,
   call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
@@ -643,7 +660,8 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
   location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
   loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081), toggle state and kill (S16, ARC-WORLD-114;
-  the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047).
+  the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
+  obj is dead, obj is switched off, distance between and set faction (S18, ARC-SCRIPT-049; the viewer's heartbeat set only).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

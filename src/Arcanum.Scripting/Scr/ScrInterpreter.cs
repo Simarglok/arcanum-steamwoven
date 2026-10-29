@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S17"/>.
+/// <see cref="ScrAdmissionSet.S18"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -186,6 +186,10 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
         // WE6: the global the rewield (0x465530) sets around its runs.
         ScrCatalogue.Condition.ItemsBeingRewielded => Items.ItemsBeingRewielded(),
+        // HW1, HW2: the dead test (0x45D8D0) and the "off" object flag over the operand's objects, true by the list rule of SG6; an object the
+        // host does not know stops the run.
+        ScrCatalogue.Condition.IsDead => ListHolds(c, obj => States.IsDead(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line)),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -402,6 +406,23 @@ internal sealed class ScrInterpreter
                 // WE4: the table entry, then the object; an absent object shows nothing (the original passes a null handle on).
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } on) _shared.EyeCandies.Add(new(number, on));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.DistanceBetween:
+            {
+                // HW3: the first objects of operands 0 and 1 (0x44B960), their tile distance (0x441AE0 → 0x4B96F0: the larger of the two axis
+                // differences) into operand 2, cut to 32 bits as the original stores it. An absent object, or one without a place, stops the run
+                // (the original reads a null handle's location field).
+                var from = World.Location(Object(a, 0, line)) ?? throw new MissingObjectStop(line);
+                var to = World.Location(Object(a, 1, line)) ?? throw new MissingObjectStop(line);
+                Set(a, 2, unchecked((int)Math.Max(Math.Abs(from.X - to.X), Math.Abs(from.Y - to.Y))), line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetFaction:
+            {
+                // HW4: the first object of operand 0 and the faction; an absent object changes nothing (0x45D0C0 returns at a null handle).
+                var faction = Get(a, 1);
+                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.SetFaction, obj, faction));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CallScriptEx:
@@ -706,6 +727,20 @@ internal sealed class ScrInterpreter
 
     private IScrItemQueries Items => _host as IScrItemQueries
         ?? throw new InvalidOperationException("SCR_ITEM_QUERIES_REQUIRED: the admission set holds an item question the host cannot answer.");
+
+    // SG6: the objects of a condition's operand 0 that the test holds for; true when at least one does and either all do or the focus kind is
+    // one of the "any" kinds (one is enough), false for an empty list.
+    private bool ListHolds(ScrClause c, Func<ScrObjectRef, bool> test)
+    {
+        var list = Objects(c, 0);
+        var held = list.Count(test);
+        return held > 0 && (held == list.Count || (ScrFocusKind)c.Kind(0) is ScrFocusKind.AnyFollower or ScrFocusKind.AnyoneInParty or ScrFocusKind.AnyoneInTeam
+            or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.AnyoneInGroup or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.AnyContainerInVicinity
+            or ScrFocusKind.AnyPortalInVicinity or ScrFocusKind.AnyItemInVicinity);
+    }
+
+    private IScrObjectStateQueries States => _host as IScrObjectStateQueries
+        ?? throw new InvalidOperationException("SCR_OBJECT_STATE_QUERIES_REQUIRED: the admission set holds the dead or switched-off condition and the host cannot answer it.");
 
     private IScrObjectQueries Queries => _host as IScrObjectQueries
         ?? throw new InvalidOperationException("SCR_OBJECT_QUERIES_REQUIRED: the admission set holds a guard condition the host cannot answer.");

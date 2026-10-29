@@ -57,7 +57,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -67,6 +67,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
     /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
     public const string OffProperty = "obj.off";
+    /// <summary>ARC-SCRIPT-049: the map-change key of the faction a script's set faction (134) gave an NPC (absent while it has its map
+    /// data's; HW4). The original writes the NPC's faction field (0x124), which the save keeps; <see cref="Faction"/> reads it back.</summary>
+    public const string FactionProperty = "npc.faction";
     private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
@@ -119,17 +122,32 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// current looped object, get object type, call-ex (of the NPC's dialog point among others) and the dialog action, which in a call-ex
     /// of the dialog point asks for the talk (<see cref="AreaScriptedUse.Dialog"/>; a heartbeat's own dialog action has the NPC as its
     /// triggerer and starts nothing). A heartbeat runs every few seconds for every NPC near the PC, so the set stays this narrow; a
-    /// script outside it is refused and the tick goes on as without a script.
+    /// script outside it is refused and the tick goes on as without a script. ARC-SCRIPT-049 (audit slice 1): plus the world questions the
+    /// installed heartbeats ask first: the conditions following (18), is named (20), is dead (22), is switched off (27) and has a reputation
+    /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
+    /// <see cref="ScrAdmissionSet.S18"/>.
     /// </summary>
-    public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk", ScrAdmissionSet.S2.Conditions,
+    public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
+        ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
-            ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog]),
+            ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
+            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction]),
         ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
         (session ?? throw new ArgumentNullException(nameof(session))).QueryMapChange(new SessionMapId(map), MapChangeKey.ForEntity(entity, OffProperty)) == 1;
+
+    /// <summary>ARC-SCRIPT-049: the faction of the NPC <paramref name="row"/> now: the one a script's set faction gave it
+    /// (<see cref="FactionProperty"/>), else <paramref name="loaded"/>, its map data's.</summary>
+    public static int Faction(GameSessionOwner session, AreaObjectRecord row, int loaded)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(row);
+        return session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(EntityId(row), FactionProperty)) is { } set
+            ? unchecked((int)set) : loaded;
+    }
 
     /// <summary>ARC-WORLD-081: the label of a script's random draws on the session's generator.</summary>
     public const string RandomLabel = "scr.random";
@@ -247,6 +265,27 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return roll.Roll?.Value ?? throw new InvalidOperationException($"AREA_USE_SCRIPT_RANDOM_REFUSED {roll.Failure}");
     }
 
+    /// <summary>ARC-SCRIPT-049 (HW3): an object's tile as the vicinity places it (the PC's and an NPC's live cell, a row's world cell); null
+    /// without one.</summary>
+    public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
+
+    /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
+    /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
+    public bool? IsDead(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryHeroLife()?.Status.IsDead ?? false;
+        return Row(obj) is { Type: NpcType } ? _session.QueryNpcDead(obj.Code) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-049 (HW2): the "off" object flag of the row's map data, or for an NPC of the shown map a script's toggle state
+    /// (<see cref="OffProperty"/>); the PC is never off; null for an object of no loaded row.</summary>
+    public bool? IsSwitchedOff(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return false;
+        if (Row(obj) is not { } row) return null;
+        return ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0 || row.Type == NpcType && obj.Map == _shownMap && SwitchedOff(_session, obj.Map, obj.Code);
+    }
+
     // An object's tile: the PC's live cell (the session's placement without a world), an NPC's live cell (ARC-SCRIPT-047), a row's world cell.
     private CellCoord? Place(ScrObjectRef obj)
     {
@@ -345,6 +384,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     private const int TrapObjectType = 17, ObjectFlagsSlot = 18;
+    // The NPC faction field (0x124), as the conversation's scope reads it (AreaConversationHost.Scope).
+    private const int FactionSlot = 81;
 
     /// <summary>
     /// ARC-COMBAT-011: whether the object's use script is a trap (0x4BBDD0, ledger OD6): the script of its point-1 slot as the
@@ -679,6 +720,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         foreach (var request in effects.ObjectStates)
         {
             if (request.Change == ScrObjectStateChange.Kill) { if (!_world!.Kill!(request.Object)) return false; continue; }
+            if (request.Change == ScrObjectStateChange.SetFaction)
+            {
+                // HW4: an NPC only (ObjectStateRefusal checked the map); a faction equal to its map data's clears the key.
+                if (IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc) continue;
+                var loaded = Number(npc, FactionSlot) is { } f ? unchecked((int)f) : 0;
+                var set = _session.ApplyChanges(_session.Version, null, [new(new SessionMapId(request.Object.Map),
+                    MapChangeKey.ForEntity(request.Object.Code, FactionProperty), request.Value == loaded ? null : request.Value)]);
+                if (set.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
             var key = MapChangeKey.ForEntity(request.Object.Code, OffProperty);
             var toggled = _session.ApplyChanges(_session.Version, null,
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
@@ -698,6 +749,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         foreach (var request in effects.ObjectStates)
         {
+            // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
+            if (request.Change == ScrObjectStateChange.SetFaction)
+            {
+                if (!IsPc(request.Object) && Row(request.Object) is { Type: NpcType } && request.Object.Map != _shownMap)
+                    return $"set faction of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+                continue;
+            }
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";

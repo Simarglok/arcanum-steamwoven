@@ -116,7 +116,7 @@ public sealed class AreaGreeting : IDialogGreetingPort
 
     public IReadOnlyList<int> ReputationCandidates(DialogReactionQuery query, DialogReactionCategory category)
     {
-        var (origin, faction) = AreaConversationHost.Scope(_speaker.Row);
+        var (origin, faction) = AreaConversationHost.Scope(_speaker.Row, _session);
         return ReputationRules.GreetingCandidates(_session.HeldReputations(), _session.Reputations, origin, faction, (ReactionCategory)category);
     }
 
