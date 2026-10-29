@@ -206,6 +206,47 @@ public sealed class HeroGridStateTests
         Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom), (off.Failure, off.Verdict), "the grid is full again");
     }
 
+    [TestMethod]
+    public void Attached_art_sizes_lay_out_the_grid_again_and_size_new_items()
+    {
+        // ARC-UI-055: invented frames in pixels; 0x461780 makes each side (pixels − 1) / 32 + 1 cells.
+        var frames = new Dictionary<string, (uint, uint)?>
+        {
+            ["kit:1"] = (32, 128), ["kit:2"] = (64, 96), ["kit:3"] = null, ["apple"] = (33, 32), ["pebble"] = (0, 32),
+        };
+        var asked = new List<(string, SessionItemKind)>();
+        (uint, uint)? Frame(string entity, SessionItemKind kind) { asked.Add((entity, kind)); return frames.GetValueOrDefault(entity); }
+        using var owner = Hero();
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var revision = owner.Version.Revision;
+        owner.AttachItemArtSizes(Frame);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision for the new layout");
+        Assert.AreEqual("kit:1@0:1x4 kit:3@2:1x1 kit:2@3:2x3", Layout(owner),
+            "kit:3 (no frame) keeps its place; kit:1 and kit:2 take the first free place for their size in list order");
+        CollectionAssert.Contains(asked, ("kit:2", owner.QueryHeroKit().Single(item => item.Entity == "kit:2").Kind), "the session asks with the item's kind");
+        owner.AttachItemArtSizes(Frame);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "nothing to lay out again: no revision");
+
+        Assert.AreEqual((2, 1), owner.QueryItemCells("apple"), "a seed item on the ground: the art's size");
+        Assert.AreEqual((2, 3), owner.QueryItemCells("crate"), "no frame: the seed's size");
+        Assert.AreEqual((1, 1), owner.QueryItemCells("nothing"), "an unknown item");
+        Assert.ThrowsExactly<ArgumentException>(() => owner.QueryItemCells(""));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
+        Assert.AreEqual("apple@5:2x1", Layout(owner).Split(' ')[^1], "the art's 2 × 1 wins over the seed's 1 × 1");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "pebble", Accept).Disposition);
+        CollectionAssert.AreEqual(new[] { "pebble" }, owner.QueryHeroGrid().Unplaced.ToArray(), "a 0-pixel side is 2^27 cells and never fits");
+
+        // Detached, the kept sizes stay; a saved 1 × 1 grid (a save from before the art was read) is laid out again on attach.
+        owner.AttachItemArtSizes(null);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
+        StringAssert.Contains(Layout(owner), "kit:1@0:1x4", "detaching moves nothing");
+        StringAssert.Contains(Layout(owner), "crate@", "the seed's size without an art source");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual("kit:1@0:1x1 kit:2@1:1x1 kit:3@2:1x1", Layout(restored));
+        restored.AttachItemArtSizes(Frame);
+        Assert.AreEqual("kit:1@0:1x4 kit:3@2:1x1 kit:2@3:2x3", Layout(restored));
+    }
+
     private static (GameSessionFailure, EquipmentRefusal) Refusal(EquipmentMutationResult result) => (result.Failure, result.Refusal);
 
     private static void Ok(EquipmentMutationResult result, GameSessionOwner owner)
