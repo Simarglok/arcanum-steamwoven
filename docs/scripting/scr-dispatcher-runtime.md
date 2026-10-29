@@ -484,7 +484,7 @@ object" (10) and "every scenery in vicinity" (15), and a counter operand with an
 generator 30285 that template sectors run (ledger [PG1–PG13](../research/ledger/scripts.md#template-sector-scripts-arc-res-073);
 contract [template sector plants](../world/template-sector-plants-runtime.md)). A host whose set holds random, loop for or focus kind 15
 implements `IScrWorldQueries` (`SceneryInVicinity`, `Random`); `ScrRunOptions.Validate` refuses one that does not, and the interpreter
-runs at most S15.
+ran at most S15 until S16 (below).
 
 - **Random** stores a draw of `IScrWorldQueries.Random` between its two values (either order, both included) into operand 2; admission
   refuses a number literal there.
@@ -504,6 +504,20 @@ runs at most S15.
   each creation to `GameSessionOwner.CreateGroundItem`, which applies the Steamwoven limit (`ScrRuleProfile.CreatedItemsUnbounded`,
   Original: none).
 
+## Object state actions (ARC-WORLD-114, set S16)
+
+`ScrAdmissionSet.S16` is S15 plus toggle state (56) and kill (58); the interpreter runs at most S16. Both hand one
+`ScrObjectStateRequest(change, object)` per object of their object operand to the host, in action order (`ScrEffects.ObjectStates`;
+an absent single object asks for nothing): `ToggleOff` flips the object's "off" flag 0x2 by the raw field writes, not the object flag
+setter, so its lights are left as they are (ledger [PM2](../research/ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114)); `Kill`
+is a death with no killer (0x45D900, PM3). The run goes on after either. The installed users that matter now are the Crash Site
+pre-made heroes' heartbeat scripts 1781..1792 ([character creation evidence](../research/character-creation-evidence.md#unchosen-pre-made-heroes-arc-world-114)).
+
+- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill" (`AreaUseScriptHost.HeartbeatAdmission`, S2 with the
+  single-object focus kinds plus 56 and 58) runs an NPC's first-heartbeat and heartbeat scripts from the AI host
+  ([heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)); its host applies a kill through the world's
+  `AreaScriptWorld.Kill` and an NPC's toggle as the map change `obj.off`. No other host's set holds them.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -513,6 +527,11 @@ runs at most S15.
   stops, tile and sector writeback per mode, refusal, invalid events and
   options, the trace, the profile.
 - `tests/Arcanum.Session.Tests/RuleModeTests.cs`: `GameRules.Scripts` per mode.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrObjectStateTests.cs` (ARC-WORLD-114): toggle state and kill on the pre-made heroes' script
+  shape (chosen: off, script removed, skip default; else kill, run default), each object of the operand in action order and none for an
+  absent one, S16 admits both and S15 neither; `tests/Arcanum.TerrainViewer.Tests/AreaHeartbeatScriptTests.cs`: the viewer's heartbeat
+  host (kill through the world, the off map change and the gone set, the removed slot, a second toggle back on, the refusals); opt-in,
+  `DAT_ROOT`: the installed Crash Site's twelve scripts kill eleven and switch the chosen hero's NPC off.
 - `tests/Arcanum.Scripting.Tests/Scr/ScrTeleportTests.cs` (ARC-SCRIPT-014): both teleport actions and their operand order,
   absent objects, request order, each guard true and false, the wield locations, the absent object of a guard, the set
   and host checks; opt-in, `DAT_ROOT`: the S7 and S4 counts and the teleport requests of the installed scripts.
@@ -584,14 +603,15 @@ runs at most S15.
   actions; with a session hero also get skill, ARC-SKILLS-009); since ARC-SCRIPT-015 map mode's use
   clicks on guarded use sites run it under "S4-area-use-reading-objects-story" (since ARC-WORLD-081 "S4-area-use-reading-objects-story-world"), and since ARC-SCRIPT-017 the tile and sector scripts the player
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
-  the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); heartbeat and
-  combat are later slices.
+  the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); since ARC-WORLD-114
+  an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill"); combat is a later slice.
 - Not in any admitted set yet: focus groups other than the vicinity's scenery, loop break, float line, reactions and most other world
   actions; create object makes items only (ARC-WORLD-081).
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map
   location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
-  loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081).
+  loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081), toggle state and kill (S16, ARC-WORLD-114;
+  the viewer applies them to an NPC of the shown map only).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

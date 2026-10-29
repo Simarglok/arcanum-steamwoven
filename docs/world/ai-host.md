@@ -177,6 +177,30 @@ step, casts from them and uses them, through the map's cast host (whose item loo
 No new state: the pass record's choice is the host's; the spent item and the spells' runs are the session's (the deletion and the
 spent charges are saved as the hero's are).
 
+## Heartbeat scripts (ARC-WORLD-114)
+
+The scheduler's first-heartbeat (point 10) and heartbeat (point 19) script calls (CL7) run the NPC's script now: the host's
+`RunScript` asks the scene's `Heartbeat` port for these two points (the other AI points still run no script and continue). The viewer
+answers it with the shown map's use-script host (`AreaUseScriptHost.RunHeartbeat`): the NPC is the attachee and the triggerer, its
+slot is its row's attachment under the session's map changes `scr10.*` / `scr19.*`, and the run's outcome is the tick's ("run
+default" goes on to the pass; "skip default" stops it). A run that is refused (a script outside the set below, missing content) or
+whose effects the viewer cannot apply goes on as without a script, and logs `ARC-WORLD-114 heartbeat-refused` once per NPC, point and
+reason.
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Set | `AreaUseScriptHost.HeartbeatAdmission` | S2 (control flow, local and global flags, counters, arithmetic, story state, remove and change this script) with the single-object focus kinds of S3, plus toggle state (56) and kill (58) of [set S16](../scripting/scr-dispatcher-runtime.md#object-state-actions-arc-world-114-set-s16). A heartbeat runs every few seconds for every NPC within 30 tiles, so the set stays this narrow. |
+| Kill | 0x45D900 (PM3) | The world's kill: `GameSessionOwner.Kill` on the NPC's life target (no killer: no experience, no kill notification), drawn with the plain fall; the NPC is then a dead NPC to loot. Only an NPC of the shown map; anything else leaves the run unapplied. |
+| Toggle state | 0x4487CE (PM2) | Flips the map change `obj.off` of an NPC of the shown map (1: switched off; absent: as its map data has it). A switched-off NPC is in the map's gone set (`AreaObjectTargets.Gone`): it is not drawn, not picked and blocks no step, and the gate stops its passes (`Hidden`, object flags 0x102, now also for an NPC its map data has off). An NPC its map data has off is never switched on (its T0 body is not drawn at all): that leaves the run unapplied. |
+| Slot | 0x441980 | The changed slot is written back as map changes (a removed script reads 0, so the next tick runs nothing). |
+
+At the Crash Site this is what makes the eleven unchosen pre-made heroes corpses and takes the chosen hero's double away
+([character creation evidence](../research/character-creation-evidence.md#unchosen-pre-made-heroes-arc-world-114)); it is the
+original's own behaviour, the same in both rule modes. A heartbeat runs only while the AI host runs: with a hero, and in automated
+runs only in an AI smoke stage. The far heroes die when the PC comes within 30 tiles, as in the original.
+
+No new snapshot field: the kill is the life domain's record, the off flag and the slot are map changes; the schema stays 57.
+
 ## Settings
 
 One new switch, MG47 (`MagicAnomalyProfile.AiItemCastClearsAnySource`, [rule modes](rule-modes.md)): above. EX6, EX9, EX12,
@@ -219,8 +243,10 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   lines and the world-map travel's stop and allow calls are I9's host part.
 - **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
   throws" weapon is thrown through goal 37 (ARC-WORLD-113).
-- **Scripts and routines.** No SCR runs at the AI points (heartbeat, start and end combat), no waypoints, standpoints or day
-  routines; the danger hooks are not run.
+- **Scripts and routines.** Of the AI points only the first heartbeat and the heartbeat run their scripts, and only within the
+  heartbeat set above (ARC-WORLD-114); start and end combat run none. A heartbeat's kill runs no dying script (point 12) and fires no
+  item events of the death; a script that switches off or kills another object than an NPC of the shown map is not applied. No
+  waypoints, standpoints or day routines; the danger hooks are not run.
 - **Back-off.** The away path (0x41F3C0) is not walked: a back-off ends at once.
 - **Drawing.** NPC attack ART is not drawn (since ARC-WORLD-111 a step draws the walk or run cycle, see [companion follow](companion-follow-runtime.md#drawing-the-walk-arc-world-111)); attack sounds of NPCs are not played; the hero's fall
   and death after an NPC's hit are not drawn.
@@ -276,4 +302,7 @@ not-ready attempt reaches the viewer, `Skills` in the marker); `ai-turn-based`, 
 asked at the NPC's subturn end, `EndCombatScripts`); `ai-cast` on `Arcanum1-024-fixed` with `--hero`, marker
 `ARC-WORLD-102 native-smoke ai-cast PASS` (since ARC-WORLD-105 the NPC then casts the first listed missile spell whose run starts at
 the hero, as its pass record's choice: the missile flies from it, is drawn and arrives; `MissileSpell`, `MissileLegs` and
-`MissileSteps` in the marker).
+`MissileSteps` in the marker); `premade` on `Arcanum1-024-fixed` with `--hero` (ARC-WORLD-114): the hero stands by the north and then the
+south group of the twelve pre-made heroes' NPCs until their heartbeats have run; the chosen hero's NPC is switched off and not drawn,
+the eleven others are killed, drawn fallen and lootable as dead NPCs, the map data's own dead NPCs stay drawn and lootable; marker
+`ARC-WORLD-114 native-smoke premade PASS` (`ARC_PREMADE_SMOKE_SHOT` names an optional PNG of the view).

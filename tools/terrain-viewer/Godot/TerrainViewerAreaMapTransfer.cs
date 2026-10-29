@@ -184,7 +184,9 @@ public partial class TerrainViewerApp
             () => _plantSmokePcCell ?? (_worldActor.Session is AreaGridSession grid ? LiveCell(grid) : null),
             row => _areaSession is { } now && ObjectTargets()?.Gone(now).Contains(row.Key) == true,
             number => PrototypeItems()?.ScriptItem(number),
-            AreaDropMapNow);
+            AreaDropMapNow,
+            // ARC-WORLD-114: a heartbeat script's kill.
+            KillByScript);
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);

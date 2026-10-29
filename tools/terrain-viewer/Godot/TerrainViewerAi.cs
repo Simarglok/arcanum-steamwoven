@@ -87,6 +87,8 @@ public partial class TerrainViewerApp
             MissileArt = spell => SpellMissileArt(spell) is not null,
             // ARC-WORLD-109: an NPC's skills for its skill attempts.
             NpcSheet = AreaFollowerSheet,
+            // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
+            Heartbeat = AiHeartbeat,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -95,6 +97,49 @@ public partial class TerrainViewerApp
         return host;
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
+    private readonly HashSet<string> _heartbeatRefusalsLogged = new(StringComparer.Ordinal);
+    // ARC-WORLD-114: the NPCs a heartbeat script killed or switched off (the pre-made smoke counts them).
+    private int _heartbeatKills, _heartbeatOffs;
+
+    /// <summary>ARC-WORLD-114: an NPC's first-heartbeat or heartbeat script through the shown map's use-script host, whose toggle state and
+    /// kill reach the session; true lets the tick go on. A run that is refused or not applied goes on as without a script.</summary>
+    private bool AiHeartbeat(AiScriptPoint point, string npc)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(npc, out var row)) return true;
+        var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
+        if (AreaUseScriptHost.LoadedSlot(row, scrPoint) is not { Script: > 0 }) return true;
+        var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-WORLD-114 heartbeat-refused npc={npc} point={scrPoint} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        var states = ran.Run!.Effects.ObjectStates;
+        if (states.Count > 0)
+        {
+            _heartbeatKills += states.Count(s => s.Change == Arcanum.Scripting.Scr.ScrObjectStateChange.Kill);
+            _heartbeatOffs += states.Count(s => s.Change == Arcanum.Scripting.Scr.ScrObjectStateChange.ToggleOff);
+            GD.Print($"ARC-WORLD-114 heartbeat npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} states="
+                + string.Join(",", states.Select(s => $"{s.Change}:{s.Object.Code}")));
+        }
+        return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    /// <summary>ARC-WORLD-114: a script's kill (58) of an NPC of the shown map: a death with no killer through the session's life domain
+    /// (no experience, no killer's notification), drawn with the plain fall; false when it has no combat values or the session refuses.</summary>
+    private bool KillByScript(Arcanum.Scripting.Scr.ScrObjectRef obj)
+    {
+        if (_areaSession is not { } session || _combatHost is null || obj.Map != CurrentAreaMap
+            || _combatHost.Build(session, obj.Map, obj.Code).Combat is not { } combat) return false;
+        var killed = session.Kill(session.Version, combat.Target);
+        GD.Print($"ARC-WORLD-114 script-kill npc={obj.Code} disposition={killed.Disposition} failure={killed.Failure} events={killed.Outcome?.Events}");
+        if (killed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(obj.Map, obj.Code)] = AreaFallenPoses.Animation(outcome.Death);
+        return killed.Disposition != GameSessionDisposition.Rejected;
     }
 
     /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a

@@ -221,6 +221,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-firearms-level-arc-world-106"></a>[NPC firearms level (ARC-WORLD-106)](ledger/skills.md#npc-firearms-level-arc-world-106) | [Skills](ledger/skills.md) | NF1 |
 | <a id="inventory-window-art-arc-ui-051"></a>[Inventory window art (ARC-UI-051)](ledger/ui-audio.md#inventory-window-art-arc-ui-051) | [Interface windows and audio](ledger/ui-audio.md) | IW20–IW25 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
+| <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 
 ## Decisions to revisit
 
