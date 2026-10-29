@@ -16,6 +16,7 @@ namespace Arcanum.TerrainViewer;
 /// (main, single player, new game, in-play) are drawn in the original's look (<see cref="AreaMenuArtView"/>) with a project line at the
 /// screen's bottom for the notice and the buttons not offered; the other windows and the quit box keep this panel. ARC-UI-059: the
 /// options window too, its page buttons in the art; ARC-UI-061: and its page's controls in their own art at their slots (MW8–MW10).
+/// ARC-UI-066: the pre-made browser in its own art (<see cref="AreaPremadeBrowserArtView"/>, MW17–MW21) when the browsed hero read.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -34,6 +35,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private Label _notice = null!;
     private Label _hint = null!;
     private AreaMenuArtView _art = null!;
+    private AreaPremadeBrowserArtView _premadeArt = null!;
     private static readonly Color DiagnosticBackdrop = new(.06f, .05f, .04f, .96f);
     private Label _artNote = null!;
     public event Action<int>? ButtonPressed;
@@ -63,6 +65,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-058: the button window is drawn in the original's look.</summary>
     public bool ArtMode => Visible && _art.Visible;
     internal AreaMenuArtView ArtForSelfTest => _art;
+    /// <summary>ARC-UI-066: the pre-made browser is drawn in the original's look.</summary>
+    public bool PremadeArtMode => Visible && _premadeArt.Visible;
+    internal AreaPremadeBrowserArtView PremadeArtForSelfTest => _premadeArt;
     internal string ArtNoteForSelfTest => _artNote.Text;
     /// <summary>ARC-UI-013: the options window's controls as "label: value" (ARC-UI-061: the art's when it draws them).</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => _optionsArt ? _art.ControlsForSelfTest : _controls.Visible
@@ -96,6 +101,19 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
         _art.ArrowPressed += (index, direction) => OptionChangeRequested?.Invoke(index, direction);
         AddChild(_art);
+        _premadeArt = new AreaPremadeBrowserArtView();
+        _premadeArt.ButtonPressed += button =>
+        {
+            switch (button)
+            {
+                case AreaPremadeBrowserButton.Start: StartRequested?.Invoke(); break;
+                case AreaPremadeBrowserButton.Back: BackRequested?.Invoke(); break;
+                case AreaPremadeBrowserButton.Previous: BrowseRequested?.Invoke(-1); break;
+                case AreaPremadeBrowserButton.Next: BrowseRequested?.Invoke(1); break;
+            }
+        };
+        _premadeArt.SoundRequested += id => SoundRequested?.Invoke(id);
+        AddChild(_premadeArt);
         _artNote = new Label { Name = "MainMenuArtNote", Visible = false, Modulate = new Color(.75f, .7f, .6f), HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = Control.MouseFilterEnum.Ignore };
         AddChild(_artNote);
@@ -147,9 +165,13 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-061: the options controls' art.</summary>
     public void SetControlArt(AreaMenuControlArt art) => _art.SetControlArt(art);
 
+    /// <summary>ARC-UI-066: the pre-made browser's art.</summary>
+    public void SetPremadeArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts) => _premadeArt.SetArt(art, fonts);
+
     /// <summary>The window for the menu's state; <paramref name="hero"/> is the browsed hero's description (browser only), or the opening
-    /// shop's kit (ARC-UI-036, shop only).</summary>
-    public void Render(AreaMainMenu menu, string hero)
+    /// shop's kit (ARC-UI-036, shop only). ARC-UI-066: <paramref name="browsed"/> is the browsed hero in the browser's art (null keeps
+    /// the diagnostic window) with its large <paramref name="portrait"/>.</summary>
+    public void Render(AreaMainMenu menu, string hero, AreaPremadeBrowserView? browsed = null, Texture2D? portrait = null)
     {
         ArgumentNullException.ThrowIfNull(menu);
         Show();
@@ -173,6 +195,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (art) _art.Render(menu.Window, [.. menu.Shown.Select(button => menu.Texts.Text(button.Message))], focus,
             _optionsArt ? ControlViews(menu) : null, _optionsArt ? menu.OptionsFocus : -1);
         else _art.CloseView();
+        var premade = browser && !menu.QuitPending && browsed is not null && _premadeArt.ArtSet;
+        if (premade) _premadeArt.Render(browsed!, portrait);
+        else _premadeArt.CloseView();
+        art |= premade;
         // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
         _panel.Visible = !art && (menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending);
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
@@ -354,7 +380,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _art.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        Hide(); _panel.Visible = true; _art.CloseView(); _premadeArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -367,9 +393,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
-        if (_art.Visible)
+        if (_art.Visible || _premadeArt.Visible)
         {
-            _art.Place();
+            if (_art.Visible) _art.Place();
+            if (_premadeArt.Visible) _premadeArt.Place();
             _artNote.Size = new(Math.Max(1, size.X - 48), 0);
             _artNote.Position = new(24, 12); // at the top, away from the build line at the bottom right
         }
