@@ -1620,7 +1620,21 @@ With `--main-menu true` (launcher: `./arcanum area`, which opens it by default s
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
 does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
-([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
+([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
+and layout (below), the other windows the project's.
+
+- **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
+  [ledger MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058); `AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`):
+  with the game's art the main, single-player, new-game and in-play windows draw their background (329 `MainMenuBack`, 331
+  `SinglePlayerBack`) over the 800 × 600 screen at the bars' whole factor, centred and black around, and their labels in the
+  `Morph30Font` art font centred on (410, 143 + 50 × i): black at (−1, −1), brown at (+1, +1), the dark red face on top, bright red
+  under the pointer. The pointer over a label plays 3026, a press 3027, a release over it chooses it; letters, Escape and the
+  controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
+  focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
+  names them and the window's notice. The quit box, the options, save and load, browser, new-character, editor and shop windows keep
+  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
+  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 
 - **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
   (Pick Character, New Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013),
@@ -1668,7 +1682,8 @@ the start map: `ARC_AREA_MAP_SMOKE_ONLY=menu` with `--main-menu true` prints `AR
 (the game's texts, Last Save with no save, the real first hero read and started at the map list's start
 (92958, 82592) with its prototype, gold and flag, then F7 and Last Save loading it); the `menu` stage runs only when
 named, as the open menu blocks the other stages. Not done: the character editor (the new-character window is
-[ARC-UI-030](#new-character-window-arc-ui-030)), credits, movies and network play, the original menu art and button sounds; the scene flow is
+[ARC-UI-030](#new-character-window-arc-ui-030)), credits, movies and network play, the original art of the menu windows other than the
+button windows ([plan](../ui/original-windows.md#menu-windows-plan-arc-ui-058)); the scene flow is
 [ARC-UI-012](#scene-flow-arc-ui-012).
 
 ### Scene flow (ARC-UI-012)
