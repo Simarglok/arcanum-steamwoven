@@ -21,7 +21,7 @@ public partial class AreaSaveListArtView : Control
     private static readonly AreaSaveListArtButton[] AllButtons = Enum.GetValues<AreaSaveListArtButton>();
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private AreaArtFont? _font;
-    private IReadOnlyDictionary<int, Texture2D> _glyphs = new Dictionary<int, Texture2D>();
+    private AreaArtFontFace? _face;
     private IReadOnlyList<string> _rows = [];
     private Texture2D? _preview, _portrait;
     private AreaSaveInfo? _info;
@@ -62,16 +62,15 @@ public partial class AreaSaveListArtView : Control
         MouseFilter = MouseFilterEnum.Stop;
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
+        AreaArtTextDraw.Prepare(this);
     }
 
-    /// <summary>The art's frames by number and the font's glyph frames (by frame index); ARC-UI-067: the info display's texts and the
-    /// date's order.</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, AreaSaveInfoMessages messages,
-        AreaSaveDateOrder dateOrder)
+    /// <summary>The art's frames by number and the font; ARC-UI-067: the info display's texts and the date's order.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, AreaSaveInfoMessages messages, AreaSaveDateOrder dateOrder)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
-        _font = font ?? throw new ArgumentNullException(nameof(font));
-        _glyphs = glyphs ?? throw new ArgumentNullException(nameof(glyphs));
+        _face = font ?? throw new ArgumentNullException(nameof(font));
+        _font = font.Font;
         _messages = messages ?? throw new ArgumentNullException(nameof(messages));
         _dateOrder = dateOrder;
     }
@@ -101,7 +100,7 @@ public partial class AreaSaveListArtView : Control
     public void ClearArt()
     {
         CloseView();
-        (_art, _font, _glyphs) = (new Dictionary<int, Texture2D[]>(), null, new Dictionary<int, Texture2D>());
+        (_art, _font, _face) = (new Dictionary<int, Texture2D[]>(), null, null);
     }
 
     public void CloseView()
@@ -150,16 +149,12 @@ public partial class AreaSaveListArtView : Control
 
     private void DrawText(AreaSaveInfoText text)
     {
-        var (r, g, b) = text.Warning ? AreaSaveListArtLayout.WarningColour : AreaSaveListArtLayout.RowColour;
-        var colour = Color.Color8(r, g, b);
-        foreach (var (gx, glyph) in _font!.Layout(text.Text))
-            if (_glyphs.TryGetValue(glyph.Frame, out var texture))
-                DrawTextureRect(texture, new Rect2(text.X + gx, text.Y, glyph.Width, glyph.Height), false, colour);
+        AreaArtTextDraw.Text(this, _face!, text.Text, text.X, text.Y, text.Warning ? AreaSaveListArtLayout.WarningColour : AreaSaveListArtLayout.RowColour);
     }
 
     public override void _Draw()
     {
-        if (_font is null) return;
+        if (_font is null || _face is null) return;
         DrawRect(new Rect2(0, 0, AreaSaveListArtLayout.ScreenWidth, AreaSaveListArtLayout.ScreenHeight), Colors.Black);
         if (Art(AreaSaveListArtLayout.TopStripArt) is { } top) DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false);
         if (Art(AreaSaveListArtLayout.BottomStripArt) is { } bottom)
@@ -184,12 +179,9 @@ public partial class AreaSaveListArtView : Control
         {
             var row = _top + slot;
             var (x, y, width, _) = AreaSaveListArtLayout.Row(slot);
-            var (r, g, b) = row == _selected ? AreaSaveListArtLayout.SelectedColour : AreaSaveListArtLayout.RowColour;
-            // PROJECT: a glyph's grey levels scale the font's colour (the text blit's blend is not read, F0; as the menu's labels).
-            var colour = Color.Color8(r, g, b);
-            foreach (var (gx, glyph) in _font.Layout(AreaSaveListArtLayout.Fit(_font, _rows[row], width)))
-                if (_glyphs.TryGetValue(glyph.Frame, out var texture))
-                    DrawTextureRect(texture, new Rect2(x + gx, y, glyph.Width, glyph.Height), false, colour);
+            // MW14 fonts carry no flags: the cover blend (MW31).
+            AreaArtTextDraw.Text(this, _face, AreaSaveListArtLayout.Fit(_font, _rows[row], width), x, y,
+                row == _selected ? AreaSaveListArtLayout.SelectedColour : AreaSaveListArtLayout.RowColour);
         }
         // MW24: the hero's name, then the portrait at its own size (PO3, size 0), then the other texts.
         var texts = InfoTexts();

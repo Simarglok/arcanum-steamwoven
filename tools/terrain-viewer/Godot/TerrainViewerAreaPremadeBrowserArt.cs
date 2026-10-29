@@ -21,19 +21,19 @@ public partial class TerrainViewerApp
         _premadePortraits.Clear();
         var started = Time.GetTicksMsec();
         _premadeArtContent = SelfTestBootstrap || module is null ? AreaPremadeBrowserArtContent.Empty("self-test: no game folder") : AreaPremadeBrowserArtContent.Load(module);
-        if (_premadeArtContent.TextFont is not { } text || _premadeArtContent.NameFont is not { } name)
+        if (_premadeArtContent.TextFont is null || _premadeArtContent.NameFont is null)
         {
             GD.Print($"ARC-UI-066 browser art not ready: {_premadeArtContent.Detail}");
             return;
         }
         var art = _premadeArtContent.Art;
-        IReadOnlyDictionary<int, Texture2D> Glyphs(int number) => art[number].Frames.Select((frame, index) => (frame, index))
-            .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
         // ARC-UI-068: the new-character window's art comes with the same read.
         var frames = AreaPremadeBrowserArtContent.AllArtNumbers.Where(number => number is not (AreaPremadeBrowserArtLayout.TextFontArt or AreaPremadeBrowserArtLayout.NameFontArt)
                 && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
-        panel.SetPremadeArt(frames, new(text, Glyphs(AreaPremadeBrowserArtLayout.TextFontArt), name, Glyphs(AreaPremadeBrowserArtLayout.NameFontArt)),
+        // ARC-UI-070: the fonts drawn by the shared art-text draw (MW31).
+        panel.SetPremadeArt(frames, new(new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.TextFontArt].Frames),
+                new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.NameFontArt].Frames)),
             _premadeArtContent.ArtReady, _premadeArtContent.NewCharacterArtReady, _premadeArtContent.ShopArtReady);
         GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; browser={_premadeArtContent.ArtReady} new-character={_premadeArtContent.NewCharacterArtReady} "
             + $"shop={_premadeArtContent.ShopArtReady}; "

@@ -3,17 +3,16 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>Which art font and colour a browser text is drawn with (MW14, MW20).</summary>
-public sealed record AreaPremadeBrowserFonts(AreaArtFont Text, IReadOnlyDictionary<int, Texture2D> TextGlyphs, AreaArtFont Name,
-    IReadOnlyDictionary<int, Texture2D> NameGlyphs);
+/// <summary>Which art font a browser text is drawn with (MW14, MW20).</summary>
+public sealed record AreaPremadeBrowserFonts(AreaArtFontFace Text, AreaArtFontFace Name);
 
 /// <summary>
 /// ARC-UI-066: the pre-made character browser (window 13) in the original's look (<see cref="AreaPremadeBrowserArtLayout"/>, ledger
 /// MW17–MW21, MW26): the strips and the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the browsed
 /// hero's large portrait, its name, gender, race and background name centred in their fields, its story (or its race's text) and
 /// its fifteen stats, each field filled black first; the four art buttons with their idle, down and lit frames (GB4) and push
-/// behaviour (GB3: down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). PROJECT: a glyph's
-/// grey levels scale the font's colour (as MW5). A story shows the lines its field holds, as the original's text draw (MW26).
+/// behaviour (GB3: down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). ARC-UI-070: the
+/// text in the original's blend (MW31). A story shows the lines its field holds, as the original's text draw (MW26).
 /// </summary>
 public partial class AreaPremadeBrowserArtView : Control
 {
@@ -43,9 +42,10 @@ public partial class AreaPremadeBrowserArtView : Control
         MouseFilter = MouseFilterEnum.Stop;
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
+        AreaArtTextDraw.Prepare(this);
     }
 
-    /// <summary>The art's frames by number and the two fonts with their glyph frames (by frame index).</summary>
+    /// <summary>The art's frames by number and the two fonts.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
@@ -93,7 +93,7 @@ public partial class AreaPremadeBrowserArtView : Control
         AreaCharacterArtDraw.Window(this, _art, AreaPremadeBrowserArtLayout.BackgroundArt);
         AreaCharacterArtDraw.Character(this, fonts, view, _portrait, AreaCharacterDescription.Of(view));
         // The redraw 0x5458D0: the player name over the character draw.
-        AreaCharacterArtDraw.Centred(this, AreaPremadeBrowserArtLayout.Name, view.Name, fonts.Name, fonts.NameGlyphs, AreaPremadeBrowserArtLayout.Red);
+        AreaCharacterArtDraw.Centred(this, AreaPremadeBrowserArtLayout.Name, view.Name, fonts.Name, AreaPremadeBrowserArtLayout.Red);
         foreach (var button in AllButtons)
         {
             var (art, x, y) = AreaPremadeBrowserArtLayout.Button(button);

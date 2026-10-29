@@ -25,9 +25,10 @@ public static class AreaMenuArtLayout
     public static IReadOnlyList<int> OptionsSlotRows { get; } = [122, 197, 272, 347];
 
     /// <summary>The colours of the three passes (r, g, b of the table 0x5C4040), in drawing order, with their offsets (table 0x5C4070,
-    /// added in turn: −1, +2, −1).</summary>
-    public static IReadOnlyList<(int Dx, int Dy, (byte R, byte G, byte B) Colour)> Passes { get; } =
-        [(-1, -1, (0, 0, 0)), (1, 1, (97, 61, 42)), (0, 0, (100, 0, 0))];
+    /// added in turn: −1, +2, −1). ARC-UI-070: and their blends, by the fonts' flags (the font build 0x540A22 gives the second font of
+    /// each set flag 0x100, the others 0; MW31): the black and the face cover the background, the brown is added to it.</summary>
+    public static IReadOnlyList<(int Dx, int Dy, (byte R, byte G, byte B) Colour, AreaArtTextBlend Blend)> Passes { get; } =
+        [(-1, -1, (0, 0, 0), AreaArtTextBlend.Coverage), (1, 1, (97, 61, 42), AreaArtTextBlend.Additive), (0, 0, (100, 0, 0), AreaArtTextBlend.Coverage)];
 
     /// <summary>The face colour of a hovered button (the second font set, 0x64C234, third entry).</summary>
     public static (byte R, byte G, byte B) HoverFace { get; } = (240, 15, 15);

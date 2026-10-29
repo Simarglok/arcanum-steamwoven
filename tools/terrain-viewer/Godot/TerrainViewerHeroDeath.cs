@@ -171,14 +171,12 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-120 dialog box art " + _dialogBoxContent.Detail);
         }
         if (_dialogBoxArt is { } built) { panel.SetDialogArt(built); return; }
-        if (_dialogBoxContent.Font is not { } font) return;
+        if (_dialogBoxContent.Font is null) return;
         var art = _dialogBoxContent.Art;
         IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
-        var glyphs = art[AreaDialogBoxLayout.FontArt].Frames.Select((frame, index) => (frame, index)).Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0)
-            .ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
         panel.SetDialogArt(_dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
             new Dictionary<int, IReadOnlyList<Texture2D>> { [AreaDialogBoxLayout.AcceptArt] = Frames(AreaDialogBoxLayout.AcceptArt), [AreaDialogBoxLayout.CancelArt] = Frames(AreaDialogBoxLayout.CancelArt) },
-            font, glyphs, _dialogBoxContent.LineHeight));
+            new AreaArtFontFace(art[AreaDialogBoxLayout.FontArt].Frames), _dialogBoxContent.LineHeight));
     }
 
     /// <summary>ARC-WORLD-120: the newest save of the session's hero (the details a save of it would record), null without a session or

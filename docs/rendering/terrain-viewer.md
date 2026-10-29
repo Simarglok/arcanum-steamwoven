@@ -1769,6 +1769,16 @@ and layout (below), the other windows the project's.
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
+- **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
+  `AreaArtTextRules`, `AreaArtFontFace`, `AreaArtTextDraw`): every art-font text of the menus, the options controls, the save and
+  load windows, the pre-made and new-character windows and the dialog box goes through one draw that blends as the original's
+  software art renderer: a font without flags 0x80 and 0x100 mixes its colour into the screen by the glyph pixel's red level (smooth
+  glyph edges), flag 0x100 (the menu labels' brown pass) adds glyph × colour, flag 0x80 writes it opaque. A canvas is made ready by
+  `AreaArtTextDraw.Prepare` (premultiplied alpha; its other draws must be opaque or fully transparent with black transparent pixels,
+  as decoded art is) and keeps the order of its draws; the message panel and hover window (art 27/229), the floaters (art 229) and
+  the conversation window in the bottom panel are planned to use it next. The menu stage checks it after the art (`ARC-UI-070 native-smoke menu text blend PASS`: the main
+  window's labels, read back, within two levels a channel of the background with the three passes rendered by `AreaArtTextRules`, and
+  the font holding partly covering edge pixels).
 
 - **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
   (Pick Character, New Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013),

@@ -189,9 +189,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ResizePanel(); Hide();
     }
 
-    /// <summary>ARC-UI-058: the menu art (the button windows' backgrounds by art number, the font and its glyph frames by frame index).</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs) =>
-        _art.SetArt(backgrounds, font, glyphs);
+    /// <summary>ARC-UI-058: the menu art (the button windows' backgrounds by art number and the labels' font).</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFontFace font) => _art.SetArt(backgrounds, font);
 
     /// <summary>ARC-UI-061: the options controls' art.</summary>
     public void SetControlArt(AreaMenuControlArt art) => _art.SetControlArt(art);

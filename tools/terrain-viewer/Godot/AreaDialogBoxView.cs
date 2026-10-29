@@ -3,15 +3,15 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>ARC-WORLD-120: the dialog box's art: the background, the button frames by art number and the font's glyph frames by frame index.</summary>
-public sealed record AreaDialogBoxArt(Texture2D Background, IReadOnlyDictionary<int, IReadOnlyList<Texture2D>> Buttons, AreaArtFont Font,
-    IReadOnlyDictionary<int, Texture2D> Glyphs, int LineHeight);
+/// <summary>ARC-WORLD-120: the dialog box's art: the background, the button frames by art number and the font.</summary>
+public sealed record AreaDialogBoxArt(Texture2D Background, IReadOnlyDictionary<int, IReadOnlyList<Texture2D>> Buttons, AreaArtFontFace Font,
+    int LineHeight);
 
 /// <summary>
 /// ARC-WORLD-120: the original's dialog box (<see cref="AreaDialogBoxLayout"/>, ledger DB1–DB4) as a control of the window's own size
 /// (325 × 136), placed by its parent on the 800 × 600 screen: the background, the text in white art-font lines and the buttons, which
 /// show their frames as GB4 (idle, down while held over them, lit under the pointer), act on the release over the pressed button (GB3)
-/// and play no sound. The keys go to the app. PROJECT: a glyph's grey levels scale the white (the original's text blend is not read, MW5).
+/// and play no sound. The keys go to the app. ARC-UI-070: the text in the original's blend (the box's font has no flags: the cover, MW31).
 /// </summary>
 public partial class AreaDialogBoxView : Control
 {
@@ -41,6 +41,7 @@ public partial class AreaDialogBoxView : Control
         Size = new Vector2(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height);
         MouseFilter = MouseFilterEnum.Stop;
         Visible = false;
+        AreaArtTextDraw.Prepare(this);
     }
 
     public void SetArt(AreaDialogBoxArt art) => _art = art ?? throw new ArgumentNullException(nameof(art));
@@ -52,7 +53,7 @@ public partial class AreaDialogBoxView : Control
         var art = _art ?? throw new InvalidOperationException("ARC-WORLD-120: the dialog box art is not set");
         if (!Visible || kind != _kind) { _hovered = -1; _pressed = -1; }
         (_text, _kind) = (text, kind);
-        _lines = AreaDialogBoxLayout.Lines(art.Font, text, art.LineHeight);
+        _lines = AreaDialogBoxLayout.Lines(art.Font.Font, text, art.LineHeight);
         _buttons = AreaDialogBoxLayout.Buttons(kind);
         Position = new Vector2(point.X, point.Y);
         Visible = true;
@@ -86,13 +87,9 @@ public partial class AreaDialogBoxView : Control
     {
         if (_art is not { } art) return;
         DrawTextureRect(art.Background, new Rect2(0, 0, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height), false);
-        var (r, g, b) = AreaDialogBoxLayout.Face;
-        var colour = Color.Color8(r, g, b);
         var (x, y, _, _) = AreaDialogBoxLayout.Text;
         for (var line = 0; line < _lines.Count; line++)
-            foreach (var (gx, glyph) in _lines[line])
-                if (art.Glyphs.TryGetValue(glyph.Frame, out var texture))
-                    DrawTextureRect(texture, new Rect2(x + gx, y + line * art.LineHeight, glyph.Width, glyph.Height), false, colour);
+            AreaArtTextDraw.Glyphs(this, art.Font, _lines[line], x, y + line * art.LineHeight, AreaDialogBoxLayout.Face);
         for (var i = 0; i < _buttons.Count; i++)
         {
             var frames = art.Buttons[_buttons[i].Art];
