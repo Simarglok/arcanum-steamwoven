@@ -51,10 +51,22 @@ public sealed partial class GameSessionOwner
         MarkHotkeyPlaces();
     }
 
-    // The size of an item's inventory art in cells, or null when no art source is attached or it does not answer for the item's kind.
+    /// <summary>ARC-UI-055: an item's size in inventory cells as the session sizes it (its art's through <see cref="AttachItemArtSizes"/>,
+    /// else its attached seed's facts, else 1 × 1), for a window that draws another holder's items (the loot window, IW28).</summary>
+    public (int Width, int Height) QueryItemCells(string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity.", nameof(entity));
+        return GridSize(entity);
+    }
+
+    // The size of an item's inventory art in cells, or null when no art source is attached or it does not answer for the item's kind
+    // (the hero's, a placed one's, one the session added to an NPC or a seed item's).
     private (int Width, int Height)? ArtCells(string entity, SessionSeedItem? row)
     {
-        if (_itemArtSizes is null || (HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? row?.Facts.Kind) is not { } kind) return null;
+        if (_itemArtSizes is null) return null;
+        var added = row is null && _inventory.NpcOf(entity) is { } npc ? _inventory.AddedTo(npc).FirstOrDefault(item => item.Entity == entity) : null;
+        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? added?.Kind ?? row?.Facts.Kind) is not { } kind) return null;
         var pixels = _itemArtSizes(entity, kind);
         ThrowIfDisposed();
         return pixels is { } frame ? InventoryGridRules.CellsOf(frame) : null;

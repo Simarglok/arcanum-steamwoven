@@ -34,9 +34,10 @@ public partial class TerrainViewerApp
         if (_inventoryArtContent.ArtReady)
         {
             InventoryItemIcons();
-            var art = _inventoryArtContent.Art.Values.ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
-            _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts);
-            GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}");
+            var art = _inventoryArtContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
+                .ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
+            _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts) { LootReady = _inventoryArtContent.LootArtReady };
+            GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}; ARC-UI-052 loot art ready={_inventoryArtContent.LootArtReady}");
         }
         else GD.Print($"ARC-UI-051 inventory art not ready: {_inventoryArtContent.Detail}");
         return _inventoryArtLook;
@@ -93,14 +94,15 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.</summary>
+    /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.
+    /// ARC-UI-052: a looted holder's item too (its kind from the open window's grid).</summary>
     private Texture2D? InventoryItemArt(string item)
     {
         if (_areaSession is not { } session || InventoryItemIcons() is not { } icons) return null;
         if (!ReferenceEquals(_inventoryItemArtSession, session)) { _inventoryItemArtCache.Clear(); _inventoryItemArtSession = session; }
         if (_inventoryItemArtCache.TryGetValue(item, out var known)) return known;
         Texture2D? texture = null;
-        if (HeroItemKind(session, item) is { } kind)
+        if (InventoryItemKind(session, item) is { } kind)
         {
             var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item));
             if (frame is not null) texture = HotkeyTexture(frame);
@@ -109,4 +111,8 @@ public partial class TerrainViewerApp
         _inventoryItemArtCache[item] = texture;
         return texture;
     }
+
+    /// <summary>ARC-UI-052: the kind of an item the hero holds or the open loot window's holder holds; null otherwise.</summary>
+    private SessionItemKind? InventoryItemKind(GameSessionOwner session, string item) =>
+        HeroItemKind(session, item) ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind : null);
 }

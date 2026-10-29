@@ -995,10 +995,23 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
   18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
   grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
-  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. NOT READY: item sizes from their
-  art, the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
+  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
+  (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
   toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
   art read, every grid and worn item's art read, three lines).
+- **Loot window art (ARC-UI-052,** [plan](../ui/original-windows.md#loot-window-done-arc-ui-052),
+  [ledger IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052); `AreaLootArtLayout`): with the game's art a dead
+  NPC's, junk pile's or container's window (not the steal window) shows the loot window's look in the same frame: the `Loot` art (234)
+  on the left with the body's image at (183, 33) (by race or critter flags, a container by its description), the body's grid of 10 × 8
+  cells from (8, 136) with each item's inventory art at its inventory location, over its art's cells (ARC-UI-055, `QueryItemCells`; a junk pile's at its pile slot; PROJECT: an item the
+  session keeps at no location at the first free place; worn items left out, as the original's grid view), cut
+  to the shown rows and scrolled by the mouse wheel (maximum 4 rows, a container 88), the Take all button (808) at (301, 47), and the
+  hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
+  grid is taken through the same path as its Take button (a stack asks how many; PROJECT: into the first free cells); released on a
+  box (which shows the refused art 348 / 347) or elsewhere it goes back; a right click uses nothing here. The "Diagnostic view"
+  switch keeps the Take buttons. NOT READY: the doll views and their toggles, the scroll bar's art, a hero's item moved into the body,
+  a follower's portrait, the steal window. The native smoke checks every Crash Site body's window
+  (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag).
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1018,7 +1031,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop; ARC-UI-051 draws the own window's art and layout, the fonts and item sizes are not the original's), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; the fonts are not the original's), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 
