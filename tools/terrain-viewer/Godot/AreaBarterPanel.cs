@@ -185,6 +185,17 @@ public partial class AreaBarterPanel : CanvasLayer
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
 
+    /// <summary>ARC-UI-064: puts <paramref name="quote"/> on the original look's quote line (and the diagnostic message) without rebuilding
+    /// the window.</summary>
+    public void ShowQuote(string quote)
+    {
+        ArgumentNullException.ThrowIfNull(quote);
+        _message.Text = quote;
+        if (_art is not { } art) return;
+        _art = (art.Inventory, art.Frame with { Quote = quote });
+        _area.SetBarter(_art.Value.Frame);
+    }
+
     private void UpdateRoundView() => _roundView.Update(_area, IsOpen && ArtMode ? HolderView?.Invoke() : null);
 
     private static Button Add(VBoxContainer column, string name, string verb, AreaBarterLine line, AreaBarterView view, Action<string>? requested)

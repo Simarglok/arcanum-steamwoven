@@ -76,7 +76,7 @@ public partial class AreaInventoryGridArea : Control
         _barter = frame; QueueRedraw();
     }
 
-    // The shown object's scroll maximum by the window's mode (IW31, IW37).
+    // The shown object's scroll maximum by the window's mode (IW31, BW4).
     private int ScrollMax(AreaInventoryView view) =>
         _barter is not null ? AreaBarterArtLayout.ScrollMax(view.HolderContainer) : AreaLootArtLayout.ScrollMax(view.HolderContainer);
 
@@ -502,10 +502,13 @@ public partial class AreaInventoryGridArea : Control
         if (barter is not null)
         {
             // The merchant's name centred on x 215 (0x5766A4..0x57671A) and the quote line below it (0x57687F); PROJECT: the project's font.
-            var (_, ny, _, nh) = AreaBarterArtLayout.NameLine;
-            var width = font.GetStringSize(barter.Name, HorizontalAlignment.Left, -1, size).X;
-            DrawString(font, new(AreaBarterArtLayout.NameCentreX * _scale - width / 2, ny * _scale + (nh * _scale + size) / 2 - 2), barter.Name,
-                HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
+            var (nx, ny, nw, nh) = AreaBarterArtLayout.NameLine;
+            // A name wider than its 200-pixel line is cut with an ellipsis, so it stays centred inside the line.
+            var name = barter.Name;
+            while (name.Length > 1 && font.GetStringSize(name, HorizontalAlignment.Left, -1, size).X > nw * _scale) name = name[..^2] + "…";
+            var width = font.GetStringSize(name, HorizontalAlignment.Left, -1, size).X;
+            DrawString(font, new(Math.Max(nx * _scale, AreaBarterArtLayout.NameCentreX * _scale - width / 2), ny * _scale + (nh * _scale + size) / 2 - 2), name,
+                HorizontalAlignment.Left, nw * _scale, size, AreaInventoryArtLook.TextColour);
             var (qx, qy, qw, qh) = AreaBarterArtLayout.QuoteLine;
             if (barter.Quote.Length > 0)
                 DrawMultilineString(font, new(qx * _scale, qy * _scale + size), barter.Quote, HorizontalAlignment.Left, qw * _scale, size, 2,
@@ -524,7 +527,7 @@ public partial class AreaInventoryGridArea : Control
         foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
         {
             var (x, y) = AreaInventoryArtLayout.Box(icon);
-            Art(AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
+            Art(barter is not null ? AreaBarterArtLayout.BoxArt(icon, Held, over == icon) : AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
         }
         if (barter is not null) Art(AreaBarterArtLayout.GambleArt, AreaBarterArtLayout.GambleBox.X, AreaBarterArtLayout.GambleBox.Y);
         foreach (var item in view.Grid)
@@ -540,9 +543,9 @@ public partial class AreaInventoryGridArea : Control
         {
             // The held item stays in its place but is not drawn there (item flag 0x10, as in the hero's grid).
             if (item.Entity == Held?.Entity) continue;
-            var full = barter is not null ? AreaBarterArtLayout.FullRect(item, _lootScroll) : AreaLootArtLayout.FullRect(item, _lootScroll);
-            if (full.Y + full.Height <= shownTop || full.Y >= shownBottom) continue;
-            Item(look.ItemArt(item.Entity), full, item.Name, shownTop, shownBottom);
+            if ((barter is not null ? AreaBarterArtLayout.ItemRect(item, _lootScroll) : AreaLootArtLayout.ItemRect(item, _lootScroll)) is null) continue;
+            Item(look.ItemArt(item.Entity), barter is not null ? AreaBarterArtLayout.FullRect(item, _lootScroll) : AreaLootArtLayout.FullRect(item, _lootScroll),
+                item.Name, shownTop, shownBottom);
         }
         if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         if (Held is { } held)

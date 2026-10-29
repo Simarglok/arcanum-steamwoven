@@ -2350,8 +2350,10 @@ own window, the gamble box 345 at (703, 236), and the round view at (16, 17) wit
 merchant's item pressed and released on the hero's grid is bought, a hero's item released on the merchant's grid sold, both through the
 trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
 a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
-`… no price (REASON)`; the original prints a generated phrase of the merchant's). A left release in the round view closes the window.
-The `Diagnostic view` switch below the frame shows the diagnostic window and back; the opening shop's docked window keeps the
+`… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
+original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
+shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
+only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); the opening shop's docked window keeps the
 diagnostic look. NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
 goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
 generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll

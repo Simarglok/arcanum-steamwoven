@@ -201,7 +201,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-064: the original look's view of the window: the hero's side and the shown object's grid (its substitute container when
-    /// it has one, BT4) from the inventory host, the merchant's image (0x553D10 with the merchant, not the container, IW35), the background
+    /// it has one, BT4) from the inventory host, the merchant's image (0x553D10 with the merchant, not the container, BW2), the background
     /// by the follower rule, the merchant's name and the quote line (the last quote or trade message). Null in the opening shop (its session
     /// is not the area's) or without the art.</summary>
     private (AreaInventoryView Inventory, AreaBarterFrame Frame)? BarterArt(AreaBarterView view)
@@ -231,8 +231,9 @@ public partial class TerrainViewerApp
         if (!BarterOpen || _barterPanel?.View is not { } view || item is null) return;
         var quote = AreaBarterArtLayout.Quote(view, item);
         if (quote.Length == 0 || quote == _barterMessage) return;
+        // Only the quote line changes: no rebuild of the window's lists.
         _barterMessage = quote;
-        SyncAreaBarter(force: true);
+        _barterPanel.ShowQuote(quote);
     }
 
     /// <summary>While the window is open it owns every key: Escape closes it on a fresh press.</summary>
