@@ -100,8 +100,9 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
 shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
 (`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
-232; the barter window has its round view since ARC-UI-064 and the steal window since ARC-UI-065. Left: the own window's map drop and
-throw of a held item released in it (IW18).
+232; the barter window has its round view since ARC-UI-064 and the steal window since ARC-UI-065. ARC-UI-063: in the own window a held item
+released in it goes onto the game cursor and the window closes (IW18); a left press in the game view throws it, and the cursor shows
+the held item's art ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Barter window (done: ARC-UI-064)
 
@@ -208,13 +209,23 @@ are F0 and are read by the slice.
    141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
    (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
    (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
-   the list. Next slice (b): the save's picture as the original draws it (748 `SaveShotCover`, MW16), the info texts over it with the
-   toggle 747 at (499, 82), the lens 746 at the screen's (84, 51) with the hero's portrait (which needs the portrait in the save's
-   details, `NAME.meta.json` details schema 2), the scroll bar's art (0x5804E0) and the buttons' hints.
+   the list. Slice (b) done by ARC-UI-067, ledger MW22–MW25: the save's picture under the cover 748 `SaveShotCover`, the info texts and
+   the save's portrait over it (details schema 2), the toggle 747 at (499, 82) and the lens's art 746 at the screen's (84, 51). Left:
+   what the lens shows (0x4B8CE0 with the hero's location and 0x550DA0, not a portrait), the scroll bar's art (0x5804E0) and the
+   buttons' hints (7002, 7020–7022, 7025; where the menu shows hints is not read).
 3. **Pre-made character browser** (window 13): background 766 `PreGenCharacterBase` (800 × 400) at (0, 41) with the strips; buttons
    321 at (675, 55) (start, hint 7003), 323 at (69, 55) (back), 283 `Big_Grn_L` / 284 `Big_Grn_R` (34 × 33) at (43, 118) and
    (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);
-   the slice reads them and draws the browsed hero with the character sheet's parts where they match.
+   the slice reads them and draws the browsed hero with the character sheet's parts where they match. Done by ARC-UI-066, ledger
+   MW17–MW21, MW26 (`AreaPremadeBrowserArtView`): the strips, the background and the four art buttons with their frames and sounds; the
+   hero's large portrait at (95, 69) (128 × 128); its player name in `Cloister18Font` red at (46, 224, 228 × 19); its gender, race and
+   background name in `morph15font` red, centred in their fields at y 284, 334 and 384; its story (`gameback.mes` 1039..1050, the
+   background description field 0x102) in the field (350, 196, 395 × 212); "Initial Stats" and fifteen stats "ST: 8" (`stat.mes`
+   500 + stat, the start's effective values) in four columns from (346, 87); each field filled black first. The story's lines are
+   the original's (MW26): every installed story is longer than its field (14–18 lines) and, as in the original, its first 11 show
+   (an anomaly for the owner: a "Steamwoven" setting could show the rest). PROJECT: the hints are not shown. A hero that does not
+   read keeps the diagnostic window, and a portrait that does not read leaves its field black. The window is done but for these
+   points.
 4. **New character** (window 12): background 765 `CreateCharacterBase` (800 × 400) at (0, 41) with the strips; buttons 321 / 323 as in
    the browser, 283 / 284 at (43, 118) / (244, 118), 757 `MPCycleLeftButton` / 758 `MPCycleRightButton` (23 × 23) at (42, 331),
    (255, 332), (42, 381), (255, 382) (the gender, race, background and portrait arrows, F0 which is which), the name field and the

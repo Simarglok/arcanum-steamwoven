@@ -227,6 +227,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.WearRequested += WearItem;
             _inventoryPanel.TakeOffRequested += TakeOffItem;
             _inventoryPanel.DropRequested += DropItem;
+            _inventoryPanel.MapDropRequested += held => LiftToGameCursor(held.Entity, "round-view");
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;
@@ -302,7 +303,7 @@ public partial class TerrainViewerApp
             return;
         }
         EndInventory();
-        CancelPendingWalkOrder("lockpicks armed");
+        CancelPendingOrder("lockpicks armed");
         _pickPocketArmed = false; _pickPocketAfterRoute = null;
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";

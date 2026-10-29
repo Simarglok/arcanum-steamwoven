@@ -53,7 +53,8 @@ public enum AreaItemUseGate
     /// <summary>In a turn-based round while another critter has the turn: nothing (IW5, IW6).</summary>
     NotHeroTurn,
     /// <summary>An item whose use is a throw, released on the use icon: it takes the map drop's path (flag 4), the item leaves the hero onto
-    /// the cursor and the window closes, and a click on a tile throws it (goal 37). NOT READY in the viewer (no game cursor holds an item).</summary>
+    /// the cursor and the window closes, and a click on a tile throws it (goal 37). ARC-UI-063: the viewer lifts it onto the game cursor
+    /// in the own window (mode 0); in the loot and steal windows it is NOT READY (the original uses it there).</summary>
     Throw,
 }
 

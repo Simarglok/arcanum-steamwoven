@@ -130,7 +130,8 @@ public sealed class AreaSaveListTests
         var clock = session.QueryClockSnapshot();
         var summary = AreaSaveList.Summary(session, "two\nlines" + new string('x', 100), "Crash Site cave");
         Assert.AreEqual(("diagnostic PC", 0, "Crash Site cave", 1), (summary.HeroName, summary.Level, summary.Location, summary.RuntimeMap));
-        Assert.AreEqual(new GameSaveTime(clock.Year, clock.Month, clock.DayOfMonth, clock.Hour, clock.Minute), summary.GameTime);
+        Assert.AreEqual(new GameSaveTime(clock.Year, clock.Month, clock.DayOfMonth, clock.Hour, clock.Minute, clock.Second), summary.GameTime);
+        Assert.AreEqual((0, (int?)session.QueryStoryState()), (summary.Portrait, summary.StoryState), "ARC-UI-067: no hero, no portrait; the story state.");
         Assert.AreEqual(80, summary.Description.Length);
         StringAssert.StartsWith(summary.Description, "twolines");
     }

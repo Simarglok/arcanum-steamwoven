@@ -101,6 +101,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.NameClicked += () => MainMenuCommand(() => { _mainMenu!.BeginName(); return AreaMenuCommand.Nothing; });
         }
         AttachMenuArt(_mainMenuPanel);
+        AttachPremadeBrowserArt(_mainMenuPanel);
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("MAIN_MENU");
@@ -228,8 +229,11 @@ public partial class TerrainViewerApp
         if (_mainMenu is null || _mainMenuPanel is null) return;
         BindOptionsWindow();
         _mainMenu.Rules = CreationRules();
+        // ARC-UI-066: the browsed hero in the browser's art when it read.
+        Texture2D? portrait = null;
+        var browsed = _mainMenu.Window == AreaMenuWindow.PickCharacter ? BrowsedHeroArt(_mainMenu.Hero, out portrait) : null;
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
-            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "");
+            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "", browsed, portrait);
         RenderCharacterEditor();
     }
 
@@ -677,6 +681,8 @@ public partial class TerrainViewerApp
             Require(MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && _mainMenu.Notice == "no save to continue from", "Last Save without a save stayed");
             Choose(50); Choose(420);
             Require(_mainMenu.Window == AreaMenuWindow.PickCharacter, "the pre-made browser opened");
+            // ARC-UI-066: the browser in the original's look, browsed by its arrows.
+            await PremadeBrowserArtForSmoke(Require);
             var first = MainMenuHero(0);
             var definition = first.Definition ?? throw new InvalidOperationException("ARC-UI-011 main menu smoke: the first hero did not read: " + first.Detail);
             Require(first.Status == AreaHeroStatus.Ready && _mainMenuPanel!.HeroForSelfTest.StartsWith("1/12 halfling-male\n", StringComparison.Ordinal),
@@ -684,7 +690,8 @@ public partial class TerrainViewerApp
             MainMenuCommand(() => { _mainMenu!.Browse(1); return AreaMenuCommand.Nothing; });
             Require(MainMenuHero(1).Status == AreaHeroStatus.Ready && _mainMenuPanel!.HeroForSelfTest.StartsWith("2/12 gnome-male\n", StringComparison.Ordinal), "Next read the second hero");
             MainMenuCommand(() => { _mainMenu!.Browse(-1); return AreaMenuCommand.Nothing; });
-            MainMenuCommand(() => _mainMenu!.Start());
+            // ARC-UI-066: Start pressed and released over itself in the browser's art.
+            await ClickPremadeForSmoke(AreaPremadeBrowserButton.Start);
             var session = _areaSession!;
             var flags = session.Flags;
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));
@@ -718,6 +725,7 @@ public partial class TerrainViewerApp
             var (rowX, rowY, _, _) = AreaSaveListArtLayout.Row(0);
             await Click(saveArt.ScreenPointForSelfTest(rowX + 10, rowY + 10));
             Require(SaveListOpen && _saveList!.Selected == 0, "a press on the auto-save's row selects it: " + _saveList?.Selected);
+            await SaveInfoForSmoke(Require, Click);
             var (_, backX, backY) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Back);
             await Click(saveArt.ScreenPointForSelfTest(backX + 30, backY + 30));
             Require(!SaveListOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "Previous Screen closed the load window back to the menu: " + _mainMenu?.Window);

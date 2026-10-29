@@ -163,6 +163,8 @@ public partial class TerrainViewerApp
             Letter('p');
             Require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && _mainMenuPanel.HeroForSelfTest.StartsWith("1/12 halfling-male\n", StringComparison.Ordinal),
                 "the browser starts at the first hero: " + _mainMenuPanel.HeroForSelfTest);
+            // ARC-UI-066: without a game folder the browser keeps its diagnostic window.
+            Require(!_mainMenuPanel.PremadeArtMode && _mainMenuPanel.PanelVisibleForSelfTest, "the browser without art shows the diagnostic window");
             Letter('n');
             Require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && _mainMenu!.Hero == 0, "the browser takes no letters");
             MainMenuCommand(() => { _mainMenu!.Browse(-1); return AreaMenuCommand.Nothing; });

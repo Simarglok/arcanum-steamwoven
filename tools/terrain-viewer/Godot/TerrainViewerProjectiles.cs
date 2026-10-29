@@ -93,13 +93,23 @@ public partial class TerrainViewerApp
     /// start, and lands where it ends.
     /// </summary>
     private void LaunchProjectile(AttackGoal goal, SessionShot shot, (int Art, int Range) weapon, AttackResolution resolution, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, CellCoord? scatter) =>
+        FlyShot(shot, scatter ?? GoalTile(goal), unchecked((uint)weapon.Art), false, weapon.Range,
+            resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, target, critter, obj, scatter is not null);
+
+    /// <summary>
+    /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
+    /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction; an art without a facing rule (an item's own
+    /// art, <paramref name="unfacedArt"/>: PF14's item rotation is NOT READY) flies unfaced. A <paramref name="targetless"/> shot (a
+    /// scatter, or a throw at a location) flies free from the start and ends on leaving its destination.
+    /// </summary>
+    private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
+        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
         var hero = session.Chart.ToWorld(session.State.CommittedCell);
         var start = new CellCoord(checked((int)hero.X), checked((int)hero.Y));
-        var destination = scatter ?? GoalTile(goal);
         var thrown = owner.QueryThrownShot(shot);
         if (ProjectileRules.Launch(start, destination) is not { } flight)
         {
@@ -113,24 +123,23 @@ public partial class TerrainViewerApp
                 SyncAreaInventory();
             }
             else owner.EndShot(shot);
-            _projectileEndsForSelfTest.Add((shot, scatter is null ? ProjectileStrikeKind.None : ProjectileStrikeKind.DestinationEnd, null));
+            _projectileEndsForSelfTest.Add((shot, targetless ? ProjectileStrikeKind.DestinationEnd : ProjectileStrikeKind.None, null));
             GD.Print($"ARC-COMBAT-016 projectile-unlaunched shot={shot.Id} from={start} to={destination}");
             return;
         }
         var direction = ProjectileRules.Direction(start, destination);
-        var art = ProjectileRules.FacedArt(unchecked((uint)weapon.Art), direction);
-        var hit = resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+        var faced = art is { } raw ? ProjectileRules.FacedArt(raw, direction) ?? (unfacedArt ? raw : null) : null;
         _projectiles.Add(new AreaProjectile
         {
-            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = art,
-            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, scatter is not null, thrown?.Range ?? weapon.Range), Thrown = thrown,
-            Targetless = scatter is not null, Returns = owner.QueryShotReturns(shot),
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
+            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
+            Targetless = targetless, Returns = owner.QueryShotReturns(shot),
         });
-        _attackNotice = $"the shot flies ({(hit ? "it will hit" : scatter is null ? "it missed" : "it missed and scatters")})";
+        _attackNotice = $"the shot flies ({(hit ? "it will hit" : !targetless ? "it missed" : "it missed and scatters")})";
         GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
-            + $" to={destination.X},{destination.Y} direction={direction} art={(art is { } a ? $"0x{a:X8}" : "none")}"
-            + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (scatter is null ? "" : " scattered")
-            + (owner.QueryShotReturns(shot) ? $" boomerang range={weapon.Range}" : ""));
+            + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}"
+            + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (targetless ? " scattered" : "")
+            + (owner.QueryShotReturns(shot) ? $" boomerang range={range}" : ""));
         SyncAreaProjectileBodies();
     }
 

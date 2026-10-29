@@ -217,7 +217,9 @@ public partial class TerrainViewerApp
             .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
         var glyphs = _saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
             .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
-        panel.SetArt(art, font, glyphs, _saveListArtContent.NewSaveLabel);
+        panel.SetArt(art, font, glyphs, _saveListArtContent.NewSaveLabel, _saveListArtContent.Messages,
+            AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern), _saveListArtContent.StoryTexts);
+        panel.PortraitSource = SavePortrait;
         GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
     }
 
@@ -245,6 +247,7 @@ public partial class TerrainViewerApp
         require(shown.Count > 0 && shown.SequenceEqual(expected), $"the rows show the descriptions: {string.Join(" | ", shown)}");
         require(list.SelectedEntry is null || panel.ArtDetailForSelfTest == AreaSaveList.Detail(list.SelectedEntry), "the box shows the selected save's details: " + panel.ArtDetailForSelfTest);
         require(list.Selected < 0 || (list.Selected >= art.TopForSelfTest && list.Selected < art.TopForSelfTest + AreaSaveListArtLayout.ShownRows), "the selected row is shown");
+        require(list.SelectedEntry is not null || art.InfoTextsForSelfTest.Count == 0, "ARC-UI-067: with no save selected the preview shows no info");
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
         {
@@ -263,5 +266,42 @@ public partial class TerrainViewerApp
         await Frames(1);
         GD.Print("ARC-UI-062 native-smoke save window art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Mode = list.Mode.ToString(), _saveListArtContent!.Detail, Rows = shown, Top = art.TopForSelfTest, list.Selected }));
+    }
+
+    /// <summary>ARC-UI-067: the smokes' info display part on a selected save with details: its texts at the exe's places (MW24) and
+    /// its portrait; a click on the toggle hides them with the button down and the next shows them again (MW25).
+    /// ARC_AREA_SAVE_CAPTURE adds "-info" before the extension.</summary>
+    private async Task SaveInfoForSmoke(Action<bool, string> require, Func<Vector2, Task> click)
+    {
+        var art = _saveListPanel!.ArtForSelfTest;
+        var content = _saveListArtContent!;
+        var entry = _saveList!.SelectedEntry;
+        var info = entry is null ? null : AreaSaveListArtLayout.Info(entry, content.StoryTexts);
+        require(info is not null, $"the selected save has details: {entry?.Name} {entry?.Details}");
+        var order = AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern);
+        var expected = AreaSaveListArtLayout.InfoTexts(content.Font!, info!, content.Messages, order);
+        string Shown() => string.Join(" | ", art.InfoTextsForSelfTest.Select(text => $"{text.Text}@{text.X},{text.Y}"));
+        require(art.InfoShownForSelfTest && art.InfoTextsForSelfTest.SequenceEqual(expected), "the info texts show at the exe's places: " + Shown());
+        require(info!.Portrait > 0 && art.PortraitDrawnForSelfTest, $"the save's portrait {info.Portrait} is drawn");
+        for (var i = 0; i < 2; i++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        }
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            var path = System.IO.Path.ChangeExtension(capture, null) + "-info" + System.IO.Path.GetExtension(capture);
+            require(image.SavePng(path) == Error.Ok, "the capture saved to " + path);
+        }
+        var toggle = art.ScreenPointForSelfTest(AreaSaveListArtLayout.Toggle.X + 16, AreaSaveListArtLayout.Toggle.Y + 16);
+        await click(toggle);
+        require(!art.InfoShownForSelfTest && art.ToggleFrameForSelfTest == 1 && art.InfoTextsForSelfTest.Count == 0,
+            $"a click on the toggle hid the info, the button down: frame {art.ToggleFrameForSelfTest} texts {Shown()}");
+        await click(toggle);
+        require(art.InfoShownForSelfTest && art.ToggleFrameForSelfTest == 0 && art.InfoTextsForSelfTest.SequenceEqual(expected),
+            $"the next click showed it again, the button up: frame {art.ToggleFrameForSelfTest}");
+        GD.Print("ARC-UI-067 native-smoke save info PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            entry!.Name, info.Portrait, Story = info.StoryText, Order = order.ToString(), Texts = expected.Select(text => $"{text.Text}@{text.X},{text.Y}") }));
     }
 }

@@ -15,10 +15,13 @@ public partial class TerrainViewerApp
 
     /// <summary>Reads the frame art and the portraits <paramref name="followers"/> need that are not read yet (one content stack
     /// opening for both), and binds the art.</summary>
-    private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers)
+    private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers) =>
+        LoadPortraits(followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray());
+
+    /// <summary>Reads the frame art (on the first use) and the portraits of <paramref name="ids"/> not read yet.</summary>
+    private void LoadPortraits(IReadOnlyList<int> ids)
     {
         var module = _arguments?.ModulePath;
-        var ids = followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray();
         if (_portraitContent is null || module != _portraitModule)
         {
             _portraitModule = module; _portraitTextures.Clear();
@@ -35,10 +38,20 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>A follower's portrait texture (its stored portrait's small image), or null when it has none or it did not read.</summary>
-    private Texture2D? FollowerPortrait(AreaCompanion companion)
+    private Texture2D? FollowerPortrait(AreaCompanion companion) => AreaPortraits.Stored(companion.Speaker.Row) is { } id ? PortraitTexture(id) : null;
+
+    /// <summary>ARC-UI-067: a save's portrait for the save window's info display: its small image (PO3's size 0 draws the image at its
+    /// own size from the catalogue's path, the small file), read on first use.</summary>
+    private Texture2D? SavePortrait(int id)
     {
-        if (AreaPortraits.Stored(companion.Speaker.Row) is not { } id || _portraitContent?.Portraits.GetValueOrDefault(id) is not { Status: AreaPortraitStatus.Ready, Bytes: { } bytes })
-            return null;
+        LoadPortraits([id]);
+        return PortraitTexture(id);
+    }
+
+    /// <summary>A read portrait's texture, made once; null when it did not read or decode.</summary>
+    private Texture2D? PortraitTexture(int id)
+    {
+        if (_portraitContent?.Portraits.GetValueOrDefault(id) is not { Status: AreaPortraitStatus.Ready, Bytes: { } bytes }) return null;
         if (_portraitTextures.TryGetValue(id, out var known)) return known;
         var image = new Image();
         Texture2D? texture = image.LoadBmpFromBuffer(bytes) == Error.Ok && !image.IsEmpty() ? ImageTexture.CreateFromImage(image) : null;

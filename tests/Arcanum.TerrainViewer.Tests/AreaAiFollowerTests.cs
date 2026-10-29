@@ -6,6 +6,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -16,6 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 /// NPCs with every primary stat 20 and 20 hit points, bare-handed, an enemy (0) at world cell (10, 20) and the hero's companion (1) at
 /// (13, 21); the hero stands at (14, 20). The enemy's T0 record blocks its cell in the step evidence. The companion's cell is its own walk's (a fake that steps it at once). The attack events tell
 /// the hero's followers (0x4A9B80): a companion joins the hero's fight, walks up through its own walk and strikes through the session.
+/// ARC-WORLD-117: the viewer's attack and back-off orders go through the host (the target, the combat facts, the AI pass after each order).
 /// </summary>
 [TestClass]
 public sealed class AreaAiFollowerTests
@@ -30,16 +32,31 @@ public sealed class AreaAiFollowerTests
         new(slot, AreaPresence.Array, AreaValueOrigin.Instance, null, [.. values.Select((value, key) => new AreaSparseElement(key, [value]))], null);
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
-    // A human NPC (type 16, no monster flags) with every primary stat 20, level 1, 20 hit points, at the world cell.
-    private static AreaObjectRecord Npc(int index, CellCoord cell) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
+    private const int HealingPrototype = 8000, Uses = 3;
+    private static readonly SessionItemKind Healing = new(SessionItemType.Generic, HealingPrototype, 6000, 6001);
+
+    // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, 20 hit points, at the world cell; heal 5
+    // points when it heals.
+    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, 0), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
-            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
+            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
+            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, heal, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
+        ], true, true, true);
+
+    // A generic item (type 14) with the healing flag (generic flags 0x08), usage bonus 10 and three uses, in the pack (location 0).
+    private static AreaObjectRecord Item(int index) => new(Key(index), 0, 14, HealingPrototype, "p", "p", "r", "s",
+        AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+        [
+            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
+            Array(30), Empty(31),
+            Field(36, 0x1), Field(38, 1), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
+            Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
+            Field(59, 0x08), Field(60, 10), Field(61, Uses),
         ], true, true, true);
 
     /// <summary>The companion's own walk as the host sees it: a step moves it at once, a turn is counted.</summary>
@@ -59,10 +76,13 @@ public sealed class AreaAiFollowerTests
         public void Face(string entity, CellCoord toward) => Turns++;
     }
 
-    private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion);
+    private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion)
+    {
+        public AreaCombatHost Combat { get; init; } = null!;
+    }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -70,9 +90,11 @@ public sealed class AreaAiFollowerTests
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var start = companionAt ?? CompanionCell;
-        var rows = new[] { Npc(0, EnemyCell), Npc(1, start) };
+        // A healer companion holds a healing item (2) and has heal 5 points.
+        var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], [])], []),
+            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])],
+                healer ? [new SessionSeedItem(Entity(2), new(Healing, 1, 0, 0, null, []), null)] : []),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
@@ -97,16 +119,17 @@ public sealed class AreaAiFollowerTests
             CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")];
         var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
             objects, new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
-        var walks = new Walks(new(Entity(1), Npc(1, start), start));
+        var walks = new Walks(new(Entity(1), Npc(1, start, healer ? 5 : 0), start));
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell), EnemyCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell, critterFlags: enemyFlags), EnemyCell)], Combat = combat,
             HeroCell = () => HeroCell,
             Companions = () => [(Key(1), walks.Cells[Entity(1)])],
             Followers = followers ? walks : null,
+            NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
-        return new(session, host, walks, Entity(0), Entity(1));
+        return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
     }
 
     // Steps the host frame by frame (50 ms) until the run of the NPC ends; the notices it gave.
@@ -121,6 +144,145 @@ public sealed class AreaAiFollowerTests
         }
         Assert.IsNull(host.RunOf(npc), $"the run of {npc} ended: {host.TraceOf(npc)?.Step}");
         return notices;
+    }
+
+    [TestMethod]
+    public void Out_of_danger_a_companion_heals_the_hurt_hero_with_its_healing_item_through_the_heal_skill()
+    {
+        var (session, host, _, _, companion) = Open(healer: true);
+        var item = Entity(2);
+        Assert.AreEqual(item, host.HealingItem(companion));
+        Assert.IsFalse(host.Heal(companion), "nobody is hurt");
+        var max = session.QueryHeroLife()!.Status.MaxHitPoints;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = max / 2 }).Disposition);
+        var hurt = session.QueryHeroLife()!.Status.HitPoints;
+
+        // The heal step's targets: the companion itself (unhurt), then its PC leader, whom the heal skill's rung takes (0x4A8AA0, SP2).
+        Assert.IsTrue(host.Heal(companion), "the heal step chose");
+        StringAssert.Contains(host.TraceOf(companion)!.Item, $"heal {Pc} {AiHealStep.HealSkill} spell=-1 item={item}");
+        host.Perform(companion);
+        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(companion)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(companion)?.Perform}");
+        Assert.IsTrue(host.Holds(companion), "the skill run holds the companion's own walk");
+        var heal = Run(host, companion).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal
+            ?? throw new AssertFailedException(host.TraceOf(companion)?.Skill ?? "no heal");
+        Assert.AreEqual(GameSessionDisposition.Changed, heal.Disposition, $"{heal.Failure}");
+        Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1, "the heal spends a use of the companion's item");
+        var after = session.QueryHeroLife()!.Status.HitPoints;
+        Assert.IsTrue(heal.Check!.Success ? after > hurt : after == hurt, $"a success heals the hero, a failure does not: {hurt} -> {after}");
+        Assert.IsFalse(host.Holds(companion), "after the run its own walk follows again");
+    }
+
+    // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).
+    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true)
+    {
+        var consent = new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 3, null, 50, new(-20, 300, 200, 5), 0, 3, 5);
+        var facts = new CompanionOrderFacts(scene.Companion, "companion", 1, false, consent, Combat: scene.Host.OrderFacts(scene.Companion));
+        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null);
+    }
+
+    [TestMethod]
+    public void The_attack_orders_target_is_the_highlighted_objects_entity()
+    {
+        var scene = Open();
+        Assert.AreEqual(SessionCombatant.Critter(scene.Enemy), AreaCompanionOrders.Target(scene.Combat, 1, Key(0)));
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 1, null), "nothing highlighted: no target (FO3)");
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 1, Key(7)), "an object without a session entity");
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 2, Key(0)), "another map's");
+    }
+
+    [TestMethod]
+    public void An_attack_order_through_the_host_locks_the_companion_and_its_ai_pass_starts_the_attack()
+    {
+        var scene = Open();
+        var (session, host, walks, enemy, companion) = scene;
+        var outcome = Order(scene, CompanionOrderType.Attack, AreaCompanionOrders.Target(scene.Combat, 1, Key(0))).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.AttackLocked, true), (outcome.Effect, outcome.Locked), $"{outcome.Effect} {outcome.Failure}");
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual((DangerState.CombatFocus, SessionCombatant.Critter(enemy)), (danger.State, danger.Focus), "the ordered attack event's lock (FO3)");
+        Assert.IsTrue((danger.Flags & DangerFlags.TargetLocked) != 0);
+
+        // FO1: the follower's AI pass right after its order, through the host: perform starts the attack on the locked target.
+        var pass = outcome.Pass ?? throw new AssertFailedException("no AI pass");
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.IsTrue(pass.Pass is { Performed: true }, $"the pass performed: gate {pass.Pass?.Gate?.Stop}");
+        var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
+        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.IsTrue(host.Holds(companion));
+        StringAssert.Contains(AreaCompanionOrders.Describe(outcome), "pass=performed");
+
+        var notices = Run(host, companion);
+        Assert.IsTrue(walks.Steps >= 2, $"it walked up through its own walk ({walks.Steps} steps)");
+        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the ordered target");
+    }
+
+    [TestMethod]
+    public void An_attack_order_without_a_target_or_on_the_party_does_nothing_but_the_pass()
+    {
+        var scene = Open();
+        var none = Order(scene, CompanionOrderType.Attack).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.NoTarget, none.Effect);
+        Assert.IsNotNull(none.Pass, "the AI pass still runs (FO1)");
+        Assert.IsNull(scene.Host.RunOf(scene.Companion), "out of danger the pass's follow is the companion's own walk");
+        var party = Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(scene.Companion)).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.PartyTarget, party.Effect, "outside combat mode the hero's party is refused (FO4)");
+        Assert.AreEqual(DangerState.None, scene.Session.QueryDanger(scene.Companion).State);
+    }
+
+    [TestMethod]
+    public void Without_the_host_an_attack_order_lifts_the_stop_but_fails_and_runs_no_pass()
+    {
+        var scene = Open();
+        Assert.AreEqual(CompanionOrderEffect.Stopped, Order(scene, CompanionOrderType.BackOff, withHost: false).Outcomes.Single().Effect);
+        Assert.IsTrue((scene.Session.QueryDanger(scene.Companion).Flags & DangerFlags.NoAttack) != 0, "back off set NO_ATTACK");
+        var outcome = Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(scene.Enemy), withHost: false).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.Failed, outcome.Effect);
+        Assert.IsTrue((scene.Session.QueryDanger(scene.Companion).Flags & DangerFlags.NoAttack) == 0, "the attack order lifted it (FO9)");
+        Assert.IsNull(outcome.Pass);
+        Assert.AreEqual(DangerState.None, scene.Session.QueryDanger(scene.Companion).State);
+    }
+
+    [TestMethod]
+    public void Back_off_through_the_host_stops_the_fight_and_releases_the_companion_to_its_walk()
+    {
+        var scene = Open();
+        var (session, host, _, enemy, companion) = scene;
+        Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(enemy));
+        host.Pump(50);
+        Assert.IsNotNull(host.RunOf(companion), "the ordered attack runs");
+
+        var outcome = Order(scene, CompanionOrderType.BackOff).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.Stopped, outcome.Effect, $"{outcome.Failure}");
+        Assert.IsTrue(outcome.Stop is { Interrupted: true, NoAttack: true }, "peace with its focus, the interrupt and NO_ATTACK (FO5)");
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual(DangerState.None, danger.State);
+        Assert.IsTrue((danger.Flags & DangerFlags.NoAttack) != 0);
+        Assert.IsTrue(outcome.Pass?.Pass is { Gate.Passed: true }, $"the stop's interrupt came first: the pass's gate finds it idle ({outcome.Pass?.Pass?.Gate?.Stop})");
+        Assert.IsNull(host.RunOf(companion), "the attack run ended");
+        Assert.IsFalse(host.Holds(companion), "its own walk follows the hero again");
+    }
+
+    [TestMethod]
+    public void The_stops_interrupt_ends_the_attack_run_only_when_asked()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        host.PerformAttack(companion, enemy);
+        Assert.IsNotNull(host.RunOf(companion));
+        var stop = new SessionPeaceStep(companion) { Interrupted = true };
+        Assert.IsFalse(host.ApplyStop(stop with { Interrupted = false }), "no interrupt asked (no focus to stop)");
+        Assert.IsNotNull(host.RunOf(companion));
+        Assert.IsTrue(host.ApplyStop(stop), "the attack (priority 3) ends");
+        Assert.IsNull(host.RunOf(companion));
+        Assert.IsFalse(host.ApplyStop(stop), "nothing left to end");
+    }
+
+    [TestMethod]
+    public void The_heal_skill_check_reads_the_healers_flags_not_the_targets()
+    {
+        // An undead and mechanical NPC (critter flags 0x20000004) as the target: the check (0x4AE570, HI2) still accepts it.
+        var (_, host, _, enemy, companion) = Open(healer: true, enemyFlags: 0x20000004);
+        Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), enemy), "the target's critter flags are not read");
+        Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), Pc));
+        Assert.IsFalse(host.HealSkillAccepts(enemy, Entity(2), companion), "the healer's are");
     }
 
     [TestMethod]

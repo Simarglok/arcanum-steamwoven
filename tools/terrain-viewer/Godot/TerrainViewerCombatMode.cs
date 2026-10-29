@@ -70,13 +70,13 @@ public partial class TerrainViewerApp
     /// through the exit gate (refused with "cannot leave combat mode when under attack", the original's message 24); out of combat
     /// mode an idle concealed hero stops prowling. A walking, attacking or casting hero keeps its mode. The release never enters
     /// combat mode. The original then interrupts the hero's animations and turns it toward the pointer, which the viewer does not.
-    /// An armed targeting (spell, lockpicks, pick pocket, a follower's walk order or its open menu) takes no release.
+    /// An armed targeting (spell, lockpicks, pick pocket, a follower's walk or attack order or its open menu) takes no release.
     /// </summary>
     private void WorldRightRelease()
     {
         if (!CombatModeActive || _areaSession is not { } session || session.QueryHeroLife() is not { } life) return;
         if (!WorldClickInputOpen || AreaTransferPending) return;
-        if (_spellTargeting is not null || _lockpickArmed is not null || _pickPocketArmed || _pendingWalkOrder is not null
+        if (_spellTargeting is not null || _lockpickArmed is not null || _pickPocketArmed || _pendingOrder is not null
             || _followerPortraits is { MenuShown: true }) return;
         if (session.QueryCombatRound() is { } round && !round.Actor.IsHero) return;
         // The viewer's hero never fidgets (the original starts fidgets for NPCs only, ledger TH9).

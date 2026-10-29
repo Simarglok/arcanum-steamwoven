@@ -40,6 +40,11 @@ public sealed record CompanionOrderRequest(CompanionOrderType Type, CompanionOrd
     /// <summary>When set, each reached follower's one AI pass after its order (<see cref="GameSessionOwner.RunAiPass"/>, call
     /// 0x4C389D) runs through this host; none: the host runs it.</summary>
     public ISessionAiWorld? Ai { get; init; }
+
+    /// <summary>ARC-WORLD-117: the host's part of each reached follower's order, called with its outcome right after the order and
+    /// before its AI pass (<see cref="Ai"/>): a back off's animation interrupt (<see cref="CompanionOrderOutcome.Stop"/>, the
+    /// original's stop attacking interrupts inside the order, before the pass reads the follower's animations). None: nothing.</summary>
+    public Action<CompanionOrderOutcome>? Ordered { get; init; }
 }
 
 /// <summary>What an order did to one follower.</summary>
@@ -205,6 +210,7 @@ public sealed partial class GameSessionOwner
         foreach (var (entity, type) in receivers)
         {
             var outcome = Order(entity, type, facts[entity], request, profile);
+            request.Ordered?.Invoke(outcome);
             // FO1: one AI pass per reached follower right after its own order, before the next follower's order.
             if (request.Ai is { } ai) outcome = outcome with { Pass = RunAiPass(Version, entity, ai) };
             outcomes.Add(outcome);

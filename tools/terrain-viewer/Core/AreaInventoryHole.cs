@@ -16,8 +16,7 @@ public enum AreaRoundViewRelease
     /// <summary>An item held outside the own window: it goes back (0x575770) and the window closes.</summary>
     PutBackAndClose,
     /// <summary>An item held in the own window: the map drop with flag 4 (IW18), which leaves the item on the game view's cursor for a
-    /// throw. NOT READY in the viewer (no game cursor holds an item, and the hero throws no pack item): the panel puts it back and the
-    /// window stays open, as a release elsewhere in the frame.</summary>
+    /// throw. ARC-UI-063: the app lifts it onto the game cursor and closes the window, or leaves a refused item where it was.</summary>
     MapDrop,
 }
 

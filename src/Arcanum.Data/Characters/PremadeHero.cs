@@ -78,6 +78,10 @@ public sealed record PremadeHero(int BasicPrototype, int Prototype, int Race, in
     /// to the first zero (where the original's string ends); empty when the field is unset. The generated-once seed reads it (0x441B60,
     /// ledger RK10).</summary>
     public IReadOnlyList<byte> PlayerName { get; init; } = Array.Empty<byte>();
+
+    /// <summary>ARC-UI-066: the prototype's background description number (field 0x102, v119 slot 74; BG1), the <c>mes\gameback.mes</c>
+    /// text the pre-made browser shows (the built-in heroes carry 1039..1050); 0 when unset.</summary>
+    public int BackgroundDescription { get; init; }
 }
 
 /// <param name="Detail">The effect or prototype number the failure is about, when it has one.</param>
@@ -88,7 +92,7 @@ public sealed record PremadeHeroRead(PremadeHeroFailure Failure, PremadeHero? He
 /// ARC-WORLD-015: the Godot-free reader of one pre-made PC prototype into its new-game start (ARC-RES-027 proposal 2).
 /// Field slots are the v119 layout of <see cref="StaticObjectLoader"/> (the ARC-RES-027 probe's slot map): stat array 38,
 /// basic and tech skills 39/40, effects and causes 46/47, portrait 49, gold handle 50, inventory count/list/source 55/56/57,
-/// auto-level scheme 63, background 73, player name 86 (ARC-WORLD-101), bank money 87. Read-only and fail-closed; it creates no object and runs no script.
+/// auto-level scheme 63, background 73, background description 74 (ARC-UI-066), player name 86 (ARC-WORLD-101), bank money 87. Read-only and fail-closed; it creates no object and runs no script.
 /// NOT READY: the auto-level scheme replay, background effects, the new-character (non-pre-made) path, item wielding.
 /// </summary>
 public static class PremadeHeroReader
@@ -97,7 +101,7 @@ public static class PremadeHeroReader
     public const int GoldType = 8;
     private const int StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, EffectSlot = 46, CauseSlot = 47, PortraitSlot = 49,
         GoldSlot = 50, InventoryCountSlot = 55, InventoryListSlot = 56, InventorySourceSlot = 57, SchemeSlot = 63,
-        BackgroundSlot = 73, PlayerNameSlot = 86, BankSlot = 87, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
+        BackgroundSlot = 73, BackgroundDescriptionSlot = 74, PlayerNameSlot = 86, BankSlot = 87, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
     // ARC-WORLD-085: the item slots of the weight facts (as the area inventory reads them).
     private const int ItemWeightSlot = 38, ItemMagicWeightSlot = 39, ItemComplexitySlot = 45;
     private const int GetScript = 4, InsertItemScript = 21;
@@ -170,7 +174,8 @@ public static class PremadeHeroReader
 
         return new(PremadeHeroFailure.None, new(basicPrototype, number, race, gender, stats.GetValueOrDefault(AlignmentStat),
             stats.GetValueOrDefault(AgeStat), Int(f[PortraitSlot]), Int(f[BackgroundSlot]), Int(f[SchemeSlot]), raceEffect.Rule, genderEffect,
-            setNumber, gold, items.AsReadOnly()) { PlayerName = Array.AsReadOnly((f[PlayerNameSlot].Text ?? []).TakeWhile(b => b != 0).ToArray()) });
+            setNumber, gold, items.AsReadOnly()) { PlayerName = Array.AsReadOnly((f[PlayerNameSlot].Text ?? []).TakeWhile(b => b != 0).ToArray()),
+                BackgroundDescription = Int(f[BackgroundDescriptionSlot]) });
     }
 
     /// <summary>

@@ -9,7 +9,8 @@ namespace Arcanum.TerrainViewer;
 /// question (overwrite, delete) shows Yes and No. The app owns the state and rebuilds the window after every change.
 /// ARC-UI-062: with the game's art (<see cref="SetArt"/>) the window is drawn in the original's look (<see cref="AreaSaveListArtView"/>)
 /// and the description is typed into the new-save row; PROJECT: the selected save's details, a notice and the Yes/No question stand in
-/// the bottom strip's middle box (the original's common question box and the info display over the preview are not drawn here, F0).
+/// the bottom strip's middle box (the original's common question box is not drawn here, F0). ARC-UI-067: the selected save's info
+/// display over the preview (its texts, its portrait from <see cref="PortraitSource"/>).
 /// </summary>
 public partial class AreaSaveListPanel : CanvasLayer
 {
@@ -32,6 +33,7 @@ public partial class AreaSaveListPanel : CanvasLayer
     private AreaSaveListArtView _art = null!;
     private StyleBoxFlat _panelStyle = null!;
     private string _newSaveLabel = AreaSaveListArtContent.ProjectNewSaveLabel;
+    private IReadOnlyDictionary<int, string> _storyTexts = new Dictionary<int, string>();
     private bool _binding;
     private bool _artLook;
     private (string Name, DateTime Saved)? _previewOf;
@@ -45,6 +47,8 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>ARC-UI-062: an art button's interface sound (GB7).</summary>
     public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-067: a portrait id's small image (null when it does not read).</summary>
+    public Func<int, Texture2D?>? PortraitSource { get; set; }
     /// <summary>True while the window shows the original's look.</summary>
     public bool ArtMode => IsOpen && _art.Visible;
     internal AreaSaveListArtView ArtForSelfTest => _art;
@@ -137,11 +141,14 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (list.Mode == AreaSaveListMode.Load) GetViewport().GuiReleaseFocus();
     }
 
-    /// <summary>ARC-UI-062: the save window's art (frames by number), its font and glyphs, and the new-save row's label.</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, string newSaveLabel)
+    /// <summary>ARC-UI-062: the save window's art (frames by number), its font and glyphs, and the new-save row's label; ARC-UI-067: the
+    /// info display's texts, the date's order and the story texts.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, string newSaveLabel,
+        AreaSaveInfoMessages messages, AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts)
     {
-        _art.SetArt(art, font, glyphs);
+        _art.SetArt(art, font, glyphs, messages, dateOrder);
         _newSaveLabel = newSaveLabel ?? throw new ArgumentNullException(nameof(newSaveLabel));
+        _storyTexts = storyTexts ?? throw new ArgumentNullException(nameof(storyTexts));
     }
 
     public void CloseView()
@@ -182,8 +189,10 @@ public partial class AreaSaveListPanel : CanvasLayer
         {
             // The rows show the descriptions only, as the original's (the slot name's description part, 0x543040); the new-save row
             // shows the typed description, or "New" (5055) before any is typed (0x543BAB).
+            var info = entry is null ? null : AreaSaveListArtLayout.Info(entry, _storyTexts);
             _art.Render(list.Mode, [.. rows.Select(row => row.Entry is { } listed ? listed.DisplayDescription : NewSaveRow(list.Description))],
-                list.Selected, _preview.Texture, list.Prompt != AreaSavePrompt.None);
+                list.Selected, _preview.Texture, list.Prompt != AreaSavePrompt.None, info,
+                info is { Portrait: > 0 } ? PortraitSource?.Invoke(info.Portrait) : null, unread: entry is not null && info is null);
             _artDetail.Text = _detail.Text;
             // The box is small: a question shows without the details.
             _artDetail.Visible = list.Prompt == AreaSavePrompt.None;

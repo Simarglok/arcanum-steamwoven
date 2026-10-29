@@ -337,7 +337,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingWalkOrder("the window lost focus"); _orderKeyArmed = null; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -681,7 +681,7 @@ public partial class TerrainViewerApp
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false })
         {
             if (_rightPressTaken) _rightPressTaken = false;
-            else WorldObservation(WorldRightRelease);
+            else WorldObservation(() => { WorldRightRelease(); GameCursorRightRelease(); });
         }
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
@@ -701,7 +701,7 @@ public partial class TerrainViewerApp
             RefreshReadyStatus(); return;
         }
         // ARC-WORLD-046: a press outside the open follower order menu only closes it; after a portrait's walk order the press picks
-        // its tile.
+        // its tile (ARC-WORLD-117: after its attack order, the object under it).
         if (_followerPortraits is { MenuShown: true } portraits)
         {
             portraits.CloseMenu();
@@ -712,6 +712,8 @@ public partial class TerrainViewerApp
         // lying down (falling, unconscious, getting up) or dead takes no press.
         if (HeroLyingDown)
         {
+            // ARC-UI-063: a held item goes back when the PC is not active (0x575770, TT2).
+            PutBackGameCursorItem("the hero cannot act");
             _worldRouteClick = "ignored (the hero is down)";
             RefreshReadyStatus(); return;
         }
@@ -722,11 +724,13 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
             RefreshReadyStatus(); return;
         }
+        // ARC-UI-063: an item on the game cursor takes the press: it is thrown, or goes back for a hero that cannot act (TT2, TT6).
+        if (_gameCursorItem is not null) { _worldRouteClick = "throw"; GameCursorPress(screen); return; }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
         if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
-        if (TryPendingWalkOrder(screen)) return;
+        if (TryPendingOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);
         // ARC-SKILLS-006: armed lockpicks take this press: a door or window has its lock picked, anything else cancels the pick.
@@ -798,7 +802,7 @@ public partial class TerrainViewerApp
             static bool Modifier(Key key) => key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
             if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode))
             {
-                CancelPendingWalkOrder("a key was pressed");
+                CancelPendingOrder("a key was pressed");
                 CancelArmedLockpicks("a key was pressed");
                 _followerPortraits?.CloseMenu();
                 // Disarms an F1–F6 whose release was lost (a modifier held, a window that took it); a bare F1–F6 in an open world

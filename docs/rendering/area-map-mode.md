@@ -645,7 +645,7 @@ the executable as read in
   script is not run).
 - **Pick a lock (ARC-SKILLS-006).** The inventory window's *Pick a lock with:* button on lockpicks closes it and arms
   them; the next left press on a door or window picks its lock ([pick locks](../world/pick-locks-runtime.md)), walking within
-  range 1 first; a press anywhere else, a key press, focus loss, a follower walk order, a map change or a reload cancels it. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
+  range 1 first; a press anywhere else, a key press, focus loss, a follower walk or attack order, a map change or a reload cancels it. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
   failed); nothing opens by itself. Full light and no turn-based round are passed.
 - **Pick pocket (ARC-SKILLS-010).** The palette's *Pick pocket (then press an NPC)* arms the skill; the next left press on an
   NPC walks within reach 1 and opens the inventory window in steal mode (*Steal:* and *Plant:* buttons, one attempt each, no Take

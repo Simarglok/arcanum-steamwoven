@@ -168,7 +168,8 @@ public sealed class AreaSaveList
         Notice = notice;
     }
 
-    /// <summary>The details a save records: the hero's name and level (or the diagnostic profile), the location and the game time.</summary>
+    /// <summary>The details a save records: the hero's name and level (or the diagnostic profile), the location and the game time;
+    /// ARC-UI-067: the hero's portrait and the story state, as the original's save info (ledger MW22).</summary>
     public static GameSaveSummary Summary(GameSessionOwner session, string description, string location)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -184,6 +185,6 @@ public sealed class AreaSaveList
         }
         return new(Fit(description, limits.MaxDescriptionLength), Fit(hero is null ? "diagnostic PC" : AreaStartingHero.Name(hero), limits.MaxHeroNameLength),
             level, Fit(location, limits.MaxLocationLength), session.QueryActor().Map.RuntimeMap,
-            new(clock.Year, clock.Month, clock.DayOfMonth, clock.Hour, clock.Minute));
+            new(clock.Year, clock.Month, clock.DayOfMonth, clock.Hour, clock.Minute, clock.Second), hero?.Portrait ?? 0, session.QueryStoryState());
     }
 }

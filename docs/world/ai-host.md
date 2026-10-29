@@ -72,6 +72,7 @@ waiting; `AreaAiScene.Followers`, `IAreaAiFollowers`) are run by the host like i
 | Hold | — | `AreaAiHost.Holds`: while a companion has a goal run of the host or its danger state is not NONE, its walk makes no follow decision (`AreaCompanionGroup.HeldByAi`) and drives only the host's steps. |
 | Steps and turns | — | The host's step of a companion (`BeginStep`) orders its own walk one step onto the next cell (`AreaCompanionGroup.StepTo`, the walk-here order's ordered goal `CompanionFollower.WalkTo`; a refused one is traced); its cell is that walk's, so the host reads it from the scene's companions. A turn stands its settled grid again with the new facing (`FaceTo`). Its body is the companion group's (the T0 frame with the walk or run cycle). The companions' walks see the AI's moved NPCs (`AreaCompanionGroup.Extra`: their T0 records away, their live cells held), as the hero's does. |
 | First-step test | 0x425130 (AP1) | The arrival test's step toward the target reads the walker's overlay toward it (`Occupancy`): the target is made no-block (its T0 record and every moved record away), the other critters' live cells block. Before, it read the bare map data, so an attacker next to an NPC standing on its own record's cell met that record as an object in its way and found no first step. Next to the target past a corner object there is no first step and, as in the original, no route (AP2), so the attack ends (AP4). |
+| Orders | 0x4C31A0, 0x43C570, call 0x4C389D (FO1, FO3, FO5) | Since ARC-WORLD-117 the viewer's follower orders go through the host (`AreaCompanionOrders.Send`): each follower's combat facts are the host's (`OrderFacts`: the setter's facts, the reaction facts toward the hero, the combat-mode facts), the host is the ordered attack event's world and each reached follower's AI pass runs through it right after its order. The attack order's target is the highlighted object as its session entity (`AreaCompanionOrders.Target`): for F2 the object under the pointer at the key's release, for the portrait menu's attack the object under the next left press (its target cursor; not while the hero is dead or unconscious, OL1); none, or a press on no object, is no target (the order does nothing but the pass). A back off's stop interrupts the follower's run at priority 3 (`ApplyStop`, through the order's `Ordered` hook) right after its order and before its pass, as the original's stop attacking interrupts inside the order, so the pass finds it idle. This host's hostility world knows critters only, so an attack order on a container or a ground item stops at its attack event (Missing) and the follower ignores it; a door or scenery has no session entity, so no target. Without the host the attack order goes without a target. Only the attack and back-off orders carry the combat facts. The walk-here goal and the spread step start through the same hook, before the pass, as the original sets them inside 0x4C31A0 before 0x4C389D. |
 | Step test | — | A step's terrain test reads the map with the T0 records the planner moves too (the walked NPCs', the companions', the removed ones) and no live cells (the destination's critter is the living-critter test's): a route through a companion's home cell or a walked NPC's origin is no longer refused step by step while the planner keeps planning it. |
 
 ## Turn-based round (ARC-WORLD-095)
@@ -158,8 +159,22 @@ skill starter (0x4350F0, 0x436220) begins plays out: goal 33 walks within range 
 | Session heal | heal case of 0x4C7160 (AK3, HL1–HL5) | `GameSessionOwner.HealByNpc(SessionNpcHeal)`: the hero's heal check, outcome and item uses with the healer's own heal level and training, extraordinary intelligence and blindness and crippled arms, no local-PC difficulty term, no fate and no action points (the goal paid them). Refused before any roll: a hero, a dead or invalid healer, an item that is no healing item, has a use or destroy script, was destroyed or is the hero's, an invalid target, the version. |
 
 What chooses a skill: only the heal ladder's heal-skill rung (`AiSupportRules.Heal`, out of danger, below 90 % HP, with a healing
-item), which the item half of I10 (ARC-WORLD-108) wires with the NPC's items; until then `AreaAiHost.PerformSkill` (a test and smoke
-seam) starts a skill run as that choice would. No new state, no new switch.
+item), which ARC-WORLD-116 wires with the NPC's items (below); `AreaAiHost.PerformSkill` (a test and smoke seam) starts a skill run as
+that choice would. No new state, no new switch.
+
+## Heal skill rung (ARC-WORLD-116)
+
+The heal ladder's heal-skill rung gets the NPC's healing item, so an NPC heals itself, and a companion its PC leader (the hero) or a
+fellow follower, with a healing item through the skill goals above (ledger HI1, HI2).
+
+| Part | Original | What it does |
+| --- | --- | --- |
+| Tool | 0x4C91F0 → 0x462760 (HI1) | `HealingItem` is the first item of the NPC's list as the session shows it (`AreaCombatHost.NpcItems`, worn items included, in the list's order) that is a generic item (type 14) with the healing flag (generic flags 0x8); none for the hero. |
+| Check | 0x4AE570 (SP3, HI2) | `HealSkillAccepts` takes the item's fields (an item an NPC of the map holds), the target the hero or a critter of the map, and a healer that is neither undead (critter flag 0x4) nor mechanical (0x20000000), from its stored critter flags as the host reads them elsewhere. The target's flags are not read (the heal helper's mechanical test, P4, comes first; a dead target takes the resurrect rung instead). |
+| Choice | 0x4A8AA0 (SP2) | Out of danger with the target below 90 % HP the rung writes the pass action 3 with skill 10, the tool and the target; perform starts goal 33, the attempt goal 34 heals through `HealByNpc` (AK3) and spends a use of the item. A companion's skill run holds its own walk (`Holds`) until the goal pops. |
+
+No new state, no new switch, no schema change: the item's uses and its deletion are the session's durability records, which the
+snapshot already carries.
 
 ## Throw (ARC-WORLD-113)
 
@@ -185,7 +200,7 @@ step, casts from them and uses them, through the map's cast host (whose item loo
 | Part | Original | What it does |
 | --- | --- | --- |
 | Items in the lists | 0x4CC810, 0x4CC930, 0x4CCA30, 0x456A10, 0x453CC0 (SP10) | `Inventory` is the NPC's list as the session shows it, worn items included (`AreaCombatHost.NpcItems`: seed items still held, items given or made for it, never the taken, dropped or destroyed ones; an item without fields is left out); `HexedWeapon` the wielded weapon (slot 1004 of the session's wear) with item flag 0x40; `Item` reads its fields (spell slots, 10000 as −1; identified flag 0x1 or the session's identification; food or scroll exempt; valid-AI-action flag 0x200000 and AI action field 0x6A) with the spell charges as the cast host gives them (the session's spent charges); `CanUseItem` and `ItemFailChance` are the cast host's (`AiCanUseItem`, `AiItemFailChance`). In the Original setting's list cache (SP11) an item the NPC used or cast from that is then destroyed or out of charges drops the NPC's slot at its next list request (the force-removal 0x467860 → 0x4CCC00, the exhausted item 0x450420 → 0x4CCC40); an item given to the NPC (the insertion's drop, 0x466640) does not yet. |
-| Heal step | 0x4A8940, 0x4A8AA0 | The pass's first step runs `AiSupportRules.Heal`: a choice becomes the pass record's for this pass's perform (the pass then skips the item search and the danger update); an AI-action item is used at once. The heal skill's rung finds no healing item (`HealingItem` null: NOT READY, below). |
+| Heal step | 0x4A8940, 0x4A8AA0 | The pass's first step runs `AiSupportRules.Heal`: a choice becomes the pass record's for this pass's perform (the pass then skips the item search and the danger update); an AI-action item is used at once. The heal skill's rung finds the NPC's healing item (ARC-WORLD-116, above). |
 | Use at once | 0x4ABF10 → 0x462CC0 | An AI-action item entry the chooser meets (at the heal step or the danger update's spell choice) is used at once through the item use below, unchecked, with the entry's target; the pass record keeps no choice. |
 | Cast from an item | 0x4AC250 (NU1, NU4; MG47) | A choice with an item and pass action 1 (a scroll, a wand: an item whose first spell has no item triggers) is `SessionSpellCaster.CastByAi` with the item as source and the NPC as parent (the power it draws from the item); after a passed check the item's runs' sources are cleared and a food or scroll is destroyed out of the NPC's list (`RemoveItemFromNpc`), whether a run started or not. The Original setting clears the sources for any item, so a wand's run pays no charge (MG47); Steamwoven only for the food or scroll it destroys. The casting goal is the NPC's own (above). |
 | Goal 39 | 0x435450, 0x428CD0, 0x462CC0 (AG15, NU2) | A choice with pass action 2 (an item whose first spell has item triggers, an empty first slot or the valid-AI-action flag: a potion) starts goal 39 at the choice's target; on the target's tile or next to it, with the item still the NPC's (`ItemHolder`), the item use runs with the NPC's world: `UsedItem` from the item's fields and the cast host's charges (a scroll needs intelligence 5), the magic branch through `SessionItemTriggers.UseItem` (for an NPC holder the slot-0 activation casts nothing, NU2; the item used executor's spells start at the target and play at once; a food or scroll is spent out of the NPC's list), 4 action points in a turn-based round through the round's consume. Each use logs `ARC-WORLD-108 ai-item-use` in the viewer and refreshes the inventory. |
@@ -247,8 +262,8 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   (`ThrowableWeapon` answers no weapon for one the session added to the NPC or one with scripts, so the NPC attacks with it); the
   throw and remove-item scripts are not run and the item spells' unwear (0x4CBFC0) is not run.
 - **Action goals.** Pickups (I8b's goals), grenades and goal 40 (the heal skill or pick locks with an item,
-  0x4352C0): the host's calls refuse or do nothing; the item search chooses nothing. ARC-WORLD-108: the heal skill's rung of the heal
-  step finds no healing item (it needs the NPC's skill goal 33 and the session's heal step for an NPC); an NPC's item use runs no use
+  0x4352C0): the host's calls refuse or do nothing; the item search chooses nothing. ARC-WORLD-116: the heal skill's rung does not
+  search the substitute container of an NPC without a leader (HI1; a companion never has one); an NPC's item use runs no use
   script (an item with one goes on as if the script let it, which the trace notes), and a trap device's use, reading a written item
   and a lockpick do nothing; the cancel after an NPC's item use, which in the original returns the player's interface to its normal
   mode and closes an open targeting cursor (NU3), does not touch the viewer's cursor;
@@ -257,12 +272,14 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
-- **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events). Not ready: the attack
-  order's target (the highlighted object) and the AI pass after an order, the comment lines (taunts, near-death, the complaint's upset
+- **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events; since ARC-WORLD-117 the
+  viewer's orders carry the attack target and run the AI pass through the host). Not ready: the curse's attack event (the cursed
+  NPC is free, and free companions get no AI), an attack order on a non-critter object (the host's world knows critters only), the
+  menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
   line), the world-map travel's stop and allow calls, free companions' AI, the companion's loyalty step still on its own tick beside
-  the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn). The heal skill's rung (a companion
-  healing the hero with a healing item through the heal skill) stays NOT READY; a companion that knows a healing spell already heals
-  through the heal step's spell rung.
+  the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
+  art plays for a companion's heal too). Since ARC-WORLD-116 a companion heals the hero with a healing item through the heal skill's
+  rung, and one that knows a healing spell through the spell rungs.
 - **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
   throws" weapon is thrown through goal 37 (ARC-WORLD-113).
 - **Scripts and routines.** Of the AI points only the first heartbeat and the heartbeat run their scripts, and only within the
@@ -283,7 +300,13 @@ is held, starts its attack run, walks up through its own walk and strikes throug
 tells the victim's follower; a waiting companion is not told; a peaceful companion's follow is its own walk's; without followers in
 the scene nothing is run; next to the enemy past a corner object there is no first step and no route (AP1, AP2), while the enemy's
 own T0 record on its cell does not block the first step; after the fight (state NONE, no run) the companion is released to its walk;
-its step onto its own home record is not refused. `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
+its step onto its own home record is not refused; out of danger a companion holding a healing item heals the hurt hero through the
+heal step's heal-skill rung, goal 33 and the session (ARC-WORLD-116); since ARC-WORLD-117 the attack order's target is the highlighted
+object's entity (none, an object without one, another map's: none), an attack order through the host locks the companion on its target
+and its AI pass starts the attack, which walks up and strikes, an attack order without a target or on the party does nothing but the
+pass, without the host it lifts the stop and fails with no pass, back off through the host stops the fight (peace, interrupt,
+NO_ATTACK) before its pass, whose gate finds the companion idle, and releases it to its walk, and the stop's interrupt ends the attack
+run only when asked. `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
 paying nothing; an NPC victim's pool and the kill award for a PC-led killer only; the hero's critical-miss fate; the refusals.
 `AreaAiHostTests` (viewer Core): the movers' steps and slide; on the installed original (`ARC_AREA_CONVERSATION_GAME_ROOT`,
 `ARC_CAVE_MOBILE`) an animal of the Crash Site cave that the hero hits reacts, focuses the hero through its tick's danger update,
@@ -303,7 +326,8 @@ end frees nothing, the arrival after it begins the run, a run dropped mid-rest l
 goal's end neither frees nor charges it (ARC-WORLD-105). `AreaAiHostTests` also: an animal walking up to bite is busy at its attack goal's priority 3 (the bottom goal,
 ARC-WORLD-105). `AreaAiSkillTests` (viewer Core, synthetic rows): an NPC's heal skill on itself walks goal 33 into 34 at priority
 3 and at the action frame heals through the session, spending a use of its held item; a heal without a held healing item changes
-nothing; pickpocket and pick locks reach goals 86 and 67, whose attempts are not ready; the stand-in animation's timing (since ARC-WORLD-113 the throw's
+nothing; since ARC-WORLD-116 the heal step finds the held healing item and the check's refusals (no healing item, no critter), and a
+hurt NPC's heal step chooses the heal skill on itself and heals through goal 33, while an undead healer is refused and chooses nothing; pickpocket and pick locks reach goals 86 and 67, whose attempts are not ready; the stand-in animation's timing (since ARC-WORLD-113 the throw's
 too) and the turn (ARC-WORLD-109). `AreaAiThrowTests` (viewer
 Core, synthetic rows, ARC-WORLD-113): the attack starter of an NPC wielding a "default throws" dagger starts goal 37 at the hero's tile
 without changing the session, the throw at the action frame strikes the hero and the dagger lands on its cell or its scattered tile,
@@ -336,7 +360,11 @@ the eleven others are killed, drawn fallen and lootable as dead NPCs, the map da
 `ARC-WORLD-114 native-smoke premade PASS` (`ARC_PREMADE_SMOKE_SHOT` names an optional PNG of the view); `ai-follower` on
 `Arcanum1-024-fixed` with `--hero` (ARC-WORLD-115): a free speaker (Virgil) joins, the hero stands a few cells from the nearest living
 NPC that is not a pre-made hero's and attacks it; the follower is told, held, walks up through its own walk and strikes; marker
-`ARC-WORLD-115 native-smoke ai-follower PASS`;
+`ARC-WORLD-115 native-smoke ai-follower PASS` (since ARC-WORLD-116 first, where the hero stands, the follower given an installed healing
+item heals the hero hurt to half through the heal skill's rung and goal 33; marker `ARC-WORLD-116 native-smoke ai-heal-item PASS`;
+since ARC-WORLD-117, right after the blow, the viewer's back-off order stops the fight with its AI pass and an attack order on the NPC
+as the highlighted object locks the follower on it, its pass starts the attack and the follower strikes again; marker
+`ARC-WORLD-117 native-smoke ai-order PASS`, before the stage's own);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.

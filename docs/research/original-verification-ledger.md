@@ -220,6 +220,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-skill-goals-host-arc-world-109"></a>[NPC AI skill goals host (ARC-WORLD-109)](ledger/npc-ai.md#npc-ai-skill-goals-host-arc-world-109) | [NPC AI](ledger/npc-ai.md) | AK1–AK3 |
 | <a id="npc-ai-throw-host-arc-world-113"></a>[NPC AI throw host (ARC-WORLD-113)](ledger/npc-ai.md#npc-ai-throw-host-arc-world-113) | [NPC AI](ledger/npc-ai.md) | TA1–TA2 |
 | <a id="npc-ai-item-use-arc-world-108"></a>[NPC AI item use (ARC-WORLD-108)](ledger/npc-ai.md#npc-ai-item-use-arc-world-108) | [NPC AI](ledger/npc-ai.md) | NU1–NU4 |
+| <a id="npc-ai-heal-skill-tool-arc-world-116"></a>[NPC AI heal skill tool (ARC-WORLD-116)](ledger/npc-ai.md#npc-ai-heal-skill-tool-arc-world-116) | [NPC AI](ledger/npc-ai.md) | HI1–HI2 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="pick-pocket-arc-skills-010"></a>[Pick pocket (ARC-SKILLS-010)](ledger/skills.md#pick-pocket-arc-skills-010) | [Skills](ledger/skills.md) | PP1–PP11 |
@@ -231,7 +232,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="barter-window-art-arc-ui-064"></a>[Barter window art (ARC-UI-064)](ledger/ui-audio.md#barter-window-art-arc-ui-064) | [Interface windows and audio](ledger/ui-audio.md) | BW1–BW5 |
 | <a id="cursor-art-arc-ui-056"></a>[Cursor art (ARC-UI-056)](ledger/ui-audio.md#cursor-art-arc-ui-056) | [Interface windows and audio](ledger/ui-audio.md) | CU1–CU6, CUA1 |
 | <a id="hovered-object-arc-ui-057"></a>[Hovered object (ARC-UI-057)](ledger/ui-audio.md#hovered-object-arc-ui-057) | [Interface windows and audio](ledger/ui-audio.md) | OH1–OH9 |
-| <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW16 |
+| <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW26 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |

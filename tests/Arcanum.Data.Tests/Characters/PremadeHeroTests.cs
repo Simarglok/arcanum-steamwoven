@@ -282,6 +282,16 @@ public sealed class PremadeHeroTests
     }
 
     [TestMethod]
+    public void The_background_description_is_field_0x102()
+    {
+        // ARC-UI-066: slot 74, the number the pre-made browser's text comes from (BG1); unset reads 0.
+        Assert.AreEqual(0, PremadeHeroReader.Read(Inputs(Files()), 16069).Hero!.BackgroundDescription);
+        var pc = Pc();
+        pc[74] = 1041;
+        Assert.AreEqual(1041, PremadeHeroReader.Read(Inputs(Files(pc)), 16069).Hero!.BackgroundDescription);
+    }
+
+    [TestMethod]
     public void PrototypesAndStateTheReaderDoesNotModelAreTypedRefusals()
     {
         PremadeHeroRead Read(Dictionary<int, PrototypeFile> files, MesFile? effects = null, MesFile? buy = null) =>

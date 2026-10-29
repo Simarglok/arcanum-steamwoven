@@ -533,6 +533,34 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         }
     }
 
+    /// <summary>
+    /// ARC-WORLD-117: a follower's combat facts for an order (<see cref="CompanionOrderFacts.Combat"/>): the setter's facts of an attack
+    /// order's lock, its reaction facts toward the hero (a complaint's change, a stop's peace with the hero's side) and its combat-mode
+    /// facts (a stop's exit). Missing reaction or combat-mode facts stay null, as the session's defaults.
+    /// </summary>
+    public SessionPeaceFacts OrderFacts(string follower)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        return new()
+        {
+            Setter = SetterFacts(follower),
+            Reaction = ReactionFacts(follower) is { } facts ? new SessionPeaceReaction(facts.Npc, facts.Pc) : null,
+            CombatMode = NpcCombatMode(follower),
+        };
+    }
+
+    /// <summary>
+    /// ARC-WORLD-117: the host's part of an order's stop attacking (back off, FO5), run right after the follower's order and before
+    /// its AI pass (<see cref="CompanionOrderRequest.Ordered"/>): the stop's animation interrupt at priority 3
+    /// (<see cref="SessionPeaceStep.Interrupted"/>, 0x44E2C0 as at a round's start) ends the follower's walk, attack or flight run with
+    /// its end nodes, so the pass finds it idle. True: it freed a run.
+    /// </summary>
+    public bool ApplyStop(SessionPeaceStep step)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        return step.Interrupted && Interrupt(step.Entity);
+    }
+
     // The witnesses of an attack's noise: the attacker's square when under 30 tiles apart, then the victim's (AW16 under the switch).
     private void Witnesses(string attacker, string victim)
     {
@@ -598,7 +626,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// ARC-WORLD-108: heal (0x4A8940, <see cref="AiSupportRules.Heal"/>), the pass's first step: the healer's lists chosen for the NPC,
     /// its leader and the party; a choice goes to this pass's perform as the pass record's, an AI-action item is used at once
     /// (<see cref="UseItemAtOnce"/>). True when it chose: the pass skips the item search and the danger update. The heal skill's rung
-    /// finds no healing item (NOT READY).
+    /// finds the NPC's healing item (ARC-WORLD-116, <see cref="HealingItem"/>) and its choice starts the skill goal 33 at perform.
     /// </summary>
     public bool Heal(string npc)
     {
@@ -1621,9 +1649,29 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public int ItemFailChance(string critter, string item, string target, int spell) =>
         _scene.Spells?.Invoke()?.AiItemFailChance(critter, item, target, spell) ?? 0;
 
-    // The heal skill's rung (0x4C91F0, 0x4AE570) needs the NPC's heal skill goal (33) and its session step: NOT READY, no item.
-    public string? HealingItem(string npc) => null;
-    public bool HealSkillAccepts(string npc, string item, string target) => false;
+    /// <summary>
+    /// ARC-WORLD-116: the heal skill's tool (0x4C91F0 with skill 10 → 0x462760 with flag 0x8, ledger HI1): the first item of the NPC's
+    /// list (fields 0xED/0xEE, listed or worn, <see cref="AreaCombatHost.NpcItems"/>) that is a generic item (type 14) with the healing
+    /// flag (generic flags 0x8); none for the hero. NOT READY: the original then searches the substitute container of an NPC without a
+    /// leader (0x45F650), which the host does not read; it applies only without a leader, so never to a companion.
+    /// </summary>
+    public string? HealingItem(string npc) =>
+        npc == Pc ? null : _scene.Combat.NpcItems(_session, _scene.RuntimeMap, npc).Where(item => HealingTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
+
+    /// <summary>
+    /// ARC-WORLD-116: the heal skill check (0x4AE570, skill 10, ledger SP3 as corrected by HI2): the item must be a generic item with the
+    /// healing flag (refusal 1), the target the hero or an NPC (refusal 2), and the healer neither undead (critter flag 0x4) nor
+    /// mechanical (0x20000000; refusal 2). The target's own flags are not read here (the heal helper's mechanical test, P4, comes first).
+    /// </summary>
+    public bool HealSkillAccepts(string npc, string item, string target)
+    {
+        if (ItemFields(item) is not { } fields || !HealingTool(fields)) return false;
+        if (target != Pc && Fields(target)?.Critter is null) return false;
+        return Fields(npc)?.Critter is { } healer && (healer.Flags & (Undead | MechanicalFlag)) == 0;
+    }
+
+    private static bool HealingTool(CombatFields fields) =>
+        fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & SessionHealingItem.HealingFlag) != 0;
 
     // The fields of an item an NPC of the shown map holds now, or null.
     private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, _scene.RuntimeMap, item);

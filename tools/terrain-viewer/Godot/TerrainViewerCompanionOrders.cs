@@ -10,12 +10,14 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-046: follower orders in crash-site-area (exterior, cave and map mode). F1–F6 send the original's presets with the tile
 // under the pointer (F6 per the active rules, D2); the follower portrait strip opens each follower's order menu (walk asks for a
 // tile with the next left click). Orders go through the session; the HUD and the log name the outcomes and their line ranges.
+// ARC-WORLD-117: the attack order's target is the highlighted object (F2: the one under the pointer at the release; the portrait's
+// attack: the object of the next left press, its target cursor), and with the AI host each reached follower gets its AI pass.
 public partial class TerrainViewerApp
 {
     private AreaFollowerPortraits? _followerPortraits;
-    // A portrait walk order waiting for its tile (the original's target cursor); any non-modifier key, a modal window, focus loss,
-    // another menu choice or a rebuilt group drops it.
-    private string? _pendingWalkOrder;
+    // A portrait walk order waiting for its tile, or (ARC-WORLD-117) an attack order waiting for its object (the original's target
+    // cursor); any non-modifier key, a modal window, focus loss, another menu choice or a rebuilt group drops it.
+    private (string Entity, CompanionOrderType Type)? _pendingOrder;
     // The portraits' last state (session, revision, group, modal), so a frame with nothing new does not rebuild them.
     private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names, object? Combat)? _portraitStamp;
 
@@ -52,7 +54,9 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return true;
         }
-        IssueAreaOrder(key, new(preset.Type, CompanionOrderAddressing.All, [], Tile: PointerCell()));
+        // ARC-WORLD-117: the attack preset's target is the highlighted object at the release (0x43C570).
+        IssueAreaOrder(key, new(preset.Type, CompanionOrderAddressing.All, [], Tile: PointerCell())
+            { Target = preset.Type == CompanionOrderType.Attack ? OrderTarget(_hoverKey) : null });
         return true;
     }
 
@@ -64,7 +68,12 @@ public partial class TerrainViewerApp
         return AreaCellPicking.Pick(new(chart.X, chart.Y));
     }
 
-    /// <summary>Sends an order (its followers' facts are gathered here) and shows its outcomes.</summary>
+    /// <summary>ARC-WORLD-117: an object of the shown map as the attack order's target, or null.</summary>
+    private SessionCombatant? OrderTarget(Arcanum.Data.Area.AreaObjectKey? key) =>
+        _combatHost is { } combat ? AreaCompanionOrders.Target(combat, CurrentAreaMap, key) : null;
+
+    /// <summary>Sends an order (its followers' facts are gathered here) and shows its outcomes. ARC-WORLD-117: through the shown map's
+    /// AI host when it runs (the followers' combat facts, the attack event's world, each follower's AI pass).</summary>
     private SessionCompanionOrderResult? IssueAreaOrder(string source, CompanionOrderRequest request)
     {
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { } host
@@ -74,9 +83,15 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return null;
         }
-        var facts = AreaCompanionOrders.Facts(session, group, pc.State.CommittedCell, host.State, CompanionName);
-        var (result, noGoal) = AreaCompanionOrders.Issue(session, group, request with { Followers = facts }, pc.State.CommittedCell, WorldTime);
-        GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal)));
+        var ai = AreaAiHostNow();
+        // Only the combat orders read the combat facts (an invalid one refuses the whole order); without the host an attack order goes
+        // without a target, as before ARC-WORLD-117 (a target would lift NO_ATTACK and fail for want of the attack event's world).
+        Func<string, SessionPeaceFacts>? combat = ai is not null && request.Type is CompanionOrderType.Attack or CompanionOrderType.BackOff ? ai.OrderFacts : null;
+        var facts = AreaCompanionOrders.Facts(session, group, pc.State.CommittedCell, host.State, CompanionName, combat);
+        var (result, noGoal) = AreaCompanionOrders.Issue(session, group, request with { Followers = facts, Target = ai is null ? null : request.Target },
+            pc.State.CommittedCell, WorldTime, ai);
+        GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal))
+            + (request.Type == CompanionOrderType.Attack ? $" | target={request.Target?.Entity ?? "none"} ai={ai is not null}" : ""));
         _companionNotice = result.Failure != GameSessionFailure.None ? $"{source}: order refused ({result.Failure})"
             : result.Outcomes.Count == 0 ? $"{source}: {request.Type} reached no follower within {CompanionOrderRules.Reach} tiles"
             : $"{source}: " + string.Join("; ", result.Outcomes.Select(AreaCompanionOrders.Describe))
@@ -105,7 +120,7 @@ public partial class TerrainViewerApp
         {
             _followerPortraits?.Show([]);
             _followerPortraits?.CloseMenu();
-            if (WorldModal) { CancelPendingWalkOrder("a window opened"); _orderKeyArmed = null; }
+            if (WorldModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
             return;
         }
         if (_followerPortraits is null)
@@ -125,8 +140,8 @@ public partial class TerrainViewerApp
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)
     {
-        // A new choice replaces a walk order still waiting for its tile.
-        CancelPendingWalkOrder("another menu choice");
+        // A new choice replaces a walk or attack order still waiting for its target.
+        CancelPendingOrder("another menu choice");
         if (!OrderInputOpen)
         {
             _companionNotice = "follower order ignored: a window is open, the world has no input focus or a map change is pending";
@@ -139,18 +154,19 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
-        if (type == CompanionOrderType.WalkHere)
+        if (type is CompanionOrderType.WalkHere or CompanionOrderType.Attack)
         {
             // OL1: the target cursor does not open for a dead or unconscious PC.
-            if (HeroCannotOrderWalk)
+            if (HeroCannotPickOrderTarget)
             {
-                _companionNotice = "walk: not while the hero is dead or unconscious";
+                _companionNotice = $"{AreaCompanionOrders.Label(item)}: not while the hero is dead or unconscious";
                 RefreshReadyStatus();
                 return;
             }
-            // The HUD's companion status names the pending walk while it waits.
-            _pendingWalkOrder = entity;
-            CancelArmedLockpicks("a walk order took the next press");
+            // The HUD's companion status names the pending order while it waits.
+            _pendingOrder = (entity, type);
+            CancelArmedLockpicks($"a {AreaCompanionOrders.Label(item)} order took the next press");
+            CancelPickPocket($"a {AreaCompanionOrders.Label(item)} order took the next press");
             _companionNotice = null;
             RefreshReadyStatus();
             return;
@@ -158,26 +174,38 @@ public partial class TerrainViewerApp
         IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, AreaCompanionOrders.Label(item)));
     }
 
-    private bool HeroCannotOrderWalk => _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true };
+    private bool HeroCannotPickOrderTarget => _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true };
 
-    /// <summary>Drops a pending walk order with its reason in the HUD (nothing when none is pending).</summary>
-    private void CancelPendingWalkOrder(string why)
+    /// <summary>The HUD's word of a pending order.</summary>
+    private static string PendingOrderWord(CompanionOrderType type) => type == CompanionOrderType.Attack ? "attack" : "walk";
+
+    /// <summary>Drops a pending walk or attack order with its reason in the HUD (nothing when none is pending).</summary>
+    private void CancelPendingOrder(string why)
     {
-        if (_pendingWalkOrder is null) return;
-        _pendingWalkOrder = null;
-        _companionNotice = $"walk order cancelled: {why}";
+        if (_pendingOrder is not { } pending) return;
+        _pendingOrder = null;
+        _companionNotice = $"{PendingOrderWord(pending.Type)} order cancelled: {why}";
     }
 
-    /// <summary>The walk order's tile: the next ground press after choosing walk (true when it took the press).</summary>
-    private bool TryPendingWalkOrder(Vector2 screen)
+    /// <summary>The pending order's target: the next press after choosing walk (its tile) or, ARC-WORLD-117, attack (the object under
+    /// it, the original's object target cursor; an empty spot sends the order without one, which does nothing but the AI pass). True
+    /// when it took the press.</summary>
+    private bool TryPendingOrder(Vector2 screen)
     {
-        if (_pendingWalkOrder is not { } entity || _canvas is null) return false;
-        _pendingWalkOrder = null;
+        if (_pendingOrder is not { } pending || _canvas is null) return false;
+        var entity = pending.Entity;
+        _pendingOrder = null;
         // The caller (WorldRouteClick) has already ignored a press while the world does not own input.
-        if (HeroCannotOrderWalk)
+        if (HeroCannotPickOrderTarget)
         {
-            _companionNotice = "walk order cancelled: the hero is dead or unconscious";
+            _companionNotice = $"{PendingOrderWord(pending.Type)} order cancelled: the hero is dead or unconscious";
             RefreshReadyStatus();
+            return true;
+        }
+        if (pending.Type == CompanionOrderType.Attack)
+        {
+            IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity,
+                AreaCompanionOrders.Label(FollowerMenuItem.Attack)) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
             return true;
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
