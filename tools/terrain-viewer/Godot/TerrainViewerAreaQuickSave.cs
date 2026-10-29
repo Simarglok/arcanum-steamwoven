@@ -277,6 +277,7 @@ public partial class TerrainViewerApp
         var previous = _areaSession;
         _areaSession = session;
         AttachAreaEncumbranceEffect();
+        AttachAreaItemArtSizes();
         SyncTurnBasedSetting(session);
         ApplySessionSettings(session);
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.

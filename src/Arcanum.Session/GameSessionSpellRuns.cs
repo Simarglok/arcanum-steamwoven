@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
@@ -46,9 +47,58 @@ public sealed partial class GameSessionOwner
     private bool _spellRunsBusy;
     // The last positive cost a payment charged (the original's global 0x5E762C, which its reflection charges, MG15); not saved.
     private int _spellLastCost;
+    // ARC-MAGIC-026: the local player's maintain bar (the original's table 0x5CB3A8), changed with the runs; not saved, like them.
+    private MaintainBar _maintainBar = MaintainBar.Empty;
+    // The run rules acting now (a call or a magic-tech event): the bar question of a host port is answered against the bar after
+    // the notes they left so far (a run ended earlier in the same pass frees its slot first, as in the original).
+    private SpellRunSystem? _activeSpellSystem;
 
     /// <summary>The session's spell runs (ARC-MAGIC-010; not saved).</summary>
     public SpellRunTable QuerySpellRuns() { ThrowIfDisposed(); return _spellRuns; }
+
+    /// <summary>ARC-MAGIC-026: the local player's maintain bar (not saved, like the runs).</summary>
+    public MaintainBar QueryMaintainBar() { ThrowIfDisposed(); return _maintainBar; }
+
+    /// <summary>ARC-MAGIC-026: the maintain bar's open slots (0x57C4B0): the hero's effective intelligence / 4, at most 5; all 5
+    /// without a hero, as the slot draw takes it (0x5533C0).</summary>
+    public int QueryMaintainBarOpenSlots()
+    {
+        ThrowIfDisposed();
+        return HeroEffectiveStat(CharacterStat.Intelligence) is { } intelligence ? MaintainBarRules.OpenSlots(intelligence) : MaintainBarRules.Slots;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-026: the answer of the maintain bar to a run's maintenance tick (0x4604A0 → 0x57C290), for a host's
+    /// <see cref="ISpellRunHost.MaintainBarHasSlot"/>: whether the bar, after the notes the acting run rules left so far, shows the run
+    /// or has an empty open slot for it. The add itself follows the rules' <see cref="SpellRunNoteKind.MaintainBarAdd"/> note when
+    /// the change is committed.
+    /// </summary>
+    public bool MaintainBarTakes(SpellRun run)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(run);
+        var intelligence = HeroEffectiveStat(CharacterStat.Intelligence) ?? 0;
+        var bar = _activeSpellSystem is { } system ? MaintainBarRules.Apply(_maintainBar, system.Notes, id => system.Table[id], intelligence) : _maintainBar;
+        return MaintainBarRules.Add(bar, run.Id, run.Spell, intelligence).Added;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-026: a click on maintain-bar slot <paramref name="slot"/> (0x57C370): a slot showing a run turns to stopping and its
+    /// run is interrupted through the run rules (<see cref="SessionSpellRunActionKind.Interrupt"/>, 0x457110) with the host's world;
+    /// the run's end frees the slot. Refused, in order: a slot outside 0..4 or a call from inside the run rules
+    /// (<see cref="GameSessionFailure.InvalidSpellRun"/>); the version. A slot that shows no run is NoChange; otherwise as
+    /// <see cref="ActOnSpellRun"/>, and the slot's stopping state is a change even when the interrupt changes no run.
+    /// </summary>
+    public SessionSpellRunResult StopMaintainedSpell(GameSessionVersion expected, ISpellRunHost host, int slot)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(host);
+        if (slot is < 0 or >= MaintainBarRules.Slots || _spellRunsBusy) return RejectRun(GameSessionFailure.InvalidSpellRun);
+        if (!IsCurrent(expected)) return RejectRun(GameSessionFailure.StaleVersion);
+        if (MaintainBarRules.Stop(_maintainBar, slot) is not var (stopping, run))
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, [], Version);
+        return ActCore(host, new(SessionSpellRunActionKind.Interrupt, run), stopping);
+    }
 
     /// <summary>
     /// Starts a run (0x455AC0, 0x455C30, ARC-MAGIC-009's <see cref="SpellRunRules.Create"/>): the invocation check, a slot and
@@ -97,19 +147,35 @@ public sealed partial class GameSessionOwner
             || _spellRunsBusy)
             return RejectRun(GameSessionFailure.InvalidSpellRun);
         if (!IsCurrent(expected)) return RejectRun(GameSessionFailure.StaleVersion);
+        return ActCore(host, action, _maintainBar);
+    }
+
+    // An admitted action on the runs, starting from <paramref name="bar"/> (the session's bar, or the bar with a clicked slot
+    // stopping, ARC-MAGIC-026).
+    private SessionSpellRunResult ActCore(ISpellRunHost host, SessionSpellRunAction action, MaintainBar bar)
+    {
+        var before = _maintainBar;
         var system = NewSpellSystem(host);
         _spellRunsBusy = true;
-        try { Act(system, action); }
-        finally { _spellRunsBusy = false; }
+        _activeSpellSystem = system;
+        try { _maintainBar = bar; Act(system, action); }
+        finally { _spellRunsBusy = false; _activeSpellSystem = null; _maintainBar = before; }
         if (!system.Changed(_spellRuns))
         {
             // Its payments come back for the host to apply, so their last cost follows (not saved, no revision).
             _spellLastCost = system.LastCostCharged;
-            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
+            // Only the bar can have changed (a clicked slot's stopping state with an interrupt that changed no run; defensive, as an
+            // interrupt of a run the bar holds always sets it).
+            var after = MaintainBarAfter(system, bar);
+            if (after.SameAs(_maintainBar)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, system.Notes, Version);
+            if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
+            _maintainBar = after;
+            Revise();
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, system.Notes, Version);
         }
         if (!SpellEventsFit(system.Queued.Count)) return RejectRun(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectRun(GameSessionFailure.RevisionExhausted);
-        CommitSpellSystem(system);
+        CommitSpellSystem(system, bar);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, system.Notes, Version);
     }
@@ -145,10 +211,12 @@ public sealed partial class GameSessionOwner
         }
         var system = NewSpellSystem(host);
         _spellRunsBusy = true;
+        _activeSpellSystem = system;
         try { system.Fire(run, code); }
-        finally { _spellRunsBusy = false; }
+        finally { _spellRunsBusy = false; _activeSpellSystem = null; }
         if (!system.Changed(_spellRuns))
         {
+            // No bar change without a table change here: a removal comes with its run's end or free, an add with its tick.
             _spellLastCost = system.LastCostCharged;
             _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
             return GameEventHandlerOutcome.Completed;
@@ -159,10 +227,23 @@ public sealed partial class GameSessionOwner
             _passSpellRuns?.Add(new(firing.Event, run, code, false, system.Notes));
             return GameEventHandlerOutcome.Refused;
         }
-        CommitSpellSystem(system);
+        CommitSpellSystem(system, _maintainBar);
         Revise();
         _passSpellRuns?.Add(new(firing.Event, run, code, true, system.Notes));
         return GameEventHandlerOutcome.Completed;
+    }
+
+    // ARC-MAGIC-026: the bar after the run rules' notes (adds and removes in order, the freed runs' slots emptied).
+    private MaintainBar MaintainBarAfter(SpellRunSystem system, MaintainBar bar) =>
+        MaintainBarRules.Apply(bar, system.Notes, id => system.Table[id], HeroEffectiveStat(CharacterStat.Intelligence) ?? 0);
+
+    /// <summary>The hero's effective stat with its life's poison and crippled legs (the cast host's and the maintain bar's reading);
+    /// null without a hero.</summary>
+    internal int? HeroEffectiveStat(CharacterStat stat)
+    {
+        if (QueryHeroLife() is not { } life) return null;
+        var state = life.Record.State;
+        return QueryHeroStats(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
     }
 
     private SpellRunSystem NewSpellSystem(ISpellRunHost host) =>
@@ -174,8 +255,9 @@ public sealed partial class GameSessionOwner
         _events.QueryPending().Count(e => e.Kind == SessionEventKinds.SpellRun) + added <= SessionEventKinds.MaxSpellRunEvents &&
         _events.Count + added <= _events.Limits.MaxPending && _events.NextSequence <= long.MaxValue - added;
 
-    private void CommitSpellSystem(SpellRunSystem system)
+    private void CommitSpellSystem(SpellRunSystem system, MaintainBar bar)
     {
+        _maintainBar = MaintainBarAfter(system, bar);
         _spellRuns = system.Table;
         _spellLastCost = system.LastCostCharged;
         foreach (var run in system.RemovedEvents)

@@ -975,8 +975,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
   window's frame ([ledger IW14](../research/ledger/ui-audio.md#inventory-grid-arc-ui-019); `AreaInventoryDrag`, plain shapes and
   names, no original art), scaled to the window. The grid is the session's (`QueryHeroGrid`,
-  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (1 × 1 until the
-  inventory art's size is read, NOT READY) at the first free place, and the items without room are named in the hint line. A left
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (its inventory art's
+  frame in 32-pixel cells, ARC-UI-055; 1 × 1 without the game's art) at the first free place, and the items without room are named in the hint line. A left
   press on an item of the grid or the doll holds it (it stays in its place and is not drawn there, IW2); the next left release puts it
   where the pointer is: on a cell, the target is the cell minus the grab's offset in grid locations (IW10), a grid item moves there
   (`MoveHeroItem`) and a worn item comes off into it (`Unequip` with the slot); on a slot, `Equip` runs with its checks and an
@@ -1028,19 +1028,20 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger IW20–IW25](../research/ledger/ui-audio.md#inventory-window-art-arc-ui-051); `AreaInventoryArtLayout`, `AreaInventoryArtContent`):
   the 800 × 400 frame at its place between the interface bars, scaled to the free part, with the paper doll (223) and pack (221)
   arts, a cover art on every empty wear slot (241–249), each item's inventory art (field 0x5D) centred in its slot or cells
-  (scaled down when larger, since items are 1 × 1), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
+  (scaled down only when larger than its place; a grid item's cells fit its art since ARC-UI-055; a worn item on the cursor
+  takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
   18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
   grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
-  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. NOT READY: item sizes from their
-  art, the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
+  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
+  (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
   toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
   art read, every grid and worn item's art read, three lines).
 - **Loot window art (ARC-UI-052,** [plan](../ui/original-windows.md#loot-window-done-arc-ui-052),
   [ledger IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052); `AreaLootArtLayout`): with the game's art a dead
   NPC's, junk pile's or container's window (not the steal window) shows the loot window's look in the same frame: the `Loot` art (234)
   on the left with the body's image at (183, 33) (by race or critter flags, a container by its description), the body's grid of 10 × 8
-  cells from (8, 136) with each item's inventory art at its inventory location (a junk pile's at its pile slot; PROJECT: an item the
+  cells from (8, 136) with each item's inventory art at its inventory location, over its art's cells (ARC-UI-055, `QueryItemCells`; a junk pile's at its pile slot; PROJECT: an item the
   session keeps at no location at the first free place; worn items left out, as the original's grid view), cut
   to the shown rows and scrolled by the mouse wheel (maximum 4 rows, a container 88), the Take all button (808) at (301, 47), and the
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
@@ -1068,7 +1069,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop; ARC-UI-051 draws the own window's art and layout, the fonts and item sizes are not the original's), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; the fonts are not the original's), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 
@@ -2043,7 +2044,9 @@ diagnostic HUD moves below the top strip and the follower portraits and spell pa
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
 the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
-right-button drag). The top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+right-button drag). Since ARC-MAGIC-026 the top strip's five slots are the
+[maintain bar](../world/spell-cast-host.md#the-maintain-bar-arc-magic-026): they show the hero's maintained spells and a click on one
+ends its spell. The top strip's clock is drawn as the art shows it and does nothing yet. Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the

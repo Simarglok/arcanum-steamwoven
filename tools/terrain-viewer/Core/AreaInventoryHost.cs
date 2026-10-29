@@ -417,12 +417,13 @@ public sealed class AreaInventoryHost
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
             { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
         // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
-        // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from).
+        // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from). ARC-UI-055:
+        // another item takes its size from the session (its inventory art's cells, 0x461780), drawn at most a container grid's size.
         var pileSlots = pile is null ? null : session.QueryJunkPiles().FirstOrDefault(p => p.Entity == holder)?.Items.ToDictionary(entry => entry.Entity, StringComparer.Ordinal);
         var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
-            .Select(pair => new AreaLootGridItem(pair.Entry.Entity, pair.Pile?.Slot ?? pair.Entry.Facts.InventoryLocation, pair.Pile?.Width ?? pair.Entry.Facts.InventoryWidth,
-                pair.Pile?.Height ?? pair.Entry.Facts.InventoryHeight,
-                Rowless(pair.Entry.Entity) is not null ? KindName(pair.Entry.Facts.Kind, catalog) : Name(pair.Entry.Entity, catalog), pair.Entry.Facts.Kind)).ToArray());
+            .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
+            .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray());
         var (image, container) = pile is not null
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);
@@ -431,6 +432,8 @@ public sealed class AreaInventoryHost
               HolderContainer = container };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
+        static (int, int) LootCells((int Width, int Height) cells) =>
+            (Math.Clamp(cells.Width, 1, InventoryGridRules.Columns), Math.Clamp(cells.Height, 1, InventoryGridRules.ContainerRows));
         static bool Stack(SessionItemFacts facts) => facts.AmmoType is not null || facts.Kind.Type == SessionItemType.Gold && facts.Quantity is not null;
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));

@@ -98,6 +98,8 @@ public partial class TerrainViewerApp
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
         BindAreaInventory(arguments, result);
+        // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
+        AttachAreaItemArtSizes();
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
         // fallback) brings keeps the sound state it holds, as a same-map quick load does.
         if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad or MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
