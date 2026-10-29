@@ -1,4 +1,5 @@
 using Arcanum.Data.Characters;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -156,6 +157,12 @@ public sealed class AreaNewCharacterArtTests
         var read = new PremadeHero(16067, 16087, 5, 1, 0, 20, 1017, 39, 0, new(69, true, []), null, 0, 0, []) { BackgroundDescription = 1039 };
         var definition = AreaStartingHero.Definition(read, out _);
         Assert.AreEqual((39, 1039), (definition.Background, definition.BackgroundDescription), "field 0x102 (MW19)");
+        // ARC-UI-069: and its player name (field 0x10E, MW21); one the session would refuse starts empty.
+        Assert.AreEqual(0, definition.PlayerName.Count);
+        var named = AreaStartingHero.Definition(read with { PlayerName = "Merwin"u8.ToArray() }, out _);
+        CollectionAssert.AreEqual("Merwin"u8.ToArray(), named.PlayerName.ToArray());
+        var tooLong = AreaStartingHero.Definition(read with { PlayerName = [.. Enumerable.Repeat((byte)'a', SessionHeroLimits.MaxPlayerNameBytes + 1)] }, out _);
+        Assert.AreEqual(0, tooLong.PlayerName.Count);
         var rule = new EffectRule(86, true, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1), new(EffectAttributeKind.BasicSkill, 1, EffectChangeOperator.Add, 2)]);
         var stat = AreaStartingHero.StatEffect(rule)!;
         Assert.AreEqual(86, stat.EffectId);

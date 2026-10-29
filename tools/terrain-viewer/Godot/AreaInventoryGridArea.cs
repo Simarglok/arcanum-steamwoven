@@ -95,6 +95,15 @@ public partial class AreaInventoryGridArea : Control
     }
     private bool _roundViewCut;
 
+    /// <summary>ARC-UI-069: the main menu is up (the opening shop's barter window): the open turns on no view window, so its art is not drawn
+    /// (IW33), and a release in its square is not tested (IW34): it acts as anywhere else in the frame.</summary>
+    internal bool MenuUp
+    {
+        get => _menuUp;
+        set { if (_menuUp == value) return; _menuUp = value; QueueRedraw(); }
+    }
+    private bool _menuUp;
+
     // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
     private void Background(AreaInventoryArtLook look, int number, AreaInventoryMode mode)
     {
@@ -299,7 +308,7 @@ public partial class AreaInventoryGridArea : Control
         // ARC-UI-054: a release in the round view closes the window (0x574559, IW34); ARC-UI-060: by the window's mode, a held item goes
         // back first outside the own window. ARC-UI-063: in the own window a held item released there is the map drop of IW18: the app
         // lifts it onto the game cursor and closes the window, or puts it back.
-        if (Look is not null && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y))
+        if (Look is not null && !_menuUp && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y))
         {
             var release = AreaInventoryHole.Release(LookMode, Held is not null);
             var lifted = Held;
@@ -500,7 +509,7 @@ public partial class AreaInventoryGridArea : Control
         }
         Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
-        Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
+        if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
         if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));

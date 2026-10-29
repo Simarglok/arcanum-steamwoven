@@ -12,6 +12,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// that following does not replace. Lines are named by their message range only. ARC-WORLD-117: with the shown map's AI host the
 /// orders carry each follower's combat facts, the attack order its target (the highlighted object, 0x43C570) and the host as the
 /// ordered attack event's world, and each reached follower gets its AI pass through the host (FO1); a back off's interrupt is the host's.
+/// ARC-WORLD-119: so are a leave's interrupt (<see cref="AreaAiHost.ObserveLeaves"/>) and the curse's attack event
+/// (<see cref="AreaAiHost.OrderAttack"/>), run before the former follower's pass.
 /// </summary>
 public static class AreaCompanionOrders
 {
@@ -85,9 +87,11 @@ public static class AreaCompanionOrders
     /// <summary>
     /// ARC-WORLD-117: sends the order. <paramref name="goals"/> is the host's part of each reached follower's order (its ordered goals),
     /// run right after the order. With the shown map's AI host <paramref name="ai"/> it is the ordered attack event's world, a back
-    /// off's stop interrupts the follower's run right after its order (<see cref="AreaAiHost.ApplyStop"/>), then the goals start, and
-    /// each reached follower's AI pass runs through the host after that (FO1). Without one: no attack world (an attack order with a
-    /// target fails after lifting the stop) and no pass.
+    /// off's stop interrupts the follower's run right after its order (<see cref="AreaAiHost.ApplyStop"/>), a leave (an order's or the
+    /// curse's) ends the leaver's run (<see cref="AreaAiHost.ObserveLeaves"/>, FO20), then the goals start, the curse's attack event runs
+    /// (<see cref="AreaAiHost.OrderAttack"/>: 0x4C3703 raises it inside the order, after the leave and the insult) and each reached
+    /// follower's AI pass runs through the host after that (FO1). Without one: no attack world (an attack order with a target fails
+    /// after lifting the stop), no curse attack event and no pass.
     /// </summary>
     public static SessionCompanionOrderResult Send(GameSessionOwner session, CompanionOrderRequest request, AreaAiHost? ai,
         Action<CompanionOrderOutcome>? goals = null)
@@ -100,7 +104,9 @@ public static class AreaCompanionOrders
             Ordered = outcome =>
             {
                 if (outcome.Stop is { } stop) ai.ApplyStop(stop);
+                ai.ObserveLeaves();
                 goals?.Invoke(outcome);
+                if (outcome.CurseAttack is { } attack) ai.OrderAttack(attack);
             },
         });
     }
@@ -129,6 +135,7 @@ public static class AreaCompanionOrders
         + (outcome.Lines is { } lines ? $" lines {lines.First}-{lines.Last}" : "")
         + (outcome.Consent is { } consent && consent != FollowConsent.Accepted ? $" ({consent})" : "")
         + (outcome.Failure != GameSessionFailure.None ? $" failure={outcome.Failure}" : "")
+        + (outcome.CurseAttack is not null ? " curse-attack" : "")
         + (outcome.Pass is { } pass ? " pass=" + (pass.Failure != GameSessionFailure.None ? pass.Failure.ToString()
             : pass.Pass is { Performed: true } ? "performed" : pass.Pass?.Gate is { } gate ? $"gate {gate.Stop}" : "ran")
             + (pass.WriteFailure != GameSessionFailure.None ? $" write-failure={pass.WriteFailure}" : "") : "");

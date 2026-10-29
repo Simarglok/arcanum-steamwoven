@@ -147,7 +147,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-inventory-changes-arc-world-055"></a>[NPC inventory changes (ARC-WORLD-055)](ledger/items.md#npc-inventory-changes-arc-world-055) | [Items and inventory](ledger/items.md) | NI1–NI7 |
 | <a id="objects-without-art-arc-data-038"></a>[Objects without ART (ARC-DATA-038)](ledger/data.md#objects-without-art-arc-data-038) | [Data and loading](ledger/data.md) | NA1 |
 | <a id="world-map-travel-arc-res-068"></a>[World-map travel (ARC-RES-068)](ledger/world.md#world-map-travel-arc-res-068) | [World, maps and movement](ledger/world.md) | WT1–WT13 |
-| <a id="npc-ai-followers-in-combat-arc-res-067"></a>[NPC AI followers in combat (ARC-RES-067)](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067) | [NPC AI](ledger/npc-ai.md) | FO1–FO17 |
+| <a id="npc-ai-followers-in-combat-arc-res-067"></a>[NPC AI followers in combat (ARC-RES-067)](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067) | [NPC AI](ledger/npc-ai.md) | FO1–FO20 |
 | <a id="lights-on-all-maps-arc-res-069"></a>[Lights on all maps (ARC-RES-069)](ledger/world.md#lights-on-all-maps-arc-res-069) | [World, maps and movement](ledger/world.md) | LT1–LT15 |
 | <a id="combat-wear-arc-combat-007"></a>[Combat wear (ARC-COMBAT-007)](ledger/combat.md#combat-wear-arc-combat-007) | [Combat](ledger/combat.md) | CW1–CW10 |
 | <a id="object-damage-arc-combat-008"></a>[Object damage (ARC-COMBAT-008)](ledger/combat.md#object-damage-arc-combat-008) | [Combat](ledger/combat.md) | OD1–OD14 |

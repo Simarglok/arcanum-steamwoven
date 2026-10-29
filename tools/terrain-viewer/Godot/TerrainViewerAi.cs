@@ -18,7 +18,8 @@ namespace Arcanum.TerrainViewer;
 // at its danger update and cast it through the map's cast host (the hero's); its casting goal is timed by its cast eye candy (not
 // drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. ARC-WORLD-108: an NPC heals
 // and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item.
-// ARC-WORLD-115: the hero's companions here are run too and fight beside it, stepping through their own walk. NOT READY: pickups,
+// ARC-WORLD-115: the hero's companions here are run too and fight beside it, stepping through their own walk. ARC-WORLD-119: so are
+// the free ones (released or cursed), as any leaderless NPC; a leave does not rebuild the host. NOT READY: pickups,
 // the attack order's target, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
@@ -53,12 +54,18 @@ public partial class TerrainViewerApp
             return null;
         }
         // A follower joining or leaving changes who the host runs; ARC-WORLD-115: so do the companions standing here (a rebuilt group
-        // with the same ones keeps the host: their walks are read from the group of the moment).
-        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)),
+        // with the same ones keeps the host: their walks are read from the group of the moment). ARC-WORLD-119: the host runs the group's
+        // companions whether they follow or not, so only the joins and leaves of other NPCs rebuild it; a group companion's leave ends
+        // its own run in the host (AreaAiHost.ObserveLeaves), the other NPCs' runs go on.
+        var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
+        // A visitor from another home map has no row here: the group's entities count too.
+        var groupEntities = (_areaCompanions?.Companions.Select(c => c.Entity) ?? []).ToHashSet(StringComparer.Ordinal);
+        var stamp = (session, CurrentAreaMap, area,
+            string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)
+                .Where(f => !groupEntities.Contains(f) && (!map.TryGetRow(f, out var r) || !companions.Contains(r.Key)))),
             string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         RetireAiHost();
-        var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
         var npcs = new List<AreaAiNpc>();
         foreach (var holder in map.Seed.Holders)
         {
@@ -92,8 +99,9 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
-            // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk.
-            Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart, session) : null,
+            // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
+            // free ones act as any NPC through the same walk).
+            Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
         };
@@ -106,11 +114,11 @@ public partial class TerrainViewerApp
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
 
-    /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (those the hero leads, following or waiting), with their
-    /// home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
-    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart, GameSessionOwner session) : IAreaAiFollowers
+    /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (ARC-WORLD-119: every one standing here, following,
+    /// waiting or free), with their home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
+    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart) : IAreaAiFollowers
     {
-        public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions.Where(c => session.QueryCompanion(c.Entity).LedByPc)
+        public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
 
         public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;

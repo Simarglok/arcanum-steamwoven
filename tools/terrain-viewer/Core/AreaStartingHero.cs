@@ -645,6 +645,9 @@ public static class AreaStartingHero
             Portrait = Math.Max(hero.Portrait, 0),
             // ARC-UI-068: the prototype's background description (field 0x102, MW19): a pre-made hero's story.
             BackgroundDescription = hero.BackgroundDescription,
+            // ARC-UI-069: the prototype's player name (field 0x10E, MW21), the name the browser shows and the save info keeps; one the
+            // session would refuse (longer than its bound, never installed) starts empty rather than refusing the hero.
+            PlayerName = SessionHeroLimits.ValidPlayerName(hero.PlayerName) ? hero.PlayerName : [],
         };
     }
 
