@@ -30,16 +30,31 @@ public sealed class AreaAiFollowerTests
         new(slot, AreaPresence.Array, AreaValueOrigin.Instance, null, [.. values.Select((value, key) => new AreaSparseElement(key, [value]))], null);
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
-    // A human NPC (type 16, no monster flags) with every primary stat 20, level 1, 20 hit points, at the world cell.
-    private static AreaObjectRecord Npc(int index, CellCoord cell) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
+    private const int HealingPrototype = 8000, Uses = 3;
+    private static readonly SessionItemKind Healing = new(SessionItemType.Generic, HealingPrototype, 6000, 6001);
+
+    // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, 20 hit points, at the world cell; heal 5
+    // points when it heals.
+    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, 0), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
-            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
+            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
+            Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, heal, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
+        ], true, true, true);
+
+    // A generic item (type 14) with the healing flag (generic flags 0x08), usage bonus 10 and three uses, in the pack (location 0).
+    private static AreaObjectRecord Item(int index) => new(Key(index), 0, 14, HealingPrototype, "p", "p", "r", "s",
+        AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+        [
+            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
+            Array(30), Empty(31),
+            Field(36, 0x1), Field(38, 1), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
+            Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
+            Field(59, 0x08), Field(60, 10), Field(61, Uses),
         ], true, true, true);
 
     /// <summary>The companion's own walk as the host sees it: a step moves it at once, a turn is counted.</summary>
@@ -62,7 +77,7 @@ public sealed class AreaAiFollowerTests
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion);
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -70,9 +85,11 @@ public sealed class AreaAiFollowerTests
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var start = companionAt ?? CompanionCell;
-        var rows = new[] { Npc(0, EnemyCell), Npc(1, start) };
+        // A healer companion holds a healing item (2) and has heal 5 points.
+        var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], [])], []),
+            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])],
+                healer ? [new SessionSeedItem(Entity(2), new(Healing, 1, 0, 0, null, []), null)] : []),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
@@ -97,13 +114,14 @@ public sealed class AreaAiFollowerTests
             CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")];
         var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
             objects, new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
-        var walks = new Walks(new(Entity(1), Npc(1, start), start));
+        var walks = new Walks(new(Entity(1), Npc(1, start, healer ? 5 : 0), start));
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell), EnemyCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell, critterFlags: enemyFlags), EnemyCell)], Combat = combat,
             HeroCell = () => HeroCell,
             Companions = () => [(Key(1), walks.Cells[Entity(1)])],
             Followers = followers ? walks : null,
+            NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, walks, Entity(0), Entity(1));
@@ -121,6 +139,42 @@ public sealed class AreaAiFollowerTests
         }
         Assert.IsNull(host.RunOf(npc), $"the run of {npc} ended: {host.TraceOf(npc)?.Step}");
         return notices;
+    }
+
+    [TestMethod]
+    public void Out_of_danger_a_companion_heals_the_hurt_hero_with_its_healing_item_through_the_heal_skill()
+    {
+        var (session, host, _, _, companion) = Open(healer: true);
+        var item = Entity(2);
+        Assert.AreEqual(item, host.HealingItem(companion));
+        Assert.IsFalse(host.Heal(companion), "nobody is hurt");
+        var max = session.QueryHeroLife()!.Status.MaxHitPoints;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = max / 2 }).Disposition);
+        var hurt = session.QueryHeroLife()!.Status.HitPoints;
+
+        // The heal step's targets: the companion itself (unhurt), then its PC leader, whom the heal skill's rung takes (0x4A8AA0, SP2).
+        Assert.IsTrue(host.Heal(companion), "the heal step chose");
+        StringAssert.Contains(host.TraceOf(companion)!.Item, $"heal {Pc} {AiHealStep.HealSkill} spell=-1 item={item}");
+        host.Perform(companion);
+        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(companion)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(companion)?.Perform}");
+        Assert.IsTrue(host.Holds(companion), "the skill run holds the companion's own walk");
+        var heal = Run(host, companion).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal
+            ?? throw new AssertFailedException(host.TraceOf(companion)?.Skill ?? "no heal");
+        Assert.AreEqual(GameSessionDisposition.Changed, heal.Disposition, $"{heal.Failure}");
+        Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1, "the heal spends a use of the companion's item");
+        var after = session.QueryHeroLife()!.Status.HitPoints;
+        Assert.IsTrue(heal.Check!.Success ? after > hurt : after == hurt, $"a success heals the hero, a failure does not: {hurt} -> {after}");
+        Assert.IsFalse(host.Holds(companion), "after the run its own walk follows again");
+    }
+
+    [TestMethod]
+    public void The_heal_skill_check_reads_the_healers_flags_not_the_targets()
+    {
+        // An undead and mechanical NPC (critter flags 0x20000004) as the target: the check (0x4AE570, HI2) still accepts it.
+        var (_, host, _, enemy, companion) = Open(healer: true, enemyFlags: 0x20000004);
+        Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), enemy), "the target's critter flags are not read");
+        Assert.IsTrue(host.HealSkillAccepts(companion, Entity(2), Pc));
+        Assert.IsFalse(host.HealSkillAccepts(enemy, Entity(2), companion), "the healer's are");
     }
 
     [TestMethod]
