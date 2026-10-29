@@ -37,6 +37,7 @@ public partial class TerrainViewerApp
                 hidden.Visible = false; _gameBar.Reset(); _messageLog.ClearHover(); hidden.Render(); hidden.ShowHoverPortrait(null, null); _hud?.SetTopInset(0);
             }
             HideHotkeyBar();
+            HideSpellBar();
             return;
         }
         if (_gameBarPanel is null)
@@ -72,6 +73,7 @@ public partial class TerrainViewerApp
         _gameBarPanel.Visible = true;
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
         SyncHotkeyBar();
+        SyncSpellBar();
     }
 
     private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>
