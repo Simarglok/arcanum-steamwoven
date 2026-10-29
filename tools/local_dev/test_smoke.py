@@ -127,6 +127,11 @@ class PlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "--env takes NAME=VALUE"):
                 self.plan("pr", "--stages", "cast", "--env", bad)
 
+    def test_a_debug_stage_runs_in_the_viewers_debug_mode(self) -> None:
+        debug = self.plan("pr", "--stages", "debug-travel", "--no-build")[-1]
+        self.assertIn("--debug-mode", debug.command)
+        self.assertNotIn("--debug-mode", self.plan("pr", "--stages", "cast", "--no-build")[-1].command)
+
     def test_the_full_chain(self) -> None:
         steps = self.plan("full", imported=False)
         self.assertEqual([step.name for step in steps], ["build", "import", "crash-site", "main", "town", "wild", "ruins"])

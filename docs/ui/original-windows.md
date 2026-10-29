@@ -246,8 +246,9 @@ are F0 and are read by the slice.
    without the round view (the main menu is up, IW33, IW34). PROJECT: the hints are not shown; the controller's focus row lights its
    button until the pointer moves. Left: the editor (window 14, the same strips and buttons, table 0x5C5310) with the character
    sheet's original look.
-6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3); its art is the game's common dialog box (not
-   read, F0), shared with the other yes/no questions: one slice for the dialog box.
+6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3) in the game's common dialog box, read by
+   ARC-WORLD-120 (DB1–DB4: `DialogueBox` 325 × 136 at (237, 232), `Flare12Font` text, `Lil_Accept` and `Lil_Cancel`) and built
+   there as `AreaDialogBoxView` for the death load box; left: the quit box and the other yes/no questions on that view.
 
 Not planned here: Credits (25), View Intro (10) and the network windows (16–24), which Steamwoven does not build (FR-MEDIA-001,
 FR-MEDIA-002, network play).

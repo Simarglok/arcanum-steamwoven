@@ -1903,20 +1903,27 @@ What follows the hero's death in crash-site-area (exterior, cave and map mode), 
   the screen black; when no start scene is known (no launch arguments, a start map the shown map does not know), or no
   menu has come 2 minutes after the first try, the screen fades in over the game as it is (the original's reset cannot
   be refused). A start scene that fails shows its failure.
-- **The load box (ARC-UI-028, Steamwoven only).** A project addition the owner asked for
-  ([decision](../architecture/decisions.md), switch `LifecycleRuleProfile.DeathResetsToMainMenu`, which keeps the reset
-  above under the Original setting, read from the session's rules at the end of the show). Where the show ends, before
-  the reset, when the save list holds a save, the black screen shows a box drawn as the main menu's quit box: the
-  project's question "You have died. Load the newest save?" (the game's message files hold no such question), the
-  newest save's description and name, Yes (Y) and No (N), and a line on the keys. Y, Return, the Yes button or the
-  controller's confirm loads the newest save (by file date, as F8 and the main menu's Last Save) as F8 does: on the
-  shown map at once, a save on another map after that map loads, while the screen stays black; then the loaded game
-  fades in (2 s, or after 2 minutes without the map) and play goes on. A refused load (a damaged save, another map
-  loading) keeps the box with the reason under the buttons, and so does a load that brings no living hero (the save's
-  map failed to load and the old game came back, or the save's hero is dead); a window stream held under the screen is
-  dropped first, as the load replaces the scene. N, Escape, the No button or the controller's cancel ends
-  the game with the reset above. Without any save the reset follows at once, as the original. The box acts on key
-  presses (the slides on releases); its buttons take the mouse, nothing under the screen does.
+- **The load box (ARC-UI-028, Steamwoven only; look and save rule ARC-WORLD-120).** A project addition the owner asked for
+  ([decisions](../architecture/decisions.md), switch `LifecycleRuleProfile.DeathResetsToMainMenu`, which keeps the reset
+  above under the Original setting, read from the session's rules). When the dead hero has a save (the newest save whose
+  details name the same hero and, when both record one, the same portrait; a save of another hero, or with missing or
+  stale details, is not offered), the box asks as soon as the death slide has faded in, over the slide, whose voice and
+  music go on (the slide then ends neither on a key nor at the voice's end); when no slide showed, at the point of the
+  reset over the black screen. It is the original's common dialog box of its quit question ([ledger
+  DB1–DB4](../research/ledger/ui-audio.md#dialog-box-arc-world-120)): `DialogueBox` 325 × 136 at the 800 × 600 screen's
+  (237, 232), the 800 × 600 screen fitted to the window as the slide's picture is (PROJECT), the project's question "You
+  have died. Load this hero's last save?" (the game's message files hold no such question) and the save's description,
+  a line each, in white `Flare12Font`, the green check `Lil_Accept` (Yes) and the red cross `Lil_Cancel` (No), lit under
+  the pointer, down while held, acting on the release over them and silent. Y, Return, the check or the controller's
+  confirm loads the save as F8 does (on the shown map at once, a save on another map or beyond the main map's shown window
+  after that map or window loads) while the slide fades to black (2 s); then the loaded game fades in (2 s, or after 2
+  minutes without the map) and play goes on. A refused load (a damaged save, another map loading) keeps the box with the
+  reason as its third line, and so does a load that brings no living hero (the save's map failed to load and the old game
+  came back, or the save's hero is dead); a window stream held under the screen is dropped first, as the load replaces
+  the scene. N, Escape, the cross or the controller's cancel fades the slide out and ends the game with the reset above.
+  Without a save of this hero the show and the reset are the original's. The box acts on key presses (the slides on
+  releases); its buttons take the mouse, nothing under the screen does. Without the game's art (the synthetic
+  self-tests) the box is the diagnostic parchment box with the question, the save, Yes and No.
 
 Automated runs (self-tests, native smokes) keep the death off unless their own check turns it on, as many of them kill
 or wound the hero for other checks. Self-test `ARC-UI-026 self-test PASS synthetic hero death` (the production app over
@@ -1925,17 +1932,20 @@ hero dies, the in-play menu opened meanwhile closes after 5 s and the death come
 the input (Escape opens nothing), the 800 × 600 picture fades in, its voice starts, a key ends it, the reset loads the
 start scene with a fresh session and the reopened main menu, which fades in; a hero brought back to life before the
 death comes is not reset; a voice's end ends the slide; a start scene that does not publish clears the screen over
-the game as it is. ARC-UI-028 in the same self-test: with a save in the list the Steamwoven setting asks after the
-slides (the question, the save "Auto-Save (quicksave)", Yes and No; another key does nothing), Y loads the save with its
-living hero and no reset, and it fades in; a damaged save keeps the box with the reason and Escape then resets; the No
-button and the N key reset; under Original the death resets without the box though a save is there. Native smoke on the original data, map mode on the start map
+the game as it is. ARC-UI-028 and ARC-WORLD-120 in the same self-test: with the hero's save in the list the Steamwoven
+setting asks over the faded-in slide (the diagnostic box: the question, the save "Auto-Save (quicksave)", Yes and No;
+another key and the voice's end do nothing), Y loads the save with its living hero and no reset while the slide fades to
+black, and it fades in; a damaged save keeps the box with the reason and Escape then fades the slide out and resets; the
+No button and the N key do the same; under Original the death resets without the box though a save is there; with only
+another hero's save the box does not ask. Native smoke on the original data, map mode on the start map
 with `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=death` prints `ARC-UI-026 native-smoke death PASS` and
 `ARC-UI-028 native-smoke death load PASS` (a new game as the first pre-made hero saved into a temporary save folder,
 the hero killed through the session, the death after 5 s on the wall clock, the installed default slide's 800 × 600
-picture with the slides' music and its voice, a left click through the window ending it; under Steamwoven the box asks
-and a left click on Yes loads the save, which fades in with its hero alive; the loaded hero killed under Original,
+picture with the slides' music and its voice; ARC-WORLD-120: a newer save of another hero is written first, and the
+original's dialog box asks over the slide with the hero's own save, the pointer over the check lights it and a left click
+on it loads the save, which fades in with its hero alive; the loaded hero killed under Original,
 Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
-slide (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
+slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
 animation.
 
 ### Options window (ARC-UI-013)

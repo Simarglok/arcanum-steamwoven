@@ -442,7 +442,14 @@ queued transfer.
 
 - **Same map.** A save whose actor stands on the map shown is adopted in place,
   as on the exterior: the shown map's inventory seeds and dialog state are
-  checked against it, then it replaces the running session.
+  checked against it, then it replaces the running session. ARC-WORLD-120: on a
+  map shown as a window of sectors (the main map, ARC-RENDER-024), a save whose
+  cell lies outside the window's core sectors loads as a save on another map
+  does (below), the window opening around the saved cell; it was refused as "not
+  admitted for movement" before, which broke F8 and the death's load box for a
+  save made on the main map away from where the hero stands (bug report triage
+  D1). Native smoke: the `debug-travel` stage saves before its teleport and loads
+  that save from the far window: `ARC-WORLD-120 native-smoke far load PASS`.
 - **Another map.** A save whose actor stands on another map that map mode can
   open (listed with a sector file; the main map as a window around the saved cell, ARC-RENDER-024) passes the same checks of the slot, the
   restore and the shown map, then loads that map through the ordinary load

@@ -9,11 +9,13 @@ public partial class TerrainViewerApp
     // Native observation (ARC_AREA_MAP_SMOKE_ONLY=death, map mode on the start map with --main-menu true), on the wall clock: after a
     // new game as the first pre-made hero, the hero dies (killed through the session). Five seconds later the screen fades to black,
     // the installed rules\slide.mes gives the default death slide, whose picture (slide\death.bmp, 800 × 600) fades in while the
-    // slides' music plays, then its voice; a left press through the window ends it. ARC-UI-028: the new game was saved first (into
-    // a temporary save folder), so under the Steamwoven setting the black screen asks whether to load it; a left click on Yes loads it
-    // and the loaded game, its hero alive, fades in. The hero dies again under the Original setting, Escape ends the slide show and
+    // slides' music plays, then its voice. ARC-UI-028: the new game was saved first (into a temporary save folder), so under the
+    // Steamwoven setting a box asks whether to load it; ARC-WORLD-120: the original's dialog box (DialogueBox art, Lil_Accept and
+    // Lil_Cancel) over the faded-in slide, its music going on, offering the hero's own save although another hero's save is newer; the
+    // pointer over Yes lights it, a left click on Yes loads the save while the slide fades out, and the loaded game, its hero alive,
+    // fades in. The hero dies again under the Original setting, Escape ends the slide show and
     // the game resets without asking: the start map loads again with a fresh session without a hero and the main menu reopened,
-    // which fades in. ARC_AREA_DEATH_CAPTURE=PATH.png saves the shown slide (original art: keep it out of git).
+    // which fades in. ARC_AREA_DEATH_CAPTURE=PATH.png saves the shown slide with the box (original art: keep it out of git).
     private async Task RunAreaHeroDeathSmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-026 death smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-026 death smoke: " + why); } }
@@ -70,6 +72,16 @@ public partial class TerrainViewerApp
             Require(game.SelectRules(RuleMode.Steamwoven) != GameSessionDisposition.Rejected, "Steamwoven selected");
             var saved = SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "smoke ");
             Require(saved is not null && SaveLibrary.Latest()?.Name == saved, "the new game saved: " + _quickSaveStatus);
+            // ARC-WORLD-120: a newer save of another hero is not offered.
+            {
+                var grid = (AreaGridSession)_worldActor.Session!;
+                var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+                var other = AreaQuickSave.Save(game, new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing), SaveLibrary,
+                    null, session => AreaSaveList.Summary(session, "another hero", SaveLocation()) with { HeroName = "Another Hero" });
+                Require(other.Saved, "another hero's save written: " + other.Status);
+                System.IO.File.SetLastWriteTimeUtc(SaveLibrary.Slot(other.Library!.Name!).Path, DateTime.UtcNow.AddMinutes(1));
+                Require(SaveLibrary.Latest()?.Name == other.Library.Name && DeadHeroSave() == saved, "the newest save is another hero's, the hero's own is found");
+            }
             _heroDeathForSelfTest = true;
             await Frames(2);
             Require(_heroDeath.Stage == AreaDeathStage.Watching, "a living hero starts nothing");
@@ -83,28 +95,23 @@ public partial class TerrainViewerApp
             var slide = _heroDeath.Slide;
             Require(_heroDeathPanel!.PictureSizeForSelfTest == new Vector2I(800, 600) && _deathMusic is not null && slide is { Id: AreaHeroDeath.DefaultSlide },
                 $"the 800 × 600 death picture shows with the slides' music ({_heroDeathPanel.PictureSizeForSelfTest})");
-            await Until(() => _heroDeath.Stage == AreaDeathStage.Slide, 4, "the slide faded in");
+            await Until(() => _heroDeath.Stage == AreaDeathStage.Asking, 4, "the slide faded in and the box asks");
             Require(_heroDeathPanel.Veil == 0, "clear after the fade in");
             var voice = _deathVoice is { } handle && _audio?.Volume(handle) is not null;
+            // ARC-WORLD-120: the original's dialog box asks over the shown slide at once, with the hero's own save.
+            Require(_heroDeath.Stage == AreaDeathStage.Asking && _heroDeathPanel.AsksInArt && _heroDeathPanel.PictureShown && _deathMusic is not null
+                && _heroDeath.OfferedSave == saved && _heroDeathPanel.DialogForSelfTest.TextForSelfTest.StartsWith(AreaHeroDeath.LoadQuestion + "\n", StringComparison.Ordinal)
+                && _heroDeathPanel.DialogForSelfTest.LinesForSelfTest >= 2, $"the dialog box asks over the slide ({_heroDeath.Stage}, art {_dialogBoxContent?.Detail})");
+            await Frames(2);
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_DEATH_CAPTURE") is { Length: > 0 } capture)
                 GetViewport().GetTexture().GetImage().SavePng(capture);
-            // The voice may end the slide on its own; otherwise a left press through the window ends it.
-            await Frames(2);
-            var clicked = false;
-            if (_heroDeath.Stage == AreaDeathStage.Slide)
-            {
-                var at = GetViewport().GetVisibleRect().GetCenter();
-                Click(at);
-                await Frames(1);
-                clicked = true;
-                Require(_heroDeath.Stage == AreaDeathStage.SlideOut && _deathVoice is null, "the press ended the slide and its voice");
-            }
-            // ARC-UI-028: Steamwoven asks over the black screen; a click on Yes loads the newest save.
-            await Until(() => _heroDeath.Stage == AreaDeathStage.Asking, 4, "the slide faded out and the box asks");
-            await Frames(2);
-            Require(_heroDeathPanel.Asking && _heroDeathPanel.QuestionForSelfTest == AreaHeroDeath.LoadQuestion && _heroDeath.OfferedSave == saved
-                && _deathMusic is null && _heroDeathPanel.ButtonCentreForSelfTest(true) is not null, "the box offers the save: " + _heroDeathPanel.SaveForSelfTest);
-            Click(_heroDeathPanel.ButtonCentreForSelfTest(true)!.Value);
+            var yes = _heroDeathPanel.ButtonCentreForSelfTest(true)!.Value;
+            Require(_heroDeathPanel.DialogForSelfTest.ButtonFrameForSelfTest(true) == 0, "Yes idle");
+            GetViewport().PushInput(new InputEventMouseMotion { Position = yes, GlobalPosition = yes });
+            await Frames(1);
+            Require(_heroDeathPanel.DialogForSelfTest.ButtonFrameForSelfTest(true) == 2 && _heroDeathPanel.DialogForSelfTest.ButtonFrameForSelfTest(false) == 0,
+                "the pointer over Yes lights it (frame 2)");
+            Click(yes);
             await Frames(1);
             Require(_heroDeath.Stage is AreaDeathStage.Loading or AreaDeathStage.MenuFadeIn && _heroDeath.Loaded, "the click on Yes loads: " + _heroDeathStatus);
             await Until(() => _heroDeath.Stage == AreaDeathStage.Watching, 30, "the loaded game faded in");
@@ -126,9 +133,10 @@ public partial class TerrainViewerApp
                 && !ReferenceEquals(game, _areaSession) && _areaSession!.QueryHero() is null && !_heroDeathPanel.IsOpen && _deathMusic is null,
                 "the start map loaded again with a fresh session and the main menu reopened");
             GD.Print("ARC-UI-026 native-smoke death PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Start = start, Waited = waited, Slides = slides.Detail, Slide = slide!.Image, slide.Voice, VoiceStarted = voice, Clicked = clicked,
+                Start = start, Waited = waited, Slides = slides.Detail, Slide = slide!.Image, slide.Voice, VoiceStarted = voice, Box = _dialogBoxContent?.Detail,
                 LoadedSave = saved, Revision = _areaSession!.Version.Revision }));
-            GD.Print("ARC-UI-028 native-smoke death load PASS " + System.Text.Json.JsonSerializer.Serialize(new { Saved = saved, Rules = "steamwoven asks, original resets" }));
+            GD.Print("ARC-UI-028 native-smoke death load PASS " + System.Text.Json.JsonSerializer.Serialize(new { Saved = saved,
+                Rules = "steamwoven asks in the original's dialog box over the slide, this hero's save only; original resets" }));
         }
         finally
         {

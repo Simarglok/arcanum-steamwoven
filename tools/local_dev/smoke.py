@@ -90,6 +90,8 @@ HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "co
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
+# The stages that need the viewer's debug mode (ARC-DEV-050): their run gets --debug-mode (ARC-WORLD-120).
+DEBUG_STAGES = frozenset({"debug-travel"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
@@ -185,7 +187,8 @@ def crash_site_step(inputs: dict, conf: dict, prefs_root: Path, environ: Mapping
 def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, map_name: str, *,
              hero: str | None, sector: str | None, stages: Sequence[str] = (), main_menu: bool = False,
              extra: Sequence[tuple[str, str]] = ()) -> Step:
-    viewer = ["--native-smoke", *launch.map_arguments(inputs, map_name, hero=hero, sector=sector, main_menu=main_menu)]
+    viewer = ["--native-smoke", *launch.map_arguments(inputs, map_name, hero=hero, sector=sector, main_menu=main_menu,
+                                                      debug_mode=any(stage in DEBUG_STAGES for stage in stages))]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
                 start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES,
                 requires=tuple(stages) or BATTERY_STAGES)

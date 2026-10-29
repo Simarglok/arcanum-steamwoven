@@ -15,8 +15,9 @@ public static partial class TerrainViewerSelfTest
     /// dies; 5 s later the open in-play menu closes and the death comes again 0.3 s later; the screen fades to black, owning the
     /// input (Escape opens no menu), the slide fades in and a key ends it; the game resets to the reopened main menu, which fades
     /// in. A second death whose hero lives again when it fires does nothing; a third ends its slide when the voice ends.
-    /// ARC-UI-028: with a save in the list the Steamwoven setting asks in a box after the slides: Y loads the newest save, which fades
-    /// in; a corrupt save keeps the box with its refusal; Escape resets; the box's No button resets; Original resets without asking.</summary>
+    /// ARC-UI-028: with a save in the list the Steamwoven setting asks in a box: Y loads the newest save, which fades in; a corrupt save
+    /// keeps the box with its refusal; Escape resets; the box's No button resets; Original resets without asking. ARC-WORLD-120: the box
+    /// asks over the faded-in slide (No fades it out first, Yes while the save loads), and only a save of the dead hero is offered.</summary>
     private static async Task AssertAreaHeroDeathAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
@@ -159,32 +160,37 @@ public partial class TerrainViewerApp
             Require(!HeroDeathCovering && !_heroDeathPanel.IsOpen && !WorldModal, "the screen cleared");
             _sceneLoadForSelfTest = published;
 
-            // ARC-UI-028: a save in the list; under Steamwoven the box asks after the slides, Y loads it and the loaded game fades in.
+            // ARC-UI-028: a save in the list; under Steamwoven the box asks (ARC-WORLD-120: over the faded-in slide), Y loads it and the
+            // loaded game fades in once the slide has faded out.
             AreaDeathStage DieToTheBox(GameSessionOwner session)
             {
                 Kill(session);
                 TickHeroDeath(16);
                 TickHeroDeath(AreaHeroDeath.DeathDelay); TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
-                voicePlaying = false;
-                TickHeroDeath(16); TickHeroDeath(AreaHeroDeath.FadeTime);
                 return _heroDeath.Stage;
             }
             game = NewGame();
             var saved = SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "self-test ");
             Require(saved == GameSaveLibrary.AutoName && SaveLibrary.Latest()?.Name == saved, "the new game saved: " + _quickSaveStatus);
             loads = _sceneLoadsForSelfTest;
-            Require(DieToTheBox(game) == AreaDeathStage.Asking && _heroDeathPanel.Asking && _heroDeathPanel.Veil == 1
+            Require(DieToTheBox(game) == AreaDeathStage.Asking && _heroDeathPanel.Asking && _heroDeathPanel.Veil == 0 && _heroDeathPanel.PictureShown
+                && voicePlaying && !_heroDeathPanel.AsksInArt
                 && _heroDeathPanel.QuestionForSelfTest == AreaHeroDeath.LoadQuestion && _heroDeathPanel.SaveForSelfTest == "Auto-Save (quicksave)"
                 && _heroDeathPanel.ButtonsForSelfTest.SequenceEqual(["Yes  (Y)", "No  (N)"]) && _heroDeath.OfferedSave == saved,
-                "the box asks to load the newest save: " + string.Join("|", _heroDeathPanel.ButtonsForSelfTest) + " " + _heroDeathPanel.SaveForSelfTest);
+                "the box asks over the shown slide (the diagnostic box without game art) to load the hero's save: "
+                + string.Join("|", _heroDeathPanel.ButtonsForSelfTest) + " " + _heroDeathPanel.SaveForSelfTest);
             Key(Godot.Key.A, 'a');
-            Require(_heroDeath.Stage == AreaDeathStage.Asking && !MainMenuOpen, "another key does nothing");
+            voicePlaying = false;
+            TickHeroDeath(16);
+            Require(_heroDeath.Stage == AreaDeathStage.Asking && !MainMenuOpen && _heroDeathPanel.PictureShown, "another key and the voice's end do nothing");
             Key(Godot.Key.Y, 'y');
             Require(_heroDeath.Stage == AreaDeathStage.Loading && !_heroDeathPanel.Asking && !ReferenceEquals(game, _areaSession)
                 && _areaSession!.QueryHeroLife()?.Status.IsDead == false && _sceneLoadsForSelfTest == loads,
                 "Y loaded the save with its living hero, no reset: " + _quickSaveStatus);
-            TickHeroDeath(16);
-            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _heroDeath.Loaded, "the loaded game fades in");
+            TickHeroDeath(AreaHeroDeath.FadeTime / 2);
+            Require(_heroDeath.Stage == AreaDeathStage.Loading && Math.Abs(_heroDeathPanel.Veil - .5f) < .02f, "the slide fades to black meanwhile");
+            TickHeroDeath(AreaHeroDeath.FadeTime / 2);
+            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _heroDeath.Loaded && !_heroDeathPanel.PictureShown, "the loaded game fades in");
             TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_heroDeath.Stage == AreaDeathStage.Watching && !HeroDeathCovering && !_heroDeathPanel.IsOpen && !MainMenuOpen && !WorldModal,
                 "play goes on in the loaded game");
@@ -197,6 +203,8 @@ public partial class TerrainViewerApp
             Require(_heroDeath.Stage == AreaDeathStage.Asking && _heroDeath.LoadRefusal is { Length: > 0 } && _heroDeathPanel.NoticeForSelfTest == _heroDeath.LoadRefusal
                 && ReferenceEquals(game, _areaSession), "Return on a corrupt save keeps the box with why: " + _heroDeath.LoadRefusal);
             Key(Godot.Key.Escape);
+            Require(_heroDeath.Stage == AreaDeathStage.SlideOut && !_heroDeathPanel.Asking, "Escape: the slide fades out");
+            TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_sceneLoadsForSelfTest == loads + 1 && MainMenuOpen && _mainMenu!.Reopened && _heroDeath.Stage == AreaDeathStage.MenuFadeIn
                 && !_heroDeathPanel.Asking, "Escape reset to the main menu");
             TickHeroDeath(AreaHeroDeath.FadeTime);
@@ -206,6 +214,7 @@ public partial class TerrainViewerApp
             Require(SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "self-test ") == saved, "saved again");
             Require(DieToTheBox(game) == AreaDeathStage.Asking, "the box once more");
             _heroDeathPanel.PressForSelfTest(false);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_sceneLoadsForSelfTest == loads + 2 && MainMenuOpen && _heroDeath.Stage == AreaDeathStage.MenuFadeIn, "No reset to the main menu");
             TickHeroDeath(AreaHeroDeath.FadeTime);
 
@@ -214,19 +223,40 @@ public partial class TerrainViewerApp
             Require(SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, null, "self-test ") == saved, "saved for the N key");
             Require(DieToTheBox(game) == AreaDeathStage.Asking, "the box for the N key");
             Key(Godot.Key.N, 'n');
+            TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_sceneLoadsForSelfTest == loads + 3 && MainMenuOpen && _heroDeath.Stage == AreaDeathStage.MenuFadeIn, "N reset to the main menu");
             TickHeroDeath(AreaHeroDeath.FadeTime);
 
-            // Original never asks (PD8), a save there or not.
+            // Original never asks (PD8), a save there or not: the slide plays until its voice ends and the game resets.
+            AreaDeathStage DieToTheReset(GameSessionOwner session)
+            {
+                Require(DieToTheBox(session) == AreaDeathStage.Slide && !_heroDeathPanel.Asking, "the slide shows without the box: " + _heroDeath.Stage);
+                voicePlaying = false;
+                TickHeroDeath(16); TickHeroDeath(AreaHeroDeath.FadeTime);
+                return _heroDeath.Stage;
+            }
             game = NewGame();
             Require(game.SelectRules(RuleMode.Original) == GameSessionDisposition.Changed, "Original selected");
-            Require(DieToTheBox(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 4 && MainMenuOpen && !_heroDeathPanel.Asking,
+            Require(DieToTheReset(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 4 && MainMenuOpen && !_heroDeathPanel.Asking,
                 "Original reset to the main menu without the box: " + _heroDeath.Stage);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+
+            // ARC-WORLD-120: only the dead hero's saves are offered: with only another hero's save (the auto slot, which cannot be deleted,
+            // written over with another hero's details) the game resets as the original.
+            game = NewGame();
+            var grid = (AreaGridSession)_worldActor.Session!;
+            var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+            var other = AreaQuickSave.Save(game, new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing), SaveLibrary, saved,
+                session => AreaSaveList.Summary(session, "another hero", SaveLocation()) with { HeroName = "Another Hero" });
+            Require(other.Saved && SaveLibrary.List().Entries.Count == 1 && DeadHeroSave() is null, "the only save (the auto slot) is another hero's: " + other.Status);
+            Require(DieToTheReset(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 5 && MainMenuOpen && !_heroDeathPanel.Asking,
+                "another hero's save is not offered: " + _heroDeath.Stage);
             TickHeroDeath(AreaHeroDeath.FadeTime);
             return "a death waits 5 s, closes the in-play menu and comes 0.3 s later, fades to black owning the input, shows the slide "
                 + "(picture, voice) until a key, resets to the reopened main menu fading in; a hero alive again is not reset; a voice's end ends the slide; "
-                + "an unpublished start scene clears the screen; Steamwoven with a save asks: Y loads it and it fades in, a corrupt save keeps the box, "
-                + "Escape, the No button and N reset; Original resets without asking";
+                + "an unpublished start scene clears the screen; Steamwoven with a save of this hero asks over the slide: Y loads it while the slide "
+                + "fades out and it fades in, a corrupt save keeps the box, Escape, the No button and N fade the slide out and reset; Original resets "
+                + "without asking; another hero's save is not offered";
         }
         finally
         {
