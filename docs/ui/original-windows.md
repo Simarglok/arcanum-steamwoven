@@ -47,8 +47,8 @@ the loot window is done by ARC-UI-052 (below).
 
 Left for the next inventory slices (each its own task):
 
-- **Item sizes**: an item's grid size from its inventory art (0x461780, F0) changes where items go in the
-  session grid (behaviour, not only presentation); today every item is 1 × 1.
+- ~~**Item sizes**~~: done by ARC-UI-055 (an item's grid size is its inventory art's frame in cells, 0x461780, ledger JP3;
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
 - **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at

@@ -105,7 +105,8 @@ public sealed partial class GameSessionOwner
             if (kind == PickPocketItemKind.Item && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectPickPocket(GameSessionFailure.ItemTypeUnsupported);
             quantity = kind == PickPocketItemKind.Ammunition ? QueryAmmo(item)?.Units ?? facts.Quantity ?? 0 : facts.Quantity ?? 1;
             location = facts.InventoryLocation;
-            (width, height) = (facts.InventoryWidth, facts.InventoryHeight);
+            // ARC-UI-055: its inventory art's cells (0x461780) when the art source answers, else the seed's size.
+            (width, height) = GridSize(item);
         }
         else
         {
@@ -114,8 +115,8 @@ public sealed partial class GameSessionOwner
             kind = held.Type == SessionItemType.Ammo ? PickPocketItemKind.Ammunition : PickPocketItemKind.Item;
             quantity = kind == PickPocketItemKind.Ammunition ? QueryAmmo(item)?.Units ?? 0 : 1;
             location = _equipment.SlotOf(item) is { } slot ? (int)slot : 0;
-            var cells = _inventory.Grid.TryGetValue(item, out var placed) ? (placed.Width, placed.Height) : (1, 1);
-            (width, height) = cells;
+            // ARC-UI-055: its inventory art's cells (0x461780) when the art source answers, also for a worn or waiting item.
+            (width, height) = ArtCells(item, SeedRow(item)) ?? (_inventory.Grid.TryGetValue(item, out var placed) ? (placed.Width, placed.Height) : GridSize(item));
         }
         if (kind == PickPocketItemKind.Ammunition && newStackKind.Type != SessionItemType.Ammo) return RejectPickPocket(GameSessionFailure.InvalidAmmo);
 
