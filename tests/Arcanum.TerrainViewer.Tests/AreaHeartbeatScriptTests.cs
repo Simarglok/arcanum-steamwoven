@@ -17,7 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaHeartbeatScriptTests
 {
-    private const byte Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4, Everyone = 8, Looped = 10;
+    private const byte Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4, Everyone = 8, Looped = 10, Player = 21;
     private const int ChosenFlag = 2350;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
@@ -25,7 +25,7 @@ public sealed class AreaHeartbeatScriptTests
     private static ScrObjectRef Ref(int index) => new(1, Entity(index));
 
     // A row with a heartbeat slot (point 19), optionally a dialog slot (point 9), and its object flags.
-    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0)
+    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0, int? faction = null)
     {
         var slots = new List<AreaSparseElement> { new(ScrPoint.Heartbeat, [0, 0, script]) };
         if (dialog != 0) slots.Insert(0, new(ScrPoint.Dialog, [0, 0, dialog]));
@@ -34,6 +34,7 @@ public sealed class AreaHeartbeatScriptTests
             new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, slots, null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, objectFlags, [], null),
         };
+        if (faction is { } f) fields.Add(new(81, AreaPresence.Value, AreaValueOrigin.Instance, f, [], null));
         return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
             [], fields, true, true, true);
     }
@@ -99,6 +100,16 @@ public sealed class AreaHeartbeatScriptTests
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault)),
                 Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))),
                 Do(new(ScrCatalogue.Action.Dialog, N(3)))));
+            // ARC-SCRIPT-049: 786 sets its attachee's faction to 11 (2756's shape) and runs the default. 787 skips the default when its
+            // attachee is switched off or dead, or (2700's shape) when the player is within 5 tiles; 788 asks for 785 in 2 seconds (1914's).
+            Write("scr/00786faction.scr", Program(Do(new(ScrCatalogue.Action.SetFaction, (Attachee, -1), N(11))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00787near.scr", Program(
+                If(new(ScrCatalogue.Condition.IsSwitchedOff, (Attachee, -1)), new(ScrCatalogue.Action.ReturnSkipDefault), new(ScrCatalogue.Action.DoNothing)),
+                If(new(ScrCatalogue.Condition.IsDead, (Attachee, -1)), new(ScrCatalogue.Action.ReturnSkipDefault), new(ScrCatalogue.Action.DoNothing)),
+                Do(new(ScrCatalogue.Action.DistanceBetween, (Attachee, -1), (Player, 0), (Local, 0))),
+                If(new(ScrCatalogue.Condition.LessOrEqual, (Local, 0), N(5)), new(ScrCatalogue.Action.ReturnSkipDefault), new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00788later.scr", Program(
+                Do(new(ScrCatalogue.Action.CallScriptIn, N(785), N(0), (Attachee, -1), (Attachee, -1), N(2))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -232,6 +243,71 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(new ScrSlot(0, 0, 0), host.Slot(Ref(1), ScrPoint.Heartbeat));
             Assert.AreEqual(new ScrSlot(785, 1u << 2, 0), host.Slot(Ref(1), ScrPoint.Dialog));
             Assert.AreEqual(1L << 2, session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForEntity(Entity(1), AreaConversationState.LocalFlagsProperty)));
+        });
+    }
+
+    [TestMethod]
+    public void Set_faction_keeps_the_npc_s_new_faction_which_its_readers_take()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 16, 786, faction: 4);
+            var ran = Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(11L, session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForEntity(Entity(1), AreaUseScriptHost.FactionProperty)));
+            Assert.AreEqual(11, AreaUseScriptHost.Faction(session, npc, 4));
+            Assert.AreEqual((0, 11), AreaConversationHost.Scope(npc, session));
+            Assert.AreEqual((0, 4), AreaConversationHost.Scope(npc), "the map data's");
+            // A faction equal to the map data's clears the key.
+            var member = Row(2, 16, 786, faction: 11);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, null, member).RunHeartbeat(member, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForEntity(Entity(2), AreaUseScriptHost.FactionProperty)));
+        });
+    }
+
+    [TestMethod]
+    public void Switched_off_dead_and_the_distance_to_the_player_steer_the_heartbeat()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // The NPC stands at (11, 20).
+            var npc = Row(1, 16, 787);
+            var near = HostAt(session, content, null, new(14, 22), npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual((ScrOutcome.SkipDefault, 3), (near.Run!.Outcome, near.Run.StopLine), "3 tiles away");
+            var far = HostAt(session, content, null, new(17, 20), npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(ScrOutcome.RunDefault, far.Run!.Outcome, "6 tiles away");
+            // Off in its map data, or switched off by a script.
+            var off = Row(2, 16, 787, objectFlags: 0x2);
+            Assert.AreEqual(0, HostAt(session, content, null, new(30, 20), off).RunHeartbeat(off, ScrPoint.Heartbeat, session.Rules.Scripts).Run!.StopLine);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+                [new(new SessionMapId(1), MapChangeKey.ForEntity(Entity(1), AreaUseScriptHost.OffProperty), 1)]).Disposition);
+            Assert.AreEqual(0, HostAt(session, content, null, new(30, 20), npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Run!.StopLine);
+            var host = HostAt(session, content, null, new(30, 20), npc);
+            Assert.AreEqual((false, false), (host.IsSwitchedOff(host.Pc), host.IsDead(host.Pc)), "the PC is neither");
+            Assert.IsNull(host.IsDead(new ScrObjectRef(1, "oid:unknown")), "no loaded row");
+            // Dead as the session holds it (a kill).
+            var dead = Row(3, 16, 787);
+            Assert.AreEqual(GameSessionDisposition.Changed,
+                session.Kill(session.Version, SessionLifeTarget.Critter(Entity(3), new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+            var killed = HostAt(session, content, null, new(30, 20), dead);
+            Assert.IsTrue(killed.IsDead(Ref(3)));
+            Assert.AreEqual(1, killed.RunHeartbeat(dead, ScrPoint.Heartbeat, session.Rules.Scripts).Run!.StopLine);
+        });
+    }
+
+    [TestMethod]
+    public void Call_script_in_from_a_heartbeat_goes_to_the_session_queue()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 16, 788);
+            var ran = Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            var call = session.QueryScriptCalls().Single();
+            Assert.AreEqual((785, 0, 16000L), (call.Call.Script, call.Call.Line, call.DeadlineMs - session.QueryClockSnapshot().GameTimestampMs));
         });
     }
 

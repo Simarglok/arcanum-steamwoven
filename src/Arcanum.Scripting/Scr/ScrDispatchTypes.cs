@@ -180,6 +180,23 @@ public interface IScrWorldQueries
     /// <summary>A number from <paramref name="low"/> to <paramref name="high"/>, both included (<paramref name="low"/> ≤
     /// <paramref name="high"/>), from the game's generator (random between, 0x4CEF00; PG5).</summary>
     int Random(int low, int high);
+
+    /// <summary>ARC-SCRIPT-049: the object's tile (its location field, which distance between reads, HW3), or null when the host does not
+    /// know the object or its place (the run then stops as for an absent object).</summary>
+    (long X, long Y)? Location(ScrObjectRef obj);
+}
+
+/// <summary>
+/// ARC-SCRIPT-049: the object questions of the conditions obj is dead (22) and obj is switched off (27) of set
+/// <see cref="ScrAdmissionSet.S18"/> (ledger HW1, HW2). A host whose admission set holds them implements this interface; the interpreter
+/// asks only for the objects the conditions name. Null is an object the host does not know: the run stops as for an absent object.
+/// </summary>
+public interface IScrObjectStateQueries
+{
+    /// <summary>Whether the object is dead as the original's test (0x45D8D0) reads it: its current hit points (0x43D600) are 0 or less.</summary>
+    bool? IsDead(ScrObjectRef obj);
+    /// <summary>Whether the object is switched off: its object flag "off" (field 0x13, bit 0x2), as a script's toggle state left it.</summary>
+    bool? IsSwitchedOff(ScrObjectRef obj);
 }
 
 /// <summary>ARC-WORLD-081: the vicinity a script's object list reads (ledger PG3).</summary>
@@ -211,11 +228,15 @@ public enum ScrObjectStateChange
     ToggleOff,
     /// <summary>Kill (58): a death with no killer (0x45D900).</summary>
     Kill,
+    /// <summary>ARC-SCRIPT-049: set faction (134) to <see cref="ScrObjectStateRequest.Value"/> (0x45D0C0, HW4): an NPC's faction field
+    /// (0x124) is written; any other object is left as it is.</summary>
+    SetFaction,
 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
-/// of the operand's list in turn, 0x44B4E0). The host decides what the object is.</summary>
-public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object);
+/// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
+/// faction as <paramref name="Value"/> (0 for the others). The host decides what the object is.</summary>
+public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
@@ -510,7 +531,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S17"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S18"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -531,7 +552,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S17)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S17.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S18)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S18.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -545,6 +566,8 @@ public sealed record ScrRunOptions
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
-            throw new ArgumentException("A set with random, loop for or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+            throw new ArgumentException("A set with random, loop for, distance between or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+        if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
+            throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
     }
 }
