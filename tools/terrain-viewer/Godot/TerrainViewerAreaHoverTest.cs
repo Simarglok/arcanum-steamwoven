@@ -102,6 +102,26 @@ public partial class TerrainViewerApp
             }
             Require(outcomes.Contains(AreaHoverAction.Walk) && outcomes.Contains(AreaHoverAction.NoRoute), "both ground outcomes observed near the actor");
 
+            // ARC-UI-056: with the original's cursor art read (here injected) the art replaces the action shapes and does not follow
+            // the target; without it the shapes come back.
+            Require(CursorShownForSelfTest is null, "no cursor art without a game folder");
+            _cursorContentForSelfTest = SyntheticCursorContent(); _cursorClockForSelfTest = 0;
+            SyncCursorArt();
+            Require(CursorShownForSelfTest == (AreaCursorArt.Gauntlet, 0) && Godot.Input.GetCurrentCursorShape() == Godot.Input.CursorShape.Arrow,
+                $"the gauntlet out of combat mode: {CursorShownForSelfTest}");
+            foreach (var (_, ground) in near.Where(c => AreaHover.Ground(Routes(), actor, c.Cell) == AreaHoverAction.Walk).Take(1))
+            {
+                HoverAtForSelfTest(ground); SyncCursorArt();
+                Require(HoverCursorForSelfTest == Godot.Input.CursorShape.Cross && CursorShownForSelfTest == (AreaCursorArt.Gauntlet, 0)
+                    && Godot.Input.GetCurrentCursorShape() == Godot.Input.CursorShape.Arrow, "a walk target keeps the gauntlet");
+            }
+            ToggleWorldSettings(); SyncCursorArt();
+            Require(WorldModal && CursorArtForSelfTest == AreaCursorArt.Gauntlet, "a window shows the gauntlet");
+            ToggleWorldSettings(); OpenHoverGate(steps);
+            _cursorContentForSelfTest = null; _cursorClockForSelfTest = null;
+            SyncCursorArt();
+            Require(CursorShownForSelfTest is null, "the system shapes come back without the art");
+
             // A native control (HUD, palette) under the pointer takes it: no tooltip, default cursor.
             point = await HoverPointAsync(host, body) ?? throw new InvalidOperationException("AREA hover: body not visible again");
             HoverAtForSelfTest(point, overGui: true);
@@ -135,7 +155,7 @@ public partial class TerrainViewerApp
                 Arcanum.Data.Messages.MesFile.Parse(System.Text.Encoding.ASCII.GetBytes($"{{{probe.Number}}}{{Synthetic Hover Name}}")).File!));
             HoverAtForSelfTest(point);
             Require(HoverTextForSelfTest == AreaHover.Tooltip("Synthetic Hover Name", expected), "catalog name shown: " + HoverTextForSelfTest);
-            return $"bodies {index.Bodies.Count}, body {expected}, ground Walk and NoRoute, modal/gate/focus/window guards";
+            return $"bodies {index.Bodies.Count}, body {expected}, ground Walk and NoRoute, modal/gate/focus/window guards, cursor art";
         }
         finally
         {

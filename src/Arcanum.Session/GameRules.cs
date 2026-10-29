@@ -41,7 +41,7 @@ public sealed class GameRules
         ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience, SoundRuleProfile sound, ItemRuleProfile items,
         TechnologyRuleProfile technology, MagicAnomalyProfile magic, TravelRuleProfile travel, CompanionOrderRuleProfile orders, DialogRuleProfile dialog,
         WrittenRuleProfile written, NavigationRuleProfile navigation, CharacterCreationRuleProfile creation,
-        LifecycleRuleProfile lifecycle)
+        LifecycleRuleProfile lifecycle, InterfaceRuleProfile @interface)
     {
         Mode = mode;
         Combat = combat;
@@ -61,6 +61,7 @@ public sealed class GameRules
         Navigation = navigation;
         Creation = creation;
         Lifecycle = lifecycle;
+        Interface = @interface;
     }
 
     public RuleMode Mode { get; }
@@ -120,19 +121,22 @@ public sealed class GameRules
     /// <summary>Game lifecycle (ARC-UI-028): PD8, the hero's death resets to the main menu without asking to load the last save.</summary>
     public LifecycleRuleProfile Lifecycle { get; }
 
+    /// <summary>Interface (ARC-UI-056): CUA1, the called-shot cursors of the <c>.</c> and <c>/</c> keys show the other location's picture.</summary>
+    public InterfaceRuleProfile Interface { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
         ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven, SoundRuleProfile.Steamwoven, ItemRuleProfile.Steamwoven, TechnologyRuleProfile.Steamwoven,
         MagicAnomalyProfile.Steamwoven, TravelRuleProfile.Steamwoven, CompanionOrderRuleProfile.Steamwoven,
         DialogRuleProfile.Steamwoven, WrittenRuleProfile.Steamwoven, NavigationRuleProfile.Steamwoven, CharacterCreationRuleProfile.Steamwoven,
-        LifecycleRuleProfile.Steamwoven);
+        LifecycleRuleProfile.Steamwoven, InterfaceRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
         ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original, SoundRuleProfile.Original, ItemRuleProfile.Original, TechnologyRuleProfile.Original,
         MagicAnomalyProfile.Original, TravelRuleProfile.Original, CompanionOrderRuleProfile.Original,
         DialogRuleProfile.Original, WrittenRuleProfile.Original, NavigationRuleProfile.Original, CharacterCreationRuleProfile.Original,
-        LifecycleRuleProfile.Original);
+        LifecycleRuleProfile.Original, InterfaceRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];

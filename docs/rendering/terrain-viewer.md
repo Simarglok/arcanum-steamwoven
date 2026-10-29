@@ -674,7 +674,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   type, e.g. `[NPC: name unavailable]`, and the status line gives the status (never a path).
 - **Action cursor.** Project policy, not original behaviour: the original main-mode cursor
   changes with weapon and called-shot keys, not with the target
-  (the cursor refresh, 0x553990).
+  (the cursor refresh, 0x553990). Since ARC-UI-056 the player sees the original's cursor art
+  ([below](#original-cursor-art-arc-ui-056)) and these system shapes only while that art is not read (the self-test, an
+  unreadable game folder); the action is still decided, named in the tooltip's second line and the status line.
   The decision follows `WorldRouteClick` in its order and guards without running it:
   a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
@@ -707,6 +709,41 @@ entrance walk to use, click-through sprites passed through to the body behind, t
 does what the cursor showed). Not
 verified: original cursor or message-window parity, hover art (the animated underlay), a
 human on a physical mouse and display.
+
+### Original cursor art (ARC-UI-056)
+
+In `crash-site-area` (the exterior, the cave and `--area-map`) the pointer is the original's cursor art, picked as the 1.0.7.4
+executable picks it ([ledger CU1–CU6](../research/ledger/ui-audio.md#cursor-art-arc-ui-056), FR-UI-005). It follows the
+game's state, never the object under the pointer: what a click would do there stays in the tooltip (ARC-UI-005).
+
+- **Which art** (`AreaCursorArt.Art`, CU1–CU3). The spell's targeting cursor open: `spellcur.art` (21). A window over the game
+  (inventory, sheet, logbook, schematics, barter, reading, world map, save list, main menu, palette, dialog, bug report, the
+  death cover): the gauntlet `cursor.art` (0). In the game out of combat mode: the gauntlet; in combat mode: `battlecur.art`
+  (353), or with a called-shot key held (`,` first, then `.`, then `/`, the physical keys, as the attack reads them, FA4) its
+  called-shot cursor (818 head, 819 leg picture, 820 arm picture). `skillcur.art` (352) belongs to the skill cursor, which the
+  viewer does not have yet.
+- **Rule modes** (CUA1). The original shows the leg picture for `.`, which aims at the arm, and the arm picture for `/`,
+  which aims at the leg. Original keeps that; Steamwoven (default) shows the aimed location's picture
+  (`InterfaceRuleProfile.CalledShotCursorsSwapped`, [rule modes](../world/rule-modes.md)). A mode switch shows at the next frame.
+- **Drawing** (CU4, CU5). Each art's frames are read once a run from the game folder of the area's module (as the interface
+  bars' art) and shown at their own pixel size as Godot's custom arrow cursor with the frame's hot point (the ART frame
+  header's centre) on the pointer. `spellcur.art` steps its 7 frames every 100 ms (10 fps) from the moment the art was set,
+  wrapping; the others have one frame. The same cursor serves the world, the bars and the windows, as in the original;
+  controls with a cursor shape of their own (a text field's I-beam) keep it. The log prints `ARC-UI-056 cursor art ready=…`
+  once and `ARC-UI-056 cursor art=N mode=M` at each change.
+- **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file) the
+  ARC-UI-005 system shapes stay, as before.
+
+Not built (F0 rows of CU6): the cursor arts `Cursor_UP`/`Cursor_DWN` over two interface buttons not yet identified, the
+spell cursor of the world map's state 3, a held item's art on the cursor (the viewer's inventory drag keeps its own image),
+the skill cursor, and scaling the art with the window (it stays at the art's pixel size).
+
+Checks: `AreaCursorTests` (the art by mode, combat mode and key in both rule modes, the frame steps, content readiness; the
+opt-in `Original_cursor_art_reads` checks the installed arts' names, frames, rate and hot points), `RuleModeTests`, the
+ARC-UI-005 self-test with injected synthetic art (the gauntlet over a walk target and under the palette, the system shapes
+back without the art), the ARC-COMBAT-004 combat-mode smoke (`battlecur` in combat mode, each called-shot key in both rule
+modes, the gauntlet after leaving) and the ARC-MAGIC-015 cast smoke (`spellcur` frame 0, frame 1 after 100 ms, gone after
+the cast). Not verified: a human on a physical mouse and display, original parity of the cursor's on-screen size.
 
 ### Health and fatigue bars (ARC-UI-020)
 

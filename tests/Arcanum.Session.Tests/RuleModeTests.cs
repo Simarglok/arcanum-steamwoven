@@ -63,6 +63,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Creation, Arcanum.Simulation.Character.CharacterCreationRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Lifecycle.Name);
             Assert.AreSame(rules.Lifecycle, LifecycleRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Interface.Name);
+            Assert.AreSame(rules.Interface, InterfaceRuleProfile.FromName(rules.Name));
         }
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Steamwoven, GameRules.Steamwoven.Items);
         Assert.AreSame(Arcanum.Simulation.Items.ItemRuleProfile.Original, GameRules.Original.Items);
@@ -100,6 +102,9 @@ public sealed class RuleModeTests
         // ARC-UI-028: the death window is a Steamwoven addition; Original resets to the main menu (PD8).
         Assert.IsTrue(GameRules.Original.Lifecycle.DeathResetsToMainMenu);
         Assert.IsFalse(GameRules.Steamwoven.Lifecycle.DeathResetsToMainMenu);
+        // ARC-UI-056: CUA1 is a Steamwoven fix with an Original switch.
+        Assert.IsTrue(GameRules.Original.Interface.CalledShotCursorsSwapped);
+        Assert.IsFalse(GameRules.Steamwoven.Interface.CalledShotCursorsSwapped);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

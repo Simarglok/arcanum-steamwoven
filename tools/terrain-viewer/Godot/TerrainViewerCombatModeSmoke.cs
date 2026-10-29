@@ -40,6 +40,24 @@ public partial class TerrainViewerApp
             }
             PressR();
             Require(HeroInCombatMode, "R entered combat mode");
+            // ARC-UI-056: the battle cursor in combat mode; a called-shot key's cursor by the key in Original, by the aimed
+            // location in Steamwoven (CUA1).
+            SyncCursorArt();
+            Require(CursorShownForSelfTest?.Art == AreaCursorArt.Battle, $"the battle cursor in combat mode: {CursorShownForSelfTest}");
+            var priorRules = session.Rules.Mode;
+            foreach (var rules in new[] { RuleMode.Steamwoven, RuleMode.Original })
+            {
+                Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
+                var swapped = rules == RuleMode.Original;
+                foreach (var (aim, art) in new[] { (HitLocation.Head, AreaCursorArt.CalledHead),
+                    (HitLocation.Arm, swapped ? AreaCursorArt.CalledLeg : AreaCursorArt.CalledArm), (HitLocation.Leg, swapped ? AreaCursorArt.CalledArm : AreaCursorArt.CalledLeg) })
+                {
+                    _attackAimForSelfTest = aim; SyncCursorArt();
+                    Require(CursorShownForSelfTest?.Art == art, $"{rules} {aim} key shows art {art}: {CursorShownForSelfTest}");
+                }
+            }
+            _attackAimForSelfTest = null; session.SelectRules(priorRules); SyncCursorArt();
+            Require(CursorShownForSelfTest?.Art == AreaCursorArt.Battle, "the battle cursor again once the key is up");
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains("combat mode: ON (real time)", StringComparison.Ordinal), "HUD names combat mode");
 
@@ -112,6 +130,8 @@ public partial class TerrainViewerApp
             Require(!HeroInCombatMode, "a map change left combat mode");
             PressR(); PressR();
             Require(!HeroInCombatMode, "R toggles off");
+            SyncCursorArt();
+            Require(CursorShownForSelfTest?.Art == AreaCursorArt.Gauntlet, $"the gauntlet out of combat mode: {CursorShownForSelfTest}");
             var healed = session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = charged });
             Require(healed.Disposition != GameSessionDisposition.Rejected && session.QueryHeroLife()!.Record.State.FatigueDamage == before, "fatigue healed back");
             GD.Print("ARC-COMBAT-004 native-smoke combat-mode PASS " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -123,6 +143,7 @@ public partial class TerrainViewerApp
             _worldAdvanceObserverForSelfTest = null;
             _areaSmokeTime = (_areaSmokeTime + 9) / 10;
             _numLockRun = numLock; _alwaysRunOption = option; _worldGait = MovementGait.Walk;
+            _attackAimForSelfTest = null;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }

@@ -274,11 +274,14 @@ public sealed class AreaGameBarTexts
 
 public enum AreaInterfaceArtStatus { Ready, Unnamed, MissingFile, Unreadable, LimitExceeded }
 
-/// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent).</summary>
-public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba);
+/// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent), and its hot point
+/// (the frame header's centre, which a cursor puts on the pointer, ARC-UI-056).</summary>
+public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int HotX = 0, int HotY = 0);
 
 /// <param name="Name">The file name <c>interface.mes</c> gives the number; null when it names none.</param>
-public sealed record AreaInterfaceArtLoad(int Number, AreaInterfaceArtStatus Status, string? Name, IReadOnlyList<AreaInterfaceFrame> Frames, string Detail);
+/// <param name="FramesPerSecond">The art header's frame rate (ARC-UI-056: an animated cursor's).</param>
+public sealed record AreaInterfaceArtLoad(int Number, AreaInterfaceArtStatus Status, string? Name, IReadOnlyList<AreaInterfaceFrame> Frames, string Detail,
+    int FramesPerSecond = 0);
 
 /// <summary>Explicit limits of the interface art one load reads: one file's size, frames per file and the pixels of all files.</summary>
 public sealed record AreaInterfaceArtLimits(int MaxFileBytes = 4 * 1048576, int MaxFrames = 32, long MaxRgbaBytes = 16L * 1048576);
@@ -342,9 +345,9 @@ public static class AreaInterfaceArt
                 var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, i, 0), options);
                 total += frame.Rgba.Count;
                 if (total > rgbaLeft) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path}: more than {limits.MaxRgbaBytes} bytes of pixels");
-                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba]));
+                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba], frame.Frame.HotX, frame.Frame.HotY));
             }
-            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames");
+            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond);
         }
         catch (ArtException error)
         {
