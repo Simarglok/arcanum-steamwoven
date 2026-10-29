@@ -201,7 +201,7 @@ def queued(args: argparse.Namespace) -> int:
     command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
     # ARC-DEV-059: a quiet run checks its own start (docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029).
     check = start_check.for_run(args.kind, args.expect, args.start_within)
-    if check is not None and args.verbose:
+    if check is not None and args.verbose and not os.environ.get(run_queue.TICKET_ENV):  # a nested run is never checked
         run_queue.say("note: a --verbose run has no start check; check its start yourself")
     return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose,
                          start=check)
@@ -336,8 +336,9 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--start-within", type=float, metavar="SEC",
                          help=f"seconds from the command's start to its start line (default "
                               f"{start_check.DEFAULT_WINDOW_SECONDS:g}; 0: no start check); a usage error before it, no "
-                              f"start line in time, or an end before it fails the run (exit "
-                              f"{start_check.FAILED_START_EXIT} when it was stopped)")
+                              f"start line in time, or a non-zero end before it fails the run (exit "
+                              f"{start_check.FAILED_START_EXIT} when it was stopped); an end with 0 before it passes "
+                              f"with a note")
     command.add_argument("--verbose", action="store_true",
                          help="stream the command's output here instead of the quiet default (ARC-DEV-037): the whole "
                               "output goes to a log file and only PASS or FAIL with the first error is printed; a "

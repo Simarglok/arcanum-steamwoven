@@ -15,20 +15,25 @@ DEFAULT_WINDOW_SECONDS = 60.0
 FAILED_START_EXIT = 125  # the wrapper stopped a command that did not start, or that ended before its start line
 GRACE_SECONDS = 5.0  # after a start failure line the command may still exit by itself (and print its own reason)
 MAX_SHOWN = 200
+MAX_PARTIAL = 65536  # bytes of a line without a newline kept before it is scanned as it is
 
 # The start lines of the project's Godot and export commands: the viewer's resolved mode (ARC-DEV-059; the load line
 # of a build from before it), the viewer self-test's first stage, the export endpoint, the terrain export's steps and
-# the player package. A command whose output does not reach the log by then (a wrapper that sends Godot's output
-# elsewhere, the WORLD validation, which prints only its summary at the end) gives its own line with --expect.
+# the player package (their phase lines, never their failure lines), and Godot's import progress (`--import`). A
+# command whose output does not reach the log by then (a wrapper that sends Godot's output elsewhere, the WORLD
+# validation, which prints only its summary at the end) gives its own line with --expect.
 GODOT_START = (r"ARC-DEV-059 viewer start |ARC-RENDER-004 load stage=begin|ARC-DEV-043 self-test stage "
-               r"|^export-endpoint: |^validate-macos: step |^package: ")
+               r"|^export-endpoint: validate (?!FAILED)|^validate-macos: step (?!.*FAILED)"
+               r"|^package: (?!could not start|stopped|FAIL)|^\[ *\d+% \] ")
 REMEDY = "give the command's own start line with --expect, or --start-within 0"
 
 # Lines that mean the command did not start what was asked: a launcher or tool usage error (argparse), the viewer's
-# argument or game-folder failure (printed since ARC-DEV-059; before, it was drawn on the HUD only), a missing command.
+# argument or game-folder failure (printed since ARC-DEV-059; before, it was drawn on the HUD only), a command or script
+# the shell or Python could not find (only their own messages: an engine line about some missing file is not one).
 START_FAILURE = (r"^usage: |^[\w./-]+: error: (?:unrecognized arguments|the following arguments are required|argument "
-                 r"|invalid choice)|failure stage=(?:Arguments|GameFolder) |command not found|No such file or directory$"
-                 r"|Invalid project path|Couldn't load project")
+                 r"|invalid choice)|failure stage=(?:Arguments|GameFolder) "
+                 r"|^(?:\S*/)?(?:sh|zsh|bash|dash|env)(?:: line \d+)?: .*(?:command not found|No such file or directory)"
+                 r"|^\S*python[\d.]*: can't open file |Invalid project path|Couldn't load project")
 
 
 @dataclass(frozen=True)

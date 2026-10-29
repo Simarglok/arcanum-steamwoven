@@ -46,26 +46,31 @@ it blocking in one step and read its result; this satisfies the one-minute rule.
 | Outcome | Wrapper output | Exit |
 |---|---|---|
 | A start line within the window (default 60 s) | `ARCANUM_QUEUE started ticket=N after=Ss line=LINE` on stderr; the run goes on to its end as before | the command's |
-| A start failure line before it | `ARCANUM_QUEUE start-failed ticket=N line=LINE`; the command gets 5 s to exit by itself, then its process group is stopped | the command's own non-zero exit, or 125 |
+| A start failure line before it | `ARCANUM_QUEUE start-failed ticket=N line=LINE`; the command gets 5 s to exit by itself or print its start line (then the failure line was a harmless early line and the run goes on), then its process group is stopped | the command's own non-zero exit, or 125 |
 | No start line in the window | the process group is stopped | 125 |
-| The command ended before any start line | | its non-zero exit, or 125 for exit 0 |
+| The command ended non-zero before any start line | | the command's |
+| The command ended with 0 before any start line | `ARCANUM_QUEUE note: ticket=N ended with 0 before a start line; its mode was not checked` (an import, the WORLD settings test): check its log yourself when the mode matters | 0 |
+| The run's own limit (`--timeout`) came first | as for any timeout | 124 |
 
 A failed start adds `start check: REASON` under the `FAIL` line on stdout, before the log lines. Fix the command and run
 it again; a failed start is never a result of the change under test.
 
-- **Start lines.** For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
+- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
   (printed when its arguments resolved a mode; check that `M`, `NAME` and `smoke` are the intended ones, since a viewer
   that did not get its arguments starts from the launcher settings instead), `ARC-RENDER-004 load stage=begin` (a build
-  from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, and `export-endpoint: `,
-  `validate-macos: step ` and `package: ` lines. Godot's banner and the `ARC-DEV-047 build` line are not start lines:
+  from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, the phase lines of the export
+  endpoint (`export-endpoint: validate ...`), the terrain export (`validate-macos: step NAME`) and the player package
+  (`package: ...`), never their failure lines, and Godot's import progress (`[  0% ] ...`, for `--import`). Godot's banner and the `ARC-DEV-047 build` line are not start lines:
   the project manager and a start that then fails print them too. `dotnet` runs have none (a build or test ends by
   itself and its quiet output may print nothing for minutes), so they are not checked.
 - **Start failure lines.** An argparse usage error (`usage: `, `PROG: error: unrecognized arguments ...`), the viewer's
   `failure stage=Arguments` or `failure stage=GameFolder` (the viewer now also prints every failure it draws on its HUD
-  as `ARC-DEV-059 viewer failure TEXT`), `command not found`, `No such file or directory` and Godot's
-  `Invalid project path` or `Couldn't load project`. A failure after the start line is the run's result, not a start failure.
+  as `ARC-DEV-059 viewer failure TEXT`), the shell's or `env`'s own `command not found` or `No such file or directory`
+  (`zsh: command not found: Godot`, `sh: ./x: No such file or directory`; an engine line about a missing file is not
+  one), Python's `can't open file` and Godot's `Invalid project path` or `Couldn't load project`. A failure after the start line is the run's result, not a start failure.
 - **`--expect REGEX`** replaces the default start lines (a Python search on each log line), and gives a `dotnet` run a
-  check. A command whose output does not reach the run's log by then needs it, or `--start-within 0`: a wrapper that
+  check. A command that runs longer than the window and whose output does not reach the run's log by then needs it,
+  or `--start-within 0`: a wrapper that
   sends Godot's output to its own file (send it to stdout, or `tee` it, instead), the WORLD validation
   (`world_validate.py` prints only its summary at the end), a lab that prints none of the lines above.
 - **`--start-within SEC`** changes the window; `0` turns the check off.
