@@ -418,7 +418,7 @@ public partial class TerrainViewerApp
                 GroundDrawn = groundKeys.Length, PickedNextTo = 1, WalkToPickUpFrames = walkFrames, DeadBodies = bodies.Length, Looted = looted, LeftOnBodies = left,
                 PrintedLines = printed, WornCycled = wornCycled, Dragged = dragged, Grid = _areaSession.QueryHeroGrid().Items.Count,
                 Pc = _areaSession.QueryPcInventory().Count, Named = view.Pc.Count,
-                Parity = artShown ? "original art and layout (ARC-UI-051); fonts, item sizes and paper-doll art NOT_VERIFIED" : "NOT_VERIFIED (diagnostic window, no original art)" }));
+                Parity = artShown ? "original art and layout (ARC-UI-051), item sizes (ARC-UI-055); fonts and paper-doll art NOT_VERIFIED" : "NOT_VERIFIED (diagnostic window, no original art)" }));
         }
         finally
         {
@@ -484,6 +484,14 @@ public partial class TerrainViewerApp
         var lines = panel.GridAreaForSelfTest.Look!.Texts.Lines(view.Carry, view.Speed);
         Require(lines.All(line => line.Length > 0), "the weight, encumbrance and speed lines: " + string.Join(" | ", lines));
         GD.Print($"ARC-UI-051 native-smoke inventory-art PASS art={AreaInventoryArtLayout.ArtNumbers.Distinct().Count()} items={drawn}/{items.Length} lines=\"{string.Join(" | ", lines)}\"");
+        // ARC-UI-055: every grid item takes its inventory art's cells (0x461780), and the kit holds at least one item larger than a cell.
+        var sized = view.Grid.Select(item => (item, art: panel.GridAreaForSelfTest.Look!.ItemArt(item.Entity)!))
+            .Select(pair => (pair.item, cells: Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)pair.art.GetWidth(), (uint)pair.art.GetHeight())))).ToArray();
+        var wrong = sized.Where(pair => pair.cells != (pair.item.Width, pair.item.Height)).Select(pair => $"{pair.item.Entity} {pair.item.Width}x{pair.item.Height} art {pair.cells}").ToArray();
+        Require(wrong.Length == 0, "grid items take their art's cells: " + string.Join("; ", wrong));
+        Require(sized.Any(pair => pair.item.Width * pair.item.Height > 1), "an item larger than one cell");
+        GD.Print($"ARC-UI-055 native-smoke item sizes PASS items={sized.Length} " +
+            string.Join(' ', sized.Select(pair => $"{pair.item.Width}x{pair.item.Height}")));
     }
 
     /// <summary>ARC-UI-019: drags with the mouse's press and release on the window's grid area: a grid item to a free cell and back, the

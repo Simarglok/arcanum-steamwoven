@@ -372,7 +372,7 @@ nor looted from it.
 | Step | Value |
 | --- | --- |
 | Drop (JP1, JP2) | Every drop the session makes goes through the placement before its decay is scheduled: the hero's and an NPC's critical drops and a broken container's spill, whose items drop one by one, the last first (0x463730), so from the second item on they gather into a pile on the container's cell. An item swept into a new pile keeps its decay event (in a pile it still decays, JP6); the dropped item's starts over. A thrown item's plain placement (ARC-COMBAT-017) and an assembly product the inventory refused (ARC-WORLD-070, created on the tile) make no pile, as in the original; a later drop on their tile sweeps them in. An item in flight is not on the tile. |
-| Size | `SessionItemFacts.InventoryWidth` and `InventoryHeight` of the attached seed that lists the item (a seed with a side below 1 or above 2^27 cells is refused); 1 × 1 otherwise (the hero's kit and made items, a seed not attached). |
+| Size | The frame of the item's inventory art in cells (`CellsOf`, 0x461780) when the host's art source answers for it (`AttachItemArtSizes`, ARC-UI-055); else `SessionItemFacts.InventoryWidth` and `InventoryHeight` of the attached seed that lists the item (a seed with a side below 1 or above 2^27 cells is refused); 1 × 1 otherwise (a kit or made item without an art source, a seed not attached). |
 | Ground | `QueryMapInventory(map).Ground` leaves out the items in piles; `JunkPiles` lists the map's piles with their items. `QueryJunkPiles` lists every pile. An item in a pile is not picked up from the ground (`PickUpItem`: `ItemNotAvailable`) and cannot be attacked there (`ObjectUnavailable`). |
 | Loot (JP6) | `LootItem(pile, item)` takes an item from a pile of the actor's map as a loot from a holder (the recipient's transfer, the item's remove-item and insert-item scripts through the host; a placed item goes back to the list it came from, as its pickup does); the item lies in its pile slot, not in a worn slot, and its decay ends. The pile stays while the host's loot window shows it. |
 | Close (JP4, JP5) | `CloseJunkPile(expected, pile)` is the host's loot window closing on the pile: a pile left with no item is removed, one left with one item is removed and the item dropped again on its cell through the placement, with a new decay event two days on. One revision when the pile went; `UnknownHolder` for a pile not on the actor's map. |
@@ -408,8 +408,8 @@ chest of 3 (one with the no-decay flag), all 3 in the pile.
   attached seed shows a get or insert-item script is not swept (it stays loose beside the pile), and a dropped item with an
   insert-item script lies loose and makes no pile.
 - Gold and ammunition do not merge into a stack of their kind in the pile (JP8); each stays an item of its own.
-- The items' inventory sizes: the viewer's seeds leave every item 1 × 1 (the inventory art's frame size is not read yet), so a pile
-  fills only after 960 items.
+- The viewer's seeds leave every item's facts 1 × 1; its items take their art's size through the art source (ARC-UI-055), so a pile
+  only of seed items with no art source attached fills only after 960 items.
 - A deletion other than the decay (`DestroyItem`, a break) takes the item out of its pile without the dissolve check, so a pile can
   be left with one item until its window closes or another of its items decays.
 - The network paths and the dissolve's network guard.
@@ -717,8 +717,8 @@ inventory window (N6).
 Source: alpha item N6 part 2, [ledger IW10–IW15](../research/ledger/ui-audio.md#inventory-grid-arc-ui-019) and the grid of
 [junk piles](#junk-piles-arc-world-063) (JP3). The session keeps the PC's grid: 10 columns by 12 rows (`SessionHeroGrid`,
 `InventoryGridRules.CritterRows`), each held item that is not worn at a slot (row × 10 + column, the original's inventory location)
-with its size in cells, kept from the moment it took the slot (a taken item's from its seed facts, `InventoryWidth`/`InventoryHeight`;
-a kit or made item's 1 × 1; the inventory art's size is not read yet, so every installed item is 1 × 1 here: NOT READY).
+with its size in cells, kept from the moment it took the slot: its inventory art's frame in 32-pixel cells (0x461780, ledger JP3) as the
+host's art source gives it (ARC-UI-055, below); without an answer a taken item's seed facts (`InventoryWidth`/`InventoryHeight`) or 1 × 1.
 
 - **Placement.** After every change (`Revise`) an item that left the PC's list or was put on loses its slot first, then each held item
   without one takes the first top-left free place for its size, row by row, in list order (kit, taken, made); a new session's kit
@@ -745,8 +745,18 @@ a kit or made item's 1 × 1; the inventory art's size is not read yet, so every 
   `height` 1..12); a restore refuses (`InvalidGrid`) an item the PC does not hold or wears, one listed twice, a rectangle outside the grid
   or two that share a cell. A restore places nothing: the next change does. Schemas 1..51 are refused.
 
-**Not ready.** The inventory art's size of an item (a size is taken when the item takes a slot; a worn or waiting item whose seed is
-not attached then counts as 1 × 1); the room of items entering from outside; a restore accepts a grid that leaves out held items
+- **Art sizes (ARC-UI-055).** `AttachItemArtSizes(sizes)` attaches the host's inventory art frames: for an item's entity and kind the
+  frame of its inventory art (field 0x5D) in pixels, or null. The session sizes the item with `CellsOf`, (pixels − 1) / 32 + 1 per side
+  (a 0-pixel side is 2^27 cells and never fits, so the item waits outside the grid), for the hero's grid and for the junk piles; without
+  an answer the seed facts or 1 × 1 count. The source is not state (never saved; attached again after a restore; null detaches it and
+  moves nothing). While it answers, an item whose kept size differs from its art's loses its slot at the next change and takes the
+  first free place for its size again; attaching it does so at once, in one revision, when anything differs (PROJECT: a new hero's kit
+  placed before the source was attached, or a grid saved before ARC-UI-055; the original's sizes never change). The viewer attaches
+  it wherever its running session is set (after the seeds), reading the art through `AreaItemIcons.InventoryFrame` from the item's own map
+  row while its map is loaded in the run, else from its prototype (an item whose row and prototype name different art can then
+  change size, and be laid out again, between runs on different maps), once per item and session; the synthetic self-tests have no game folder and keep 1 × 1.
+
+**Not ready.** The room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
 that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
 

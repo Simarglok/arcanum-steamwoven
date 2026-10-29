@@ -344,7 +344,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         return who.Id == Hero ? HeroStat(s) : _map.Critter(who.Id) is { } npc ? NpcStat(npc, s) : null;
     }
 
-    public bool MaintainBarHasSlot(SpellRun run) => true;
+    /// <summary>ARC-MAGIC-026: the session's maintain bar answers (<see cref="GameSessionOwner.MaintainBarTakes"/>).</summary>
+    public bool MaintainBarHasSlot(SpellRun run) => _owner.MaintainBarTakes(run);
 
     /// <summary>The charge of a run freed before its BEGIN (0x456FA0 through 0x4507D0): the run cost with mastery, applied, by its
     /// source; in the original whatever the run (MG40), in Steamwoven only when its BEGIN would have paid.</summary>
@@ -683,6 +684,17 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         return result;
     }
 
+    /// <summary>ARC-MAGIC-026: a click on maintain-bar slot <paramref name="slot"/> through this host
+    /// (<see cref="GameSessionOwner.StopMaintainedSpell"/>), with its notes applied.</summary>
+    public SessionSpellRunResult StopMaintainedSpell(int slot)
+    {
+        var before = _owner.QuerySpellRuns();
+        var result = _owner.StopMaintainedSpell(_owner.Version, this, slot);
+        Apply(result.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        FirePendingItems();
+        return result;
+    }
+
     /// <summary>
     /// An event pass with this host as the magic world (the magic-tech events run through it) and, when the host's event world is a
     /// script world, that world for deferred SCR calls. The notes of the firings that ran are applied after the pass, so several
@@ -964,12 +976,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             : new(true, 0, SpellBookRules.NoMastery);
     }
 
-    private int? HeroStat(CharacterStat stat)
-    {
-        if (_owner.QueryHeroLife() is not { } life) return null;
-        var state = life.Record.State;
-        return _owner.QueryHeroStats(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
-    }
+    private int? HeroStat(CharacterStat stat) => _owner.HeroEffectiveStat(stat);
 
     private int? NpcStat(SpellCastCritter npc, CharacterStat stat) =>
         _owner.QueryLife(npc.Combat.Target).View is { } life ? npc.Combat.EffectiveStat(stat, life.Record.State) : null;

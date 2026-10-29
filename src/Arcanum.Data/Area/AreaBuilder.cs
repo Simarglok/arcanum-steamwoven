@@ -326,13 +326,16 @@ public sealed partial class AreaDataOwner
                         AddVisual(visuals, body);
                         // ARC-WORLD-051: every other frame of a door or window's ART, which its open and close steps select at
                         // runtime (ledger LK10). A portal ART has one group; its frame is ART bits 14..18.
-                        if (record.Type == 1 && body.FrameCount is > 1 and <= 32)
+                        // ARC-RENDER-035: on a whole map, every other frame of a scenery ART its animation loop plays (ledger
+                        // AS1): scenery without scenery flag 0x1 (no auto-animation). Its frame is ART bits 14..18 too.
+                        if ((record.Type == 1 || record.Type == 3 && AnimatedSceneryAdmitted && (Optional(effective, SceneryFlagsSlot) & 0x1) == 0)
+                            && body.FrameCount is > 1 and <= 32)
                             for (var other = 0; other < body.FrameCount; other++)
                             {
                                 if (other == request.Frame) continue;
                                 var framed = (aid & ~(31U << 14)) | ((uint)other << 14);
                                 AdmitVisual(visuals); output.Allocate(2048);
-                                AddVisual(visuals, MakeVisual(vkey with { Layer = AreaLayerKind.PortalFrame, SparseIndex = other }, framed, framed, request.Entry,
+                                AddVisual(visuals, MakeVisual(vkey with { Layer = record.Type == 1 ? AreaLayerKind.PortalFrame : AreaLayerKind.SceneryFrame, SparseIndex = other }, framed, framed, request.Entry,
                                     request.Nominal, request.Group, other, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy));
                             }
                     }
@@ -385,6 +388,10 @@ public sealed partial class AreaDataOwner
         try { return TerrainLoader.ParseSector(bytes, new TerrainLoaderOptions()); }
         catch (TerrainException error) { throw Fail(error is TerrainLimitExceededException ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Sector); }
     }
+    /// <summary>The first type-specific slot: a scenery's scenery flags.</summary>
+    private const int SceneryFlagsSlot = 36;
+    private static long Optional(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) =>
+        fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number is { } number ? number : 0;
     private static long Number(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) => fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number.HasValue ? value.Number.Value : throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance);
     private Dictionary<int, ObjectWireRecord> ReadPrototypes(CancellationToken token, AreaOwnership ownership)
     {
