@@ -137,6 +137,15 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// above the strip's art and buttons.</summary>
     public void AddPart(AreaBarStrip strip, Control part) => _strips[strip].AddChild(part ?? throw new ArgumentNullException(nameof(part)));
 
+    /// <summary>ARC-UI-053: puts <paramref name="part"/> on the bottom strip under the message window's drawing (a pane's name is written
+    /// over it) and above the strip's art.</summary>
+    public void AddPartUnderMessageLog(Control part)
+    {
+        var strip = _strips[AreaBarStrip.Bottom];
+        strip.AddChild(part ?? throw new ArgumentNullException(nameof(part)));
+        strip.MoveChild(part, _messageLog.GetIndex());
+    }
+
     public override void _Input(InputEvent input)
     {
         if (input is not InputEventMouseMotion motion || !Visible) return;

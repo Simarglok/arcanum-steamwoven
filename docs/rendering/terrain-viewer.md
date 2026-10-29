@@ -2047,12 +2047,13 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   (`mes\intgame.mes` 1000–1009) as a hover entry with icon 444, which is never stored and shows only in the message mode and when
   no entry was stored in the last 3 s (real time). Leaving the button takes the name away.
 - **Panes.** While Spells (the spell pane, `M`) or Skills is down the window belongs to that pane and draws nothing of the log
-  (the panes' own art in the window is a later slice; the viewer's spell pane stays above the strip). A new stored entry puts the
+  (since ARC-UI-053 the spell pane is drawn there as the original's bar mode 1, with its art, college buttons and spell icons:
+  [spell pane](../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053); the skills pane's art is a later slice). A new stored entry puts the
   window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
   pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
   weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up
-  returns the window to the log. The viewer shows the weapon's spells inside the spell pane with Spells down, and treats the
-  whole pane as the original's separate weapon mode while they are open (no return above the strip).
+  returns the window to the log. The viewer shows the weapon button and the weapon's spells in the diagnostic pane above the strip
+  with Spells down, and treats them as the original's separate weapon mode while they are open (no return above the strip).
 - **Steamwoven fix (both rule modes).** The original leaves the window blank after a button name is taken away and after the
   window returns from a pane, until the next entry or scroll click; the viewer shows the scroll position's entry again there
   (a technical display bug, ML7).
