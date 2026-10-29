@@ -18,7 +18,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// beforehand whether it can (the NPC's combat values read; null: always). Without <see cref="Kill"/>, or for an NPC it cannot kill, a
 /// kill leaves the run unapplied. ARC-SCRIPT-047: <see cref="CritterCell"/> is an NPC's live cell when it is not where its map data puts
 /// it (an NPC the AI moved, a companion; null: its row's cell), for the critters in a run's vicinity. ARC-SCRIPT-050: <see cref="MapArea"/> is
-/// the shown map's map-list area and whether it is the start map, for get area (84); null when the map list does not list it.
+/// the shown map's map-list area and whether it is the start map, for get area (84); null when the viewer has no map-list row for it (outside
+/// map mode), and then get area is not answered.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -245,8 +246,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>
     /// ARC-SCRIPT-050 (GA2, GA3): what get area stores for any object of a run on the shown map, the current map of the original: the shown
     /// map's map-list area when it is not 0, else 0 unless the shown map is the start map, where the original places the object by its
-    /// location (the nearest area whose town map is the object's sector's, 0x4CB630), which is not modelled (null: the run stops). Null as
-    /// well without the map list's row.
+    /// location (the nearest area whose town map is the object's sector's, 0x4CB630), which is not modelled. Null (the dispatch ends as not
+    /// modelled) for that, and when the world gives no map-list row (outside map mode).
     /// </summary>
     public int? AreaOf(ScrObjectRef obj) => _world?.MapArea?.Invoke() is not { } map ? null : map.Area != 0 ? map.Area : map.StartMap ? null : 0;
 

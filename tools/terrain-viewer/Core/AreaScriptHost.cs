@@ -76,11 +76,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// ARC-SCRIPT-050: the shown map's use host (<see cref="AreaUseScriptHost"/>), which answers this host's object, world and area
     /// questions as it answers a use or heartbeat run's: the objects' items, names and reputations, the session's random draws labelled
     /// <see cref="AreaUseScriptHost.RandomLabel"/>, the critters around an object at their live cells, and the shown map's area. It is used
-    /// only while its shown map is this host's map (a visitor's host, ARC-WORLD-048, keeps the narrower set). Null: none.
+    /// only while its shown map and the PC's map are this host's map (a visitor's host, ARC-WORLD-048, keeps the narrower set). Null: none.
     /// </summary>
     public Func<AreaUseScriptHost?>? QueryHost { get; set; }
 
-    private AreaUseScriptHost? Queries => QueryHost?.Invoke() is { } host && host.ShownMap == _map.RuntimeMap ? host : null;
+    // The use host's PC is the session actor's: its map must be this host's too, or float line would never find this host's PC.
+    private AreaUseScriptHost? Queries => QueryHost?.Invoke() is { } host && host.ShownMap == _map.RuntimeMap && host.Pc == Pc ? host : null;
 
     private AreaUseScriptHost Answering => Queries ?? throw new InvalidOperationException("AREA_SCRIPT_QUERIES_UNAVAILABLE: the run's set holds a query command and no use host of this map answers it.");
 

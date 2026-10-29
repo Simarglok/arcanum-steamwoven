@@ -154,7 +154,7 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
     script (focus 8) 5, change art (59) 4, then one each of unfog town map, grant fate point, eye candy, destroy item named, damage;
   - dialog (9), 127 of 180 refused, 1 missing: float line (23) 45, critter disband (22) 17, obj is wielding (condition 21) 14, get
     area (84) 10, random (37) 8, obj is dead (condition 22) 6, get reaction (29) 5, PC quest state (condition 6) 4, hours since
-    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S18) 69 of 180 refused, 1 missing:
+    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S18) 69 of 180 refused, 1 missing; the largest:
     critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11, obj is dead (condition 22) 6,
     obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, goto beyond the end 2, give gold (33) and adjust money
     (36) 2 each;

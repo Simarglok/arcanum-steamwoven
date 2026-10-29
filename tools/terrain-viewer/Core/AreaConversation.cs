@@ -311,6 +311,7 @@ public sealed class AreaConversationHost
             detail = $"script {call.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}";
             return false;
         }
+        if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (get area on the start map, GA3)"; return false; }
         if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
         if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
         detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
@@ -368,6 +369,9 @@ public sealed class AreaConversationHost
         if (result.Outcome == ScrOutcome.Refused)
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
                 $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
+        // ARC-SCRIPT-050: a question the viewer cannot answer (get area on the start map) ended the dispatch with nothing applied.
+        if (result.Stop == ScrStop.NotModelled)
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {result.Script}: NotModelled (get area on the start map, GA3)");
         // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
         // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
         (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");

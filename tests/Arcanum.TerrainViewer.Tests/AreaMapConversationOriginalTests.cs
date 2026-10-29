@@ -75,7 +75,7 @@ public sealed class AreaMapConversationOriginalTests
     }
 
     /// <summary>ARC-SCRIPT-050: the same walk with the shown map's use host answering the talks' queries (<see cref="AreaScriptHost.QueryHost"/>),
-    /// as map mode wires it: the PC beside the speaker, the map list's area. The talk set admits float line, get area, random and the guard
+    /// as map mode wires it: the PC on the speaker's cell, the map list's area. The talk set admits float line, get area, random and the guard
     /// conditions, so more entries run; a floated line is shown or, with an action field the viewer does not run, leaves the talk unapplied.</summary>
     [TestMethod, TestCategory("RealData")]
     public void Every_dialog_npc_of_every_interior_starts_with_the_talk_queries()

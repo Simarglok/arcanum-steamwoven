@@ -130,12 +130,14 @@ public sealed class AreaTalkQueryTests
                 Assert.IsTrue(plain.Host.Apply(plain.Run().Effects));
                 Assert.IsFalse(plain.Flag);
             }
-            // GA3 is not modelled: the start map with area 0, or a map without a map-list row, stops the run at get area.
+            // GA3 is not modelled: the start map with area 0, or a world without the map list's row (outside map mode), ends the dispatch at
+            // get area with nothing applied (the float line before it included).
             foreach (var mapArea in new (int, bool)?[] { (0, true), null })
             {
                 using var stopped = Create(content, 790, mapArea);
                 var run = stopped.Run();
-                Assert.AreEqual((ScrStop.MissingObject, 1), (run.Stop, run.StopLine), mapArea?.ToString() ?? "unlisted");
+                Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.NotModelled), (run.Outcome, run.Stop), mapArea?.ToString() ?? "no map list");
+                Assert.IsTrue(run.Effects.IsEmpty);
             }
         });
     }

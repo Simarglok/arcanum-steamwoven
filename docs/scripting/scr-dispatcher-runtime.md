@@ -555,8 +555,9 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
 [FL1–FL5, GA1–GA3, ML1](../research/ledger/scripts.md#talk-commands-arc-script-050)).
 
 - **Float line** (operands: the DLG line, the objects). Its dialog PC is the first PC in the game-window rectangle around the run's
-  **triggerer** (`IScrWorldQueries.CrittersInVicinity(triggerer)`, the first object the host's `IsPc` accepts); without a triggerer or a PC
-  there nothing happens and no operand is read. Otherwise each object of the object operand, in list order, gets one `ScrFloatLine`
+  **triggerer** (`IScrWorldQueries.CrittersInVicinity(triggerer)`, the first object the host's `IsPc` accepts); without a PC there nothing
+  happens and no operand is read; without a triggerer nothing happens either (a project choice: the original's list read of a null
+  handle was not traced). Otherwise each object of the object operand, in list order, gets one `ScrFloatLine`
   (the running script's number as for print line, the line, the object as the speaker, the PC) in `ScrEffects.Floats`. No attachee is
   needed. The host builds the text as print line does (`ScrPrintedLine.Read`, with the alternate text for a PC that is not male); the
   original runs the line's action field between the PC and the speaker and hands the text to the dialog interface's speech display
@@ -564,14 +565,17 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
 - **Get area** (operands: the object, the store). `IScrAreaQueries.AreaOf(object)` stores the area of the **current map** from its
   map-list row (`MapListEntry.Area`, the row's optional `Area:` value read in the original's order after `Type:` and `WorldMap:`, ML1;
   `MapList.AreaOfRuntime` is 0x40FFE0), whatever the object's map; on the start map with area 0 the original takes the area at the
-  object's location (GA3), which is not modelled: the host answers null and the run stops (`MissingObject`), as for an absent object.
+  object's location (GA3), which is not modelled: the host answers null and the dispatch ends with the stop `NotModelled` (skip default,
+  nothing of it applied, a float line or a flag write before it included); the viewer reports such a talk or deferred call as not ready.
+  An absent object stops the run (`MissingObject`) as at every single-object read.
 - **Print line and the action field.** A DLG action field that holds only separators (space, tab, `,`, `;`, `:`, `(`, `)`) has no
   operation, as the conversation grammar reads it, so `ScrPrintedLine.Read` shows such a line (24 of the 30 floated lines whose field is
-  not empty hold one or two spaces). A real operation is still `Unsupported`.
+  not empty hold one or two spaces). This is the grammar's admission policy, not a reading of the original's scanner. A real operation is
+  still `Unsupported`.
 - **Hosts.** The AREA viewer's dialog host (`AreaScriptHost`) runs the talk set "S3-area-talk-queries" (with a session hero
   "S3-area-talk-queries-skill"): its earlier set plus the guard conditions of S4 (PC quest state, holds an item named, is named, wields an
   item named, has a reputation), random (37), float line and get area, while its `QueryHost` gives the shown map's use host
-  (`AreaUseScriptHost`) of the talk's map, which answers them as for a use or heartbeat run (map mode wires it; a visitor's host keeps
+  (`AreaUseScriptHost`) of the talk's map with the PC on it, built for the shown snapshot only, which answers them as for a use or heartbeat run (map mode wires it; a visitor's host keeps
   the earlier set). `AreaScriptWorld.MapArea` gives the use host the shown map's map-list area and whether it is the start map.
   The dialog host applies a run's float lines first: a missing or unreadable DLG floats nothing (the original's load fails), a line
   with an action field or generated text leaves the whole run unapplied; the shown texts go to the viewer (`TakeFloats`), which floats

@@ -128,9 +128,16 @@ public sealed class ScrTalkCommandTests
         CollectionAssert.AreEqual(new[] { Npc }, host.AreaAsked);
         host.Area = 3;
         Assert.AreEqual(ScrStop.ReturnRunDefault, Speak(host).Stop);
-        // A host that cannot answer (the start map's location rule) stops the run as for an absent object; so does an absent object.
-        host.Area = null;
-        Assert.AreEqual((ScrStop.MissingObject, 0), (Speak(host).Stop, Speak(host).StopLine));
+        // A host that cannot answer (the start map's location rule) ends the dispatch as not modelled with nothing applied, a float line
+        // and a flag write before it included; an absent object stops the run as at every single-object read.
+        var unanswered = Host(Program(
+            Do(C(ScrCatalogue.Action.SetGlobalFlag, N(5))),
+            Do(C(ScrCatalogue.Action.FloatLine, N(1), (Attachee, 0))),
+            Do(C(ScrCatalogue.Action.GetArea, (Attachee, 0), (Local, 0)))), Pc);
+        unanswered.Area = null;
+        var ended = Speak(unanswered);
+        Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.NotModelled), (ended.Outcome, ended.Stop));
+        Assert.IsTrue(ended.Effects.IsEmpty);
         var absent = Host(Program(Do(C(ScrCatalogue.Action.GetArea, (ExtraObject, 0), (Local, 0)))), Pc);
         Assert.AreEqual(ScrStop.MissingObject, ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), absent, Options).Stop);
         Assert.AreEqual(0, absent.AreaAsked.Count);

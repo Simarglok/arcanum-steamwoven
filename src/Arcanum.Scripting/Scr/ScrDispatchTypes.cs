@@ -128,9 +128,9 @@ public interface IScrObjectQueries
 /// </summary>
 public interface IScrAreaQueries
 {
-    /// <summary>The area get area stores for the object (0x4CB6A0): the current map's map-list area (0x40FFE0) whatever the object's map,
-    /// and only when that is 0 and the current map is the start map, the area at the object's location (0x4CB630); null when the host
-    /// cannot answer (the run then stops as for an absent object).</summary>
+    /// <summary>The area get area stores for the object (0x4CB6A0): the current map's map-list area (0x40FFE0, 0 for a map without a row)
+    /// whatever the object's map, and only when that is 0 and the current map is the start map, the area at the object's location
+    /// (0x4CB630); null when the host cannot answer (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
     int? AreaOf(ScrObjectRef obj);
 }
 
@@ -324,6 +324,9 @@ public enum ScrStop
     /// <summary>ARC-SCRIPT-042: a call-ex (81) names an attachment point outside 0..35 or the dialog-override slot; the dispatch ends with skip
     /// default and applies nothing (the original would index past the object's script array).</summary>
     CallExPoint,
+    /// <summary>ARC-SCRIPT-050: the host cannot answer a question the original answers (get area on the start map with area 0, ledger GA3, not
+    /// modelled); the dispatch ends with skip default and applies nothing, and the caller reports the run as not ready.</summary>
+    NotModelled,
 }
 
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>

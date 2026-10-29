@@ -34,9 +34,9 @@ public static class ScrPrintedLine
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(names);
         if (!document.TryGetRecord(line, out var record) || record is null) return new(ScrPrintedLineStatus.Shown, " ", $"no line {line}: one space");
-        // ARC-SCRIPT-050: a field of separators only (24 of the 30 floated lines with an action field hold one or two spaces) has no
-        // operation, as the conversation grammar reads it, so the NPC-line step runs nothing for it.
-        if (record.Action.Bytes.Any(b => !IsSeparator(b))) return new(ScrPrintedLineStatus.Unsupported, string.Empty, $"line {line} has an action field");
+        // ARC-SCRIPT-050: a field of separators only (24 of the 30 floated lines with an action field hold one or two spaces) is taken as
+        // holding no operation, by the conversation grammar's admission policy (not a reading of the original's scanner).
+        if (record.Action.Bytes.Any(b => !DialogConversationGrammar.IsSeparator(b))) return new(ScrPrintedLineStatus.Unsupported, string.Empty, $"line {line} has an action field");
         // As in the conversation runtime: the marker is tested on the record text whatever the field shown, and a marker is
         // ASCII, so the raw prefix decides it.
         var raw = record.Text.Bytes;
@@ -52,6 +52,4 @@ public static class ScrPrintedLine
         return new(ScrPrintedLineStatus.Shown, DialogText.Substitute(text, names), $"line {line}");
     }
 
-    // The operation separators of the conversation grammar: SP, HTAB, ',', ';', ':', '(' and ')'.
-    private static bool IsSeparator(byte b) => b is (byte)' ' or (byte)'\t' or (byte)',' or (byte)';' or (byte)':' or (byte)'(' or (byte)')';
 }

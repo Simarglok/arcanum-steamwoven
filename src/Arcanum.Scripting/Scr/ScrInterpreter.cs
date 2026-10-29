@@ -235,23 +235,14 @@ internal sealed class ScrInterpreter
                 if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
                 return (Step.Next, 0);
             }
-            case ScrCatalogue.Action.FloatLine:
-            {
-                // FL2–FL4: the PC is the first PC in the game-window rectangle around the triggerer (0x440FC0 with the PC mask 0x8000); without
-                // one nothing is read or floated. Then operand 0 selects the DLG line of the running script (the number this run executes, as
-                // print line) and each object of operand 1 in list order gets it floated, with that PC as the dialog's PC. The attachee is not
-                // needed (unlike print line).
-                if (_roles.Triggerer is not { } around || World.CrittersInVicinity(around).Where(_host.IsPc).Select(o => (ScrObjectRef?)o).FirstOrDefault() is not { } pc) return (Step.Next, 0);
-                var at = Get(a, 0);
-                foreach (var speaker in Objects(a, 1)) _shared.Floats.Add(new(_number, at, speaker, pc));
-                return (Step.Next, 0);
-            }
+            case ScrCatalogue.Action.FloatLine: FloatLine(a); return (Step.Next, 0);
             case ScrCatalogue.Action.GetArea:
             {
                 // GA1: the first object of operand 0, its area into operand 1. The original reads an empty list's uninitialised first slot; an
-                // absent object, or one the host cannot answer for, stops the run (the project rule of the single-object commands).
+                // absent object stops the run (the project rule of the single-object commands). A host that cannot answer (GA3 not modelled)
+                // ends the whole dispatch with nothing applied, so the caller can report it as not ready.
                 var obj = Object(a, 0, line);
-                Set(a, 1, Areas.AreaOf(obj) ?? throw new MissingObjectStop(line), line);
+                Set(a, 1, Areas.AreaOf(obj) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled), line);
                 return (Step.Next, 0);
             }
             // SN28: play sound plays the effect once without a position; play sound on plays it once on the object's tile;
@@ -502,6 +493,19 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.ClearGlobalFlag: _flags[GlobalFlag(Get(a, 0), line)] = false; return (Step.Next, 0);
             default: throw new InvalidOperationException("Action outside the interpreter's set.");
         }
+    }
+
+    // ARC-SCRIPT-050 (FL2–FL4): the PC is the first PC in the game-window rectangle around the triggerer (0x440FC0 with the PC mask 0x8000);
+    // without one nothing is read or floated. Without a triggerer nothing happens either (a project choice: the original passes the null handle
+    // to the list, whose location read was not traced). Then operand 0 selects the DLG line of the running script (the number this run
+    // executes, as print line) and each object of operand 1 in list order gets it floated, with that PC as the dialog's PC. The attachee is
+    // not needed (unlike print line). The callback test and the DLG load are the host's.
+    [OriginalFunction(0x44B1F0, OriginalFunctionScope.Partial)]
+    private void FloatLine(ScrClause a)
+    {
+        if (_roles.Triggerer is not { } around || World.CrittersInVicinity(around).Where(_host.IsPc).Select(o => (ScrObjectRef?)o).FirstOrDefault() is not { } pc) return;
+        var at = Get(a, 0);
+        foreach (var speaker in Objects(a, 1)) _shared.Floats.Add(new(_number, at, speaker, pc));
     }
 
     [OriginalFunction(0x44B030, OriginalFunctionScope.Partial)]
