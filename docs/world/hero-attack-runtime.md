@@ -15,7 +15,9 @@ effective object fields. No NPC fights back. Requirements:
 wears armour and weapons ([FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008),
 [FR-ITEM-011](../requirements/items-economy.md#fr-item-011); [attack wear](attack-resolver-runtime.md#wear-arc-combat-007)), and
 since ARC-COMBAT-009 a critical hit rolls the original's critical-effect tables and applies them
-([FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009), [below](#critical-effects-arc-combat-009)).
+([FR-COMBAT-009](../requirements/combat-magic-tech.md#fr-combat-009), [below](#critical-effects-arc-combat-009)). Since
+ARC-COMBAT-021 the hero falls when it goes unconscious, lies while it stays so and gets up when it comes round
+([FR-COMBAT-010](../requirements/combat-magic-tech.md#fr-combat-010), [below](#hero-knockdown-arc-combat-021)).
 
 ## Evidence
 
@@ -358,6 +360,47 @@ session keeps neither the shot nor the mark: a restored hero has it in the hand)
   ART, the rolls, the death, the experience, the corpse being lootable, the fallen pose, the status line and that a corpse click
   without Alt does nothing. A map without a living NPC with combat values prints `NO-TARGET`.
 
+## Hero knockdown (ARC-COMBAT-021)
+
+The AREA hero (exterior, cave and map mode; real time and turn-based; both rule modes) falls when the session makes it
+unconscious and gets up when the fatigue recovery brings it round, as the original draws a critter (exe rows
+[UC1–UC5](../research/ledger/combat.md#hero-knockdown-arc-combat-021), one reader, F1). Owner report of 2026-10-29: the hero at
+fatigue −3 kept standing and acting.
+
+- **Session.** Unchanged: `LifeStatus.IsUnconscious` (fatigue at most 0, never for an undead, 0x45D800) is the state; the going
+  unconscious of the fatigue setter (IC4) already ends the hero's maintained runs and its casts refuse, and the fatigue recovery
+  event (0x45E610) on the session queue, pumped by the viewer's clock, brings it round. No snapshot change.
+- **Body.** `HeroBodyArt` also reads the body's fall-down (animation 7, `…XAh.art`) and get-up (animation 8, `…XAi.art`) ARTs
+  into the profile (`ActorDiagnosticProfile.FallDown`, `GetUp`, both or neither; actions `FallDown`, `GetUp`); every creatable
+  body has them, 11 frames at 11 fps and 19 at 14 fps (UC5; 345 keys a body); a body whose fall or get-up ART is missing, is not one
+  entry, does not read in its palette or would pass the key cap loads without both. A human or elf woman, until now drawn with the
+  fixed human (which has neither ART), is read as her own body when the session has a hero; without a hero, or when the body
+  does not read, the fixed human stays and the hero lies down without a drawn fall.
+- **Stages** (`AreaHeroKnockdown`, Godot-free): standing → falling (the fall played once from frame 0 at the ART rate on the
+  world clock, starting once the hero stands on its cell) → down (the fall's last frame held while unconscious or dead) →
+  getting up (once conscious, UC2–UC3) → standing. A hero that goes down again while getting up falls from the start. A new
+  session or map (a load, a transfer, a window move) rebases: a hero down already lies, none falls. The drawn pose is
+  `DiagnosticGridActor.DownPose` (action, facing octant at the fall, frame), which wins over the attack pose on a settled actor.
+- **Getting up** needs an active hero (UC3): a conscious hero that is stunned, paralysed or stoned stays down until it is active.
+- **Turn-based round.** The get-up waits for the hero's own subturn and pays `TurnBasedRules.GetUpCost` (5) through the hero's
+  charge (A3, CT3, UC3); a refused charge keeps the hero down and passes the subturn as any refused charge. An unconscious hero
+  is skipped by the round (ARC-COMBAT-020).
+- **Input.** Going down stops the walk, the attack, the talk, use, inventory and door approaches and closes the spell's target
+  cursor. While the hero lies (falling, down, getting up) or is dead, a world press does nothing (`ignored (the hero is down)`,
+  UC4: the original's world press returns for a PC that is not active) and the walk keys and stick start no step. Windows and
+  keys that check the hero themselves keep their own refusals (combat mode, turn-based, casts, hot keys).
+- **Death.** A dead hero lies on the same fall until the death screen (the dying animation's choice of ARC-COMBAT-005 is not
+  drawn for the hero).
+- Log lines `ARC-COMBAT-021 hero knockdown stage=… fatigue=…`; the status line adds ` | hero: falling`, `unconscious`, `dead` or
+  `getting up`.
+- Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the audio stage on the Crash Site exterior and in
+  the map battery, as its recovery moves the game clock on; alone as `ARC_AREA_MAP_SMOKE_ONLY=knockdown`): a fatigue packet leaves the hero at fatigue −3; it falls
+  over drawn frames to the fall's last frame (uploaded), the status line names it, a ground press and the stick do nothing;
+  game-time jumps of 10 s fire the recovery, the hero gets up over drawn frames, stands idle and takes a press again; the fatigue
+  is healed back.
+- Not ready: a stunned or paralysed hero (inactive in the original too, UC4) still takes presses; the knockdown goal's test
+  0x424070; a recovered NPC stands at once without its get-up animation; HD frames of the fall and get-up (Legacy per frame).
+
 ## Not ready
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
@@ -370,9 +413,9 @@ session keeps neither the shot nor the mark: a restored hero has it in the hand)
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
 - The attack ART of a wielded weapon (the diagnostic human is drawn bare-handed; the viewer has no equip action, so the hero
-  fights bare-handed), the low attack, the hero's own knockdown and death animations, the dying animation itself (the body jumps
-  to its last frame), the get-up after a knockout (the viewer runs no event pump, so an unconscious NPC stays down), and HD frames
-  of the fallen poses (Legacy per frame).
+  fights bare-handed), the low attack, the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
+  and lies on that fall when dead), the dying animation itself (the body jumps to its last frame), an NPC's get-up animation
+  after a knockout (a recovered NPC stands at once), and HD frames of the fallen poses (Legacy per frame).
 - A killed NPC still blocks its cell: step evidence is T0 map data.
 - Companions (Virgil while he stands as a companion actor) are not attackable: their combat goal would need their live cell;
   the click says so.
@@ -406,5 +449,8 @@ an NPC and the weapon lies at its cell after a restore, items without a cell sta
 arm drops a torch it can no longer hold), `tests/Arcanum.Session.Tests/AttackWearStateTests.cs` (armour wear to the second break, the critical
 weapon effects and invulnerability, the hero's weapon to its break, bare hands never killing, an NPC attacker, object targets,
 missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
-`Repose`, the frame overlay, the dying animation and the pose read from a synthetic archive with its refusals) and the native
-smoke above; synthetic only in git.
+`Repose`, the frame overlay, the dying animation and the pose read from a synthetic archive with its refusals),
+`tests/Arcanum.TerrainViewer.Tests/AreaHeroKnockdownTests.cs` (ARC-COMBAT-021: the stages, the refused get-up, a fall while
+getting up, the rebase, a body without the ARTs, the profile's fall and get-up, a synthetic body read with both, one or an unreadable
+one, and the down pose; the opt-in real-data
+`HeroBodyArtTests` count every body's fall and get-up frames) and the native smokes above; synthetic only in git.

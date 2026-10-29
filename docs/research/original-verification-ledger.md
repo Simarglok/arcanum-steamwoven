@@ -203,6 +203,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="thrown-weapons-arc-combat-017"></a>[Thrown weapons (ARC-COMBAT-017)](ledger/combat.md#thrown-weapons-arc-combat-017) | [Combat](ledger/combat.md) | TW1–TW7 |
 | <a id="second-projectile-and-scatter-arc-combat-018"></a>[Second projectile and scatter (ARC-COMBAT-018)](ledger/combat.md#second-projectile-and-scatter-arc-combat-018) | [Combat](ledger/combat.md) | PS1–PS6 |
 | <a id="boomerangs-arc-combat-019"></a>[Boomerangs (ARC-COMBAT-019)](ledger/combat.md#boomerangs-arc-combat-019) | [Combat](ledger/combat.md) | BR1–BR7 |
+| <a id="hero-knockdown-arc-combat-021"></a>[Hero knockdown (ARC-COMBAT-021)](ledger/combat.md#hero-knockdown-arc-combat-021) | [Combat](ledger/combat.md) | UC1–UC5 |
 | <a id="inventory-window-arc-ui-015"></a>[Inventory window (ARC-UI-015)](ledger/ui-audio.md#inventory-window-arc-ui-015) | [Interface windows and audio](ledger/ui-audio.md) | IW1–IW9 |
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |
