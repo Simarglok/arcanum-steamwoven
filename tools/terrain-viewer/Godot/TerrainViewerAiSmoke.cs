@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -690,6 +691,40 @@ public partial class TerrainViewerApp
             var there = host.Tile(enemy)!.Value;
             Require(AiExecutorRules.Distance(at, there) == 1, $"it struck from the cell next to the NPC: {at} {there}");
             Require(session.QueryCombatMode(SessionCombatant.Critter(follower)), "the attempt put it into combat mode (goal 19 node 5)");
+
+            // ARC-WORLD-117: the viewer's orders through the AI host, at once after the blow (no frame between, so the NPC's own fight does
+            // not re-engage the follower): back off stops the fight (FO5) and the order's AI pass runs (FO1); then an attack order on the
+            // NPC as the highlighted object locks the follower on it (FO3) and its pass starts the attack, which strikes again.
+            if (session.QueryLife(enemyLife).View?.Status is { IsDead: true } or { IsUnconscious: true })
+                session.Heal(session.Version, enemyLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var backOff = IssueAreaOrder("smoke", new(CompanionOrderType.BackOff, CompanionOrderAddressing.All, []))?.Outcomes.SingleOrDefault(o => o.Entity == follower);
+            // The host's interrupt comes before the pass, whose gate then finds the follower idle.
+            Require(backOff is { Effect: CompanionOrderEffect.Stopped, Stop.Interrupted: true, Pass: { Failure: GameSessionFailure.None, Pass.Gate.Passed: true } }
+                && session.QueryDanger(follower).State == DangerState.None && host.RunOf(follower) is null,
+                $"back off stopped the fight and ran the pass: {(backOff is null ? "none" : AreaCompanionOrders.Describe(backOff))} run={host.RunOf(follower)?.Bottom.Goal}");
+            var ordered = IssueAreaOrder("smoke", new(CompanionOrderType.Attack, CompanionOrderAddressing.All, []) { Target = OrderTarget(target.Row.Key) })
+                ?.Outcomes.SingleOrDefault(o => o.Entity == follower);
+            Require(ordered is { Effect: CompanionOrderEffect.AttackLocked, Locked: true, Pass.Pass.Performed: true },
+                $"the attack order locked the follower and its pass performed: {(ordered is null ? "none" : AreaCompanionOrders.Describe(ordered))}");
+            var focus = session.QueryDanger(follower);
+            Require(focus.State == DangerState.CombatFocus && focus.Focus == SessionCombatant.Critter(enemy), $"the follower's focus is the ordered target: {focus.State} {focus.Focus?.Entity}");
+            Require(host.RunOf(follower) is { Bottom.Goal: AiGoalType.Attack } orderRun && orderRun.Bottom.Target == enemy, $"the pass started the attack: {host.TraceOf(follower)?.Perform}");
+            var hitBefore = host.TraceOf(follower)?.Hit;
+            var orderFrames = 0; var offTarget = false;
+            for (; orderFrames < 4000 && ReferenceEquals(host.TraceOf(follower)?.Hit, hitBefore); orderFrames++)
+            {
+                offTarget |= host.RunOf(follower) is { } now && now.Bottom.Target != enemy;
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            var orderHit = host.TraceOf(follower)?.Hit;
+            Require(!ReferenceEquals(orderHit, hitBefore) && orderHit is not null && !orderHit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal),
+                $"the ordered follower struck again after {orderFrames} frames: {orderHit}");
+            Require(!offTarget, "its runs aimed at the ordered target only");
+            GD.Print("ARC-WORLD-117 native-smoke ai-order PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                BackOff = AreaCompanionOrders.Describe(backOff!), Attack = AreaCompanionOrders.Describe(ordered!), Frames = orderFrames, Hit = orderHit,
+                Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
             RefreshAreaStatus();
             GD.Print("ARC-WORLD-115 native-smoke ai-follower PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Follower = template.Speaker.Row.PrototypeNumber, Target = target.Row.PrototypeNumber, Apart = apart, Walked = walked, Frames = frames,

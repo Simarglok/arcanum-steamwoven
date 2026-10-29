@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-051: the portals are bound with the same session and grid.
         BindAreaPortals();
         _areaCompanions = null; _unbodiedVisitors = [];
-        CancelPendingWalkOrder("the companions were rebuilt");
+        CancelPendingOrder("the companions were rebuilt");
         RefreshFollowerPortraits();
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
@@ -64,7 +64,7 @@ public partial class TerrainViewerApp
 
     private void UnbindAreaCompanions()
     {
-        _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; _pendingWalkOrder = null;
+        _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; _pendingOrder = null;
         RefreshFollowerPortraits();
     }
 
@@ -263,7 +263,8 @@ public partial class TerrainViewerApp
         if (_conversationHost is not { PartyWired: true }) return "";
         var text = (_areaCompanions is { } group ? group.Status() : "companions: none") + " | " + PartySideLabel();
         var unbodied = (_unbodiedVisitors.Count == 0 ? "" : " | not talkable here (no body kept this run): " + string.Join(", ", _unbodiedVisitors))
-            + (_pendingWalkOrder is null ? "" : " | walk order: click a tile (any key cancels)");
+            + (_pendingOrder is not { } pending ? "" : pending.Type == CompanionOrderType.Attack
+                ? " | attack order: click an object (any key cancels)" : " | walk order: click a tile (any key cancels)");
         return " | " + text + unbodied + (_companionNotice is { } notice ? " | " + notice : "");
     }
 

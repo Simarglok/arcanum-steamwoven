@@ -218,6 +218,24 @@ public sealed class CompanionCombatOrderTests
     }
 
     [TestMethod]
+    public void The_hosts_part_of_each_order_runs_before_its_pass()
+    {
+        using var owner = Owner();
+        var ai = new AiSchedulerTests.World().With(Virgil).With(Sogg);
+        var seen = new List<(string Entity, int Calls, bool Passed)>();
+        var result = owner.IssueCompanionOrder(owner.Version, new(CompanionOrderType.StayClose, CompanionOrderAddressing.All, [F(Virgil), F(Sogg)])
+        {
+            World = new World(), Ai = ai, Ordered = outcome => seen.Add((outcome.Entity, ai.Calls.Count, outcome.Pass is not null)),
+        });
+        // ARC-WORLD-117: once per reached follower, in order, with the outcome before its pass; Virgil's pass runs between the two.
+        CollectionAssert.AreEqual(new[] { Virgil, Sogg }, seen.Select(s => s.Entity).ToArray());
+        Assert.IsFalse(seen.Any(s => s.Passed), "the outcome is given before its pass");
+        Assert.AreEqual(0, seen[0].Calls, "nothing of the host ran before Virgil's part");
+        Assert.IsTrue(seen[1].Calls > 0, $"Virgil's pass ran before Sogg's part: {string.Join(", ", ai.Calls)}");
+        Assert.IsTrue(result.Outcomes.All(o => o.Pass is { Failure: GameSessionFailure.None }));
+    }
+
+    [TestMethod]
     public void Each_pass_runs_before_the_next_followers_order()
     {
         using var owner = Owner();

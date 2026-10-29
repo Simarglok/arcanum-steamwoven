@@ -6,6 +6,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -16,6 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 /// NPCs with every primary stat 20 and 20 hit points, bare-handed, an enemy (0) at world cell (10, 20) and the hero's companion (1) at
 /// (13, 21); the hero stands at (14, 20). The enemy's T0 record blocks its cell in the step evidence. The companion's cell is its own walk's (a fake that steps it at once). The attack events tell
 /// the hero's followers (0x4A9B80): a companion joins the hero's fight, walks up through its own walk and strikes through the session.
+/// ARC-WORLD-117: the viewer's attack and back-off orders go through the host (the target, the combat facts, the AI pass after each order).
 /// </summary>
 [TestClass]
 public sealed class AreaAiFollowerTests
@@ -74,7 +76,10 @@ public sealed class AreaAiFollowerTests
         public void Face(string entity, CellCoord toward) => Turns++;
     }
 
-    private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion);
+    private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion)
+    {
+        public AreaCombatHost Combat { get; init; } = null!;
+    }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0)
@@ -124,7 +129,7 @@ public sealed class AreaAiFollowerTests
             NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
-        return new(session, host, walks, Entity(0), Entity(1));
+        return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
     }
 
     // Steps the host frame by frame (50 ms) until the run of the NPC ends; the notices it gave.
@@ -165,6 +170,109 @@ public sealed class AreaAiFollowerTests
         var after = session.QueryHeroLife()!.Status.HitPoints;
         Assert.IsTrue(heal.Check!.Success ? after > hurt : after == hurt, $"a success heals the hero, a failure does not: {hurt} -> {after}");
         Assert.IsFalse(host.Holds(companion), "after the run its own walk follows again");
+    }
+
+    // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).
+    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true)
+    {
+        var consent = new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 3, null, 50, new(-20, 300, 200, 5), 0, 3, 5);
+        var facts = new CompanionOrderFacts(scene.Companion, "companion", 1, false, consent, Combat: scene.Host.OrderFacts(scene.Companion));
+        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null);
+    }
+
+    [TestMethod]
+    public void The_attack_orders_target_is_the_highlighted_objects_entity()
+    {
+        var scene = Open();
+        Assert.AreEqual(SessionCombatant.Critter(scene.Enemy), AreaCompanionOrders.Target(scene.Combat, 1, Key(0)));
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 1, null), "nothing highlighted: no target (FO3)");
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 1, Key(7)), "an object without a session entity");
+        Assert.IsNull(AreaCompanionOrders.Target(scene.Combat, 2, Key(0)), "another map's");
+    }
+
+    [TestMethod]
+    public void An_attack_order_through_the_host_locks_the_companion_and_its_ai_pass_starts_the_attack()
+    {
+        var scene = Open();
+        var (session, host, walks, enemy, companion) = scene;
+        var outcome = Order(scene, CompanionOrderType.Attack, AreaCompanionOrders.Target(scene.Combat, 1, Key(0))).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.AttackLocked, true), (outcome.Effect, outcome.Locked), $"{outcome.Effect} {outcome.Failure}");
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual((DangerState.CombatFocus, SessionCombatant.Critter(enemy)), (danger.State, danger.Focus), "the ordered attack event's lock (FO3)");
+        Assert.IsTrue((danger.Flags & DangerFlags.TargetLocked) != 0);
+
+        // FO1: the follower's AI pass right after its order, through the host: perform starts the attack on the locked target.
+        var pass = outcome.Pass ?? throw new AssertFailedException("no AI pass");
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.IsTrue(pass.Pass is { Performed: true }, $"the pass performed: gate {pass.Pass?.Gate?.Stop}");
+        var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
+        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.IsTrue(host.Holds(companion));
+        StringAssert.Contains(AreaCompanionOrders.Describe(outcome), "pass=performed");
+
+        var notices = Run(host, companion);
+        Assert.IsTrue(walks.Steps >= 2, $"it walked up through its own walk ({walks.Steps} steps)");
+        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the ordered target");
+    }
+
+    [TestMethod]
+    public void An_attack_order_without_a_target_or_on_the_party_does_nothing_but_the_pass()
+    {
+        var scene = Open();
+        var none = Order(scene, CompanionOrderType.Attack).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.NoTarget, none.Effect);
+        Assert.IsNotNull(none.Pass, "the AI pass still runs (FO1)");
+        Assert.IsNull(scene.Host.RunOf(scene.Companion), "out of danger the pass's follow is the companion's own walk");
+        var party = Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(scene.Companion)).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.PartyTarget, party.Effect, "outside combat mode the hero's party is refused (FO4)");
+        Assert.AreEqual(DangerState.None, scene.Session.QueryDanger(scene.Companion).State);
+    }
+
+    [TestMethod]
+    public void Without_the_host_an_attack_order_lifts_the_stop_but_fails_and_runs_no_pass()
+    {
+        var scene = Open();
+        Assert.AreEqual(CompanionOrderEffect.Stopped, Order(scene, CompanionOrderType.BackOff, withHost: false).Outcomes.Single().Effect);
+        Assert.IsTrue((scene.Session.QueryDanger(scene.Companion).Flags & DangerFlags.NoAttack) != 0, "back off set NO_ATTACK");
+        var outcome = Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(scene.Enemy), withHost: false).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.Failed, outcome.Effect);
+        Assert.IsTrue((scene.Session.QueryDanger(scene.Companion).Flags & DangerFlags.NoAttack) == 0, "the attack order lifted it (FO9)");
+        Assert.IsNull(outcome.Pass);
+        Assert.AreEqual(DangerState.None, scene.Session.QueryDanger(scene.Companion).State);
+    }
+
+    [TestMethod]
+    public void Back_off_through_the_host_stops_the_fight_and_releases_the_companion_to_its_walk()
+    {
+        var scene = Open();
+        var (session, host, _, enemy, companion) = scene;
+        Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(enemy));
+        host.Pump(50);
+        Assert.IsNotNull(host.RunOf(companion), "the ordered attack runs");
+
+        var outcome = Order(scene, CompanionOrderType.BackOff).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.Stopped, outcome.Effect, $"{outcome.Failure}");
+        Assert.IsTrue(outcome.Stop is { Interrupted: true, NoAttack: true }, "peace with its focus, the interrupt and NO_ATTACK (FO5)");
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual(DangerState.None, danger.State);
+        Assert.IsTrue((danger.Flags & DangerFlags.NoAttack) != 0);
+        Assert.IsTrue(outcome.Pass?.Pass is { Gate.Passed: true }, $"the stop's interrupt came first: the pass's gate finds it idle ({outcome.Pass?.Pass?.Gate?.Stop})");
+        Assert.IsNull(host.RunOf(companion), "the attack run ended");
+        Assert.IsFalse(host.Holds(companion), "its own walk follows the hero again");
+    }
+
+    [TestMethod]
+    public void The_stops_interrupt_ends_the_attack_run_only_when_asked()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        host.PerformAttack(companion, enemy);
+        Assert.IsNotNull(host.RunOf(companion));
+        var stop = new SessionPeaceStep(companion) { Interrupted = true };
+        Assert.IsFalse(host.ApplyStop(stop with { Interrupted = false }), "no interrupt asked (no focus to stop)");
+        Assert.IsNotNull(host.RunOf(companion));
+        Assert.IsTrue(host.ApplyStop(stop), "the attack (priority 3) ends");
+        Assert.IsNull(host.RunOf(companion));
+        Assert.IsFalse(host.ApplyStop(stop), "nothing left to end");
     }
 
     [TestMethod]

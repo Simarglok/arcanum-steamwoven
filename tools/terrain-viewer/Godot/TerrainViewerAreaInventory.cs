@@ -303,7 +303,7 @@ public partial class TerrainViewerApp
             return;
         }
         EndInventory();
-        CancelPendingWalkOrder("lockpicks armed");
+        CancelPendingOrder("lockpicks armed");
         _pickPocketArmed = false; _pickPocketAfterRoute = null;
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";

@@ -11,8 +11,8 @@ the order part of [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-0
 The combat orders (attack, back off/stop, curse) are the NPC AI's slice I9 (ARC-WORLD-091, [AI followers](ai-followers.md)) through
 the same entry.
 
-**NOT READY:** the viewer gives the attack order no target (it does nothing) and runs no AI pass after an order; there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
-and the follower's AI pass after an order are not run by the viewer; lines are named by their message range, no line text or speech
+**NOT READY:** without the AI host (the AI off) the attack order is sent without a target (it does nothing) and no AI pass runs after an order; an attack order on a container or a ground item is ignored by the host's attack event, and on an object without a session entity (a door, scenery) it has no target (ARC-WORLD-117); there is no typed order text (Enter) and no keyword lookup of `mes\broadcast.mes`; the move order's "please move" goal
+is not run by the viewer; lines are named by their message range, no line text or speech
 is loaded; the spread-out step is a project approximation (below). Owner decisions D1–D4 (2026-10-21): the Steamwoven setting fixes each
 bug, the Original setting keeps it. Parity of the viewer's goals NOT_VERIFIED.
 
@@ -83,10 +83,12 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
   modifier, or a press on the ground that the world accepts closes it (that press does nothing else; a press while the world does
   not own input is ignored as any ground press is). A window resize closes it too. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
-  dead or unconscious, OL1); the HUD shows the pending walk order, and any key other than a bare modifier, a modal window, focus
+  dead or unconscious, OL1); the HUD shows the pending walk (or attack) order, and any key other than a bare modifier, a modal window, focus
   loss, another menu choice or a rebuilt group cancels it. A ground press while the world does not own input is ignored as any
   ground press is (the walk stays pending); the press that picks the tile is refused while the hero is dead or unconscious. Attack
-  is sent at once, with no target cursor and no target (slice I9 answers `NoTarget`: nothing). The strip is hidden and its menu closed
+  asks for an object the same way (ARC-WORLD-117): the next left press's object is the target (none on an empty spot), and with the
+  AI host the orders run each follower's AI pass ([AI host](ai-host.md#followers-in-combat-arc-world-115)); F2's target is the
+  object under the pointer at the release. The strip is hidden and its menu closed
   while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
   the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
