@@ -67,6 +67,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-102: whether a spell's projectile eye candy has art (0x458B70), so its release launches a missile
     /// (ARC-WORLD-105: <see cref="AreaAiNoticeKind.Missile"/>, flown by the viewer).</summary>
     public Func<int, bool>? MissileArt { get; init; }
+    /// <summary>ARC-WORLD-114: runs an NPC's first-heartbeat or heartbeat script (the NPC as attachee and triggerer) and answers whether
+    /// the tick goes on ("run default", or no script that runs); null: no script runs at these points.</summary>
+    public Func<AiScriptPoint, string, bool>? Heartbeat { get; init; }
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
@@ -138,7 +141,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
-    private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000;
+    private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000, OffObject = 0x2;
     private const uint Undead = 0x4, Animal = 0x8, SleepingFlag = 0x1000, NoFleeFlag = 0x8000000, NonLethal = 0x10000000, AnimalEnshrouded = 0x40000000;
     private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
     private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
@@ -482,8 +485,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     public long DistanceToPc(string npc) => Tile(npc) is { } at && Tile(Pc) is { } pc ? AiExecutorRules.Distance(at, pc) : -1;
 
-    // No SCR runs at the AI points yet: every point continues.
-    public bool RunScript(AiScriptPoint point, string npc, string? triggerer) => true;
+    /// <summary>ARC-WORLD-114: the first-heartbeat and heartbeat points run the NPC's script through the scene's
+    /// <see cref="AreaAiScene.Heartbeat"/> (true: continue); the other points run no script yet and continue.</summary>
+    public bool RunScript(AiScriptPoint point, string npc, string? triggerer) =>
+        point is not (AiScriptPoint.FirstHeartbeat or AiScriptPoint.Heartbeat) || _scene.Heartbeat?.Invoke(point, npc) != false;
     public bool RunWaypoints(string npc) => false;
     public void RunStandpoints(string npc) { }
     public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
@@ -496,7 +501,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public void MoveToLeader(string npc) { }
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
-    public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & DontDraw) != 0;
+    // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).
+    public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & (DontDraw | OffObject)) != 0 || Gone(npc);
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     public bool ConversationCallback => false;

@@ -151,7 +151,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters, death, debug-travel, report)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, premade, life, floaters, death, debug-travel, report)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
                         var only = MapSmokeStages();
@@ -199,6 +199,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                                 // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
+                                // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
+                                if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).

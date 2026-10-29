@@ -28,7 +28,7 @@ public sealed record AreaObjectAttackTarget(string Entity, AreaObjectRecord Row,
 /// <see cref="SessionObjectFacts.ItemFacts"/>). A container's entity is its inventory holder's, so its spill reaches the
 /// holder's items; a portal's is the lock domain's; any other static object's is <see cref="AreaUseScriptHost.EntityId"/>. Whether
 /// an object's use script is a trap is the caller's (<see cref="AreaUseScriptHost.IsTrap"/>, ARC-COMBAT-011). It also names the objects the session destroyed or
-/// switched off, which the view no longer draws.
+/// switched off, which the view no longer draws, and since ARC-WORLD-114 the NPCs a script switched off (<see cref="AreaUseScriptHost.OffProperty"/>).
 /// </summary>
 public sealed class AreaObjectTargets
 {
@@ -37,6 +37,8 @@ public sealed class AreaObjectTargets
     private readonly IReadOnlyDictionary<AreaObjectKey, (string Entity, SessionOpenableBaseline Baseline)> _portals;
     private readonly AreaInventoryMap? _inventory;
     private readonly Dictionary<AreaObjectKey, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind)> _objects = [];
+    // ARC-WORLD-114: the NPC rows by key, with their session entity, which a script can switch off.
+    private readonly Dictionary<AreaObjectKey, string> _npcs = [];
 
     /// <summary>The targets of a shown map from its snapshot, its drawn portals and its inventory map (null without a seed).</summary>
     public static AreaObjectTargets From(AreaSnapshot snapshot, AreaPortals portals, AreaInventoryMap? inventory)
@@ -59,6 +61,7 @@ public sealed class AreaObjectTargets
         if (runtimeMap < 1) return;
         foreach (var row in rows)
         {
+            if (row.Type == CombatFieldReader.NpcType && row.WorldX is not null && row.WorldY is not null) _npcs.TryAdd(row.Key, AreaUseScriptHost.EntityId(row));
             DamageableObjectKind? kind = row.Type switch
             {
                 CombatFieldReader.PortalType => DamageableObjectKind.Portal,
@@ -115,8 +118,8 @@ public sealed class AreaObjectTargets
 
     private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
 
-    /// <summary>The objects the session destroyed or switched off: the view no longer draws them, and since ARC-WORLD-065 they no
-    /// longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
+    /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off): the view no
+    /// longer draws them, and since ARC-WORLD-065 they no longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
     /// unchanged.</summary>
     public IReadOnlySet<AreaObjectKey> Gone(GameSessionOwner session)
     {
@@ -124,7 +127,8 @@ public sealed class AreaObjectTargets
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off).Select(pair => pair.Key).ToHashSet();
+            or SessionObjectCondition.Off).Select(pair => pair.Key)
+            .Concat(_npcs.Where(pair => AreaUseScriptHost.SwitchedOff(session, _map.RuntimeMap, pair.Value)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);
