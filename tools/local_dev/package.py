@@ -39,6 +39,9 @@ SMOKE_MINUTES = 10.0
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_")
 BOTTLES = 32  # GameFolderLocator.MaxBottles
 KEPT_VARIABLES = frozenset({"ARCANUM_QUEUE_TICKET", "ARCANUM_QUEUE_KIND"})
+# ARC-DEV-062: BUILD.txt's map-smoke line when the full map smoke chain did not run before this package (`./arcanum daily`
+# runs it and passes its result with --map-smoke).
+MAP_SMOKE_NOT_RUN = "NOT RUN (./arcanum package alone; ./arcanum daily runs the full map smoke chain first)"
 
 
 @dataclass(frozen=True)
@@ -243,7 +246,8 @@ def remove(path: Path) -> None:
         path.unlink()
 
 
-def install(built: Path, destination: Path, commit: str, date: str, smoke: str, instruction: Path) -> Path:
+def install(built: Path, destination: Path, commit: str, date: str, smoke: str, instruction: Path,
+            map_smoke: str = MAP_SMOKE_NOT_RUN) -> Path:
     """Replace destination/<product> (a bundle or a zip) by `built`; the build it replaces moves to destination/previous/ with its BUILD.txt and
     README.md. The new build is first moved next to its place (the copy across volumes, the step that can fail on a full
     disk), so the current build is rotated only once the new one is complete on the same volume."""
@@ -263,14 +267,17 @@ def install(built: Path, destination: Path, commit: str, date: str, smoke: str, 
             if (destination / name).is_file():
                 (destination / name).rename(previous / name)
     incoming.rename(current)
-    (destination / "BUILD.txt").write_text(f"commit {commit}\ndate {date}\nproduct {built.name}\nsmoke {smoke}\n", encoding="utf-8")
+    (destination / "BUILD.txt").write_text(f"commit {commit}\ndate {date}\nproduct {built.name}\nsmoke {smoke}\n"
+                                           f"map-smoke {map_smoke}\n", encoding="utf-8")
     if instruction.is_file():
         shutil.copyfile(instruction, destination / "README.md")
     return current
 
 
 def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bool, smoke: bool, keep_work: bool,
-            runner: Runner = run_logged, base: dict[str, str] | None = None) -> Path:
+            runner: Runner = run_logged, base: dict[str, str] | None = None, map_smoke: str = MAP_SMOKE_NOT_RUN) -> Path:
+    if not map_smoke.strip() or any(character in map_smoke for character in "\r\n"):
+        raise PackageError("--map-smoke takes one line of text")
     if fetch:
         say("fetch origin main")
         git(root, "fetch", "origin", "main")
@@ -329,7 +336,7 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             zip_folder(product, built)
             product = built
         try:
-            installed = install(product, output / platform.folder, commit, date, smoked, source / INSTRUCTION)
+            installed = install(product, output / platform.folder, commit, date, smoked, source / INSTRUCTION, map_smoke)
         except OSError as error:
             raise PackageError(f"could not install into {output / platform.folder}: {error}") from error
         say(f"PASS {installed} (main {commit[:10]}, {date}, smoke {smoked.split(' (', 1)[0]})")
@@ -353,6 +360,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")
     result.add_argument("--keep-work", action="store_true", help="keep the temporary source and export folder")
     result.add_argument("--output", type=Path, help="default: artifacts/packages in the main checkout")
+    result.add_argument("--map-smoke", default=MAP_SMOKE_NOT_RUN, metavar="TEXT",
+                        help="the full map smoke chain's result for BUILD.txt's map-smoke line (ARC-DEV-062: ./arcanum daily)")
     return result
 
 
@@ -368,7 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root = main_checkout()
         output = args.output or root / "artifacts" / "packages"
         package(PLATFORMS[args.platform], root=root, output=output, ref=args.ref, fetch=not args.no_fetch,
-                smoke=not args.no_smoke, keep_work=args.keep_work)
+                smoke=not args.no_smoke, keep_work=args.keep_work, map_smoke=args.map_smoke)
     except PackageError as error:
         print(f"package: FAIL {error}", file=sys.stderr)
         return 1

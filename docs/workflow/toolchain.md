@@ -101,8 +101,8 @@ history held about 500 runs of such copies of one template).
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the
   Crash Site, or at `--sector`), with the Crash Site smoke first only when the change is related to it
-  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build (when main
-  changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
+  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
+  (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
   the junk pile stage).
@@ -284,6 +284,31 @@ stage line is the case this node covers; a window that reads true still draws by
 
 Not covered: Windows and Linux were not run; another OS window of the process that can draw while the main one cannot
 would get a second draw in that frame (the viewer opens none).
+
+### System pointer in automated runs (ARC-DEV-060)
+
+The viewer's smokes and self-tests drive the pointer themselves: they push mouse events into the viewport
+(`Viewport.push_input`) or, in the terrain smoke, parse them (`Input.parse_input_event`). The system pointer reached the
+same GUI through the window, and on macOS the key window receives the pointer's moves anywhere on the screen. Godot also
+replays a motion at the system pointer on every cursor shape change (`Input.set_default_cursor_shape`), and the AREA
+hover changed the shape whenever the system pointer rested inside the window over the world. Either took the GUI's hover
+off the control a test had just entered, one frame later: the hotkey bar smoke's `entering slot 2 shows the spell's hint:
+Plain texts=2` (15 of 43 runs in the launch queue's run logs on the owner's Mac before the fix; the logs are outside
+git) and the bar smoke's button hover and release failures.
+Whether a run failed depended on where the owner's pointer was and whether it moved.
+
+The process that hosts an automated run (as for the draw keeper above) adds an `AutomatedPointerGate` node and prints
+`ARC-DEV-060 automated pointer gate window=0`. It takes the main window's input callback and passes every event as the
+window would (the `window_input` signal for all but internal events, then the window's input), except mouse and gesture
+events, which pass only when a test parsed them with the gate's test device (48; buffered motions merge without
+comparing devices, so a parsed test motion must not directly follow a system one). The AREA hover of an automated run
+reads no system pointer either (headless runs and the self-test's bootstrap apps too): it is over the world only where a
+test places the pointer. The hotkey bar smoke checks
+the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
+every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
+
+Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
+(mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
 
 ### Quiet output (ARC-DEV-037)
 
