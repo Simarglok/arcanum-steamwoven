@@ -182,7 +182,7 @@ public sealed class AreaConversationHost
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null,
             Speakers.Select(speaker => Scope(speaker.Row, session)).ToArray());
-        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet);
+        Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet, Profile);
     }
 
     /// <summary>The map whose dialog state this host reads and writes (ARC-WORLD-048: a visitor's home map).</summary>
@@ -197,8 +197,14 @@ public sealed class AreaConversationHost
     /// the viewer cannot quick-load during a talk, whose panel takes every key).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
-        _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory, _npcSheet).KeepingGreetingTexts(_greetingTexts);
+    public AreaConversationHost Rebind(GameSessionOwner session)
+    {
+        var host = new AreaConversationHost(_snapshot, _map, Speakers, _content, session, _baseProfile, _givenInventory, _party,
+            _contentDetail, _companions, _npcAdvancement, _refuseUncoveredInventory, _npcSheet).KeepingGreetingTexts(_greetingTexts);
+        // ARC-SCRIPT-050: the shown map's use host still answers the talk's queries (it follows the viewer's session).
+        host.Scripts.QueryHost = Scripts.QueryHost;
+        return host;
+    }
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -313,6 +319,7 @@ public sealed class AreaConversationHost
             detail = $"script {call.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}";
             return false;
         }
+        if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (get area on the start map, GA3)"; return false; }
         if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
         if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
         detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
@@ -370,6 +377,9 @@ public sealed class AreaConversationHost
         if (result.Outcome == ScrOutcome.Refused)
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
                 $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
+        // ARC-SCRIPT-050: a question the viewer cannot answer (get area on the start map) ended the dispatch with nothing applied.
+        if (result.Stop == ScrStop.NotModelled)
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {result.Script}: NotModelled (get area on the start map, GA3)");
         // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
         // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
         (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");

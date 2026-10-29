@@ -87,6 +87,26 @@ public partial class TerrainViewerApp
         layer.Redraw();
     }
 
+    // ARC-SCRIPT-050: the float lines (23) of the dialog scripts the viewer ran, over their speakers. The original hands them to the dialog
+    // interface's float callback (0x568430 → its speech display 0x568540), which is not modelled; here they are the floater field's white lines.
+    private int _scriptFloats;
+
+    private void TickScriptFloats()
+    {
+        foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray())
+        foreach (var line in scripts.TakeFloats())
+        {
+            if (_readyMode != TerrainViewerMode.CrashSiteArea || _readyArea is null) continue;
+            var owner = line.Speaker == scripts.Pc ? HeroFloater : line.Speaker.Code;
+            var layer = FloaterLayer();
+            DropFloatersOfOldScene(layer);
+            if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
+            if (layer.Field.Add(owner, line.Text, FloaterColor.White)) _scriptFloats++;
+            GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
+            layer.Redraw();
+        }
+    }
+
     private AreaFloaterLayer FloaterLayer()
     {
         if (_floaters is { } layer) return layer;
@@ -108,6 +128,7 @@ public partial class TerrainViewerApp
     /// <summary>Each frame: a new scene drops the lines; otherwise they rise (every 50 ms or more) and are drawn where their objects are.</summary>
     private void TickFloaters()
     {
+        TickScriptFloats();
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;

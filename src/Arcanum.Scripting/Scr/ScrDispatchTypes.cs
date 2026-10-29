@@ -123,6 +123,18 @@ public interface IScrObjectQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-050: the area question of get area (action 84, ledger GA1–GA3). A host whose admission set holds the action implements this
+/// interface; the interpreter asks only for the object the action names.
+/// </summary>
+public interface IScrAreaQueries
+{
+    /// <summary>The area get area stores for the object (0x4CB6A0): the current map's map-list area (0x40FFE0, 0 for a map without a row)
+    /// whatever the object's map, and only when that is 0 and the current map is the start map, the area at the object's location
+    /// (0x4CB630); null when the host cannot answer (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
+    int? AreaOf(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-SKILLS-009: the skill question of get skill (action 47, ledger SX1, SX2). A host whose admission set holds the action implements
 /// this interface; the interpreter asks only for skill numbers 0..15 and stores 0 for any other without asking.
 /// </summary>
@@ -333,6 +345,9 @@ public enum ScrStop
     /// <summary>ARC-SCRIPT-042: a call-ex (81) names an attachment point outside 0..35 or the dialog-override slot; the dispatch ends with skip
     /// default and applies nothing (the original would index past the object's script array).</summary>
     CallExPoint,
+    /// <summary>ARC-SCRIPT-050: the host cannot answer a question the original answers (get area on the start map with area 0, ledger GA3, not
+    /// modelled); the dispatch ends with skip default and applies nothing, and the caller reports the run as not ready.</summary>
+    NotModelled,
 }
 
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
@@ -375,6 +390,15 @@ public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer,
 /// the host reads the DLG and decides whether it can show it. A run without an attachee prints nothing, as the original.
 /// </summary>
 public readonly record struct ScrPrintLine(int Script, int Line, int Kind);
+
+/// <summary>
+/// ARC-SCRIPT-050: one object of a float line action (23, ledger FL1–FL5): line <paramref name="Line"/> of the DLG of <paramref name="Script"/>
+/// (the number the run executes, as for print line) floated over <paramref name="Speaker"/>, with <paramref name="Pc"/>, the first PC
+/// in the game-window rectangle around the run's triggerer, as the dialog's PC. The original builds the text through the dialog's
+/// NPC-line step (which runs the line's action field between that PC and the speaker) and hands it to the dialog interface's float
+/// callback; the host reads the DLG and decides whether it can show it.
+/// </summary>
+public readonly record struct ScrFloatLine(int Script, int Line, ScrObjectRef Speaker, ScrObjectRef Pc);
 
 /// <summary>What a script's sound action asks for (ARC-SCRIPT-040).</summary>
 public enum ScrSoundKind
@@ -443,8 +467,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
-        IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null)
+        IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null)
     {
+        Floats = floats ?? Array.Empty<ScrFloatLine>();
         Creations = creations ?? Array.Empty<ScrCreateRequest>();
         ObjectStates = objectStates ?? Array.Empty<ScrObjectStateRequest>();
         States = states ?? Array.Empty<ScrStateRequest>();
@@ -502,9 +527,12 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrCreateRequest> Creations { get; }
     /// <summary>ARC-WORLD-114: the toggle-state and kill requests, in action order (ledger SU6, PM1).</summary>
     public IReadOnlyList<ScrObjectStateRequest> ObjectStates { get; }
+    /// <summary>ARC-SCRIPT-050: the float lines, one per object, in action order (ledger FL4).</summary>
+    public IReadOnlyList<ScrFloatLine> Floats { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
-        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0;
+        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
+        && Floats.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -531,7 +559,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S18"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S19"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -552,7 +580,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S18)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S18.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S19)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S19.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -566,8 +594,10 @@ public sealed record ScrRunOptions
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
-            throw new ArgumentException("A set with random, loop for, distance between or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+            throw new ArgumentException("A set with random, loop for, distance between, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
+        if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
+            throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
     }
 }

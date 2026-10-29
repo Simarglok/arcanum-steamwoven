@@ -223,8 +223,18 @@ public sealed class ScrAdmissionSet
     /// <summary>The conditions of <see cref="S18"/> a host answers through <see cref="IScrObjectStateQueries"/>.</summary>
     public static IReadOnlySet<int> ObjectStateQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff };
 
-    /// <summary>The actions of <see cref="S15"/> and <see cref="S18"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
-    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween };
+    /// <summary>
+    /// The talk set (ARC-SCRIPT-050, slice 2 of the script trigger audit): <see cref="S18"/> plus float line (23), which hands one
+    /// <see cref="ScrFloatLine"/> per object of its object operand to the host after finding the PC in the game-window rectangle around the
+    /// triggerer through <see cref="IScrWorldQueries.CrittersInVicinity"/> (ledger FL1–FL5), and get area (84), which stores the area the
+    /// host answers through <see cref="IScrAreaQueries"/> (GA1–GA3).
+    /// </summary>
+    public static ScrAdmissionSet S19 { get; } = new("S19", S18.Conditions, S18.Actions.Concat([ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]),
+        S18.ValueKinds, S18.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
+    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
+        { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
@@ -410,6 +420,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Distance between stores into its number operand 2 (ARC-SCRIPT-049, HW3).
             if (!condition && type == ScrCatalogue.Action.DistanceBetween && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
+            if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
             if (slot != 0) continue;
             var literal = (ScrValueKind)kind == ScrValueKind.Number;

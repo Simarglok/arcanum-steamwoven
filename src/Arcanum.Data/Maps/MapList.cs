@@ -14,6 +14,10 @@ public sealed record MapListEntry(int Catalogue, string Name, WorldLocation? Sta
 
     /// <summary>ARC-UI-038: the row's map type (its fourth value <c>Type: word</c>; <see cref="MapListType.None"/> without one).</summary>
     public MapListType Type { get; init; }
+
+    /// <summary>ARC-SCRIPT-050: the row's world-map area (its optional <c>Area: n</c> value, 0x4126FD; 0 without one), which get area (84)
+    /// answers for an object on this map (0x40FFE0).</summary>
+    public int Area { get; init; }
 }
 
 /// <summary>ARC-UI-038: the map types of the map list (the original's table at 0x59F058: <c>NONE</c>, <c>START_MAP</c>,
@@ -76,9 +80,43 @@ public sealed class MapList
             // so it is treated as absent (the original keeps it).
             WorldLocation? start = null;
             if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
-            entries.Add(new(number, values[0].Trim(), start) { Type = values.Length >= 4 ? TypeOf(values[3]) : MapListType.None });
+            entries.Add(new(number, values[0].Trim(), start) { Type = values.Length >= 4 ? TypeOf(values[3]) : MapListType.None, Area = AreaOf(values) });
         }
         return new(MapListStatus.Read, entries.AsReadOnly());
+    }
+
+    /// <summary>ARC-SCRIPT-050: the area of the runtime map (0x40FFE0): the row's <see cref="MapListEntry.Area"/> for a number 1..count, else 0.</summary>
+    [OriginalFunction(0x40FFE0, OriginalFunctionScope.Full)]
+    public int AreaOfRuntime(int runtime) => runtime >= 1 && runtime <= Entries.Count ? Entries[runtime - 1].Area : 0;
+
+    // ARC-SCRIPT-050: the optional values after the start are read in a fixed order through one cursor (0x412681..0x41271C): "Type:",
+    // then "WorldMap:" (0x532320 with 0x5A05D0), then "Area:" (0x5A05C8). Each test skips white space and must find its case-sensitive
+    // keyword at the cursor; a value that does not match leaves the cursor on it for the next test, a match consumes the value up to and
+    // past its comma. The number after "WorldMap:" and "Area:" is the C runtime's atol of the value (0x531990), which accumulates without an
+    // overflow check (no installed row overflows). A row without a matching "Area:" keeps 0.
+    private static int AreaOf(string[] values)
+    {
+        var at = 3;
+        if (at < values.Length && Keyword(values[at], "Type:") is not null) at++;
+        if (at < values.Length && Keyword(values[at], "WorldMap:") is not null) at++;
+        return at < values.Length && Keyword(values[at], "Area:") is { } rest ? Atol(rest) : 0;
+    }
+
+    private static string? Keyword(string value, string keyword)
+    {
+        var rest = value.TrimStart(' ', '\t', '\n', '\v', '\f', '\r');
+        return rest.StartsWith(keyword, StringComparison.Ordinal) ? rest[keyword.Length..] : null;
+    }
+
+    private static int Atol(string text)
+    {
+        var i = 0;
+        while (i < text.Length && text[i] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r') i++;
+        var negative = i < text.Length && text[i] == '-';
+        if (i < text.Length && text[i] is '-' or '+') i++;
+        var total = 0;
+        for (; i < text.Length && text[i] is >= '0' and <= '9'; i++) total = unchecked(total * 10 + (text[i] - '0'));
+        return negative ? unchecked(-total) : total;
     }
 
     // ARC-UI-038: the optional type after the start (0x412681 → 0x532480): the value must begin, after white space, with the case-sensitive

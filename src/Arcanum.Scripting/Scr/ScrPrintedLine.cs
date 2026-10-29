@@ -17,7 +17,7 @@ public sealed record ScrPrintedLineText(ScrPrintedLineStatus Status, string Text
 /// <summary>
 /// The text a print-line action (<see cref="ScrPrintLine"/>) shows from a loaded DLG, as the original's NPC-line step
 /// builds it (ledger IS2, docs/research/item-insert-script.md): the record with the line's number; a missing record shows
-/// one space. The step runs the record's action field and selects generated text for a <c>g:</c>, <c>m:</c> or <c>r:</c>
+/// one space. The step runs the record's action field (a field of separators only holds no operation) and selects generated text for a <c>g:</c>, <c>m:</c> or <c>r:</c>
 /// prefix (any case) or a whole text of <c>i:</c> of the record text (whichever field is shown, as the conversation
 /// runtime tests NPC markers); neither is modelled, so such a line is
 /// <see cref="ScrPrintedLineStatus.Unsupported"/>. Otherwise the text, or the alternate text when the triggerer is a critter
@@ -34,7 +34,9 @@ public static class ScrPrintedLine
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(names);
         if (!document.TryGetRecord(line, out var record) || record is null) return new(ScrPrintedLineStatus.Shown, " ", $"no line {line}: one space");
-        if (record.Action.Length > 0) return new(ScrPrintedLineStatus.Unsupported, string.Empty, $"line {line} has an action field");
+        // ARC-SCRIPT-050: a field of separators only (24 of the 30 floated lines with an action field hold one or two spaces) is taken as
+        // holding no operation, by the conversation grammar's admission policy (not a reading of the original's scanner).
+        if (record.Action.Bytes.Any(b => !DialogConversationGrammar.IsSeparator(b))) return new(ScrPrintedLineStatus.Unsupported, string.Empty, $"line {line} has an action field");
         // As in the conversation runtime: the marker is tested on the record text whatever the field shown, and a marker is
         // ASCII, so the raw prefix decides it.
         var raw = record.Text.Bytes;
@@ -49,4 +51,5 @@ public static class ScrPrintedLine
             return new(ScrPrintedLineStatus.Unsupported, string.Empty, $"line {line}: {tokens}");
         return new(ScrPrintedLineStatus.Shown, DialogText.Substitute(text, names), $"line {line}");
     }
+
 }

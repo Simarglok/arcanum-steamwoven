@@ -52,6 +52,11 @@ public partial class TerrainViewerApp
             _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost,
                 party: arguments.AreaMapName is null || _companionData?.Data is not null, contentDetail: $"{content.Status}: {content.Detail}",
                 companions: arguments.AreaMapName is null ? null : MapCompanionFacts, npcAdvancement: AreaNpcAdvancement, npcSheet: AreaFollowerSheet);
+            // ARC-SCRIPT-050: a talk's guard conditions, random draws, float lines and get area are answered by the shown map's use host.
+            // Only while that snapshot is shown: the Crash Site's cave swaps the shown area without rebinding the talks, and a use host built
+            // for a snapshot not shown would replace the shown one's traps.
+            var snapshot = area.Snapshot;
+            _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
         }
         else _conversationHost = null;
         if (_conversationPanel is null)

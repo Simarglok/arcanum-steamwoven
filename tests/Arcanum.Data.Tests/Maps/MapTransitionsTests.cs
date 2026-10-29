@@ -61,6 +61,22 @@ public sealed class MapTransitionsTests
         Assert.IsNull(list.OfType(MapListType.None));
     }
 
+    /// <summary>ARC-SCRIPT-050: the area after the start (0x4125C0 at 0x4126FD, 0x40FFE0): Type, WorldMap and Area are tested in this order on
+    /// one cursor, each optional; a value that matches none of the remaining keywords stops the reading, and the number is atol's.</summary>
+    [TestMethod]
+    public void The_map_list_reads_each_rows_area_after_its_optional_type_and_world_map()
+    {
+        Write("rules/maplist.mes", Encoding.Latin1.GetBytes("{5000}{start, 10, 20, Type: START_MAP, WorldMap: 0, Area: 7}\n{5001}{plain, 1, 1,Area: 12}\n" +
+            "{5002}{world, 1, 1, WorldMap: 3,  Area:  -4x}\n{5003}{blocked, 1, 1, Foo, Area: 5}\n{5004}{late, 1, 1, Area: 6, Type: START_MAP}\n" +
+            "{5005}{lower, 1, 1, area: 8}\n{5006}{typed, 1, 1, Type: NOWHERE, Area: 9}\n{5007}{none, 1, 1}\n{5008}{short}\n"));
+        using var stack = Stack();
+        var list = MapList.Read(stack);
+        CollectionAssert.AreEqual(new[] { 7, 12, -4, 0, 6, 0, 9, 0, 0 }, list.Entries.Select(entry => entry.Area).ToArray());
+        // 5004's type comes after its area: the type is tested only first, on its area, so the row has none.
+        Assert.AreEqual(MapListType.None, list.ByRuntime(5)!.Type);
+        Assert.AreEqual((7, 12, 0, 0), (list.AreaOfRuntime(1), list.AreaOfRuntime(2), list.AreaOfRuntime(0), list.AreaOfRuntime(10)));
+    }
+
     [TestMethod]
     public void A_missing_or_unparsed_map_list_is_typed_and_empty()
     {

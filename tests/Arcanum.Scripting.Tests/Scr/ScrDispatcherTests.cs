@@ -389,7 +389,7 @@ public sealed class ScrDispatcherTests
             Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.InvalidEvent), (ScrDispatcher.RunObject(e, host).Outcome, ScrDispatcher.RunObject(e, host).Stop));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RunNpc(host, options: new() { MaxExecutedLines = 0 }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RunNpc(host, options: new() { MaxExecutedLines = 1001 }));
-        var wider = new ScrAdmissionSet("wider", [0], [1, 2, FloatLine], [ScrValueKind.Number], [ScrFocusKind.Player]);
+        var wider = new ScrAdmissionSet("wider", [0], [1, 2, CritterDisband], [ScrValueKind.Number], [ScrFocusKind.Player]);
         Assert.ThrowsExactly<ArgumentException>(() => RunNpc(host, options: new() { Admission = wider }));
         // A default object reference is not a valid role.
         foreach (var e in new ScrObjectEvent[] { new(Heartbeat, default, Pc, null), new(Heartbeat, Npc, default(ScrObjectRef), null), new(Heartbeat, Npc, Pc, default(ScrObjectRef)) })

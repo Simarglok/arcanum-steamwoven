@@ -9,8 +9,8 @@ namespace Arcanum.Scripting.Tests.Scr;
 internal static class ScrTestPrograms
 {
     internal const byte Counter = 0, Local = 2, Number = 3, GlobalFlag = 4;
-    /// <summary>Float line (23), an action outside every set the interpreter runs.</summary>
-    internal const int FloatLine = 23;
+    /// <summary>Critter disband (22), an action outside every set the interpreter runs (float line, 23, until ARC-SCRIPT-050).</summary>
+    internal const int CritterDisband = 22;
 
     internal readonly record struct Clause(int Type, (byte Kind, int Value)[] Operands);
     internal static Clause C(int type, params (byte, int)[] operands) => new(type, operands);

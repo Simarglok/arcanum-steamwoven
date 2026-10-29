@@ -193,7 +193,9 @@ public partial class TerrainViewerApp
             // ARC-WORLD-114: a heartbeat script's kill, checked before the run applies anything.
             KillByScript, CanKillByScript,
             // ARC-SCRIPT-047: the critters in a run's vicinity stand where the AI or the party walked them.
-            ScriptCritterCell);
+            ScriptCritterCell,
+            // ARC-SCRIPT-050: get area reads the shown map's map-list row.
+            () => _mapTransfers?.Transitions is { Entry: { } entry } transitions ? (entry.Area, transitions.IsStartMap) : null);
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
