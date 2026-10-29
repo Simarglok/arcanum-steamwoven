@@ -32,7 +32,7 @@ reputation owners' (`HostilityRules.Upset`, `ReputationRules.OriginSame`, the wo
 | `IssueCompanionOrder`, attack | broadcast type 10 (FO3, FO4, FO9) | No target (`CompanionOrderRequest.Target`) → `NoTarget`; the party filter → `PartyTarget`; otherwise in one revision NO_ATTACK cleared, then the ordered attack event (`HostilityRules.AttackEvent` over `CompanionOrderRequest.World`): an early stop → `AttackIgnored` with the stop; else the follower rule with the follower's direct leader → `AttackLocked` (`Locked`, the setter step's hook), `Complained` (rule, line, reaction) or `AttackIgnored`. The cleared stop stays in every case past the filter (FO9). No line. A step the session cannot make (no world, missing reaction facts for a complaint) is `Failed` but still clears the stop. |
 | `IssueCompanionOrder`, back off and stop | broadcast type 12 (FO5) | The acknowledgement (2100–2199) and `StopAttacking` for the follower (`Stopped`, the peace step for the host's interrupts). |
 | `IssueCompanionOrder`, curse | broadcast type 7 (FO2) | Mind controlled → `MindControlled`; an unforced leave (the hero's charisma, else the consent facts' `PcCharisma`) → `LeaveRefused` for an extraordinary leader; else `Cursed`: the follower is free (FO7 clears NO_ATTACK in Steamwoven), `Insult` (the race insult, FO19: base 1000 of the race-line tables, chosen by the host) and `CurseAttack`, the hero's attack event on it at loudness 1 with no flags, which the host runs in full (fan-out, noise, its reaction to the attack). |
-| `IssueCompanionOrder`, the AI pass | call 0x4C389D (FO1) | With `CompanionOrderRequest.Ai`, each reached follower gets one `RunAiPass` right after its own order and before the next follower's, whatever the order did (`CompanionOrderOutcome.Pass`). |
+| `IssueCompanionOrder`, the AI pass | call 0x4C389D (FO1) | With `CompanionOrderRequest.Ai`, each reached follower gets one `RunAiPass` right after its own order and before the next follower's, whatever the order did (`CompanionOrderOutcome.Pass`). Since ARC-WORLD-117 `CompanionOrderRequest.Ordered` is the host's part of each order, called with its outcome before that pass (a back off's animation interrupt, which the original makes inside stop attacking). |
 
 Per follower the order's combat facts are `CompanionOrderFacts.Combat` (`SessionPeaceFacts`: the setter's facts, the reaction facts
 of a complaint and of a stop's peace with the hero's side, the combat-mode facts of a stop); invalid ones, or an invalid target
@@ -59,9 +59,12 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
 ## Not ready
 
 - **Host.** Since ARC-WORLD-115 the AREA viewer's AI host runs the hero's companions and its attack events tell the followers
-  ([AI host](ai-host.md#followers-in-combat-arc-world-115)). The viewer's attack order (F2, the portrait menu) still sends no
-  target and does nothing (`NoTarget`) and its back off stops attacking; the viewer runs no AI pass after an order. The highlighted
-  object (0x43C570) and the menu's target cursor are the host's.
+  ([AI host](ai-host.md#followers-in-combat-arc-world-115)). Since ARC-WORLD-117 the viewer's orders go through that host: the
+  attack order's target is the highlighted object (F2: the one under the pointer at the release; the portrait menu: the object of
+  the next press, its target cursor; U2 stays an inference), the followers' combat facts and the attack event's world are the
+  host's, each reached follower's AI pass runs through it, and a back off's interrupt is the host's. The host's world knows
+  critters only (an order on a container or a ground item is ignored at its attack event; a door or scenery has no session entity,
+  so no target), it does not run the curse's attack event.
 - **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115); the curse returns its attack event
   for the host, which does not run it yet. The comment lines are rules the attack resolution and the damage step do not
   call yet; the "combat taunts" setting is not in the options (ARC-UI-013), and the line texts and the race-line selection are the
@@ -77,7 +80,8 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
 the four line ranges, tell followers, the party filter, the taunt kind and its two draws, FO17, the near-death crossing and FO16,
 the activity test. `CompanionCombatOrderTests` (Session): the attack's lock and lifted stop in one revision per follower, no
 target and the party filter, FO9 with an ignored event, a complaint with −5 in combat mode, back off, curse in both settings
-(FO7) and an extraordinary leader, one AI pass per reached follower and before the next follower's order, an origin complaint,
+(FO7) and an extraordinary leader, one AI pass per reached follower and before the next follower's order, the host's part of each
+order before its pass (ARC-WORLD-117), an origin complaint,
 a target in combat mode and a door through the order, a failed step that still lifts the stop, refused facts, and
 `ApplyFollowerRule`'s writes.
 

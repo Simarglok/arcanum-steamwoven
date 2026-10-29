@@ -72,6 +72,7 @@ waiting; `AreaAiScene.Followers`, `IAreaAiFollowers`) are run by the host like i
 | Hold | — | `AreaAiHost.Holds`: while a companion has a goal run of the host or its danger state is not NONE, its walk makes no follow decision (`AreaCompanionGroup.HeldByAi`) and drives only the host's steps. |
 | Steps and turns | — | The host's step of a companion (`BeginStep`) orders its own walk one step onto the next cell (`AreaCompanionGroup.StepTo`, the walk-here order's ordered goal `CompanionFollower.WalkTo`; a refused one is traced); its cell is that walk's, so the host reads it from the scene's companions. A turn stands its settled grid again with the new facing (`FaceTo`). Its body is the companion group's (the T0 frame with the walk or run cycle). The companions' walks see the AI's moved NPCs (`AreaCompanionGroup.Extra`: their T0 records away, their live cells held), as the hero's does. |
 | First-step test | 0x425130 (AP1) | The arrival test's step toward the target reads the walker's overlay toward it (`Occupancy`): the target is made no-block (its T0 record and every moved record away), the other critters' live cells block. Before, it read the bare map data, so an attacker next to an NPC standing on its own record's cell met that record as an object in its way and found no first step. Next to the target past a corner object there is no first step and, as in the original, no route (AP2), so the attack ends (AP4). |
+| Orders | 0x4C31A0, 0x43C570, call 0x4C389D (FO1, FO3, FO5) | Since ARC-WORLD-117 the viewer's follower orders go through the host (`AreaCompanionOrders.Send`): each follower's combat facts are the host's (`OrderFacts`: the setter's facts, the reaction facts toward the hero, the combat-mode facts), the host is the ordered attack event's world and each reached follower's AI pass runs through it right after its order. The attack order's target is the highlighted object as its session entity (`AreaCompanionOrders.Target`): for F2 the object under the pointer at the key's release, for the portrait menu's attack the object under the next left press (its target cursor; not while the hero is dead or unconscious, OL1); none, or a press on no object, is no target (the order does nothing but the pass). A back off's stop interrupts the follower's run at priority 3 (`ApplyStop`, through the order's `Ordered` hook) right after its order and before its pass, as the original's stop attacking interrupts inside the order, so the pass finds it idle. This host's hostility world knows critters only, so an attack order on a container or a ground item stops at its attack event (Missing) and the follower ignores it; a door or scenery has no session entity, so no target. Without the host the attack order goes without a target. Only the attack and back-off orders carry the combat facts. The walk-here goal and the spread step start through the same hook, before the pass, as the original sets them inside 0x4C31A0 before 0x4C389D. |
 | Step test | — | A step's terrain test reads the map with the T0 records the planner moves too (the walked NPCs', the companions', the removed ones) and no live cells (the destination's critter is the living-critter test's): a route through a companion's home cell or a walked NPC's origin is no longer refused step by step while the planner keeps planning it. |
 
 ## Turn-based round (ARC-WORLD-095)
@@ -271,8 +272,10 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   read (F0); goal 83's casting animation is not played (NPC ART is not read: the release comes at once); the NPC's cast eye candy times
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
-- **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events). Not ready: the attack
-  order's target (the highlighted object) and the AI pass after an order, the comment lines (taunts, near-death, the complaint's upset
+- **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events; since ARC-WORLD-117 the
+  viewer's orders carry the attack target and run the AI pass through the host). Not ready: the curse's attack event (the cursed
+  NPC is free, and free companions get no AI), an attack order on a non-critter object (the host's world knows critters only), the
+  menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
   line), the world-map travel's stop and allow calls, free companions' AI, the companion's loyalty step still on its own tick beside
   the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
   art plays for a companion's heal too). Since ARC-WORLD-116 a companion heals the hero with a healing item through the heal skill's
@@ -298,7 +301,12 @@ tells the victim's follower; a waiting companion is not told; a peaceful compani
 the scene nothing is run; next to the enemy past a corner object there is no first step and no route (AP1, AP2), while the enemy's
 own T0 record on its cell does not block the first step; after the fight (state NONE, no run) the companion is released to its walk;
 its step onto its own home record is not refused; out of danger a companion holding a healing item heals the hurt hero through the
-heal step's heal-skill rung, goal 33 and the session (ARC-WORLD-116). `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
+heal step's heal-skill rung, goal 33 and the session (ARC-WORLD-116); since ARC-WORLD-117 the attack order's target is the highlighted
+object's entity (none, an object without one, another map's: none), an attack order through the host locks the companion on its target
+and its AI pass starts the attack, which walks up and strikes, an attack order without a target or on the party does nothing but the
+pass, without the host it lifts the stop and fails with no pass, back off through the host stops the fight (peace, interrupt,
+NO_ATTACK) before its pass, whose gate finds the companion idle, and releases it to its walk, and the stop's interrupt ends the attack
+run only when asked. `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
 paying nothing; an NPC victim's pool and the kill award for a PC-led killer only; the hero's critical-miss fate; the refusals.
 `AreaAiHostTests` (viewer Core): the movers' steps and slide; on the installed original (`ARC_AREA_CONVERSATION_GAME_ROOT`,
 `ARC_CAVE_MOBILE`) an animal of the Crash Site cave that the hero hits reacts, focuses the hero through its tick's danger update,
@@ -353,7 +361,10 @@ the eleven others are killed, drawn fallen and lootable as dead NPCs, the map da
 `Arcanum1-024-fixed` with `--hero` (ARC-WORLD-115): a free speaker (Virgil) joins, the hero stands a few cells from the nearest living
 NPC that is not a pre-made hero's and attacks it; the follower is told, held, walks up through its own walk and strikes; marker
 `ARC-WORLD-115 native-smoke ai-follower PASS` (since ARC-WORLD-116 first, where the hero stands, the follower given an installed healing
-item heals the hero hurt to half through the heal skill's rung and goal 33; marker `ARC-WORLD-116 native-smoke ai-heal-item PASS`);
+item heals the hero hurt to half through the heal skill's rung and goal 33; marker `ARC-WORLD-116 native-smoke ai-heal-item PASS`;
+since ARC-WORLD-117, right after the blow, the viewer's back-off order stops the fight with its AI pass and an attack order on the NPC
+as the highlighted object locks the follower on it, its pass starts the attack and the follower strikes again; marker
+`ARC-WORLD-117 native-smoke ai-order PASS`, before the stage's own);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.

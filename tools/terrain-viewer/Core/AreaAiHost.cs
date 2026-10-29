@@ -533,6 +533,34 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         }
     }
 
+    /// <summary>
+    /// ARC-WORLD-117: a follower's combat facts for an order (<see cref="CompanionOrderFacts.Combat"/>): the setter's facts of an attack
+    /// order's lock, its reaction facts toward the hero (a complaint's change, a stop's peace with the hero's side) and its combat-mode
+    /// facts (a stop's exit). Missing reaction or combat-mode facts stay null, as the session's defaults.
+    /// </summary>
+    public SessionPeaceFacts OrderFacts(string follower)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        return new()
+        {
+            Setter = SetterFacts(follower),
+            Reaction = ReactionFacts(follower) is { } facts ? new SessionPeaceReaction(facts.Npc, facts.Pc) : null,
+            CombatMode = NpcCombatMode(follower),
+        };
+    }
+
+    /// <summary>
+    /// ARC-WORLD-117: the host's part of an order's stop attacking (back off, FO5), run right after the follower's order and before
+    /// its AI pass (<see cref="CompanionOrderRequest.Ordered"/>): the stop's animation interrupt at priority 3
+    /// (<see cref="SessionPeaceStep.Interrupted"/>, 0x44E2C0 as at a round's start) ends the follower's walk, attack or flight run with
+    /// its end nodes, so the pass finds it idle. True: it freed a run.
+    /// </summary>
+    public bool ApplyStop(SessionPeaceStep step)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        return step.Interrupted && Interrupt(step.Entity);
+    }
+
     // The witnesses of an attack's noise: the attacker's square when under 30 tiles apart, then the victim's (AW16 under the switch).
     private void Witnesses(string attacker, string victim)
     {
