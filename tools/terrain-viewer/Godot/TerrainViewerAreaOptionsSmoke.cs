@@ -14,7 +14,13 @@ public partial class TerrainViewerApp
     // through the hero's turn-based switch, and the O key closes the menu. The settings are restored at the end.
     private async Task RunAreaOptionsSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-013 options smoke: " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            // The scene's failure line names only the exception's type: the reason is printed first.
+            GD.Print("ARC-UI-013 options smoke FAILED: " + why);
+            throw new InvalidOperationException("ARC-UI-013 options smoke: " + why);
+        }
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-013-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -45,7 +51,11 @@ public partial class TerrainViewerApp
 
             Require(_arguments?.MainMenu == true && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && CurrentAreaMap == 1,
                 "the menu is open over the start map (run with --main-menu true)");
-            Require(_gameSettingsStore is { Persistent: false } && _gameSettings == AreaGameSettings.Defaults, "an automated run uses the original's defaults, no file");
+            // ARC-DEV-061: the smoke runner points GAME_SETTINGS_TEST_PATH into the smoke's own folder, so the store may have a file there,
+            // but nothing is saved in it yet.
+            Require((_gameSettingsStore is { Persistent: false } || !string.IsNullOrWhiteSpace(OS.GetEnvironment(GameSettingsStore.TestVariable)))
+                && _gameSettingsStore is { HasSaved: false } && _gameSettings == AreaGameSettings.Defaults,
+                "an automated run starts at the original's defaults, with no file or only the isolated test file, nothing saved");
             Choose(12);
             var texts = _mainMenu!.OptionsTexts;
             Require(_mainMenu.Window == AreaMenuWindow.Options && texts.FromGame && _mainMenuPanel!.HeaderForSelfTest == "Options: Game",

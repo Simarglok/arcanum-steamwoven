@@ -32,6 +32,23 @@ public enum CombatModeRefusal
 /// </summary>
 public readonly record struct CombatModeFacts(bool Dead, bool Active, bool Stoned, bool Paralysed, bool Stunned, bool Concealed, bool LocalPc);
 
+/// <summary>What the game view's mouse right release does for the local PC (<see cref="RealTimeCombatRules.RightRelease"/>).</summary>
+public enum RightReleaseAction
+{
+    None,
+    /// <summary>The combat-mode toggle; the caller only reaches it in combat mode, so it leaves through the exit gate.</summary>
+    ToggleCombatMode,
+    /// <summary>The PC's concealment (and its followers') ends.</summary>
+    LeaveConcealment,
+}
+
+/// <summary>
+/// What the game view's right release reads about the local PC: active (alive, conscious, neither stunned nor paralysed nor
+/// stoned), lying knocked down (its fall-down animation shown), in combat mode, concealed, whether it runs an animation that
+/// is not an overlay, and whether its first animation is a fidget.
+/// </summary>
+public readonly record struct RightReleaseFacts(bool Active, bool KnockedDown, bool InCombatMode, bool Concealed, bool Animating, bool Fidgeting);
+
 /// <summary>
 /// What the real-time attack repeat reads (the source's auto-attack check at the end of every attack): the attacker in
 /// combat mode and a PC, the <c>auto_attack</c> setting, no turn-based round, the target neither destroyed nor switched
@@ -142,6 +159,21 @@ public static class RealTimeCombatRules
             if (!inCombatMode && !facts.Active) return CombatModeRefusal.Inactive;
         }
         return facts.Concealed && !facts.LocalPc && !facts.Dead ? CombatModeRefusal.Concealed : CombatModeRefusal.None;
+    }
+
+    /// <summary>
+    /// The game view's mouse right release for the local PC (the source's 0x54DE50, subtype 3, ledger RR1–RR4): nothing for an
+    /// inactive PC or one lying knocked down; in combat mode the combat-mode toggle (which then leaves through the exit gate)
+    /// when the PC runs no animation or its first one is a fidget; out of combat mode the end of its concealment when it is
+    /// concealed and runs no animation. The release never enters combat mode. The caller ignores it on another participant's
+    /// turn-based subturn; the interrupt and the turn toward the pointer that follow are not part of it.
+    /// </summary>
+    [OriginalFunction(0x54DE50, OriginalFunctionScope.Partial)]
+    public static RightReleaseAction RightRelease(RightReleaseFacts facts)
+    {
+        if (!facts.Active || facts.KnockedDown) return RightReleaseAction.None;
+        if (facts.InCombatMode) return facts.Fidgeting || !facts.Animating ? RightReleaseAction.ToggleCombatMode : RightReleaseAction.None;
+        return facts.Concealed && !facts.Animating ? RightReleaseAction.LeaveConcealment : RightReleaseAction.None;
     }
 
     /// <summary>

@@ -29,6 +29,8 @@ public partial class AreaInventoryGridArea : Control
     public event Action<string?>? PointerStill;
     /// <summary>ARC-UI-052: the loot window's Take all button was pressed and released.</summary>
     public event Action? TakeAllRequested;
+    /// <summary>ARC-UI-054: a left release in the round view of the original look closed the window (IW34).</summary>
+    public event Action? HoleReleased;
     // ARC-UI-052: the holder's grid's scroll in rows, the holder it belongs to and a press on Take all waiting for its release.
     private int _lootScroll;
     private string? _lootHolder;
@@ -47,6 +49,32 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
     public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
+
+    /// <summary>ARC-UI-054: screen pixels per frame pixel.</summary>
+    internal float FrameScale => _scale;
+
+    /// <summary>ARC-UI-054: the round view is shown under the frame: the background art leaves its square out (the original's copy
+    /// replaces the square, IW33; the doll art 223 is opaque there).</summary>
+    internal bool RoundViewCut
+    {
+        get => _roundViewCut;
+        set { if (_roundViewCut == value) return; _roundViewCut = value; QueueRedraw(); }
+    }
+    private bool _roundViewCut;
+
+    // ARC-UI-054: a background art at (0, 0), without the round view's square while the round view is shown.
+    private void Background(AreaInventoryArtLook look, int number, bool loot)
+    {
+        if (look.Art.GetValueOrDefault(number) is not { } texture) return;
+        Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
+        float width = texture.GetWidth(), height = texture.GetHeight();
+        if (!_roundViewCut) { DrawTextureRect(texture, Scaled(0, 0, width, height), false); return; }
+        var (x, y) = AreaInventoryHole.Corner(loot);
+        const float side = AreaInventoryHole.Side;
+        foreach (var (px, py, pw, ph) in new[] { (0f, 0f, width, (float)y), (0f, y + side, width, height - y - side), (0f, (float)y, (float)x, side),
+            (x + side, (float)y, width - x - side, side) })
+            if (pw > 0 && ph > 0) DrawTextureRectRegion(texture, Scaled(px, py, pw, ph), new Rect2(px, py, pw, ph));
+    }
 
     /// <summary>ARC-UI-052: the holder's grid's scroll in rows.</summary>
     internal int LootScroll => _lootScroll;
@@ -211,6 +239,15 @@ public partial class AreaInventoryGridArea : Control
             if (LootHit(frame).TakeAll) Callable.From(() => TakeAllRequested?.Invoke()).CallDeferred();
             return;
         }
+        if (Look is not null && AreaInventoryHole.Contains(LootLook, frame.X, frame.Y) && (Held is null || LootLook))
+        {
+            // ARC-UI-054: a release in the round view closes the window (0x574559, IW34); the loot window puts a held item back first
+            // (IW18). NOT READY: in the player's own window a held item released there is the map drop and throw of IW18 (not built: the
+            // release below puts it back).
+            if (Held is not null) { Held = null; QueueRedraw(); }
+            Callable.From(() => HoleReleased?.Invoke()).CallDeferred();
+            return;
+        }
         if (Held is not { } held) return;
         Held = null;
         var drop = LootLook ? AreaLootArtLayout.Release(held, LootHit(frame)) : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
@@ -314,8 +351,11 @@ public partial class AreaInventoryGridArea : Control
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
             DrawTextureRect(texture, placed, false);
         }
-        Art(AreaInventoryArtLayout.DollArt, 0, 0);
+        Background(look, AreaInventoryArtLayout.DollArt, loot: false);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
+        var (holeX, holeY) = AreaInventoryHole.Corner(false);
+        Art(AreaInventoryHole.Art(false), holeX, holeY);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));
         void Text((int X, int Y, int Width, int Height) rect, string text)
@@ -394,7 +434,9 @@ public partial class AreaInventoryGridArea : Control
             var ratio = texture.GetHeight() / h;
             DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
         }
-        Art(AreaLootArtLayout.LootArt, 0, 0);
+        Background(look, AreaLootArtLayout.LootArt, loot: true);
+        var (holeX, holeY) = AreaInventoryHole.Corner(true);
+        Art(AreaInventoryHole.Art(true), holeX, holeY);
         if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
         var font = GetThemeDefaultFont();

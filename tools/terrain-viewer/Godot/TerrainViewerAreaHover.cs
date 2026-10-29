@@ -120,6 +120,7 @@ public partial class TerrainViewerApp
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>
     private void UpdateAreaHover()
     {
+        TrackHoverWindow();
         if (_exiting || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || _canvas is null)
         {
             if (_hoverPanel?.Visible == true || _hoverCursor != Godot.Input.CursorShape.Arrow) ShowAreaHover(null, AreaHoverAction.None, null);
@@ -140,7 +141,7 @@ public partial class TerrainViewerApp
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
-            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode),
+            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode, _gameBarPanel?.Visible == true),
             (_spellTargeting?.Spell, _spellTargeting?.Mask));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
@@ -216,9 +217,14 @@ public partial class TerrainViewerApp
         };
         // ARC-UI-056: while the original's cursor art is shown these shapes are not (it does not change per target).
         if (cursor != _hoverCursor) { _hoverCursor = cursor; if (_cursorShown is null) SetCursorShape(cursor); }
+        // ARC-UI-057: the hovered portal, container, scenery or item is drawn once more, additive (0x43C690).
+        if (_canvas is not null) _canvas.AreaHighlight = key is { } lit && _hoverIndex is { } rows && rows.Contains(lit) && AreaHoverWindow.Highlighted(rows.Row(lit)) ? lit : null;
+        // ARC-UI-057: with the interface bars drawn the object is described in the message window, as the original does; the floating
+        // tooltip is the viewer's without the bars.
+        var inBars = _gameBarPanel is { Visible: true };
         if (_hoverPanel is not null && _hoverLabel is not null)
         {
-            if (text is null || screen is not { } at) _hoverPanel.Visible = false;
+            if (text is null || screen is not { } at || inBars) _hoverPanel.Visible = false;
             else
             {
                 _hoverLabel.Text = text;
@@ -232,8 +238,8 @@ public partial class TerrainViewerApp
                 _hoverPanel.Visible = true;
             }
         }
-        // ARC-UI-024: the hovered follower's portrait and name in the message window while the bars are drawn.
-        SyncHoverPortrait(text is null ? null : key);
+        // ARC-UI-024, ARC-UI-057: the hovered object's window (a follower's portrait among it) in the message window while the bars are drawn.
+        SyncHoverWindow(key);
         if (changed && refreshStatus) RefreshAreaStatus();
     }
 

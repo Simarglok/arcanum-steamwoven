@@ -13,10 +13,13 @@ namespace Arcanum.TerrainViewer;
 // map change leave combat mode first, as the source's dialog and teleport do. Running in combat mode charges one fatigue
 // every fifth run step of a move (fatigue-limiting and -draining heroes do not exist yet); a hero out of fatigue walks.
 // The status line shows the mode and the hero's fatigue. In combat mode the original's left click attacks a living NPC;
-// that click is ARC-COMBAT-005's, so a click still talks here, and the dialog leaves combat mode first.
+// that click is ARC-COMBAT-005's, so a click still talks here, and the dialog leaves combat mode first. ARC-COMBAT-022: a right
+// release in the world leaves combat mode too (WorldRightRelease).
 public partial class TerrainViewerApp
 {
-    private string _combatModeNotice = "R toggles combat mode";
+    private string _combatModeNotice = "R toggles combat mode, a right click leaves it";
+    // A right press the world took (a macOS Ctrl+click, closing the spell cursor): its release does nothing more.
+    private bool _rightPressTaken;
     // Run steps of the current move in combat mode (the source counts them per move goal).
     private int _combatRunSteps;
     private (GameSessionOwner Session, long Revision, string Text)? _combatModeStatus;
@@ -59,6 +62,34 @@ public partial class TerrainViewerApp
         _combatRunSteps = 0;
         GD.Print($"ARC-COMBAT-004 combat-mode disposition={result.Disposition} refusal={result.Refusal} failure={result.Failure} on={result.InCombatMode}");
         RefreshAreaStatus();
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-022: the game view's mouse right release (the original's 0x54DE50, subtype 3, ledger RR1–RR4), under the world press's
+    /// guards and only on the hero's own turn-based subturn: an idle, active hero standing in combat mode toggles it, which leaves
+    /// through the exit gate (refused with "cannot leave combat mode when under attack", the original's message 24); out of combat
+    /// mode an idle concealed hero stops prowling. A walking, attacking or casting hero keeps its mode. The release never enters
+    /// combat mode. The original then interrupts the hero's animations and turns it toward the pointer, which the viewer does not.
+    /// An armed targeting (spell, lockpicks, pick pocket, a follower's walk order or its open menu) takes no release.
+    /// </summary>
+    private void WorldRightRelease()
+    {
+        if (!CombatModeActive || _areaSession is not { } session || session.QueryHeroLife() is not { } life) return;
+        if (!WorldClickInputOpen || AreaTransferPending) return;
+        if (_spellTargeting is not null || _lockpickArmed is not null || _pickPocketArmed || _pendingWalkOrder is not null
+            || _followerPortraits is { MenuShown: true }) return;
+        if (session.QueryCombatRound() is { } round && !round.Actor.IsHero) return;
+        // The viewer's hero never fidgets (the original starts fidgets for NPCs only, ledger TH9).
+        var action = RealTimeCombatRules.RightRelease(new(life.Status.IsActive, _heroKnockdown.Lying, HeroInCombatMode, HeroConcealed,
+            Animating: !HeroIdleForRound(), Fidgeting: false));
+        GD.Print($"ARC-COMBAT-022 right-release action={action}");
+        if (action == RightReleaseAction.ToggleCombatMode) ToggleCombatMode();
+        else if (action == RightReleaseAction.LeaveConcealment)
+        {
+            var result = session.ToggleHeroConcealment(session.Version);
+            _prowlNotice = result.Disposition == GameSessionDisposition.Rejected ? $"prowl refused: {result.Failure}" : "prowling off (right click)";
+            BindGaitPalette(); RefreshReadyStatus();
+        }
     }
 
     private static string Refusal(SessionCombatModeRefusal refusal) => refusal switch

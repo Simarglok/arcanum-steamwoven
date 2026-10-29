@@ -54,7 +54,31 @@ public partial class AreaInventoryPanel : CanvasLayer
     private Button _lookToggle = null!;
     private StyleBoxFlat _diagnosticStyle = null!;
     private readonly StyleBoxEmpty _originalStyle = new();
+    // ARC-UI-054: the round view's copy of the game view, on a layer under the window so the copy reads the world, not the window
+    // (PROJECT: it reads what layers 1 and 2 drew too, floaters and the spell pane, where the original copies the game view alone).
+    private CanvasLayer _holeLayer = null!;
+    private ColorRect _hole = null!;
+    private ShaderMaterial _holeMaterial = null!;
+    private const string HoleShader = """
+        shader_type canvas_item;
+        render_mode unshaded, blend_disabled;
+        uniform sampler2D screen_texture : hint_screen_texture, filter_nearest, repeat_disable;
+        // The hole's and the source square's corners and sides in canvas units (the same layer transform).
+        uniform vec2 hole_origin;
+        uniform float hole_side = 1.0;
+        uniform vec2 source_origin;
+        uniform float source_side = 1.0;
+        void fragment() {
+            // The screen span of one UV unit of the hole: the canvas-to-screen scale (and a flipped axis) without knowing the stretch.
+            vec2 span = vec2(dFdx(SCREEN_UV.x) / dFdx(UV.x), dFdy(SCREEN_UV.y) / dFdy(UV.y));
+            vec2 delta = (source_origin - hole_origin) + UV * (source_side - hole_side);
+            COLOR = vec4(texture(screen_texture, SCREEN_UV + delta / hole_side * span).rgb, 1.0);
+        }
+        """;
     public event Action? CloseRequested;
+    /// <summary>ARC-UI-054: the window's holder on the screen for the round view: its foot point in canvas units and the game view's
+    /// zoom (canvas units per game pixel); null when it is not drawn.</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
     /// <summary>ARC-UI-029: the quantity window's Accept (or Enter) with the count shown, 0 too (QW4).</summary>
     public event Action<int>? QuantityAccepted;
     /// <summary>ARC-UI-029: the quantity window's Cancel: nothing moves.</summary>
@@ -165,6 +189,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
         _area.PointerStill += item => PointerStill?.Invoke(item);
         _area.TakeAllRequested += () => TakeAllRequested?.Invoke();
+        _area.HoleReleased += () => CloseRequested?.Invoke();
         _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
         _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
         _quantity.AddChild(_quantityLabel);
@@ -185,8 +210,33 @@ public partial class AreaInventoryPanel : CanvasLayer
             if (_view is { } view) Render(view, _message.Text);
         }).CallDeferred();
         foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
+        _holeMaterial = new ShaderMaterial { Shader = new Shader { Code = HoleShader } };
+        _hole = new ColorRect { Name = "RoundView", MouseFilter = Control.MouseFilterEnum.Ignore, Material = _holeMaterial };
+        _holeLayer = new CanvasLayer { Name = "RoundViewLayer", Layer = 3, Visible = false };
+        _holeLayer.AddChild(_hole); AddChild(_holeLayer);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
+    }
+
+    /// <summary>ARC-UI-054: the round view shows the game view around the holder (IW33) while the original look is up.</summary>
+    internal bool RoundViewShown => _holeLayer.Visible;
+
+    private void UpdateRoundView()
+    {
+        var holder = IsOpen && ArtMode ? HolderView?.Invoke() : null;
+        _holeLayer.Visible = holder is not null;
+        _area.RoundViewCut = holder is not null;
+        if (holder is not { } shown) return;
+        var loot = _area.LootLook;
+        var (x, y) = AreaInventoryHole.Corner(loot);
+        var side = AreaInventoryHole.Side * _area.FrameScale;
+        var origin = _area.GlobalPosition + new Vector2(x, y) * _area.FrameScale;
+        _hole.Position = origin; _hole.Size = new(side, side);
+        var source = AreaInventoryHole.Source(shown.Foot.X, shown.Foot.Y, shown.Zoom);
+        _holeMaterial.SetShaderParameter("hole_origin", origin);
+        _holeMaterial.SetShaderParameter("hole_side", side);
+        _holeMaterial.SetShaderParameter("source_origin", new Vector2(source.X, source.Y));
+        _holeMaterial.SetShaderParameter("source_side", source.Side);
     }
 
     public void Open(AreaInventoryView view, string? message = null)
@@ -206,7 +256,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         EndQuantity();
         // An item held on the cursor goes back first (0x575770, IW1): it never left its place.
         _area.Hold(null);
-        _view = null; Hide();
+        _view = null; Hide(); _holeLayer.Visible = false;
         GetViewport().GuiReleaseFocus();
     }
 
@@ -355,11 +405,22 @@ public partial class AreaInventoryPanel : CanvasLayer
             + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map; original UI parity NOT_VERIFIED";
         // ARC-UI-029: a re-render while the quantity window is up keeps the rest of the window inert.
         if (_bar is not null) SetOthersDisabled(true);
-        _message.Visible = !ArtMode || _message.Text.Length > 0;
+        ShowMessageLine();
         // ARC-UI-051: in the original look only the switch takes focus, so a pad or the keyboard can reach the diagnostic buttons.
         var enabled = Focusable();
         enabled[Math.Clamp(focus < 0 ? 0 : focus, 0, enabled.Count - 1)].GrabFocus();
-        ResizePanel();
+        ResizePanel(); UpdateRoundView();
+    }
+
+    /// <summary>ARC-UI-054: the message line is always laid out. In the original look it keeps one line, empty or not, cut with an ellipsis,
+    /// so a message ("took N item(s)") never changes the frame's scale (PROJECT: the original prints none in the window); the frame is
+    /// therefore always one line smaller than with no line at all. The diagnostic window wraps it.</summary>
+    private void ShowMessageLine()
+    {
+        var art = ArtMode;
+        _message.Visible = true;
+        _message.AutowrapMode = art ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart;
+        _message.TextOverrunBehavior = art ? TextServer.OverrunBehavior.TrimEllipsis : TextServer.OverrunBehavior.NoTrimming;
     }
 
     /// <summary>ARC-UI-051: the original look hides the diagnostic lists, buttons and texts (their actions stay: the doll, the grid, the
@@ -402,7 +463,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         SetOthersDisabled(true);
         ShowQuantity();
         _message.Text = message ?? string.Empty;
-        _message.Visible = !ArtMode || _message.Text.Length > 0;
+        ShowMessageLine();
         _quantityButtons[0].GrabFocus();
         ResizePanel();
     }
@@ -483,7 +544,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         if (ArtMode)
         {
             // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
-            // shows besides the frame (the switch, a message, the quantity row; PROJECT: the original prints no message in the window).
+            // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
+            // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {
@@ -507,6 +569,10 @@ public partial class AreaInventoryPanel : CanvasLayer
         _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _Process(double delta)
+    {
+        if (IsOpen) ResizePanel();
+        UpdateRoundView();
+    }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }
