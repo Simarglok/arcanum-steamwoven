@@ -47,8 +47,9 @@ public static class AreaInventoryArtLayout
         : heldOver ? UseOnArt : UseOffArt;
 
     /// <summary>The place of an item's art in its rectangle: centred, as the redraw centres a grid item's art in its cells
-    /// ((cells × 32 − art) / 2) and a worn item's in its slot. PROJECT: an art larger than the rectangle is scaled down to fit (the viewer's
-    /// items are 1 × 1, their art sizes not read: IW22).</summary>
+    /// ((cells × 32 − art) / 2) and a worn item's in its slot. A grid item's cells come from its art's size (0x461780, ARC-UI-055), so its
+    /// art fits them. PROJECT: an art larger than the rectangle is scaled down to fit (a grid item sized without its art, when the game's
+    /// art did not read for the session, or an art larger than its doll slot).</summary>
     public static (float X, float Y, float Width, float Height) Place((float X, float Y, float Width, float Height) rect, int artWidth, int artHeight)
     {
         if (artWidth <= 0 || artHeight <= 0) throw new ArgumentOutOfRangeException(nameof(artWidth));
@@ -116,12 +117,22 @@ public sealed class AreaInventoryTexts
     ];
 }
 
-/// <summary>ARC-UI-051: what the inventory window draws from the game folder: its interface art (<see cref="AreaInventoryArtLayout.ArtNumbers"/>)
-/// and its texts.</summary>
+/// <summary>ARC-UI-051: what the inventory window draws from the game folder: its interface art (<see cref="AreaInventoryArtLayout.ArtNumbers"/>;
+/// ARC-UI-052: and the loot window's, <see cref="Numbers"/>) and its texts.</summary>
 public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, AreaInventoryTexts Texts, string Detail)
 {
     /// <summary>True when every art number read: the window then shows the original look.</summary>
-    public bool ArtReady => AreaInventoryArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);
+    public bool ArtReady => AreaInventoryArtLayout.ArtNumbers.All(Ready);
+
+    /// <summary>ARC-UI-052: true when the loot window's own arts read too (<see cref="AreaLootArtLayout.ArtNumbers"/>): the loot window then
+    /// shows the original look. A holder image that does not read is left out, not a reason for the diagnostic window.</summary>
+    public bool LootArtReady => ArtReady && AreaLootArtLayout.ArtNumbers.All(Ready);
+
+    private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready;
+
+    /// <summary>Every art number the window reads: the inventory window's, the loot window's and the holders' images.</summary>
+    public static IReadOnlyList<int> Numbers { get; } =
+        AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers).Distinct().ToArray();
 
     public static AreaInventoryArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaInventoryTexts.Project(reason), reason);
 
@@ -134,7 +145,7 @@ public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterf
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaInventoryArtLayout.ArtNumbers);
+        var art = AreaInterfaceArt.Load(stack, Numbers);
         var texts = AreaInventoryTexts.Load(stack);
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToArray();
         return new(art, texts, $"art {art.Count - failed.Length}/{art.Count} read{(failed.Length == 0 ? "" : " (" + string.Join("; ", failed) + ")")}; {texts.Detail}");

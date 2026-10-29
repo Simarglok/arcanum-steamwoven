@@ -46,9 +46,13 @@ public sealed class AreaWindowRealDataTests
             window.Sectors.Where(s => s.Template is not null).Select(s => $"{s.Coordinate.X},{s.Coordinate.Y}").ToArray());
         Assert.IsTrue(window.Sectors.Where(s => s.Template is not null).All(s => s.Present && s.Scope == AreaScope.Context && s.DatOrdinal is null));
         Assert.AreEqual(25, window.Sectors.Count(s => s.Present));
-        // The same visuals: the five generated mountain sectors add terrain only, drawn from frames the core already uses.
-        Assert.AreEqual(pinned.Visuals.Count, window.Visuals.Count);
-        CollectionAssert.AreEquivalent(pinned.Visuals.Select(v => v.RgbaSha256).ToList(), window.Visuals.Select(v => v.RgbaSha256).ToList());
+        // The same visuals: the five generated mountain sectors add terrain only, drawn from frames the core already uses. The
+        // window also decodes the other frames of its animated scenery (ARC-RENDER-035), which the pinned profile does not.
+        var drawn = window.Visuals.Where(v => v.Key.Layer != AreaLayerKind.SceneryFrame).ToList();
+        Assert.AreEqual(pinned.Visuals.Count, drawn.Count);
+        CollectionAssert.AreEquivalent(pinned.Visuals.Select(v => v.RgbaSha256).ToList(), drawn.Select(v => v.RgbaSha256).ToList());
+        var animated = window.Visuals.Where(v => v.Key.Layer == AreaLayerKind.SceneryFrame).GroupBy(v => v.Key.Object).ToList();
+        Assert.AreEqual((4, 76), (animated.Count, animated.Sum(g => g.Count())), "the wreck's fires: animated scenery and their other frames");
         Assert.AreEqual(pinned.Objects.Count, window.Objects.Count);
         // Every core terrain cell.
         CollectionAssert.AreEquivalent(Terrain(pinned), Terrain(window));

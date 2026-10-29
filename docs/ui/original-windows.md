@@ -1,4 +1,4 @@
-# Original look of the inventory, character, logbook and world-map windows (ARC-UI-051)
+# Original look of the inventory, loot, character, logbook and world-map windows (ARC-UI-051, ARC-UI-052)
 
 The owner's playtest of the packaged alpha (main `72c7b932`, 2026-10-28) found that the inventory (`I`),
 character sheet (`C`), logbook (`L`) and world map (`W`) open diagnostic panels without the original graphics.
@@ -42,22 +42,49 @@ Read in the redraw 0x576520 and the open 0x572340; rows [IW20–IW25](../researc
 
 Done in the viewer: backgrounds, covers, item arts (inventory art everywhere, scaled down when larger than the
 item's place), boxes with their hover art, lines and counts in the project's font, the window at its place
-between the bars, the "Diagnostic view" switch below it. Loot, steal, barter and the other modes keep the
-diagnostic window.
+between the bars, the "Diagnostic view" switch below it. Steal, barter and the other modes keep the diagnostic window;
+the loot window is done by ARC-UI-052 (below).
 
 Left for the next inventory slices (each its own task):
 
-- **Item sizes**: an item's grid size from its inventory art (0x461780, F0) changes where items go in the
-  session grid (behaviour, not only presentation); today every item is 1 × 1.
+- ~~**Item sizes**~~: done by ARC-UI-055 (an item's grid size is its inventory art's frame in cells, 0x461780, ledger JP3;
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
-- **Other modes**: loot (234 `Loot`, 349 `Loot_PD`), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at
+- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at
   (703, 236)), steal; the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
 - The two numbers at (80, 358) and (261, 358) (0x464630, 0x464700, F0) and the selected-item fill
   (0x681458, colour from the palette, F0).
+
+## Loot window (done: ARC-UI-052)
+
+The owner's bug report of 2026-10-29 (build `169ef64`): the window for searching a body drew placeholder rectangles. Read in the
+open 0x5727B0, the redraw 0x576520, the hit test 0x575CB0 and the image choice 0x553D10; rows
+[IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052). The loot window is interface mode 2 (a dead critter or a
+container); the frame is the inventory window's.
+
+| Part | Art | Place in the window | Notes |
+| --- | --- | --- | --- |
+| Loot background | 234 `Loot` 358 × 400 | (0, 0) | the hero's doll and weight lines are not drawn (doll toggle clear at every open) |
+| Pack background, hero's grid, counts, boxes | as in the inventory window | as there | the boxes show 348 / 347 (refused) under the body's own item |
+| Body's image | race icons 375–382, 634; 383–385, 434 by critter flags; containers 832–839, 435 | (183, 33) | 0x553D10; a follower's portrait is not built |
+| Body's grid | item inventory art | 10 × 8 cells of 32 from (8, 136), scrolled by rows | worn items (1000..1008) only in the doll view; scroll maximum 4 (critter) or 88 (container) |
+| Take all | 808 `TakeAllButt` | (301, 47) | mode 2 only |
+
+Done in the viewer: the backgrounds, the body's image, the body's items at their inventory locations with their art (cut to the
+eight shown rows; a junk pile's items at their pile slots; PROJECT: an item the session keeps at no location, -1, at the first free
+place), the hero's grid, counts and boxes, the Take all button; a press on a body's item and its release on the hero's
+grid takes it (a gold pile or ammunition stack asks how many), on a box or elsewhere it goes back; the mouse wheel scrolls the
+body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the "Diagnostic view" switch shows the diagnostic
+window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
+
+Left for the next loot slices (each its own task): the doll views (the body's worn items on 349 `Loot_PD` at two thirds, toggles 338 /
+339 at (23, 108), (74, 108); the hero's doll toggle at (713, 37), (751, 37); IW29, IW30), the scroll bar's art, the move of a hero's
+item into the body, the steal window (mode 3, same frame), the button 340 at (763, 197) and the hot spots of IW30, a follower's
+portrait as the image.
 
 ## Character sheet
 

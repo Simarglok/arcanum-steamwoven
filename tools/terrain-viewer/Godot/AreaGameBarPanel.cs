@@ -57,6 +57,8 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     /// <summary>ARC-UI-024: frame <paramref name="frame"/> of an interface art the bars read (the vials' art among them), or null.</summary>
     public Texture2D? ArtFrame(int number, int frame = 0) => _art.TryGetValue(number, out var frames) && frame >= 0 && frame < frames.Length ? frames[frame] : null;
+    /// <summary>ARC-MAGIC-026: every frame of an interface art the bars read (the maintain bar's slot and plugged arts), or null.</summary>
+    public ImageTexture[]? ArtFrames(int number) => _art.GetValueOrDefault(number);
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
@@ -136,6 +138,15 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-027: puts <paramref name="part"/> on <paramref name="strip"/>, in the strip's own frame (scaled and placed with it),
     /// above the strip's art and buttons.</summary>
     public void AddPart(AreaBarStrip strip, Control part) => _strips[strip].AddChild(part ?? throw new ArgumentNullException(nameof(part)));
+
+    /// <summary>ARC-UI-053: puts <paramref name="part"/> on the bottom strip under the message window's drawing (a pane's name is written
+    /// over it) and above the strip's art.</summary>
+    public void AddPartUnderMessageLog(Control part)
+    {
+        var strip = _strips[AreaBarStrip.Bottom];
+        strip.AddChild(part ?? throw new ArgumentNullException(nameof(part)));
+        strip.MoveChild(part, _messageLog.GetIndex());
+    }
 
     public override void _Input(InputEvent input)
     {

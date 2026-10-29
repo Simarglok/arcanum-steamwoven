@@ -9,7 +9,8 @@ namespace Arcanum.TerrainViewer;
 // over the windows they open, which lay themselves out in the part the bars leave free; they hide under the windows they cannot
 // reach or that do not fit (conversation, barter, reading, save list, palette, menu, world map). Automated runs draw no bars unless
 // their smoke asks, so world presses at fixed screen points are not taken by them. ARC-UI-023: the bottom strip's message window draws
-// the message log (ledger ML1–ML8), and the bar's hover names are hover entries of that log.
+// the message log (ledger ML1–ML8), and the bar's hover names are hover entries of that log. ARC-MAGIC-026: the top strip's maintain bar
+// (TerrainViewerMaintainBar.cs).
 public partial class TerrainViewerApp
 {
     private AreaGameBarPanel? _gameBarPanel;
@@ -29,6 +30,8 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
     {
+        // ARC-MAGIC-026: a drop of the maintain bar's open count ends the closed slots' spells whether the bars show or not.
+        SyncMaintainClosing();
         if (!GameBarActive)
         {
             if (_gameBarPanel is { Visible: true } hidden)
@@ -37,6 +40,7 @@ public partial class TerrainViewerApp
                 hidden.Visible = false; _gameBar.Reset(); _messageLog.ClearHover(); hidden.Render(); hidden.ShowHoverPortrait(null, null); _hud?.SetTopInset(0);
             }
             HideHotkeyBar();
+            HideSpellBar();
             return;
         }
         if (_gameBarPanel is null)
@@ -72,6 +76,8 @@ public partial class TerrainViewerApp
         _gameBarPanel.Visible = true;
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
         SyncHotkeyBar();
+        SyncMaintainBar();
+        SyncSpellBar();
     }
 
     private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>
@@ -169,5 +175,5 @@ public partial class TerrainViewerApp
             _gameBarPanel?.MessageLog.Render();
     }
 
-    private string GameBarStatus() => _gameBarPanel is not { Visible: true } ? "" : " | interface bars" + (_gameBarNotice is null ? "" : ": " + _gameBarNotice);
+    private string GameBarStatus() => _gameBarPanel is not { Visible: true } ? "" : " | interface bars" + (_gameBarNotice is null ? "" : ": " + _gameBarNotice) + MaintainBarStatus();
 }

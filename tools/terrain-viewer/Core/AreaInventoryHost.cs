@@ -226,6 +226,14 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-051: the hero's effective speed (stat 11), the window's third line (IW24); null without a hero or when the
     /// stats do not read.</summary>
     public int? Speed { get; init; }
+    /// <summary>ARC-UI-052: the looted holder's items at their grid locations (its worn items left out), in list order; empty in the
+    /// player's own window.</summary>
+    public IReadOnlyList<AreaLootGridItem> LootGrid { get; init; } = Array.Empty<AreaLootGridItem>();
+    /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
+    /// do not decide it.</summary>
+    public int? HolderImage { get; init; }
+    /// <summary>ARC-UI-052: the looted holder is a container (a junk pile too): its grid scrolls further.</summary>
+    public bool HolderContainer { get; init; }
 }
 
 /// <summary>
@@ -408,14 +416,41 @@ public sealed class AreaInventoryHost
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
             { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
+        // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
+        // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from). ARC-UI-055:
+        // another item takes its size from the session (its inventory art's cells, 0x461780), drawn at most a container grid's size.
+        var pileSlots = pile is null ? null : session.QueryJunkPiles().FirstOrDefault(p => p.Entity == holder)?.Items.ToDictionary(entry => entry.Entity, StringComparer.Ordinal);
+        var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
+            .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
+            .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray());
+        var (image, container) = pile is not null
+            ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
+            : HolderLook(runtimeMap, holder);
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed };
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image,
+              HolderContainer = container };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
+        static (int, int) LootCells((int Width, int Height) cells) =>
+            (Math.Clamp(cells.Width, 1, InventoryGridRules.Columns), Math.Clamp(cells.Height, 1, InventoryGridRules.ContainerRows));
         static bool Stack(SessionItemFacts facts) => facts.AmmoType is not null || facts.Kind.Type == SessionItemType.Gold && facts.Quantity is not null;
 
         IReadOnlyList<EquipmentSlot> Slots(string entity) => worn.Contains(entity) ? Array.Empty<EquipmentSlot>() : WearSlots(Wearable(session, entity, kitWear));
         bool Usable(string entity) => !worn.Contains(entity) && UseFacts(session, entity, kitUse) is { CanUseBox: true, Wearable: false };
+    }
+
+    /// <summary>ARC-UI-052: the loot window's image of a seed holder (<see cref="AreaLootArtLayout.HolderImage"/>) from its object row: a
+    /// critter's flags and race, a container's description (its prototype file less 20, as the session's junk piles count it); and whether
+    /// it is a container. No image when its row or fields do not read.</summary>
+    private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
+    {
+        if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetRow(holder, out var row)) return (null, false);
+        var container = row.Type == CombatFieldReader.ContainerType;
+        if (container) return (AreaLootArtLayout.HolderImage(row.Type, 0, -1, row.PrototypeNumber - 20), true);
+        return CombatFieldReader.Read(row).Fields is { Critter: { } critter } fields
+            ? (AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0), false)
+            : (null, false);
     }
 
     /// <summary>

@@ -705,3 +705,59 @@ stays inside `.text`.
 and armour lines 0x555910 and 0x555B50 (with 0x555780), the getters 0x465CF0, 0x4614A0, 0x461700, 0x461370, 0x462410, 0x463110 and
 0x5045A0 the item window reads, the action-point preview 0x4B7790, the window-mode extras 0x578330, 0x5786C0 and 0x578760, and the hook
 0x64C6D4 (set once at the game's init, 0x541552).
+
+## Maintain bar (ARC-MAGIC-026)
+
+Source: the [spell cast host](../../world/spell-cast-host.md#the-maintain-bar-arc-magic-026), magic plan slice MT20b (owner bug report
+2026-10-29 10:41:46: the five top slots did not show or end maintained spells). Read on 2026-10-29 in the 1.0.7.4 executable (`llvm-objdump`;
+tables from the file) by this task and independently by a second reader, who agreed on every row (F2): the bar's add 0x57C290, remove
+0x57C320, click 0x57C370, hover 0x57C3F0, reset 0x57C470, open count 0x57C4B0 and slot query 0x57C520; the spell test 0x459FF0 and the
+icon 0x458AE0; the slot draw 0x553620 → 0x5533C0 and the enable 0x553910 → 0x553670; the hook table built at 0x57C6E0 and copied at
+0x45FD40 (0x5E86A0..0x5E86AC); the button records 0x5C6E40 and 0x5C6E90 and the per-slot windows 0x5C6378 (rectangles 0x5C6EE0); the
+callers in the in-game handlers 0x54B5D0 and 0x54C8E0; the save and load 0x57BB60 and 0x57BBB0. Every direct branch stays inside
+`.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| MB1 | table (0x5CB3A8, 0x57C470, 0x57C520) | Five entries {run, state}, 8 bytes each: state 0 empty, 1 showing its run, 2 its stop asked. The reset (0x57C470, the Spell-UI module's reset entry 0x57BB40) sets each to {−1, 0}, redraws it empty and sets the cached open count 0x5CB3D0 to −1; 0x57C520 answers whether a slot's state is not 0. | Original |
+| MB2 | add (0x57C290 through the hook 0x5E86A4, the scheduler's 0x4604A0) | Refused (0) unless the run's record is fetched and its spell is 0..222 (0x459FF0). The open count is the PC's effective intelligence / 4 toward zero, without an upper bound. Over the first count entries: an entry in state 1 with the same run answers 1 and writes nothing; else the first entry whose run is −1 (the run only is tested) takes it: run, state 1, the slot's art set to the spell's icon (0x458AE0 → 0x4B1570), answer 1. | Original (MG12 below) |
+| MB3 | add's bounds (0x57C2E9) | The "none found" value −1 is compared with the count by a signed `≥`: with every open entry taken, or a count of 0, slot −1 is written (the run into 0x5CB3A0, a neighbouring variable, and 1 into 0x5CB3A4), the records before the table redrawn, and 1 answered; a count above 5 scans and writes past the five entries (into 0x5CB3D0 and beyond). | Original bug, out of bounds (MG12): fixed in both modes — a full bar refuses the run (the scheduler then ends it) and at most five slots open |
+| MB4 | remove (0x57C320 through the hook 0x5E86A8, the run rules' 0x4604C0) | For a run other than −1, the first entry holding it in a state of 1 or more becomes {−1, 0} and, below index 5, is redrawn empty (0x553620 with −1). | Original |
+| MB5 | click (0x57C370; callers 0x54BD5F and 0x54D06F, event 1, the release over the button) | Only an entry whose run is not −1 and whose state is 1: the state becomes 2; in single player (bit 0 of 0x62AC6C clear) the run is interrupted (0x457110); with bit 0 set an 8-byte message {0x3B, run} is sent (0x5295F0) and the interrupt runs only with bit 1 set. A press calls neither the click nor the hover. The slots are push buttons of the bars' creator 0x54AA60 (press 3000, release 3001, GB6). | Original |
+| MB6 | hover (0x57C3F0; callers 0x54C38E and 0x54D69E, event 2, the pointer entering) | Only an entry in state 1 whose run is fetched: the spell's description is posted (0x5507E0 with the record's spell, as the hotkey bar's spell hover, HK19/HK20), then the world's hovered-object routine 0x43C270 gets the first non-null of the run's handles at +0xA0, the one +0x134 points to, and +0x58 (none: no call). | Original (the description implemented; the hovered object not) |
+| MB7 | open count (0x57C4B0, the interface refresh 0x5492D8 and the hook 0x5E86AC) | With a PC: count = intelligence / 4; equal to the cached 0x5CB3D0 does nothing; otherwise slots below the count are enabled (0x553910 with 1) and the slots from the count to 4 disabled (0x553910 with 0), and the count is cached. No clamp: a count above 5 enables slots 5 and up (MG12). | Original (MG12 capped in both modes) |
+| MB8 | slot draw (0x553620 → 0x5533C0, 0x553910 → 0x553670; records 0x5C6E40) | The five buttons stand at (281 + 50 i, 3) on the top strip (window 0) with art 188 + i (SplSlt1–5); a second, identical set (0x5C6E90) is drawn in five 32 × 32 windows (0x5C6378, rectangles 0x5C6EE0). A slot with an icon gets the icon as its button art; an emptied slot gets art 188 + i and, at or beyond intelligence / 4 (5 without a PC), art 628 + i (SP_Plugged1–5) blitted one pixel up and left of the button. Disabling a slot: one already plugged stays; an empty one is disabled and plugged; one showing an icon is clicked (0x57C370 at 0x5538F8), so a drop of the open count ends the spell of every slot it closes. Enabling: the plug is drawn over with the strip and the button enabled. | Original |
+| MB9 | save and load (0x57BB60, 0x57BBB0; the Spell-UI module table 0x5C2CB0) | The five entries are saved with the game (state 2 included) and read back on load, each non-empty slot redrawn with its icon; the cached count is not saved. | Original (not modelled: runs and the bar are not saved until MT9b) |
+
+**F0 facts raised:** the maintain bar of [FR-MAGIC-006](../../requirements/combat-magic-tech.md#fr-magic-006): 0x57C290, 0x57C320, 0x57C370,
+0x57C3F0 and 0x57C4B0 at F2, implemented (registry rows; but the hovered object and the save); 0x57C470, 0x57C520, 0x5533C0 and 0x553670 at
+F2, read only (the reset is the session's empty bar, the slot query and the draws the viewer's; no registry row). Left at F0: the
+button library calls 0x5389F0, 0x5387E0, 0x538840 and 0x5388B0 (named by use only), the hovered-object routine 0x43C270 and the
+multiplayer message 0x5295F0.
+
+## Spell pane (ARC-UI-053)
+
+Source: the [spell cast host](../../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053), the owner's playtest report
+of 2026-10-29 (the `M` pane was a text list without colleges or icons). Read on 2026-10-29 by this task in the 1.0.7.4 executable
+(`llvm-objdump`; tables from the file): the bar-mode request 0x5506C0 and the Spells/Skills toggle 0x54DBF0 (from the `M` and `K` key
+releases at 0x54C5A8 and 0x54C5D0), the mode set 0x552130, the mode leave 0x5504F0 (jump table 0x550678) and build 0x551210 (jump table
+0x551620) with its background draw 0x5503F0 (table 0x5C6548), the interface's button init 0x5501C0 with the spell buttons' creation
+0x550BD0, the college's spells shown 0x550C60 and hidden 0x550CD0, the in-game handler 0x54B5D0's release branch 0x54BAF5 and press branch
+0x54BE1F, its enter branch 0x54C18D and the hovers 0x550860 and 0x5507E0, the selection's init 0x54A58C and its save and load 0x54A1C4 and
+0x54A252, the magic tables 0x4B1A80 (0x5B55B0), 0x4B1570 (0x5B5630), 0x4B1A40 (names loaded at 0x4B1454 from `spell.mes` 500 +
+college), 0x4B1B00 and 0x4B1950 (with 0x4B1AB0), and the button records 0x5C6618 and 0x5C6718 (x, y, art, handle). Art sizes from the
+installed `art\interface` files. One reader (F1); every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SPN1 | mode request and background (0x54DBF0, 0x5506C0, 0x552130, 0x551210, 0x5503F0, table 0x5C6548) | The `M` key's release and the Spells button request bar mode 1, the spells; `K` and Skills mode 2; a request for the mode already shown returns to mode 0, the messages. Every mode's build first draws its background through 0x5503F0 from the table at 0x5C6548 (x, y, art by mode): mode 0 art 354, mode 1 art 8 (`spell_ro.art`, 410 × 107), mode 2 274, mode 8 564, all at (196, 492) of the screen. | Original |
+| SPN2 | buttons (0x5501C0, 0x550BD0, 0x54AAE0; records 0x5C6618, 0x5C6718; tables 0x5B55B0, 0x5B5630) | The interface's init creates, as the bar's push buttons (sounds 3000 and 3001, GB6), a button per college with art 0x4B1A80(college) (table 0x5B55B0: 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122, the 24 × 24 `s_<college>.art` files with three frames) at y 497 and x 201, 226, 251, 276, 301, 326, 351, 376, 400, 425, 450, 475, 500, 525, 550, 575; and five buttons per college, one per rank, with the spell's icon 0x4B1570(5 × college + rank) (32 × 32, two frames) at y 528 and x 284, 334, 384, 435, 485 for every college. All start hidden. | Original |
+| SPN3 | mode-1 build (0x551210 case 1, 0x4B1B00, 0x550C60, 0x4B1950) | The build shows the button of every college whose rank the PC has above 0 (0x4B1B00 reads it through 0x4B1AB0, a critter's only), sets the selected college's button (0x64C530) down (button state 0) and shows that college's spell buttons rank by rank while the PC knows the spell (0x4B1950: rank + 1 at most the college's rank), stopping at the first it does not know. The selection starts at 0 (0x54A58C), so a PC without conveyance sees the colleges and no spell until it presses one. Leaving mode 1 hides the college buttons and the selected college's spells (0x5504F0 case 1, 0x550CD0). | Original |
+| SPN4 | presses (0x54BE1F, 0x54BAF5 → 0x57EFA0, 0x57BC70) | A college button's press (button event 0) in mode 1 hides the selected college's spells, selects the pressed college and shows its spells; it sets no button state, so only the next build draws the new selection down. A spell button's release over it (event 1) in mode 1, for a spell the PC knows, records the spell as the latest recent action (HK2) and activates it with the PC (SU1). A right press on a spell button starts the hotkey drag (HK15). The selection is written to the save after the bar mode (0x54A1C4) and read back (0x54A252), which also sets the selected college's button down when the loaded mode is 1. | Original (the save and the down look's lag: not ready, display only) |
+| SPN5 | enter (0x54C18D → 0x550860, 0x5507E0; 0x4B1A40) | In mode 1 the pointer entering a college's button writes the college's name (0x4B1A40: `spell.mes` 500 + college) and entering a spell's button the spell's name in the mode's text area (208, 574, 387 × 18, 0x5509C0, HK21); in the message mode a college's entry would post a type 9 hint instead. Leaving changes nothing in mode 1 (0x550720 acts in mode 0 only). | Original |
+| SPN6 | window (ML8) | Mode 1 holds the message window while the pointer is over the strip: a move above it returns to the messages, a move back over it to the spells while the Spells toggle is down (ML8); each return builds the mode again (SPN3). | Original |
+
+**F0 facts raised:** the spell pane of [FR-MAGIC-012](../../requirements/combat-magic-tech.md#fr-magic-012) and
+[FR-UI-002](../../requirements/ui-media-lifecycle.md#fr-ui-002) (0x551210 case 1, 0x550BD0, 0x550C60, 0x54BE1F, 0x54BAF5, 0x550860: F1,
+implemented). Left at F0: whether hiding a button resets its state (the button library, 0x538840), the skills pane (0x551210 case 2,
+records 0x5C6C68), the weapon's pane on the strip (case 8, 0x551660) and the compact interface's pane.
