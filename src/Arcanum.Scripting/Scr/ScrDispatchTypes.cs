@@ -283,7 +283,8 @@ public enum ScrStop
     /// <summary>The executed-line budget ran out (skip default, no auto-removal, E9).</summary>
     Budget,
     /// <summary>A dialog action ended the run (skip default; auto-removal applies). The conversation to start, if the
-    /// triggerer is a PC, is in <see cref="ScrEffects.Dialog"/>.</summary>
+    /// triggerer is a PC, is in <see cref="ScrEffects.Dialog"/>; since ARC-SCRIPT-046 a called script's dialog action, which ends only
+    /// the callee, puts its conversation there with any other stop of the run.</summary>
     Dialog,
     /// <summary>An object operand names a role the event does not have (no triggerer, attachee, extra or player); the
     /// original would pass a null handle (both fixed), the run stops with skip default.</summary>
@@ -456,7 +457,8 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrEyeCandy> EyeCandies { get; }
     /// <summary>
     /// ARC-SCRIPT-042: the slots the dispatch's call-ex runs (81, ledger WE3) changed, in the order the runs ended, each the object's
-    /// slot for the point as that run left it. The caller stores them in this order and then <see cref="Writeback"/>, so the event's
+    /// slot for the point as that run left it; since ARC-SCRIPT-046 also the attachee slot a called script's dialog action stored its flags
+    /// and counters into (ledger X11), in action order. The caller stores them in this order and then <see cref="Writeback"/>, so the event's
     /// own slot wins over a call-ex run of the same slot, as the original's outer run writes its copy back last.
     /// </summary>
     public IReadOnlyList<ScrWriteback> SlotWrites { get; }

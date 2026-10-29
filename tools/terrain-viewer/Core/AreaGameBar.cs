@@ -45,10 +45,10 @@ public static class AreaGameBarLayout
     /// <summary>ARC-UI-024: the gauges' rectangles on the screen (0x5C63D8, CH7).</summary>
     public static readonly (int X, int Y, int Width, int Height) HealthGauge = (14, 472, 28, 88), FatigueGauge = (754, 473, 28, 88);
     /// <summary>ARC-UI-024: the hovered critter's image in the message window (PA6): its top left on the screen and, for a
-    /// portrait, the portrait's own 64 × 64 size; the name goes in the panel's first line rectangle (0x5C70C8).</summary>
+    /// portrait, the portrait's own 64 × 64 size; the name goes in the panel's first line rectangle (0x5C70C8, the message window's
+    /// object window, ARC-UI-057).</summary>
     public static readonly (int X, int Y) HoverImage = (217, 510);
     public const int HoverPortraitSize = 64;
-    public static readonly (int X, int Y, int Width, int Height) HoverNameLine = (290, 504, 291, 19);
 
     public static (int X, int Y, int Width, int Height) StripRect(AreaBarStrip strip) =>
         strip == AreaBarStrip.Top ? (0, 0, ScreenWidth, TopHeight) : (0, BottomTop, ScreenWidth, BottomHeight);

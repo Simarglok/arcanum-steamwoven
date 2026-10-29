@@ -339,3 +339,55 @@ public partial class AreaHoverLifeBars : VBoxContainer
         Visible = true;
     }
 }
+
+/// <summary>ARC-UI-057 (ledger CH8, OH7): the hovered critter's bars in the message window, in the bottom strip's own frame: health on the
+/// third line (290, 546) and fatigue on the fourth (290, 564), each 291 px long with its text (<see cref="LifeBarRules.HoverText"/>)
+/// right-aligned on its line; the health bar takes the poisoned colour while the critter is poisoned. The original's bar art (463–466,
+/// 665, 666) is not drawn: the viewer's bar colours stand in.</summary>
+public partial class AreaWindowLifeBars : Control
+{
+    public const int BarWidth = 291, LineHeight = 18, BarThickness = 8;
+    public static readonly (int X, int Y) HealthLine = (290, 546), FatigueLine = (290, 564);
+    private AreaLifeBar _health = null!;
+    private AreaLifeBar _fatigue = null!;
+    private Label _healthText = null!;
+    private Label _fatigueText = null!;
+
+    internal (int Health, string HealthText, int Fatigue, string FatigueText, bool Poisoned)? ValuesForSelfTest =>
+        Visible ? (_health.Filled, _healthText.Text, _fatigue.Filled, _fatigueText.Text, _health.FillColor == AreaLifeBar.PoisonedHealthColor) : null;
+
+    public override void _Ready()
+    {
+        Name = "HoverWindowLifeBars";
+        MouseFilter = MouseFilterEnum.Ignore;
+        (_health, _healthText) = Line("Health", HealthLine);
+        (_fatigue, _fatigueText) = Line("Fatigue", FatigueLine);
+        Visible = false;
+    }
+
+    private (AreaLifeBar, Label) Line(string name, (int X, int Y) at)
+    {
+        var top = at.Y - AreaGameBarLayout.BottomTop;
+        var bar = new AreaLifeBar { Name = name + "Bar", Length = BarWidth, Thickness = BarThickness, Position = new Vector2(at.X, top + (LineHeight - BarThickness) / 2) };
+        var text = new Label
+        {
+            Name = name + "Text", MouseFilter = MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+            Position = new Vector2(at.X, top), Size = new Vector2(BarWidth, LineHeight),
+        };
+        text.AddThemeFontSizeOverride("font_size", 12);
+        AddChild(bar); AddChild(text);
+        return (bar, text);
+    }
+
+    /// <summary>Shows the bars of a critter (its life and whether it is on the PC's side), or hides them (null).</summary>
+    public void Show((AreaLife Life, bool PcSide)? critter)
+    {
+        if (critter is not { } shown) { Visible = false; return; }
+        var life = shown.Life;
+        _health.SetFill(LifeBarRules.HoverFill(life.HealthPercent, BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+        _fatigue.SetFill(LifeBarRules.HoverFill(life.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+        _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
+        _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
+        Visible = true;
+    }
+}

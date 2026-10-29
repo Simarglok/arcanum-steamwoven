@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -46,16 +47,18 @@ public sealed class AreaBodyArt
         if (header.FramesPerGroup < 1 || header.PhysicalGroupCount < 1) throw new ArgumentException("AREA_BODY_ART_EMPTY");
         Animation = animation; Name = name; _bytes = bytes; _identity = identity; _palette = palette; _groups = header.PhysicalGroupCount;
         _view = bytes.Length - metadata.TrailingBytes;
-        FramesPerGroup = header.FramesPerGroup; FramesPerSecond = header.FramesPerSecond;
+        FramesPerGroup = header.FramesPerGroup; FramesPerSecond = header.FramesPerSecond; ActionFrame = header.ActionFrame;
         _digest = Digest(bytes);
     }
 
-    /// <summary>The animation number (0 stand, 1 walk, 6 run).</summary>
+    /// <summary>The animation number (0 stand, 1 walk, 6 run; ARC-RENDER-038 also 14 throw, 20 attack, 21 low attack).</summary>
     public int Animation { get; }
     public string Name { get; }
     public int FramesPerGroup { get; }
     /// <summary>The ART's own frame rate (the middle rate of the original's Speed table, research ARC-RES-047 L6/L7).</summary>
     public int FramesPerSecond { get; }
+    /// <summary>ARC-RENDER-038: the ART's action frame (an attack's hit).</summary>
+    public int ActionFrame { get; }
 
     /// <summary>The frame <paramref name="frame"/> (taken modulo the cycle) of facing <paramref name="octant"/>.</summary>
     public AreaBodyPose Pose(int octant, int frame)
@@ -78,6 +81,10 @@ public sealed class AreaBodyArt
 
     internal static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 }
+
+/// <summary>ARC-RENDER-038: an armed animation ART of a body (<see cref="AreaBodyMoveArt.LoadArmed"/>): the ART read, or null with the
+/// reason, and the animation, weapon part and shield bit the read file names (the request's when none was read).</summary>
+public sealed record AreaBodyArmedLoad(AreaBodyMoveStatus Status, AreaBodyArt? Art, int Animation, int Weapon, int Shield, string Detail);
 
 /// <summary>A body's move set: the stand, walk and run ARTs found next to its ART (null when absent).</summary>
 public sealed record AreaBodyMoves(AreaBodyMoveStatus Status, AreaBodyArt? Stand, AreaBodyArt? Walk, AreaBodyArt? Run, string Detail)
@@ -179,7 +186,86 @@ public static class AreaBodyMoveArt
         if (command.Visual != visual.Key || moves.Status != AreaBodyMoveStatus.Ready) return (command, null);
         if (action == ActorDiagnosticAction.Idle && octant == visual.NominalFacing && !moved) return (command, null);
         if (moves.For(action) is not { } art) return (command, null);
-        var pose = art.Pose(octant, action == ActorDiagnosticAction.Idle ? 0 : CycleFrame(elapsedMs, art.FramesPerSecond, art.FramesPerGroup));
+        return Place(command, body, visual, art.Pose(octant, action == ActorDiagnosticAction.Idle ? 0 : CycleFrame(elapsedMs, art.FramesPerSecond, art.FramesPerGroup)));
+    }
+
+    /// <summary>
+    /// ARC-RENDER-038: the ART of an armed animation of the body (an NPC in combat mode: its stand, attack, low attack or throw), named as
+    /// the original resolves it (MA2, MA3): the stand and the attacks keep weapon and shield, the throw (14, among 6..19) clears both; the
+    /// shield letter is <c>S</c> or <c>X</c>, the weapon letter <see cref="HeroBody.WeaponCode"/>'s (a two-handed sword with a shield is
+    /// written as the sword). Tried in order: the missing-art repair turns a missing low attack into the attack for bare hands and weapons
+    /// 2..8, 10 and 13 (MA1, WA10; another weapon's low attack is not repaired); then, as for the
+    /// hero (the session's wear check does not test the art, WA8: NOT READY), without the shield, then bare-handed. The first readable one
+    /// is the load's, with the animation, weapon and shield it names.
+    /// </summary>
+    public static AreaBodyArmedLoad LoadArmed(AreaVisualRecord visual, string? archivePath, int animation, int weapon, int shield)
+    {
+        ArgumentNullException.ThrowIfNull(visual);
+        if (animation is < 0 or > 24 || weapon is < 0 or >= WeaponArtRules.WeaponParts || shield is not (0 or 1))
+            return new(AreaBodyMoveStatus.WalkMissing, null, animation, weapon, shield, "no critter ART names this animation or weapon");
+        if (visual.RawArt >> 28 is not (2 or 12 or 13) || visual.Policy.Contains("badart", StringComparison.Ordinal))
+            return new(AreaBodyMoveStatus.NotACritterArt, null, animation, weapon, shield, $"art class {visual.RawArt >> 28}");
+        if (archivePath is null || !File.Exists(archivePath)) return new(AreaBodyMoveStatus.SourceUnavailable, null, animation, weapon, shield, visual.Entry.Source.ToString());
+        var tries = new List<(int Animation, int Weapon, int Shield)>();
+        foreach (var (w, s) in new[] { (weapon, shield), (weapon, 0), (WeaponArtRules.Unarmed, 0) })
+        foreach (var a in animation == WeaponArtRules.LowAttackAnimation && HeroBody.LowAttackRepaired(w) ? new[] { animation, WeaponArtRules.AttackAnimation } : [animation])
+        {
+            // MA2: animations 6..19 clear weapon and shield.
+            var named = a is >= 6 and <= 19 ? (a, 0, 0) : (a, w, s);
+            if (!tries.Contains(named)) tries.Add(named);
+        }
+        try
+        {
+            using var archive = DatArchive.Open(archivePath, Options);
+            if (AreaFallenPoses.StandingEntry(archive, visual) is not { } standing)
+                return new(AreaBodyMoveStatus.EntryMismatch, null, animation, weapon, shield, $"ordinal {visual.Entry.Ordinal}");
+            var name = AreaFallenPoses.Name(standing);
+            var dot = name.LastIndexOf('.');
+            if (dot < 4) return new(AreaBodyMoveStatus.WalkMissing, null, animation, weapon, shield, "name");
+            // One pass over the file records (no directory or ignored ones); a name held twice is ambiguous and never chosen.
+            var named = archive.Entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0)
+                .GroupBy(e => AreaFallenPoses.Name(e), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.First() : null, StringComparer.OrdinalIgnoreCase);
+            var refused = new List<string>();
+            foreach (var (a, w, s) in tries)
+            {
+                var wanted = string.Concat(name.AsSpan(0, dot - 3), $"{(s != 0 ? 's' : 'x')}{char.ToLowerInvariant(HeroBody.WeaponCode(w, s))}{(char)('a' + a)}", name.AsSpan(dot));
+                if (!named.TryGetValue(wanted, out var entry) || entry is null) continue;
+                try
+                {
+                    var identity = new AreaEntryIdentity(visual.Entry.Source, entry.Ordinal, entry.Flags, entry.StoredSize, entry.DeclaredOutputSize, entry.Offset,
+                        AreaBodyArt.Digest(entry.RawNameBytes.ToArray()));
+                    var art = new AreaBodyArt(a, AreaFallenPoses.Name(entry), archive.ReadEntry(entry), identity, visual.RequestedPalette);
+                    return new(AreaBodyMoveStatus.Ready, art, a, w, s, art.Name + (refused.Count == 0 ? "" : "; unreadable " + string.Join(", ", refused)));
+                }
+                // An unreadable candidate leaves the next one.
+                catch (Exception error) when (error is DatException or ArtException or ArgumentException) { refused.Add($"{wanted}: {error.GetType().Name}"); }
+            }
+            return new(refused.Count == 0 ? AreaBodyMoveStatus.WalkMissing : AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield,
+                string.Join("; ", [$"animation {animation} weapon {weapon} shield {shield}", .. refused]));
+        }
+        catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return new(AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield, error.GetType().Name + " " + error.Message);
+        }
+    }
+
+    /// <summary>
+    /// ARC-RENDER-038: <paramref name="command"/> (the body of <paramref name="body"/> drawn from <paramref name="visual"/>, moved where it
+    /// stands) with frame <paramref name="frame"/> of <paramref name="art"/> facing <paramref name="octant"/>, placed as
+    /// <see cref="Animate"/> places a move frame. Null when the command is not the visual's.
+    /// </summary>
+    public static (AreaDrawCommand Command, AreaBodyPose Pose)? Pose(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaBodyArt art,
+        int octant, int frame)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        ArgumentNullException.ThrowIfNull(art);
+        if (command.Visual != visual.Key) return null;
+        return Place(command, body, visual, art.Pose(octant, frame));
+    }
+
+    private static (AreaDrawCommand Command, AreaBodyPose Pose) Place(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaBodyPose pose)
+    {
         var objectFlip = command.FlipX != visual.Mirrored;
         var posed = AreaScenePlan.Repose(command, body, visual, pose.Key, pose.Frame.Width, pose.Frame.Height, pose.HotX, pose.HotY)
             with { FlipX = pose.FlipX != objectFlip };

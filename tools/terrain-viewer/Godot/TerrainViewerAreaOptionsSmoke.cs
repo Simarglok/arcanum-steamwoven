@@ -11,10 +11,18 @@ public partial class TerrainViewerApp
     // preference file is read or written): the main menu's Options opens the options window with the game's labels and values at
     // the original's defaults; on the Sound page a music change moves the channel; Done goes back to the main menu. A new game as the
     // first pre-made hero, then in play Escape and Options: a difficulty change reaches the session, the default combat mode goes
-    // through the hero's turn-based switch, and the O key closes the menu. The settings are restored at the end.
+    // through the hero's turn-based switch, and the O key closes the menu. The settings are restored at the end. ARC-UI-059: the window
+    // shows its background 556 and the page buttons in the original's look at (130, 221 + 40 i) (MW7), and a click on Sound's label shows
+    // the Sound page; ARC_AREA_OPTIONS_CAPTURE saves an in-app readback of the Game page to the caller's ignored path.
     private async Task RunAreaOptionsSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-013 options smoke: " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            // The scene's failure line names only the exception's type: the reason is printed first.
+            GD.Print("ARC-UI-013 options smoke FAILED: " + why);
+            throw new InvalidOperationException("ARC-UI-013 options smoke: " + why);
+        }
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-013-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -45,19 +53,50 @@ public partial class TerrainViewerApp
 
             Require(_arguments?.MainMenu == true && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && CurrentAreaMap == 1,
                 "the menu is open over the start map (run with --main-menu true)");
-            Require(_gameSettingsStore is { Persistent: false } && _gameSettings == AreaGameSettings.Defaults, "an automated run uses the original's defaults, no file");
+            // ARC-DEV-061: the smoke runner points GAME_SETTINGS_TEST_PATH into the smoke's own folder, so the store may have a file there,
+            // but nothing is saved in it yet.
+            Require((_gameSettingsStore is { Persistent: false } || !string.IsNullOrWhiteSpace(OS.GetEnvironment(GameSettingsStore.TestVariable)))
+                && _gameSettingsStore is { HasSaved: false } && _gameSettings == AreaGameSettings.Defaults,
+                "an automated run starts at the original's defaults, with no file or only the isolated test file, nothing saved");
             Choose(12);
             var texts = _mainMenu!.OptionsTexts;
             Require(_mainMenu.Window == AreaMenuWindow.Options && texts.FromGame && _mainMenuPanel!.HeaderForSelfTest == "Options: Game",
                 $"Options opened the options window with the game's texts: {texts.Detail} {_mainMenuPanel?.HeaderForSelfTest}");
             var panel = _mainMenuPanel!;
-            Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
+            // ARC-UI-059: the page buttons are the art's labels (no letters, as the original's) at the window's own points; 33 is the
+            // installed Morph30 font's height (MW4).
+            var art = panel.ArtForSelfTest;
+            var places = art.ButtonsForSelfTest;
+            Require(panel.ArtMode && _menuArtContent is { ArtReady: true } && panel.ButtonsForSelfTest.SequenceEqual(["Game", "Video", "Sound", "Done"]),
+                "the options window shows the game's art and page labels: " + _menuArtContent?.Detail + " " + string.Join("|", panel.ButtonsForSelfTest));
+            Require(places.Count == 4 && places.Select((place, slot) => place.Y == AreaMenuArtLayout.OptionsFirstButtonY + AreaMenuArtLayout.OptionsButtonStep * slot
+                && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
+                "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
+            Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
             Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
-            Choose(4002);
-            Require(Controls().SequenceEqual(["Effects: 5/10", "Voice: 5/10", "Music: 5/10"]), "Sound page: " + string.Join("|", Controls()));
+            await Frames(2);
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_OPTIONS_CAPTURE") is { Length: > 0 } capture)
+            {
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
+            }
+            var sound = panel.ButtonCentreForSelfTest(2) ?? throw new InvalidOperationException("ARC-UI-059 options smoke: no Sound label");
+            GetViewport().PushInput(new InputEventMouseMotion { Position = sound, GlobalPosition = sound });
+            await Frames(1);
+            Require(art.HoveredForSelfTest == 2, "the pointer over Sound lights it: " + art.HoveredForSelfTest);
+            foreach (var pressed in new[] { true, false })
+            {
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = sound, GlobalPosition = sound, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+                });
+                await Frames(1);
+            }
+            Require(_mainMenu!.Window == AreaMenuWindow.Options && _mainMenu.Page == AreaOptionsPage.Sound && panel.ArtMode
+                && Controls().SequenceEqual(["Effects: 5/10", "Voice: 5/10", "Music: 5/10"]), "a click on Sound showed the Sound page: " + string.Join("|", Controls()));
             panel.ChangeForSelfTest(2, -1);
             Require(_audioVolumes.Music == 4 && Controls()[2] == "Music: 4/10", "music down one step");
             panel.ChangeForSelfTest(2, 1);
@@ -86,7 +125,7 @@ public partial class TerrainViewerApp
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
             await Frames(3);
             GD.Print("ARC-UI-013 native-smoke options PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Texts = texts.Detail, Map = _readyMapName, Hero = first.Hero.Name, Difficulty = _areaSession!.Difficulty.ToString(), Rules = _areaSession.Rules.Name, Revision = _areaSession.Version.Revision }));
+                Texts = texts.Detail, Art = _menuArtContent!.Detail, Pages = places.Select(place => $"{place.X},{place.Y} {place.Width}x{place.Height}").ToArray(), Map = _readyMapName, Hero = first.Hero.Name, Difficulty = _areaSession!.Difficulty.ToString(), Rules = _areaSession.Rules.Name, Revision = _areaSession.Version.Revision }));
         }
         finally
         {

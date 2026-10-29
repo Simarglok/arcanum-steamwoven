@@ -110,7 +110,11 @@ public sealed class AreaAiHostTests
     }
 
     private sealed record Cave(GameSessionOwner Session, AreaAiHost Host, AreaCombatHost Combat, int Map, string Rat, AreaObjectRecord RatRow,
-        CellCoord Hero, AreaCombatWorld Round);
+        CellCoord Hero, AreaCombatWorld Round)
+    {
+        /// <summary>ARC-RENDER-038: the attack ARTs the host asked the scene for (none is read here: the fixed timing plays).</summary>
+        public List<(string Npc, AreaAiAttackArtRequest Wanted)> AttackArts { get; init; } = [];
+    }
 
     // The hero stands `distance` tiles from the first living animal that has such a free admitted cell (straight along an axis).
     private static Cave Open(int distance)
@@ -152,12 +156,14 @@ public sealed class AreaAiHostTests
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(new SessionMapId(map), inventory.Seed).Failure);
 
         AreaAiHost? host = null;
+        var attackArts = new List<(string Npc, AreaAiAttackArtRequest Wanted)>();
         var npcs = snapshot.Objects.Where(o => o.Type == 16 && o.WorldX is not null && combat.Entity(map, o.Key) is not null)
             .Select(o => new AreaAiNpc(combat.Entity(map, o.Key)!, o, new(checked((int)o.WorldX!.Value), checked((int)o.WorldY!.Value)))).ToArray();
         var scene = new AreaAiScene
         {
             RuntimeMap = map, Chart = AreaChart.For(snapshot), Steps = steps, Npcs = npcs, Combat = combat,
             HeroCell = () => hero, Parameters = table,
+            AttackArt = (npc, wanted) => { attackArts.Add((npc.Entity, wanted)); return null; },
             LineOfFire = () => new AreaLineOfFire(steps, snapshot.Objects, host!.Movers.Moved.ToHashSet(), new Dictionary<CellCoord, AreaObjectRecord>(),
                 _ => false, row => combat.Entity(map, row.Key) is { } e && session.QueryNpcKilled(e), _ => null),
         };
@@ -169,12 +175,13 @@ public sealed class AreaAiHostTests
         host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), round);
         Assert.AreEqual(0, host.ScheduleTicks(), "every living NPC of the cave gets its delayed tick");
         Assert.IsNotNull(session.QueryAiTick(rat));
-        return new(session, host, combat, map, rat, ratRow, hero, round);
+        return new(session, host, combat, map, rat, ratRow, hero, round) { AttackArts = attackArts };
     }
 
     private static void Fight(int distance)
     {
-        var (session, host, combat, map, rat, _, hero, _) = Open(distance);
+        var cave = Open(distance);
+        var (session, host, combat, map, rat, _, hero, _) = cave;
 
         // The hero's hit and its attack event: the animal reacts and fights (or flees) the hero.
         if (distance == 1)
@@ -214,6 +221,14 @@ public sealed class AreaAiHostTests
         Assert.IsNotNull(bite.Resolution);
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(rat)), "the attempt puts the attacker into combat mode (goal 19 node 5)");
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Hero), "and its PC target");
+        // ARC-RENDER-038: the bite asks for the attack (20) with bare hands (WA1, WA4: the standing hero is a critter of height 1), plays with
+        // the fixed timing when no ART is read, and the animal shows bare hands in combat mode.
+        Assert.IsTrue(cave.AttackArts.Contains((rat, new AreaAiAttackArtRequest(20, 1, 0))), string.Join(", ", cave.AttackArts));
+        var swing = notices.First(n => n.Kind == AreaAiNoticeKind.Swing);
+        Assert.IsNotNull(swing.Play);
+        Assert.IsNull(swing.Play.Art);
+        Assert.AreEqual(9, swing.Play.Moments.Count(m => m.Kind != AttackUpdateKind.Ended) + 1, "the fixed human attack ART's 9 frames");
+        Assert.AreEqual((1, 0), host.ShownWeapon(rat));
         // ARC-WORLD-099: its attack run ends done, and an NPC in combat mode outside a round then starts its fidget (0x4B4320).
         var fidget = false;
         for (var frame = 1200; frame < 1600 && !fidget; frame++)

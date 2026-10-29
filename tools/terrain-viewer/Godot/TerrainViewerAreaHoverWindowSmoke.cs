@@ -1,0 +1,122 @@
+using Arcanum.Data.Area;
+using Arcanum.TerrainViewer.Core;
+using GamepadLab.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+// ARC-UI-057 native observation (map mode, the "hover" stage, or the map battery): with the interface bars drawn, hovering each kind of
+// pickable non-critter object of the map (an item, a container, a portal, a scenery) draws it a second time additively, so its pixel under
+// the pointer is not darker and at least one channel is brighter unless already full, and describes it in the message window (an item's
+// window, or the object's image and name) without the floating tooltip; leaving it takes the highlight and the window away. A
+// click-through body under a point is never the pick. ARC_AREA_HOVER_WINDOW_CAPTURE saves in-app readbacks to the caller's ignored path.
+public partial class TerrainViewerApp
+{
+    private async Task RunAreaHoverWindowSmokeAsync()
+    {
+        if (_areaSession is null || _readyArea is not { } area || _canvas is not { } canvas)
+        { GD.Print($"ARC-UI-057 native-smoke hover-window NONE map={_readyMapName} (needs an area session)"); return; }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-UI-057 hover-window smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_HOVER_WINDOW_SMOKE_FAILED");
+        }
+        var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_HOVER_WINDOW_CAPTURE");
+        async Task<Image> Frame()
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            return GetViewport().GetTexture().GetImage();
+        }
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var bars = _gameBarForSelfTest;
+        _worldFocusSimulationForSelfTest = true; _gameBarForSelfTest = true;
+        try
+        {
+            _worldFocused = true; SelectSimulatedPadForSelfTest();
+            for (var i = 0; i < 600 && _hoverNames is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptHoverNames(); }
+            for (var i = 0; i < 120 && _gameBarPanel is not { Visible: true }; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_gameBarPanel is { Visible: true } && !_messageLog.PaneMode, "the bars show in the message mode: " + _gameBarNotice);
+            var index = HoverIndex()!;
+            var seen = new List<string>();
+            // The body framed, then the pixels (every other one, outside the HUD and the bars' strips) where it is the pick.
+            async Task<List<Vector2>> PickPoints(AreaDrawCommand body)
+            {
+                PublishWorldSelection();
+                _camera!.ResetWorld(new Vec2(body.Destination.X + body.Destination.Width / 2d, body.Destination.Y + body.Destination.Height / 2d), WorldViewport, 1);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var hud = _hud!.Rect;
+                var top = _gameBarPanel!.StripRectForSelfTest(AreaBarStrip.Top); var bottom = _gameBarPanel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                var found = new List<Vector2>();
+                if (canvas.AreaBodyRect(body.Identity!.Value) is not { } rect) return found;
+                // The body's rectangle on the screen, inside the viewport.
+                var screenRect = (AreaDrawItem.RasterTransform(GetViewport()) * rect).Grow(2).Intersection(GetViewport().GetVisibleRect());
+                for (var y = (int)screenRect.Position.Y; y < (int)screenRect.End.Y && found.Count < 400; y += 2)
+                for (var x = (int)screenRect.Position.X; x < (int)screenRect.End.X && found.Count < 400; x += 2)
+                {
+                    var p = new Vector2(x + .5f, y + .5f);
+                    if (!hud.HasPoint(p) && !top.HasPoint(p) && !bottom.HasPoint(p) && AreaObjectAtScreen(p) == body.Identity) found.Add(p);
+                }
+                return found;
+            }
+            foreach (var kind in new[] { AreaHoverWindowKind.Item, AreaHoverWindowKind.Container, AreaHoverWindowKind.Portal, AreaHoverWindowKind.Scenery })
+            {
+                List<Vector2> points = []; AreaDrawCommand? body = null;
+                foreach (var candidate in index.Bodies.Where(c => c.Identity is { } id && index.Row(id) is var row && AreaHoverWindow.Kind(row.Type) == kind
+                    && AreaHoverWindow.Highlighted(row) && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c)).Take(6))
+                {
+                    HoverAtForSelfTest(null);
+                    points = await PickPoints(candidate);
+                    if (points.Count > 0) { body = candidate; break; }
+                }
+                if (body is null) { seen.Add($"{kind}=none"); continue; }
+                var at = points[points.Count / 2];
+                var key = body.Identity!.Value; var row = index.Row(key);
+                // Under the pointer without the highlight first (the pointer off the window), then hovered.
+                HoverAtForSelfTest(null);
+                Require(canvas.AreaHighlight is null && canvas.AreaHighlightDrawnForSelfTest is null, $"{kind}: no highlight without a hover");
+                using var before = await Frame();
+                HoverAtForSelfTest(at);
+                Require(HoverKeyForSelfTest == key, $"{kind}: the body is the pick");
+                using var after = await Frame();
+                Require(canvas.AreaHighlightDrawnForSelfTest is { Additive: true, Unlit: true, Alpha: 255, Multiply: false, WadeRows: 0 } drawn
+                    && drawn.Identity == key && drawn.Frame == body.Frame, $"{kind}: the highlight is the body's frame drawn additive: {canvas.AreaHighlightDrawnForSelfTest}");
+                // Additive: no pixel of the body gets darker and some get brighter (an opaque black source pixel adds nothing).
+                const float Step = 1.5f / 255;
+                var pairs = points.Select(p => (Before: before.GetPixel((int)p.X, (int)p.Y), After: after.GetPixel((int)p.X, (int)p.Y))).ToArray();
+                var darker = pairs.Count(c => c.After.R < c.Before.R - Step || c.After.G < c.Before.G - Step || c.After.B < c.Before.B - Step);
+                var brighter = pairs.Count(c => c.After.R > c.Before.R + Step || c.After.G > c.Before.G + Step || c.After.B > c.Before.B + Step);
+                Require(darker == 0 && brighter > 0, $"{kind}: of {pairs.Length} picked pixels {brighter} brighter and {darker} darker");
+                var window = HoverWindowForSelfTest;
+                var log = _gameBarPanel!.MessageLog;
+                if (kind == AreaHoverWindowKind.Item)
+                    Require(window is { Kind: AreaMessageKind.Item } && log.ShownKindForSelfTest == AreaMessageKind.Item && log.DrawnTextsForSelfTest == 1,
+                        $"{kind}: the item window: {window} drawn {log.ShownKindForSelfTest}/{log.DrawnTextsForSelfTest}");
+                else
+                    Require(window is { Kind: AreaMessageKind.Object } && window.Title == index.Name(key) && window.Icon == AreaHoverWindow.Image(row)
+                        && log.ShownKindForSelfTest == AreaMessageKind.Object && log.IconForSelfTest == window.Icon && log.DrawnTextsForSelfTest == 1
+                        && window.NameBlock == (kind == AreaHoverWindowKind.Scenery), $"{kind}: the object window: {window} icon {log.IconForSelfTest}");
+                Require(HoverTextForSelfTest is null, $"{kind}: no floating tooltip with the bars");
+                if (!string.IsNullOrWhiteSpace(capture)) Require(after.SavePng($"{capture}-{kind}.png") == Error.Ok, "capture saved");
+                HoverAtForSelfTest(null);
+                Require(canvas.AreaHighlight is null && HoverWindowForSelfTest is null && log.ShownKindForSelfTest is not (AreaMessageKind.Item or AreaMessageKind.Object),
+                    $"{kind}: leaving takes the highlight and the window away");
+                seen.Add($"{kind}={row.PrototypeNumber}:{brighter}/{pairs.Length}");
+            }
+            Require(seen.Any(s => !s.EndsWith("=none", StringComparison.Ordinal)), "at least one kind of object is hovered: " + string.Join(" ", seen));
+            // A click-through body (OF_CLICK_THROUGH) is never the pick, so it is neither highlighted nor described (OH1).
+            var through = area.Plan.Commands.FirstOrDefault(c => c.Identity is { } id && index.Contains(id) && AreaHoverIndex.ClickThrough(index.Row(id)));
+            Require(through is null || index.Bodies.All(c => c.Identity != through.Identity), "click-through bodies are not pickable");
+            GD.Print($"ARC-UI-057 native-smoke hover-window PASS map={_readyMapName} {string.Join(" ", seen)} click-through={(through is null ? "none" : "skipped")}");
+        }
+        finally
+        {
+            HoverReleaseForSelfTest(); HoverAtForSelfTest(null); HoverReleaseForSelfTest();
+            _messageLog.ClearHover();
+            _gameBarForSelfTest = bars; ReleaseSimulatedPadForSelfTest();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+            PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+    }
+}

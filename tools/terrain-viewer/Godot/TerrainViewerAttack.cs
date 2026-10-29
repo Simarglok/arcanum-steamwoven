@@ -59,6 +59,10 @@ public partial class TerrainViewerApp
         public AreaAttackPlayer? Player { get; set; }
         public long? RepeatAtMs { get; set; }
         public int Octant { get; set; }
+        /// <summary>ARC-RENDER-039: the playing animation (20 attack, 21 low attack, 14 throw) and the action that draws it (the attack
+        /// for a repaired low attack).</summary>
+        public int Animation { get; set; } = Arcanum.Simulation.Equipment.WeaponArtRules.AttackAnimation;
+        public ActorDiagnosticAction Action { get; set; } = ActorDiagnosticAction.Attack;
         public int Attacks { get; set; }
         public int Approaches { get; set; }
         // The last hit ended the goal (refused, or the resolver refused the attack): no repeat follows.
@@ -387,16 +391,23 @@ public partial class TerrainViewerApp
         return RoutePlanner.PlanApproach(routes, session.State.CommittedCell, target) is { Outcome: RouteOutcome.Found } plan ? plan.Target : null;
     }
 
-    /// <summary>Starts one attack animation: the clip from the attack ART and the hero's Speed and weapon, the attack sound roll
-    /// (a draw the original makes at every attack start), the facing toward the target.</summary>
+    /// <summary>Starts one attack animation: the clip from the attack ART (since ARC-RENDER-039 the low attack or the throw, as the
+    /// original picks it) and the hero's Speed and weapon, the attack sound roll (a draw the original makes at every attack start), the
+    /// facing toward the target.</summary>
     private void BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
     {
+        // ARC-RENDER-039: the attack, low attack or throw (WA4); a body without that ART does not attack (the original's goal fails, WA5).
+        var animation = HeroAttackArt.Animation(hero.Skill, goal.Row, LyingAnimation(goal));
+        if (HeroAttackArt.Clip(_worldActor.Profile, animation) is not var (action, art, rateTable))
+        { CancelAreaAttack($"the hero's body has no ART for attack animation {animation}"); return; }
         // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
         if (!ChargeHeroAction(TurnBasedRules.AttackCost(hero.WeaponSpeed), "attack")) { CancelAreaAttack(_turnBasedNotice); return; }
-        var art = _worldActor.Profile.Attack!;
-        var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
+        // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
+        // (the throw's file drops the weapon, the art id keeps it).
+        var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);
-        var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), AttackArtWeapon.Unarmed);
+        var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), weapon);
         var sound = _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
         var session = (AreaGridSession)_worldActor.Session!;
         var (tx, ty) = LiveWorldCell(goal.Row);
@@ -405,9 +416,10 @@ public partial class TerrainViewerApp
             : DiagnosticGridActor.RenderState(session.State).Facing;
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.RepeatAtMs = null;
-        _worldActor.AttackPose = (goal.Octant, 0);
+        goal.Animation = animation; goal.Action = action;
+        _worldActor.AttackPose = (action, goal.Octant, 0);
         PlayAttackStartSounds(sound.Roll?.Value);
-        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
+        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} animation={animation} drawn={action} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
     }
@@ -448,7 +460,7 @@ public partial class TerrainViewerApp
         if (_attack != goal) return;
         if (goal.Player.Playing)
         {
-            if (changed) { _worldActor.AttackPose = (goal.Octant, goal.Player.Playback.Frame); PublishWorldSelection(); }
+            if (changed) { _worldActor.AttackPose = (goal.Action, goal.Octant, goal.Player.Playback.Frame); PublishWorldSelection(); }
             return;
         }
         _worldActor.AttackPose = null;
@@ -782,6 +794,15 @@ public partial class TerrainViewerApp
         _worldActor.AttackPose = null;
         if (why is not null) { _attackNotice = "attack stopped: " + why; GD.Print("ARC-COMBAT-005 attack-cancel " + why); }
         if (_worldActor.Session is not null && _readyActorPlan is not null) PublishWorldSelection();
+    }
+
+    /// <summary>ARC-RENDER-039: the animation the attack's target is drawn in when the session knocked it out (the fall, 7) or killed
+    /// it (its dying animation); null for a standing NPC or an object (its placed art's).</summary>
+    private int? LyingAnimation(AttackGoal goal)
+    {
+        if (goal.Combat is null || _areaSession?.QueryLife(goal.Combat.Target).View is not { } life) return null;
+        return life.Status.IsDead ? _deathAnimations.GetValueOrDefault((CurrentAreaMap, goal.Entity), AreaFallenPoses.FallDown)
+            : life.Status.IsUnconscious ? AreaFallenPoses.FallDown : null;
     }
 
     // The fallen bodies of the shown map (an NPC the session killed or knocked out, drawn in its pose's last frame in place of its

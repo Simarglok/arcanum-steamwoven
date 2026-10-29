@@ -97,6 +97,46 @@ public sealed class HeroBodyArtTests
         Assert.Throws<ArgumentException>(() => new GaitTiming(human.Walk.Stride!, human.Run.Stride!, 8, rateBonus: 3));
     }
 
+    /// <summary>ARC-RENDER-037: in combat mode the body shows the wielded weapon and the shield (WA1); each animation's file keeps or
+    /// clears them as the original names it (MA2, MA3), and an armed walk falls back to the walk without the weapon (MA1).</summary>
+    [TestMethod]
+    public void TheArmedBodyShowsItsWeaponAndShieldInTheirAnimations()
+    {
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        var man = HeroBody.For(CharacterRace.Human, CharacterGender.Male)!.Value;
+        const uint dagger = 0x60000000u | 2u << 6, twoHanded = 0x60000000u | 7u << 6;
+        // Out of combat mode nothing shows; in it the dagger (2), bare hands without a weapon or for a subtype of 0.
+        Assert.AreEqual(man, man.Armed(false, dagger, 7));
+        var armed = man.Armed(true, dagger, null)!.Value;
+        Assert.AreEqual((2, 0), (armed.Weapon, armed.Shield));
+        Assert.AreEqual((1, 1), (man.Armed(true, null, 7)!.Value.Weapon, man.Armed(true, null, 7)!.Value.Shield));
+        Assert.AreEqual(1, man.Armed(true, 0x60000000u, null)!.Value.Weapon);
+        Assert.AreEqual(0, man.Armed(true, null, 5)!.Value.Shield, "only an armour item shows as a shield");
+        Assert.IsNull(man.Armed(true, 0x60000000u | 15u << 6, null), "subtype 15 has no weapon part");
+        // The stand and the attack show the weapon; the walk without the shield; run, vault and the falls show neither.
+        var shielded = man.Armed(true, dagger, 7)!.Value;
+        Assert.AreEqual("art/critter/HMM/HMMUWSCa.art", shielded.ArtPath(shielded.Selector(human.Idle.Selector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWSCu.art", shielded.ArtPath(shielded.Selector(human.Attack!.Selector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXCb.art", shielded.ArtPath(shielded.Selector(human.Walk.Selector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXAg.art", shielded.ArtPath(shielded.Selector(human.Run!.Selector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXAn.art", shielded.ArtPath(shielded.Selector(human.Vault!.Selector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXAh.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanFallDownSelector)));
+        // Animations outside 6..19 (stealth walk 3 here) keep both (MA2).
+        Assert.AreEqual("art/critter/HMM/HMMUWSCd.art", shielded.ArtPath(shielded.Selector(0x200000C0u)));
+        Assert.AreEqual(shielded.BodyBits, shielded.Selector(human.Idle.Selector) & 0x0FF00030u);
+        // MA3: a two-handed sword with a shield is written as the sword.
+        var both = man.Armed(true, twoHanded, 7)!.Value;
+        Assert.AreEqual("art/critter/HMM/HMMUWSDu.art", both.ArtPath(both.Selector(human.Attack.Selector)));
+        // MA1: an armed walk is tried with the weapon, then without it; a stand without a weapon then with bare hands.
+        var walk = armed.Selector(human.Walk.Selector);
+        CollectionAssert.AreEqual(new[] { walk, walk & ~15u }, armed.Candidates(human.Walk.Selector).ToArray());
+        var stand = man.Selector(human.Idle.Selector);
+        CollectionAssert.AreEqual(new[] { stand, stand | 1u }, man.Candidates(human.Idle.Selector).ToArray());
+        CollectionAssert.AreEqual(new[] { armed.Selector(human.Attack.Selector) }, armed.Candidates(human.Attack.Selector).ToArray());
+        // Unarmed out of combat mode the attack keeps the human's bare hands (nothing attacks out of combat mode).
+        Assert.AreEqual(1u, man.Selector(human.Attack.Selector) & 15u);
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void EveryCreatableBodyLoadsFromTheInstalledArt()
     {
@@ -131,7 +171,11 @@ public sealed class HeroBodyArtTests
             Assert.AreEqual((11, 11, 19, 14), (load.Profile.FallDown.FramesPerGroup, load.Profile.FallDown.RawFramesPerSecond,
                 load.Profile.GetUp.FramesPerGroup, load.Profile.GetUp.RawFramesPerSecond), body.Label);
             var downKeys = 5 * (load.Profile.FallDown.FramesPerGroup + load.Profile.GetUp.FramesPerGroup);
-            Assert.AreEqual((195 + downKeys, 195 + downKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
+            // ARC-RENDER-039: every body also has its bare-handed low attack and its throw (installed in underwear: 7 frames at 13 fps,
+            // action frame 5, and 11 frames at 12 fps, action frame 4; 435 keys a body).
+            Assert.IsNotNull(load.Profile.LowAttack, body.Label); Assert.IsNotNull(load.Profile.Throw, body.Label);
+            var attackKeys = 5 * (load.Profile.LowAttack.FramesPerGroup + load.Profile.Throw.FramesPerGroup);
+            Assert.AreEqual((195 + downKeys + attackKeys, 195 + downKeys + attackKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
             CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Take(5).Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
             // HB3: the installed strides (axis dx, dy, diagonal) of walk and run.
             var (walk, run) = body.Label switch
@@ -179,10 +223,35 @@ public sealed class HeroBodyArtTests
                 var worn = bare.Wearing(item.UseArt);
                 Assert.IsNotNull(worn, $"{name} {item.Kind.Prototype}: subtype has no art");
                 var body = HeroBodyArt.Load(archive, worn.Value);
-                Assert.AreEqual(195 + 5 * (body.Profile.FallDown!.FramesPerGroup + body.Profile.GetUp!.FramesPerGroup), body.Textures.Count,
+                Assert.AreEqual(195 + 5 * (body.Profile.FallDown!.FramesPerGroup + body.Profile.GetUp!.FramesPerGroup
+                    + body.Profile.LowAttack!.FramesPerGroup + body.Profile.Throw!.FramesPerGroup), body.Textures.Count,
                     $"{name} {item.Kind.Prototype} {worn.Value.Label}");
                 report.Add($"{name} {item.Kind.Prototype}: {worn.Value.Label} armor={worn.Value.Armor} palette={worn.Value.Palette}");
             }
+            // ARC-RENDER-037: in combat mode each kit weapon (and bare hands) draws an armed body that loads: its stand and attack
+            // show the weapon, its walk is the walk without it (no creatable body has an armed walk, MA1).
+            var dressed = bare.Wearing(armour[0].UseArt)!.Value;
+            var weapons = load.KitWear!.Where(item => item is not null && item.Item.Kind == Arcanum.Simulation.Equipment.EquipmentItemKind.Weapon)
+                .Select(item => (uint?)item!.UseArt).Append(null);
+            foreach (var use in weapons)
+            {
+                var armed = dressed.Armed(true, use, null)!.Value;
+                var body = HeroBodyArt.Load(archive, armed);
+                Assert.AreEqual((armed.Weapon, armed.Weapon, 0), ((int)(body.Profile.Idle.Selector & 15), (int)(body.Profile.Attack!.Selector & 15),
+                    (int)(body.Profile.Walk.Selector & 15)), $"{name} weapon {armed.Weapon}");
+                // ARC-RENDER-039: bare hands and the bow have their own low attack; every other kit weapon's is repaired to the attack
+                // (MA1) and not read; the throw drops the weapon (MA2).
+                Assert.AreEqual(armed.Weapon is 1 or 8, body.Profile.LowAttack is not null, $"{name} weapon {armed.Weapon} low attack");
+                Assert.AreEqual(0u, body.Profile.Throw!.Selector & 15, $"{name} throw");
+                report.Add($"{name} combat: {armed.Label} weapon={armed.Weapon} attack={body.Profile.Attack.FramesPerGroup}f/{body.Profile.Attack.RawFramesPerSecond}fps action={body.Profile.Attack.ActionFrame}"
+                    + $" low={(body.Profile.LowAttack is { } low ? $"{low.FramesPerGroup}f/{low.RawFramesPerSecond}fps action={low.ActionFrame}" : "attack")}"
+                    + $" throw={body.Profile.Throw.FramesPerGroup}f/{body.Profile.Throw.RawFramesPerSecond}fps action={body.Profile.Throw.ActionFrame}");
+            }
+            // With a shield (no kit holds one): the dagger's stand and attack are the shield files, the walk the plain walk.
+            var shielded = dressed.Armed(true, 0x60000000u | 2u << 6, Arcanum.Simulation.Equipment.WeaponArtRules.ArmorItemType)!.Value;
+            var withShield = HeroBodyArt.Load(archive, shielded);
+            Assert.AreEqual((1, 1, 0), ((int)(withShield.Profile.Idle.Selector >> 19 & 1), (int)(withShield.Profile.Attack!.Selector >> 19 & 1),
+                (int)(withShield.Profile.Walk.Selector >> 19 & 1)), $"{name} shield");
         }
         Console.WriteLine(string.Join("\n", report));
     }

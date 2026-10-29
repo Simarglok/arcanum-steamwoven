@@ -164,15 +164,42 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-020: in a turn-based round a companion moves only on its own subturn, by its AI (ARC-WORLD-115: the steps the AI
         // host gives the companion it holds); the others stand.
         var round = owner.QueryCombatRound() is not null;
+        var entered = new List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)>();
         foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier, heldOnly: round))
+        {
+            // The steps it started into a tile, as the player's (NoteMapEntries), for its tile scripts after the drive.
+            if (_mapTransfers is { } transfers)
+                foreach (var evidence in advance.AreaEvidence)
+                    if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open)
+                        entered.Add((companion, transfers.Map.Chart.ToWorld(evidence.Key.To)));
         foreach (var item in advance.Movement.Events)
             if (item.Kind is MovementEventKind.StepStarted or MovementEventKind.StepRejected or MovementEventKind.CenterArrived)
                 GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} event={item.Kind} {item.Key.From.X},{item.Key.From.Y}->{item.Key.To.X},{item.Key.To.Y} reason={item.Reason}"
                     + (advance.AreaEvidence.LastOrDefault(e => e.Key == item.Key) is { } evidence ? $" step={evidence.Live?.ReasonCode ?? evidence.Assessment.ReasonCode}" : ""));
+        }
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
             GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
         if (!round) RunCompanionLoyalty(group, owner, pc, frontier);
+        RunCompanionTileScripts(entered);
         RefreshFollowerPortraits();
+    }
+
+    // ARC-SCRIPT-046: the original runs a tile's script for an NPC that moved onto it too (ledger TR3), with the NPC as the triggerer: each
+    // step a following companion of the shown map (not a visitor from another map) started into a tile with a script runs it, in step
+    // order. A run that asked for a conversation opens it with the dialog's NPC; once one is open the remaining steps of this drive run
+    // nothing. Runs that did nothing are not logged.
+    private void RunCompanionTileScripts(List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)> entered)
+    {
+        if (_mapTransfers is not { } transfers) return;
+        foreach (var (companion, cell) in entered)
+        {
+            if (ConversationOpen) break;
+            if (companion.Template.Home.RuntimeMap != CurrentAreaMap || transfers.EnterByCritter(cell, companion.Template.Entity) is not { } ran) continue;
+            if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Dialog is not null || ran.Lines.Count > 0)
+                GD.Print("ARC-SCRIPT-046 companion-tile " + System.Text.Json.JsonSerializer.Serialize(new { Script = companion.Speaker.ScriptId, Cell = cell,
+                    Outcome = ran.Outcome.ToString(), ran.Detail, Dialog = ran.Dialog?.Script, Node = ran.Dialog?.Node }));
+            if (ran.Dialog is { } dialog) BeginScriptedConversation(dialog);
+        }
     }
 
     // ARC-WORLD-045: each following companion's AI tick runs the loyalty step (the original's non-combat pass, so none while a

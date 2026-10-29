@@ -34,7 +34,7 @@ opt-in [`TemplateSectorPlantsOriginalTests`](../../tests/Arcanum.TerrainViewer.T
 
 ## The commands (set S15)
 
-The use, tile and sector set of the viewer (`AreaUseScriptHost.Admission`, now "S4-area-use-reading-objects-story-world") gains the
+The use, tile and sector set of the viewer (`AreaUseScriptHost.Admission`, now "S4-area-use-reading-objects-story-world"; tile and sector runs use it with the dialog action since ARC-SCRIPT-046, `PlacedAdmission`) gains the
 world commands of `ScrAdmissionSet.S15`:
 
 - **Random** (37, PG5): the bounds in either order, both included, into operand 2 (a number literal there refuses the script). The

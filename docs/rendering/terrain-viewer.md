@@ -665,7 +665,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   so the name does not change after the first talk (NOT READY). The tooltip sits below
   right of the pointer and flips inside the window; it is recomputed when the pointer, the
   camera, the map, the actor's cell or the input guards change, so it never stays on an
-  old position. The area status line repeats it as `hover <name> -> <action>`.
+  old position. The area status line repeats it as `hover <name> -> <action>`. Since ARC-UI-057
+  the tooltip is shown only while the interface bars are not drawn (the diagnostic viewer): with the bars the
+  object is described in the message window as in the original ([below](#hovered-object-window-and-highlight-arc-ui-057)).
 - **Names.** The description tables come from the content stack of the game folder that
   holds the area's module archive (`<game>/modules/<Name>.dat`, the installed layout; the
   mounted module archive must be that same file). They load once in the background
@@ -709,6 +711,47 @@ entrance walk to use, click-through sprites passed through to the body behind, t
 does what the cursor showed). Not
 verified: original message-window parity (the cursor art follows the executable since ARC-UI-056), hover art (the animated underlay), a
 human on a physical mouse and display.
+
+### Hovered object window and highlight (ARC-UI-057)
+
+The owner's bug reports of 2026-10-29: an item under the pointer was not highlighted, and its name floated at the pointer
+instead of the message window. Both follow the executable now (ledger [OH1–OH9](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)),
+on the pick of ARC-UI-005.
+
+- **Highlight.** The hovered portal, container, scenery or item (types 1–3 and 5–14, without `OF_DONTDRAW` or `OF_INVISIBLE`)
+  is drawn a second time over itself (0x43C690): after every body and before the roofs, its frame additive, the source tinted
+  by the constant colour (200, 200, 200), unlit, without its alpha modes and its wall fade (`TerrainCanvas.AreaHighlight`,
+  rule `AreaHoverWindow.Highlighted`). The item brightens by about 78 % of its own colour. A wall, a projectile, a critter or a
+  trap gets no second draw. NOT READY: the critters' coloured rings under and over them (arts 467 and 468 in the reaction
+  category's colour, 555 in combat mode), the detect-invisible exception, the wading object's two-part draw (the same blit
+  for both parts, so no visible difference).
+- **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
+  tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
+  ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
+  by their image at (217, 510) and their name, scenery's in its three-line block; a critter by its name, the bars of
+  ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
+  critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
+  loot window's); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
+  an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
+  original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
+  back only when the pointer moves to another object. NOT READY: a portal's and container's lock state and hit points line,
+  scenery's hit points, a critter's level or reaction line and the combat panel of 0x554830, the item window's further lines
+  (HK22), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
+  it until the quiet time's next entry (the original's clearing of it there was not read).
+- **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
+  `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
+  the original's behaviour, not a Steamwoven bug (OH8).
+
+Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
+its show and leave), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
+portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
+hovers each found one: the highlight is the body's frame drawn additive, none of its picked pixels gets darker and some
+get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
+`ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
+follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
+original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
 
 ### Original cursor art (ARC-UI-056)
 
@@ -820,18 +863,20 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   folder) a frame is a dark rectangle with the name's first letters and plain bars.
 - **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
   in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
-  and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered
-  follower the PC leads that has a portrait; the [message log](#message-log-arc-ui-023) (its background included) gives way
-  while it is shown. The portrait shows when the pointer moves over the follower, not when the bars come back under a
-  pointer that has not moved.
+  and for the PC's followers with one. While the bars are drawn the viewer shows there a hovered follower's portrait (when
+  the PC leads it and it has one) as part of the [hovered object's window](#hovered-object-window-and-highlight-arc-ui-057),
+  which the [message log](#message-log-arc-ui-023) shows as its hover entry (ARC-UI-057; before it the log gave way to the
+  portrait). The portrait shows when the pointer moves over the follower, not when the bars come back under a pointer that
+  has not moved.
 
 Checks: `LifeBarsTests` (gauge art placement, compact fill and numbers), `AreaPanelArtTests` (layouts, the stored portrait
 of a critter record; with `DAT_ROOT` the installed frame and vial art and a portrait image read) and the native smoke stage
 `life` (map mode, `bates mansion lev 2` with `--hero`): without the bars the compact panel's columns, numbers and place,
 the frame's art, place and portrait, with the bars the vials' art numbers (17 while poisoned) and the hovered follower's
-portrait and name in the message window when it has one. NOT READY: frames past six (the original scrolls them with its
-arrow buttons), the critter art the original draws for a follower without a portrait (by race or flags, at 50 %), the
-PC's portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
+portrait and name in the message window when it has one (since ARC-UI-057 also the window's bars and another NPC's
+window). NOT READY: frames past six (the original scrolls them with its arrow buttons), the 50 % draw of the critter art
+the window shows for a follower without a portrait (the art by race or flags is drawn since ARC-UI-057), the PC's
+portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
 portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
 
@@ -1050,6 +1095,16 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   switch keeps the Take buttons. NOT READY: the doll views and their toggles, the scroll bar's art, a hero's item moved into the body,
   a follower's portrait, the steal window. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag).
+- **Round view (ARC-UI-054,** [ledger IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054); `AreaInventoryHole`): the
+  window's open centres the camera on the PC, and in the original look of the own window and the loot window the 89 × 89 rectangle
+  at (11, 9) or (16, 17) shows the screen's square of 178 game pixels around the PC (centred 15 game pixels above its foot point) at
+  half size, copied by a screen-texture shader on canvas layer 3 under the window (the background art leaves the square out, as
+  the original's copy replaces it; the doll art 223 is opaque there), with art 233 or 232 drawn over it when it reads.
+  A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
+  frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
+  frame. NOT READY: the barter window's round view (art 231), the own window's map drop and throw from it (IW18). The native smoke
+  checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
+  (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
@@ -1620,7 +1675,21 @@ With `--main-menu true` (launcher: `./arcanum area`, which opens it by default s
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
 does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
-([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); the art and layout are the project's.
+([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
+and layout (below), the other windows the project's.
+
+- **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
+  [ledger MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058); `AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`):
+  with the game's art the main, single-player, new-game and in-play windows draw their background (329 `MainMenuBack`, 331
+  `SinglePlayerBack`) over the 800 × 600 screen at the bars' whole factor, centred and black around, and their labels in the
+  `Morph30Font` art font centred on (410, 143 + 50 × i): black at (−1, −1), brown at (+1, +1), the dark red face on top, bright red
+  under the pointer. The pointer over a label plays 3026, a press 3027, a release over it chooses it; letters, Escape and the
+  controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
+  focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
+  names them and the window's notice. ARC-UI-059: the options window too (below). The quit box, the save and load, browser, new-character, editor and shop windows keep
+  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
+  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 
 - **Windows.** Main (Single Player, Options, Exit Game), Single Player (New Game, Load Game, Last Save, Cancel) and New Game
   (Pick Character, New Character, Cancel), in the original's order; Options opens the [options window](#options-window-arc-ui-013),
@@ -1668,7 +1737,8 @@ the start map: `ARC_AREA_MAP_SMOKE_ONLY=menu` with `--main-menu true` prints `AR
 (the game's texts, Last Save with no save, the real first hero read and started at the map list's start
 (92958, 82592) with its prototype, gold and flag, then F7 and Last Save loading it); the `menu` stage runs only when
 named, as the open menu blocks the other stages. Not done: the character editor (the new-character window is
-[ARC-UI-030](#new-character-window-arc-ui-030)), credits, movies and network play, the original menu art and button sounds; the scene flow is
+[ARC-UI-030](#new-character-window-arc-ui-030)), credits, movies and network play, the original art of the menu windows other than the
+button windows ([plan](../ui/original-windows.md#menu-windows-plan-arc-ui-058)); the scene flow is
 [ARC-UI-012](#scene-flow-arc-ui-012).
 
 ### Scene flow (ARC-UI-012)
@@ -1780,7 +1850,15 @@ animation.
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
 in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
-project's.
+project's, except as below.
+
+- **Original look (ARC-UI-059,** [ledger MW7–MW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
+  art the window draws its background 556 `OptionsMenuBack` over the 800 × 600 screen as the main menu's windows do, and its page
+  buttons Game, Video, Sound and Done as art-font labels centred on (130, 221 + 40 × i), lit under the pointer, sounding and
+  choosing as the main menu's labels (the focused one lit while the focus is on a page button). PROJECT: the page's controls stay
+  the project's rows (label, arrows, value), alone in a panel placed at the page's first control slot (261, 122) on the scaled
+  screen, until the controls' own art (arts 623, 667–670, MW8 F0) is read; the line at the top names the hidden controls and the
+  notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
 - **Pages.** The buttons Game, Video, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
@@ -1827,9 +1905,10 @@ from play, Done going back from the main menu, the Rules line switching the sess
 texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
 Done back to the main menu, a new game as the first hero beginning under the Original rules, then in play a difficulty
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
-Steamwoven on the session, the O key closing the menu). Not done: Brightness, Text Duration, Combat Taunts, Module,
-Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
-button sounds.
+Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
+while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
+saves the Game page's picture to an ignored path). Not done: Brightness, Text Duration, Combat Taunts, Module,
+Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art of the controls.
 
 ### New-character window (ARC-UI-030)
 
@@ -2101,8 +2180,9 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
 Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
 scroll areas (the original drops it through 0x575770), the compact interface's message window (F10). Since ARC-UI-024 a
 hovered follower's portrait and name take the window while shown ([panel art](#panel-art-arc-ui-024)): the log, its background
-included, is hidden until the hover ends, and an entry stored meanwhile sounds then but is drawn only after (the original's
-order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+included, was hidden until the hover ended. Since ARC-UI-057 the hovered object's window is the log's hover entry
+([hovered object](#hovered-object-window-and-highlight-arc-ui-057)): an entry stored meanwhile takes the window at once (the
+original's order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
 time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
 `ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
 drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's

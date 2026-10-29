@@ -250,8 +250,53 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-046: opens the conversation a tile script (or a script it called) asked for with its dialog action, the PC with
+    /// <paramref name="speaker"/>, as a talk opens (combat mode left first; none while the hero is under attack or a window is modal).
+    /// The run's effects are applied already; the DLG starts at the action's node without a dialog script run.
+    /// </summary>
+    private void BeginScriptedConversation(AreaSpeaker speaker, Arcanum.Scripting.Scr.ScrDialogStart dialog)
+    {
+        if (_conversationHost is null || _conversationPanel is null || ConversationOpen || WorldModal)
+        {
+            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation or window is open");
+            return;
+        }
+        if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
+        if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
+        QuarantineWorld();
+        _conversationNotice = null; _talkAfterRoute = null;
+        _areaCompanions?.InterruptGoals(speaker.Row.Key);
+        _talkHost = host;
+        AreaConversationStart start;
+        try { start = host.BeginScripted(speaker, dialog); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
+        {
+            start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
+        }
+        OpenConversation(speaker, start);
+        _conversationScripted = true;
+        GD.Print($"ARC-SCRIPT-046 scripted conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
+        RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-SCRIPT-046: as above for the conversation a tile or sector run asked for: the speaker is the dialog NPC of the shown
+    /// map whose entity the action's attachee names (the host refused any other); none here is a notice.</summary>
+    private void BeginScriptedConversation(Arcanum.Scripting.Scr.ScrDialogStart dialog)
+    {
+        if (_conversationHost?.Speakers.FirstOrDefault(s => AreaConversationState.EntityId(s.Row) == dialog.Npc?.Code) is { } speaker) { BeginScriptedConversation(speaker, dialog); return; }
+        _conversationNotice = $"script {dialog.Script} asked for a conversation with {dialog.Npc?.Code ?? "no NPC"}, which is no dialog NPC here";
+        GD.Print("ARC-SCRIPT-046 scripted conversation not opened: " + _conversationNotice);
+        RefreshReadyStatus();
+    }
+
+    // ARC-SCRIPT-046: the open conversation was started by a script's dialog action, so a "return to script" end has no dialog script
+    // of the speaker to resume.
+    private bool _conversationScripted;
+
     private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
     {
+        _conversationScripted = false;
         _conversationParty = start.Party;
         _conversationSpeaker = speaker;
         _voiceStart = start;
@@ -288,13 +333,16 @@ public partial class TerrainViewerApp
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
         var talkHost = _talkHost; _talkHost = null;
+        var scripted = _conversationScripted; _conversationScripted = false;
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
         if (conversation?.End is { Kind: DialogEndKind.SchematicWindow } && talkHost?.TakeSchematicCrafter() is { } crafter && _areaSession is not null)
             QueueDialogSchematics(crafter);
         // ARC-UI-050: b: ended the talk; the barter window opens with the speaker as merchant and the talk does not resume (BT7).
         if (conversation?.End is { Kind: DialogEndKind.BarterWindow } && talkHost?.TakeBarterMerchant() is { } merchant && _areaSession is not null)
             QueueDialogBarter(talkHost, merchant);
-        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
+        if (resume && scripted && conversation?.End is { Kind: DialogEndKind.ReturnToScript })
+            _conversationNotice = "the script that started this conversation does not continue here (not modelled)";
+        else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
             _talkHost = talkHost;

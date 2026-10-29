@@ -53,8 +53,9 @@ public sealed record AreaAiScene
     public AiParameterTable? Parameters { get; init; }
     /// <summary>The per-gait step durations; null: the live step of <see cref="DiagnosticGridSession.LiveDuration"/>.</summary>
     public GaitTiming? Timing { get; init; }
-    /// <summary>The attack ART's frames, action frame and raw frame rate of an NPC's body, or null for the fixed human attack ART.</summary>
-    public Func<AreaAiNpc, (int Frames, int ActionFrame, int RawFramesPerSecond)?>? AttackArt { get; init; }
+    /// <summary>ARC-RENDER-038: the attack ART an NPC's body has for a request (its animation, weapon part and shield), or null when it
+    /// has none the viewer can read: the attack then plays with the fixed human attack ART's timing and is not drawn. Null: always so.</summary>
+    public Func<AreaAiNpc, AreaAiAttackArtRequest, AreaAiAttackArt?>? AttackArt { get; init; }
     /// <summary>ARC-WORLD-099: whether the hero runs no animation (its walk or attack, which count in the original's animations-complete
     /// test); null: idle.</summary>
     public Func<bool>? HeroIdle { get; init; }
@@ -106,6 +107,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
+    /// <summary>ARC-RENDER-038: the attack animation the swing started (<see cref="AreaAiNoticeKind.Swing"/>).</summary>
+    public AreaAiAttackPlay? Play { get; init; }
     /// <summary>ARC-WORLD-102: the cast's spell and magic run, its play's timing (<see cref="AreaAiNoticeKind.Cast"/>; none plays: the
     /// release came at once), whether the release began the run (<see cref="AreaAiNoticeKind.Release"/>) and the goal end's free
     /// (<see cref="AreaAiNoticeKind.CastEnd"/>); ARC-WORLD-105: the launched missile's spell and run, its target object in
@@ -175,7 +178,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // The lists of a host without spell records: every spell without AI values.
     private static readonly AiGlobalLists NoLists = AiGlobalLists.Build([.. Enumerable.Repeat(AiSpellValues.None, AiGlobalLists.Spells)]);
     private const int GuardClass = 5;
-    // The fixed human attack ART (hmfuwxbu: 9 frames, action frame 6, 15 frames per second) stands in for an NPC's own.
+    // The fixed human attack ART (hmfuwxbu: 9 frames, action frame 6, 15 frames per second) stands in for an NPC's own when the viewer
+    // reads none (ARC-RENDER-038: <see cref="AreaAiScene.AttackArt"/>).
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedAttackArt = (9, 6, 15);
     // ARC-WORLD-109: the skill animation (12), and since ARC-WORLD-113 the throw animation (14), stand in with the same frames, played
     // at their raw rate: NPC ART is not read yet.
@@ -231,6 +235,11 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // ARC-WORLD-105: the runs launched by a casting goal still playing, with the cast host that launched them (its handled frame and
     // missile live there): a host rebuilt before the goal's end would see neither and free the run charged.
     private readonly Dictionary<int, SessionSpellCaster> _launched = [];
+    // ARC-RENDER-038: each NPC's last attack animation (the viewer draws it while it plays).
+    private readonly Dictionary<string, AreaAiAttackPlay> _attackPlays = new(StringComparer.Ordinal);
+    // ARC-RENDER-038: the weapon part and shield each NPC shows, for one session revision.
+    private readonly Dictionary<string, (int Weapon, int Shield)> _shown = new(StringComparer.Ordinal);
+    private long _shownRevision = -1;
 
     /// <param name="events">The viewer's event world: the pass's script calls, life facts, party and loot questions.</param>
     /// <param name="round">The turn-based round's world (the scan of the map's critters).</param>
@@ -460,6 +469,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
         _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
+        _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
     }
 
@@ -728,6 +738,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // still waits for its BEGIN is freed, unpaid.
     private void EndDroppedRun(AiGoalRun run)
     {
+        // ARC-RENDER-038: a dropped run's attack animation is not drawn on.
+        _attackPlays.Remove(run.Owner);
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
     }
@@ -923,18 +935,79 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (NpcCombatMode(id) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(id), true, context);
         if (target == Pc || _session.QueryCompanion(target).LedByPc && !(Status(Pc)?.IsDead ?? true)) HeroIntoCombatMode();
         Face(id, target);
-        var art = _scene.AttackArt?.Invoke(npc) ?? FixedAttackArt;
-        var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed, Math.Clamp(values.Speed, 1, RealTimeCombatRules.MaxStat),
-            art.RawFramesPerSecond);
-        var clip = new AttackClip(art.Frames, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, Math.Clamp(values.WeaponSpeed, -RealTimeCombatRules.MaxStat, RealTimeCombatRules.MaxStat)),
-            AttackArtWeapon.Unarmed);
+        // ARC-RENDER-038: the attack ART of the animation and the weapon the attacker's body shows (WA1, WA4), its frames, action frame
+        // and the rate of its weapon slot; an ART the viewer cannot read plays with the fixed human attack ART's timing.
+        var wanted = AttackRequest(id, target);
+        var art = _scene.AttackArt?.Invoke(npc, wanted) is { Frames: >= 1 and <= RealTimeCombatRules.MaxFrames, ActionFrame: >= 0 and <= RealTimeCombatRules.MaxFrames } read
+            ? read : null;
+        var (frames, actionFrame, rate, weapon) = art is null
+            ? (FixedAttackArt.Frames, FixedAttackArt.ActionFrame, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed,
+                Math.Clamp(values.Speed, 1, RealTimeCombatRules.MaxStat), FixedAttackArt.RawFramesPerSecond), AttackArtWeapon.Unarmed)
+            : (art.Frames, art.ActionFrame, AreaAiAttackArtRules.FramesPerSecond(art, wanted.Animation, values.Speed), AreaAiAttackArtRules.ClipWeapon(art));
+        var clip = new AttackClip(frames, actionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, Math.Clamp(values.WeaponSpeed, -RealTimeCombatRules.MaxStat, RealTimeCombatRules.MaxStat)),
+            weapon);
         var moments = RealTimeCombatRules.Schedule(clip);
         var hit = moments.FirstOrDefault(m => m.Kind == AttackUpdateKind.Hit);
         var end = moments[^1];
         var action = (int)Math.Max(1, hit.Kind == AttackUpdateKind.Hit ? hit.AtMs : end.AtMs);
         var swing = new AiAttackSwing(action, (int)Math.Max(1, end.AtMs - action));
-        _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing });
+        var play = new AreaAiAttackPlay(id, _nowMs, wanted, art, moments);
+        _attackPlays[id] = play;
+        _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing, Play = play });
         return swing;
+    }
+
+    /// <summary>ARC-RENDER-038: the NPC's attack animation playing at <paramref name="nowMs"/> and its frame, or null.</summary>
+    public (AreaAiAttackPlay Play, int Frame)? AttackPose(string id, long nowMs) =>
+        _attackPlays.TryGetValue(id, out var play) && play.Frame(nowMs) is { } frame ? (play, frame) : null;
+
+    /// <summary>
+    /// ARC-RENDER-038: the weapon part and shield bit the NPC's body shows now (0x465020, ledger WA1): none out of combat mode; in it the
+    /// use-art subtype of the item it wields (bare hands without one) and the shield bit for an armour item in its shield slot, its worn
+    /// items as the session shows them (<see cref="AreaCombatHost.Worn"/>; none read: bare hands).
+    /// </summary>
+    public (int Weapon, int Shield) ShownWeapon(string id)
+    {
+        if (id == Pc) return (0, 0);
+        // Asked per mover and frame: kept per session revision (combat mode and worn items change only with it).
+        var revision = _session.Version.Revision;
+        if (_shownRevision != revision) { _shown.Clear(); _shownRevision = revision; }
+        if (_shown.TryGetValue(id, out var known)) return known;
+        var shown = (0, 0);
+        if (_session.QueryCombatMode(SessionCombatant.Critter(id)))
+        {
+            var (use, _, shield) = Wielded(id);
+            shown = (WeaponArtRules.WeaponPart(true, use), WeaponArtRules.ShieldPart(true, shield));
+        }
+        _shown[id] = shown;
+        return shown;
+    }
+
+    /// <summary>
+    /// ARC-RENDER-038: the attack ART an NPC's attack on <paramref name="target"/> wants (WA1, WA4): its wielded weapon's part and flags,
+    /// its shield, and the target's stored object flags (the shrunk flag), its art (its height; the hero's is a critter's) and its current
+    /// animation, read as lying (7) while it is unconscious or dead, else its stored art's (<see cref="WeaponArtRules.AnimationOf"/>; a
+    /// target mid-fall, getting up or knocked down is NOT READY).
+    /// </summary>
+    public AreaAiAttackArtRequest AttackRequest(string id, string target)
+    {
+        var (use, flags, shield) = Wielded(id);
+        var targetFields = Fields(target);
+        var lying = Status(target) is { IsUnconscious: true } or { IsDead: true };
+        var targetArt = targetFields?.Object.CurrentArt ?? BodyArmorArtRules.CritterArt << 28;
+        return AreaAiAttackArtRules.Request(use, flags, shield, targetFields?.Object.Flags ?? 0,
+            lying ? AreaAiAttackArtRules.LyingAnimation : WeaponArtRules.AnimationOf(targetArt), targetArt);
+    }
+
+    // The use art and weapon flags of the item in the NPC's weapon slot and the type of the item in its shield slot.
+    private (uint? UseArt, uint Flags, int? ShieldType) Wielded(string id)
+    {
+        var worn = _scene.Combat.Worn(_session, _scene.RuntimeMap, id);
+        var weapon = worn?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon);
+        var shield = worn?.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield);
+        return (weapon is { Entity: not null } w ? w.Fields.Item?.UseArtFragment : null,
+            weapon is { Entity: not null } f ? (uint)(f.Fields.Weapon?.Flags ?? 0) : 0,
+            shield is { Entity: not null } s ? s.Fields.Object.Type : null);
     }
 
     /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event.</summary>

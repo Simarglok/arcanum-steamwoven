@@ -657,19 +657,32 @@ public partial class TerrainViewerApp
         $"{route.Status} target={route.Target?.ToString() ?? "none"}{(route.StopReason is { } reason ? " " + reason : "")}"
         + $" plan={route.LastPlan?.ReasonCode ?? "none"} segments={route.PlannedSegments}";
     /// <summary>ARC-WORLD-007: an unhandled LMB press on the ground sets the route goal (KM-03). Native
-    /// GUI (HUD, palette) handles its own clicks first; release has no meaning.</summary>
+    /// GUI (HUD, palette) handles its own clicks first; a left release has no meaning, a right release is ARC-COMBAT-022's.</summary>
     public override void _UnhandledInput(InputEvent @event)
     {
         if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed));
-        // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world has
-        // no right-button action, so it is the original's Ctrl+LMB.
+        // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
+        // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
+        {
+            _rightPressTaken = true;
             WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
+        }
         // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && _spellTargeting is not null)
+        {
+            _rightPressTaken = true;
             WorldObservation(() => { CancelSpellTargeting("right click"); RefreshAreaStatus(); });
+        }
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) _rightPressTaken = false;
+        // ARC-COMBAT-022: the right release leaves combat mode or concealment, unless its press was taken above.
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false })
+        {
+            if (_rightPressTaken) _rightPressTaken = false;
+            else WorldObservation(WorldRightRelease);
+        }
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && _readyActorPlan is not null

@@ -320,11 +320,12 @@ them as `MapTransitionSet.Placed`: 3,012 tile scripts and 20 sector scripts in t
 the start map), one per tile.
 
 - **When.** For each step the actor completes, in step order (ledger TS2, read in the executable): the tile's jump point
-  first, then the tile's script, then, when the step enters another sector, that sector's script (only the player's
-  steps; the original also runs a tile script for an NPC entering the tile). A load, a reset, a transfer arrival and an F8
+  first, then the tile's script, then, when the step enters another sector, that sector's script. Since ARC-SCRIPT-046
+  a companion's step runs the tile's script too, with the companion as the triggerer (below). A load, a reset, a transfer arrival and an F8
   restore fire nothing; the original places an object on the map with the same notifications (TS2), which arrival path
   a teleport takes is not read.
-- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-use-reading-objects". The slot
+- **Run** (ledger TS1, TS3): from line 0 as a use, the player the triggerer, no attachee, under "S4-area-placed-dialog" (the use set
+  "S4-area-use-reading-objects-story-world" with the dialog action, since ARC-SCRIPT-046). The slot
   is the sector file's attachment overridden by the session's map changes on the sector: `tile.N.script`, `tile.N.lf`,
   `tile.N.counters` for tile index N, `sector.script`, `sector.lf`, `sector.counters`. A changed slot is written back
   there; under the Original rules a tile script's change is discarded (ledger X3, the original stores the unchanged
@@ -356,8 +357,30 @@ the start map), one per tile.
   marker's sector script runs 40 times through map mode's own runner; on 2026-10-28 it listed 19 template scripts in the window and
   laid 6 herbs (Passion Root and Witchbane, the elven forest variant 67108864 of sector (1385, 238)) next to the marker, all drawn and
   picked as ground items: `ARC-WORLD-081 native-smoke plants PASS`.
-- **Not covered.** Tile scripts for NPCs; the actions and conditions outside the set (most tile scripts); the arrival tile of a
-  transfer; a fade-and-teleport's fade, sound and movie.
+- **Companions and conversations** (ARC-SCRIPT-046, ledger TR3 and X11, read in the executable): the original runs a tile's script
+  after every move of a PC or an NPC, with the mover as the triggerer; the jump point only for a PC, a sector script only for the
+  player. Every step a following companion of the shown map starts into a scripted tile runs its script with the companion as the
+  triggerer (`AreaMapTransfers.EnterByCritter`, `AreaUseScriptHost.RunPlaced` with a triggerer); its teleport is not modelled and
+  leaves that run unapplied. A dialog action of a tile or sector run, or of a script it calls, opens that conversation of the PC with
+  the action's attachee once the run's effects are applied (`AreaScriptedUse.Dialog`; the conversation host's `BeginScripted`, no
+  dialog script run): combat mode is left first, as for a talk, and none opens while another conversation or a modal window is
+  open (logged); the player's steps still queued wait until it closes, a companion's remaining steps of that drive run nothing.
+  A dialog action with no NPC of the shown map to talk to (a tile script's own, which has no attachee), or with a teleport, applies
+  nothing and counts as a refused run (so a tile's unconditional teleport still fires); a stored use slot of an NPC with no loaded
+  use element leaves the run unapplied. Such a conversation's "return to script" does not resume a script (not modelled; the
+  speaker's dialog script is not the one that started it), and a DLG with an LF operation is refused (which local flags it reads
+  for such a start is not read in the executable). Log lines: `ARC-SCRIPT-046 companion-tile` (a companion's run that did something),
+  `ARC-SCRIPT-046 scripted conversation`. Installed original: at the plane wreck of the Crash Site, script 1695 on a row of tiles
+  waits for Virgil (name 6409) to step on one, then calls 1696, whose dialog asks for node 1 of DLG 1696 (his remark on the
+  flying machine; its last replies set flag 2304, which ends 1695 at once from then on); the player stepping there runs it to
+  its return with nothing (the bug report of 2026-10-29). Opt-in check `AreaUseScriptsOriginalTests` (`DAT_ROOT`); native smoke
+  the stage `wreck`, run only when named (`ARC_AREA_MAP_SMOKE_ONLY=wreck` on the main map at the Crash Site): Virgil joins, stands
+  one cell before a wreck tile with the PC four cells past it, follows, and his first step opens the conversation
+  (`ARC-SCRIPT-046 wreck smoke PASS`; on 2026-10-29 at tile (92912,82552), in 1 frame, DLG 1696 node 1). A conversation
+  left before its last reply leaves flag 2304 unset, so his next step onto a wreck tile opens it again, as the script reads.
+- **Not covered.** Tile scripts for NPCs other than following companions (moving NPCs of the AI host, visiting companions, a
+  companion's jump onto the PC); the actions and conditions outside the set (most tile scripts); the arrival tile of a transfer; a
+  fade-and-teleport's fade, sound and movie.
 
 ## Dialogs (ARC-WORLD-032)
 

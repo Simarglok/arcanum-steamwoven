@@ -39,6 +39,31 @@ public sealed class RealTimeCombatRulesTests
         Assert.IsFalse(RealTimeCombatRules.CanExitCombatMode(true, true, false, true));
     }
 
+    // ARC-COMBAT-022 (ledger RR1–RR4): the game view's right release.
+    [TestMethod]
+    public void ARightReleaseLeavesCombatModeOnlyForAnIdleActivePcAndNeverEntersIt()
+    {
+        var idle = new RightReleaseFacts(Active: true, KnockedDown: false, InCombatMode: true, Concealed: false, Animating: false, Fidgeting: false);
+        Assert.AreEqual(RightReleaseAction.ToggleCombatMode, RealTimeCombatRules.RightRelease(idle));
+        Assert.AreEqual(RightReleaseAction.ToggleCombatMode, RealTimeCombatRules.RightRelease(idle with { Concealed = true }), "combat mode first");
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(idle with { Animating = true }), "walking or attacking");
+        Assert.AreEqual(RightReleaseAction.ToggleCombatMode, RealTimeCombatRules.RightRelease(idle with { Animating = true, Fidgeting = true }));
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(idle with { Active = false }), "stunned, paralysed, stoned, unconscious or dead");
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(idle with { KnockedDown = true }));
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(idle with { InCombatMode = false }), "the release never enters");
+    }
+
+    [TestMethod]
+    public void ARightReleaseOutOfCombatModeEndsTheConcealmentOfAnIdlePc()
+    {
+        var concealed = new RightReleaseFacts(Active: true, KnockedDown: false, InCombatMode: false, Concealed: true, Animating: false, Fidgeting: false);
+        Assert.AreEqual(RightReleaseAction.LeaveConcealment, RealTimeCombatRules.RightRelease(concealed));
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(concealed with { Animating = true }));
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(concealed with { Animating = true, Fidgeting = true }), "the fidget only matters in combat mode");
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(concealed with { Active = false }));
+        Assert.AreEqual(RightReleaseAction.None, RealTimeCombatRules.RightRelease(concealed with { KnockedDown = true }));
+    }
+
     [TestMethod]
     public void AttackRatesComeFromTheWeaponSlotAndSpeed()
     {
@@ -78,6 +103,9 @@ public sealed class RealTimeCombatRulesTests
         // Not a critter ART, or under a body-of-element spell: the ART's own rate.
         Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 20, 12, critterArt: false));
         Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 20, 12, elementalBody: true));
+        // ARC-RENDER-039 (WA9): the throw keeps its ART's rate whatever the Speed and weapon.
+        foreach (var weapon in Enum.GetValues<AttackArtWeapon>())
+            Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Throw, weapon, 20, 12), weapon.ToString());
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 0, 12));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 8, 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, (AttackArtWeapon)15, 8, 12));

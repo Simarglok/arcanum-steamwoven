@@ -6,13 +6,17 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-011 main menu: a backdrop over the whole window and a column of the shown buttons of <see cref="AreaMainMenu"/>'s window
 /// with their original labels (each with its hotkey letter), the hidden buttons' note and the notice; the pre-made browser shows the
-/// browsed hero with Previous, Next, Start and Back. The app owns the state and rebuilds the window after every change; the
-/// original's menu art and layout are not drawn. ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
+/// browsed hero with Previous, Next, Start and Back. The app owns the state and rebuilds the window after every change; this panel
+/// does not draw the original's menu art and layout (ARC-UI-058 below). ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
 /// ARC-UI-013: the options window: the page's shown controls, each with its label, value and arrows, above the page and Done buttons.
 /// ARC-UI-030: the new-character window: gender, race and background rows with their arrows (the original's art buttons), the
 /// background's name and text from the game, Accept and Cancel. ARC-UI-034: the character editor (window 14) is the creation-mode
 /// character sheet the app shows above this backdrop; the menu's own panel is hidden there. ARC-UI-036: the opening shop (window 15):
-/// the kit the shop made (the host's text: gold and items), Accept and Back.
+/// the kit the shop made (the host's text: gold and items), Accept and Back. ARC-UI-058: with the game's menu art read, the button windows
+/// (main, single player, new game, in-play) are drawn in the original's look (<see cref="AreaMenuArtView"/>) with a project line at the
+/// screen's bottom for the notice and the buttons not offered; the other windows and the quit box keep this panel. ARC-UI-059: the
+/// options window too, its page buttons in the art; PROJECT: its page's controls stay this panel's rows (only them), placed at the
+/// page's first control slot (MW8) until the controls' own art is read (open 0x541C70, control build 0x57FAD0).
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -30,6 +34,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private Label _note = null!;
     private Label _notice = null!;
     private Label _hint = null!;
+    private AreaMenuArtView _art = null!;
+    private static readonly Color DiagnosticBackdrop = new(.06f, .05f, .04f, .96f);
+    private Label _artNote = null!;
     public event Action<int>? ButtonPressed;
     public event Action<int>? BrowseRequested;
     public event Action? StartRequested;
@@ -47,13 +54,17 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-033: a click on the new-character window's name field.</summary>
     public event Action? NameClicked;
     public bool IsOpen => Visible;
-    internal Vector2? ButtonCentreForSelfTest(int index) =>
+    internal Vector2? ButtonCentreForSelfTest(int index) => ArtMode ? _art.ButtonCentreForSelfTest(index) :
         _buttons.Visible && _buttons.GetChildren().OfType<Button>().ElementAtOrDefault(index) is { } button ? button.GetGlobalRect().GetCenter() : null;
-    internal IReadOnlyList<string> ButtonsForSelfTest => _buttons.Visible ? _buttons.GetChildren().OfType<Button>().Select(button => button.Text).ToArray() : [];
+    internal IReadOnlyList<string> ButtonsForSelfTest => ArtMode ? _art.LabelsForSelfTest : _buttons.Visible ? _buttons.GetChildren().OfType<Button>().Select(button => button.Text).ToArray() : [];
     internal string HeroForSelfTest => _browser.Visible ? _hero.Text : "";
     internal string NoteForSelfTest => _note.Text;
     internal string NoticeForSelfTest => _notice.Text;
     internal string HeaderForSelfTest => _header.Text;
+    /// <summary>ARC-UI-058: the button window is drawn in the original's look.</summary>
+    public bool ArtMode => Visible && _art.Visible;
+    internal AreaMenuArtView ArtForSelfTest => _art;
+    internal string ArtNoteForSelfTest => _artNote.Text;
     /// <summary>ARC-UI-013: the options window's controls as "label: value".</summary>
     internal IReadOnlyList<string> ControlsForSelfTest => _controls.Visible
         ? _controls.GetChildren().OfType<HBoxContainer>().Select(row => row.GetChildren().OfType<Label>().ToArray()).Select(labels => $"{labels[0].Text}: {labels[1].Text}").ToArray() : [];
@@ -79,9 +90,17 @@ public partial class AreaMainMenuPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 4;
-        _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = new Color(.06f, .05f, .04f, .96f), MouseFilter = Control.MouseFilterEnum.Stop };
+        _backdrop = new ColorRect { Name = "MainMenuBackdrop", Color = DiagnosticBackdrop, MouseFilter = Control.MouseFilterEnum.Stop };
         AddChild(_backdrop);
-        _backdrop.AddChild(ViewerBuild.MakeLabel(DebugMode)); // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode)
+        _art = new AreaMenuArtView();
+        _art.ButtonPressed += index => ButtonPressed?.Invoke(index);
+        _art.SoundRequested += id => SoundRequested?.Invoke(id);
+        AddChild(_art);
+        _artNote = new Label { Name = "MainMenuArtNote", Visible = false, Modulate = new Color(.75f, .7f, .6f), HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = Control.MouseFilterEnum.Ignore };
+        AddChild(_artNote);
+        // ARC-DEV-047: which build this is (ARC-DEV-050: and the debug mode); above the art (ARC-UI-058), which may cover the corner.
+        AddChild(ViewerBuild.MakeLabel(DebugMode));
         _panel = new PanelContainer { Name = "AreaMainMenu", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -121,6 +140,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         ResizePanel(); Hide();
     }
 
+    /// <summary>ARC-UI-058: the menu art (the button windows' backgrounds by art number, the font and its glyph frames by frame index).</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs) =>
+        _art.SetArt(backgrounds, font, glyphs);
+
     /// <summary>The window for the menu's state; <paramref name="hero"/> is the browsed hero's description (browser only), or the opening
     /// shop's kit (ARC-UI-036, shop only).</summary>
     public void Render(AreaMainMenu menu, string hero)
@@ -138,12 +161,19 @@ public partial class AreaMainMenuPanel : CanvasLayer
             AreaMenuWindow.NewCharacter => menu.Texts.Text(421), AreaMenuWindow.CharacterEditor => "Character editor",
             AreaMenuWindow.Shop => "Opening shop", _ => menu.Texts.Text(420),
         };
-        // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
-        _panel.Visible = menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending;
-        foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
-        RenderControls(menu);
         var options = menu.Window == AreaMenuWindow.Options;
         var focus = options ? menu.OptionsFocus - menu.Controls.Count : menu.Focus;
+        // ARC-UI-058: a button window in the original's look when its art read; the quit box stays the panel's.
+        var art = !menu.QuitPending && _art.Draws(menu.Window);
+        if (art) _art.Render(menu.Window, [.. menu.Shown.Select(button => menu.Texts.Text(button.Message))], focus);
+        else _art.CloseView();
+        // ARC-UI-059: over the options window's art the panel holds only the page's controls.
+        _optionsArt = art && options;
+        // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
+        _panel.Visible = (!art || _optionsArt) && (menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending);
+        foreach (var control in new Control[] { _header, _note, _notice, _hint }) control.Visible = !_optionsArt;
+        foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
+        RenderControls(menu);
         var shown = menu.Shown;
         // The quit box (ARC-UI-012): the original's yes/no box with its fixed letters; the project's button texts.
         if (menu.QuitPending)
@@ -173,12 +203,16 @@ public partial class AreaMainMenuPanel : CanvasLayer
         }
         RenderCreation(menu, creating);
         RenderShop(menu, shopping, hero);
-        _buttons.Visible = !browser && !creating && !shopping;
+        _buttons.Visible = !browser && !creating && !shopping && !_optionsArt;
         _browser.Visible = browser;
         _hero.Text = browser ? hero : "";
         var hidden = menu.HiddenNotes;
         _note.Text = hidden.Count == 0 ? "" : "Not offered: " + string.Join("; ", hidden);
         _notice.Text = menu.Notice ?? "";
+        _artNote.Visible = art;
+        // ARC-UI-058: outside the original's screen the window is black, as the original's 800 × 600 screen has no margin.
+        _backdrop.Color = art ? Colors.Black : DiagnosticBackdrop;
+        _artNote.Text = art ? string.Join("  |  ", new[] { menu.Notice ?? "", _note.Text }.Where(line => line.Length > 0)) : "";
         _hint.Text = (browser ? "Previous/Next browse the pre-made heroes, Start begins a new game with that hero, Escape or Back goes back"
                 : shopping ? "the kit the shop made for the character (the original's item_generate_inventory); Accept or Return starts the game "
                     + "with it, Back or Escape returns to the character editor, where every point is still free; item names from the game when loaded"
@@ -309,7 +343,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true;
+        Hide(); _panel.Visible = true; _art.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        foreach (var control in new Control[] { _header, _note, _notice, _hint }) control.Visible = true;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -322,13 +357,25 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
+        if (_art.Visible)
+        {
+            _art.Place();
+            _artNote.Size = new(Math.Max(1, size.X - 48), 0);
+            _artNote.Position = new(24, 12); // at the top, away from the build line at the bottom right
+        }
         var width = Math.Max(1, Math.Min(560, size.X - 48));
+        var (slotX, slotY) = AreaMenuArtLayout.OptionsSlot(0);
+        // ARC-UI-059: over the options art the controls' rows start at the page's first slot (MW8) and end before the screen's right edge.
+        if (_optionsArt) width = Math.Max(1, Math.Min(width, (AreaMenuArtLayout.ScreenWidth - slotX - 16) * _art.Scale.X));
         _panel.Size = new(width, 0);
         var height = _panel.GetCombinedMinimumSize().Y;
         _panel.Position = new((size.X - width) / 2, _dockedBelow ? Math.Max(24, size.Y - height - 24) : Math.Max(24, (size.Y - height) / 2));
+        if (!_optionsArt) return;
+        var at = _art.Position + new Vector2(slotX, slotY) * _art.Scale;
+        _panel.Position = new(Math.Max(0, Math.Min(at.X, size.X - _panel.Size.X)), Math.Max(0, Math.Min(at.Y, size.Y - height)));
     }
 
-    private bool _dockedBelow;
+    private bool _dockedBelow, _optionsArt;
 
     /// <summary>ARC-UI-038: the opening shop's window at the bottom, below the docked barter window, with its text compact.</summary>
     public void SetDockedBelow(bool docked)
