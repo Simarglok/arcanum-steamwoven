@@ -6,7 +6,8 @@ Status: **Implemented bounded component**, ARC-COMBAT-004 (2026-10-17). Slice 4 
 animation's cadence in real time (rate from Speed and weapon, pause from weapon speed, the action-frame hit, the pistol,
 rifle and bow repeat shot), the auto-attack repeat, and the fatigue charge of running in combat mode. The rules are pure
 functions in `Arcanum.Simulation.Combat.RealTimeCombatRules`; combat mode is a domain of the
-[game session](game-session-runtime.md) (snapshot schema 15, now 16); the AREA viewer toggles it with the original R key.
+[game session](game-session-runtime.md) (snapshot schema 15, now 16); the AREA viewer toggles it with the original R key, and a
+right click leaves it (ARC-COMBAT-022).
 Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001) (mode and switching),
 [FR-COMBAT-012](../requirements/combat-magic-tech.md#fr-combat-012) (the auto-attack part) and
 [FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the attack's action frame runs its hit once). The hero's attack in the viewer is
@@ -24,13 +25,15 @@ Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001
   [verification ledger](../research/ledger/combat.md#real-time-combat-arc-combat-004). The original does
   what that first reading describes except in three places: the `auto attack` default is "1" (RT6), Speed 8 gives the
   middle rate (LA1, RT10) and the attack start clears invisibility for an attacker that is not the local PC (RT8). None
-  is a bug of the original, so there is no rule-mode switch.
+  is a bug of the original, so there is no rule-mode switch. The game view's right release (ARC-COMBAT-022) is in
+  [Right release](../research/ledger/combat.md#right-release-arc-combat-022) (RR1–RR5, two readers, no anomaly).
 
 ## Rules (`RealTimeCombatRules`)
 
 | Rule | Value |
 | --- | --- |
 | Toggle | a dead critter skips every refusal; else stoned and paralysed refuse, stunned refuses leaving, inactive (unconscious, stunned, paralysed, stoned) refuses entering, an NPC in its concealed animation refuses (`ToggleRefusal`) |
+| Right release | the game view's mouse right release for the local PC (ledger [RR1–RR5](../research/ledger/combat.md#right-release-arc-combat-022)): nothing for an inactive PC or one lying knocked down; in combat mode the toggle (so leaving through the exit gate) when the PC runs no animation or its first one is a fidget; out of combat mode the end of a concealed PC's concealment when it runs no animation; never entering (`RightRelease`) |
 | Exit gate | out of combat mode or not active: open; attempting an attack: closed; an active, fighting NPC in the vicinity with the critter or one of its followers as combat focus: closed (`CanExitCombatMode`) |
 | Attack rate | ART rate for a non-critter ART, a body-of-element spell or a weapon slot without an entry; else (middle, low, high) per slot: attack unarmed/sword 15/7/23, dagger/bow 10/6/14, axe/mace/two-handed 14/8/20, pistol 8/3/12, rifle 6/3/10, staff 12/8/16; low attack unarmed 13/8/18, dagger/bow/staff 10/6/14, sword 14/8/20, axe/mace 11/7/15, pistol/rifle 6/3/10, two-handed 13/9/17; Speed < 8 `low + Speed·(middle − low)/8`, 8 the middle, < 30 `middle + Speed·(high − middle)/30`, else high; no dwarf or halfling offset (`AttackFramesPerSecond`) |
 | Frame pause | `clamp(1000 / rate, 30, 800)`, then `− 10 × (weapon speed − 10)` and clamped to 30..800 again; weapon speed is `TurnBasedRules.WeaponSpeed` (10 unarmed) (`AttackFramePauseMs`) |
@@ -74,8 +77,15 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 
 ## Viewer (AREA)
 
-- R (the original Ready/Unready key) toggles the hero's combat mode in real time; the status line shows
+- R (the original Ready/Unready key) toggles the hero's combat mode, in real time or (ARC-COMBAT-020) turn-based; the status line shows
   `combat mode: ON (real time)` or `off` with the hero's fatigue. Without `--hero` it says combat mode needs a hero.
+- ARC-COMBAT-022: a right click in the world (its release, under the world press's guards, on the hero's own subturn in a
+  round) leaves combat mode for a hero that stands (not walking, attacking or casting) and is active and not knocked down;
+  under attack it is refused with "cannot leave combat mode when under attack" (the original's message 24); it never enters
+  combat mode. Out of combat mode it ends the idle hero's prowling. A right press that closed the spell cursor or was a macOS
+  Ctrl+click (on every platform a Ctrl+right press, ARC-WORLD-020), an armed targeting (lockpicks, pick pocket, a
+  follower's walk order or its open menu) and a window or bar that took the press take the release instead. Native smoke: the turn-based stage (`./arcanum smoke pr --stages turn-based
+  --hero human-male`), lines `ARC-COMBAT-022 right-release action=…` before its PASS line.
 - A dialog start leaves combat mode first and does not start while the hero is under attack; a map change (the cave
   transfer) leaves combat mode, as the source's teleport.
 - Running in combat mode charges one fatigue every fifth run step of a move; a hero out of fatigue walks. Native smoke:
@@ -86,8 +96,10 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 - The hero's attack is the next slice, ARC-COMBAT-005 ([hero attack runtime](hero-attack-runtime.md)): the combat-mode
   click on a living NPC, the attack cursor and ART, damage, death and loot, played by these rules. Ranged attacks and the
   repeat shot have no host yet.
-- AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer), the attacked
-  NPC's AI pass, NPC attacks.
+- AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer, so the right
+  click's and R's refusal under attack does not happen there yet), the attacked NPC's AI pass, NPC attacks.
+- After the right release the original interrupts the PC's animations at priority 3 and turns it toward the pointer
+  (RR5); the viewer does neither.
 - The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020
   ([viewer host](turn-based-round-runtime.md#viewer-host-arc-combat-020)); the event pump (ARC-WORLD-039) recovers the fatigue
   spent running as the clock flows. Outside a round an unconscious hero still moves (movement does not read life yet).
@@ -99,7 +111,7 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 
 ## Tests
 
-`tests/Arcanum.Simulation.Tests/Combat/RealTimeCombatRulesTests.cs` (toggle and gate tables, rate tables for every slot
+`tests/Arcanum.Simulation.Tests/Combat/RealTimeCombatRulesTests.cs` (toggle and gate tables, the right release, rate tables for every slot
 and both animations, pause clamps, the playback plan, repeat shots, the repeat check, the run charge),
 `LifeRulesTests.AFatigueChargeAddsToTheDamageWhateverTheImmunities` and
 `tests/Arcanum.Session.Tests/CombatModeTests.cs` (toggle refusals, death, NPC facts, exit gate with followers, the

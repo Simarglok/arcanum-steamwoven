@@ -12,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 // actor, its gait timing and its plan are swapped (NPCs and companions keep the human timing). A body that cannot be read or
 // swapped is drawn as the fixed human, with its reason in the log, and is not tried again that run. ARC-WORLD-112: the body wears
 // the hero's worn body armour (its use art's armour part and palette, ledger BA1–BA2); a worn body whose ARTs do not read is drawn bare.
+// ARC-RENDER-037: in combat mode the body shows the wielded weapon and the shield (0x465020, ledger WA1): it stands and attacks with
+// them; an armed body whose ARTs do not read is drawn as the unarmed one.
 public partial class TerrainViewerApp
 {
     private readonly Dictionary<HeroBody, HeroBodyLoad> _heroBodies = new();
@@ -21,35 +23,56 @@ public partial class TerrainViewerApp
     private string? _heroWomanFailure;
     private IReadOnlyList<ActorDiagnosticFrame>? _humanActorFrames;
 
-    // ARC-WORLD-112: the use art of each worn body armour, by item entity, for one session and kit (an item's art never changes).
+    // ARC-WORLD-112: the use art of each worn body armour (since ARC-RENDER-037 also weapon), by item entity, for one session and kit
+    // (an item's art never changes).
     private readonly Dictionary<string, uint?> _bodyArmorUseArts = new();
     private (GameSessionOwnerIdentity? Owner, IReadOnlyList<SessionWearableItem?>? Kit) _bodyArmorUseArtsFor;
 
     /// <summary>The body the session hero should be drawn with: its race and gender's wearing its body armour (bare when that body
-    /// did not read, or the item's subtype has no art), the fixed human without a hero.</summary>
+    /// did not read, or the item's subtype has no art) and, since ARC-RENDER-037, showing its weapon and shield in combat mode (without
+    /// the shield when that body did not read, unarmed when neither did); the fixed human without a hero.</summary>
     private HeroBody WantedHeroBody()
     {
         if (_areaSession is not { } session || session.QueryHero() is not { } hero || HeroBody.For(hero.Race, hero.Gender) is not { } bare)
             return HeroBody.HumanFemale;
-        return bare.Wearing(WornBodyArmorUseArt(session)) is { } worn && !_heroBodyFailures.ContainsKey(worn) ? worn : bare;
+        var worn = session.QueryEquipment().Worn;
+        var dressed = bare.Wearing(WornUseArt(session, worn, EquipmentSlot.Armor)) is { } armour && !_heroBodyFailures.ContainsKey(armour) ? armour : bare;
+        if (ArmedBody(session, worn, dressed) is not { } armed) return dressed;
+        // A weapon and shield pair without its ARTs (the session's wear check does not test the art, WA8) still shows the weapon.
+        return !_heroBodyFailures.ContainsKey(armed) ? armed : !_heroBodyFailures.ContainsKey(armed with { Shield = 0 }) ? armed with { Shield = 0 } : dressed;
+    }
+
+    /// <summary>ARC-RENDER-037: <paramref name="body"/> with the weapon and shield the hero shows (WA1): none out of combat mode (the
+    /// body itself); in it the wielded weapon's use-art subtype (bare hands without a weapon, or for one whose use art is not read here:
+    /// NOT READY) and the shield bit for an armour item in the shield slot.</summary>
+    private HeroBody? ArmedBody(GameSessionOwner session, IReadOnlyList<SessionWornItem> worn, HeroBody body)
+    {
+        if (!HeroInCombatMode) return body;
+        var shield = worn.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield);
+        return body.Armed(true, WornUseArt(session, worn, EquipmentSlot.Weapon),
+            shield is null ? null : shield.Item.Kind == EquipmentItemKind.Armor ? WeaponArtRules.ArmorItemType : 0);
     }
 
     /// <summary>The use art of the hero's worn body armour: null with none, or when its facts are not read here (a made item, a taken
     /// item whose map rows the inventory host does not hold: NOT READY, drawn bare). Only a read use art is kept, so an item read later is
     /// drawn then.</summary>
-    private uint? WornBodyArmorUseArt(GameSessionOwner session)
+    private uint? WornBodyArmorUseArt(GameSessionOwner session) => WornUseArt(session, session.QueryEquipment().Worn, EquipmentSlot.Armor);
+
+    private uint? WornUseArt(GameSessionOwner session, IReadOnlyList<SessionWornItem> worn, EquipmentSlot slot)
     {
-        if (session.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == EquipmentSlot.Armor) is not { } armor) return null;
+        if (worn.FirstOrDefault(item => item.Slot == slot) is not { } item) return null;
         if (_bodyArmorUseArtsFor != (session.Version.Owner, _areaKitWear)) { _bodyArmorUseArts.Clear(); _bodyArmorUseArtsFor = (session.Version.Owner, _areaKitWear); }
-        if (_bodyArmorUseArts.TryGetValue(armor.Entity, out var use)) return use;
-        use = _inventoryHost?.Wearable(session, armor.Entity, _areaKitWear)?.UseArt;
-        if (use is not null) _bodyArmorUseArts[armor.Entity] = use;
+        if (_bodyArmorUseArts.TryGetValue(item.Entity, out var use)) return use;
+        use = _inventoryHost?.Wearable(session, item.Entity, _areaKitWear)?.UseArt;
+        if (use is not null) _bodyArmorUseArts[item.Entity] = use;
         return use;
     }
 
     private void SyncHeroBody()
     {
         if (_readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || _readyActorPlan is null || _worldActor.Session is not AreaGridSession) return;
+        // ARC-RENDER-037: a playing attack keeps its body (its clip has that body's attack ART's frames); a weapon change swaps after it.
+        if (_attack?.Player is { Playing: true }) return;
         var wanted = WantedHeroBody();
         // A body that did not read or swap is drawn as the fixed human, with the human's profile and timing.
         if (_heroBodyFailures.ContainsKey(wanted)) wanted = HeroBody.HumanFemale;
@@ -113,17 +136,17 @@ public partial class TerrainViewerApp
         // ARC-WORLD-112: the body wears the hero's body armour (the pre-made start wields the kit's best items).
         var body = WantedHeroBody();
         var bare = HeroBody.For(hero.Race, hero.Gender) ?? HeroBody.HumanFemale;
-        Require(bare.Wearing(_areaSession is { } session ? WornBodyArmorUseArt(session) : null) is not { } worn || worn == body,
+        Require(bare.Wearing(_areaSession is { } session ? WornBodyArmorUseArt(session) : null) is not { } worn || worn == body with { Weapon = 0, Shield = 0 },
             $"the worn body armour's body is drawn: {_heroBodyStatus}");
         var profile = _worldActor.Profile;
         Require(!_heroBodyFailures.ContainsKey(body) && (body != HeroBody.HumanFemale || _heroWomanFailure is null),
             "the body did not load: " + (_heroWomanFailure ?? _heroBodyStatus));
         Require(ReferenceEquals(_readyActorPlan?.Profile, profile), "the plan draws the actor's profile");
-        Require(profile.Actions.All(action => profile.Resource(action).Selector == body.Selector(ActorDiagnosticProfile.HumanSelector(action))),
+        Require(profile.Actions.All(action => body.Candidates(ActorDiagnosticProfile.HumanSelector(action)).Contains(profile.Resource(action).Selector)),
             $"{hero.Race} {hero.Gender}: every action is the {body.Label} body");
         // ARC-COMBAT-021: the body reads its fall-down and get-up ARTs.
         Require(profile.FallDown is not null && profile.GetUp is not null, $"{body.Label}: the fall-down and get-up ARTs read");
-        Require(_readyActor is { } drawn && (drawn.TextureKey.Selector & 0x0FF00030u) == body.Selector(0) && _cache.TryGet(drawn.TextureKey, out _),
+        Require(_readyActor is { } drawn && (drawn.TextureKey.Selector & 0x0FF00030u) == body.BodyBits && _cache.TryGet(drawn.TextureKey, out _),
             "the drawn frame is the body's and uploaded: " + _readyActor?.TextureKey);
         Require(_worldActor.AreaGaitTiming is { } timing && timing.RateBonus == body.GaitRateBonus
             && (_worldActor.Session as AreaGridSession)?.Timing == timing, "the steps take the body's gait timing");
@@ -145,7 +168,7 @@ public partial class TerrainViewerApp
         {
             SyncHeroBody();
             Require(WantedHeroBody() == body && !_heroBodyFailures.ContainsKey(body), $"{when}: {body.Label} armour {body.Armor} is wanted: {_heroBodyStatus}");
-            Require(_readyActor is { } drawn && (drawn.TextureKey.Selector & 0x0FF00030u) == body.Selector(0) && _cache.TryGet(drawn.TextureKey, out _),
+            Require(_readyActor is { } drawn && (drawn.TextureKey.Selector & 0x0FF00030u) == body.BodyBits && _cache.TryGet(drawn.TextureKey, out _),
                 $"{when}: the drawn frame is {body.Label} armour {body.Armor}: {_readyActor?.TextureKey}");
         }
         var triggers = ItemTriggersNow();
@@ -168,7 +191,7 @@ public partial class TerrainViewerApp
     {
         if (body == HeroBody.HumanFemale && textures) _heroWomanFailure = reason;
         else _heroBodyFailures[body] = reason;
-        _heroBodyStatus = $"fixed human ({body.Label} not drawn: {reason})";
-        GD.Print($"ARC-UI-039 hero body={body.Label} FAILED {reason}; the fixed human is drawn");
+        _heroBodyStatus = $"{body.Label} armour {body.Armor} weapon {body.Weapon} shield {body.Shield} not drawn: {reason}";
+        GD.Print($"ARC-UI-039 hero body={body.Label} armor={body.Armor} weapon={body.Weapon} shield={body.Shield} FAILED {reason}; the next body without it is drawn (the fixed human last)");
     }
 }

@@ -197,6 +197,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="container-loot-window-arc-world-101"></a>[Container loot window (ARC-WORLD-101)](ledger/items.md#container-loot-window-arc-world-101) | [Items and inventory](ledger/items.md) | LW1–LW4 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="body-armour-art-arc-world-112"></a>[Body armour art (ARC-WORLD-112)](ledger/items.md#body-armour-art-arc-world-112) | [Items and inventory](ledger/items.md) | BA1–BA6 |
+| <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA8 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -204,6 +205,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="second-projectile-and-scatter-arc-combat-018"></a>[Second projectile and scatter (ARC-COMBAT-018)](ledger/combat.md#second-projectile-and-scatter-arc-combat-018) | [Combat](ledger/combat.md) | PS1–PS6 |
 | <a id="boomerangs-arc-combat-019"></a>[Boomerangs (ARC-COMBAT-019)](ledger/combat.md#boomerangs-arc-combat-019) | [Combat](ledger/combat.md) | BR1–BR7 |
 | <a id="hero-knockdown-arc-combat-021"></a>[Hero knockdown (ARC-COMBAT-021)](ledger/combat.md#hero-knockdown-arc-combat-021) | [Combat](ledger/combat.md) | UC1–UC5 |
+| <a id="right-release-arc-combat-022"></a>[Right release (ARC-COMBAT-022)](ledger/combat.md#right-release-arc-combat-022) | [Combat](ledger/combat.md) | RR1–RR5 |
 | <a id="inventory-window-arc-ui-015"></a>[Inventory window (ARC-UI-015)](ledger/ui-audio.md#inventory-window-arc-ui-015) | [Interface windows and audio](ledger/ui-audio.md) | IW1–IW9 |
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |
@@ -226,6 +228,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="loot-window-art-arc-ui-052"></a>[Loot window art (ARC-UI-052)](ledger/ui-audio.md#loot-window-art-arc-ui-052) | [Interface windows and audio](ledger/ui-audio.md) | IW26–IW32 |
 | <a id="round-view-arc-ui-054"></a>[Round view (ARC-UI-054)](ledger/ui-audio.md#round-view-arc-ui-054) | [Interface windows and audio](ledger/ui-audio.md) | IW33–IW34 |
 | <a id="cursor-art-arc-ui-056"></a>[Cursor art (ARC-UI-056)](ledger/ui-audio.md#cursor-art-arc-ui-056) | [Interface windows and audio](ledger/ui-audio.md) | CU1–CU6, CUA1 |
+| <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW6 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
