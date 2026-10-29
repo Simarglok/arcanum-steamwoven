@@ -783,6 +783,16 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   its goal held by the new window (the far-goal hand-over was not needed on this walk; unit tests cover it), at least
   179 visible bodies after each move. Managed heap after a full collection: 265 MB at the start and 413 MB at the end
   in the Shrouded Hills window (observed values, not a growth measure; the stream smoke's windows take 368 to 435 MB).
+- **Inventory of a window (ARC-COMBAT-024).** A window's inventory seed lists only the window's objects and is marked a
+  window seed ([inventory](../world/inventory-runtime.md#model)): an item the hero took where the new window does not reach
+  no longer refuses the seed. Before, such a move (the owner's report: armour taken at the Crash Site, the window moved two
+  sectors south, published as the hero died) left the scene without its inventory and combat hosts, so killed NPCs stood up,
+  the hero was drawn without its armour and nothing could be looted or attacked; a refused attach now prints
+  `ARC-UI-004 inventory-attach refused`. Native check (stage `dead-window`, only when named, from the map's opening window,
+  with `--hero`; it leaves the hero dead): the hero takes an item one sector behind the centre, the window moves twice the
+  other way, the second time while the hero is dead and without the item's sector; the map keeps its inventory and combat,
+  an NPC killed before is drawn fallen and the hero keeps its armoured body: `ARC-COMBAT-024 native-smoke dead-window PASS`
+  (half-ogre and human male, 2026-10-29: windows (1452,1290) → (1452,1291) → (1452,1292), the item from (1452,1289)).
 - **Terrain overview (ARC-RENDER-034).** Beyond the window's 3×3 core the viewer draws a terrain overview: every sector within
   6 of the window's centre (`AreaTerrainOverview.Radius`; 160 sectors at most) is one flat diamond (5,120 × 2,560 px) in the
   colour of its base terrain type, read from the map's terrain grid (`terrain.tdf`) and the type's editor colour in

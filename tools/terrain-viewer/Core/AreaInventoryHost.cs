@@ -122,7 +122,11 @@ public sealed class AreaInventoryMap
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
                     item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray())
                     { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0, MagicWeight = item.MagicWeight },
-                item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
+                item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray())
+        {
+            // ARC-COMBAT-024: a window of the main map lists only its own objects, not the items the PC took elsewhere on the map.
+            Window = snapshot.Window is not null,
+        };
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
         // ARC-WORLD-090: an NPC's substitute container (0x45F650 asks for no leader first) that is a container of this area.

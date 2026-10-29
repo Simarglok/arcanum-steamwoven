@@ -770,6 +770,10 @@ public sealed partial class GameSessionOwner : IDisposable
     /// with its saved kind, and no item the PC took from another map or another attached seed lists may be in it, else
     /// <see cref="GameSessionFailure.InventoryMismatch"/> (a save of other data, or one object on two maps). A seed is not session state: like recorded
     /// lighting it moves no revision, it is never saved and the host attaches it again after a restore.
+    /// ARC-COMBAT-024: a window seed (<see cref="SessionMapInventorySeed.Window"/>) lists only its window's objects, so an item the PC took
+    /// from the map (or a junk pile item of the map) it does not list is no mismatch: the row of the map's previous seed is kept for it (the
+    /// facts a taken item's rules read, as complexity, decay and scripts), or, with none (a restored game whose window holds none), the item
+    /// has no row here. An item it lists is checked as in any seed.
     /// </summary>
     public GameSessionMutationResult AttachMapInventory(SessionMapId map, SessionMapInventorySeed seed)
     {
@@ -783,7 +787,7 @@ public sealed partial class GameSessionOwner : IDisposable
                          .Select(g => (g.Entity, Origin: g.Origin!.Value, _inventory.AddedTo(_inventory.NpcOf(g.Entity)!).First(e => e.Entity == g.Entity).Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
-            if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
+            if (item.Origin == map ? listed ? row!.Facts.Kind != item.Kind : !admitted.Source.Window : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
@@ -808,9 +812,17 @@ public sealed partial class GameSessionOwner : IDisposable
         // it. (Where it lies is the seed's and the map changes' answer: an item no longer on the pile's cell is not shown in the pile.)
         foreach (var pile in _inventory.JunkPiles)
             foreach (var entry in pile.Items.Where(entry => _inventory.PlacedItem(entry.Entity) is null))
-                if (pile.Map == map ? !admitted.Items.ContainsKey(entry.Entity) : admitted.Items.ContainsKey(entry.Entity))
+                if (pile.Map == map ? !admitted.Items.ContainsKey(entry.Entity) && !admitted.Source.Window : admitted.Items.ContainsKey(entry.Entity))
                     return Reject(GameSessionFailure.InventoryMismatch);
         if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
+        // ARC-COMBAT-024: a window keeps the previous seed's rows of the map's items the session tracks that it does not list (lookups only:
+        // they join neither its ground nor a holder's list).
+        if (admitted.Source.Window && _inventory.Seeds.TryGetValue(map, out var previous))
+        {
+            var piled = _inventory.JunkPiles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(entry => entry.Entity).ToHashSet(StringComparer.Ordinal);
+            foreach (var (entity, kept) in previous.Items)
+                if ((_inventory.Taken.Contains(entity) || piled.Contains(entity)) && !admitted.Items.ContainsKey(entity)) admitted.Items.Add(entity, kept);
+        }
         _inventory.Seeds[map] = admitted;
         _inventory.SeedGeneration++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
