@@ -39,8 +39,8 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `MapPatchFile.MaxBytes` (`Rules\map.patch`) | 1 MiB | 5,779 | — | 181× |
 | `AreaMapLoadOperation.MaxChartSectors` | 32 | 14 | k'na tha | 2.3× |
 | `AreaTerrainOverview.Radius` (ARC-RENDER-034: the overview beyond a window's core, one flat diamond per sector; a fixed size, not a cap) | 6 (13 × 13 sectors) | 160 diamonds (13 × 13 less the core) | arcanum1-024-fixed | — |
-| `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,678 owner frame requests (4,562 before ARC-RENDER-035 decoded the 116 other frames of void's animated scenery; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.5× |
-| `AreaRepositoryPolicy.MaxMapCpuBytes` (CPU, and GPU visible) | 160 MiB | 58,892,780 (56.2 MiB) | void | 2.8× |
+| `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,644 drawn frames, 4,678 owner frame requests (4,557 and 4,562 before ARC-RENDER-035 decoded the other frames of void's animated scenery; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.5× |
+| `AreaRepositoryPolicy.MaxMapCpuBytes` (CPU, and GPU visible) | 160 MiB | 59,590,192 (56.8 MiB; 58,892,780 before ARC-RENDER-035's scenery frames) | void | 2.8× |
 | `GameSessionLimits.PolicyMaxMaps` (was 64) | 200 | 81 maps | — | 2.5× |
 | `GameSessionLimits.PolicyMaxChangesPerMap` (was 4,096) | 262,144 | 158,385 objects | arcanum1-024-fixed | 1.7× |
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
