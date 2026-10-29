@@ -13,7 +13,9 @@ namespace Arcanum.TerrainViewer;
 // game as it was when the window opened (the actor does not move while it is open) with the preview taken just before the window
 // was drawn; a new save takes the next number, saving onto a listed save asks first and keeps its description, the auto-save
 // cannot be deleted, a delete clears the selection (ledger SL3–SL6). A save or load that succeeds closes the window, as the
-// original; a failed one keeps it open with the reason. The description is typed on the new-save row only.
+// original; a failed one keeps it open with the reason. The description is typed on the new-save row only. ARC-UI-062: with a game
+// folder the window shows the original's look (AreaSaveListArtView; ledger MW9–MW13), the art read once a module; without one (the
+// synthetic self-tests) it keeps the diagnostic window.
 public partial class TerrainViewerApp
 {
     private AreaSaveListPanel? _saveListPanel;
@@ -73,8 +75,16 @@ public partial class TerrainViewerApp
             _saveListPanel.DeleteRequested += () => SaveListCommand(() => _saveList!.RequestDelete());
             _saveListPanel.AnswerRequested += yes => SaveListCommand(() => _saveList!.Answer(yes));
             _saveListPanel.CloseRequested += () => EndSaveList();
-            _saveListPanel.DescriptionChanged += text => { if (_saveList is not null) _saveList.Description = text; };
+            _saveListPanel.DescriptionChanged += text =>
+            {
+                if (_saveList is null) return;
+                _saveList.Description = text;
+                // The original's look draws the typed description in the new-save row.
+                if (_saveListPanel.ArtMode) _saveListPanel.Render(_saveList, SelectedPreview());
+            };
+            _saveListPanel.SoundRequested += id => PlayBarSound(id, "save window button");
         }
+        AttachSaveListArt(_saveListPanel);
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("SAVE_LIST");
@@ -185,4 +195,70 @@ public partial class TerrainViewerApp
 
     private string AreaSaveListStatus() => !QuickKeysActive ? "" : SaveListOpen ? " | save list open: Escape closes"
         : _saveListStatus is null ? "" : " | save list: " + _saveListStatus;
+
+    private AreaSaveListArtContent? _saveListArtContent;
+    private string? _saveListArtModule;
+
+    /// <summary>ARC-UI-062: gives the window the current module's art, read on first use; nothing when it did not read.</summary>
+    private void AttachSaveListArt(AreaSaveListPanel panel)
+    {
+        var module = _arguments?.ModulePath;
+        if (_saveListArtContent is not null && module == _saveListArtModule) return;
+        _saveListArtModule = module;
+        var started = Time.GetTicksMsec();
+        _saveListArtContent = SelfTestBootstrap || module is null ? AreaSaveListArtContent.Empty("self-test: no game folder") : AreaSaveListArtContent.Load(module);
+        if (_saveListArtContent.Font is not { } font)
+        {
+            GD.Print($"ARC-UI-062 save window art not ready: {_saveListArtContent.Detail}");
+            return;
+        }
+        var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number != AreaSaveListArtLayout.FontArt)
+            .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+        var glyphs = _saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
+            .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
+        panel.SetArt(art, font, glyphs, _saveListArtContent.NewSaveLabel);
+        GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
+    }
+
+    /// <summary>The smokes' art part of an open save or load window: the original's look with its rows at the exe's places (MW11),
+    /// the selected row in view; the pointer over the confirm button lights it (frame 2, GB4). ARC_AREA_SAVE_CAPTURE saves an in-app
+    /// readback of the window to the caller's ignored path (the mode's name is added before the extension).</summary>
+    private async Task SaveListArtForSmoke(Action<bool, string> require)
+    {
+        async Task Frames(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+        }
+        var panel = _saveListPanel!;
+        var art = panel.ArtForSelfTest;
+        var list = _saveList!;
+        require(panel.ArtMode && _saveListArtContent is { ArtReady: true }, "the save window shows the game's art: " + _saveListArtContent?.Detail);
+        var shown = art.ShownRowsForSelfTest;
+        var expected = list.Rows().Select(row => row.Entry?.DisplayDescription ?? (list.Description is { Length: > 0 } typed ? typed : _saveListArtContent!.NewSaveLabel)).ToArray();
+        require(shown.Count == Math.Min(expected.Length, AreaSaveListArtLayout.ShownRows) && shown.Zip(expected.Skip(art.TopForSelfTest)).All(pair => pair.Second.StartsWith(pair.First.TrimEnd('.'), StringComparison.Ordinal)),
+            $"the rows show the descriptions: {string.Join(" | ", shown)}");
+        require(list.Selected < 0 || (list.Selected >= art.TopForSelfTest && list.Selected < art.TopForSelfTest + AreaSaveListArtLayout.ShownRows), "the selected row is shown");
+        await Frames(2);
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            var path = System.IO.Path.ChangeExtension(capture, null) + "-" + list.Mode.ToString().ToLowerInvariant() + System.IO.Path.GetExtension(capture);
+            require(image.SavePng(path) == Error.Ok, "the capture saved to " + path);
+        }
+        var (_, cx, cy) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Confirm);
+        var over = art.ScreenPointForSelfTest(cx + 30, cy + 30);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
+        await Frames(1);
+        require(art.FrameForSelfTest(AreaSaveListArtButton.Confirm) == 2 && art.FrameForSelfTest(AreaSaveListArtButton.Back) == 0,
+            "the pointer over the confirm button lights it: " + art.FrameForSelfTest(AreaSaveListArtButton.Confirm));
+        var away = art.ScreenPointForSelfTest(400, 20);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away });
+        await Frames(1);
+        GD.Print("ARC-UI-062 native-smoke save window art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Mode = list.Mode.ToString(), _saveListArtContent!.Detail, Rows = shown, Top = art.TopForSelfTest, list.Selected }));
+    }
 }

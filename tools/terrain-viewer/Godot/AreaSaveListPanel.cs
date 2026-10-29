@@ -6,8 +6,10 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-010 save and load window: the save list of <see cref="AreaSaveList"/> as a scrolled list (the auto slot first, then newest
 /// first), the selected save's details and preview, a description field (save mode), and Save/Load, Delete and Close buttons; a
-/// question (overwrite, delete) shows Yes and No. The app owns the state and rebuilds the window after every change; the original's
-/// save window art and layout are not drawn.
+/// question (overwrite, delete) shows Yes and No. The app owns the state and rebuilds the window after every change.
+/// ARC-UI-062: with the game's art (<see cref="SetArt"/>) the window is drawn in the original's look (<see cref="AreaSaveListArtView"/>)
+/// and the description is typed into the new-save row; PROJECT: the selected save's details, a notice and the Yes/No question stand in
+/// the bottom strip's middle box (the original's common question box and the info display over the preview are not drawn here, F0).
 /// </summary>
 public partial class AreaSaveListPanel : CanvasLayer
 {
@@ -23,6 +25,12 @@ public partial class AreaSaveListPanel : CanvasLayer
     private Button _close = null!;
     private HBoxContainer _question = null!;
     private Label _hint = null!;
+    private Label _artDetail = null!;
+    private HBoxContainer _buttons = null!;
+    private Control _body = null!;
+    private AreaSaveListArtView _art = null!;
+    private StyleBoxFlat _panelStyle = null!;
+    private string _newSaveLabel = AreaSaveListArtContent.ProjectNewSaveLabel;
     private bool _binding;
     private (string Name, DateTime Saved)? _previewOf;
     public event Action<int>? RowRequested;
@@ -32,7 +40,13 @@ public partial class AreaSaveListPanel : CanvasLayer
     public event Action<bool>? AnswerRequested;
     public event Action? CloseRequested;
     public event Action<string>? DescriptionChanged;
+    /// <summary>ARC-UI-062: an art button's interface sound (GB7).</summary>
+    public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
+    /// <summary>True while the window shows the original's look.</summary>
+    public bool ArtMode => IsOpen && _art.Visible;
+    internal AreaSaveListArtView ArtForSelfTest => _art;
+    internal string ArtDetailForSelfTest => _artDetail.Visible ? _artDetail.Text : "";
     /// <summary>True while the description field has the keyboard (typed keys go to it, not to the list).</summary>
     public bool TypingDescription => IsOpen && _description.Visible && _description.HasFocus();
     internal IReadOnlyList<string> RowsForSelfTest => Enumerable.Range(0, _rows.ItemCount).Select(_rows.GetItemText).ToArray();
@@ -44,15 +58,30 @@ public partial class AreaSaveListPanel : CanvasLayer
     {
         Layer = 4;
         _panel = new PanelContainer { Name = "AreaSaveList", MouseFilter = Control.MouseFilterEnum.Stop };
-        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        _panelStyle = new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f),
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
-        });
+        };
+        _panel.AddThemeStyleboxOverride("panel", _panelStyle);
+        _art = new AreaSaveListArtView();
+        _art.RowPressed += row => RowRequested?.Invoke(row);
+        _art.ButtonPressed += button =>
+        {
+            switch (button)
+            {
+                case AreaSaveListArtButton.Confirm: ConfirmRequested?.Invoke(); break;
+                case AreaSaveListArtButton.Delete: DeleteRequested?.Invoke(); break;
+                default: CloseRequested?.Invoke(); break;
+            }
+        };
+        _art.SoundRequested += id => SoundRequested?.Invoke(id);
+        AddChild(_art);
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.2f, .12f, .05f) };
         var body = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        _body = body;
         _rows = new ItemList
         {
             Name = "Saves", SelectMode = ItemList.SelectModeEnum.Single, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(360, 300),
@@ -69,6 +98,7 @@ public partial class AreaSaveListPanel : CanvasLayer
         _description = new LineEdit { Name = "Description", PlaceholderText = "description (empty: the slot name)", MaxLength = 80, FocusMode = Control.FocusModeEnum.All };
         _description.TextChanged += text => { if (!_binding) DescriptionChanged?.Invoke(text); };
         var buttons = new HBoxContainer();
+        _buttons = buttons;
         _confirm = new Button { Name = "Confirm", FocusMode = Control.FocusModeEnum.None };
         _confirm.Pressed += () => ConfirmRequested?.Invoke();
         _delete = new Button { Name = "Delete", Text = "Delete", FocusMode = Control.FocusModeEnum.None };
@@ -90,7 +120,8 @@ public partial class AreaSaveListPanel : CanvasLayer
                 "is typed on the new-save row | PROJECT window over the original's " +
                 "save list rules (auto-save first, newest first, auto-save not deletable); original art and layout NOT_VERIFIED",
         };
-        foreach (var control in new Control[] { _header, body, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
+        _artDetail = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.86f, .8f, .68f), Visible = false };
+        foreach (var control in new Control[] { _header, body, _artDetail, _description, buttons, _question, _notice, _hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -103,9 +134,16 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (list.Mode == AreaSaveListMode.Load) GetViewport().GuiReleaseFocus();
     }
 
+    /// <summary>ARC-UI-062: the save window's art (frames by number), its font and glyphs, and the new-save row's label.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, string newSaveLabel)
+    {
+        _art.SetArt(art, font, glyphs);
+        _newSaveLabel = newSaveLabel ?? throw new ArgumentNullException(nameof(newSaveLabel));
+    }
+
     public void CloseView()
     {
-        Hide(); _preview.Texture = null; _previewOf = null;
+        Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -136,6 +174,15 @@ public partial class AreaSaveListPanel : CanvasLayer
         _confirm.Disabled = list.Prompt != AreaSavePrompt.None || (!save && entry is null);
         _notice.Text = list.Notice ?? "";
         ShowPreview(entry is null ? null : (entry.Name, entry.SavedAtUtc), preview);
+        SetLook(_art.ArtSet);
+        if (_art.ArtSet)
+        {
+            // The rows show the descriptions only, as the original's (the slot name's description part, 0x543040); the new-save row
+            // shows the typed description, or "New" (5055) before any is typed (0x543BAB).
+            _art.Render(list.Mode, [.. rows.Select(row => row.Entry is { } listed ? listed.DisplayDescription : list.Description is { Length: > 0 } typed ? typed : _newSaveLabel)],
+                list.Selected, _preview.Texture);
+            _artDetail.Text = _detail.Text;
+        }
         ResizePanel();
     }
 
@@ -148,9 +195,34 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (image.LoadPngFromBuffer(png) == Error.Ok && !image.IsEmpty()) _preview.Texture = ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>The diagnostic window, or the original's look with the panel shrunk to the bottom strip's middle box (PROJECT).</summary>
+    private void SetLook(bool art)
+    {
+        if (_art.Visible == art && _artDetail.Visible == art) return;
+        if (!art) _art.CloseView();
+        foreach (var control in new Control[] { _header, _body, _buttons, _hint }) control.Visible = !art;
+        _artDetail.Visible = art;
+        _panelStyle.BgColor = art ? new Color(0, 0, 0, 0) : new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f);
+        _notice.Modulate = art ? new Color(1f, .6f, .4f) : new Color(.45f, .1f, .05f);
+        // The field keeps the keyboard in the original's look but is not seen: its text is drawn in the new-save row.
+        _description.Modulate = art ? new Color(1, 1, 1, 0) : Colors.White;
+        _description.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+        if (art) _description.AddThemeFontSizeOverride("font_size", 1);
+        else _description.RemoveThemeFontSizeOverride("font_size");
+        // The box lets the pointer through to the art outside its Yes/No buttons.
+        _panel.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+    }
+
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (_art.Visible)
+        {
+            _art.Place();
+            _panel.Position = _art.Position + new Vector2(200, AreaSaveListArtLayout.BottomStripTop + 47) * _art.Scale;
+            _panel.Size = new Vector2(400, AreaSaveListArtLayout.BottomStripHeight - 47) * _art.Scale;
+            return;
+        }
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(900, size.X - 48));
         var height = Math.Max(1, Math.Min(640, size.Y - 48));
