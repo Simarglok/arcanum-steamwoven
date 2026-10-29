@@ -27,10 +27,23 @@ public sealed class ActorDiagnosticProfile
 {
     private ActorDiagnosticProfile(ActorDiagnosticProfileId id, ActorDiagnosticClock clock,
         ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, ActorDiagnosticResource? vault,
-        ActorDiagnosticResource? attack, int coverage, long? rgbaBytes, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null)
+        ActorDiagnosticResource? attack, int coverage, long? rgbaBytes, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null)
     {
         Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run; Vault = vault; Attack = attack; FallDown = fallDown; GetUp = getUp;
+        LowAttack = lowAttack; Throw = @throw;
         DistinctKeys = coverage; OriginalRgbaBytes = rgbaBytes;
+        var actions = new List<ActorDiagnosticAction> { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk };
+        if (run is not null) actions.Add(ActorDiagnosticAction.Run);
+        if (run is not null && vault is not null) actions.Add(ActorDiagnosticAction.Vault);
+        if (run is not null && vault is not null && attack is not null)
+        {
+            actions.Add(ActorDiagnosticAction.Attack);
+            if (fallDown is not null) actions.AddRange([ActorDiagnosticAction.FallDown, ActorDiagnosticAction.GetUp]);
+            if (lowAttack is not null) actions.Add(ActorDiagnosticAction.LowAttack);
+            if (@throw is not null) actions.Add(ActorDiagnosticAction.Throw);
+        }
+        Actions = actions.AsReadOnly();
     }
 
     private static readonly ActorDiagnosticResource HumanIdle = new(ActorDiagnosticAction.Idle, 0x20000000, 2667, 0, 8, 1, 6, 6);
@@ -45,11 +58,16 @@ public sealed class ActorDiagnosticProfile
     /// <summary>ARC-COMBAT-021: the fixed human's selectors of the fall-down (animation 7) and get-up (animation 8) ARTs, without a
     /// weapon; only a hero body reads them (<see cref="HeroBodyArt"/>), the fixed human's profiles have neither.</summary>
     public const uint HumanFallDownSelector = 0x200001C0, HumanGetUpSelector = 0x20000200;
+    /// <summary>ARC-RENDER-039: the fixed human's selectors of the bare-handed low attack (animation 21, weapon 1) and the throw
+    /// (animation 14, no weapon); only a hero body reads them, the fixed human's profiles have neither.</summary>
+    public const uint HumanLowAttackSelector = 0x20000541, HumanThrowSelector = 0x20000380;
     /// <summary>The fixed human's selector of an action (a hero body's selectors are its body bits over these).</summary>
     public static uint HumanSelector(ActorDiagnosticAction action) => action switch
     {
         ActorDiagnosticAction.FallDown => HumanFallDownSelector,
         ActorDiagnosticAction.GetUp => HumanGetUpSelector,
+        ActorDiagnosticAction.LowAttack => HumanLowAttackSelector,
+        ActorDiagnosticAction.Throw => HumanThrowSelector,
         _ => HumanFixedArea.Resource(action).Selector,
     };
     public static ActorDiagnosticProfile HumanFixed { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
@@ -62,11 +80,13 @@ public sealed class ActorDiagnosticProfile
     /// <summary>ARC-UI-039: the AREA hero drawn with its own body (<see cref="HeroBodyArt"/>): the same five actions and facing table as
     /// <see cref="HumanFixedArea"/>, resources read from the body's ART headers, with no metadata commitment (the archive identity is
     /// authenticated by the load).</summary>
-    /// <remarks>ARC-COMBAT-021: with the body's fall-down and get-up ARTs when both read (null both otherwise).</remarks>
+    /// <remarks>ARC-COMBAT-021: with the body's fall-down and get-up ARTs when both read (null both otherwise). ARC-RENDER-039: with its
+    /// low attack and throw ARTs when they read (each null otherwise).</remarks>
     internal static ActorDiagnosticProfile ForHeroBody(ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource run,
-        ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null) =>
+        ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null) =>
         new(ActorDiagnosticProfileId.HeroBody, ActorDiagnosticClock.ArtMetadata, idle, walk, run, vault, attack, keys, null,
-            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null);
+            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
         new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, null, 184, null);
@@ -86,15 +106,13 @@ public sealed class ActorDiagnosticProfile
     /// <summary>ARC-COMBAT-021: the get-up ART (animation 8) a hero body plays when it comes round, or null (present with
     /// <see cref="FallDown"/> only).</summary>
     public ActorDiagnosticResource? GetUp { get; }
+    /// <summary>ARC-RENDER-039: the low attack ART (animation 21) a hero body attacks a shrunk, falling, lying or short target with, or
+    /// null (missing, or left out over the key cap; a missing one is the attack's, ledger MA1).</summary>
+    public ActorDiagnosticResource? LowAttack { get; }
+    /// <summary>ARC-RENDER-039: the throw ART (animation 14) a hero body attacks with a returning weapon (a boomerang), or null.</summary>
+    public ActorDiagnosticResource? Throw { get; }
     /// <summary>The actions this profile decodes, in load order.</summary>
-    public IReadOnlyList<ActorDiagnosticAction> Actions => Run is null ? IdleWalk : Vault is null ? IdleWalkRun : Attack is null ? IdleWalkRunVault
-        : FallDown is null ? IdleWalkRunVaultAttack : IdleWalkRunVaultAttackDown;
-    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalk = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk]);
-    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRun = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run]);
-    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRunVault = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault]);
-    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRunVaultAttack = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault, ActorDiagnosticAction.Attack]);
-    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRunVaultAttackDown = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault, ActorDiagnosticAction.Attack,
-        ActorDiagnosticAction.FallDown, ActorDiagnosticAction.GetUp]);
+    public IReadOnlyList<ActorDiagnosticAction> Actions { get; }
     public int DistinctKeys { get; }
     public long? OriginalRgbaBytes { get; }
     public int? ModuleOrdinal => Id == ActorDiagnosticProfileId.MonsterRegression ? 643 : null;
@@ -113,6 +131,8 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.Attack => Attack ?? throw MetadataFailure(),
         ActorDiagnosticAction.FallDown => FallDown ?? throw MetadataFailure(),
         ActorDiagnosticAction.GetUp => GetUp ?? throw MetadataFailure(),
+        ActorDiagnosticAction.LowAttack => LowAttack ?? throw MetadataFailure(),
+        ActorDiagnosticAction.Throw => Throw ?? throw MetadataFailure(),
         _ => throw MetadataFailure()
     };
     public ActorDiagnosticAction ActionFor(uint selector) => selector == Idle.Selector ? ActorDiagnosticAction.Idle
@@ -120,7 +140,9 @@ public sealed class ActorDiagnosticProfile
         : Vault is not null && selector == Vault.Selector ? ActorDiagnosticAction.Vault
         : Attack is not null && selector == Attack.Selector ? ActorDiagnosticAction.Attack
         : FallDown is not null && selector == FallDown.Selector ? ActorDiagnosticAction.FallDown
-        : GetUp is not null && selector == GetUp.Selector ? ActorDiagnosticAction.GetUp : throw MetadataFailure();
+        : GetUp is not null && selector == GetUp.Selector ? ActorDiagnosticAction.GetUp
+        : LowAttack is not null && selector == LowAttack.Selector ? ActorDiagnosticAction.LowAttack
+        : Throw is not null && selector == Throw.Selector ? ActorDiagnosticAction.Throw : throw MetadataFailure();
 
     public ActorDiagnosticFacing Facing(ActorDiagnosticAction action, int projectOctant)
     {
@@ -128,7 +150,7 @@ public sealed class ActorDiagnosticProfile
         // Both action tables were independently ratified for HumanFixed. The
         // legacy profile happens to agree numerically; this is not compass parity.
         // ARC-WORLD-020/021, ARC-COMBAT-005: Run, Vault and Attack reuse the same table; their rows are not independently verified
-        // (nor are ARC-COMBAT-021's FallDown and GetUp).
+        // (nor are ARC-COMBAT-021's FallDown and GetUp, or ARC-RENDER-039's LowAttack and Throw).
         return projectOctant switch
         {
             0 => new(0, 0, 0, false), 1 => new(1, 1, 7, true), 2 => new(2, 2, 6, true), 3 => new(3, 3, 5, true),

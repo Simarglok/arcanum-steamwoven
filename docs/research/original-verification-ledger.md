@@ -197,7 +197,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="container-loot-window-arc-world-101"></a>[Container loot window (ARC-WORLD-101)](ledger/items.md#container-loot-window-arc-world-101) | [Items and inventory](ledger/items.md) | LW1–LW4 |
 | <a id="junk-piles-arc-world-063"></a>[Junk piles (ARC-WORLD-063)](ledger/items.md#junk-piles-arc-world-063) | [Items and inventory](ledger/items.md) | JP1–JP8 |
 | <a id="body-armour-art-arc-world-112"></a>[Body armour art (ARC-WORLD-112)](ledger/items.md#body-armour-art-arc-world-112) | [Items and inventory](ledger/items.md) | BA1–BA6 |
-| <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA8 |
+| <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA10 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |

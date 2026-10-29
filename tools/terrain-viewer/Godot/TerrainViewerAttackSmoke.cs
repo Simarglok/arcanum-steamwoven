@@ -130,9 +130,49 @@ public partial class TerrainViewerApp
             Require(raised.Disposition != GameSessionDisposition.Rejected && !session.QueryNpcKilled(target.Holder.Entity), "the NPC is brought back: " + raised.Failure);
             PublishWorldSelection();
             Require(!_fallenBodies.ContainsKey(key), "the body stands again");
+            // ARC-RENDER-039: an NPC knocked out lies in its fall (animation 7), so the hero's attack on it is the low attack (WA4), drawn
+            // with the body's low attack ART (bare hands) or the attack ART the repair gives a weapon (MA1); the NPC is woken after.
+            var knocked = session.ApplyDamage(session.Version, target.Build.Combat!.Target, new LifeDamage { Fatigue = 1000 });
+            Require(knocked.Disposition != GameSessionDisposition.Rejected, "the NPC takes the fatigue: " + knocked.Failure);
+            var lowAction = ActorDiagnosticAction.Attack;
+            var lowFrames = 0;
+            // An NPC that never goes unconscious (the undead) skips the check.
+            if (session.QueryLife(target.Build.Combat!.Target).View?.Status.IsUnconscious != true)
+                GD.Print("ARC-RENDER-039 native-smoke low attack SKIP (the NPC does not go unconscious)");
+            else
+            {
+                if (!HeroInCombatMode) ToggleCombatMode();
+                SyncHeroBody();
+                // The armed body's: its own low attack ART, or the attack ART for a weapon the repair turns (MA1).
+                lowAction = _worldActor.Profile.LowAttack is null ? ActorDiagnosticAction.Attack : ActorDiagnosticAction.LowAttack;
+                PublishWorldSelection();
+                Require(_fallenBodies.ContainsKey(key), "the knocked-out body is drawn fallen");
+                point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-RENDER-039 smoke: knocked-out body not visible");
+                HoverAtForSelfTest(point);
+                AreaSmokeClick(point);
+                Require(_attack is not null, "the click on the knocked-out NPC started an attack: " + _attackNotice);
+                for (var i = 0; i < 4000 && lowFrames == 0 && _attack is not null; i++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                    if (_attack?.Player is not null && _attack.Animation == Arcanum.Simulation.Equipment.WeaponArtRules.LowAttackAnimation
+                        && _worldActor.State.Action == lowAction && _attack.Action == lowAction) lowFrames++;
+                }
+                Require(lowFrames > 0, $"the low attack ({lowAction}) was drawn: {_attackNotice}");
+                CancelAreaAttack(null);
+                HoverReleaseForSelfTest();
+                ToggleCombatMode();
+                Require(!HeroInCombatMode, "the hero leaves combat mode after the low attack");
+                SyncHeroBody();
+            }
+            var woken = session.Heal(session.Version, target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            Require(woken.Disposition != GameSessionDisposition.Rejected && session.QueryLife(target.Build.Combat!.Target).View?.Status.IsActive == true,
+                "the NPC is woken: " + woken.Failure);
+            PublishWorldSelection();
+            Require(!_fallenBodies.ContainsKey(key), "the body stands again after the low attack");
             GD.Print("ARC-COMBAT-005 native-smoke attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Walked = walked, Frames = frames, AttackFrames = attackFrames, Weapon = armed, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
+                Walked = walked, Frames = frames, AttackFrames = attackFrames, Weapon = armed, LowAttack = lowFrames > 0 ? lowAction.ToString() : "SKIP", Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
                 Experience = session.QueryHeroExperience()?.Experience - experience, Refused = refused,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

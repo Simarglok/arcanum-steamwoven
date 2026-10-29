@@ -640,6 +640,7 @@ address,name,domain,status,reason,level,evidence,method
 0x502D80,art palette,items,full,,F1,docs/research/ledger/items.md#body-armour-art-arc-world-112,Arcanum.Simulation.Equipment.BodyArmorArtRules.Palette
 0x502DB0,art palette set,items,full,,F1,docs/research/ledger/items.md#body-armour-art-arc-world-112,Arcanum.Simulation.Equipment.BodyArmorArtRules.WithPalette
 0x5031C0,frame data of art,rendering,partial,only the roof branch: a mirrored roof frame takes hot spot x 0 and offset x 0,F2,docs/research/ledger/world.md#roofs-arc-render-021,Arcanum.Data.Area.AreaRoofGrid.HotSpot
+0x503E20,art animation,combat,full,,F1,docs/research/ledger/items.md#weapon-art-arc-render-037,Arcanum.Simulation.Equipment.WeaponArtRules.AnimationOf
 0x503F60,art height,combat,full,,F1,docs/research/ledger/items.md#weapon-art-arc-render-037,Arcanum.Simulation.Equipment.WeaponArtRules.Height
 0x504030,critter art armour,audio,full,,F1,docs/research/audio-evidence.md#dialogue-voice-event-sounds-scripts-and-interface,Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor
 0x504060,critter art armour set,items,full,,F1,docs/research/ledger/items.md#body-armour-art-arc-world-112,Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor
