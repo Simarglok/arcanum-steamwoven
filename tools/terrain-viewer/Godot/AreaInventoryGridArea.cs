@@ -32,6 +32,9 @@ public partial class AreaInventoryGridArea : Control
     public event Action? TakeAllRequested;
     /// <summary>ARC-UI-054: a left release in the round view of the original look closed the window (IW34).</summary>
     public event Action? HoleReleased;
+    /// <summary>ARC-UI-063: a left release in the own window's round view with an item held: the map drop with flag 4 (IW18), which
+    /// lifts the item onto the game cursor (the app checks it and closes the window, or puts it back).</summary>
+    public event Action<AreaInventoryHeld>? MapDropRequested;
     // ARC-UI-052: the holder's grid's scroll in rows, the holder it belongs to and a press on Take all waiting for its release.
     private int _lootScroll;
     private string? _lootHolder;
@@ -47,6 +50,9 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
+
+    /// <summary>ARC-UI-063: the original look's held item is the cursor's own image (ledger CU7), so the frame does not draw it.</summary>
+    internal bool HeldOnCursor { get; set; }
 
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
     public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
@@ -256,13 +262,15 @@ public partial class AreaInventoryGridArea : Control
             return;
         }
         // ARC-UI-054: a release in the round view closes the window (0x574559, IW34); ARC-UI-060: by the window's mode, a held item goes
-        // back first outside the own window. NOT READY: in the own window a held item released there is the map drop and throw of IW18
-        // (not built: the release below puts it back and the window stays open).
-        if (Look is not null && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y)
-            && AreaInventoryHole.Release(LookMode, Held is not null) != AreaRoundViewRelease.MapDrop)
+        // back first outside the own window. ARC-UI-063: in the own window a held item released there is the map drop of IW18: the app
+        // lifts it onto the game cursor and closes the window, or puts it back.
+        if (Look is not null && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y))
         {
+            var release = AreaInventoryHole.Release(LookMode, Held is not null);
+            var lifted = Held;
             if (Held is not null) { Held = null; QueueRedraw(); }
-            Callable.From(() => HoleReleased?.Invoke()).CallDeferred();
+            if (release == AreaRoundViewRelease.MapDrop) Callable.From(() => MapDropRequested?.Invoke(lifted!)).CallDeferred();
+            else Callable.From(() => HoleReleased?.Invoke()).CallDeferred();
             return;
         }
         if (Held is not { } held) return;
@@ -407,7 +415,7 @@ public partial class AreaInventoryGridArea : Control
             if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, name: entry.Name ?? "?");
             else Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
         }
-        if (Held is { } held)
+        if (Held is { } held && !HeldOnCursor)
         {
             var placed = _view.Grid.FirstOrDefault(item => item.Entity == held.Entity);
             var texture = look.ItemArt(held.Entity);
@@ -486,7 +494,7 @@ public partial class AreaInventoryGridArea : Control
             Item(look.ItemArt(item.Entity), AreaLootArtLayout.FullRect(item, _lootScroll), item.Name, shownTop, shownBottom);
         }
         if (AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
-        if (Held is { } held)
+        if (Held is { } held && !HeldOnCursor)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
                 : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name) : (1, 1, "?");

@@ -164,7 +164,7 @@ taken), each to be checked against the requirements and read in the executable w
 | ARC-COMBAT-017 Thrown weapons | Done ([below](#thrown-weapons-arc-combat-017)): the "default throws" weapon (the throwing dagger 6072) leaves the hand at the attack, is checked with the throwing skill and its thrown range, flies hidden and lands where its projectile ends (ledger TW1–TW7); the original wields nothing again afterwards (TW3). |
 | ARC-COMBAT-018 Second projectile and scatter | Done ([below](#second-projectile-and-scatter-arc-combat-018)): a bow shot from expert training flies as two projectiles for one arrow, and a missed throw scatters from its target location (ledger PS1–PS6). |
 | ARC-COMBAT-019 Returning weapons | Done ([below](#boomerangs-arc-combat-019)): a boomerang stays in the hand, is checked with the thrown range of its own weight, keeps the hero from attacking while it is away, turns back at its first end, flies back striking nothing and is back where the hero stood at the turn; then the hero attacks again with auto attack (ledger BR1–BR7). |
-| ARC-COMBAT-023 Inventory throw | Done in the session ([below](#inventory-throw-arc-combat-023)): any held item thrown at a location as the inventory throws it, with the damage of its weight, its thrown range, the line of fire's struck critter, the scatter and the landing (ledger TT1–TT5); the viewer's cursor and press are ARC-UI-063. |
+| ARC-COMBAT-023 Inventory throw | Done in the session ([below](#inventory-throw-arc-combat-023)): any held item thrown at a location as the inventory throws it, with the damage of its weight, its thrown range, the line of fire's struck critter, the scatter and the landing (ledger TT1–TT5); the viewer's cursor and press: ARC-UI-063, done ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063), TT6, TT7, CU7). |
 
 ## Ranged hero attack (ARC-COMBAT-015)
 
@@ -334,7 +334,8 @@ session keeps neither the shot nor the mark: a restored hero has it in the hand)
 Requirements: [FR-COMBAT-007](../requirements/combat-magic-tech.md#fr-combat-007) (throws resolved by item type, partly) and
 [FR-COMBAT-005](../requirements/combat-magic-tech.md#fr-combat-005) (the throw's check, partly). Read in the retail 1.0.7.4
 executable ([ledger TT1–TT5](../research/ledger/combat.md#inventory-throw-arc-combat-023), with TW1–TW7 and WB8). Session and
-rules only: the viewer's game cursor holding the item and its press in the game view are ARC-UI-063.
+rules only: the viewer's game cursor holding the item and its press in the game view are ARC-UI-063
+([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 | Rule | Value |
 | --- | --- |
@@ -346,8 +347,8 @@ rules only: the viewer's game cursor holding the item and its press in the game 
 
 Steamwoven differences: the item leaves at the throw, so a worn item's own values still count for the range and check, and a critical
 miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead struck critter refuses (NoChange): the host throws
-again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). The viewer's "default throws" attack still
-pays the attack cost in a round until ARC-UI-063 moves both throws to `ThrowActionCost`.
+again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). Since ARC-UI-063 the viewer charges
+`ThrowActionCost` for both throws in a round, the inventory's and a "default throws" weapon's.
 
 Not ready: gold and ammunition (the lift's quantity split, `AttackUnsupported`), the item's throw script (point 6) and the removal's
 wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck

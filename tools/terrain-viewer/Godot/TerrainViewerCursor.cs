@@ -22,10 +22,14 @@ public partial class TerrainViewerApp
     // The system shape last given to Godot as the default (the display server's own answer is Arrow when headless).
     private Godot.Input.CursorShape _cursorShapeSet = Godot.Input.CursorShape.Arrow;
     private AreaCursorContent? _cursorContentForSelfTest;
+    // ARC-UI-063: the held item shown on the cursor (null: none) and its composed image for the art and frame shown.
+    private string? _cursorHeldShown;
+    private (string Item, int Art, int Frame, AreaCursorContent Content, ImageTexture Texture, Vector2 Hot)? _heldCursorImage;
 
     internal int CursorArtForSelfTest => _cursorArt;
     internal (int Art, int Frame)? CursorShownForSelfTest => _cursorShown;
     internal Godot.Input.CursorShape CursorShapeSetForSelfTest => _cursorShapeSet;
+    internal string? CursorHeldShownForSelfTest => _cursorHeldShown;
 
     /// <summary>The default system cursor shape; every change goes through here so the self-test can read it.</summary>
     private void SetCursorShape(Godot.Input.CursorShape shape)
@@ -53,10 +57,11 @@ public partial class TerrainViewerApp
         {
             if (_cursorShown is not null)
             {
-                _cursorShown = null;
+                _cursorShown = null; _cursorHeldShown = null;
                 Godot.Input.SetCustomMouseCursor(null);
                 SetCursorShape(_hoverCursor);
             }
+            _inventoryPanel?.SetHeldOnCursor(false);
             return;
         }
         var art = AreaCursorArt.Art(CursorMode, HeroInCombatMode, HeroInCombatMode ? HeldAim() : null,
@@ -69,16 +74,40 @@ public partial class TerrainViewerApp
         }
         var load = content.Art[art];
         var frame = AreaCursorArt.Frame((long)(now - Math.Min(_cursorSince, now)), load.Frames.Count, load.FramesPerSecond);
-        if (_cursorShown == (art, frame) && ReferenceEquals(_cursorTexturesOf, content)) return;
+        // ARC-UI-063: an item held on the game cursor, or in the inventory window's original look, is the cursor's image (CU7).
+        var held = HeldCursorImage(art, frame, content, load.Frames[frame]);
+        _inventoryPanel?.SetHeldOnCursor(held is not null && _gameCursorItem is null);
+        if (_cursorShown == (art, frame) && _cursorHeldShown == held?.Item && ReferenceEquals(_cursorTexturesOf, content)) return;
         if (!ReferenceEquals(_cursorTexturesOf, content)) { _cursorTextures.Clear(); _cursorTexturesOf = content; }
         if (!_cursorTextures.TryGetValue(art, out var textures))
             _cursorTextures[art] = textures = load.Frames
                 .Select(f => ImageTexture.CreateFromImage(Image.CreateFromData(f.Width, f.Height, false, Image.Format.Rgba8, f.Rgba))).ToArray();
         var shown = load.Frames[frame];
         // The frame's hot point goes on the pointer (the mouse library, 0x4FFEC0).
-        Godot.Input.SetCustomMouseCursor(textures[frame], Godot.Input.CursorShape.Arrow, new Vector2(shown.HotX, shown.HotY));
+        if (held is { } image) Godot.Input.SetCustomMouseCursor(image.Texture, Godot.Input.CursorShape.Arrow, image.Hot);
+        else Godot.Input.SetCustomMouseCursor(textures[frame], Godot.Input.CursorShape.Arrow, new Vector2(shown.HotX, shown.HotY));
         if (_cursorShown is null) SetCursorShape(Godot.Input.CursorShape.Arrow);
-        _cursorShown = (art, frame);
+        if (_cursorHeldShown != held?.Item) GD.Print($"ARC-UI-063 cursor held={held?.Item ?? "none"} art={art}");
+        _cursorShown = (art, frame); _cursorHeldShown = held?.Item;
+    }
+
+    /// <summary>ARC-UI-063: the item held on the game cursor, else the one the open inventory window's original look holds, composed with
+    /// the cursor art's frame (<see cref="AreaHeldCursor.Compose"/>); null when nothing is held or its inventory art does not read.</summary>
+    private (string Item, ImageTexture Texture, Vector2 Hot)? HeldCursorImage(int art, int frame, AreaCursorContent content, AreaInterfaceFrame cursor)
+    {
+        var item = _gameCursorItem?.Item ?? (InventoryOpen && _inventoryPanel!.ArtMode ? _inventoryPanel.HeldItem?.Entity : null);
+        if (item is null) { _heldCursorImage = null; return null; }
+        if (_heldCursorImage is { } cached && cached.Item == item && cached.Art == art && cached.Frame == frame && ReferenceEquals(cached.Content, content))
+            return (item, cached.Texture, cached.Hot);
+        _heldCursorImage = null;
+        if (InventoryItemArt(item)?.GetImage() is not { } image) return null;
+        if (image.IsCompressed() && image.Decompress() != Error.Ok) return null;
+        if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);
+        if (AreaHeldCursor.Compose(image.GetWidth(), image.GetHeight(), image.GetData(), cursor) is not { } composed) return null;
+        var texture = ImageTexture.CreateFromImage(Image.CreateFromData(composed.Width, composed.Height, false, Image.Format.Rgba8, composed.Rgba));
+        var hot = new Vector2(composed.HotX, composed.HotY);
+        _heldCursorImage = (item, art, frame, content, texture, hot);
+        return (item, texture, hot);
     }
 
     /// <summary>Synthetic cursor art for the self-test: a 2 × 2 frame for each art, the spell cursor three frames at 10 fps.</summary>

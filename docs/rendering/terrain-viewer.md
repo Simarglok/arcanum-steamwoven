@@ -1040,8 +1040,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
   (ARC-UI-029, below). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032; the grid takes the release only after a right press on it, where the original takes any right release over the window), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
-  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
-  map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
+  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw takes the map drop onto the game
+  cursor there (IW18, ARC-UI-063, [below](#inventory-throw-from-the-game-cursor-arc-ui-063); in a loot or steal window it is NOT
+  READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
   (`AiExecutorRules.UseItemNow`) over the window's world: a scroll the hero is not clever enough for stops; an item that needs a target
   and has none opens the targeting cursor (lockpicks arm the lock pick, as *Pick a lock* does; any other item's cursor is NOT READY);
   a trap device's use is NOT READY; the item's use script (a taken item's) may stop the use; an item with spell charges or the magical
@@ -1114,14 +1115,46 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
   barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
   goes back and the window closes outside the own window); the barter window draws the diagnostic look, so its round view shows once
-  its original look is built (the steal window's shows since ARC-UI-065). NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
-  the window stays open). The native smoke
+  its original look is built (the steal window's shows since ARC-UI-065). ARC-UI-063: in the own window a held item released there
+  is the map drop of IW18: it goes onto the game cursor and the window closes ([below](#inventory-throw-from-the-game-cursor-arc-ui-063)). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
 - **HUD.** The status line shows `PC items <n>` and the last pickup/loot result.
+
+### Inventory throw from the game cursor (ARC-UI-063)
+
+The original lifts a held item onto the game cursor and throws it from there (ledger IW18, TT1, TT2, TT6, TT7, CU7); the session's
+throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-attack-runtime.md#inventory-throw-arc-combat-023)).
+
+- **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
+  (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
+  item stays and the window says why) and, NOT READY, gold and ammunition (the original splits a quantity first) and an item with a
+  throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
+  the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
+- **Cursor.** While an item is held, in the game view and in the inventory window's original look, the cursor's image is the item's
+  inventory art with its top-left corner 2 pixels up and left of the pointer and the cursor art over it on its own hot point
+  (`AreaHeldCursor.Compose`, CU7; the original sets the hot point at (2, 2) of the item art, the overlay's exact pixel place was not
+  read); the window then no longer draws its own drag image. Without the item's art the window keeps its drag image and the game
+  cursor stays the plain art. The status line shows the item and its thrown range (`QueryHeroThrowRange`).
+- **Press.** A left press in the game view, under the world press's guards (another critter's turn ignores it), throws the item: at
+  the tile of the object under the pointer (0x54ED30), else at the pressed tile. A hero that cannot act puts it back (0x575770; the
+  original's press on an object then leaves it held). The struck critter is the line of fire's blocker when it is a living NPC with
+  combat values, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays on the cursor). In a turn-based
+  round the throw first charges `QueryHeroThrowCost` (Steamwoven 2, the Original setting 0, TT4); so does a "default throws" weapon's
+  attack, which used to charge the attack's cost. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
+  struck critter as the critter attack's flight, a throw without one (or a miss's scatter) to its destination without a target; the
+  art is a weapon's projectile art, else the item's own art drawn unfaced (PF14's item rotation and PF11's size arc are NOT READY).
+  The item lands where its flight ends. A refused throw empties the cursor with the reason (the item never left).
+- **Put back.** A right release in the game view (0x54E228), a window opening, a map change, or the item no longer held puts it back.
+- **Smoke.** The ranged stage (needs `--hero`) lifts the kit weapon from the round view (straight from the window without the art),
+  checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
+  the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
+  `AreaHeldThrowTests`.
+- **Not ready.** The throw animation (the item leaves at once), the hotkey bar's lift, the lift of gold and ammunition, the use-icon
+  throw in the loot and steal windows.
 
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
 after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`

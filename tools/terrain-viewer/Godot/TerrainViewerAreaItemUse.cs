@@ -45,7 +45,9 @@ public partial class TerrainViewerApp
                 case AreaItemUseGate.Wearable: message = $"nothing: {name} is worn or has a wear location (a right click uses other items)"; break;
                 case AreaItemUseGate.NotUsable: message = $"not used: {name} cannot be used from the inventory"; break;
                 case AreaItemUseGate.NotHeroTurn: message = "not used: another critter has the turn"; break;
-                case AreaItemUseGate.Throw: message = $"not used: {name} is thrown (the throw from the map is NOT READY)"; break;
+                // ARC-UI-063: in the own window the use of a thrown item is the map drop onto the game cursor (IW6, IW17, IW18).
+                case AreaItemUseGate.Throw when holder is null: LiftToGameCursor(item, "use-icon"); return;
+                case AreaItemUseGate.Throw: message = $"not used: {name} is thrown (its use in a loot or steal window is NOT READY)"; break;
                 default:
                     if (UseNotReady(item, facts) is { } notReady) { message = notReady; break; }
                     var world = new HeroItemUse(this, facts);

@@ -227,6 +227,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.WearRequested += WearItem;
             _inventoryPanel.TakeOffRequested += TakeOffItem;
             _inventoryPanel.DropRequested += DropItem;
+            _inventoryPanel.MapDropRequested += held => LiftToGameCursor(held.Entity, "round-view");
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;

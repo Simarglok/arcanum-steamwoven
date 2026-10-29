@@ -104,7 +104,17 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action<EquipmentSlot>? TakeOffRequested;
     /// <summary>ARC-UI-019: the held item was released on the doll or the grid (or elsewhere: put back).</summary>
     public event Action<AreaInventoryDrop>? DropRequested;
+    /// <summary>ARC-UI-063: the held item was released in the own window's round view: the map drop onto the game cursor (IW18).</summary>
+    public event Action<AreaInventoryHeld>? MapDropRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-063: the item the window holds on the cursor (null when closed or nothing is held).</summary>
+    public AreaInventoryHeld? HeldItem => IsOpen ? _area.Held : null;
+    /// <summary>ARC-UI-063: the cursor shows the held item (ledger CU7), so the frame does not draw it again.</summary>
+    public void SetHeldOnCursor(bool shown)
+    {
+        if (_area.HeldOnCursor == shown) return;
+        _area.HeldOnCursor = shown; _area.QueueRedraw();
+    }
     /// <summary>ARC-UI-029: the quantity window is up.</summary>
     public bool Asking => _bar is not null;
     internal QuantityBar? QuantityForSelfTest => _bar;
@@ -190,6 +200,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.PointerStill += item => PointerStill?.Invoke(item);
         _area.TakeAllRequested += () => TakeAllRequested?.Invoke();
         _area.HoleReleased += () => CloseRequested?.Invoke();
+        _area.MapDropRequested += held => MapDropRequested?.Invoke(held);
         _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
         _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
         _quantity.AddChild(_quantityLabel);

@@ -976,7 +976,7 @@ public partial class TerrainViewerApp : Node
             }
             // ARC-UI-026: the hero's death, on the frame's real time.
             SyncHeroDeath(delta);
-            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); SyncCursorArt();
+            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); ProcessGameCursorItem(); SyncCursorArt();
             // ARC-DEV-051: the session-event lines of the bug report's log.
             SyncBugReport();
             return;
