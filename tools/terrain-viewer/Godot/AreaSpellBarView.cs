@@ -128,14 +128,15 @@ public partial class AreaSpellBarView : Control
     }
 
     // A button's frame (GB4): down while held with the pointer over it, or the selected college; lit (two steps) under the pointer; else
-    // idle. The college arts have three frames (idle, down, lit), the spell icons two (so under the pointer they show frame 0).
+    // idle. The college arts have three frames (idle, down, lit), the spell icons two (so under the pointer they show frame 0). A button
+    // whose art did not read is not shown (no invisible area takes the pointer).
     private void DrawButton(TextureRect rect, AreaSpellBarButton? button, bool college)
     {
-        rect.Visible = button is not null;
-        if (button is null) return;
+        rect.Visible = button is { Frames.Length: > 0 };
+        if (button is not { Frames.Length: > 0 }) return;
         var held = _held == (college, button.Number);
         var hovered = _hovered == (college, button.Number);
         var look = (held && hovered) || button.Selected ? AreaBarButtonLook.Down : hovered && !held ? AreaBarButtonLook.Hovered : AreaBarButtonLook.Idle;
-        rect.Texture = button.Frames is { Length: > 0 } frames ? frames[AreaGameBarLayout.Frame(look, frames.Length)] : null;
+        rect.Texture = button.Frames[AreaGameBarLayout.Frame(look, button.Frames.Length)];
     }
 }

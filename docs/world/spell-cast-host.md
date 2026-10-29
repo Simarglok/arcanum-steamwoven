@@ -423,7 +423,7 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    … `s_temporal.art`, three frames); the selected college's spells on the lower row at y 528, x 284, 334, 384, 435 and 485 by rank, each
    with its 32 × 32 icon (the hotkey bar's spell icons). A hover's name is written over the background in the mode's text area
    (208, 574, 387 × 18). The buttons are the bar's push buttons: down while held over them, lit under the pointer; the selected college
-   shows down.
+   shows down. A button whose art does not read is not shown.
 2. **What shows** (SPN3). A college's button shows when the hero has a rank in it; the selected college's spells show rank by rank while
    the hero knows them. The selection starts on college 0, which shows no spell when the hero has no rank in conveyance, until a college
    is pressed.
@@ -433,7 +433,8 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
 4. **Names** (SPN5). The pointer entering a college's button writes the college's name (`spell.mes` 500 + college), entering a spell's
    icon the spell's name, in the mode's text area; leaving keeps it.
 5. **Window** (SPN6). The pane shows only while it holds the message window: the pointer above the strip gives the window back to the
-   log and the pane hides, a move back over the strip shows it again (ML8). Without the bars or the pane's art (automated runs without a
+   log and the pane hides, a move back over the strip shows it again (ML8); the pane stays open meanwhile, so `M` then closes it, as the
+   original's toggle acts on the Spells button's state, not on the mode shown (0x54DBF0). Without the bars or the pane's art (automated runs without a
    bar smoke, the self-test) the diagnostic pane lists the spells as before. The weapon button and the weapon's pane (bar mode 8) stay in
    the diagnostic pane, which shows only while the weapon has something to show.
 6. **Smoke.** Inside the hotkey-bar smoke (cast stage): `M` shows the pane in the strip with its background and the colleges the hero has a

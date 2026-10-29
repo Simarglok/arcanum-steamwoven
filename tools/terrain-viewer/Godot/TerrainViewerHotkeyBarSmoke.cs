@@ -70,7 +70,8 @@ public partial class TerrainViewerApp
             // release over the spell's icon activates it (the bar's button sounds).
             await RunSpellPaneStripSmokeAsync(session, spell, Frames, Click, Hover);
 
-            // A right drag from the spell pane onto slot 2.
+            // A right drag from the spell pane onto slot 2 (the spell's college selected).
+            _spellCollege = spell / SpellPaneRules.Ranks;
             ShowSpellPane();
             await Frames(3);
             var paneButton = _spellBarView!.SpellCentreForSelfTest(spell);
