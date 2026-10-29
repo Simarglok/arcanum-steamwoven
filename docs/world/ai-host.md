@@ -62,7 +62,12 @@ take chart cells.
 
 I9's host part: the hero's companions on the shown map (the group's companions the session says the hero leads, following or
 waiting; `AreaAiScene.Followers`, `IAreaAiFollowers`) are run by the host like its NPCs, over the follower rules of
-[AI followers](ai-followers.md) (FO1–FO19). Free companions still get no AI (not ready).
+[AI followers](ai-followers.md) (FO1–FO20). Since ARC-WORLD-119 the free ones (released or cursed) are run too, as any leaderless
+NPC: the removal leaves no mark but the null leader, which the AI's follower branches read (FO20). They are the group's companions standing here,
+whatever their standing, so a group companion's join or leave no longer rebuilds the host (other NPCs' runs go on); a leave ends
+the leaver's run (`ObserveLeaves`: the removal's interrupt at priority 5 ends every run of this host, whose goals are of priority 4
+or less; seen by the pump, by perform, and right after an order), a join keeps it (C5). An order's attack event (the curse's,
+FO2) runs through `OrderAttack` after the order's leave and before the former follower's pass.
 
 | Part | Original | What it does |
 | --- | --- | --- |
@@ -274,10 +279,12 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   its goal but is not drawn; the fail-chance predictor reads the fate-maximised flag unset. A cast host rebuilt between a release
   and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
 - **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events; since ARC-WORLD-117 the
-  viewer's orders carry the attack target and run the AI pass through the host). Not ready: the curse's attack event (the cursed
-  NPC is free, and free companions get no AI), an attack order on a non-critter object (the host's world knows critters only), the
+  viewer's orders carry the attack target and run the AI pass through the host; since ARC-WORLD-119 free companions are run as any
+  leaderless NPC and the curse's attack event runs). Not ready: a curse from the viewer (the typed order text is not read), the
+  curse's insult line, a leave outside an order seen only at the host's next pump or perform (an AI pass in between finds the old
+  run; a leave and a join between two looks, as a second join's leave-first, C5, is not seen at all: the run is kept), an attack order on a non-critter object (the host's world knows critters only), the
   menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
-  line), the world-map travel's stop and allow calls, free companions' AI, the companion's loyalty step still on its own tick beside
+  line), the world-map travel's stop and allow calls, the companion's loyalty step still on its own tick beside
   the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
   art plays for a companion's heal too). Since ARC-WORLD-116 a companion heals the hero with a healing item through the heal skill's
   rung, and one that knows a healing spell through the spell rungs.
@@ -365,7 +372,11 @@ NPC that is not a pre-made hero's and attacks it; the follower is told, held, wa
 item heals the hero hurt to half through the heal skill's rung and goal 33; marker `ARC-WORLD-116 native-smoke ai-heal-item PASS`;
 since ARC-WORLD-117, right after the blow, the viewer's back-off order stops the fight with its AI pass and an attack order on the NPC
 as the highlighted object locks the follower on it, its pass starts the attack and the follower strikes again; marker
-`ARC-WORLD-117 native-smoke ai-order PASS`, before the stage's own);
+`ARC-WORLD-117 native-smoke ai-order PASS`; since ARC-WORLD-119 a curse order then frees the follower, the hero's attack event on it
+runs and asks its reaction before its pass, and the same host runs it on as a free NPC for 200 frames; marker
+`ARC-WORLD-119 native-smoke ai-free PASS`, before the stage's own; the stage restores life and combat mode but leaves the session's
+danger records, who-hit-me-last, team and the follower's lowered reaction toward the hero, so a later stage in the same run meets a
+cursed Virgil);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.

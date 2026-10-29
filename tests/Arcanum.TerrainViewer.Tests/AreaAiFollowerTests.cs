@@ -18,6 +18,8 @@ namespace Arcanum.TerrainViewer.Tests;
 /// (13, 21); the hero stands at (14, 20). The enemy's T0 record blocks its cell in the step evidence. The companion's cell is its own walk's (a fake that steps it at once). The attack events tell
 /// the hero's followers (0x4A9B80): a companion joins the hero's fight, walks up through its own walk and strikes through the session.
 /// ARC-WORLD-117: the viewer's attack and back-off orders go through the host (the target, the combat facts, the AI pass after each order).
+/// ARC-WORLD-119: a free companion (released or cursed) is run as any leaderless NPC; a leave ends its run (FO20) and the curse's attack
+/// event runs through the host before the former follower's pass.
 /// </summary>
 [TestClass]
 public sealed class AreaAiFollowerTests
@@ -82,7 +84,7 @@ public sealed class AreaAiFollowerTests
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -100,6 +102,8 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(1)).Disposition);
         if (companionWaits) Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, Entity(1)).Disposition);
+        // ARC-WORLD-119: a companion released before the host is built.
+        if (free) Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, Entity(1), new PartyLeave(Force: true)).Disposition);
         var combat = new AreaCombatHost(inventory, session: () => session);
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
         for (var x = 0; x < 32; x++) for (var y = 0; y < 32; y++)
@@ -173,11 +177,12 @@ public sealed class AreaAiFollowerTests
     }
 
     // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).
-    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true)
+    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true,
+        Action<CompanionOrderOutcome>? goals = null)
     {
         var consent = new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 3, null, 50, new(-20, 300, 200, 5), 0, 3, 5);
         var facts = new CompanionOrderFacts(scene.Companion, "companion", 1, false, consent, Combat: scene.Host.OrderFacts(scene.Companion));
-        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null);
+        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null, goals);
     }
 
     [TestMethod]
@@ -395,5 +400,101 @@ public sealed class AreaAiFollowerTests
         var (_, other, _, wolf, next) = Open(companionAt: new(11, 21));
         Assert.AreEqual(AiStepBlock.Occupied, other.StepBlocked(next, EnemyCell, false), "the living enemy on its cell (LivingCritterOn)");
         Assert.IsNotNull(enemy); Assert.IsNotNull(wolf);
+    }
+
+    // ---- ARC-WORLD-119: free companions ----
+
+    [TestMethod]
+    public void A_free_companion_is_run_as_any_leaderless_npc()
+    {
+        var (session, host, walks, enemy, companion) = Open(free: true);
+        Assert.IsFalse(session.QueryCompanion(companion).LedByPc);
+        CollectionAssert.AreEqual(new[] { companion }, host.RunCompanions.ToArray(), "the host runs the free companion too");
+        host.Perform(companion);
+        Assert.AreEqual("Routine", host.TraceOf(companion)?.Perform, "out of danger, without a leader: the routine, no follow");
+        Assert.IsFalse(host.Holds(companion));
+
+        host.HeroAttacked(enemy);
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State, "no longer the hero's follower: not told (0x4A9B80)");
+
+        // The enemy strikes it: as any victim it reacts to its attacker (here a flight, the morale rule's answer for these rows).
+        host.PerformAttack(enemy, companion);
+        Run(host, enemy);
+        var danger = session.QueryDanger(companion);
+        Assert.IsTrue(danger.State is DangerState.Flee or DangerState.CombatFocus && danger.Source?.Entity == enemy,
+            $"the victim reacts to the attack: {danger.State} {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Reaction}");
+        Assert.IsTrue(host.Holds(companion), "a companion in danger is held: its walk goes where the host steps it");
+
+        // In COMBAT_FOCUS on the enemy (as a danger update's fight sets it) perform starts the attack, which it walks up and strikes
+        // through its own walk.
+        var focus = session.SetDangerState(session.Version, new SessionDangerRequest { Entity = companion, State = DangerState.CombatFocus, Target = SessionCombatant.Critter(enemy) });
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, focus.Disposition, focus.Failure.ToString());
+        host.Perform(companion);
+        var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
+        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        var notices = Run(host, companion);
+        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the enemy");
+        Assert.AreEqual(1, AiExecutorRules.Distance(walks.Cells[companion], host.Tile(enemy)!.Value), "from the cell next to it, where its own walk stands");
+    }
+
+    [TestMethod]
+    public void The_curse_through_the_host_frees_the_follower_ends_its_run_and_runs_the_attack_event_before_its_pass()
+    {
+        var scene = Open();
+        var (session, host, _, enemy, companion) = scene;
+        host.HeroAttacked(enemy);
+        host.Perform(companion);
+        Assert.AreEqual(enemy, host.RunOf(companion)?.Bottom.Target, "it fights the hero's victim");
+
+        // The order's host part sees the leave first: by its goals (right after the look) the run on the enemy has ended (FO20).
+        var runAtGoals = (AiGoalType?)AiGoalType.Attack;
+        var outcome = Order(scene, CompanionOrderType.Curse, goals: _ => runAtGoals = host.RunOf(companion)?.Bottom.Goal).Outcomes.Single();
+        Assert.AreEqual(CompanionOrderEffect.Cursed, outcome.Effect, $"{outcome.Failure}");
+        Assert.IsNull(runAtGoals, "the leave's interrupt ended the run inside the order, before the attack event and the pass");
+        Assert.IsFalse(session.QueryCompanion(companion).LedByPc, "the curse's leave (FO2)");
+        StringAssert.Contains(AreaCompanionOrders.Describe(outcome), "curse-attack");
+        // The hero's attack event on it (loudness 1, no flags): the former follower, no longer the hero's, reacts to it (here a flight
+        // from the stronger hero) and its pass runs after the event; the leave's interrupt had ended its run on the enemy (FO20).
+        StringAssert.StartsWith(host.TraceOf(companion)?.Reaction, "Weigh Flee", "it reacted to the hero's attack, not as the attacker's follower");
+        var danger = session.QueryDanger(companion);
+        Assert.IsTrue(danger.State is DangerState.Flee or DangerState.Surrender && danger.Source?.IsHero == true,
+            $"it flees the hero: {danger.State} {danger.Source?.Entity} {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Setter}");
+        Assert.IsTrue(outcome.Pass?.Pass is { Performed: true }, $"the pass after the event performed: {outcome.Pass?.Pass?.Gate?.Stop}");
+        StringAssert.StartsWith(host.TraceOf(companion)?.Perform, "Flee", "the pass's perform is the flight's");
+        Assert.AreNotEqual(enemy, host.RunOf(companion)?.Bottom.Target, "the run on the enemy is gone");
+        Assert.IsTrue(host.RunCompanions.Contains(companion), "the host still runs it, now as a free NPC");
+        Assert.AreEqual(0, host.ObserveLeaves().Count, "the leave was seen once, inside the order");
+
+        // Without the host the curse frees the follower and runs no attack event.
+        var other = Open();
+        var bare = Order(other, CompanionOrderType.Curse, withHost: false).Outcomes.Single();
+        Assert.AreEqual((CompanionOrderEffect.Cursed, (SessionAiResult?)null), (bare.Effect, bare.Pass));
+        Assert.AreEqual(DangerState.None, other.Session.QueryDanger(other.Companion).State);
+    }
+
+    [TestMethod]
+    public void A_leave_outside_an_order_ends_the_leavers_run_at_the_next_pump_and_a_join_keeps_it()
+    {
+        var (session, host, _, enemy, companion) = Open();
+        host.HeroAttacked(enemy);
+        host.Perform(companion);
+        host.PerformAttack(enemy, companion);
+        Assert.IsNotNull(host.RunOf(companion));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, companion, new PartyLeave(Force: true)).Disposition);
+        host.Pump(10);
+        Assert.IsNull(host.RunOf(companion), "the leave's interrupt at priority 5 ended its run (FO20)");
+        Assert.AreEqual("left the hero", host.TraceOf(companion)?.Event);
+        Assert.IsNotNull(host.RunOf(enemy), "another NPC's run goes on");
+
+        // A free companion's run survives a join (0x45DE90 interrupts nothing, C5).
+        var (joining, freeHost, _, wolf, loner) = Open(free: true);
+        freeHost.PerformAttack(loner, wolf);
+        Assert.IsNotNull(freeHost.RunOf(loner));
+        Assert.AreEqual(GameSessionDisposition.Changed, joining.ForceJoinParty(joining.Version, loner).Disposition);
+        freeHost.Pump(10);
+        Assert.IsNotNull(freeHost.RunOf(loner), "the join kept its run");
+        Assert.AreEqual(0, freeHost.ObserveLeaves().Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, joining.LeaveParty(joining.Version, loner, new PartyLeave(Force: true)).Disposition);
+        CollectionAssert.AreEqual(new[] { loner }, freeHost.ObserveLeaves().ToArray(), "a leave after the join is seen again");
     }
 }
