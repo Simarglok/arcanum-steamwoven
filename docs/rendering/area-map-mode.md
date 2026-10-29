@@ -607,6 +607,9 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   (`ARC-WORLD-048 native-smoke visitor-talk PASS`, after the carry; observed on
   `bates mansion lev 1` and on the main map, script 1160 from lev 2, whose
   dialog script line 0 is not admitted yet, `EntryNotAdmitted`, as at home).
+  Since ARC-DEV-065 a fight there with the AI on (with `--hero`) follows the
+  talk: the AI host keeps the visitor out of its rules
+  (`ARC-DEV-065 native-smoke visitor-fight PASS`, [AI host](../world/ai-host.md)).
 
 Not covered: after a quick load, a companion whose home map was not loaded in
 this run, or loaded without the party ever touching it, has no body and is

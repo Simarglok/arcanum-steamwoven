@@ -122,7 +122,82 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-037 native-smoke carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap,
             At = $"{cell.X},{cell.Y}", Drawn = drawn }));
-        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) TalkToAreaMapVisitor(companion);
+        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); }
+    }
+
+    /// <summary>
+    /// ARC-DEV-065: on the destination (the Crash Site cave from the main map), with the AI on and a hero, the hero strikes the living
+    /// monstrous NPC with the fewest hit points and that NPC bites the hero back while the visitor stands here: the AI host's world
+    /// does not know a visitor (no combat fields on this map), so the rules must never meet it (the follower rule of both attack
+    /// events, the flee test's party count, the noise's square). Before the fix the bite stopped the game (ActorPlan). The hero, the
+    /// clock and the AI are restored after.
+    /// </summary>
+    private void FightNextToAreaMapVisitor(AreaCompanion companion)
+    {
+        if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area || _mapTransfers is not { } transfers)
+        { GD.Print("ARC-DEV-065 native-smoke visitor-fight NONE (no hero)"); return; }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-DEV-065 visitor-fight smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_VISITOR_FIGHT_FAILED");
+        }
+        var map = transfers.Map;
+        if (_inventoryHost?.Maps.SingleOrDefault(m => m.RuntimeMap == map.RuntimeMap) is not { } inventory)
+        { GD.Print($"ARC-DEV-065 native-smoke visitor-fight NONE map={map.RuntimeMap} (no inventory seed)"); return; }
+        var commands = area.Plan.Commands.Where(c => c.Identity is not null).Select(c => c.Identity!.Value).ToHashSet();
+        var target = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
+            .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
+            .Where(c => c.Build.Combat is { Monstrous: true } && commands.Contains(c.Row.Key) && c.Row.Scope == Arcanum.Data.Area.AreaScope.Core)
+            .OrderBy(c => Arcanum.Simulation.Combat.LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (target.Holder is null) { GD.Print($"ARC-DEV-065 native-smoke visitor-fight NO-TARGET map={map.RuntimeMap}"); return; }
+        var entity = target.Holder.Entity;
+        var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+        var home = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        var testTime = _worldTestTime; var turnBased = _turnBasedSetting;
+        _aiForSmoke = true;
+        try
+        {
+            // Real time, as the player's fight (the AI stages' own setting).
+            _turnBasedSetting = false;
+            AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 2));
+            if (!HeroInCombatMode) ToggleCombatMode();
+            Require(HeroInCombatMode, "the hero is in combat mode");
+            var host = AreaAiHostNow();
+            Require(host is not null && host.RunCompanions.Contains(companion.Entity), "the AI host runs the visitor's walk");
+            Require(host!.Find(companion.Entity) is null, "the AI host's world does not know the visitor (no combat fields here)");
+            // The hero's attack: the attacker's followers are told, the victim weighs fleeing against the hero's party, witnesses hear it.
+            host.HeroAttacked(entity);
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var hostMs = 30_000_000L;
+            TickAreaClock(hostMs);
+            var frames = 0;
+            // Its bite on the hero: the victim's followers are told.
+            for (; frames < 4000 && host.TraceOf(entity)?.Hit is null; frames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(host.TraceOf(entity)?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal),
+                $"the NPC's bite was resolved after {frames} frames: {host.TraceOf(entity)?.Hit} {host.TraceOf(entity)?.Step}");
+            Require(host.TraceOf(companion.Entity)?.Event is null, "the visitor was told of no attack: " + host.TraceOf(companion.Entity)?.Event);
+            Require(!host.Square(entity, 20).Contains(companion.Entity), "the visitor stands in no square the rules read");
+            GD.Print("ARC-DEV-065 native-smoke visitor-fight PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Map = map.RuntimeMap, Visitor = companion.Speaker.ScriptId, Target = target.Row.PrototypeNumber, Frames = frames, Hit = host.TraceOf(entity)?.Hit }));
+        }
+        finally
+        {
+            _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            RestoreWorldTestTime(testTime);
+            // The carry and talk leave the hero out of combat mode; it leaves as the AI stages do (no exit gate, no round).
+            if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+            _turnBasedSetting = turnBased;
+            AreaSmokePlace(map, home);
+        }
     }
 
     /// <summary>

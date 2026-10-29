@@ -68,6 +68,12 @@ it again; a failed start is never a result of the change under test.
   as `ARC-DEV-059 viewer failure TEXT`, except in the self-test's bootstrap apps, whose failures are expected), the shell's or `env`'s own `command not found` or `No such file or directory`
   (`zsh: command not found: Godot`, `sh: ./x: No such file or directory`; an engine line about a missing file is not
   one), Python's `can't open file` and Godot's `Invalid project path` or `Couldn't load project`. A failure after the start line is the run's result, not a start failure.
+- **World fault lines (ARC-DEV-065).** An `InvalidOperationException`, `ArgumentException`, `OverflowException`,
+  `GridReplayCapacityException` or `TerrainViewerException` inside the viewer's world step (input, the frame's world advance,
+  the AI host, combat) ends the run: `ARC-WORLD-003 lifecycle=observation-fault-disposal`, then the line
+  `ARC-DEV-065 observation-fault type=T at M1 < M2 < ...` naming the exception's type and its methods, innermost first (no
+  message, no file paths), then the HUD failure `failure stage=ActorPlan code=ActorPlan`; so a player's `godot.log` or a bug
+  report's `log.txt` shows the failing code.
 - **`--expect REGEX`** replaces the default start lines (a Python search on each log line), and gives a `dotnet` run a
   check. A command that runs longer than the window and whose output does not reach the run's log by then needs it,
   or `--start-within 0`: a wrapper that

@@ -161,8 +161,12 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// attack event tells the attacker's and the victim's followers (the follower rule, <see cref="TellFollowers"/>).
 /// ARC-WORLD-119: free companions are run as any leaderless NPC; a leave ends the leaver's run (<see cref="ObserveLeaves"/>), and an
 /// order's attack event (the curse's) runs through <see cref="OrderAttack"/>.
-/// NOT READY (later slices): the heal skill's rung and goal 40, pickups, a thrown item's flight,
-/// grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
+/// ARC-DEV-065: a companion standing here that this host's world does not know (<see cref="Stranger"/>: a visitor from another home
+/// map has no combat fields on the shown map) never reaches the rules: it is not told of attacks, stands in no scan's or noise's
+/// square and is not in the hero's party a flee test counts (<see cref="Followers"/>, nor is a follower on another map), so a rule
+/// never meets an object the world cannot describe; its walk still follows the hero through the group.
+/// NOT READY (later slices): a visiting companion's combat facts (its home map's fields), so it neither fights nor is fought here;
+/// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
 public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
@@ -514,7 +518,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     {
         if (leader != Pc || Find(other) is null) return;
         var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following && _followers.ContainsKey(f.Entity))
-            .Select(f => f.Entity).ToArray();
+            .Select(f => f.Entity).Where(f => !Stranger(f)).ToArray();
         if (followers.Length == 0) return;
         foreach (var outcome in FollowerRules.TellFollowers(this, leader, other, followers, side, accidental: false, _session.Rules.Combat))
         {
@@ -1816,8 +1820,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public MoraleParameters MoraleParameters(string npc) => Row(npc) is { } row
         ? new(row.FleeHpPercent, row.FleeOutnumbered, row.FleeOutlevelled, row.StandWhileTargetWeakPercent, row.CombatDistance) : default;
 
+    // ARC-DEV-065: the party's followers this world knows (the interface's contract): a visitor from another home map or a follower left
+    // on another map has no combat fields here, so a flee test's party count leaves it out (NOT READY: visiting companions' facts).
     public IReadOnlyList<string> Followers(string id) =>
-        id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).ToArray() : [];
+        id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
 
     public AwarenessResult See(string observer, string target) => SeeFacing(observer, target, null);
 
@@ -1869,7 +1875,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var critters = new List<AreaScanCritter>();
         if (Tile(Pc) is { } hero && Inside(hero)) critters.Add(new(SessionCombatant.Hero, hero, 0, null));
         foreach (var other in _scene.Npcs.Concat(_followers.Values))
-            if (Tile(other.Entity) is { } cell && Inside(cell)) critters.Add(new(SessionCombatant.Critter(other.Entity), cell, 0, other.Row.Key));
+            if (Tile(other.Entity) is { } cell && Inside(cell) && !Stranger(other.Entity)) critters.Add(new(SessionCombatant.Critter(other.Entity), cell, 0, other.Row.Key));
         return AreaCombatScan.Order(critters).Select(c => Id(c.Combatant)).ToArray();
     }
 
@@ -1899,6 +1905,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private AreaObjectKey? Key(string id) => TryNpc(id, out var npc) ? npc.Row.Key : null;
 
     // ARC-WORLD-115: an NPC the host walks: one of the map's or a companion the host runs.
+    // ARC-DEV-065: a companion run here that the world does not know (Find gives null: a visitor from another home map has no combat
+    // fields on the shown map). The rules' Get refuses an unknown object, so such a follower is kept out of them.
+    private bool Stranger(string id) => _followers.ContainsKey(id) && Find(id) is null;
     private bool TryNpc(string id, out AreaAiNpc npc) => _npcs.TryGetValue(id, out npc!) || _followers.TryGetValue(id, out npc!);
     private bool Walks(string id) => _npcs.ContainsKey(id) || _followers.ContainsKey(id);
 
