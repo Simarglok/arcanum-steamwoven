@@ -1638,11 +1638,13 @@ window's frame, buttons and list are the original's with the game's art (below),
   the pointer and down while held, acting on a release over it with 3000 / 3001; the list's eleven rows in the art font 27 from the
   scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
   each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
-  the description being typed into it. PROJECT: the stored preview fills the preview hole; the selected save's details, a notice
-  and the Yes/No question stand in the bottom strip's middle box. Not drawn yet (next slice): the original's picture cover and info
-  texts, the info toggle, the hero's portrait lens, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
+  the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
+  characters the font lacks are not drawn, though they are saved). PROJECT: the stored preview is fitted into the preview hole; the
+  selected save's details, a notice and the Yes/No question stand in the bottom strip's middle box (a question without the
+  details), and while a question is open the art buttons and rows do nothing. Not drawn yet (next slice): the original's picture
+  cover and info texts, the info toggle, the hero's portrait lens, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
   diagnostic window. The menu stage (`ARC-UI-062 native-smoke save window art PASS`, Load Game from the single-player window with
-  the F7 auto-save listed, Escape back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
+  the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
   the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
   saves each window's picture to an ignored path (`-load` / `-save` added to the name).
 

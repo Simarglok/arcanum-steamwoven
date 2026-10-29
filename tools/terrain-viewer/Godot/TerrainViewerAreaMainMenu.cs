@@ -697,14 +697,30 @@ public partial class TerrainViewerApp
             }
             QuickKey(Key.F7);
             Require(_saveLibraryForSelfTest.AutoSlot.Exists, "F7 saved the new game: " + _quickSaveStatus);
-            // ARC-UI-062: Load Game shows the load window in the original's look with the auto-save listed; Escape gives the menu back.
+            // ARC-UI-062: Load Game shows the load window in the original's look with the auto-save listed; a press on its row selects
+            // it, and Previous Screen pressed and released over itself gives the menu back.
             OpenMainMenu(texts);
             Choose(10); Choose(51);
             Require(SaveListOpen && _saveList!.Mode == AreaSaveListMode.Load && _saveList.Entries.Count == 1, "Load Game opened the load window with the auto-save");
             await SaveListArtForSmoke(Require);
-            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
-            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
-            Require(!SaveListOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "Escape closed the load window back to the menu: " + _mainMenu?.Window);
+            var saveArt = _saveListPanel!.ArtForSelfTest;
+            async Task Click(Vector2 at)
+            {
+                foreach (var pressed in new[] { true, false })
+                {
+                    GetViewport().PushInput(new InputEventMouseButton
+                    {
+                        ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+                    });
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                }
+            }
+            var (rowX, rowY, _, _) = AreaSaveListArtLayout.Row(0);
+            await Click(saveArt.ScreenPointForSelfTest(rowX + 10, rowY + 10));
+            Require(SaveListOpen && _saveList!.Selected == 0, "a press on the auto-save's row selects it: " + _saveList?.Selected);
+            var (_, backX, backY) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Back);
+            await Click(saveArt.ScreenPointForSelfTest(backX + 30, backY + 30));
+            Require(!SaveListOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "Previous Screen closed the load window back to the menu: " + _mainMenu?.Window);
             Choose(52);
             Require(!MainMenuOpen && !ReferenceEquals(session, _areaSession) && _areaSession!.QueryHero()?.Prototype == definition.Prototype
                 && _quickSaveStatus?.StartsWith("Last save quick loaded", StringComparison.Ordinal) == true, "Last Save loaded the auto-save: " + _quickSaveStatus);

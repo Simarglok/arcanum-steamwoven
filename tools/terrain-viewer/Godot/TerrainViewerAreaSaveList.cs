@@ -209,6 +209,7 @@ public partial class TerrainViewerApp
         _saveListArtContent = SelfTestBootstrap || module is null ? AreaSaveListArtContent.Empty("self-test: no game folder") : AreaSaveListArtContent.Load(module);
         if (_saveListArtContent.Font is not { } font)
         {
+            panel.ClearArt();
             GD.Print($"ARC-UI-062 save window art not ready: {_saveListArtContent.Detail}");
             return;
         }
@@ -238,9 +239,11 @@ public partial class TerrainViewerApp
         var list = _saveList!;
         require(panel.ArtMode && _saveListArtContent is { ArtReady: true }, "the save window shows the game's art: " + _saveListArtContent?.Detail);
         var shown = art.ShownRowsForSelfTest;
-        var expected = list.Rows().Select(row => row.Entry?.DisplayDescription ?? (list.Description is { Length: > 0 } typed ? typed : _saveListArtContent!.NewSaveLabel)).ToArray();
-        require(shown.Count == Math.Min(expected.Length, AreaSaveListArtLayout.ShownRows) && shown.Zip(expected.Skip(art.TopForSelfTest)).All(pair => pair.Second.StartsWith(pair.First.TrimEnd('.'), StringComparison.Ordinal)),
-            $"the rows show the descriptions: {string.Join(" | ", shown)}");
+        var font = _saveListArtContent!.Font!;
+        var expected = list.Rows().Skip(art.TopForSelfTest).Take(AreaSaveListArtLayout.ShownRows)
+            .Select(row => AreaSaveListArtLayout.Fit(font, row.Entry?.DisplayDescription ?? panel.NewSaveRow(list.Description), AreaSaveListArtLayout.Row(0).Width)).ToArray();
+        require(shown.Count > 0 && shown.SequenceEqual(expected), $"the rows show the descriptions: {string.Join(" | ", shown)}");
+        require(list.SelectedEntry is null || panel.ArtDetailForSelfTest == AreaSaveList.Detail(list.SelectedEntry), "the box shows the selected save's details: " + panel.ArtDetailForSelfTest);
         require(list.Selected < 0 || (list.Selected >= art.TopForSelfTest && list.Selected < art.TopForSelfTest + AreaSaveListArtLayout.ShownRows), "the selected row is shown");
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)

@@ -8,8 +8,9 @@ namespace Arcanum.TerrainViewer;
 /// the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the list's rows in the art font from the
 /// scroll top, the selected row gold; the three art buttons with their idle, down and lit frames (GB4) and push behaviour (GB3:
 /// down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). A press on a row selects it.
-/// PROJECT: the selected save's stored preview is drawn into the window's preview rectangle and the wheel over the list scrolls it
-/// (the scroll bar widget's art and the preview's own blit are not read, F0).
+/// PROJECT: the selected save's stored preview is drawn fitted and centred into the window's preview rectangle, the wheel over the list
+/// scrolls it (the scroll bar widget's art and the preview's own blit are not read, F0), and while a question is open the buttons and
+/// rows do nothing (the original's question box is modal, not read here).
 /// </summary>
 public partial class AreaSaveListArtView : Control
 {
@@ -21,6 +22,7 @@ public partial class AreaSaveListArtView : Control
     private Texture2D? _preview;
     private AreaSaveListMode _mode;
     private int _selected = -1, _top;
+    private bool _blocked;
     private AreaSaveListArtButton? _hovered, _pressed;
 
     /// <summary>A press on a row (its index in the list).</summary>
@@ -58,17 +60,28 @@ public partial class AreaSaveListArtView : Control
     }
 
     /// <summary>Shows the rows (the save window's new-save row first) with <paramref name="selected"/> lit; a new opening starts at the
-    /// scroll top 0 (0x543380), later renders keep the selected row shown.</summary>
-    public void Render(AreaSaveListMode mode, IReadOnlyList<string> rows, int selected, Texture2D? preview)
+    /// scroll top 0 (0x543380), a changed selection is scrolled into view (MW13) and other renders keep the top (the wheel's too).
+    /// <paramref name="blocked"/>: a question is open.</summary>
+    public void Render(AreaSaveListMode mode, IReadOnlyList<string> rows, int selected, Texture2D? preview, bool blocked)
     {
         ArgumentNullException.ThrowIfNull(rows);
         if (_font is null) throw new InvalidOperationException("ARC-UI-062: the save window art is not set");
-        if (!Visible) { _top = 0; _hovered = null; _pressed = null; }
-        (_mode, _rows, _selected, _preview) = (mode, rows, selected, preview);
-        _top = AreaSaveListArtLayout.ScrollTop(_top, selected, rows.Count);
+        var opened = !Visible;
+        if (opened) { _top = 0; _hovered = null; _pressed = null; }
+        var follow = opened || selected != _selected;
+        (_mode, _rows, _selected, _preview, _blocked) = (mode, rows, selected, preview, blocked);
+        if (blocked) _pressed = null;
+        _top = follow ? AreaSaveListArtLayout.ScrollTop(_top, selected, rows.Count) : Math.Clamp(_top, 0, AreaSaveListArtLayout.MaxScrollTop(rows.Count));
         Visible = true;
         Place();
         QueueRedraw();
+    }
+
+    /// <summary>The art is dropped (a module whose art did not read): the panel's diagnostic window shows again.</summary>
+    public void ClearArt()
+    {
+        CloseView();
+        (_art, _font, _glyphs) = (new Dictionary<int, Texture2D[]>(), null, new Dictionary<int, Texture2D>());
     }
 
     public void CloseView()
@@ -105,14 +118,19 @@ public partial class AreaSaveListArtView : Control
         if (Art(AreaSaveListArtLayout.BottomStripArt) is { } bottom)
             foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
                 DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
-        if (_preview is not null)
+        if (_preview is not null && _preview.GetWidth() > 0 && _preview.GetHeight() > 0)
         {
             var (px, py, pw, ph) = AreaSaveListArtLayout.Preview;
-            DrawTextureRect(_preview, new Rect2(px, py, pw, ph), false);
+            var fit = Math.Min((float)pw / _preview.GetWidth(), (float)ph / _preview.GetHeight());
+            var (w, h) = (_preview.GetWidth() * fit, _preview.GetHeight() * fit);
+            DrawTextureRect(_preview, new Rect2(px + (pw - w) / 2, py + (ph - h) / 2, w, h), false);
         }
         // The background's preview hole is transparent: the preview shows through it.
         if (Art(AreaSaveListArtLayout.BackgroundArt) is { } background)
             DrawTextureRect(background, new Rect2(0, AreaSaveListArtLayout.WindowTop, background.GetWidth(), background.GetHeight()), false);
+        // MW11: the list's rectangle, five rows taller, is filled black before the rows.
+        var (lx, ly, lw, lh) = AreaSaveListArtLayout.List;
+        DrawRect(new Rect2(lx, ly, lw, lh + AreaSaveListArtLayout.ListFillExtra), Colors.Black);
         for (var slot = 0; slot < AreaSaveListArtLayout.ShownRows && _top + slot < _rows.Count; slot++)
         {
             var row = _top + slot;
@@ -166,6 +184,9 @@ public partial class AreaSaveListArtView : Control
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:
                 var at = ButtonAt(button.Position);
+                if (_blocked) { AcceptEvent(); break; }
+                // The press lights what is under it even when the pointer did not move since the opening (GB3: down over it).
+                _hovered = at;
                 if (button.Pressed)
                 {
                     _pressed = at;

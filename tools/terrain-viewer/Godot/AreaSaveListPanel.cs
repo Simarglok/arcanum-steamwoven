@@ -28,10 +28,12 @@ public partial class AreaSaveListPanel : CanvasLayer
     private Label _artDetail = null!;
     private HBoxContainer _buttons = null!;
     private Control _body = null!;
+    private Control _contents = null!;
     private AreaSaveListArtView _art = null!;
     private StyleBoxFlat _panelStyle = null!;
     private string _newSaveLabel = AreaSaveListArtContent.ProjectNewSaveLabel;
     private bool _binding;
+    private bool _artLook;
     private (string Name, DateTime Saved)? _previewOf;
     public event Action<int>? RowRequested;
     public event Action<int>? RowActivated;
@@ -79,6 +81,7 @@ public partial class AreaSaveListPanel : CanvasLayer
         AddChild(_art);
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
+        _contents = contents;
         _header = new Label { Modulate = new Color(.2f, .12f, .05f) };
         var body = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         _body = body;
@@ -179,9 +182,11 @@ public partial class AreaSaveListPanel : CanvasLayer
         {
             // The rows show the descriptions only, as the original's (the slot name's description part, 0x543040); the new-save row
             // shows the typed description, or "New" (5055) before any is typed (0x543BAB).
-            _art.Render(list.Mode, [.. rows.Select(row => row.Entry is { } listed ? listed.DisplayDescription : list.Description is { Length: > 0 } typed ? typed : _newSaveLabel)],
-                list.Selected, _preview.Texture);
+            _art.Render(list.Mode, [.. rows.Select(row => row.Entry is { } listed ? listed.DisplayDescription : NewSaveRow(list.Description))],
+                list.Selected, _preview.Texture, list.Prompt != AreaSavePrompt.None);
             _artDetail.Text = _detail.Text;
+            // The box is small: a question shows without the details.
+            _artDetail.Visible = list.Prompt == AreaSavePrompt.None;
         }
         ResizePanel();
     }
@@ -195,14 +200,25 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (image.LoadPngFromBuffer(png) == Error.Ok && !image.IsEmpty()) _preview.Texture = ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>The new-save row's text: the typed description, or the label before any (only spaces count as none, as the save's
+    /// own rule).</summary>
+    public string NewSaveRow(string description) => string.IsNullOrWhiteSpace(description) ? _newSaveLabel : description;
+
+    /// <summary>ARC-UI-062: the art is dropped (the diagnostic window shows again).</summary>
+    public void ClearArt() { _art.ClearArt(); SetLook(false); }
+
     /// <summary>The diagnostic window, or the original's look with the panel shrunk to the bottom strip's middle box (PROJECT).</summary>
     private void SetLook(bool art)
     {
-        if (_art.Visible == art && _artDetail.Visible == art) return;
+        if (_artLook == art) return;
+        _artLook = art;
         if (!art) _art.CloseView();
         foreach (var control in new Control[] { _header, _body, _buttons, _hint }) control.Visible = !art;
         _artDetail.Visible = art;
         _panelStyle.BgColor = art ? new Color(0, 0, 0, 0) : new Color(232 / 255f, 222 / 255f, 196 / 255f, .97f);
+        (_panelStyle.ContentMarginLeft, _panelStyle.ContentMarginRight, _panelStyle.ContentMarginTop, _panelStyle.ContentMarginBottom) = art ? (14, 14, 6, 4) : (16, 16, 12, 12);
+        _panel.ClipContents = art;
+        _contents.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Pass;
         _notice.Modulate = art ? new Color(1f, .6f, .4f) : new Color(.45f, .1f, .05f);
         // The field keeps the keyboard in the original's look but is not seen: its text is drawn in the new-save row.
         _description.Modulate = art ? new Color(1, 1, 1, 0) : Colors.White;

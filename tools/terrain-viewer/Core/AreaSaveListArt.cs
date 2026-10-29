@@ -21,7 +21,7 @@ public static class AreaSaveListArtLayout
     public const int BackgroundArt = 745, TopStripArt = 336, BottomStripArt = 335, ConfirmArt = 321, BackArt = 323, DeleteArt = 32, FontArt = 27;
     /// <summary>The window's top (a background not 600 rows high, MW1) and the bottom strip's (the art buttons' y origin, MW10).</summary>
     public const int WindowTop = 41, BottomStripTop = 441, TopStripHeight = 41, BottomStripHeight = 159;
-    public const int RowHeight = 20, RowTextShrink = 4, ShownRows = 11;
+    public const int RowHeight = 20, RowTextShrink = 4, ShownRows = 11, ListFillExtra = 5;
     /// <summary>MainMenu.mes: the new-save row's label "New" (5055) and the buttons' hints (7021 Save Game, 7020 Load Game, 7002
     /// Previous Screen, 7022 Delete Save Game).</summary>
     public const int NewSaveMessage = 5055, SaveHint = 7021, LoadHint = 7020, BackHint = 7002, DeleteHint = 7022;
