@@ -23,11 +23,16 @@ public partial class TerrainViewerApp
 
     private bool HoverWindowShown => _hoverWindowEntry is { } entry && ReferenceEquals(_messageLog.Shown, entry) && !_messageLog.PaneMode;
 
-    /// <summary>Describes <paramref name="key"/> (null: no object) in the message window when it is another object than the last one.</summary>
+    /// <summary>Describes <paramref name="key"/> (null: no object) in the message window when it is another object than the last one; for
+    /// the same object still shown, a critter's bars follow its life (the session's revision is in the hover's stamp).</summary>
     private void SyncHoverWindow(AreaObjectKey? key)
     {
         if (_gameBarPanel is not { Visible: true } panel) { ResetHoverWindow(); return; }
-        if (key == _hoverWindowKey) return;
+        if (key == _hoverWindowKey)
+        {
+            if (key is { } same && HoverWindowShown && _hoverWindowBars is { } shown && IsInstanceValid(shown)) shown.Show(HoverLife(same));
+            return;
+        }
         _hoverWindowKey = key;
         LeaveHoverWindow();
         if (key is not { } hit || _hoverIndex is not { } index || !index.Contains(hit)) return;
@@ -37,7 +42,7 @@ public partial class TerrainViewerApp
         if (kind == AreaHoverWindowKind.None || string.IsNullOrEmpty(name)) return;
         if (_messageLog.PaneMode)
         {
-            // 0x553BE0 in another bar mode: only the name, in the pane's text area (HK21; an item's not in bar mode 3).
+            // 0x553BE0 in another bar mode: only the name, in the pane's text area (HK21).
             if (_messageLog.ShowPaneName(MessagePaneMode, name, item: kind == AreaHoverWindowKind.Item)) panel.MessageLog.Render();
             return;
         }

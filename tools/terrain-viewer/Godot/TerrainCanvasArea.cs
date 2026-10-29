@@ -90,7 +90,13 @@ public partial class TerrainCanvas
     internal AreaObjectKey? AreaHighlight
     {
         get => _areaHighlight;
-        set { if (_areaHighlight == value) return; _areaHighlight = value; UpdateAreaVisible(); }
+        set
+        {
+            if (_areaHighlight == value) return;
+            _areaHighlight = value;
+            try { UpdateAreaVisible(); }
+            catch (Exception error) { AreaFailure?.Invoke(error); }
+        }
     }
     /// <summary>The colour the highlight's source pixels are multiplied by before they are added.</summary>
     internal static readonly Color AreaHighlightColour = Color.Color8(AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel);

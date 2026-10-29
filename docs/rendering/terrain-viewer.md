@@ -729,20 +729,25 @@ on the pick of ARC-UI-005.
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
   ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
   by their image at (217, 510) and their name, scenery's in its three-line block; a critter by its name, the bars of
-  ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn) and its image (a
-  follower's portrait, ARC-UI-024, else by its flags or race as the loot window's); a trap's name as a hover text. In a pane
-  mode only the name goes into the pane's text area. A scenery with an empty name, a wall and a projectile draw nothing.
-  Leaving the object shows the viewed entry again (Steamwoven's ML7; the original keeps its drawing). NOT READY: a portal's
-  and container's lock state and hit points line, scenery's hit points, a critter's level or reaction line and the combat
-  panel of 0x554830, the item window's further lines (HK22), the PC's own portrait.
+  ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
+  critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
+  loot window's); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
+  an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
+  original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
+  back only when the pointer moves to another object. NOT READY: a portal's and container's lock state and hit points line,
+  scenery's hit points, a critter's level or reaction line and the combat panel of 0x554830, the item window's further lines
+  (HK22), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
+  it until the quiet time's next entry (the original's clearing of it there was not read).
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
   `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
 its show and leave), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
-human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: on the start map an item, a container and a scenery are
-hovered with the bars drawn, the highlight is the body's frame drawn additive, none of its picked pixels gets darker and some
+human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
+portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
+hovers each found one: the highlight is the body's frame drawn additive, none of its picked pixels gets darker and some
 get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
@@ -858,18 +863,20 @@ FR-UI-002: the in-game panel's art after the [interface bars](#interface-bars-ar
   folder) a frame is a dark rectangle with the name's first letters and plain bars.
 - **Hovered portrait** (PA6). The original has no fixed PC portrait or name area in its bars: its hovered-object panel
   in the message window shows the hovered object's image at 217, 510, the portrait (at its own 64 × 64 size) for the PC
-  and for the PC's followers with one. While the bars are drawn the viewer shows there the portrait and name of a hovered
-  follower the PC leads that has a portrait; the [message log](#message-log-arc-ui-023) (its background included) gives way
-  while it is shown. The portrait shows when the pointer moves over the follower, not when the bars come back under a
-  pointer that has not moved.
+  and for the PC's followers with one. While the bars are drawn the viewer shows there a hovered follower's portrait (when
+  the PC leads it and it has one) as part of the [hovered object's window](#hovered-object-window-and-highlight-arc-ui-057),
+  which the [message log](#message-log-arc-ui-023) shows as its hover entry (ARC-UI-057; before it the log gave way to the
+  portrait). The portrait shows when the pointer moves over the follower, not when the bars come back under a pointer that
+  has not moved.
 
 Checks: `LifeBarsTests` (gauge art placement, compact fill and numbers), `AreaPanelArtTests` (layouts, the stored portrait
 of a critter record; with `DAT_ROOT` the installed frame and vial art and a portrait image read) and the native smoke stage
 `life` (map mode, `bates mansion lev 2` with `--hero`): without the bars the compact panel's columns, numbers and place,
 the frame's art, place and portrait, with the bars the vials' art numbers (17 while poisoned) and the hovered follower's
-portrait and name in the message window when it has one. NOT READY: frames past six (the original scrolls them with its
-arrow buttons), the critter art the original draws for a follower without a portrait (by race or flags, at 50 %), the
-PC's portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
+portrait and name in the message window when it has one (since ARC-UI-057 also the window's bars and another NPC's
+window). NOT READY: frames past six (the original scrolls them with its arrow buttons), the 50 % draw of the critter art
+the window shows for a follower without a portrait (the art by race or flags is drawn since ARC-UI-057), the PC's
+portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
 portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
 
@@ -2139,8 +2146,9 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
 Not ready: entry types 1–3 and 7–13 (listed in ML5), the original's other messages, a held inventory item released over the
 scroll areas (the original drops it through 0x575770), the compact interface's message window (F10). Since ARC-UI-024 a
 hovered follower's portrait and name take the window while shown ([panel art](#panel-art-arc-ui-024)): the log, its background
-included, is hidden until the hover ends, and an entry stored meanwhile sounds then but is drawn only after (the original's
-order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
+included, was hidden until the hover ended. Since ARC-UI-057 the hovered object's window is the log's hover entry
+([hovered object](#hovered-object-window-and-highlight-arc-ui-057)): an entry stored meanwhile takes the window at once (the
+original's order there was not read). Tests `AreaMessageLogTests` (ring, repeats, the 199-character copy, the quiet
 time, scrolling, panes, sounds, layout), `AreaLevelMessagesTests`. Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar`:
 `ARC-UI-023 native-smoke message-log PASS` (three encumbrance entries with the player's texts through the production post, each
 drawn with the background, its icon and 3004; a repeat not stored and sounding again; the halves clicked through the window's

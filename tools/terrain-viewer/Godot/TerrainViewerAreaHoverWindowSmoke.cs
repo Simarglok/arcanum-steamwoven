@@ -45,11 +45,14 @@ public partial class TerrainViewerApp
                 PublishWorldSelection();
                 _camera!.ResetWorld(new Vec2(body.Destination.X + body.Destination.Width / 2d, body.Destination.Y + body.Destination.Height / 2d), WorldViewport, 1);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                var size = GetViewport().GetVisibleRect().Size; var hud = _hud!.Rect;
+                var hud = _hud!.Rect;
                 var top = _gameBarPanel!.StripRectForSelfTest(AreaBarStrip.Top); var bottom = _gameBarPanel.StripRectForSelfTest(AreaBarStrip.Bottom);
                 var found = new List<Vector2>();
-                for (var y = 0; y < (int)size.Y && found.Count < 400; y += 2)
-                for (var x = 0; x < (int)size.X && found.Count < 400; x += 2)
+                if (canvas.AreaBodyRect(body.Identity!.Value) is not { } rect) return found;
+                // The body's rectangle on the screen, inside the viewport.
+                var screenRect = (AreaDrawItem.RasterTransform(GetViewport()) * rect).Grow(2).Intersection(GetViewport().GetVisibleRect());
+                for (var y = (int)screenRect.Position.Y; y < (int)screenRect.End.Y && found.Count < 400; y += 2)
+                for (var x = (int)screenRect.Position.X; x < (int)screenRect.End.X && found.Count < 400; x += 2)
                 {
                     var p = new Vector2(x + .5f, y + .5f);
                     if (!hud.HasPoint(p) && !top.HasPoint(p) && !bottom.HasPoint(p) && AreaObjectAtScreen(p) == body.Identity) found.Add(p);
@@ -112,6 +115,7 @@ public partial class TerrainViewerApp
             _messageLog.ClearHover();
             _gameBarForSelfTest = bars; ReleaseSimulatedPadForSelfTest();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+            PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
     }
