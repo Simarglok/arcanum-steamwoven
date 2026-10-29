@@ -204,14 +204,14 @@ public partial class TerrainViewerApp
         => TryAreaPixel(command, AreaFramesOf(area), _canvas!.AreaVisibleCommands, image, GetViewport(), _hud!.Rect,
             _readyActor is { } actor ? new Rect2(actor.Destination.X - 5, actor.Destination.Y - 5,
                 actor.Destination.Width + 10, actor.Destination.Height + 10) : null,
-            _camera!.State.Zoom, out sample, out diagnostics);
+            _camera!.State.Zoom, out sample, out diagnostics, covers: _canvas.AreaVisibleCovers);
 
     // The exact production observation path, with value inputs for public
     // native fixtures. The fixture must still publish via the real compositor.
     internal static bool TryAreaPixel(AreaDrawCommand command, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         IReadOnlyList<AreaDrawCommand> ordered, Image image, Viewport viewport, Rect2? hud, Rect2? actor,
         double zoom, out object sample, out AreaPixelDiagnostics diagnostics, Arcanum.Data.Lighting.AmbientColor? ambient = null,
-        Func<Vector2, (double R, double G, double B)>? tintAt = null)
+        Func<Vector2, (double R, double G, double B)>? tintAt = null, AreaVisibleCovers? covers = null)
     {
         sample = null!;
         var frame = frames[command.Frame]; var destination = command.Destination;
@@ -262,6 +262,10 @@ public partial class TerrainViewerApp
             diagnostics.TargetOnlyEligible++;
             var occluder = ordered.Skip(index + 1).FirstOrDefault(later => AreaAlphaAt(later, frames, transform, sx, sy) != 0);
             if (occluder is not null) { diagnostics.LastOccluder = occluder.Visual; diagnostics.Reject("later-alpha"); continue; }
+            // ARC-RENDER-036: the covered-tile masks (over the terrain) and the roofs (over everything) are drawn outside the
+            // ordered list; a pixel one of them covers shows the cover, not the target.
+            if (covers is { } over && (command.Identity is null && over.Masks.Any(cover => CoverAt(cover, frames, transform, sx, sy))
+                || over.Roofs.Any(cover => CoverAt(cover, frames, transform, sx, sy)))) { diagnostics.Reject("cover"); continue; }
             if (actor is { } a && a.HasPoint(actualWorld)) { diagnostics.Reject("actor-guide"); continue; }
             var observed = image.GetPixel(sx, sy);
             // Lit observation (ARC-RENDER-010): source channel times the applied ambient channel / 255.
@@ -294,6 +298,12 @@ public partial class TerrainViewerApp
         }
         return false;
     }
+
+    // ARC-RENDER-036: a mask or roof covers a screen pixel where its source alpha there is nonzero; the canvas drew it from
+    // the same frames, so a missing one is an error, not a cover.
+    private static bool CoverAt(AreaDrawCommand cover, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames, Transform2D transform,
+        int screenX, int screenY) => frames.ContainsKey(cover.Frame) ? AreaAlphaAt(cover, frames, transform, screenX, screenY) != 0
+            : throw new InvalidOperationException("AREA_COVER_FRAME_MISSING");
 
     private static byte AreaAlphaAt(AreaDrawCommand command, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         Transform2D transform, int screenX, int screenY)

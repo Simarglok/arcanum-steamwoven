@@ -78,6 +78,12 @@ fall back to interpolated sampling. These are bounded renderer limits, not
 measured performance claims. Measure full-area update costs before readiness.
 
 Both target admission and later-occluder alpha use this same production rule.
+The covered-tile masks and roofs ([roofs](roofs.md)) are drawn outside the ordered command list,
+so a pixel observation also rejects a pixel where a mask (for a terrain target) or a roof that is
+not faded out at all four corners has nonzero source alpha (ARC-RENDER-036: the map battery's
+object-light pixel at the town sector was an indoor floor tile under its building's roof). A partly
+faded roof counts wherever its source alpha is nonzero, and covers are read from the Legacy frames
+(as the later occluders are), so an HD edge wider than the Legacy one is not covered.
 Independent tests must additionally compute their own source indices and assert
 literal pixels on actual main and sub viewports, sparse features/holes, opaque
 occluders, full/nonzero crops, X/Y reflections, signed/parity/fractional positions,

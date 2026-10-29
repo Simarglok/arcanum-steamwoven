@@ -42,7 +42,8 @@ public partial class TerrainViewerApp
             var hit = session.AttackObject(session.Version, new() { Target = candidate.Object, HeroWorn = AreaCombatHost.HeroWorn(session, _areaKitDurability) });
             Require(hit.Disposition != GameSessionDisposition.Rejected, $"attack {attacks} accepted ({hit.Failure})");
         }
-        Require(session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Destroyed, $"the container broke within {attacks} attacks");
+        Require(session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Destroyed,
+            $"the container broke within {attacks} attacks (hit points {session.QueryObject(candidate.Object!).HitPoints} left; a hero whose hits stay under its damage threshold cannot break it)");
         var cell = new Arcanum.Simulation.Movement.CellCoord(checked((int)candidate.Row.WorldX!.Value), checked((int)candidate.Row.WorldY!.Value));
         var current = session.QueryMapInventory(mapId)!;
         var pile = current.JunkPiles.SingleOrDefault(p => p.Cell == cell);
