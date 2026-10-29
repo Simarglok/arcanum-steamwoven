@@ -48,7 +48,7 @@ ARC-COMBAT-021 the hero falls when it goes unconscious, lies while it stays so a
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
 | Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (the resistance getter 0x43D6D0, ledger EQ8); resistance effects are not applied. |
 | Reach | The weapon's range, 1 bare-handed, and since ARC-COMBAT-015 a clear line of fire to the target for every weapon (the goal's reach test, ledger RH1, [below](#ranged-hero-attack-arc-combat-015): a target farther away without a clear shot is approached; a target next to the hero across a wall edge or cover worth 26 or more has no approach, so the goal ends at once, as the original's empty plan does, AP4); farther away the click route walks (running, as every object approach) (since ARC-WORLD-073 the original's approach: the cell one step short of the target on the shared request's route into its tile, [click route](click-route-runtime.md#attack-approach-arc-world-073)) first, the attack goal's move-near step. |
-| Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
+| Animation | The hero's attack ART (animation 20) with the weapon its body shows in combat mode (since ARC-RENDER-037, [below](#weapon-art-arc-render-037): the wielded weapon's art slot, bare hands slot 1: 9 frames, 15 fps, action frame 6; the dagger's 5 frames, action frame 3) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and that weapon slot and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
 | Repeat | Auto attack (the options window's setting, ARC-UI-013; on by default, as the original's) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
 | Dying pose (FA10) | A death-flag hit or a death of at most 20 hit points falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body keeps the last frame of that animation in its facing (group 0 for a single-rotation pose ART); a bloody death without its file falls (the original's missing-art repair). |
@@ -187,8 +187,8 @@ distance terms are SC8 and RA2, the shot's ammunition RA3.
 Viewer (AREA): the goal tests its reach with `InAttackReach` (the line from the hero's committed cell, the shown map's line-of-fire
 view), walks when it fails (`walking to attack: no clear shot` when within range), and under Steamwoven stops the walk at a clear
 shot (`ARC-COMBAT-015 clear-shot stop`). The hit passes the line to the struck NPC as `LineOfFire`; a wall blocker is struck
-(`ARC-COMBAT-015 line-of-fire strikes wall=…`, `wall-hit`). The hero is drawn with the bare-handed attack ART at the bare-handed rate
-whatever it wields (weapon attack ART not ready). Native smoke `ARC-COMBAT-015 native-smoke ranged PASS` (map mode after the
+(`ARC-COMBAT-015 line-of-fire strikes wall=…`, `wall-hit`). The hero is drawn with the attack ART of its wielded weapon at that weapon slot's
+rate (since [ARC-RENDER-037](#weapon-art-arc-render-037)). Native smoke `ARC-COMBAT-015 native-smoke ranged PASS` (map mode after the
 line-of-fire stage, or alone with `ARC_AREA_MAP_SMOKE_ONLY=ranged`): no kit holds a bow, so the stage lends the wielded kit weapon a
 bow's values (range 10, no ammunition) and restores it; from a cell 3..6 tiles from an NPC with a clear shot the attack starts
 without a walk and the check carries the range penalty and the line's cost as cover; from a cell 12..16 tiles away under
@@ -199,7 +199,7 @@ after it; the session tests cover the wall's shot.
 
 Not ready: boomerangs (RH3, RH4,
 ARC-COMBAT-019), the out-of-ammunition refusal's sound, flag and auto-switch (RA3), the firearms' and
-bows' repeat shot (RT rows), the weapon attack ART, a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
+bows' repeat shot (RT rows), a follower struck on the line (RH6), and the NPCs' ranged attacks (no AI).
 
 ## Projectiles in flight (ARC-COMBAT-016)
 
@@ -401,6 +401,35 @@ fatigue −3 kept standing and acting.
 - Not ready: a stunned or paralysed hero (inactive in the original too, UC4) still takes presses; the knockdown goal's test
   0x424070; a recovered NPC stands at once without its get-up animation; HD frames of the fall and get-up (Legacy per frame).
 
+## Weapon art (ARC-RENDER-037)
+
+A playtest of the packaged build (bug report of 2026-10-29) showed the hero punching with a wielded dagger: the hero's body had one
+fixed bare-handed attack ART. The original shows a critter's weapon only in combat mode and attacks with its weapon's ART; read in
+the retail 1.0.7.4 executable ([ledger WA1–WA8](../research/ledger/items.md#weapon-art-arc-render-037)). A technical bug of ours,
+fixed in both rule modes.
+
+| Rule | Behaviour |
+| --- | --- |
+| Weapon art (WA1–WA3) | `WeaponArtRules.WieldedArt` (0x465020): out of combat mode the art id's weapon part (bits 0..3) and shield bit (19) are 0; in combat mode the weapon part is the use-art subtype of the weapon slot's item (`WeaponPart`; bare hands 1 without an item or for a subtype of 0), the shield bit 1 for an armour item in the shield slot (`ShieldPart`). The combat-mode toggle and the wield-on and wield-off hooks set it. `WithWeapon`/`WithShield` (0x504100, 0x504180) keep the parts in range. |
+| Files (MA1–MA3) | The stand shows weapon and shield, the walk the weapon only, the attack and low attack both, the animations 6..19 (run, vault, fall, get up) neither; a two-handed sword with a shield is written as the sword. A missing armed walk is the walk without the weapon: no installed creatable body has an armed walk, so the armed hero walks without its weapon and stands and attacks with it (`HeroBody.Selector`, `Candidates`, `ArtPath`). |
+| Attack animation (WA4–WA6) | `WeaponArtRules.Animation` (the attempt-attack goal's node 0x42B9C0): the throw (14) for a weapon with flag 0x40 (a boomerang), the low attack (21) against a shrunk target (object flag 0x80), one playing animation 7..11 or a short one (`Height`, 0x503F60: every critter is middle, a monster by its species table), else the attack (20). The viewer plays only the attack (20): the low attack and the throw are ARC-RENDER-039. |
+| Wear check (WA7, WA8) | The original refuses to wield a weapon or shield whose attack art (combat mode, animation 20) the body lacks. Not ready: the session's wear check leaves the art test to the host (as BA6). |
+
+Viewer (AREA): the hero's body (`HeroBody`, ARC-UI-039) carries `Weapon` and `Shield`; `TerrainViewerHeroBody` builds it from the
+session's combat mode, the weapon slot's use art (the inventory host's wear facts, as the body armour's; one not read there is drawn
+bare-handed, NOT READY) and the shield slot's item kind (`HeroBody.Armed`), so entering or leaving combat mode or changing the weapon
+swaps the body at the next frame (its ARTs read once a run, as a worn armour's). An armed body whose ARTs do not read is drawn
+unarmed, logged. The attack clip takes the drawn attack ART's frames, action frame and weapon slot, so the rate follows the weapon
+(`RealTimeCombatRules.AttackFramesPerSecond`); the log line `ARC-COMBAT-005 attack-start` names `weapon=` and `art=`.
+
+Native smoke: the `attack` stage (`ARC-COMBAT-005 native-smoke attack PASS`, now with `Weapon`) checks that in combat mode the
+attack and stand ARTs show the wielded weapon's part (bare hands 1 without one) and that out of combat mode the stand shows none.
+Opt-in real data (`HeroBodyArtTests.EveryPremadeHerosBodyArmourLoadsFromTheInstalledArt`): each pre-made hero's kit weapons and
+bare hands load an armed body (the dagger's attack 5 frames at 10 fps, action frame 3; the staff's 8 frames, action frame 4).
+
+Not ready: the NPCs' attack ART (ARC-RENDER-038: the AI host still times NPC attacks with the human stand-in), the low attack and
+the throw animation (ARC-RENDER-039), the wear check's art test (WA8), the auto-switch re-wield.
+
 ## Not ready
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
@@ -412,8 +441,7 @@ fatigue −3 kept standing and acting.
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
-- The attack ART of a wielded weapon (the diagnostic human is drawn bare-handed; the viewer has no equip action, so the hero
-  fights bare-handed), the low attack, the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
+- The low attack (21) and the boomerang's throw animation (14): the hero always plays the attack (20; ARC-RENDER-039), the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
   and lies on that fall when dead), the dying animation itself (the body jumps to its last frame), an NPC's get-up animation
   after a knockout (a recovered NPC stands at once), and HD frames of the fallen poses (Legacy per frame).
 - A killed NPC still blocks its cell: step evidence is T0 map data.

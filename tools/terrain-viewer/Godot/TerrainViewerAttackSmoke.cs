@@ -88,6 +88,11 @@ public partial class TerrainViewerApp
             }
             Require(session.QueryNpcKilled(target.Holder.Entity), $"killed after {frames} frames, attack {_attack is not null}: {_attackNotice}");
             Require(attackFrames > 0, "the attack ART was drawn");
+            // ARC-RENDER-037: in combat mode the hero attacks and stands with its wielded weapon (bare hands without one, WA1).
+            var armed = ArmedBody(session, HeroBody.HumanFemale)!.Value.Weapon;
+            Require(armed >= 1 && WantedHeroBody().Weapon == armed && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector) == armed
+                && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Idle.Selector) == armed,
+                $"the attack and stand ARTs show weapon {armed}: attack 0x{_worldActor.Profile.Attack!.Selector:x8} idle 0x{_worldActor.Profile.Idle.Selector:x8} ({_heroBodyStatus})");
             Require(session.QueryRandom().Draws > draws, "the attacks rolled");
             // ARC-UI-042: every attack plays its result on the hero (a miss always has 4010, an unarmed hit the material sounds).
             Require(_audio is null || _cuePlays.GetValueOrDefault("attack") > attackSounds, "the attacks played their sounds: " + _cueNotice);
@@ -109,6 +114,10 @@ public partial class TerrainViewerApp
             Require(_attack is null && !InventoryOpen && _worldRoute?.Target == route, "a corpse click without Alt does nothing");
             ToggleCombatMode();
             HoverReleaseForSelfTest();
+            // Out of combat mode the hero shows no weapon again (WA1, WA3).
+            SyncHeroBody();
+            Require(WantedHeroBody().Weapon == 0 && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Idle.Selector) == 0,
+                $"out of combat mode the stand shows no weapon: idle 0x{_worldActor.Profile.Idle.Selector:x8}");
             // The later stages see the map as it was: the NPC is brought back (experience stays).
             var raised = session.Heal(session.Version, target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             Require(raised.Disposition != GameSessionDisposition.Rejected && !session.QueryNpcKilled(target.Holder.Entity), "the NPC is brought back: " + raised.Failure);
@@ -116,7 +125,7 @@ public partial class TerrainViewerApp
             Require(!_fallenBodies.ContainsKey(key), "the body stands again");
             GD.Print("ARC-COMBAT-005 native-smoke attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Walked = walked, Frames = frames, AttackFrames = attackFrames, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
+                Walked = walked, Frames = frames, AttackFrames = attackFrames, Weapon = armed, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
                 Experience = session.QueryHeroExperience()?.Experience - experience, Refused = refused,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
