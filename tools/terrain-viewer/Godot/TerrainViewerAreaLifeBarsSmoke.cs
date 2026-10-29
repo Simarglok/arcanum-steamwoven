@@ -204,22 +204,46 @@ public partial class TerrainViewerApp
             Require(placed.Health.Position.IsEqualApprox(origin + new Vector2(14, 472) * factor) && placed.Health.Size.IsEqualApprox(new Vector2(28, 88) * factor)
                 && placed.Fatigue.Position.IsEqualApprox(origin + new Vector2(754, 473) * factor), $"vial places {placed} at factor {factor}");
             CheckGauges("in the bars");
-            // ARC-UI-024: hovering the follower with the bars drawn puts its portrait and name in the message window (PA6).
+            // ARC-UI-024, ARC-UI-057: hovering the follower with the bars drawn puts its portrait, name and bars in the message window's
+            // object window (PA6, CH8, OH6, OH7); the floating tooltip is not shown.
             var barsPoint = ScreenPoint(companion.Speaker.Row.Key);
             Require(barsPoint is not null, "the follower is drawn on screen with the bars");
             HoverAtForSelfTest(barsPoint);
             var messagePortrait = _gameBarPanel.HoverPortraitForSelfTest;
             var portraitShown = FollowerPortrait(companion) is not null;
-            Require(portraitShown && messagePortrait.Image is not null && messagePortrait.Name == CompanionName(companion),
-                $"the message window shows the follower's portrait ({portraitShown}): {messagePortrait}");
+            var window = HoverWindowForSelfTest;
+            Require(portraitShown && messagePortrait.Image is not null && window is { Kind: AreaMessageKind.Object, Icon: null }
+                && window.Title == _hoverIndex!.Name(companion.Speaker.Row.Key) && _gameBarPanel.MessageLog.Visible && HoverTextForSelfTest is null,
+                $"the message window shows the follower's portrait ({portraitShown}) and name: {messagePortrait} {window} tooltip '{HoverTextForSelfTest}'");
             if (portraitShown)
                 Require(messagePortrait.Rect.Position.IsEqualApprox(origin + new Vector2(AreaGameBarLayout.HoverImage.X, AreaGameBarLayout.HoverImage.Y) * factor)
                     && messagePortrait.Rect.Size.IsEqualApprox(new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize) * factor),
                     $"the portrait at 217, 510: {messagePortrait.Rect}");
-            Require(!_gameBarPanel.MessageLog.Visible, "the hovered panel takes the message window from the log (ARC-UI-023)");
+            void CheckWindowBars(AreaLife life, bool pcSide, string what)
+            {
+                var bars = HoverWindowBarsForSelfTest;
+                Require(bars is { } b && b.Health == LifeBarRules.HoverFill(life.HealthPercent, AreaWindowLifeBars.BarWidth)
+                    && b.Fatigue == LifeBarRules.HoverFill(life.FatiguePercent, AreaWindowLifeBars.BarWidth)
+                    && b.HealthText == LifeBarRules.HoverText(life.Health, life.MaxHealth, pcSide)
+                    && b.FatigueText == LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, pcSide) && b.Poisoned == life.Poisoned,
+                    $"{what}: window bars {bars} for {life} pcSide={pcSide}");
+            }
+            CheckWindowBars(wounded, pcSide: true, "follower in the window");
             await Capture("bars");
+            if (other is { } hovered)
+            {
+                var npcPoint = await HoverPointAsync(this, hovered.Command);
+                HoverAtForSelfTest(npcPoint);
+                var npcWindow = HoverWindowForSelfTest;
+                Require(npcWindow is { Kind: AreaMessageKind.Object, Icon: not null } && npcWindow.Title == _hoverIndex!.Name(hovered.Command.Identity!.Value)
+                    && _gameBarPanel.HoverPortraitForSelfTest.Image is null, $"the other NPC's image and name in the window: {npcWindow}");
+                CheckWindowBars(hovered.Life, pcSide: false, "other NPC in the window");
+                await Capture("bars-other");
+            }
             HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
-            Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null && _gameBarPanel.MessageLog.Visible, "no hover, no portrait, the message log back");
+            Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null && HoverWindowForSelfTest is null && HoverWindowBarsForSelfTest is null
+                && _gameBarPanel.MessageLog.Visible, "no hover, no portrait, window or bars; the message log back");
+            GD.Print("ARC-UI-057 native-smoke hover-window critter PASS");
             HoverReleaseForSelfTest();
             // A window the bars stay over (the inventory, by its key) keeps the gauges in the vials.
             void InventoryKey()

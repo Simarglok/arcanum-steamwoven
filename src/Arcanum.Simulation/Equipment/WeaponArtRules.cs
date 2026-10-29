@@ -2,7 +2,7 @@ namespace Arcanum.Simulation.Equipment;
 
 /// <summary>
 /// ARC-RENDER-037: the weapon and shield a critter shows, and the attack animation it plays, as the retail 1.0.7.4 executable sets them
-/// (ledger WA1–WA8). A critter shows its weapon only in combat mode: the weapon art (0x465020) gives the art id the wielded weapon's
+/// (ledger WA1–WA10). A critter shows its weapon only in combat mode: the weapon art (0x465020) gives the art id the wielded weapon's
 /// use-art subtype (1 bare-handed) and, for an armour item in the shield slot, the shield bit; out of combat mode both are 0. The
 /// combat-mode toggle (0x4B3F80) and the wield-on and wield-off hooks (BA1) set it. The attack animation (the attempt-attack goal's
 /// node 0x42B9C0) is the throw for a returning (throwing-skill) weapon, the low attack against a shrunk, falling or short target, else
@@ -79,6 +79,11 @@ public static class WeaponArtRules
         _ => 1,
     };
 
+    /// <summary>The animation of an art (0x503E20): bits 6..10 of a critter, monster or unique NPC art id, 0 for any other art type
+    /// (the attack animation's target test, ARC-RENDER-039).</summary>
+    [OriginalFunction(0x503E20, OriginalFunctionScope.Full)]
+    public static int AnimationOf(uint art) => HoldsWeapon(art) ? (int)((art >> 6) & 31) : 0;
+
     /// <summary>
     /// The animation of an attack (the attempt-attack goal's node 0x42B9C0, set on the attacker's art only in combat mode): the throw
     /// (14) when the wielded weapon has the returning flag 0x40; else the low attack (21) when the target is shrunk (object flag 0x80),
@@ -88,7 +93,7 @@ public static class WeaponArtRules
     /// </summary>
     /// <param name="weaponFlags">The wielded weapon's flags (field 0x70), 0 bare-handed.</param>
     /// <param name="targetObjectFlags">The target's object flags (field 0x13).</param>
-    /// <param name="targetAnimation">The animation of the target's current art (bits 6..10).</param>
+    /// <param name="targetAnimation">The animation of the target's current art (<see cref="AnimationOf"/>).</param>
     /// <param name="targetArt">The target's current art (field 1), for its height.</param>
     public static int Animation(uint weaponFlags, uint targetObjectFlags, int targetAnimation, uint targetArt) =>
         (weaponFlags & ReturningWeaponFlag) != 0 ? ThrowAnimation

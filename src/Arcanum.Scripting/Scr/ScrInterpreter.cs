@@ -50,6 +50,9 @@ internal sealed class ScrInterpreter
 
     private readonly Shared _shared;
     private readonly int _depth;
+    // ARC-SCRIPT-046: the attachment point of the run (its event's; a called script runs at its caller's, 0x44B030), which the dialog
+    // action of a called script stores its flags and counters at.
+    private readonly int _point;
     private ScrDialogStart? _dialog { get => _shared.Dialog; set => _shared.Dialog = value; }
     private List<ScrCallRequest> _calls => _shared.Calls;
     private List<ScrPrintLine> _lines => _shared.Lines;
@@ -75,14 +78,15 @@ internal sealed class ScrInterpreter
     private int _loopIndex, _loopReturn;
     private ScrObjectRef? _looped;
 
-    internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options)
-        : this(admitted, number, slot, ownFileFlags, roles, host, options, new Shared(), 0) { }
+    internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options,
+        int point)
+        : this(admitted, number, slot, ownFileFlags, roles, host, options, new Shared(), 0, point) { }
 
     private ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options,
-        Shared shared, int depth)
+        Shared shared, int depth, int point)
     {
         _admitted = admitted; _number = number; _slot = slot; _ownFileFlags = ownFileFlags; _roles = roles; _host = host; _options = options;
-        _localFlags = slot.LocalFlags; _counters = slot.Counters; _shared = shared; _depth = depth;
+        _localFlags = slot.LocalFlags; _counters = slot.Counters; _shared = shared; _depth = depth; _point = point;
     }
 
     private class IndexStop(int line) : Exception { internal int Line { get; } = line; }
@@ -207,9 +211,16 @@ internal sealed class ScrInterpreter
                 return (Step.Next, 0);
             case ScrCatalogue.Action.Dialog:
             {
-                // The conversation starts only for a PC triggerer; the action ends the run with skip default either way.
+                // The conversation starts only for a PC triggerer; the action ends the run with skip default either way (0x447282).
                 var node = Get(a, 0);
-                if (_roles.Triggerer is { } pc && _host.IsPc(pc)) _dialog = new(pc, _roles.Attachee, _number, line, node);
+                if (_roles.Triggerer is { } pc && _host.IsPc(pc))
+                {
+                    // ARC-SCRIPT-046: a called script's dialog (its caller goes on) is one more conversation of the dispatch: a project
+                    // limit refuses a second one.
+                    if (_dialog is not null) throw new CallRefusedStop(new(line, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), _number, ScrStop.Refused);
+                    if (_depth > 0) StoreDialogSlot();
+                    _dialog = new(pc, _roles.Attachee, _number, line, node);
+                }
                 return (Step.Dialog, 0);
             }
             case ScrCatalogue.Action.PrintLine:
@@ -488,9 +499,24 @@ internal sealed class ScrInterpreter
         if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
-        RefuseDialogIn(admission.Admitted!, script);
+        // ARC-SCRIPT-046: the callee runs at the caller's point (0x44B030 copies it), where its dialog action stores its flags.
         new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
-            new(triggerer, attachee, null), _host, _options, _shared, _depth + 1).Run(line);
+            new(triggerer, attachee, null), _host, _options, _shared, _depth + 1, _point).Run(line);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-046: the dialog action of a called script (0x447282, ledger X11) before its conversation starts: the attachee's slot
+    /// of the run's point takes the run's local flags and counters when they differ, its script number kept (no attachee, no store).
+    /// The slot is read as call-ex reads one (a change earlier in the dispatch first) and kept in <see cref="ScrEffects.SlotWrites"/>.
+    /// </summary>
+    private void StoreDialogSlot()
+    {
+        if (_roles.Attachee is not { } attachee) return;
+        var slot = _shared.Slots.TryGetValue((attachee, _point), out var written) ? written : _host.Slot(attachee, _point) ?? new ScrSlot(0, 0, 0);
+        if (slot.LocalFlags == _localFlags && slot.Counters == _counters) return;
+        var stored = slot with { LocalFlags = _localFlags, Counters = _counters };
+        _shared.Slots[(attachee, _point)] = stored;
+        _shared.SlotWrites.Add(new(ScrSource.Object, attachee, _point, stored));
     }
 
     /// <summary>
@@ -523,7 +549,7 @@ internal sealed class ScrInterpreter
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, own.Script, ScrStop.Refused);
         RefuseDialogIn(admission.Admitted!, own.Script);
-        var run = new ScrInterpreter(admission.Admitted!, own.Script, own, program.FileFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1).Run(line);
+        var run = new ScrInterpreter(admission.Admitted!, own.Script, own, program.FileFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
         if (run.Slot == own) return;
         if (run.Slot.Script == 0 && _host.IsTrapObject(obj))
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
@@ -531,8 +557,8 @@ internal sealed class ScrInterpreter
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
     }
 
-    // A dialog action inside a called script is not modelled (the original's dialog store would write the callee's flags into its
-    // attachee's slot, not read in the executable): the dispatch is refused at that line.
+    // A dialog action inside a call-ex run is not modelled (its store would write the slot the run itself changes; call script's is,
+    // ARC-SCRIPT-046): the dispatch is refused at that line.
     private static void RefuseDialogIn(ScrAdmittedProgram admitted, int script)
     {
         foreach (var at in admitted.Region)

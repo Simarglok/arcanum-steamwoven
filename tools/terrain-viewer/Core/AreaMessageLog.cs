@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// HK22), never stored and drawn whatever the time since the last entry. The other types (1–3 and 9–13) are listed in the ledger
 /// and not posted by the viewer.
 /// </summary>
-public enum AreaMessageKind { LevelUp = 0, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, Item = 100 }
+public enum AreaMessageKind { LevelUp = 0, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, Item = 100, Object = 101 }
 
 /// <summary>The colours of the message window's fonts (ML6, HK22): white (font art 27 and 229), red (229, the right-hand number of a
 /// skill hint), and an item name's blue for a magickal item and orange for an identified hexed one (font art 27, 0x64C470, 0x64C538).</summary>
@@ -22,7 +22,8 @@ public enum AreaMessageColour { White, Red, Magick, Hexed }
 /// in <paramref name="Title"/>, split at its first line break when drawn (ML4). ARC-UI-035: a skill hint keeps its name and description
 /// (<paramref name="Title"/>, <paramref name="Detail"/>) and its right-hand number line in <see cref="Value"/>; a spell hint its name,
 /// willpower line (<paramref name="Line"/>), cost line (<see cref="Value"/>), description and the college's icon (<see cref="Icon"/>); an
-/// item window its name in <see cref="TitleColour"/> and the item's type icon.
+/// item window its name in <see cref="TitleColour"/> and the item's type icon. ARC-UI-057: a hovered object's window (a portal, container,
+/// scenery or critter in the world) its name and image, the name in the scenery's name block when <see cref="NameBlock"/>.
 /// </summary>
 public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string Line = "", string Detail = "", bool Scheme = false)
 {
@@ -31,10 +32,12 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
     /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line.</summary>
     public string Value { get; init; } = "";
     public AreaMessageColour TitleColour { get; init; } = AreaMessageColour.White;
+    /// <summary>ARC-UI-057: an object window's name goes in the scenery's three-line block (0x5C7118), not on the title's line.</summary>
+    public bool NameBlock { get; init; }
 
     public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
-        kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item
-            ? throw new ArgumentException("a level-up entry, a hint and an item window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
+        kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
+            ? throw new ArgumentException("a level-up entry, a hint and an item or object window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
 
     /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window.</summary>
     public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.Message or AreaMessageKind.Plain;
@@ -93,7 +96,7 @@ public sealed class AreaMessageLog
     public AreaMessagePost Post(AreaMessageEntry entry, long nowMilliseconds)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (entry.Kind == AreaMessageKind.Item) throw new ArgumentException("an item window is drawn with ShowItem", nameof(entry));
+        if (entry.Kind is AreaMessageKind.Item or AreaMessageKind.Object) throw new ArgumentException("an item or object window is drawn with ShowItem", nameof(entry));
         if (!entry.Stored)
         {
             // 0x552770: shown only in the message mode and more than 3 s after the last stored entry; the scroll position stays.
@@ -117,11 +120,12 @@ public sealed class AreaMessageLog
 
     /// <summary>ARC-UI-035: the item window of an item description (0x553BE0 → 0x554F10, HK22): drawn in the message mode at once (no
     /// time test: it does not go through the post), never stored; the scroll position stays. False in a pane mode (the caller writes the
-    /// name into the pane, <see cref="ShowPaneName"/>).</summary>
+    /// name into the pane, <see cref="ShowPaneName"/>). ARC-UI-057: a hovered object's window (0x553BE0 → 0x555EC0, 0x556040, 0x555D80,
+    /// 0x553F70) the same way.</summary>
     public bool ShowItem(AreaMessageEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (entry.Kind != AreaMessageKind.Item) throw new ArgumentException("not an item window", nameof(entry));
+        if (entry.Kind is not (AreaMessageKind.Item or AreaMessageKind.Object)) throw new ArgumentException("not an item or object window", nameof(entry));
         if (PaneMode) return false;
         Shown = entry;
         return true;
@@ -294,9 +298,10 @@ public static class AreaMessageLayout
     };
 
     /// <summary>Every interface art the message window draws: the background, the entry icons, the colleges' icons (spell hints,
-    /// <see cref="HotkeyBarRules.CollegeIcon"/>) and the items' type icons (item windows).</summary>
+    /// <see cref="HotkeyBarRules.CollegeIcon"/>), the items' type icons (item windows) and the hovered objects' images (ARC-UI-057).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers).Distinct()];
+        [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers)
+            .Concat(AreaHoverWindow.ImageNumbers).Distinct()];
 
     /// <summary>The entry's drawing; <paramref name="wide"/> the second layout of a text entry whose text did not fit.</summary>
     public static AreaMessageDraw Draw(AreaMessageEntry entry, bool wide = false)
@@ -317,6 +322,9 @@ public static class AreaMessageLayout
         // ARC-UI-035 (HK22): the item window's first part, the type icon and the name in its colour; the further lines are not drawn yet.
         if (entry.Kind == AreaMessageKind.Item)
             return new(entry.Icon, [new(Title, AreaMessageFont.Title, entry.Title, false, false, entry.TitleColour)], false);
+        // ARC-UI-057 (OH6): a hovered object's image and name in the title font (font art 0x739F88, white); the further lines are not drawn.
+        if (entry.Kind == AreaMessageKind.Object)
+            return new(entry.Icon, [new(entry.NameBlock ? AreaHoverWindow.SceneryName : Title, AreaMessageFont.Title, entry.Title, false)], false);
         var cut = entry.Title.IndexOf('\n');
         var (head, rest) = cut < 0 ? (entry.Title, (string?)null) : (entry.Title[..cut], entry.Title[(cut + 1)..]);
         if (wide)

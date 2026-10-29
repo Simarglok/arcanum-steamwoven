@@ -3,8 +3,9 @@ using Arcanum.Data.Terrain;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>Closed, source-derived state accepted by the fixed actor diagnostic.</summary>
-/// <remarks>ARC-COMBAT-021: <see cref="FallDown"/> and <see cref="GetUp"/> are the hero body's fall (animation 7) and getting up (8).</remarks>
-public enum ActorDiagnosticAction { Idle, Walk, Run, Vault, Attack, FallDown, GetUp }
+/// <remarks>ARC-COMBAT-021: <see cref="FallDown"/> and <see cref="GetUp"/> are the hero body's fall (animation 7) and getting up (8);
+/// ARC-RENDER-039: <see cref="LowAttack"/> and <see cref="Throw"/> its low attack (21) and throw (14).</remarks>
+public enum ActorDiagnosticAction { Idle, Walk, Run, Vault, Attack, FallDown, GetUp, LowAttack, Throw }
 public enum ActorDiagnosticRenderBranch { NormalUncached, CachedUnsupported, Unknown }
 
 /// <summary>Path-free identity for one selected actor ART frame.</summary>

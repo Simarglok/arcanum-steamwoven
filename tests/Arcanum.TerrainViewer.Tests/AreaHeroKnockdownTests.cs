@@ -109,7 +109,7 @@ public sealed class AreaHeroKnockdownTests
     }
 
     // A minimal 8-bit ART: 8 groups of `frames` 1×1 frames each moving the anchor (1, 1), palette 0 white unless `palette` is false.
-    private static byte[] Art(int frames, int fps = 10, int actionFrame = 0, bool palette = true)
+    internal static byte[] Art(int frames, int fps = 10, int actionFrame = 0, bool palette = true)
     {
         const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28;
         var total = 8 * frames;
@@ -135,7 +135,7 @@ public sealed class AreaHeroKnockdownTests
         return bytes;
     }
 
-    private static HeroBodyLoad LoadWoman(params (string Name, byte[] Payload)[] downArts)
+    internal static HeroBodyLoad LoadWoman(params (string Name, byte[] Payload)[] downArts)
     {
         var path = Path.Combine(Path.GetTempPath(), $"arc-combat-021-{Guid.NewGuid():N}.dat");
         try
@@ -188,7 +188,7 @@ public sealed class AreaHeroKnockdownTests
         using var fixture = new GridWireFixture();
         var actor = new DiagnosticGridActor();
         actor.Configure(fixture.Snapshot, SimulationTime.At(0), StepDuration.Of(8));
-        actor.AttackPose = (3, 4);
+        actor.AttackPose = (ActorDiagnosticAction.Attack, 3, 4);
         Assert.AreEqual((ActorDiagnosticAction.Attack, 3, 4), (actor.State.Action, actor.State.Facing, actor.CurrentFrame));
         actor.DownPose = (ActorDiagnosticAction.FallDown, 6, 2);
         Assert.AreEqual((ActorDiagnosticAction.FallDown, 6, 2), (actor.State.Action, actor.State.Facing, actor.CurrentFrame));

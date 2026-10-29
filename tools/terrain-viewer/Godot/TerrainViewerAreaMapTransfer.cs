@@ -99,6 +99,11 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-017: every tile and sector script the player enters runs on the session the same way.
         _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        // ARC-SCRIPT-046: a tile script a companion stepped onto runs with it as the triggerer; its teleport is not modelled.
+        _mapTransfers.CritterTileRunner = (placed, entity) => UseScriptHost(area.Snapshot) is { } host
+            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, _ => "a teleport from a tile an NPC entered is not modelled",
+                new Arcanum.Scripting.Scr.ScrObjectRef(area.Snapshot.RuntimeMap, entity)))
+            : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
@@ -232,7 +237,8 @@ public partial class TerrainViewerApp
         }
         // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
         // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
-        while (_mapEntered.TryDequeue(out var step))
+        // ARC-SCRIPT-046: a conversation a run opened holds the steps still queued for a later frame.
+        while (!ConversationOpen && _mapEntered.TryDequeue(out var step))
         {
             var queued = false;
             // The status line shows a transfer, a refused exit and a run that printed; refusals and silent runs are logged
@@ -258,7 +264,13 @@ public partial class TerrainViewerApp
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
             foreach (var entered in _mapTransfers.Enter(step.To)) Note(entered);
-            if (_mapTransfers.EnterSector(step.From, step.To) is { } sector) Note(sector);
+            // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
+            if (_mapTransfers.LastScripted?.Dialog is { } tileTalk) BeginScriptedConversation(tileTalk);
+            if (_mapTransfers.EnterSector(step.From, step.To) is { } sector)
+            {
+                Note(sector);
+                if (_mapTransfers.LastScripted?.Dialog is { } sectorTalk) BeginScriptedConversation(sectorTalk);
+            }
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
         if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);

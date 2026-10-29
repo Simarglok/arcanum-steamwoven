@@ -381,8 +381,43 @@ public sealed class AreaConversationHost
                 ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
-        var document = loaded.Document;
+        return Open(speaker, dialog, loaded.Document!);
+    }
 
+    /// <summary>
+    /// ARC-SCRIPT-046: opens the conversation a tile script, or a script it called, asked for with its dialog action (0x447282: the DLG
+    /// of the running script at the action's node, the PC with the action's attachee): <paramref name="speaker"/> is that attachee and
+    /// the run's effects are applied already (<see cref="AreaUseScriptHost.RunPlaced"/>), so no dialog script runs. Which local flags
+    /// the DLG's LF reads and writes for such a start is not read in the executable (level F0; the action stored the callee's into the
+    /// speaker's use slot, X11), so a DLG with any LF operation is refused (<see cref="AreaConversationStartStatus.EntryNotAdmitted"/>)
+    /// rather than run on the speaker's dialog slot. A "return to script" end has no dialog script of the speaker to resume (the
+    /// caller does not resume it).
+    /// </summary>
+    public AreaConversationStart BeginScripted(AreaSpeaker speaker, ScrDialogStart dialog, CancellationToken token = default)
+    {
+        SchematicCrafter = null;
+        ArgumentNullException.ThrowIfNull(speaker); ArgumentNullException.ThrowIfNull(dialog);
+        token.ThrowIfCancellationRequested();
+        EndReaction();
+        if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
+        if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
+        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
+        var loaded = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node, _session.Rules.Data);
+        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
+        if (UsesLocalFlags(loaded.Document!))
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags (not modelled)");
+        token.ThrowIfCancellationRequested();
+        return Open(speaker, dialog, loaded.Document!);
+    }
+
+    // ARC-SCRIPT-046: whether any condition or action field of the DLG holds an LF operation (operations are comma-separated, the
+    // opcode their first two letters, case-insensitive, as the conversation grammar reads them).
+    private static bool UsesLocalFlags(DlgDocument document) => document.Records.Any(record => new[] { record.Condition, record.Action }
+        .Any(field => System.Text.Encoding.Latin1.GetString(field.Bytes.ToArray()).Split(',')
+            .Any(operation => operation.TrimStart(' ', '\t').StartsWith("lf", StringComparison.OrdinalIgnoreCase))));
+
+    private AreaConversationStart Open(AreaSpeaker speaker, ScrDialogStart dialog, DlgDocument document)
+    {
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
         // ARC-WORLD-043: the original starts the reaction conversation before the dialog's first NPC line and action (0x412FD0).
@@ -390,7 +425,7 @@ public sealed class AreaConversationHost
             return new(AreaConversationStartStatus.ReactionRejected, null, speaker, $"script {dialog.Script}: the session refused the NPC's reaction conversation");
         _reactionOpen = speaker.Index;
         var greeting = Greeting(speaker);
-        var conversation = DialogConversation.Start(document!,
+        var conversation = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, InventoryPort(), State,
                 // ARC-SKILLS-004: the skill gates read the session hero; the diagnostic PC has no skills, so they stay unadmitted.
