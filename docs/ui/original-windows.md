@@ -208,9 +208,10 @@ are F0 and are read by the slice.
    141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
    (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
    (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
-   the list. Next slice (b): the save's picture as the original draws it (748 `SaveShotCover`, MW16), the info texts over it with the
-   toggle 747 at (499, 82), the lens 746 at the screen's (84, 51) with the hero's portrait (which needs the portrait in the save's
-   details, `NAME.meta.json` details schema 2), the scroll bar's art (0x5804E0) and the buttons' hints.
+   the list. Slice (b) done by ARC-UI-067, ledger MW17–MW20: the save's picture under the cover 748 `SaveShotCover`, the info texts and
+   the save's portrait over it (details schema 2), the toggle 747 at (499, 82) and the lens's art 746 at the screen's (84, 51). Left:
+   what the lens shows (0x4B8CE0 with the hero's location and 0x550DA0, not a portrait), the scroll bar's art (0x5804E0) and the
+   buttons' hints (7002, 7020–7022, 7025; where the menu shows hints is not read).
 3. **Pre-made character browser** (window 13): background 766 `PreGenCharacterBase` (800 × 400) at (0, 41) with the strips; buttons
    321 at (675, 55) (start, hint 7003), 323 at (69, 55) (back), 283 `Big_Grn_L` / 284 `Big_Grn_R` (34 × 33) at (43, 118) and
    (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);
