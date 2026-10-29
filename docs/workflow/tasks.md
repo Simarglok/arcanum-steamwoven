@@ -109,7 +109,7 @@ many for information only.
 
 ### Lean orientation
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit 2 item 3): orientation
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 3): orientation
 does not fill the main context with search output.
 
 - Start from the entry files, types and docs the brief names (taken from the
@@ -120,24 +120,24 @@ does not fill the main context with search output.
   yourself only where you edit or cite them.
 
 Why: in the token audit of 2026-10-29, re-read search and reading output was
-22 percent of all tokens (about 62 searches and 20 reads per session), and the
+22 percent of the week's cache-read tokens (about 62 searches and 20 reads per session), and the
 [small search and read output](#small-search-and-read-output) rule made no
 visible difference: per-call output was already small, the count is the cost.
 
 ### Review model
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit 2 item 4):
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 4):
 
 - The independent review runs on Sonnet by default. Use Opus for a diff over
   about 800 changed lines or one that changes original-game mechanics, the save
   schema or threading. Readings of the original executable stay on Opus.
 
-Why: in the token audit of 2026-10-29, reviews were 8 percent of all tokens
+Why: in the token audit of 2026-10-29, reviews were 8 percent of the week's cache-read tokens
 (146 review subagents), all of them on Opus.
 
 ### Smoke scope
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit 2 item 5):
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 5):
 
 - Per PR, run the smoke stages the diff touches plus the Crash Site smoke. The
   full map smoke chain runs before every `./arcanum package` and once a day on
@@ -150,7 +150,7 @@ much of it the full check and smoke ritual every thread repeats.
 
 ### Task code
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit 2 item 7):
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7):
 
 - The coordinator checks the code is unused before handing it out; the thread
   confirms with one check (remote branches and a PR search for the code), not a
@@ -159,7 +159,7 @@ Owner decision 2026-10-29 (ARC-DEV-057, token audit 2 item 7):
   ([fewer steps](#fewer-steps)).
 
 Why: in the token audit of 2026-10-29, checklist-only steps were still 8.6 per
-session (about 5 percent of tokens), and every new thread paid its own
+session (about 5 percent of the cache-read tokens), and every new thread paid its own
 orientation and code check.
 
 ### Quiet run output
