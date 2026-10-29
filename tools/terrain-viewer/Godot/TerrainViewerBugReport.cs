@@ -268,6 +268,10 @@ public partial class TerrainViewerApp
             Chord();
             await Frames(2);
             Require(BugReportOpen && WorldModal && !_worldGate.IsOpen, "Ctrl+B opened the modal report and closed the actor gate");
+            // ARC-DEV-064: the first open of the run fits the screen (it was as tall as one word per line of the hint).
+            var screen = GetViewport().GetVisibleRect(); var panel = _bugReportPanel!.PanelRectForSelfTest;
+            Require(screen.Encloses(panel), $"the first report window fits the screen: {panel} in {screen}");
+            Require(_canvas!.ShowActorGuides == DebugMode, $"the actor frame and anchor cross only in the debug mode: guides={_canvas.ShowActorGuides} debug={DebugMode}");
             Require(_bugReport is { Save: not null }, "the key's moment holds a save: " + _bugReport?.SaveMissing);
             Require(_bugReport!.Log.Any(line => line.Text.Contains("bug report smoke marker before-key", StringComparison.Ordinal)), "the log holds the line before the key");
             var headless = DisplayServer.GetName() == "headless";

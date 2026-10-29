@@ -146,7 +146,8 @@ app is). On Windows, in a command prompt in the game folder: `"Arcanum Steamwove
 around that area and puts you on a walkable spot in it, together with the companions that follow you. A teleport takes
 no game time and does not mark the area as discovered; areas you have really discovered stay marked in yellow. Normal
 travel on the world map works as without the debug mode. The debug mode also shows the panel of diagnostic text at the top
-of the window from the start (section 8).
+of the window from the start (section 8), and a magenta frame and a yellow cross at the feet of your character (where the
+game places it); without the debug mode they are not drawn.
 
 **Saves:** the debug mode does not change the rules or what a save holds, but a save made while it is on has `[DEBUG]`
 before its location in the save's details (the line under the list in the save and load windows), so you can tell it apart. Such a save loads normally with the debug mode off.

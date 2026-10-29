@@ -58,6 +58,7 @@ public static partial class TerrainViewerSelfTest
         var app = new TerrainViewerApp { SelfTestBootstrap = true }; app.SetProcess(false);
         viewport.AddChild(app); host.AddChild(viewport);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        app.ShowActorGuidesForSelfTest(); // the sector/guide raster oracle below (ARC-DEV-064)
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         var initial = app.GetSelfTestSnapshot();
         if (initial.CameraZoom != 2 || app.WorldFollowForSelfTest.Mode != GamepadLab.Core.CameraMode.Follow)

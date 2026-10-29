@@ -346,6 +346,7 @@ public static partial class TerrainViewerSelfTest
         viewport.AddChild(app);
         host.AddChild(viewport);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        app.ShowActorGuidesForSelfTest(); // the actor pixel oracle checks the guides (ARC-DEV-064: debug mode only in play)
         var fixture = SyntheticActorFixture.Create();
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -652,7 +653,7 @@ public static partial class TerrainViewerSelfTest
             ActorDiagnosticAction.Idle, 1, 0, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2);
         var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
         var viewport = new SubViewport { Size = new Vector2I(200, 100), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas();
+        var canvas = new TerrainCanvas { ShowActorGuides = true };
         viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, null, actor), cache);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);

@@ -13,6 +13,10 @@ public partial class TerrainCanvas : Node2D
     private bool _showActor = true;
     internal bool ActorVisibleForReadback => _showActor;
     internal bool StaticVisibleForReadback => _showStatics;
+    /// <summary>ARC-DEV-064: the actor's magenta frame and yellow anchor cross are a diagnostic overlay, drawn only in the
+    /// run's debug mode (or by a self-test raster oracle that asks for them); off in play.</summary>
+    public bool ShowActorGuides { get => _showActorGuides; set { _showActorGuides = value; _areaView = null; QueueRedraw(); } }
+    private bool _showActorGuides;
 
     public TerrainCanvas()
     {
@@ -182,6 +186,7 @@ public partial class TerrainCanvas : Node2D
                     DrawSetTransform(Vector2.Zero, 0, Vector2.One);
                 }
                 else DrawTextureRectRegion(texture, destination, source);
+                if (!_showActorGuides) return;
                 DrawRect(destination, Colors.Magenta, false, 1f);
                 DrawLine(new Vector2((float)actor.AnchorX - 4, (float)actor.AnchorY), new Vector2((float)actor.AnchorX + 4, (float)actor.AnchorY), Colors.Yellow, 1f);
                 DrawLine(new Vector2((float)actor.AnchorX, (float)actor.AnchorY - 4), new Vector2((float)actor.AnchorX, (float)actor.AnchorY + 4), Colors.Yellow, 1f);

@@ -27,6 +27,7 @@ public partial class AreaBugReportPanel : CanvasLayer
     internal string NoticeForSelfTest => _notice.Text;
     internal void SetTextForSelfTest(string text) => _text.Text = text;
     internal void PressSendForSelfTest() => _send.EmitSignal(BaseButton.SignalName.Pressed);
+    internal Rect2 PanelRectForSelfTest => _panel.GetRect();
 
     public override void _Ready()
     {
@@ -66,6 +67,10 @@ public partial class AreaBugReportPanel : CanvasLayer
         foreach (var button in new[] { _send, _cancel, _close }) buttons.AddChild(button);
         foreach (var control in new Control[] { _header, _hint, _text, _notice, buttons }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
+        // ARC-DEV-064: a word-wrapped label measures its height at the width it has, and it gets the panel's width only when the
+        // container lays it out (after the first ResizePanel), so the first open measured one word per line and the panel kept that
+        // height past the bottom of the screen. The panel is fitted again whenever its content's minimum size changes.
+        _panel.MinimumSizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
@@ -108,5 +113,9 @@ public partial class AreaBugReportPanel : CanvasLayer
         _panel.Position = new((size.X - width) / 2, Math.Max(16, (size.Y - _panel.GetCombinedMinimumSize().Y) / 2));
     }
 
-    public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
+    public override void _ExitTree()
+    {
+        GetViewport().SizeChanged -= ResizePanel;
+        _panel.MinimumSizeChanged -= ResizePanel;
+    }
 }

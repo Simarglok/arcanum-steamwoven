@@ -743,7 +743,7 @@ public partial class TerrainViewerApp : Node
             || !TryFindActorRasterPixel(decoded, actor, out var sourcePixel))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorDecode));
         var viewport = new SubViewport { Size = new Vector2I(actor.Destination.Width + 12, actor.Destination.Height + 12), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas { Position = new Vector2(6 - actor.Destination.X, 6 - actor.Destination.Y) };
+        var canvas = new TerrainCanvas { Position = new Vector2(6 - actor.Destination.X, 6 - actor.Destination.Y), ShowActorGuides = true };
         viewport.AddChild(canvas); AddChild(viewport);
         canvas.Publish(DiagnosticScenePlan.Create(result.Plan.Isolate(result.Plan.Commands[0].Ordinal), null, _readyActorPlan!), _cache);
         await NextFrameAsync();
