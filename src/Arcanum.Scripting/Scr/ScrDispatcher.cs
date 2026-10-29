@@ -65,7 +65,7 @@ public static class ScrDispatcher
             }
         }
 
-        var run = Execute(program, number, own, e.Line, ownFlags, new(e.Triggerer, e.Attachee, e.Extra), host, options);
+        var run = Execute(program, number, own, e.Line, ownFlags, new(e.Triggerer, e.Attachee, e.Extra), host, options, e.Point);
         if (run.Refusal is not null) return run.Result;
         var after = run.Slot;
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
@@ -120,13 +120,14 @@ public static class ScrDispatcher
         if (IsTrapScript(e.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
         if (e.Attachee is { } attachee && host.IsMonsterGenerator(attachee)) return Ended(ScrOutcome.RunDefault, ScrStop.MonsterGenerator);
         var run = Execute(program, e.Script, new(e.Script, program.InitialLocalFlags, program.InitialCounters), e.Line, program.FileFlags,
-            new(e.Triggerer, e.Attachee, null), host, options);
+            new(e.Triggerer, e.Attachee, null), host, options, ScrPoint.Use);
         if (run.Refusal is not null) return run.Result;
         // A call has no attachment, so nothing is written back, with one exception the original has: its dialog action
         // stores the run's flags and counters into the attachee's slot of the run's point (use) before the conversation
-        // starts, when they differ (0x447282; flags to flags, X1). The slot keeps its own number.
+        // starts, when they differ (0x447282; flags to flags, X1). The slot keeps its own number. A script this one called stored its
+        // own (ARC-SCRIPT-046): only a dialog action of this run, which ends it, stores this run's.
         ScrWriteback? writeback = null;
-        if (run.Dialog is not null && e.Attachee is { } npc)
+        if (run.Dialog is not null && run.Result.Stop == ScrStop.Dialog && e.Attachee is { } npc)
         {
             var slot = host.Slot(npc, ScrPoint.Use) ?? new ScrSlot(0, 0, 0);
             if (slot.LocalFlags != run.Slot.LocalFlags || slot.Counters != run.Slot.Counters)
@@ -143,7 +144,7 @@ public static class ScrDispatcher
         if (Unavailable(lookup) is { } missing) return Ended(ScrOutcome.SkipDefault, missing);
         var program = lookup.Program!;
         if (IsTrapScript(slot.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
-        var run = Execute(program, slot.Script, slot, 0, program.FileFlags, roles, host, options);
+        var run = Execute(program, slot.Script, slot, 0, program.FileFlags, roles, host, options, ScrPoint.Use);
         if (run.Refusal is not null) return run.Result;
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
@@ -161,13 +162,14 @@ public static class ScrDispatcher
 
     private static ScrRunResult Ended(ScrOutcome outcome, ScrStop stop) => new(outcome, stop, null, null, null, Array.Empty<ScrTraceStep>(), ScrEffects.None);
 
-    private static Run Execute(ScrProgram program, int number, ScrSlot slot, int line, uint ownFileFlags, ScrRoles roles, IScrHost host, ScrRunOptions options)
+    private static Run Execute(ScrProgram program, int number, ScrSlot slot, int line, uint ownFileFlags, ScrRoles roles, IScrHost host, ScrRunOptions options,
+        int point)
     {
         // Only the lines a run from this line can reach are admitted and read (ARC-SCRIPT-009).
         var admission = ScrAdmission.AdmitFrom(program, options.Admission, line);
         if (!admission.IsAdmitted)
             return new(new(ScrOutcome.Refused, ScrStop.Refused, number, null, admission.Refusal, Array.Empty<ScrTraceStep>(), ScrEffects.None), slot, admission.Refusal);
-        return new ScrInterpreter(admission.Admitted!, number, slot, ownFileFlags, roles, host, options).Run(line);
+        return new ScrInterpreter(admission.Admitted!, number, slot, ownFileFlags, roles, host, options, point).Run(line);
     }
 
     /// <summary>The objects an event names; any may be absent.</summary>

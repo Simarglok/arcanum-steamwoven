@@ -213,6 +213,34 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_NOT_OPENED_IN_MAP_MODE 5001"), (refused.Outcome, refused.Reason));
         Assert.IsNull(transfers.Pending);
     }
+
+    // ARC-SCRIPT-046: an NPC's step runs only the tile's script (the jump point is the PC's, ledger TR3), through its own runner, and
+    // leaves the player's last run and the pending transfer alone.
+    [TestMethod]
+    public void An_npc_entering_a_script_tile_runs_only_its_script_through_the_critter_runner()
+    {
+        var (map, row) = Load();
+        var cell = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var sector = WorldSectorCoordinate.Containing(new(cell.X, cell.Y));
+        var jump = new MapTransitionSite(MapTransitionTrigger.JumpPoint, new(cell.X, cell.Y), null, 600, [600], 0, false, false,
+            map.RuntimeMap + 4999, map.RuntimeMap, new(cell.X, cell.Y), MapTransitionGuard.None);
+        var tile = new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 0, new(cell.X, cell.Y), 0, 0, 600);
+        var set = new MapTransitionSet(new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []), new(map.RuntimeMap + 4999, "test", null),
+            [jump], [], [tile]);
+        var transfers = new AreaMapTransfers(map, set, Destinations(map));
+        Assert.IsNull(transfers.EnterByCritter(cell, "oid:npc"), "without a runner an NPC's step fires nothing");
+        Assert.ThrowsExactly<ArgumentException>(() => transfers.EnterByCritter(cell, ""));
+
+        var asked = new List<(int Script, string Entity)>();
+        var answer = new AreaScriptedUse(AreaScriptedUseOutcome.NoTeleport, null, [], null, "talk")
+            { Dialog = new(new(map.RuntimeMap, "pc"), new(map.RuntimeMap, "oid:npc"), 601, 0, 1) };
+        transfers.CritterTileRunner = (placed, entity) => { asked.Add((placed.Script, entity)); return answer; };
+        Assert.AreSame(answer, transfers.EnterByCritter(cell, "oid:npc"));
+        Assert.IsNull(transfers.EnterByCritter(new(cell.X + 1, cell.Y), "oid:npc"), "a tile without a script");
+        Assert.AreEqual((600, "oid:npc"), asked.Single());
+        Assert.IsNull(transfers.Pending, "the jump point is not the NPC's");
+        Assert.IsNull(transfers.LastScripted);
+    }
     [TestMethod]
     public void A_jump_point_fires_before_the_tile_script_and_a_refused_run_leaves_the_unconditional_teleport()
     {
