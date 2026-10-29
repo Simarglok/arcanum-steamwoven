@@ -140,8 +140,9 @@ public partial class TerrainViewerApp
         _barterPanel.Docked = shop;
         _mainMenuPanel?.SetDockedBelow(shop);
         // ARC-UI-064: the window in the world shows the original look when the game's art read; the open centres the game view on the PC
-        // (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's. The opening shop's docked window keeps the diagnostic look.
-        _barterPanel.SetArtLook(shop ? null : InventoryArtLook());
+        // (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's. ARC-UI-069: the opening shop's docked window too (with
+        // the main menu up the view is not centred, IW33).
+        _barterPanel.SetArtLook(InventoryArtLook());
         if (!shop && _camera is not null)
         {
             var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
@@ -182,7 +183,12 @@ public partial class TerrainViewerApp
         if (_barterPanel is null || !_barterPanel.IsOpen) return;
         GD.Print("ARC-UI-050 barter closed");
         _barterPanel.CloseView(); _barter = null; _barterSession = null; _barterRevision = -1;
-        if (_barterInShop) { _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false); }
+        if (_barterInShop)
+        {
+            _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false);
+            // ARC-UI-069: a session the start took is the game's now; its items' rows come from the game's maps.
+            (_shopInventoryHost, _shopInventorySession) = (null, null);
+        }
         QuarantineWorld(); RefreshReadyStatus();
     }
 
@@ -202,11 +208,12 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-064: the original look's view of the window: the hero's side and the shown object's grid (its substitute container when
     /// it has one, BT4) from the inventory host, the merchant's image (0x553D10 with the merchant, not the container, BW2), the background
-    /// by the follower rule, the merchant's name and the quote line (the last quote or trade message). Null in the opening shop (its session
-    /// is not the area's) or without the art.</summary>
+    /// by the follower rule, the merchant's name and the quote line (the last quote or trade message). ARC-UI-069: in the opening shop the
+    /// shop session's, from the shop map's host and the kit's tables. Null without the art.</summary>
     private (AreaInventoryView Inventory, AreaBarterFrame Frame)? BarterArt(AreaBarterView view)
     {
-        if (_barterInShop || _inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
+        if (_barterInShop) return ShopBarterArt(view);
+        if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
         var merchant = view.Merchant;
         var inventory = InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) };
         var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);

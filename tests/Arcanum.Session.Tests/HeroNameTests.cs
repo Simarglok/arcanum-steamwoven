@@ -40,6 +40,21 @@ public sealed class HeroNameTests
     }
 
     [TestMethod]
+    public void A_definition_s_player_name_starts_the_hero_and_a_refused_one_refuses_it()
+    {
+        // ARC-UI-069: a pre-made hero's name (field 0x10E, MW21) comes with its definition, as its portrait does.
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { PlayerName = Name } });
+        using var owner = result.Owner!;
+        CollectionAssert.AreEqual(Name, owner.QueryHero()!.PlayerName.ToArray());
+        Assert.AreEqual(0L, owner.Version.Revision, "a starting value, not a change");
+        using var restored = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(GameSessionSnapshotCodec.Encode(owner.Capture())).Snapshot!,
+            RestoreOptions()).Owner!;
+        CollectionAssert.AreEqual(Name, restored.QueryHero()!.PlayerName.ToArray());
+        foreach (var refused in new byte[][] { [0x41, 0x00], [.. Enumerable.Repeat((byte)'a', SessionHeroLimits.MaxPlayerNameBytes + 1)] })
+            Assert.AreEqual(GameSessionFailure.InvalidHero, GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { PlayerName = refused } }).Failure);
+    }
+
+    [TestMethod]
     public void Setting_the_name_stores_its_bytes_in_one_revision()
     {
         using var owner = Owner();

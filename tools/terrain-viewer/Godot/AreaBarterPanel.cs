@@ -9,8 +9,9 @@ namespace Arcanum.TerrainViewer;
 /// is shown with its reason and its button is disabled outside a follower's window. It renders an <see cref="AreaBarterView"/>; the app
 /// runs every trade through the session. ARC-UI-064: with the game's art and a shown object the window draws the original barter window
 /// instead (<see cref="AreaInventoryGridArea"/> in mode 1, the round view, <see cref="AreaBarterArtLayout"/>): an item dragged from the
-/// merchant's grid onto the hero's is bought, one dragged the other way sold; a switch below the frame shows the diagnostic window. The
-/// opening shop's docked window keeps the diagnostic look.
+/// merchant's grid onto the hero's is bought, one dragged the other way sold; a switch below the frame shows the diagnostic window.
+/// ARC-UI-069: the opening shop's docked window shows the original look too, at the menu screen's (0, 41) between the shop's strips, without
+/// the round view or its release (the main menu is up, IW33, IW34) and without the switch.
 /// </summary>
 public partial class AreaBarterPanel : CanvasLayer
 {
@@ -68,9 +69,9 @@ public partial class AreaBarterPanel : CanvasLayer
     internal Button LookToggleForSelfTest => _lookToggle;
     internal bool RoundViewShown => _roundView.Visible;
 
-    /// <summary>ARC-UI-064: the window shows the original barter window: the barter arts read, a shown object, not docked in the opening
-    /// shop and the diagnostic view not chosen.</summary>
-    public bool ArtMode => _look is { BarterReady: true } && _art is not null && !_docked && !_diagnosticChosen;
+    /// <summary>ARC-UI-064: the window shows the original barter window: the barter arts read, a shown object and the diagnostic view not
+    /// chosen (ARC-UI-069: docked in the opening shop too).</summary>
+    public bool ArtMode => _look is { BarterReady: true } && _art is not null && !_diagnosticChosen;
 
     /// <summary>ARC-UI-064: the frame's view while the window is open (null without the original look's parts).</summary>
     public AreaInventoryView? ArtView => IsOpen ? _art?.Inventory : null;
@@ -176,6 +177,8 @@ public partial class AreaBarterPanel : CanvasLayer
     private void ApplyLook()
     {
         var art = ArtMode;
+        // ARC-UI-069: in the opening shop the main menu is up: no round view and no release in its square (IW33, IW34).
+        _area.MenuUp = _docked;
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;
@@ -196,7 +199,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.SetBarter(_art.Value.Frame);
     }
 
-    private void UpdateRoundView() => _roundView.Update(_area, IsOpen && ArtMode ? HolderView?.Invoke() : null);
+    private void UpdateRoundView() => _roundView.Update(_area, IsOpen && ArtMode && !_docked ? HolderView?.Invoke() : null);
 
     private static Button Add(VBoxContainer column, string name, string verb, AreaBarterLine line, AreaBarterView view, Action<string>? requested)
     {
@@ -242,6 +245,19 @@ public partial class AreaBarterPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (ArtMode && _docked)
+        {
+            // ARC-UI-069: the window's 800 × 400 at the screen's (0, 41) of the menu's 800 × 600 screen, at the bars' whole factor (as the
+            // shop's strips, AreaShopArtView).
+            var screen = GetViewport().GetVisibleRect().Size;
+            var factor = AreaGameBarPanel.ScreenFactor(screen);
+            _area.FitScale(factor);
+            var (wx, wy, ww, _) = AreaShopArtLayout.Window;
+            _panel.Size = new(ww * factor, AreaInventoryDrag.FrameHeight * factor);
+            _panel.Position = new(AreaGameBarPanel.ScreenLeft(screen, factor) + wx * factor,
+                MathF.Round((screen.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2) + wy * factor);
+            return;
+        }
         if (ArtMode)
         {
             // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it

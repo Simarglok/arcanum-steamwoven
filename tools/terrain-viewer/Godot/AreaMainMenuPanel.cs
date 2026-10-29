@@ -18,6 +18,7 @@ namespace Arcanum.TerrainViewer;
 /// options window too, its page buttons in the art; ARC-UI-061: and its page's controls in their own art at their slots (MW8–MW10).
 /// ARC-UI-066: the pre-made browser in its own art (<see cref="AreaPremadeBrowserArtView"/>, MW17–MW21, MW26) when the browsed hero read.
 /// ARC-UI-068: the new-character window in its own art (<see cref="AreaNewCharacterArtView"/>, MW27–MW29) when its character can be drawn.
+/// ARC-UI-069: the opening shop in its own art (<see cref="AreaShopArtView"/>, MW30) while its barter window shows the original look.
 /// </summary>
 public partial class AreaMainMenuPanel : CanvasLayer
 {
@@ -38,6 +39,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private AreaMenuArtView _art = null!;
     private AreaPremadeBrowserArtView _premadeArt = null!;
     private AreaNewCharacterArtView _newCharacterArt = null!;
+    private AreaShopArtView _shopArt = null!;
     private static readonly Color DiagnosticBackdrop = new(.06f, .05f, .04f, .96f);
     private Label _artNote = null!;
     public event Action<int>? ButtonPressed;
@@ -73,6 +75,9 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-068: the new-character window is drawn in the original's look.</summary>
     public bool NewCharacterArtMode => Visible && _newCharacterArt.Visible;
     internal AreaNewCharacterArtView NewCharacterArtForSelfTest => _newCharacterArt;
+    /// <summary>ARC-UI-069: the opening shop is drawn in the original's look.</summary>
+    public bool ShopArtMode => Visible && _shopArt.Visible;
+    internal AreaShopArtView ShopArtForSelfTest => _shopArt;
     /// <summary>ARC-UI-068: a press in the new-character art not on the name field.</summary>
     public event Action? PressedOutsideName;
     /// <summary>The diagnostic window is shown (ARC-UI-066: the browser's, when its art is not drawn).</summary>
@@ -134,6 +139,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _newCharacterArt.PressedElsewhere += () => PressedOutsideName?.Invoke();
         _newCharacterArt.SoundRequested += id => SoundRequested?.Invoke(id);
         AddChild(_newCharacterArt);
+        _shopArt = new AreaShopArtView();
+        _shopArt.ButtonPressed += button => (button == AreaShopArtButton.Accept ? AcceptRequested : BackRequested)?.Invoke();
+        _shopArt.SoundRequested += id => SoundRequested?.Invoke(id);
+        AddChild(_shopArt);
         _artNote = new Label { Name = "MainMenuArtNote", Visible = false, Modulate = new Color(.75f, .7f, .6f), HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = Control.MouseFilterEnum.Ignore };
         AddChild(_artNote);
@@ -185,18 +194,22 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-061: the options controls' art.</summary>
     public void SetControlArt(AreaMenuControlArt art) => _art.SetControlArt(art);
 
-    /// <summary>ARC-UI-066: the pre-made browser's art; ARC-UI-068: the new-character window's from the same read.</summary>
-    public void SetPremadeArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts, bool browser, bool newCharacter)
+    /// <summary>ARC-UI-066: the pre-made browser's art; ARC-UI-068: the new-character window's from the same read; ARC-UI-069: and the
+    /// opening shop's.</summary>
+    public void SetPremadeArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts, bool browser, bool newCharacter, bool shop)
     {
         if (browser) _premadeArt.SetArt(art, fonts);
         if (newCharacter) _newCharacterArt.SetArt(art, fonts);
+        if (shop) _shopArt.SetArt(art);
     }
 
     /// <summary>The window for the menu's state; <paramref name="hero"/> is the browsed hero's description (browser only), or the opening
     /// shop's kit (ARC-UI-036, shop only). ARC-UI-066: <paramref name="browsed"/> is the browsed hero in the browser's art (null keeps
     /// the diagnostic window) with its large <paramref name="portrait"/>. ARC-UI-068: <paramref name="created"/> is the new character in
-    /// its window's art (null keeps the diagnostic window), with the same portrait.</summary>
-    public void Render(AreaMainMenu menu, string hero, AreaPremadeBrowserView? browsed = null, Texture2D? portrait = null, AreaNewCharacterView? created = null)
+    /// its window's art (null keeps the diagnostic window), with the same portrait. ARC-UI-069: <paramref name="shopArt"/>, the opening shop
+    /// in its art (its barter window shows the original look docked over it).</summary>
+    public void Render(AreaMainMenu menu, string hero, AreaPremadeBrowserView? browsed = null, Texture2D? portrait = null, AreaNewCharacterView? created = null,
+        bool shopArt = false)
     {
         ArgumentNullException.ThrowIfNull(menu);
         Show();
@@ -228,6 +241,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (newCharacter) _newCharacterArt.Render(created!, portrait, menu.Focus);
         else _newCharacterArt.CloseView();
         art |= newCharacter;
+        var shopWindow = shopping && shopArt && _shopArt.ArtSet;
+        if (shopWindow) _shopArt.Render(menu.Focus);
+        else _shopArt.CloseView();
+        art |= shopWindow;
         // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
         _panel.Visible = !art && (menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending);
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
@@ -260,7 +277,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
             _buttons.AddChild(button);
         }
         RenderCreation(menu, creating && !newCharacter);
-        RenderShop(menu, shopping, hero);
+        RenderShop(menu, shopping && !shopWindow, hero);
         _buttons.Visible = !browser && !creating && !shopping;
         _browser.Visible = browser;
         _hero.Text = browser ? hero : "";
@@ -409,7 +426,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        Hide(); _panel.Visible = true; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -422,11 +439,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
-        if (_art.Visible || _premadeArt.Visible || _newCharacterArt.Visible)
+        if (_art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible)
         {
             if (_art.Visible) _art.Place();
             if (_premadeArt.Visible) _premadeArt.Place();
             if (_newCharacterArt.Visible) _newCharacterArt.Place();
+            if (_shopArt.Visible) _shopArt.Place();
             _artNote.Size = new(Math.Max(1, size.X - 48), 0);
             _artNote.Position = new(24, 12); // at the top, away from the build line at the bottom right
         }

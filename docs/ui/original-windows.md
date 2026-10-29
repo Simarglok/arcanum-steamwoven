@@ -126,12 +126,14 @@ wheel as its scroll (PROJECT: the scroll bar at (330, 168) is not drawn), the he
 the round view; a merchant's item released on the hero's grid is bought and a hero's item released on the merchant's grid sold through the
 session (PROJECT: into the hero's first free cells, a stack whole), and a right release on an item moves it to the other side the same
 way (IW36); the quote line shows a PROJECT quote text (`Buy NAME: N`) on a resting
-pointer and the trade messages; the "Diagnostic view" switch shows the diagnostic window. The opening shop keeps the diagnostic look.
+pointer and the trade messages; the "Diagnostic view" switch shows the diagnostic window. Since ARC-UI-069 the opening shop shows this
+look too, docked at the screen's (0, 41) over window 15's strips, without the round view and its release (the main menu is up, IW33,
+IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
 Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
 boxes inside the barter window, the follower's weight lines and cycle buttons 757 / 758 at (155, 55), (253, 55), the merchant's doll view
-(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30), the scroll bar's art, the opening shop's window in this look.
+(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30), the scroll bar's art.
 
 ## Character sheet
 
@@ -238,7 +240,12 @@ are F0 and are read by the slice.
    points.
 5. **Character editor and opening shop** (windows 14 and 15): no background of their own (-1, MW1: the strips only); buttons 321 at
    (675, 55) and 323 at (69, 55) (back, target -2). The editor is the creation-mode character sheet over 22 `char_maint`: done with
-   the character sheet's slice (above) rather than here; the shop is the barter window's look (ARC-UI-038).
+   the character sheet's slice (above) rather than here; the shop is the barter window's look (ARC-UI-038). Shop done by ARC-UI-069,
+   ledger MW30 (`AreaShopArtView`): the strips and the two art buttons Accept and Back in the bottom strip (table 0x5C5408, flag 1,
+   the screen's (675, 496) and (69, 496)), the barter window's original look docked at the screen's (0, 41) on the shop's session,
+   without the round view (the main menu is up, IW33, IW34). PROJECT: the hints are not shown; the controller's focus row lights its
+   button until the pointer moves. Left: the editor (window 14, the same strips and buttons, table 0x5C5310) with the character
+   sheet's original look.
 6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3); its art is the game's common dialog box (not
    read, F0), shared with the other yes/no questions: one slice for the dialog box.
 
