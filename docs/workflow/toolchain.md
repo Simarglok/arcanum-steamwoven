@@ -114,12 +114,12 @@ history held about 500 runs of such copies of one template).
   lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
   need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
-  `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`) gets
+  `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `pickpocket`) gets
   the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`, `wreck`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `pickpocket`, `wreck`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too.
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
   `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;

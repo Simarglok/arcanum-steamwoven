@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -39,13 +40,14 @@ public sealed class AreaAiSkillTests
             Field(59, 0x08), Field(60, 10), Field(61, Uses),
         ], true, true, true);
 
-    // A human NPC (type 16, no monster flags) with every primary stat 20, level 1, heal 5 points, 20 hit points, at world cell (10, 20).
-    private static AreaObjectRecord Npc(int index) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
+    // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, heal 5 points, 20 hit points, at world
+    // cell (10, 20).
+    private static AreaObjectRecord Npc(int index, uint critterFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, 0), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
+            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
             Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
@@ -53,10 +55,10 @@ public sealed class AreaAiSkillTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open()
+    private static Scene Open(uint critterFlags = 0)
     {
         var session = ConversationSessionFixture.Create();
-        var rows = new[] { Npc(0), Item(1) };
+        var rows = new[] { Npc(0, critterFlags), Item(1) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Healing, 1, 0, 0, null, []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
@@ -70,7 +72,7 @@ public sealed class AreaAiSkillTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0), new(10, 20))], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, critterFlags), new(10, 20))], Combat = combat,
             HeroCell = () => new CellCoord(14, 20),
             NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
@@ -116,6 +118,52 @@ public sealed class AreaAiSkillTests
         Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1, "the heal spends a use (a critical failure's five use up the three)");
         Assert.AreNotEqual(started, session.Version);
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, "heal ");
+    }
+
+    // Hurts the NPC to half its hit points (below the heal skill's 90 %, above the 30 % care line).
+    private static int Hurt(GameSessionOwner session, AreaAiHost host, string npc)
+    {
+        var life = host.AiLifeTarget(npc) ?? throw new AssertFailedException("the NPC's life target");
+        var max = session.QueryLife(life).View!.Status.MaxHitPoints;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, life, new LifeDamage { HitPoints = max / 2 }).Disposition);
+        return session.QueryLife(life).View!.Status.HitPoints;
+    }
+
+    [TestMethod]
+    public void The_heal_step_finds_the_held_healing_item_and_its_skill_rung_heals_the_hurt_npc_through_goal_33()
+    {
+        var (session, host, npc, item) = Open();
+        Assert.AreEqual(item, host.HealingItem(npc), "the first generic item with the healing flag (0x4C91F0, HK1)");
+        Assert.IsNull(host.HealingItem(AiSchedulerRules.Pc), "the hero's items are not an NPC's list");
+        Assert.IsTrue(host.HealSkillAccepts(npc, item, npc), "itself");
+        Assert.IsTrue(host.HealSkillAccepts(npc, item, AiSchedulerRules.Pc), "the hero (type 15)");
+        Assert.IsFalse(host.HealSkillAccepts(npc, npc, npc), "refusal 1: no healing item");
+        Assert.IsFalse(host.HealSkillAccepts(npc, item, "oid:" + new string('f', 64)), "refusal 2: no critter");
+
+        Assert.IsFalse(host.Heal(npc), "unhurt: nothing to heal");
+        var hurt = Hurt(session, host, npc);
+        Assert.IsTrue(host.Heal(npc), "the heal step chose");
+        StringAssert.Contains(host.TraceOf(npc)!.Item, $"heal {npc} {AiHealStep.HealSkill} spell=-1 item={item}");
+        host.Perform(npc);
+        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
+        var now = 0L;
+        var heal = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no heal");
+        Assert.AreEqual(GameSessionDisposition.Changed, heal.Disposition, $"{heal.Failure}");
+        Assert.IsTrue(heal.ItemDestroyed || heal.UsesLeft is Uses - 1, "the heal spends a use");
+        var after = session.QueryLife(host.AiLifeTarget(npc)!).View!.Status.HitPoints;
+        Assert.IsTrue(heal.Check!.Success ? after > hurt : after == hurt, $"a success heals, a failure does not: {hurt} -> {after}");
+    }
+
+    [TestMethod]
+    public void An_undead_healer_is_refused_the_heal_skill_and_its_heal_step_chooses_nothing()
+    {
+        var (session, host, npc, item) = Open(critterFlags: 0x4);
+        Assert.AreEqual(item, host.HealingItem(npc), "the item search reads no healer flags");
+        Assert.IsFalse(host.HealSkillAccepts(npc, item, npc), "the check reads the healer's critter flags 0x20000004 (HK2)");
+        Hurt(session, host, npc);
+        var before = session.Version;
+        Assert.IsFalse(host.Heal(npc), "no list entry either");
+        Assert.AreEqual(before, session.Version);
     }
 
     [TestMethod]
