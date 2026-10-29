@@ -1,4 +1,5 @@
-"""ARC-DEV-061: ./arcanum smoke plans the per-PR scope and the full map smoke chain and runs each smoke through the queue."""
+"""ARC-DEV-061: ./arcanum smoke plans the per-PR scope and the full map smoke chain and runs each smoke through the queue;
+ARC-DEV-063: it passes only when every requested stage printed its PASS line."""
 from __future__ import annotations
 
 import argparse
@@ -43,12 +44,13 @@ class PlanTests(unittest.TestCase):
             inputs[role] = str(path)
         self.conf = {"inputs": inputs}
         self.prefs = self.root / "prefs"
+        self.said: list[str] = []
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def plan(self, *argv: str, imported: bool = True) -> list[smoke.Step]:
-        return smoke.plan(parse(*argv), self.conf, self.prefs, ENVIRON, imported)
+        return smoke.plan(parse(*argv), self.conf, self.prefs, ENVIRON, imported, say=self.said.append)
 
     def test_the_stage_names_come_from_the_viewer(self) -> None:
         stages = smoke.map_stages()
@@ -103,7 +105,7 @@ class PlanTests(unittest.TestCase):
         for wrong in (line.format("-"), line.format("elven ruins 2"), line.format("elven ruins").replace("True", "False"),
                       line.format("elven ruins").replace("crash-site-area", "world-diagnostic")):
             self.assertFalse(stages.search(wrong), wrong)
-        menu = self.plan("map", "Arcanum1-024-fixed", "--main-menu")[-1]
+        menu = self.plan("map", "Arcanum1-024-fixed", "--main-menu", "--stages", "menu")[-1]
         self.assertTrue(re.search(menu.expect or "", line.format("Arcanum1-024-fixed").replace("main-menu=False", "main-menu=True")))
         # The expected start line goes to the queue's start check in place of the default lines.
         check = start_check.for_run("window", stages.pattern, None)
@@ -139,6 +141,60 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(step.timeout, smoke.BATTERY_MINUTES)
         self.assertIsNone(self.plan("pr", "--stages", "cast")[-1].timeout)
 
+    def test_every_stage_has_its_pass_line_from_the_viewer(self) -> None:
+        self.assertEqual(set(smoke.STAGE_PASS), set(smoke.map_stages()))
+        sources = "\n".join(path.read_text(encoding="utf-8") for path in (REPO / smoke.VIEWER).glob("*.cs"))
+        for stage, marker in smoke.STAGE_PASS.items():
+            self.assertIn('"' + marker, sources.replace('$"', '"'), stage)
+        known = set(smoke.map_stages())
+        for group in (smoke.HERO_STAGES, smoke.MENU_STAGES, smoke.ALONE_STAGES, smoke.BATTERY_ALSO, smoke.BATTERY_STAGES):
+            self.assertLessEqual(set(group), known)
+
+    def test_the_stages_that_run_only_without_map_come_from_the_viewer(self) -> None:
+        text = (REPO / smoke.VIEWER / "TerrainViewerApp.cs").read_text(encoding="utf-8")
+        start, end = text.index('if (Stage("map"))'), text.index("else await RunAreaSmokeAsync(result);")
+        battery, *branch = text[start:end].splitlines()
+        alone, also = set(), set()
+        for line in branch:
+            named = re.search(r'(?:Stage|only\?\.Contains)\("([a-z-]+)"\)', line)
+            if named is None:
+                continue
+            calls = re.findall(r"Run\w+", line)
+            self.assertTrue(calls, line)
+            (also if all(call in battery for call in calls) else alone).add(named.group(1))
+        self.assertEqual((alone, also), (set(smoke.ALONE_STAGES), set(smoke.BATTERY_ALSO)))
+
+    def test_a_stage_that_needs_a_hero_gets_one(self) -> None:
+        step = self.plan("pr", "--stages", "ai", "--no-build")[0]
+        self.assertEqual(step.command[step.command.index("--hero") + 1], smoke.AUTO_HERO)
+        self.assertEqual(step.requires, ("ai",))
+        self.assertEqual(self.said, [f"SMOKE hero {smoke.AUTO_HERO} (auto): ai need a hero; --hero picks another"])
+        step = self.plan("pr", "--stages", "ai,container", "--hero", "elf-male", "--no-build")[0]
+        self.assertEqual(step.command[step.command.index("--hero") + 1], "elf-male")
+        self.assertNotIn("--hero", self.plan("pr", "--stages", "hover,report", "--no-build")[0].command)
+        battery = self.plan("map", "elven ruins", "--no-build")[0]  # the whole battery plays the hero's stages
+        self.assertEqual(battery.command[battery.command.index("--hero") + 1], smoke.AUTO_HERO)
+        self.assertEqual(battery.requires, smoke.BATTERY_STAGES)
+        for full in self.plan("full")[1:]:
+            self.assertIn("--hero", full.command)
+        with self.assertRaisesRegex(ValueError, "stage ai, life needs a hero, and --main-menu starts without one"):
+            self.plan("pr", "--stages", "ai,menu,life", "--main-menu")
+        with self.assertRaisesRegex(ValueError, "the whole map battery needs a hero"):
+            self.plan("map", "Arcanum1-024-fixed", "--main-menu")
+        with self.assertRaisesRegex(ValueError, "stage menu, death runs from the main menu: add --main-menu"):
+            self.plan("pr", "--stages", "menu,death")
+        self.assertEqual(self.plan("pr", "--stages", "menu,death", "--main-menu", "--no-build")[0].requires, ("menu", "death"))
+
+    def test_the_stages_that_run_only_without_map_get_their_own_run(self) -> None:
+        steps = self.plan("pr", "--stages", "map,ai,cast,stream,barter", "--no-build")
+        self.assertEqual([(step.name, step.requires) for step in steps],
+                         [("stages", ("map", "cast", "stream")), ("stages-alone", ("ai", "barter"))])
+        self.assertIn("ARC_AREA_MAP_SMOKE_ONLY=map,cast,stream", steps[0].command)
+        self.assertIn("ARC_AREA_MAP_SMOKE_ONLY=ai,barter", steps[1].command)
+        self.assertEqual([step.settings for step in steps], ["stages", "stages-alone"])
+        self.assertIn("SMOKE run stages-alone for ai, barter: the viewer runs them only without map", self.said)
+        self.assertEqual([step.name for step in self.plan("map", "x", "--stages", "map,cast", "--no-build")], ["map"])
+
     def test_one_map_crash_site_and_self_test(self) -> None:
         one = self.plan("map", "crash site cave", "--stages", "junk", "--no-build")
         self.assertEqual([step.name for step in one], ["map"])
@@ -153,14 +209,27 @@ class PlanTests(unittest.TestCase):
 
 
 class ExecuteTests(unittest.TestCase):
-    def run_steps(self, steps: list[smoke.Step], codes: dict[str, int]) -> tuple[int, list[tuple], list[str]]:
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def run_steps(self, steps: list[smoke.Step], codes: dict[str, int],
+                  logs: dict[str, str] | None = None) -> tuple[int, list[tuple], list[str]]:
+        logs = logs or {}
         calls: list[tuple] = []
         lines: list[str] = []
 
         def runner(kind: str, command: list[str], *, label: str, timeout: float | None, quiet: bool,
-                   start: start_check.StartCheck | None) -> int:
+                   start: start_check.StartCheck | None, log_sink) -> int:
             calls.append((kind, label, quiet, start.start.pattern if start else None))
-            return codes.get(label[len("smoke "):], 0)
+            name = label[len("smoke "):]
+            if name in logs:
+                path = Path(self.temp.name) / f"{name}.log"
+                path.write_text(logs[name], encoding="utf-8")
+                log_sink(path)
+            return codes.get(name, 0)
 
         return smoke.execute(steps, runner, lines.append), calls, lines
 
@@ -187,6 +256,25 @@ class ExecuteTests(unittest.TestCase):
         code, calls, lines = self.run_steps(steps, {"crash-site": 130})
         self.assertEqual((code, len(calls)), (130, 2))
         self.assertEqual(lines[-1], "SMOKE FAIL 1 of 3 steps passed")
+
+
+    def test_a_requested_stage_without_its_pass_line_fails_its_smoke(self) -> None:
+        steps = [smoke.Step("stages", "window", ("g",), requires=("ai", "cast")), smoke.Step("main", "window", ("g",))]
+        ran = f"{smoke.STAGE_PASS['cast']} {{}}\n{smoke.STAGE_PASS['ai']} {{}}\n"
+        code, _, lines = self.run_steps(steps, {}, {"stages": ran})
+        self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 2 of 2 steps passed"))
+        skipped = f"{smoke.STAGE_PASS['cast']} {{}}\nARC-UI-050 native-smoke barter SKIP (no living hero: start with --hero)\n"
+        code, _, lines = self.run_steps(steps, {}, {"stages": skipped})
+        self.assertEqual(code, 1)
+        self.assertTrue(any(line.startswith("  FAIL stages not run: ai (no PASS line in ") for line in lines), lines)
+        self.assertIn("  viewer: ARC-UI-050 native-smoke barter SKIP (no living hero: start with --hero)", lines)
+        self.assertIn(f"  stages  FAIL exit={smoke.STAGE_NOT_RUN}", lines)
+        self.assertEqual(lines[-1], "SMOKE FAIL 1 of 2 steps passed")
+        code, _, lines = self.run_steps(steps, {})  # no log: nothing shows the stages ran
+        self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 1 of 2 steps passed"))
+        code, _, lines = self.run_steps(steps, {"stages": 1}, {"stages": ""})  # a failed run keeps its own exit
+        self.assertIn("  stages  FAIL exit=1", lines)
+        self.assertFalse(any("stages not run" in line for line in lines))
 
 
 class RunTests(unittest.TestCase):

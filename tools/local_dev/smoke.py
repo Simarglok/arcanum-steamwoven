@@ -7,6 +7,10 @@ imported, then runs each smoke as its own quiet `window` run of the queue with a
 viewer's *_TEST_PATH files) and an environment without the owner's opt-in variables (DAT_ROOT, ARC_*, ARCANUM_*, the
 settings paths), so neither the owner's files nor another smoke's leak into it. A failed smoke does not stop the
 chain: every step runs and the summary names each one; a failed build or import, or a stopped run, stops it.
+
+ARC-DEV-063: PASS means every requested stage ran. A smoke passes only when its log holds each requested stage's own
+PASS line (a stage the viewer skips, silently or with a NONE/SKIP line, fails it); a stage that needs a hero gets
+AUTO_HERO when no --hero is given; a stage the viewer runs only without `map` gets its own run when both are asked for.
 """
 from __future__ import annotations
 
@@ -55,6 +59,42 @@ STOPPED = 128  # an exit at or above it is a stopped run (128+N), which ends the
 NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RESERVED = frozenset({"PATH", "DOTNET_ROOT", "HOME", "GODOT", "__GODOT_SHELL_ENV_SET"})  # the canonical start's own
 BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minutes; the queue's window default is 30
+STAGE_NOT_RUN = 3  # a smoke that exited 0 without the PASS line of a requested stage (ARC-DEV-063)
+# ARC-DEV-063: the line each map smoke stage prints when it ran and passed (the viewer's own markers, checked against its
+# sources by the tests). A whole map battery (no stage list) must show the map and resources stages; its other stages
+# depend on the map (a whole map has no window to stream, only the start map opens the world map).
+STAGE_PASS = {
+    "map": "ARC-RENDER-017 native-smoke map PASS", "resources": "ARC-RENDER-007 resources reload PASS",
+    "transfer": "ARC-WORLD-031 native-smoke transfer PASS", "roundtrip": "ARC-RENDER-024 native-smoke round-trip PASS",
+    "stream": "ARC-RENDER-024 native-smoke stream PASS", "worldmap": "ARC-UI-048 native-smoke worldmap PASS",
+    "walk": "ARC-WORLD-042 native-smoke walk PASS", "census": "ARC-RENDER-027 native-smoke census PASS",
+    "cast": "ARC-MAGIC-015 native-smoke cast PASS", "turn-based": "ARC-COMBAT-020 native-smoke turn-based PASS",
+    "knockdown": "ARC-COMBAT-021 native-smoke knockdown PASS", "ranged": "ARC-COMBAT-015 native-smoke ranged PASS",
+    "container": "ARC-WORLD-101 native-smoke container PASS", "junk": "ARC-WORLD-063 native-smoke junk-pile PASS",
+    "barter": "ARC-UI-050 native-smoke barter PASS", "menu": "ARC-UI-011 native-smoke main menu PASS",
+    "scene": "ARC-UI-012 native-smoke scene flow PASS", "options": "ARC-UI-013 native-smoke options PASS",
+    "plants": "ARC-WORLD-081 native-smoke plants PASS", "bar": "ARC-UI-018 native-smoke bar PASS",
+    "ai": "ARC-WORLD-092 native-smoke ai PASS", "ai-turn-based": "ARC-WORLD-095 native-smoke ai-turn-based PASS",
+    "ai-cast": "ARC-WORLD-102 native-smoke ai-cast PASS", "premade": "ARC-WORLD-114 native-smoke premade PASS",
+    "life": "ARC-UI-020 native-smoke life PASS", "floaters": "ARC-UI-021 native-smoke floaters PASS",
+    "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS",
+    "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
+    "report": "ARC-DEV-051 native-smoke bug report PASS", "hover": "ARC-UI-057 native-smoke hover-window PASS",
+}
+BATTERY_STAGES = ("map", "resources")
+# The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
+# plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
+HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "premade", "pickpocket"})
+AUTO_HERO = "human-male"  # the full chain's hero on the main map
+# The stages that run from the main menu (--main-menu, which starts without a hero).
+MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
+# The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
+# as well (the tests read both from TerrainViewerApp.cs).
+ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
+                          "ai-turn-based", "ai-cast", "premade", "pickpocket", "wreck"})
+BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report"})
+SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP)\b")
 
 
 @dataclass(frozen=True)
@@ -67,6 +107,7 @@ class Step:
     gate: bool = False  # a failure stops the chain (the build, the import)
     settings: str | None = None  # the step's own settings folder under the run's folder
     timeout: float | None = None  # minutes; None: the queue's default for the kind
+    requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
 
 
 def map_stages() -> tuple[str, ...]:
@@ -145,10 +186,35 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
              extra: Sequence[tuple[str, str]] = ()) -> Step:
     viewer = ["--native-smoke", *launch.map_arguments(inputs, map_name, hero=hero, sector=sector, main_menu=main_menu)]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
-                start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES)
+                start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES,
+                requires=tuple(stages) or BATTERY_STAGES)
 
 
-def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mapping[str, str], imported: bool) -> list[Step]:
+def map_runs(name: str, stages: Sequence[str], *, hero: str | None, main_menu: bool,
+             say: Callable[[str], None]) -> tuple[str | None, list[tuple[str, tuple[str, ...]]]]:
+    """ARC-DEV-063: the hero and the viewer runs (step name, stage list; () the whole map battery) in which every requested
+    stage runs. A stage that needs a hero gets AUTO_HERO when none is given (refused with --main-menu, which starts
+    without one); a menu stage needs --main-menu; the stages the viewer runs only without `map` get a run of their own."""
+    wanted = tuple(stages) or ("map",)
+    menu = [stage for stage in wanted if stage in MENU_STAGES]
+    if menu and not main_menu:
+        raise ValueError(f"stage {', '.join(menu)} runs from the main menu: add --main-menu (in a smoke of its own)")
+    needs = [stage for stage in wanted if stage in HERO_STAGES]
+    if needs and hero is None:
+        if main_menu:
+            raise ValueError(f"{'the whole map battery' if not stages else 'stage ' + ', '.join(needs)} needs a hero, "
+                             "and --main-menu starts without one: run it in a smoke of its own")
+        hero = AUTO_HERO
+        say(f"SMOKE hero {hero} (auto): {', '.join(needs)} need a hero; --hero picks another")
+    alone = tuple(stage for stage in stages if stage in ALONE_STAGES)
+    if "map" not in stages or not alone:
+        return hero, [(name, tuple(stages))]
+    say(f"SMOKE run {name}-alone for {', '.join(alone)}: the viewer runs them only without map")
+    return hero, [(name, tuple(stage for stage in stages if stage not in ALONE_STAGES)), (name + "-alone", alone)]
+
+
+def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mapping[str, str], imported: bool,
+         say: Callable[[str], None] = lambda line: print(line, flush=True)) -> list[Step]:
     """Every step of this smoke run, in order."""
     godot = environ.get("GODOT") or DEFAULT_GODOT
     inputs = conf.get("inputs", {})
@@ -173,15 +239,17 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         if args.crash_site:
             steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
         if stages:
-            steps.append(map_step("stages", inputs, prefs_root, environ, godot, args.map, hero=args.hero,
-                                  sector=args.sector, stages=stages, main_menu=args.main_menu, extra=extra))
+            hero, runs = map_runs("stages", stages, hero=args.hero, main_menu=args.main_menu, say=say)
+            steps.extend(map_step(name, inputs, prefs_root, environ, godot, args.map, hero=hero, sector=args.sector,
+                                  stages=run_stages, main_menu=args.main_menu, extra=extra) for name, run_stages in runs)
         elif args.map != MAIN_MAP or args.hero or args.sector or args.main_menu or extra:
             raise ValueError("--map, --hero, --sector, --main-menu and --env go with --stages (the touched stages)")
         if len(steps) == prepared:
             raise ValueError("nothing to run: give --stages (the touched stages) or --crash-site")
         return steps
-    steps.append(map_step("map", inputs, prefs_root, environ, godot, args.name, hero=args.hero, sector=args.sector,
-                          stages=stages, main_menu=args.main_menu, extra=extra))
+    hero, runs = map_runs("map", stages, hero=args.hero, main_menu=args.main_menu, say=say)
+    steps.extend(map_step(name, inputs, prefs_root, environ, godot, args.name, hero=hero, sector=args.sector,
+                          stages=run_stages, main_menu=args.main_menu, extra=extra) for name, run_stages in runs)
     return steps
 
 
@@ -190,14 +258,35 @@ def shown(command: Sequence[str]) -> str:
                     for part in command)
 
 
+def stages_not_run(log: Path | None, stages: Sequence[str]) -> tuple[list[str], list[str]]:
+    """The requested stages whose PASS line the log lacks, and the log's first NONE/SKIP lines (the viewer's reasons)."""
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace") if log is not None else ""
+    except OSError:
+        text = ""
+    missing = [stage for stage in stages if STAGE_PASS[stage] not in text]
+    reasons = [line.strip()[:200] for line in text.splitlines() if SKIP_LINE.search(line)][:3] if missing else []
+    return missing, reasons
+
+
 def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             say: Callable[[str], None] = lambda line: print(line, flush=True)) -> int:
-    """Run the steps through the queue (each quiet, start checked); 0 when every one passed."""
+    """Run the steps through the queue (each quiet, start checked); 0 when every one passed and printed the PASS line
+    of each stage it was asked for."""
     results: list[tuple[str, int]] = []
     for step in steps:
         say(f"SMOKE step {step.name} kind={step.kind}")
         check = start_check.for_run(step.kind, step.expect, None, step.command)
-        code = runner(step.kind, list(step.command), label=f"smoke {step.name}", timeout=step.timeout, quiet=True, start=check)
+        logs: list[Path] = []
+        code = runner(step.kind, list(step.command), label=f"smoke {step.name}", timeout=step.timeout, quiet=True,
+                      start=check, log_sink=logs.append)
+        if code == 0 and step.requires:
+            missing, reasons = stages_not_run(logs[-1] if logs else None, step.requires)
+            if missing:
+                say(f"  FAIL stages not run: {', '.join(missing)} (no PASS line in {logs[-1] if logs else 'the log'})")
+                for reason in reasons:
+                    say(f"  viewer: {reason}")
+                code = STAGE_NOT_RUN
         results.append((step.name, code))
         if code >= STOPPED or (code != 0 and step.gate):
             break

@@ -106,6 +106,18 @@ history held about 500 runs of such copies of one template).
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
   the junk pile stage).
+- **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
+  its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
+  the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
+  `resources`; a stage the viewer skipped (silently, as the AI stages without a hero, or with a `NONE`/`SKIP` line)
+  makes the step `FAIL exit=3` with `FAIL stages not run: ...` and the log's first `NONE`/`SKIP` lines. Before
+  anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
+  `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`) gets
+  `--hero human-male` when no `--hero` is given, and says so (`SMOKE hero human-male (auto): ...`); with
+  `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
+  `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `premade`, `pickpocket`, `wreck`) get a run of their
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too.
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
   `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.

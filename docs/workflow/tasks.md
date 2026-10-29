@@ -159,6 +159,10 @@ narrowed the same day in ARC-DEV-061):
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
   `./arcanum smoke pr --stages S,... [--crash-site]` per PR and
   `./arcanum smoke full` for the chain; no scratch smoke scripts.
+- `SMOKE PASS` means every requested stage ran and printed its `PASS` line
+  (ARC-DEV-063): a skipped stage fails the smoke, a stage that needs a hero
+  gets `human-male` unless `--hero` names another
+  ([every requested stage runs](toolchain.md#smoke-runner-arc-dev-061)).
 
 Why: in the token audit of 2026-10-29, a merged PR took 162 steps (94 before),
 much of it the full check and smoke ritual every thread repeats; smoke runs
