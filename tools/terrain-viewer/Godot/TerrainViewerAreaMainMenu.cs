@@ -718,6 +718,7 @@ public partial class TerrainViewerApp
             var (rowX, rowY, _, _) = AreaSaveListArtLayout.Row(0);
             await Click(saveArt.ScreenPointForSelfTest(rowX + 10, rowY + 10));
             Require(SaveListOpen && _saveList!.Selected == 0, "a press on the auto-save's row selects it: " + _saveList?.Selected);
+            await SaveInfoForSmoke(Require, Click);
             var (_, backX, backY) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Back);
             await Click(saveArt.ScreenPointForSelfTest(backX + 30, backY + 30));
             Require(!SaveListOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "Previous Screen closed the load window back to the menu: " + _mainMenu?.Window);

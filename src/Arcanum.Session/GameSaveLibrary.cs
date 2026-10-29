@@ -39,12 +39,14 @@ public enum GameSaveDetails
     Stale,
 }
 
-/// <summary>A game date and clock time as the session clock reports it.</summary>
-public readonly record struct GameSaveTime(long Year, int Month, int Day, int Hour, int Minute);
+/// <summary>A game date and clock time as the session clock reports it (<see cref="Second"/> is 0 in a details file of schema 1).</summary>
+public readonly record struct GameSaveTime(long Year, int Month, int Day, int Hour, int Minute, int Second = 0);
 
 /// <summary>The player-facing details of one save, supplied by the host (the session holds no hero name or map title).
-/// Texts are single-line and bounded by <see cref="GameSaveLimits"/>.</summary>
-public sealed record GameSaveSummary(string Description, string HeroName, int Level, string Location, int RuntimeMap, GameSaveTime GameTime);
+/// Texts are single-line and bounded by <see cref="GameSaveLimits"/>. ARC-UI-067: the hero's portrait id (0 for none) and the story
+/// state (null in a details file of schema 1, which did not record it), as the original's save info holds them (ledger MW17).</summary>
+public sealed record GameSaveSummary(string Description, string HeroName, int Level, string Location, int RuntimeMap, GameSaveTime GameTime,
+    int Portrait = 0, int? StoryState = null);
 
 /// <summary>One listed save. <see cref="Summary"/> is null unless <see cref="Details"/> is Present or Stale. <see cref="SavedAt"/> is the
 /// save file's last write time, which orders the list as the original orders it by file date.</summary>
@@ -80,7 +82,7 @@ public sealed record GameSaveLimits(int MaxEntries = 10_000, int MaxDetailsBytes
 
 /// <summary>
 /// ARC-UI-010 save list: one folder of saves, each a <see cref="GameSessionSaveSlot"/> file (<c>NAME.json</c>, the snapshot), a
-/// details file (<c>NAME.meta.json</c>: description, hero, level, location, game time and the snapshot's byte count) and an optional
+/// details file (<c>NAME.meta.json</c>: description, hero, level, location, game time, portrait, story state and the snapshot's byte count) and an optional
 /// PNG preview (<c>NAME.png</c>). The auto slot is the quick save file (<c>quicksave.json</c>, the original's <c>SlotAuto</c>
 /// "Auto-Save" that F7 writes); numbered saves are <c>slot0000</c>..<c>slot9998</c>. As the original (ledger SL1–SL8):
 /// a new save takes the highest number plus one (<c>slot0000</c> when there is none) and is refused at 9999; the list shows the
@@ -98,7 +100,8 @@ public sealed class GameSaveLibrary
     public const string ThumbnailSuffix = ".png";
     private const string SnapshotSuffix = ".json";
     private const string DetailsFormat = "arcanum-steamwoven-save-details";
-    private const int DetailsSchema = 1;
+    /// <summary>ARC-UI-067: schema 2 adds the portrait, the story state and the game time's seconds; schema 1 files still read.</summary>
+    private const int DetailsSchema = 2, OldDetailsSchema = 1;
     private static readonly Regex Names = new("^(quicksave|slot(?!9999)[0-9]{4})$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private static readonly UTF8Encoding Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
@@ -265,8 +268,10 @@ public sealed class GameSaveLibrary
         if (summary.Level is < 0 or > 1000) return "LEVEL_INVALID";
         if (summary.RuntimeMap < 0) return "MAP_INVALID";
         var time = summary.GameTime;
-        if (time.Year is < 0 or > 1_000_000_000 || time.Month is < 1 or > 12 || time.Day is < 1 or > 31 || time.Hour is < 0 or > 23 || time.Minute is < 0 or > 59)
+        if (time.Year is < 0 or > 1_000_000_000 || time.Month is < 1 or > 12 || time.Day is < 1 or > 31 || time.Hour is < 0 or > 23 || time.Minute is < 0 or > 59
+            || time.Second is < 0 or > 59)
             return "GAME_TIME_INVALID";
+        if (summary.Portrait < 0) return "PORTRAIT_INVALID";
         return null;
     }
 
@@ -286,16 +291,21 @@ public sealed class GameSaveLibrary
             json.WriteNumber("map", summary.RuntimeMap);
             json.WriteStartArray("gameTime");
             json.WriteNumberValue(summary.GameTime.Year); json.WriteNumberValue(summary.GameTime.Month); json.WriteNumberValue(summary.GameTime.Day);
-            json.WriteNumberValue(summary.GameTime.Hour); json.WriteNumberValue(summary.GameTime.Minute);
+            json.WriteNumberValue(summary.GameTime.Hour); json.WriteNumberValue(summary.GameTime.Minute); json.WriteNumberValue(summary.GameTime.Second);
             json.WriteEndArray();
+            json.WriteNumber("portrait", summary.Portrait);
+            if (summary.StoryState is { } story) json.WriteNumber("storyState", story);
+            else json.WriteNull("storyState");
             json.WriteEndObject();
         }
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static readonly string[] DetailsProperties = ["format", "schema", "snapshotBytes", "description", "hero", "level", "location", "map", "gameTime"];
+    private static readonly string[] OldDetailsProperties = ["format", "schema", "snapshotBytes", "description", "hero", "level", "location", "map", "gameTime"];
+    private static readonly string[] DetailsProperties = [.. OldDetailsProperties, "portrait", "storyState"];
 
-    /// <summary>Strict: exactly the written properties, of their kinds; anything else is a damaged details file.</summary>
+    /// <summary>Strict: exactly the written properties of schema 2 (or of schema 1, without the portrait, the story state and the
+    /// seconds), of their kinds; anything else is a damaged details file.</summary>
     private static (long SnapshotBytes, GameSaveSummary Summary)? DecodeDetails(string text)
     {
         try
@@ -303,16 +313,22 @@ public sealed class GameSaveLibrary
             using var document = JsonDocument.Parse(text, new JsonDocumentOptions { MaxDepth = 4 });
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("schema", out var schemaValue) || schemaValue.ValueKind != JsonValueKind.Number) return null;
+            var schema = schemaValue.GetInt32();
+            var expected = schema == DetailsSchema ? DetailsProperties : schema == OldDetailsSchema ? OldDetailsProperties : null;
             var names = root.EnumerateObject().Select(p => p.Name).ToArray();
-            if (names.Length != DetailsProperties.Length || names.Distinct(StringComparer.Ordinal).Count() != names.Length
-                || !names.All(DetailsProperties.Contains)) return null;
-            if (root.GetProperty("format").GetString() != DetailsFormat || root.GetProperty("schema").GetInt32() != DetailsSchema) return null;
+            if (expected is null || names.Length != expected.Length || names.Distinct(StringComparer.Ordinal).Count() != names.Length
+                || !names.All(expected.Contains)) return null;
+            if (root.GetProperty("format").GetString() != DetailsFormat) return null;
             var time = root.GetProperty("gameTime");
-            if (time.ValueKind != JsonValueKind.Array || time.GetArrayLength() != 5) return null;
+            if (time.ValueKind != JsonValueKind.Array || time.GetArrayLength() != (schema == DetailsSchema ? 6 : 5)) return null;
             var t = time.EnumerateArray().ToArray();
+            var story = schema == DetailsSchema ? root.GetProperty("storyState") : default;
             var summary = new GameSaveSummary(root.GetProperty("description").GetString()!, root.GetProperty("hero").GetString()!,
                 root.GetProperty("level").GetInt32(), root.GetProperty("location").GetString()!, root.GetProperty("map").GetInt32(),
-                new(t[0].GetInt64(), t[1].GetInt32(), t[2].GetInt32(), t[3].GetInt32(), t[4].GetInt32()));
+                new(t[0].GetInt64(), t[1].GetInt32(), t[2].GetInt32(), t[3].GetInt32(), t[4].GetInt32(), schema == DetailsSchema ? t[5].GetInt32() : 0),
+                schema == DetailsSchema ? root.GetProperty("portrait").GetInt32() : 0,
+                schema != DetailsSchema || story.ValueKind == JsonValueKind.Null ? null : story.GetInt32());
             var bytes = root.GetProperty("snapshotBytes").GetInt64();
             return bytes < 0 ? null : (bytes, summary);
         }

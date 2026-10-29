@@ -135,7 +135,8 @@ public sealed class SaveLibraryTests
         Assert.IsTrue(library.Create(owner.Capture(), Summary()).Saved);
         var details = Path.Combine(_directory, "slot0000" + GameSaveLibrary.DetailsSuffix);
         var text = File.ReadAllText(details);
-        foreach (var damaged in new[] { "{", "[]", text.Replace("\"schema\":1", "\"schema\":2", StringComparison.Ordinal),
+        foreach (var damaged in new[] { "{", "[]", text.Replace("\"schema\":2", "\"schema\":3", StringComparison.Ordinal),
+            text.Replace("\"schema\":2", "\"schema\":1", StringComparison.Ordinal), text.Replace("\"portrait\":0", "\"portrait\":-1", StringComparison.Ordinal),
             text.Replace("}", ",\"extra\":1}", StringComparison.Ordinal), text.Replace("\"level\":3", "\"level\":-1", StringComparison.Ordinal),
             text.Replace("Hero", "He\\nro", StringComparison.Ordinal) })
         {
@@ -153,6 +154,28 @@ public sealed class SaveLibraryTests
         File.WriteAllText(other, File.ReadAllText(other).Replace($"\"snapshotBytes\":{bytes}", $"\"snapshotBytes\":{bytes + 1}", StringComparison.Ordinal));
         var stale = library.List().Entries.Single(e => e.Name == "slot0001");
         Assert.AreEqual((GameSaveDetails.Stale, "Before the cave"), (stale.Details, stale.DisplayDescription));
+    }
+
+    [TestMethod]
+    public void DetailsKeepThePortraitTheStoryStateAndTheSecondsAndOldDetailsStillRead()
+    {
+        using var owner = GoldenSession();
+        var library = Library();
+        var summary = Summary() with { GameTime = new(1885, 3, 14, 9, 30, 41), Portrait = 1004, StoryState = 7 };
+        Assert.IsTrue(library.Create(owner.Capture(), summary).Saved);
+        Assert.IsTrue(library.Create(owner.Capture(), Summary()).Saved);
+        var entries = library.List().Entries;
+        Assert.AreEqual((GameSaveDetails.Present, summary), (entries.Single(e => e.Name == "slot0000").Details, entries.Single(e => e.Name == "slot0000").Summary),
+            "ARC-UI-067: schema 2 records what the original's save info shows (ledger MW17).");
+        Assert.IsNull(entries.Single(e => e.Name == "slot0001").Summary!.StoryState, "No story state was given: written as null.");
+
+        // A details file of schema 1 (written before ARC-UI-067) reads without the new fields.
+        var details = Path.Combine(_directory, "slot0001" + GameSaveLibrary.DetailsSuffix);
+        var bytes = entries.Single(e => e.Name == "slot0001").Bytes;
+        File.WriteAllText(details, "{\"format\":\"arcanum-steamwoven-save-details\",\"schema\":1,\"snapshotBytes\":" + bytes
+            + ",\"description\":\"Old\",\"hero\":\"Hero\",\"level\":3,\"location\":\"Crash Site\",\"map\":1,\"gameTime\":[1885,3,14,9,30]}");
+        var old = library.List().Entries.Single(e => e.Name == "slot0001");
+        Assert.AreEqual((GameSaveDetails.Present, Summary("Old")), (old.Details, old.Summary), "Portrait 0, no story state and second 0.");
     }
 
     [TestMethod]
