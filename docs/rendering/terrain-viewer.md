@@ -1113,8 +1113,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
   frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
   barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
-  goes back and the window closes outside the own window); the barter window draws the diagnostic look, so its round view shows once
-  its original look is built (the steal window's shows since ARC-UI-065). NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
+  goes back and the window closes outside the own window); the barter window's round view shows with its original look since
+  ARC-UI-064 (art 231, below) and the steal window's since ARC-UI-065; the component is `AreaRoundView`, shared by the inventory and
+  barter panels. NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
   the window stays open). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
@@ -2337,16 +2338,41 @@ the right header, the container's buy list in brackets after the merchant's); th
 and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken container leaves the merchant's own list, another refused
 open shows no window.
 
-**Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
+**Original look (ARC-UI-064,** [ledger BW1–BW5](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064), plan
+[original windows](../ui/original-windows.md#barter-window-done-arc-ui-064); `AreaBarterArtLayout`): with the game's art (every barter
+art of `AreaBarterArtLayout.ArtNumbers` read, log `ARC-UI-064 barter art ready=True`) the window in the world draws the original barter
+window, the inventory window's 800 × 400 frame in interface mode 1 at its place between the bars: background 235 `Barter` (825
+`Barter_Follower` in a follower's window while the hero leads another follower too), the merchant's image at (183, 33) (its race or
+flags, as the loot window's; the merchant's even when a substitute container is shown), its name centred on x 215, the quote line at
+(89, 128), the shown object's grid (the substitute container's, else the merchant's; worn items left out) of 10 × 7 rows of 32 from
+(8, 168) scrolled by the mouse wheel (largest scroll 5, or 89 for a container), the hero's grid, counts and drop and use boxes as in its
+own window, the gamble box 345 at (703, 236), and the round view at (16, 17) with art 231 (the open centres the camera on the PC). A
+merchant's item pressed and released on the hero's grid is bought, a hero's item released on the merchant's grid sold, both through the
+trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
+a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
+`… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
+original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
+shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
+only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); the opening shop's docked window keeps the
+diagnostic look. NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
+goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
+generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll
+toggles, the scroll bar's art, a follower's portrait as the image, the original fonts.
+
+**Not implemented in the diagnostic window:** grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
 the follower menu and cycling ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). ARC-WORLD-096: every open schedules
 the restock of the window's container (else the merchant), logged as `ARC-WORLD-096 restock schedule`, and a loot open schedules the
 looted holder's; the event world runs the restock through the viewer's restock host ([barter runtime](../world/barter-runtime.md#restock-in-the-viewer-arc-world-096)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
-with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
+with the trade sound, `Escape`, a replaced session closes it; ARC-UI-064 over a synthetic art set: the original look in mode 1 with
+background 235, a resting pointer's quote, a sale and a buy by drag with their coins and sounds, a sale by a right release, a ware
+released on its own grid changing nothing, the switch and back, a release on the round view closing the window); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
 its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
 restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
-one); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
+one); with it `ARC-UI-064 native-smoke barter-art PASS` on the live window (mode 1, the background by the follower rule, the merchant's
+image and every shown item's art read, the round view shown, the first ware's quote, that ware released on its own grid going back;
+`ARC_AREA_BARTER_CAPTURE=PATH.png` saves the window); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
 screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the
 window opened again shows the new wares; then `ARC-WORLD-103 native-smoke redress PASS`: the first living NPC of the map with an
 inventory source of its own whose set the project admits and combat values is scheduled through the window open's path, its event regenerates it and it wields its

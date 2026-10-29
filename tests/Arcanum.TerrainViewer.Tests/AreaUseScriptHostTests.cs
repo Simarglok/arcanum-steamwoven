@@ -456,7 +456,7 @@ public sealed class AreaUseScriptHostTests
 
             var ran = host.RunPlaced(tile, session.Rules.Scripts, null, npc);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
-            Assert.AreEqual(new ScrDialogStart(host.Pc, npc, 741, 0, 3), ran.Dialog);
+            Assert.AreEqual(new ScrDialogStart(host.Pc, npc, 741, 0, 3) { Point = ScrPoint.Use }, ran.Dialog);
             Assert.AreEqual(new ScrSlot(0, 0b10, 0), host.Slot(npc, ScrPoint.Use), "the NPC's use slot took 741's flags before the conversation (0x447282)");
             Assert.AreEqual(ScrStop.ReturnSkipDefault, ran.Run!.Stop, "the tile script went on after its call");
 
@@ -479,7 +479,7 @@ public sealed class AreaUseScriptHostTests
             var held = session.Version;
             var unkept = other.RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(1, AreaUseScriptHost.EntityId(bare)));
             Assert.AreEqual((AreaScriptedUseOutcome.EffectsRejected, (ScrDialogStart?)null), (unkept.Outcome, unkept.Dialog), unkept.Detail);
-            StringAssert.Contains(unkept.Detail, "no loaded use element");
+            StringAssert.Contains(unkept.Detail, "point 1 slot"); StringAssert.Contains(unkept.Detail, "no loaded element");
             Assert.AreEqual(held, session.Version);
         });
     }

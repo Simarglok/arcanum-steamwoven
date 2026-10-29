@@ -196,6 +196,8 @@ public partial class TerrainViewerApp
 
     private void LogAreaEvents(AreaAmbientDriver driver)
     {
+        // ARC-SCRIPT-047: a heartbeat's talk, asked for during the pump that just returned.
+        OpenHeartbeatConversation();
         if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
         // ARC-DEV-051: the session events that came due, for the bug report's log.
         BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"

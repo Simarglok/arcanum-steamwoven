@@ -127,8 +127,9 @@ public sealed class ScrItemEffectTests
         Assert.AreEqual(new ScrWriteback(ScrSource.Object, Ring, 24, new ScrSlot(700, 1u << 1, 55)), run.Effects.SlotWrites.Single());
         Assert.IsNull(run.Effects.Writeback, "the caller's own slot did not change");
 
-        // A use or dialog point refuses the dispatch; a point outside the script array ends it; no slot or script 0 runs nothing.
-        foreach (var (point, outcome, stop) in new[] { (1, ScrOutcome.Refused, ScrStop.Refused), (9, ScrOutcome.Refused, ScrStop.Refused),
+        // A use point refuses the dispatch; a point outside the script array ends it; no slot or script 0 runs nothing (ARC-SCRIPT-047: the
+        // dialog point too, which the ring has no slot of).
+        foreach (var (point, outcome, stop) in new[] { (1, ScrOutcome.Refused, ScrStop.Refused), (9, ScrOutcome.RunDefault, ScrStop.ReturnRunDefault),
             (31, ScrOutcome.SkipDefault, ScrStop.CallExPoint), (36, ScrOutcome.SkipDefault, ScrStop.CallExPoint), (5, ScrOutcome.RunDefault, ScrStop.ReturnRunDefault) })
         {
             host.Inner.Attach(Ring, 25, 701, Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(point), N(0), (Triggerer, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault))));
