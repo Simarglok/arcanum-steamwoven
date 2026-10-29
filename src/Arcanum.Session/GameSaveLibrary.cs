@@ -272,6 +272,8 @@ public sealed class GameSaveLibrary
             || time.Second is < 0 or > 59)
             return "GAME_TIME_INVALID";
         if (summary.Portrait < 0) return "PORTRAIT_INVALID";
+        // The story state starts at 0 and only rises (ledger SS1).
+        if (summary.StoryState < 0) return "STORY_STATE_INVALID";
         return null;
     }
 

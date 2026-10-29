@@ -166,12 +166,13 @@ public partial class AreaSaveListArtView : Control
             foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
                 DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
         var (px, py, pw, ph) = AreaSaveListArtLayout.Preview;
-        // MW23: the picture at its own size from the preview's corner (the rectangle takes its size); none, the new-save row or an
-        // unread info leave the preview black. Kept within the preview here (a stored picture is at most 468 × 300).
+        // MW23: the picture at its own size (the original's fills the 468 × 300 rectangle from its corner); none, the new-save row or
+        // an unread info leave the preview black. PROJECT: the stored picture is the screen fitted into 468 × 300 keeping its shape, so
+        // a narrower or lower one is centred; kept within the preview.
         if (_info is not null && !_unread && _preview is not null && _preview.GetWidth() > 0 && _preview.GetHeight() > 0)
         {
             var (w, h) = (Math.Min(pw, _preview.GetWidth()), Math.Min(ph, _preview.GetHeight()));
-            DrawTextureRectRegion(_preview, new Rect2(px, py, w, h), new Rect2(0, 0, w, h));
+            DrawTextureRectRegion(_preview, new Rect2(px + (pw - w) / 2, py + (ph - h) / 2, w, h), new Rect2(0, 0, w, h));
         }
         // The background's preview hole is transparent: the preview shows through it.
         if (Art(AreaSaveListArtLayout.BackgroundArt) is { } background)

@@ -137,6 +137,10 @@ public sealed class SaveLibraryTests
         var text = File.ReadAllText(details);
         foreach (var damaged in new[] { "{", "[]", text.Replace("\"schema\":2", "\"schema\":3", StringComparison.Ordinal),
             text.Replace("\"schema\":2", "\"schema\":1", StringComparison.Ordinal), text.Replace("\"portrait\":0", "\"portrait\":-1", StringComparison.Ordinal),
+            text.Replace("\"schema\":2", "\"schema\":\"2\"", StringComparison.Ordinal), text.Replace("\"schema\":2", "\"schema\":1.5", StringComparison.Ordinal),
+            text.Replace("\"storyState\":null", "\"storyState\":\"7\"", StringComparison.Ordinal),
+            text.Replace("\"storyState\":null", "\"storyState\":-1", StringComparison.Ordinal),
+            text.Replace(",0],\"portrait\"", "],\"portrait\"", StringComparison.Ordinal), text.Replace(",\"portrait\":0", "", StringComparison.Ordinal),
             text.Replace("}", ",\"extra\":1}", StringComparison.Ordinal), text.Replace("\"level\":3", "\"level\":-1", StringComparison.Ordinal),
             text.Replace("Hero", "He\\nro", StringComparison.Ordinal) })
         {
