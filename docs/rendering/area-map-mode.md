@@ -378,6 +378,11 @@ the start map), one per tile.
   one cell before a wreck tile with the PC four cells past it, follows, and his first step opens the conversation
   (`ARC-SCRIPT-046 wreck smoke PASS`; on 2026-10-29 at tile (92912,82552), in 1 frame, DLG 1696 node 1). A conversation
   left before its last reply leaves flag 2304 unset, so his next step onto a wreck tile opens it again, as the script reads.
+  The other native smoke stages hold a scripted conversation (ARC-WORLD-118): the run stands, the conversation does not open
+  (`ARC-WORLD-118 scripted conversation held by the smoke`), so a following companion stepping onto a wreck tile cannot
+  quarantine the world and stop a stage's own walk (the map battery's far click, with a hero whose companion Virgil joined in the
+  talk stage, stopped so on 2026-10-29); only the `wreck` stage lets them open. A smoke stage that observes a scripted
+  conversation of its own sets `_smokeTakesScriptedConversations` for its run.
 - **Not covered.** Tile scripts for NPCs other than following companions (moving NPCs of the AI host, visiting companions, a
   companion's jump onto the PC); the actions and conditions outside the set (most tile scripts); the arrival tile of a transfer; a
   fade-and-teleport's fade, sound and movie.

@@ -253,10 +253,19 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-SCRIPT-046: opens the conversation a tile script (or a script it called) asked for with its dialog action, the PC with
     /// <paramref name="speaker"/>, as a talk opens (combat mode left first; none while the hero is under attack or a window is modal).
-    /// The run's effects are applied already; the DLG starts at the action's node without a dialog script run.
+    /// The run's effects are applied already; the DLG starts at the action's node without a dialog script run. A native smoke holds it
+    /// unless its stage observes scripted conversations (ARC-WORLD-118).
     /// </summary>
     private void BeginScriptedConversation(AreaSpeaker speaker, Arcanum.Scripting.Scr.ScrDialogStart dialog)
     {
+        // ARC-WORLD-118: in a native smoke a conversation a script opens on its own (a companion's or the PC's step onto a script tile,
+        // a sector run) would quarantine the world and stop the smoke's own walk, so only a stage that observes it lets it open; the
+        // script's run stands, the conversation is logged as held.
+        if (_nativeSmoke && !_smokeTakesScriptedConversations)
+        {
+            GD.Print($"ARC-WORLD-118 scripted conversation held by the smoke script={dialog.Script} node={dialog.Node} speaker={speaker.ScriptId}");
+            return;
+        }
         if (_conversationHost is null || _conversationPanel is null || ConversationOpen || WorldModal)
         {
             GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation or window is open");
@@ -293,6 +302,9 @@ public partial class TerrainViewerApp
     // ARC-SCRIPT-046: the open conversation was started by a script's dialog action, so a "return to script" end has no dialog script
     // of the speaker to resume.
     private bool _conversationScripted;
+
+    // ARC-WORLD-118: set by a native smoke stage that observes scripted conversations (the wreck stage); the others hold them.
+    private bool _smokeTakesScriptedConversations;
 
     private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
     {
