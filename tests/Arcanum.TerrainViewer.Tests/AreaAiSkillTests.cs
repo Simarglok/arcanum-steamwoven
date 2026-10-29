@@ -133,7 +133,7 @@ public sealed class AreaAiSkillTests
     public void The_heal_step_finds_the_held_healing_item_and_its_skill_rung_heals_the_hurt_npc_through_goal_33()
     {
         var (session, host, npc, item) = Open();
-        Assert.AreEqual(item, host.HealingItem(npc), "the first generic item with the healing flag (0x4C91F0, HK1)");
+        Assert.AreEqual(item, host.HealingItem(npc), "the first generic item with the healing flag (0x4C91F0, HI1)");
         Assert.IsNull(host.HealingItem(AiSchedulerRules.Pc), "the hero's items are not an NPC's list");
         Assert.IsTrue(host.HealSkillAccepts(npc, item, npc), "itself");
         Assert.IsTrue(host.HealSkillAccepts(npc, item, AiSchedulerRules.Pc), "the hero (type 15)");
@@ -159,11 +159,13 @@ public sealed class AreaAiSkillTests
     {
         var (session, host, npc, item) = Open(critterFlags: 0x4);
         Assert.AreEqual(item, host.HealingItem(npc), "the item search reads no healer flags");
-        Assert.IsFalse(host.HealSkillAccepts(npc, item, npc), "the check reads the healer's critter flags 0x20000004 (HK2)");
+        Assert.IsFalse(host.HealSkillAccepts(npc, item, npc), "the check reads the healer's critter flags 0x20000004 (HI2)");
         Hurt(session, host, npc);
         var before = session.Version;
         Assert.IsFalse(host.Heal(npc), "no list entry either");
         Assert.AreEqual(before, session.Version);
+        var (_, mechanical, healer, tool) = Open(critterFlags: 0x20000000);
+        Assert.IsFalse(mechanical.HealSkillAccepts(healer, tool, healer), "a mechanical healer is refused too");
     }
 
     [TestMethod]

@@ -570,7 +570,7 @@ public partial class TerrainViewerApp
             var join = session.ForceJoinParty(session.Version, follower);
             Require(join.Disposition != GameSessionDisposition.Rejected, "the speaker joined: " + join.Failure);
             joined = true;
-            // ARC-WORLD-116: first, where the hero stands (away from the fight's NPC, whose AI must not act before the fight), the
+            // ARC-WORLD-116: first, where the hero stands (before it is placed by the fight's NPC, whose AI must not act before the fight), the
             // follower, given an installed healing item (a generic item with the healing flag and no use or destroy script) and out of
             // danger, heals the hero hurt to half through the heal step's heal-skill rung (0x4A8AA0: the companion itself is unhurt, its
             // PC leader is next), skill goal 33 and the attempt's session heal. The placement on the hero's own cell binds the joined
@@ -589,7 +589,7 @@ public partial class TerrainViewerApp
             for (var wait = 0; wait < 600 && _barterData is null; wait++) { AdoptBarterData(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
             var barter = _barterData?.Data;
             Require(barter is not null, "the item prototypes loaded (" + _barterData?.Status + ")");
-            var kitNumber = Enumerable.Range(6049, 15213 - 6029).FirstOrDefault(n => barter!.Prototype(n) is { } p
+            var kitNumber = Enumerable.Range(6049, 15213 - 6049 + 1).FirstOrDefault(n => barter!.Prototype(n) is { } p
                 && AreaHealingItems.From("kit", p) is { } healing && !healing.ScriptPoints.Contains(SessionHealingItem.UseScript)
                 && !healing.ScriptPoints.Contains(SessionHealingItem.DestroyScript));
             Require(kitNumber != 0, "an installed healing item");
@@ -599,10 +599,12 @@ public partial class TerrainViewerApp
             Require(givenKit.Failure == GameSessionFailure.None && givenKit.Item is not null, $"the follower took the healing item: {givenKit.Failure}");
             kit = givenKit.Item;
             var heroMax = session.QueryHeroLife()!.Status.MaxHitPoints;
-            session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = heroMax / 2 });
+            var hurtResult = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = heroMax / 2 });
+            Require(hurtResult.Disposition == GameSessionDisposition.Changed, $"the hero was hurt: {hurtResult.Failure}");
             var heroHurt = session.QueryHeroLife()!.Status.HitPoints;
+            // The given item must be the tool: a healing item of the follower's own would lose a use the smoke does not restore.
             var tool = healer!.HealingItem(follower);
-            Require(tool is not null, "the follower holds a healing item");
+            Require(tool == kit, $"the given item is the follower's first healing item: {tool}");
             Require(healer.Heal(follower), $"the heal step chose: {healer.TraceOf(follower)?.Item}");
             Require(healer.TraceOf(follower)?.Item?.StartsWith($"heal {AiSchedulerRules.Pc} {AiHealStep.HealSkill} ", StringComparison.Ordinal) == true,
                 $"the heal skill's rung on the hero: {healer.TraceOf(follower)?.Item}");
@@ -626,7 +628,8 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-116 native-smoke ai-heal-item PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Follower = template.Speaker.Row.PrototypeNumber, Item = kitNumber, Frames = healFrames, Hurt = heroHurt, Healed = heroHealed, Max = heroMax,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
-            if (!session.IsItemDestroyed(kit!)) session.RemoveItemFromNpc(session.Version, follower, kit!);
+            if (!session.IsItemDestroyed(kit!))
+                Require(session.RemoveItemFromNpc(session.Version, follower, kit!).Disposition == GameSessionDisposition.Changed, "the healing item left the follower");
             kit = null;
             if (session.QueryHeroLife()!.Record.State is { } hurtNow && hurtNow.HitPointDamage > heroBefore.HitPointDamage)
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = hurtNow.HitPointDamage - heroBefore.HitPointDamage });
@@ -655,7 +658,6 @@ public partial class TerrainViewerApp
             var host = AreaAiHostNow();
             Require(host is not null && host.RunCompanions.Contains(follower), $"the AI host runs the follower: {host?.RunCompanions.Count}");
             Require(!host!.Holds(follower), "before the fight its own walk follows the hero");
-
             var startCell = companion!.Grid.State.CommittedCell;
             GD.Print($"ARC-WORLD-115 ai-follower target={target.Row.PrototypeNumber}@{target.Row.WorldX},{target.Row.WorldY} follower={host.Tile(follower)} hero={host.Tile(AiSchedulerRules.Pc)}");
             var apart = AiExecutorRules.Distance(host.Tile(follower)!.Value, host.Tile(enemy)!.Value);

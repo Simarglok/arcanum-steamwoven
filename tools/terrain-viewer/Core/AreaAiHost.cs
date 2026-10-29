@@ -1622,16 +1622,16 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _scene.Spells?.Invoke()?.AiItemFailChance(critter, item, target, spell) ?? 0;
 
     /// <summary>
-    /// ARC-WORLD-116: the heal skill's tool (0x4C91F0 with skill 10 → 0x462760 with flag 0x8, ledger HK1): the first item of the NPC's
+    /// ARC-WORLD-116: the heal skill's tool (0x4C91F0 with skill 10 → 0x462760 with flag 0x8, ledger HI1): the first item of the NPC's
     /// list (fields 0xED/0xEE, listed or worn, <see cref="AreaCombatHost.NpcItems"/>) that is a generic item (type 14) with the healing
     /// flag (generic flags 0x8); none for the hero. NOT READY: the original then searches the substitute container of an NPC without a
-    /// leader (0x45F650; a companion never has one), which the host does not read.
+    /// leader (0x45F650), which the host does not read; it applies only without a leader, so never to a companion.
     /// </summary>
     public string? HealingItem(string npc) =>
-        npc == Pc ? null : _scene.Combat.NpcItems(_session, _scene.RuntimeMap, npc).FirstOrDefault(item => HealingTool(item.Fields)).Entity;
+        npc == Pc ? null : _scene.Combat.NpcItems(_session, _scene.RuntimeMap, npc).Where(item => HealingTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
 
     /// <summary>
-    /// ARC-WORLD-116: the heal skill check (0x4AE570, skill 10, ledger SP3 as corrected by HK2): the item must be a generic item with the
+    /// ARC-WORLD-116: the heal skill check (0x4AE570, skill 10, ledger SP3 as corrected by HI2): the item must be a generic item with the
     /// healing flag (refusal 1), the target the hero or an NPC (refusal 2), and the healer neither undead (critter flag 0x4) nor
     /// mechanical (0x20000000; refusal 2). The target's own flags are not read here (the heal helper's mechanical test, P4, comes first).
     /// </summary>
