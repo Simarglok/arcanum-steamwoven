@@ -151,6 +151,8 @@ public partial class TerrainViewerApp
                 && _mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Human", "Background: Default (0)", "Portrait: HUM3 (1005)",
                     "Name: Enter Name", "plain"]),
                 "the new-character window: " + string.Join("|", _mainMenuPanel.CreationForSelfTest));
+            // ARC-UI-068: without a game folder the window keeps its diagnostic look.
+            Require(!_mainMenuPanel.NewCharacterArtMode && _mainMenuPanel.PanelVisibleForSelfTest, "the new-character window without art shows the diagnostic window");
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.RaceNext);
             _mainMenuPanel.CreationPressForSelfTest(AreaNewCharacterButton.BackgroundNext);
             Require(_mainMenuPanel.CreationForSelfTest.SequenceEqual(["Gender: Male", "Race: Dwarf", "Background: Stout (1)", "Portrait: ANY1 (1006)",

@@ -99,6 +99,11 @@ public partial class TerrainViewerApp
             _mainMenuPanel.CreationPressed += button => MainMenuCommand(() => { _mainMenu!.PressCreation(button, CreationRules()); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _mainMenuPanel.NameClicked += () => MainMenuCommand(() => { _mainMenu!.BeginName(); return AreaMenuCommand.Nothing; });
+            // ARC-UI-068: a press beside the name field ends its typing (NW8); without typing nothing changes and nothing is redrawn.
+            _mainMenuPanel.PressedOutsideName += () =>
+            {
+                if (_mainMenu?.Creation is { TypingName: true }) MainMenuCommand(() => { _mainMenu!.PressOutsideName(); return AreaMenuCommand.Nothing; });
+            };
         }
         AttachMenuArt(_mainMenuPanel);
         AttachPremadeBrowserArt(_mainMenuPanel);
@@ -232,8 +237,11 @@ public partial class TerrainViewerApp
         // ARC-UI-066: the browsed hero in the browser's art when it read.
         Texture2D? portrait = null;
         var browsed = _mainMenu.Window == AreaMenuWindow.PickCharacter ? BrowsedHeroArt(_mainMenu.Hero, out portrait) : null;
+        // ARC-UI-068: the new character in its window's art when it can be drawn.
+        var created = _mainMenu is { Window: AreaMenuWindow.NewCharacter, Creation: { } creation } ? NewCharacterArt(creation, out portrait) : null;
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
-            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "", browsed, portrait);
+            : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "", browsed, portrait,
+            created);
         RenderCharacterEditor();
     }
 
@@ -697,6 +705,9 @@ public partial class TerrainViewerApp
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));
             Require(!MainMenuOpen && !ReferenceEquals(placeholder, session) && session.QueryHero()?.Prototype == first.Definition!.Prototype
                 && session.QueryGold() == first.Definition.Gold && flag.Value == true, $"the new game is the first hero's: {_quickSaveStatus} {session.QueryHero()?.Prototype} flag {flag.Status} {flag.Value}");
+            // ARC-UI-068: the hero keeps its story's number (field 0x102, MW19).
+            Require(session.QueryHeroBackgroundDescription() == first.Read!.Hero!.BackgroundDescription && first.Read.Hero.BackgroundDescription > 1000,
+                $"the started hero keeps its background description: {session.QueryHeroBackgroundDescription()} (read {first.Read.Hero.BackgroundDescription})");
             for (var i = 0; i < 3; i++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -748,6 +759,8 @@ public partial class TerrainViewerApp
             OpenMainMenu(texts);
             Choose(10); Choose(50); Choose(421);
             Require(_mainMenu!.Window == AreaMenuWindow.NewCharacter, "New Character opened its window: " + _mainMenu.Notice);
+            // ARC-UI-068: the window in the original's look, its arrows, bands and name field by the pointer.
+            await NewCharacterArtForSmoke(Require);
             var creation = _mainMenu.Creation!;
             Require(creation.Race == Arcanum.Simulation.Character.CharacterRace.Human && creation.Gender == Arcanum.Simulation.Character.CharacterGender.Male
                 && creation.Background == 0 && creation.Chosen is null && creation.Generic.Backgrounds is not null && creation.BackgroundText() is not null,
@@ -764,6 +777,11 @@ public partial class TerrainViewerApp
                 && creation.Chosen is null, "an elf woman, background cleared");
             Press(AreaNewCharacterButton.BackgroundNext);
             var chosen = creation.Chosen ?? throw new InvalidOperationException("ARC-UI-030 new character smoke: no background landed");
+            // ARC-UI-068: the art shows her background's name, and its story when its number is above 1000 (MW19).
+            var elfArt = _mainMenuPanel!.NewCharacterArtForSelfTest.ViewForSelfTest;
+            Require(elfArt is not null && elfArt.Character.BackgroundName.Length > 0
+                && (chosen.Description > AreaPremadeBrowserArtLayout.DefaultDescription ? elfArt.Character.DescriptionTitle is null : elfArt.Character.DescriptionTitle is not null),
+                $"the art shows her background {chosen.Background} ({chosen.Description}): {elfArt?.Character.BackgroundName}");
             // ARC-UI-033: the elf woman's portraits from the real file (her first after the gender change, then next and previous), the
             // default name refused by Accept (506), and a name typed through the window's keys.
             var portraits = creation.Generic.Portraits ?? throw new InvalidOperationException("ARC-UI-033 new character smoke: portraits " + creation.Generic.PortraitsDetail);
@@ -784,8 +802,8 @@ public partial class TerrainViewerApp
                 HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.A, Unicode = typed });
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Backspace });
             HandleMainMenuKey(new InputEventKey { Pressed = true, Keycode = Key.Enter });
-            Require(!creation.TypingName && creation.NameText() == "Vela" && _mainMenuPanel.CreationForSelfTest.Contains("Name: Vela"),
-                "the typed name: " + string.Join(" | ", _mainMenuPanel.CreationForSelfTest));
+            Require(!creation.TypingName && creation.NameText() == "Vela" && _mainMenuPanel.NewCharacterArtForSelfTest.ViewForSelfTest?.Character.Name == "Vela",
+                "the typed name: " + _mainMenuPanel.NewCharacterArtForSelfTest.ViewForSelfTest?.Character.Name);
             var beforeAccept = _areaSession;
             // ARC-UI-034: Accept opens the character editor on her draft; the real stats, skills and spells pages spend her points: willpower
             // (the original's sheet order, row 7), a hit point, the first skill and a college 1 spell (willpower 9 lets rank 1 be learned); a

@@ -229,7 +229,13 @@ are F0 and are read by the slice.
 4. **New character** (window 12): background 765 `CreateCharacterBase` (800 × 400) at (0, 41) with the strips; buttons 321 / 323 as in
    the browser, 283 / 284 at (43, 118) / (244, 118), 757 `MPCycleLeftButton` / 758 `MPCycleRightButton` (23 × 23) at (42, 331),
    (255, 332), (42, 381), (255, 382) (the gender, race, background and portrait arrows, F0 which is which), the name field and the
-   portrait from the window's callbacks (NW1–NW6).
+   portrait from the window's callbacks (NW1–NW6). Done by ARC-UI-068, ledger MW27–MW29 (`AreaNewCharacterArtView`): the strips, the
+   background and ten art buttons from the table 0x5C4C48 (the portrait's 283 / 284; the race's 757 / 758 at (42, 331) / (255, 332),
+   the background's at (42, 381) / (255, 382) and the gender's at (42, 281) / (255, 282)), the character draw shared with the browser
+   (its stats under the chosen background's effect too), the pointer's gender and race bands choosing the description field's text
+   (hover flag 0x64C458), and the name field: an art-less button at (45, 224, 230 × 20) and the typed name with a closing "|"
+   (0x544100). PROJECT: the hints are not shown; the controller's focus row lights its buttons until the pointer moves. The window is done but for these
+   points.
 5. **Character editor and opening shop** (windows 14 and 15): no background of their own (-1, MW1: the strips only); buttons 321 at
    (675, 55) and 323 at (69, 55) (back, target -2). The editor is the creation-mode character sheet over 22 `char_maint`: done with
    the character sheet's slice (above) rather than here; the shop is the barter window's look (ARC-UI-038).

@@ -1764,7 +1764,7 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game). The quit box, new-character, editor and shop windows keep
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section). The quit box, editor and shop windows keep
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
@@ -1784,7 +1784,7 @@ and layout (below), the other windows the project's.
   Previous and Next cycling, each shown with its prototype, race, gender, level, gold and kit as read (each hero is
   read once a run, as `--hero` reads it). **Start** makes a new session as the scene's launch made its own (the
   module's clock, the map's start cell, its reputations) with that hero (its stats, gold, kit, best items worn,
-  main-menu flag) and adopts it as a load adopts its session; the menu closes. The hero's effect rules and kit facts
+  main-menu flag; since ARC-UI-068 its background's description number, field 0x102, its story) and adopts it as a load adopts its session; the menu closes. The hero's effect rules and kit facts
   come with it, and the scene's arguments name the hero from then on, so a map transfer reads the hero again with the
   map (as `--hero` does). A new game needs the start map at the map list's start, as the original's new game puts the
   PC there: the AREA exterior, or map mode on runtime map 1 (`./arcanum area`'s `Arcanum1-024-fixed`) opened without
@@ -2012,7 +2012,8 @@ Taunts, Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast T
 ### New-character window (ARC-UI-030)
 
 N10b, slice 1 (FR-CHAR-001, FR-CHAR-003, FR-CHAR-005): the original's window 12, which New Character opens from the New Game
-window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-arc-ui-030)); the art and layout are the project's.
+window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-arc-ui-030)); the art and layout are the project's
+until ARC-UI-068 (the original look, below).
 
 - **The character.** Opening the window makes the new character from the generic PC prototype 16066 (human, male, background 0,
   level 1 with every primary stat 8 and 5 points unspent), read once a run as the pre-made heroes are
@@ -2026,12 +2027,12 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   may take and wrap (BD4), and each press sets the landed block with its description number and effect. The background
   row shows the description's name and the text below it, the game's `mes\gameback.mes`; before any background press (or after
   a clear) the window shows the default text 1000 and the character keeps background 0 without its effect, as in the
-  original. Race and gender names are the project's.
+  original. Race and gender names are the project's in the project's panel (the game's in the original look, below).
 - **Portrait** (ARC-UI-033, FR-CHAR-004, [NW9](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
   a row with the original's arrows over the portraits the race and gender may take (`PortraitCatalogue.Press`, PO9: next
   past the last takes the first, previous before the first takes the last); a race or gender change takes the first
   portrait of the new pair, a refused press keeps it. The window starts with the generic prototype's portrait 1005 and
-  shows the portrait's image name and number (the image is not drawn yet). The catalogue is read with the generic start
+  shows the portrait's image name and number in the project's panel (the large image in the original look, below). The catalogue is read with the generic start
   (`AreaHeroLoad.Portraits`); without it the arrows say so and a race change keeps the portrait.
 - **Name** (ARC-UI-033, FR-CHAR-002, [NW6–NW8](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
   the field starts with main-menu message 500 (in the game's encoding, the project's text without the game). A click on it
@@ -2056,17 +2057,34 @@ window ([ledger NW1–NW6](../research/ledger/character.md#new-character-window-
   over the rows (gender, race, background, portrait, name), Accept and Cancel, and its confirm presses a row's next arrow,
   begins or ends the name's typing, or presses the button.
 
+- **Original look (ARC-UI-068,** [ledger MW27–MW29](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
+  art the window is window 12's screen (`AreaNewCharacterArtView`, read with the browser's art): the strips, the background 765 and
+  the character as the browser draws its hero (the shared character draw, `AreaCharacterArtDraw`): the large portrait, the gender,
+  race and background names, "Initial Stats" and fifteen stats of the character's effective values (its stored stats under its
+  race, gender and chosen background's effects, as the original's object carries them), and the description field: the
+  background's story when its description number is above 1000, else "Race" and the race's text. The pointer over the gender's
+  band (the gender row) shows the gender's text there instead, over the race's band the race's text (MW28). The name field
+  (`Cloister18Font`, red) shows the typed name with a closing "|" while it is typed, centred, or its end when it is too wide
+  (MW29). Accept and Cancel stand in the bottom strip, the portrait's arrows beside the portrait and the gender's, race's and
+  background's arrows (757 / 758) beside their fields; they light under the pointer, play 3000 and 3001 and act on a release
+  over themselves; the name field is an art-less button (3026 entering it, 3027 on its press, a release over it starts the
+  typing), and a press elsewhere ends the typing first (NW8). PROJECT: the controller's focus row lights its buttons until the pointer moves; the hints
+  are not shown; Accept's refusal (506) is the line at the top. Without the art (the self-tests) the window keeps the project's
+  panel. The menu stage checks it after opening the window (`ARC-UI-068 native-smoke new character art PASS`: the art read, the
+  generic human man's texts and portrait, the gender's and race's bands, a click on the race's right and left arrows, the name
+  field's click and a press beside it); `ARC_AREA_NEWCHAR_CAPTURE=PATH` saves the window's picture to an ignored path.
+
 Since ARC-UI-034 Accept opens the [character editor](#character-editor-in-creation-mode-arc-ui-034) instead of starting the
 game, and since ARC-UI-036 the editor's Accept opens the [opening shop](#opening-shop-arc-ui-036), whose kit (the background's
 money and items, the clothes, lockpicks and bandages) the new character starts with. Not built yet (later N10b slices): the
-portrait's image in the window; the body type and art by race and gender are N15. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
+body type and art by race and gender are N15. Self-test `ARC-UI-011 self-test PASS synthetic main menu` covers the window (its rows, arrows, Escape
 back, the default name refused, a name typed through the keys and an Accept that opens the editor and, through it, starts a
 dwarf with a background and its effect, the name and the portrait); native smoke on the original data: the `menu` stage
 (`ARC_AREA_MAP_SMOKE_ONLY=menu`) also opens New Character, presses gender on a dwarf man (refused; the background stays under Steamwoven) and makes an elf woman with a background,
 steps her portraits, has Accept refuse the default name, types a name through the window's keys, accepts, spends in the
 editor and checks the session (`ARC-UI-030 native-smoke new character PASS`, `ARC-UI-034 native-smoke character editor PASS`,
 then `ARC-UI-033 native-smoke name and portrait PASS`). Checks: `AreaNewCharacterTests`, `CharacterNameRulesTests`,
-`HeroNameTests`, `AreaStatsPageTests`.
+`HeroNameTests`, `AreaStatsPageTests`, `AreaNewCharacterArtTests`.
 
 ### Character editor in creation mode (ARC-UI-034)
 

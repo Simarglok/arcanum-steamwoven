@@ -206,7 +206,8 @@ PC has a background (the original's reader answers 0 for any other object), so a
 
 N10a, FR-CHAR-005, read in the executable ([ledger BD9–BD11](../research/ledger/character.md#hero-background-in-the-session-arc-world-097)).
 The hero also keeps the background's description number (`SessionHeroState.BackgroundDescription`, the original's field 0x102,
-snapshot schema 54; 0 for none and for a pre-made hero, whose field is not read yet); `QueryHeroBackgroundDescription()` gives it.
+snapshot schema 54; 0 for none; since ARC-UI-068 a pre-made hero's comes from its prototype, its story 1039–1050, through
+`SessionHeroDefinition.BackgroundDescription`); `QueryHeroBackgroundDescription()` gives it.
 
 - **`SetHeroBackground(expected, choice, effect)`** (`background_set` 0x4C25E0): stores `choice.Background` and `choice.Description`
   (a `BackgroundChoice` of the [background table](../requirements/characters-skills.md#fr-char-005)) and adds one entry of `effect`,
