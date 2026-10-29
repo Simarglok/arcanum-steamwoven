@@ -227,6 +227,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="inventory-window-art-arc-ui-051"></a>[Inventory window art (ARC-UI-051)](ledger/ui-audio.md#inventory-window-art-arc-ui-051) | [Interface windows and audio](ledger/ui-audio.md) | IW20–IW25 |
 | <a id="loot-window-art-arc-ui-052"></a>[Loot window art (ARC-UI-052)](ledger/ui-audio.md#loot-window-art-arc-ui-052) | [Interface windows and audio](ledger/ui-audio.md) | IW26–IW32 |
 | <a id="round-view-arc-ui-054"></a>[Round view (ARC-UI-054)](ledger/ui-audio.md#round-view-arc-ui-054) | [Interface windows and audio](ledger/ui-audio.md) | IW33–IW34 |
+| <a id="steal-window-arc-ui-065"></a>[Steal window (ARC-UI-065)](ledger/ui-audio.md#steal-window-arc-ui-065) | [Interface windows and audio](ledger/ui-audio.md) | IW35–IW36 |
 | <a id="cursor-art-arc-ui-056"></a>[Cursor art (ARC-UI-056)](ledger/ui-audio.md#cursor-art-arc-ui-056) | [Interface windows and audio](ledger/ui-audio.md) | CU1–CU6, CUA1 |
 | <a id="hovered-object-arc-ui-057"></a>[Hovered object (ARC-UI-057)](ledger/ui-audio.md#hovered-object-arc-ui-057) | [Interface windows and audio](ledger/ui-audio.md) | OH1–OH9 |
 | <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW10 |

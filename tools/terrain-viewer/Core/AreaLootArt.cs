@@ -20,7 +20,9 @@ public readonly record struct AreaLootHit(int? Cell, AreaInventoryIcon? Icon, in
 /// window's 800 × 400 (<see cref="AreaInventoryArtLayout"/>): the background 0x5782D0 is art 234 <c>Loot</c> at (0, 0) and the pack art
 /// 221 at (358, 0) as in mode 0; the holder's image at (183, 33); the holder's grid of 10 columns by 8 shown rows of 32 pixels from (8, 136),
 /// scrolled by whole rows; the Take all button 808 at (301, 47); the hero's grid, counts and boxes as in mode 0, the hero's doll and weight
-/// lines not drawn (the toggle 0x68150C is clear at every open). Godot-free.
+/// lines not drawn (the toggle 0x68150C is clear at every open). ARC-UI-065: the steal window (mode 3, a living NPC whose pocket the hero
+/// picks) is the same frame without the Take all button (made in mode 2 alone, IW30); a drop across the two grids and a right release are
+/// pick-pocket attempts (ledger IW35–IW36). Godot-free.
 /// </summary>
 public static class AreaLootArtLayout
 {
@@ -64,6 +66,9 @@ public static class AreaLootArtLayout
         CombatFieldReader.ContainerType => ContainerImages.GetValueOrDefault(description, ContainerImage),
         _ => null,
     };
+
+    /// <summary>ARC-UI-065: the Take all button is made, drawn and hit in the loot window (mode 2) alone (0x572815..0x572D85, IW30).</summary>
+    public static bool TakeAllShown(AreaInventoryMode mode) => mode == AreaInventoryMode.Loot;
 
     /// <summary>The scroll's largest value for a holder.</summary>
     public static int ScrollMax(bool container) => container ? ContainerScrollMax : CritterScrollMax;
@@ -147,15 +152,34 @@ public static class AreaLootArtLayout
         return hit.Cell is { } cell && AreaInventoryDrag.ItemAt(view.Grid, cell) is { } own ? new(own.Entity, null, cell - own.Slot) : null;
     }
 
-    /// <summary>A left release with an item held: the holder's item on the hero's grid is taken (<see cref="AreaInventoryDropKind.Take"/>);
-    /// on a box the refused art shows (IW23) and it goes back; the hero's item on its grid or a box as in mode 0. NOT READY: a hero's item
-    /// released on the holder's grid (the move into the holder) goes back.</summary>
-    public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaLootHit hit)
+    /// <summary>A left release with an item held: the holder's item on the hero's grid is taken (<see cref="AreaInventoryDropKind.Take"/>;
+    /// in the steal window an attempt to steal it, 0x574EB8 → 0x575180, IW35); on a box the refused art shows (IW23) and it goes back; the
+    /// hero's item on its grid or a box as in mode 0. ARC-UI-065: in the steal window the hero's item released on the holder's grid is an
+    /// attempt to plant it (<see cref="AreaInventoryDropKind.Plant"/>, 0x575100). NOT READY: in the loot window that release (the move into
+    /// the holder, 0x575360) and either window's move of a holder's item within its own grid go back.</summary>
+    public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaLootHit hit, AreaInventoryMode mode)
     {
         ArgumentNullException.ThrowIfNull(held);
         if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Take, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
+        if (hit.Location is { } location && mode == AreaInventoryMode.Steal) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
         if (hit.Location is not null || hit.TakeAll) return new(AreaInventoryDropKind.PutBack, held);
         return AreaInventoryDrag.Release(held, new AreaInventoryHit(hit.Cell, null, hit.Icon));
+    }
+
+    /// <summary>
+    /// ARC-UI-065: a right release with nothing held (0x574262..0x574430, IW36): in modes 1–3 the item under the point moves to the other
+    /// side, the holder's to the hero (<see cref="AreaInventoryDropKind.Take"/>; in the steal window an attempt to steal it) and the hero's
+    /// grid item to the holder (in the steal window an attempt to plant it, <see cref="AreaInventoryDropKind.Plant"/>). Null on no item and
+    /// for the hero's item in the loot window (NOT READY: the move into the holder, 0x575360). The original first asks the receiving side
+    /// for room (0x466510; a refusal prints its reason, 0x4673F0, and nothing else happens); PROJECT: the session's insert check of the move
+    /// decides instead.
+    /// </summary>
+    public static AreaInventoryDrop? RightRelease(AreaInventoryView view, AreaLootHit hit, AreaInventoryMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        if (mode is not (AreaInventoryMode.Loot or AreaInventoryMode.Steal) || Press(view, hit) is not { } item) return null;
+        if (item.Partner) return new(AreaInventoryDropKind.Take, item);
+        return mode == AreaInventoryMode.Steal ? new(AreaInventoryDropKind.Plant, item) : null;
     }
 
     /// <summary>The art a box shows while <paramref name="held"/> is over it: the holder's own item the refused art (348, 347), the hero's

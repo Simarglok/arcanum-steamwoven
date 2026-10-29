@@ -5,7 +5,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-UI-052: the loot window's original layout (ledger IW26–IW32): the holder's grid and its scroll, the hit test, the press and
-/// release of the holder's items, the boxes' refused art and the holder's image (no game data).</summary>
+/// release of the holder's items, the boxes' refused art and the holder's image (no game data). ARC-UI-065: the steal window's frame, drops
+/// and right releases (IW35–IW36).</summary>
 [TestClass]
 public sealed class AreaLootArtTests
 {
@@ -64,10 +65,10 @@ public sealed class AreaLootArtTests
         var held = AreaLootArtLayout.Press(view, new AreaLootHit(null, null, 21, false));
         Assert.AreEqual(new AreaInventoryHeld("loot:1", null, 10) { Partner = true }, held, "its lower cell: the grab's offset");
         Assert.IsNull(AreaLootArtLayout.Press(view, new AreaLootHit(null, null, 12, false)));
-        Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.Release(held!, new AreaLootHit(5, null, null, false)).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false)).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, new AreaLootHit(null, null, 30, false)).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, AreaLootHit.None).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.Release(held!, new AreaLootHit(5, null, null, false), AreaInventoryMode.Loot).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Loot).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, new AreaLootHit(null, null, 30, false), AreaInventoryMode.Loot).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, AreaLootHit.None, AreaInventoryMode.Loot).Kind);
     }
 
     [TestMethod]
@@ -76,9 +77,9 @@ public sealed class AreaLootArtTests
         var view = View();
         var own = AreaLootArtLayout.Press(view, new AreaLootHit(0, null, null, false));
         Assert.AreEqual(new AreaInventoryHeld("own:1", null, 0), own);
-        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.GridMove, own!, GridSlot: 7), AreaLootArtLayout.Release(own!, new AreaLootHit(7, null, null, false)));
-        Assert.AreEqual(AreaInventoryDropKind.DropToGround, AreaLootArtLayout.Release(own!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false)).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(own!, new AreaLootHit(null, null, 3, false)).Kind, "NOT READY: into the holder");
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.GridMove, own!, GridSlot: 7), AreaLootArtLayout.Release(own!, new AreaLootHit(7, null, null, false), AreaInventoryMode.Loot));
+        Assert.AreEqual(AreaInventoryDropKind.DropToGround, AreaLootArtLayout.Release(own!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Loot).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(own!, new AreaLootHit(null, null, 3, false), AreaInventoryMode.Loot).Kind, "NOT READY: into the holder");
     }
 
     [TestMethod]
@@ -121,5 +122,49 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(2, grid[0].Location, "right of the 2 × 2 item placed at 0");
         Assert.AreEqual(3, grid[2].Location);
         Assert.AreEqual(0, grid[1].Location);
+    }
+
+    [TestMethod]
+    public void TheStealWindowIsTheLootFrameWithoutTakeAll()
+    {
+        Assert.IsTrue(AreaLootArtLayout.TakeAllShown(AreaInventoryMode.Loot));
+        Assert.IsFalse(AreaLootArtLayout.TakeAllShown(AreaInventoryMode.Steal), "the button is made in mode 2 alone (IW30)");
+        Assert.IsFalse(AreaLootArtLayout.TakeAllShown(AreaInventoryMode.Own));
+        Assert.AreEqual(AreaInventoryHole.Corner(AreaInventoryMode.Loot), AreaInventoryHole.Corner(AreaInventoryMode.Steal));
+        Assert.AreEqual(AreaInventoryHole.Art(AreaInventoryMode.Loot), AreaInventoryHole.Art(AreaInventoryMode.Steal));
+    }
+
+    [TestMethod]
+    public void AStealWindowDropAcrossTheGridsIsATheftOrAPlant()
+    {
+        var view = View(new AreaLootGridItem("loot:1", 11, 1, 2, "Sword", Kind));
+        var partner = AreaLootArtLayout.Press(view, new AreaLootHit(null, null, 11, false))!;
+        var own = AreaLootArtLayout.Press(view, new AreaLootHit(0, null, null, false))!;
+        Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.Release(partner, new AreaLootHit(5, null, null, false), AreaInventoryMode.Steal).Kind,
+            "the victim's item on the hero's grid: a theft (0x575180)");
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Plant, own, GridSlot: 3),
+            AreaLootArtLayout.Release(own, new AreaLootHit(null, null, 3, false), AreaInventoryMode.Steal), "the hero's item on the victim's grid: a plant (0x575100)");
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(partner, new AreaLootHit(null, null, 30, false), AreaInventoryMode.Steal).Kind,
+            "NOT READY: a move within the victim's grid");
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(partner, new AreaLootHit(null, AreaInventoryIcon.Use, null, false), AreaInventoryMode.Steal).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.GridMove, AreaLootArtLayout.Release(own, new AreaLootHit(7, null, null, false), AreaInventoryMode.Steal).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.DropToGround, AreaLootArtLayout.Release(own, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Steal).Kind,
+            "the hero's own item on the drop box drops as in mode 0");
+    }
+
+    [TestMethod]
+    public void ARightReleaseMovesTheItemToTheOtherSide()
+    {
+        var view = View(new AreaLootGridItem("loot:1", 11, 1, 2, "Sword", Kind));
+        var lower = new AreaLootHit(null, null, 21, false);
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Take, new AreaInventoryHeld("loot:1", null, 10) { Partner = true }),
+            AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Steal));
+        Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Loot)!.Kind);
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Plant, new AreaInventoryHeld("own:1", null, 0)),
+            AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Steal));
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Loot), "NOT READY: into the holder");
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, null, 12, false), AreaInventoryMode.Steal), "no item");
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Steal));
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Own), "the own window's right release is the use (IW5)");
     }
 }

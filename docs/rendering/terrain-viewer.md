@@ -1084,17 +1084,26 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   art read, every grid and worn item's art read, three lines).
 - **Loot window art (ARC-UI-052,** [plan](../ui/original-windows.md#loot-window-done-arc-ui-052),
   [ledger IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052); `AreaLootArtLayout`): with the game's art a dead
-  NPC's, junk pile's or container's window (not the steal window) shows the loot window's look in the same frame: the `Loot` art (234)
+  NPC's, junk pile's or container's window (ARC-UI-065: and the steal window, below) shows the loot window's look in the same frame: the `Loot` art (234)
   on the left with the body's image at (183, 33) (by race or critter flags, a container by its description), the body's grid of 10 × 8
   cells from (8, 136) with each item's inventory art at its inventory location, over its art's cells (ARC-UI-055, `QueryItemCells`; a junk pile's at its pile slot; PROJECT: an item the
   session keeps at no location at the first free place; worn items left out, as the original's grid view), cut
   to the shown rows and scrolled by the mouse wheel (maximum 4 rows, a container 88), the Take all button (808) at (301, 47), and the
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
   grid is taken through the same path as its Take button (a stack asks how many; PROJECT: into the first free cells); released on a
-  box (which shows the refused art 348 / 347) or elsewhere it goes back; a right click uses nothing here. The "Diagnostic view"
+  box (which shows the refused art 348 / 347) or elsewhere it goes back; ARC-UI-065: a right release on a body's item takes it the same
+  way (IW36), on a hero's item it does nothing here. The "Diagnostic view"
   switch keeps the Take buttons. NOT READY: the doll views and their toggles, the scroll bar's art, a hero's item moved into the body,
-  a follower's portrait, the steal window. The native smoke checks every Crash Site body's window
+  a follower's portrait. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag).
+- **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
+  pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
+  flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
+  released on the victim's grid one plant attempt (`AreaInventoryDropKind.Plant`), and a right release on either side's item makes the
+  same attempt (PROJECT: the item goes to the receiving side's first free place); the boxes refuse the victim's items and drop or use the
+  hero's. The "Diagnostic view" switch keeps the Steal and Plant buttons. The `pickpocket` stage drives the theft and the plant by
+  drags and the first plain theft by a right release when the original look shows (`Look` and `Dragged` in its PASS line;
+  `ARC_AREA_STEAL_CAPTURE=PATH.png` saves the window).
 - **Round view (ARC-UI-054,** [ledger IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054); `AreaInventoryHole`): the
   window's open centres the camera on the PC, and in the original look of the own window and the loot window the 89 × 89 rectangle
   at (11, 9) or (16, 17) shows the screen's square of 178 game pixels around the PC (centred 15 game pixels above its foot point) at
@@ -1104,8 +1113,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
   frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
   barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
-  goes back and the window closes outside the own window); the barter and steal windows draw the diagnostic look, so their round view
-  shows once their original look is built. NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
+  goes back and the window closes outside the own window); the barter window draws the diagnostic look, so its round view shows once
+  its original look is built (the steal window's shows since ARC-UI-065). NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
   the window stays open). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.

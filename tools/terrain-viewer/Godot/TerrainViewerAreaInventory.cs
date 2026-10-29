@@ -428,6 +428,13 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-052 loot drag take item={item} cell={drop.GridSlot?.ToString() ?? "-"}");
                 TakeFromBody(item);
                 return;
+            case AreaInventoryDropKind.Plant:
+                // ARC-UI-065: the hero's item released on the victim's grid in the steal window, or a right release on the hero's item, is one plant
+                // attempt (0x575100, IW35; PROJECT: a planted item goes to the victim's first free place, not the released cell).
+                GD.Print($"ARC-UI-065 steal drag plant item={item} location={drop.GridSlot?.ToString() ?? "-"}");
+                if (holder is not null && holder == _pickPocketVictim) { PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); return; }
+                message = $"{name} went back to its place";
+                break;
             case AreaInventoryDropKind.UseIcon:
                 // The item goes back to its place and is used: at the hero with a Shift key held, with no target otherwise (IW6).
                 UseHeroItem(item, AreaItemUseSource.UseIcon, Godot.Input.IsKeyPressed(Key.Shift));

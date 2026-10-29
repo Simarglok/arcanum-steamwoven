@@ -50,7 +50,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [HD presentation contract: scaled crop, Legacy anchors, per-frame fallback, toggle (ARC-RENDER-013) — no HD runtime yet](rendering/hd-presentation-contract.md)
 - [HD upscale methods at 2×: AI vs pixel-art scalers, alpha, palette slots, terrain seams, licences (ARC-RES-033) — research only](rendering/hd-upscale-research.md)
 - [Generative HD re-detailing at 4×: SDXL + ControlNet Tile, local style LoRA, shading lock, walk flicker, licences (ARC-RES-038) — research only](rendering/hd-generative-redetail.md)
-- [Original look of the inventory, loot, character, logbook and world-map windows (ARC-UI-051: plan; inventory done; ARC-UI-052: loot done)](ui/original-windows.md)
+- [Original look of the inventory, loot, character, logbook and world-map windows (ARC-UI-051: plan; inventory done; ARC-UI-052: loot done; ARC-UI-065: steal done)](ui/original-windows.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)

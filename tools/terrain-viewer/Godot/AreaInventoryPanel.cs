@@ -133,11 +133,11 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal Button LookToggleForSelfTest => _lookToggle;
 
     /// <summary>ARC-UI-051: the window shows the original look: its art read, the player's own window (mode 0) and the diagnostic view not
-    /// chosen. ARC-UI-052: a loot window (mode 2) too when the loot arts read; stealing and the other modes keep the diagnostic window.</summary>
+    /// chosen. ARC-UI-052: a loot window (mode 2) too when the loot arts read; ARC-UI-065: and the steal window (mode 3) on the same frame.</summary>
     public bool ArtMode => _look is not null && !_diagnosticChosen && OriginalAvailable;
 
-    /// <summary>The open view has an original look: the player's own window, or a loot window with the loot arts.</summary>
-    private bool OriginalAvailable => _view is { Holder: null } || _view is { Steal: false } && _look is { LootReady: true };
+    /// <summary>The open view has an original look: the player's own window, or a loot or steal window with the loot arts.</summary>
+    private bool OriginalAvailable => _view is { Holder: null } || _view is not null && _look is { LootReady: true };
 
     /// <summary>ARC-UI-052: the open window's view (null when closed).</summary>
     public AreaInventoryView? CurrentView => IsOpen ? _view : null;
