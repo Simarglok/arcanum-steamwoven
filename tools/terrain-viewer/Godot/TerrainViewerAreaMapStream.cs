@@ -363,7 +363,9 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             var home = _readyMapName!; var homeRuntime = CurrentAreaMap; var session = _areaSession;
-            var there = await UseMapExitAsync(site => site.DestinationRuntime != homeRuntime) ?? throw new InvalidOperationException("AREA_ROUND_TRIP_NO_EXIT");
+            // ARC-RENDER-036: a window without a usable exit to another map (the generated wilderness) has no round trip.
+            if (await UseMapExitAsync(site => site.DestinationRuntime != homeRuntime) is not { } there)
+            { GD.Print($"ARC-RENDER-024 native-smoke round-trip NONE (no usable exit to another map in the window of {home})"); return; }
             Require(_mapWindowCentre is null && SameMapName(_readyMapName, there.To), $"NOT_ARRIVED {_readyMapName}");
             var back = await UseMapExitAsync(site => site.DestinationRuntime == homeRuntime) ?? throw new InvalidOperationException("AREA_ROUND_TRIP_NO_EXIT_BACK");
             Require(SameMapName(_readyMapName, home) && _mapWindowCentre is { } centre && (back.Arrival.X >> 6, back.Arrival.Y >> 6) == (centre.X, centre.Y), $"NOT_BACK {_readyMapName} {_mapWindowCentre}");
