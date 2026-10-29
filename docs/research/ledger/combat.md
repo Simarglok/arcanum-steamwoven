@@ -403,16 +403,19 @@ target object, what it costs in a round and what damage a thrown item deals). Re
 | TT3 | dispatcher (0x4B3170, 0x4B347B–0x4B34BE) | When the line of fire names no object the target stays none and the shared check (0x4C7090) still runs; only a target that is not a critter (type 15 or 16) skips it (flag 0x2, a hit). Its outcome decides the ranged path (0x4B39B0): a flight to the location or a scatter. | Original |
 | TT4 | throw starter (0x434F80), attack start (0x434B00), shared goal callback (0x433270) | The starter's gate (0x4348E0) is called with cost 0 and passes the PC whose subturn it is; the attack start's throw branch skips the attack cost (0x4B7C30); the throw goal's end charges 2 through 0x433270, which exempts the local PC (0x40D9F0), and the end step's pending cost exempts it too (EX6). So in a round the local PC throws, from the inventory or with a "default throws" weapon, for no action points. | Original bug (gameplay); Original switch `PcThrowCostsNothing` |
 | TT5 | weapon damage range (0x465F70) for skill 3, weapon range (0x465E30) | For the throwing skill the item's damage comes from 0x462330 (WB8) in place of fields 0x74/0x75; the rest is the common tail: no strength bonus (melee only), a weapon's (type 5) magic damage adjustment (0x461590, field 0x76), each bound clamped to 0 .. 3 × the maximum. The weapon range of an item that is not a weapon is 1 (a weapon's: field 0x79 plus its magic adjustment 0x7A), so a thrown non-weapon carries the melee bit of the item triggers' parent hit (0x4CBAD0). | Original |
+| TT6 | object press (0x54ED30: 0x54EDFA, 0x54F1D3–0x54F250, goal start 0x54F25B) | A left press on an object with an item on the cursor (read by ARC-UI-063): the handler first returns for a PC that is not active (0x45D790), so the item stays on the cursor; a PC with object flag 0x20000 does nothing; otherwise, after the hotkey bar's own drag (0x57DE00, 0x57E8B0, the lift again), the throw takes the object's location (field 2), clears the cursor (0x573840) and starts goal 37 (0x25) through the shared goal start with the object as the goal's target. The tile press (TT2) is the branch for a press that names no object. | Original (F1) |
+| TT7 | right release (0x54E082–0x54E249) | A right release in the game view, whatever its own action (the combat-mode toggle and the rest, RR1–RR4), ends with the held item put back (0x575770) and the cursor refreshed (0x553990) when an item is on the cursor. | Original (F1) |
 
 Anomalies: TT2's lost item is a technical bug (as TA1), fixed in both modes: the session refuses a throw before the item leaves.
 TT4 is a gameplay bug under the owner's rule (2026-10-28): Original keeps the free throw, Steamwoven charges the PC the goal's 2.
 Implemented by ARC-COMBAT-023 in the session and rules (`ThrowHeroItem`, `ThrowRules.ItemDamage`/`ThrownWeapon`,
 `TurnBasedRules.ThrowActionCost`). Steamwoven differences: the item leaves the hero at the throw, not at the lift, so a worn item's
 own values still count for the throw's range and check; a critical miss's weapon and ammunition steps read the wielded weapon (as
-CW3, not read for a pack throw). Not ready: the viewer still charges a "default throws" weapon's throw the attack cost in both
-modes (ARC-UI-063 moves both throws to `ThrowActionCost`), TT3's
+CW3, not read for a pack throw). ARC-UI-063 built the viewer's part: the lift from the inventory window onto the game cursor, the
+press (TT2, TT6) and the right release's put back (TT7), and both throws (the inventory's and a "default throws" weapon's) charge
+`ThrowActionCost` in a round (TT4). Not ready: TT3's
 target-less check (the session flies the item to the location unrolled), gold and ammunition, the throw script (point 6) and the
-removal's scripts (an item with any is refused), the hotkey bar's held item, the viewer's cursor and press (ARC-UI-063).
+removal's scripts (an item with any is refused), the hotkey bar's held item, the throw animation of the inventory throw.
 
 ## Second projectile and scatter (ARC-COMBAT-018)
 

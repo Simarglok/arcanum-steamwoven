@@ -11,8 +11,8 @@ namespace Arcanum.TerrainViewer;
 // ammunition stack goes the stack path (DropHeroAmmo) after the quantity window (TerrainViewerAreaQuantity). A right click on an item (its release, IW5) or its Use button uses it with the hero
 // as user and target, the use icon with the hero as target only while Shift is held; both run the original's item use (0x462CC0,
 // AiExecutorRules.UseItemNow) over the hero's world below: read, heal with a healing kit, the item's magic through the cast host, spend
-// food and scrolls, 4 action points on the hero's turn of a round. The map drop (flag 4, a throw of the held item at a clicked tile) is NOT
-// READY: the viewer has no game cursor that holds an item.
+// food and scrolls, 4 action points on the hero's turn of a round. ARC-UI-063: in the own window an item whose use is a throw takes the
+// map drop (flag 4) onto the game cursor (TerrainViewerHeldThrow).
 public partial class TerrainViewerApp
 {
     // The last use's branch and message (the self-test and the smoke read them).
@@ -45,7 +45,9 @@ public partial class TerrainViewerApp
                 case AreaItemUseGate.Wearable: message = $"nothing: {name} is worn or has a wear location (a right click uses other items)"; break;
                 case AreaItemUseGate.NotUsable: message = $"not used: {name} cannot be used from the inventory"; break;
                 case AreaItemUseGate.NotHeroTurn: message = "not used: another critter has the turn"; break;
-                case AreaItemUseGate.Throw: message = $"not used: {name} is thrown (the throw from the map is NOT READY)"; break;
+                // ARC-UI-063: in the own window the use of a thrown item is the map drop onto the game cursor (IW6, IW17, IW18).
+                case AreaItemUseGate.Throw when holder is null: LiftToGameCursor(item, "use-icon"); return;
+                case AreaItemUseGate.Throw: message = $"not used: {name} is thrown (its use in a loot or steal window is NOT READY)"; break;
                 default:
                     if (UseNotReady(item, facts) is { } notReady) { message = notReady; break; }
                     var world = new HeroItemUse(this, facts);

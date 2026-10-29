@@ -401,7 +401,10 @@ public partial class TerrainViewerApp
         if (HeroAttackArt.Clip(_worldActor.Profile, animation) is not var (action, art, rateTable))
         { CancelAreaAttack($"the hero's body has no ART for attack animation {animation}"); return; }
         // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
-        if (!ChargeHeroAction(TurnBasedRules.AttackCost(hero.WeaponSpeed), "attack")) { CancelAreaAttack(_turnBasedNotice); return; }
+        // ARC-UI-063: a "default throws" weapon starts the throw goal instead, which costs the throw's points (TT4).
+        var throws = ShotFlight(hero) is not null && HeroThrow(goal) is not null;
+        if (!ChargeHeroAction(throws ? _areaSession!.QueryHeroThrowCost() : TurnBasedRules.AttackCost(hero.WeaponSpeed), throws ? "throw" : "attack"))
+        { CancelAreaAttack(_turnBasedNotice); return; }
         // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
         // (the throw's file drops the weapon, the art id keeps it).
         var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);

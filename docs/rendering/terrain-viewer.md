@@ -1040,8 +1040,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
   (ARC-UI-029, below). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032; the grid takes the release only after a right press on it, where the original takes any right release over the window), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
   wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
-  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw is refused there (the throw from the
-  map, IW18, is NOT READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
+  the hero as target while Shift is held and with no target otherwise; an item whose use is a throw takes the map drop onto the game
+  cursor there (IW18, ARC-UI-063, [below](#inventory-throw-from-the-game-cursor-arc-ui-063); in a loot or steal window it is NOT
+  READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
   (`AiExecutorRules.UseItemNow`) over the window's world: a scroll the hero is not clever enough for stops; an item that needs a target
   and has none opens the targeting cursor (lockpicks arm the lock pick, as *Pick a lock* does; any other item's cursor is NOT READY);
   a trap device's use is NOT READY; the item's use script (a taken item's) may stop the use; an item with spell charges or the magical
@@ -1113,15 +1114,50 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
   frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
   barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
-  goes back and the window closes outside the own window); the barter window draws the diagnostic look, so its round view shows once
-  its original look is built (the steal window's shows since ARC-UI-065). NOT READY: the own window's map drop and throw from it (IW18: the held item goes back and
-  the window stays open). The native smoke
+  goes back and the window closes outside the own window); the barter window's round view shows with its original look since
+  ARC-UI-064 (art 231, below) and the steal window's since ARC-UI-065; the component is `AreaRoundView`, shared by the inventory and
+  barter panels. ARC-UI-063: in the own window a held item released there
+  is the map drop of IW18: it goes onto the game cursor and the window closes ([below](#inventory-throw-from-the-game-cursor-arc-ui-063)). The native smoke
   checks the scale and the round view on the Crash Site bodies and the round view in the own window, and the release on the first body
   (`ARC-UI-054 round view release closed the loot window`); the own window's release is covered by the unit test of the rectangle only.
 - **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
   `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
   appears in the window, is saved by F7 and comes back with F8.
 - **HUD.** The status line shows `PC items <n>` and the last pickup/loot result.
+
+### Inventory throw from the game cursor (ARC-UI-063)
+
+The original lifts a held item onto the game cursor and throws it from there (ledger IW18, TT1, TT2, TT6, TT7, CU7); the session's
+throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-attack-runtime.md#inventory-throw-arc-combat-023)).
+
+- **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
+  (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
+  item stays and the window says why) and, NOT READY, gold and ammunition (the original splits a quantity first) and an item with a
+  throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
+  the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
+- **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
+  up and left of the pointer and the cursor art over it on its own hot point (`AreaHeldCursor.Compose`, CU7; the original sets the
+  hot point at (2, 2) of the item art, the overlay's exact pixel place was not read). Without the item's art the cursor stays the
+  plain art. PROJECT: the inventory window keeps its own drag image (the original's cursor there is the same CU7 image), drawn at the
+  window's scale with the grab offset its drop rule reads (IW10–IW13). The status line shows the item and its thrown range
+  (`QueryHeroThrowRange`).
+- **Press.** A left press in the game view, under the world press's guards (another critter's turn ignores it), throws the item: at
+  the tile of the object under the pointer (0x54ED30), else at the pressed tile. A hero that cannot act puts it back (0x575770; the
+  original's press on an object then leaves it held). The struck critter is the line of fire's blocker when it is a living NPC with
+  combat values, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays on the cursor). In a turn-based
+  round the throw first charges `QueryHeroThrowCost` (Steamwoven 2, the Original setting 0, TT4; a wielded boomerang still away or a
+  hero that cannot act puts the item back before the charge, and a throw ends the hero's walk); so does a "default throws" weapon's
+  attack, which used to charge the attack's cost. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
+  struck critter as the critter attack's flight, a throw without one (or a miss's scatter) to its destination without a target; the
+  art is a weapon's projectile art, else the item's own art drawn unfaced (PF14's item rotation and PF11's size arc are NOT READY).
+  The item lands where its flight ends. A refused throw empties the cursor with the reason (the item never left).
+- **Put back.** A right release in the game view (0x54E228), a window opening, a map change, or the item no longer held puts it back.
+- **Smoke.** The ranged stage (needs `--hero`) lifts the kit weapon from the round view (straight from the window without the art),
+  checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
+  the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
+  `AreaHeldThrowTests`.
+- **Not ready.** The throw animation (the item leaves at once), the hotkey bar's lift, the lift of gold and ammunition, the use-icon
+  throw in the loot and steal windows.
 
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
 after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`
@@ -1614,12 +1650,12 @@ While `crash-site-area` has a game session, the palette's **Save game (save list
 open the save and load windows over the session's save folder (`user://saves`, map mode `user://saves/map`, an
 automated run its own folder). The original opens these windows from its in-game menu, which is a later task; the
 rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)); since ARC-UI-062 the
-window's frame, buttons and list are the original's with the game's art (below), its picture and info the project's.
+window's frame, buttons and list are the original's with the game's art (below), and since ARC-UI-067 its picture and info too.
 
 - **Folder.** `GameSaveLibrary` ([save list](../world/game-session-runtime.md#save-list-arc-ui-010)): the auto-save
   (`quicksave`, the original's `SlotAuto` "Auto-Save" that F7 writes) and numbered saves `slot0000`..`slot9998`,
-  each a snapshot file with a details file (description, hero and level, place, game date and time) and a PNG
-  preview of the screen fitted into the original's fixed 468×300.
+  each a snapshot file with a details file (description, hero and level, place, game date and time, the hero's
+  portrait and the story state) and a PNG preview of the screen fitted into the original's fixed 468×300.
 - **List.** The auto-save first, then the other saves newest first by file date. A row shows the description
   (the slot name when it is empty); the side shows the details and the preview; a save without details (a quick
   save from before ARC-UI-010) or with details from another snapshot is listed and marked.
@@ -1648,14 +1684,25 @@ window's frame, buttons and list are the original's with the game's art (below),
   scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
   each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
   the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
-  characters the font lacks are not drawn, though they are saved). PROJECT: the stored preview is fitted into the preview hole; the
-  selected save's details, a notice and the Yes/No question stand in the bottom strip's middle box (a question without the
-  details), and while a question is open the art buttons and rows do nothing. Not drawn yet (next slice): the original's picture
-  cover and info texts, the info toggle, the hero's portrait lens, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
+  characters the font lacks are not drawn, though they are saved). PROJECT: the selected save's details, a notice and the Yes/No
+  question stand in the bottom strip's middle box (a question without the details), and while a question is open the art buttons,
+  the toggle and the rows do nothing. Not drawn yet: what the lens shows, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
   diagnostic window. The menu stage (`ARC-UI-062 native-smoke save window art PASS`, Load Game from the single-player window with
   the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
   the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
   saves each window's picture to an ignored path (`-load` / `-save` added to the name).
+- **Picture and info (ARC-UI-067,** [ledger MW22–MW25](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the selected
+  save's picture in the preview (281, 96, 468 × 300; PROJECT: centred, as the stored picture keeps the screen's shape); over it, while the info display is on, the hero's name, the
+  small portrait at (484, 139), "Level N" (MainMenu.mes 5051), the description (the auto-save's "Auto-Save"), the place (5050 when
+  it has no name), the date ("%d/%d/%d" in the locale's order) and time ("%02d:%02d:%02d") ending at x 448, and the story state's
+  text from `mes/storystate.mes` broken at spaces over four narrowing lines, all in art 27 near-white at the exe's places; then the
+  cover 748 over the preview, whatever it shows. No save selected (or the save window's new-save row): black. A save without
+  readable details: black with 5005 in red. The toggle 747 at the screen's (499, 82) is a toggle button: a press turns it on (down,
+  3000) and hides the info, the next turns it off (3001) and shows it; the display's state outlives the window while the button opens
+  up, as the original. The lens 746 at the screen's (84, 51) is drawn without what the original puts in it (the hero's location,
+  not a portrait; F0). The menu stage checks it after the row press (`ARC-UI-067 native-smoke save info PASS`: the texts at their
+  places, the portrait drawn, the toggle hiding and showing them; `-info` capture); the scene stage's save window checks the black
+  preview of the new-save row.
 
 Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
 temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
@@ -1664,7 +1711,7 @@ preview when a frame can be read), the auto-save first and not deletable, a load
 loading the newest save (the auto-save, then a numbered save made newer; the HUD names the loaded save), a delete
 asked first that clears the selection. The native quick-save smoke checks the auto-save's
 details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
-original save picture, info texts and portrait (ARC-UI-062 next slice), sorting or paging options, a text cursor of the original's
+lens's content, the scroll bar's art and the hints (next slices), sorting or paging options, a text cursor of the original's
 own, and the original `.gsi` format.
 
 ### Bug report (ARC-DEV-051)
@@ -2352,16 +2399,41 @@ the right header, the container's buy list in brackets after the merchant's); th
 and identifies the goods (log line `ARC-WORLD-090 barter stock`); a broken container leaves the merchant's own list, another refused
 open shows no window.
 
-**Not implemented:** the original window art, grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
+**Original look (ARC-UI-064,** [ledger BW1–BW5](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064), plan
+[original windows](../ui/original-windows.md#barter-window-done-arc-ui-064); `AreaBarterArtLayout`): with the game's art (every barter
+art of `AreaBarterArtLayout.ArtNumbers` read, log `ARC-UI-064 barter art ready=True`) the window in the world draws the original barter
+window, the inventory window's 800 × 400 frame in interface mode 1 at its place between the bars: background 235 `Barter` (825
+`Barter_Follower` in a follower's window while the hero leads another follower too), the merchant's image at (183, 33) (its race or
+flags, as the loot window's; the merchant's even when a substitute container is shown), its name centred on x 215, the quote line at
+(89, 128), the shown object's grid (the substitute container's, else the merchant's; worn items left out) of 10 × 7 rows of 32 from
+(8, 168) scrolled by the mouse wheel (largest scroll 5, or 89 for a container), the hero's grid, counts and drop and use boxes as in its
+own window, the gamble box 345 at (703, 236), and the round view at (16, 17) with art 231 (the open centres the camera on the PC). A
+merchant's item pressed and released on the hero's grid is bought, a hero's item released on the merchant's grid sold, both through the
+trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
+a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
+`… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
+original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
+shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
+only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); the opening shop's docked window keeps the
+diagnostic look. NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
+goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
+generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll
+toggles, the scroll bar's art, a follower's portrait as the image, the original fonts.
+
+**Not implemented in the diagnostic window:** grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,
 the follower menu and cycling ([barter runtime](../world/barter-runtime.md#not-modelled-not-ready)). ARC-WORLD-096: every open schedules
 the restock of the window's container (else the merchant), logged as `ARC-WORLD-096 restock schedule`, and a loot open schedules the
 looted holder's; the event world runs the restock through the viewer's restock host ([barter runtime](../world/barter-runtime.md#restock-in-the-viewer-arc-world-096)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
-with the trade sound, `Escape`, a replaced session closes it); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
+with the trade sound, `Escape`, a replaced session closes it; ARC-UI-064 over a synthetic art set: the original look in mode 1 with
+background 235, a resting pointer's quote, a sale and a buy by drag with their coins and sounds, a sale by a right release, a ware
+released on its own grid changing nothing, the switch and back, a release on the round view closing the window); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
 its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
 restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
-one); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
+one); with it `ARC-UI-064 native-smoke barter-art PASS` on the live window (mode 1, the background by the follower rule, the merchant's
+image and every shown item's art read, the round view shown, the first ware's quote, that ware released on its own grid going back;
+`ARC_AREA_BARTER_CAPTURE=PATH.png` saves the window); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
 screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the
 window opened again shows the new wares; then `ARC-WORLD-103 native-smoke redress PASS`: the first living NPC of the map with an
 inventory source of its own whose set the project admits and combat values is scheduled through the window open's path, its event regenerates it and it wields its

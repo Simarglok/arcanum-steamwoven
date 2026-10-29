@@ -370,7 +370,10 @@ is not separately synced. One process per slot; there is no cross-process lock.
 [save and load windows](../rendering/terrain-viewer.md#save-list-arc-ui-010) and F7/F8. Each save
 `NAME` is a snapshot slot `NAME.json` (`GameSessionSaveSlot`, unchanged), a details file
 `NAME.meta.json` and an optional preview `NAME.png`. The rules are the original's
-([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)).
+([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)). The details file (schema 2 since ARC-UI-067) holds the
+description, hero name, level, place, map, game date and time with seconds, the hero's portrait id and the story state, the facts the
+original's save info keeps ([MW22](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)); a schema 1 file still reads, with
+portrait 0, no story state and second 0.
 
 | Entry | Contract |
 | --- | --- |
@@ -378,7 +381,7 @@ is not separately synced. One process per slot; there is no cross-process lock.
 | `List()` | The auto slot first, then newest first by the snapshot file's last write time (ties: the higher name first), as the original's save window sorts by file date. Each `GameSaveEntry` has its byte count, date, preview flag and `GameSaveDetails`: `Present`, `Missing` (no details file), `Damaged` (not strict UTF-8, over 16 KiB, not exactly the written properties, out of bounds) or `Stale` (written for another snapshot: its recorded byte count differs). `DisplayDescription` falls back to "Auto-Save" or the slot name. Bounded to 10,000 entries (`Truncated`); a folder that cannot be listed is `ListFailed`; a missing folder is an empty list. |
 | `Latest()` | The newest save by file date, the auto slot included (the original's latest-save helper behind F8), or null. It reads file dates only, no details. |
 | `Create(snapshot, summary, png)` | A new save named the highest number plus one (`slot0000` when there is none; gaps are not reused, the auto slot is not counted); `SlotNumbersExhausted` once that reaches 9999, as the original refuses. A truncated list refuses (`ListFailed`) rather than reuse a number. |
-| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour and minute in range) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`, and the old details or preview of that name are removed so the list never shows another snapshot's (the save is then listed with `Missing` details); a save without a preview removes the old preview. The host asks before overwriting. |
+| `Write(name, snapshot, summary, png)` | Validates the summary (one-line texts: description ≤ 80, hero ≤ 64, place ≤ 128 characters; level 0..1000; month, day, hour, minute and second in range; portrait not negative) and the preview (PNG signature, ≤ 2 MiB) before anything is written (`InvalidSummary`). Then the snapshot is written atomically by the slot (`SnapshotFailed` keeps the previous save, its details and preview); then the details and the preview, each atomically. A failure there leaves a loadable save and a `Warning`, and the old details or preview of that name are removed so the list never shows another snapshot's (the save is then listed with `Missing` details); a save without a preview removes the old preview. The host asks before overwriting. |
 | `Delete(name)` | `Protected` for the auto slot (the original's delete helper refuses its auto-save name); `NoSuchSave`; otherwise the snapshot is deleted first (`DeleteFailed` removes nothing), then the details, preview and temporary files (a leftover is a `Warning`). |
 | `ReadThumbnail(name)` | The preview's bytes when present, PNG-signed and within the bound; else null. |
 

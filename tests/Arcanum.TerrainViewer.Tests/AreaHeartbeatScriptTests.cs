@@ -17,19 +17,21 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaHeartbeatScriptTests
 {
-    private const byte Attachee = 1, Number = 3, GlobalFlag = 4;
+    private const byte Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4, Everyone = 8, Looped = 10;
     private const int ChosenFlag = 2350;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
     private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
     private static ScrObjectRef Ref(int index) => new(1, Entity(index));
 
-    // A row with a heartbeat slot (point 19) and its object flags.
-    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0)
+    // A row with a heartbeat slot (point 19), optionally a dialog slot (point 9), and its object flags.
+    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0)
     {
+        var slots = new List<AreaSparseElement> { new(ScrPoint.Heartbeat, [0, 0, script]) };
+        if (dialog != 0) slots.Insert(0, new(ScrPoint.Dialog, [0, 0, dialog]));
         var fields = new List<AreaFieldValue>
         {
-            new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Heartbeat, [0, 0, script])], null),
+            new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, slots, null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, objectFlags, [], null),
         };
         return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
@@ -82,6 +84,21 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00782toggle.scr", Program(Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 783: a dialog, outside the heartbeat set.
             Write("scr/00783talk.scr", Program(Do(new(ScrCatalogue.Action.Dialog, (Attachee, -1), N(1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // ARC-SCRIPT-047: 784 is the opening talk's heartbeat (1100's shape): for everyone in the vicinity, a looped PC gets a call-ex of
+            // the attachee's dialog point at line 1; then it removes itself and skips the default. 785 is the dialog script it calls: line 1
+            // sets local flag 2 and asks for node 3.
+            Write("scr/00784opening.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (Everyone, 0))),
+                Do(new(ScrCatalogue.Action.GetObjectType, (Looped, 0), (Local, 0))),
+                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(15)), new(ScrCatalogue.Action.DoNothing), new(ScrCatalogue.Action.Goto, N(6))),
+                Do(new(ScrCatalogue.Action.CallScriptEx, (Attachee, -1), N(ScrPoint.Dialog), N(1), (Looped, 0))),
+                Do(new(ScrCatalogue.Action.RemoveThisScript)),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault)),
+                Do(new(ScrCatalogue.Action.LoopEnd))));
+            Write("scr/00785talk.scr", Program(
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault)),
+                Do(new(ScrCatalogue.Action.SetLocalFlag, N(2))),
+                Do(new(ScrCatalogue.Action.Dialog, N(3)))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -89,7 +106,11 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     private static AreaUseScriptHost Host(GameSessionOwner session, ScriptContent content, List<ScrObjectRef>? kills, params AreaObjectRecord[] shown) =>
-        new(session, 1, shown, [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+        HostAt(session, content, kills, null, shown);
+
+    private static AreaUseScriptHost HostAt(GameSessionOwner session, ScriptContent content, List<ScrObjectRef>? kills, Arcanum.Simulation.Movement.CellCoord? pc,
+        params AreaObjectRecord[] shown) =>
+        new(session, 1, shown, [], content, new AreaScriptWorld(() => pc, _ => false, _ => null, () => null,
             kills is null ? null : obj => { kills.Add(obj); return true; }));
 
     private static void SetFlag(GameSessionOwner session, int flag)
@@ -190,6 +211,30 @@ public sealed class AreaHeartbeatScriptTests
         });
     }
 
+    [TestMethod]
+    public void An_opening_heartbeat_asks_for_the_npc_s_talk_once_the_pc_is_near_and_keeps_the_dialog_slot()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // The NPC stands at (11, 20); the vicinity reaches 10 tiles on both axes (PG13).
+            var npc = Row(1, 16, 784, dialog: 785);
+            var far = HostAt(session, content, null, new(22, 20), npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, far.Outcome, far.Detail);
+            Assert.IsNull(far.Dialog, "the PC is 11 tiles away");
+            Assert.AreEqual((ScrOutcome.SkipDefault, 784), (far.Run!.Outcome, Host(session, content, null, npc).Slot(Ref(1), ScrPoint.Heartbeat)!.Value.Script));
+
+            var host = HostAt(session, content, null, new(21, 30), npc);
+            var near = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, near.Outcome, near.Detail);
+            Assert.AreEqual(new ScrDialogStart(host.Pc, Ref(1), 785, 2, 3), near.Dialog, "at the dialog point");
+            // The heartbeat removed itself; the dialog slot keeps the flag its run set, under the keys the dialog host reads.
+            Assert.AreEqual(new ScrSlot(0, 0, 0), host.Slot(Ref(1), ScrPoint.Heartbeat));
+            Assert.AreEqual(new ScrSlot(785, 1u << 2, 0), host.Slot(Ref(1), ScrPoint.Dialog));
+            Assert.AreEqual(1L << 2, session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForEntity(Entity(1), AreaConversationState.LocalFlagsProperty)));
+        });
+    }
+
     // ---- opt-in: the installed Crash Site ----
 
     [TestMethod, TestCategory("RealData")]
@@ -220,5 +265,39 @@ public sealed class AreaHeartbeatScriptTests
         CollectionAssert.AreEquivalent(heroes.Where((_, i) => i != 5).Select(h => AreaUseScriptHost.EntityId(h)).ToArray(), kills.Select(k => k.Code).ToArray());
         Assert.IsTrue(AreaUseScriptHost.SwitchedOff(session, result.Area.Snapshot.RuntimeMap, solomon));
         Assert.AreEqual(1, heroes.Count(h => AreaUseScriptHost.SwitchedOff(session, result.Area.Snapshot.RuntimeMap, AreaUseScriptHost.EntityId(h))));
+    }
+
+    // ARC-SCRIPT-047: Virgil's heartbeat 1100 at the Crash Site opens his talk with the PC as soon as the PC is within the vicinity (10
+    // tiles on both axes): a call-ex of his dialog point 1324 at line 4, whose dialog action asks for node 1; the heartbeat then removes itself.
+    [TestMethod, TestCategory("RealData")]
+    public void Virgil_s_heartbeat_at_the_crash_site_opens_his_talk_once_the_pc_is_near()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in heartbeat check; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var result = AreaLoadOperation.Execute(1, TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Path.Combine(root, "modules", "Arcanum.dat"),
+            "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test", "--actor-resource", Path.Combine(root, "arcanum1.dat"),
+            "--game-root", root, "--area-map", "Arcanum1-024-fixed"]), default);
+        var snapshot = result.Area!.Snapshot;
+        var virgil = snapshot.Objects.Single(r => r.Type == 16 && AreaUseScriptHost.LoadedSlot(r, ScrPoint.Dialog) is { Script: 1324 });
+        Assert.AreEqual(1100, AreaUseScriptHost.LoadedSlot(virgil, ScrPoint.Heartbeat)!.Value.Script);
+        var at = new Arcanum.Simulation.Movement.CellCoord(checked((int)virgil.WorldX!.Value), checked((int)virgil.WorldY!.Value));
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        AreaUseScriptHost HostWithPc(Arcanum.Simulation.Movement.CellCoord pc) => new(session, snapshot.RuntimeMap, snapshot.Objects, [], content,
+            new AreaScriptWorld(() => pc, _ => false, _ => null, () => null));
+        var entity = new ScrObjectRef(snapshot.RuntimeMap, AreaUseScriptHost.EntityId(virgil));
+
+        var far = HostWithPc(new(at.X + 11, at.Y)).RunHeartbeat(virgil, ScrPoint.Heartbeat, session.Rules.Scripts);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, far.Outcome, far.Detail);
+        Assert.IsNull(far.Dialog, "11 tiles away");
+
+        var host = HostWithPc(new(at.X + 3, at.Y - 2));
+        var near = host.RunHeartbeat(virgil, ScrPoint.Heartbeat, session.Rules.Scripts);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, near.Outcome, near.Detail);
+        Assert.AreEqual(new ScrDialogStart(host.Pc, entity, 1324, 4, 1), near.Dialog);
+        Assert.AreEqual(ScrOutcome.SkipDefault, near.Run!.Outcome);
+        Assert.AreEqual(0, host.Slot(entity, ScrPoint.Heartbeat)!.Value.Script, "the heartbeat removed itself");
+        Assert.AreEqual(1324, host.Slot(entity, ScrPoint.Dialog)!.Value.Script);
+        Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 1324, 1, session.Rules.Data).Status);
+        Assert.IsNull(host.RunHeartbeat(virgil, ScrPoint.Heartbeat, session.Rules.Scripts).Dialog, "once only");
     }
 }

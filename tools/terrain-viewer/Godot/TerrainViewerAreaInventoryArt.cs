@@ -13,6 +13,7 @@ public partial class TerrainViewerApp
     private AreaInventoryArtContent? _inventoryArtContent;
     private string? _inventoryArtModule;
     private AreaInventoryArtLook? _inventoryArtLook;
+    private AreaInventoryArtLook? _inventoryArtLookForSelfTest;
     private AreaItemIcons? _inventoryItemIcons;
     private readonly Dictionary<string, Texture2D?> _inventoryItemArtCache = new(StringComparer.Ordinal);
     private GameSessionOwner? _inventoryItemArtSession;
@@ -25,6 +26,8 @@ public partial class TerrainViewerApp
     /// <summary>The window's original look for the current module, read on first use; null when its art did not read.</summary>
     private AreaInventoryArtLook? InventoryArtLook()
     {
+        // ARC-UI-064: a self-test's synthetic art set (the synthetic module has no game folder).
+        if (_inventoryArtLookForSelfTest is { } synthetic) return synthetic;
         var module = _arguments?.ModulePath;
         if (_inventoryArtContent is not null && module == _inventoryArtModule) return _inventoryArtLook;
         _inventoryArtModule = module;
@@ -36,8 +39,9 @@ public partial class TerrainViewerApp
             InventoryItemIcons();
             var art = _inventoryArtContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
                 .ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
-            _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts) { LootReady = _inventoryArtContent.LootArtReady };
-            GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}; ARC-UI-052 loot art ready={_inventoryArtContent.LootArtReady}");
+            _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts)
+                { LootReady = _inventoryArtContent.LootArtReady, BarterReady = _inventoryArtContent.BarterArtReady };
+            GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}; ARC-UI-052 loot art ready={_inventoryArtContent.LootArtReady}; ARC-UI-064 barter art ready={_inventoryArtContent.BarterArtReady}");
         }
         else GD.Print($"ARC-UI-051 inventory art not ready: {_inventoryArtContent.Detail}");
         return _inventoryArtLook;
@@ -112,7 +116,9 @@ public partial class TerrainViewerApp
         return texture;
     }
 
-    /// <summary>ARC-UI-052: the kind of an item the hero holds or the open loot window's holder holds; null otherwise.</summary>
+    /// <summary>ARC-UI-052: the kind of an item the hero holds or the open loot window's holder holds (ARC-UI-064: or the barter window's
+    /// shown object); null otherwise.</summary>
     private SessionItemKind? InventoryItemKind(GameSessionOwner session, string item) =>
-        HeroItemKind(session, item) ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind : null);
+        HeroItemKind(session, item) ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind : null)
+            ?? _barterPanel?.ArtView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind;
 }

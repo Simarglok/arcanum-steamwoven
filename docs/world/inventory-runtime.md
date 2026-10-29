@@ -779,7 +779,7 @@ rows PI1–PI3 and the item use's AG15, TP1 and IU1.
   inventory window runs the same use as the NPC executor (see [terrain viewer](../rendering/terrain-viewer.md)).
 - **No snapshot change.** A dropped item is a placed item (schema 32 and later).
 
-**Not ready.** The map drop and the throw of an arbitrary held item (IW18); the item
+**Not ready.** The item
 targeting cursor of an item that needs a target (lockpicks excepted) and a trap device's use from the window.
 
 ## Stack drop and the quantity window (ARC-UI-029)
@@ -802,7 +802,8 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
-in the original's window), the map drop of a stack (flag 4, IW18).
+in the original's window), the map drop of a stack (flag 4, IW18; the map drop and throw of other items is ARC-UI-063's, see the
+[terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Next steps
 

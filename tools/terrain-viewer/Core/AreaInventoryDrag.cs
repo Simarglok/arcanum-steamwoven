@@ -21,12 +21,13 @@ public sealed record AreaInventoryHeld(string Entity, EquipmentSlot? Worn, int O
     public bool Partner { get; init; }
 }
 
-public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon, Take, Plant }
+public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon, Take, Plant, Buy, Sell }
 
 /// <summary>ARC-UI-019: what a release does with the held item: put it back, move it in the grid, take it off into a grid slot, or put it
 /// into a wear slot; ARC-UI-025: drop it on the hero's tile (the drop icon) or use it (the use icon); ARC-UI-052: take the looted holder's
 /// item (released on the hero's grid in the loot window); ARC-UI-065: plant the hero's item on the NPC whose pocket the hero picks (released
-/// on its grid in the steal window).</summary>
+/// on its grid in the steal window); ARC-UI-064: buy the merchant's item (released on the hero's grid in the barter window) or sell the
+/// hero's (released on the merchant's grid).</summary>
 public sealed record AreaInventoryDrop(AreaInventoryDropKind Kind, AreaInventoryHeld Held, int? GridSlot = null, EquipmentSlot? Slot = null);
 
 /// <summary>

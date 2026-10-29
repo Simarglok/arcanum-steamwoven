@@ -681,7 +681,7 @@ public partial class TerrainViewerApp
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false })
         {
             if (_rightPressTaken) _rightPressTaken = false;
-            else WorldObservation(WorldRightRelease);
+            else WorldObservation(() => { WorldRightRelease(); GameCursorRightRelease(); });
         }
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
@@ -712,6 +712,8 @@ public partial class TerrainViewerApp
         // lying down (falling, unconscious, getting up) or dead takes no press.
         if (HeroLyingDown)
         {
+            // ARC-UI-063: a held item goes back when the PC is not active (0x575770, TT2).
+            PutBackGameCursorItem("the hero cannot act");
             _worldRouteClick = "ignored (the hero is down)";
             RefreshReadyStatus(); return;
         }
@@ -722,6 +724,8 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (another participant's turn)"; _turnBasedNotice = "the press waits for the hero's turn";
             RefreshReadyStatus(); return;
         }
+        // ARC-UI-063: an item on the game cursor takes the press: it is thrown, or goes back for a hero that cannot act (TT2, TT6).
+        if (_gameCursorItem is not null) { _worldRouteClick = "throw"; GameCursorPress(screen); return; }
         // ARC-MAGIC-015: the open targeting cursor takes every left press (the original's interface mode 1).
         if (_spellTargeting is not null) { SpellTargetClick(screen); return; }
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
