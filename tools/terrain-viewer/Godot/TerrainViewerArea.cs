@@ -264,7 +264,7 @@ public partial class TerrainViewerApp
             if (occluder is not null) { diagnostics.LastOccluder = occluder.Visual; diagnostics.Reject("later-alpha"); continue; }
             // ARC-RENDER-036: the covered-tile masks (over the terrain) and the roofs (over everything) are drawn outside the
             // ordered list; a pixel one of them covers shows the cover, not the target.
-            if (covers is { } over && (command.Identity is null && over.Masks.Any(cover => CoverAt(cover, frames, transform, sx, sy))
+            if (covers is { } over && ((command.Identity is null && over.Masks.Any(cover => CoverAt(cover, frames, transform, sx, sy)))
                 || over.Roofs.Any(cover => CoverAt(cover, frames, transform, sx, sy)))) { diagnostics.Reject("cover"); continue; }
             if (actor is { } a && a.HasPoint(actualWorld)) { diagnostics.Reject("actor-guide"); continue; }
             var observed = image.GetPixel(sx, sy);
