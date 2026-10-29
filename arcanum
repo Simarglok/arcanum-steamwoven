@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, launch, manifests, run_queue, smoke, start_check  # noqa: E402
+from tools.local_dev import clean, config, daily, launch, manifests, run_queue, smoke, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -211,7 +211,7 @@ def package_build(args: argparse.Namespace) -> int:
     """ARC-DEV-047: the packaged alpha from a fresh commit of origin/main into artifacts/packages (docs/workflow/packaging.md)."""
     command = [sys.executable, "-B", str(ROOT / "tools" / "local_dev" / "package.py"), args.platform, "--ref", args.ref,
                *(["--no-fetch"] if args.no_fetch else []), *(["--no-smoke"] if args.no_smoke else []),
-               *(["--keep-work"] if args.keep_work else [])]
+               *(["--keep-work"] if args.keep_work else []), *(["--map-smoke", args.map_smoke] if args.map_smoke else [])]
     return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose)
 
 
@@ -360,7 +360,15 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")
     command.add_argument("--keep-work", action="store_true", help="keep the temporary source and export folder for a look")
     command.add_argument("--verbose", action="store_true", help="stream the build's step lines here instead of the quiet default")
+    command.add_argument("--map-smoke", metavar="TEXT", help="the full map smoke chain's result for BUILD.txt (./arcanum daily "
+                         "passes it; default: NOT RUN)")
     command.set_defaults(func=package_build)
+    # ARC-DEV-062: the daily package build (docs/workflow/packaging.md#daily-package-build-arc-dev-062).
+    command = commands.add_parser("daily", help="the daily package build: when origin/main changed since the last package, "
+                                  "its root checks, the full map smoke chain and both player packages, from a fresh worktree "
+                                  "of that commit (ARC-DEV-062)")
+    daily.configure(command)
+    command.set_defaults(func=daily.run)
     command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
     command.set_defaults(func=queue)

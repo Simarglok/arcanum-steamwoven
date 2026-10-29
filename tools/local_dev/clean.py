@@ -276,7 +276,7 @@ def packages(checkout: Path) -> list[dict[str, Any]]:
             except OSError as error:
                 results.append({"path": str(child), "bytes": None, "class": "keep", "reason": f"cannot be read ({error.strerror}); owner decides"})
             continue
-        reason = ("step logs of the last ./arcanum package run per platform; the next run replaces them"
+        reason = ("step logs of the last ./arcanum package run per platform and of the last ./arcanum daily run; the next run replaces them"
                   if child.name == "logs" and child.is_dir() and not child.is_symlink() else "not written by ./arcanum package; owner decides")
         results.append({"path": str(child), "bytes": _bytes(child), "class": "keep", "reason": reason})
     return results

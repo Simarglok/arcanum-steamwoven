@@ -1,4 +1,4 @@
-# Packaged builds (ARC-DEV-047, Windows ARC-DEV-048)
+# Packaged builds (ARC-DEV-047, Windows ARC-DEV-048, daily ARC-DEV-062)
 
 A packaged build is the game for a player: the terrain viewer project exported with its own player name and user
 folder, started without inputs, so it opens the launcher ([ARC-UI-014](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014))
@@ -52,16 +52,65 @@ In the **main checkout** (also when the command runs from a worktree):
 
     artifacts/packages/macos/Arcanum Steamwoven.app
     artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
-    artifacts/packages/<platform>/BUILD.txt       commit, date, product, smoke result
+    artifacts/packages/<platform>/BUILD.txt       commit, date, product, smoke result, map-smoke result
     artifacts/packages/<platform>/README.md       the player instruction of that commit
     artifacts/packages/<platform>/previous/       the build before, with its BUILD.txt and README.md
     artifacts/packages/logs/<platform>/           the last run's step logs
+    artifacts/packages/logs/daily/                the last ./arcanum daily run: report.txt and each step's log
 
 The next successful package replaces the current build and moves it to `previous/` (the older `previous/` goes).
 `./arcanum clean` lists each platform's current package as KEEP (never removed) and `previous/`, with an interrupted
 install's `.incoming-*`, as DISPOSABLE with its size; `./arcanum clean --apply` removes those, keeping no previous build,
 and refuses while a package run is going (ARC-DEV-055, [build retention](build-retention.md)). Packages
 are local: the tool never commits, uploads or publishes them; giving a copy to a tester is the owner's own private act.
+
+## Daily package build (ARC-DEV-062)
+
+The full map smoke chain runs only here, and only when `main` changed since the last package
+([smoke scope](tasks.md#smoke-scope)). One command does the whole day:
+
+    ./arcanum daily               # fetch origin main; skip if both packages hold it; else checks, smoke chain, packages
+    ./arcanum daily --dry-run     # fetch, say whether it would build and print the steps; run nothing else
+    ./arcanum daily --force       # build although the packages hold origin/main or the last day failed on it
+
+It is `tools/local_dev/daily.py` (tests `tools/local_dev/test_daily.py`). It is not itself a queued run: each of its
+steps takes its own place in the [launch queue](toolchain.md#launch-queue-arc-dev-033), so it refuses to run inside
+`./arcanum run`, and one `daily` runs at a time per repository (a lock in the git folder; `--dry-run` takes none).
+
+**Any failure blocks the packages** (owner decision 2026-10-29): a failed check or smoke ends the day before packaging,
+the packages stay at their last commit, and the report names each failed step with its run log and first error, so a
+thread to find and fix it starts from the report; the first day after the fix packages.
+
+1. `git fetch origin main` in the main checkout (`--no-fetch` skips it). `SKIP` (exit 0, nothing written) when the
+   `BUILD.txt` of both `artifacts/packages/macos` and `artifacts/packages/windows` holds that commit with a
+   `map-smoke PASS` line, the mark of a package `daily` made: a package made by hand (`map-smoke NOT RUN`) does not
+   count, so the chain still runs for it. `SKIP` with exit 1 when the last `daily` run found that same commit failing
+   its root checks or smoke (its report's `failed commit` line): a failing `main` is not run again every day; the fix's
+   commit runs, or `--force`. A stopped run, a cut-off smoke chain or a failed package is not the commit's failure and
+   is tried again.
+2. A fresh detached `git worktree` of that commit in an `arcanum-daily-*` folder of the system temporary folder: the
+   steps run the commit's own commands there, never the owner's checkout or working tree. The worktree is removed at
+   the end, also when the run is stopped; one kept by `--keep-work` or left by a killed run is removed by the next
+   `daily` (under its lock, so never a running one's).
+3. The root checks (CLAUDE.md §2): the solution's locked restore, build and tests (`./arcanum run --kind dotnet`), then
+   the `dat_probe.py` and `oracle.py` self-tests (30 minutes each at most). They run without the owner's opt-in
+   variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the launcher's home), so no real-data test turns on. The oracle
+   self-test uses the main checkout's `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`), its cache of the locked
+   Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
+4. `./arcanum smoke full` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)): its viewer build and import, the
+   Crash Site smoke and the map batteries. A failed, not run or stopped step ends the day with no package.
+5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
+   `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins)`); a
+   plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.
+
+Every step's whole output goes to `artifacts/packages/logs/daily/STEP.log` (the queue's own run logs as well), and the
+report, one line per step, for each failed step (and each failed smoke) its run log, first error with up to 8 lines
+of context and last error, and a `RESULT` line, to
+`artifacts/packages/logs/daily/report.txt` (the next run replaces the folder); stdout shows the same `DAILY` lines.
+Nothing else under `artifacts/packages` is written by `daily` itself, so the bug reports beside a package
+(`artifacts/packages/macos/reports/`) are never touched. Exit codes: 0 `RESULT PASS` or `SKIP` of a packaged commit;
+1 `RESULT FAIL` (a check, the smoke chain or a package failed; a package that passed is still installed and named),
+`RESULT STOPPED` (a stop signal; the worktree is still removed) or `SKIP` of a commit that already failed.
 
 ## What makes the package different from a developer build
 
