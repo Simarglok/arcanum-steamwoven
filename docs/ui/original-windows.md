@@ -42,8 +42,8 @@ Read in the redraw 0x576520 and the open 0x572340; rows [IW20–IW25](../researc
 
 Done in the viewer: backgrounds, covers, item arts (inventory art everywhere, scaled down when larger than the
 item's place), boxes with their hover art, lines and counts in the project's font, the window at its place
-between the bars, the "Diagnostic view" switch below it. Steal, barter and the other modes keep the diagnostic window;
-the loot window is done by ARC-UI-052 (below).
+between the bars, the "Diagnostic view" switch below it. Barter and the other modes keep the diagnostic window;
+the loot window is done by ARC-UI-052 and the steal window by ARC-UI-065 (below).
 
 Left for the next inventory slices (each its own task):
 
@@ -52,7 +52,7 @@ Left for the next inventory slices (each its own task):
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
 - **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (235 `Barter`, 337 `Barter_PD`, gamble box 344–346 at
-  (703, 236)), steal; the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
+  (703, 236)), steal (done by ARC-UI-065, below); the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
@@ -83,8 +83,16 @@ window with its Take buttons. PROJECT: a taken item goes to the hero's first fre
 
 Left for the next loot slices (each its own task): the doll views (the body's worn items on 349 `Loot_PD` at two thirds, toggles 338 /
 339 at (23, 108), (74, 108); the hero's doll toggle at (713, 37), (751, 37); IW29, IW30), the scroll bar's art, the move of a hero's
-item into the body, the steal window (mode 3, same frame), the button 340 at (763, 197) and the hot spots of IW30, a follower's
-portrait as the image.
+item into the body, the button 340 at (763, 197) and the hot spots of IW30, a follower's portrait as the image, the right release's
+move of a hero's item into the body (IW36), a move within the body's grid.
+
+The steal window (done: ARC-UI-065, rows [IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): mode 3 draws the loot
+window's frame, image and grids without the Take all button (made in mode 2 alone, IW30). In the original look of the viewer the
+victim's item pressed and released on the hero's grid is one theft attempt and the hero's item released on the victim's grid one plant
+attempt (0x574EB8 → 0x575180 / 0x575100; no quantity window, PP10); a right release on an item with nothing held makes the same
+attempt (0x574262..0x574430: in modes 1–3 the right release moves the item to the other side). The boxes refuse the victim's items
+(348 / 347) and drop or use the hero's as in mode 0. PROJECT: a stolen or planted item goes to the receiving side's first free place;
+the original's room test before a right-release move (0x466510, its reason printed by 0x4673F0) is left to the session's insert check.
 
 The round view at the window's top-left (done: ARC-UI-054, rows
 [IW33–IW34](../research/ledger/ui-audio.md#round-view-arc-ui-054)): the open centres the game view on the PC and the window's
@@ -92,7 +100,7 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
 shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
 (`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
-232; the barter and steal windows get their round view with their original look (not built yet). Left: the own window's map drop and
+232; the barter window gets its round view with its original look (not built yet), the steal window has it since ARC-UI-065. Left: the own window's map drop and
 throw of a held item released in it (IW18).
 
 ## Character sheet

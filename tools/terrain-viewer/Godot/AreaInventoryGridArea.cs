@@ -15,7 +15,8 @@ namespace Arcanum.TerrainViewer;
 /// (or none) is reported (<see cref="PointerStill"/>, 0x573C74), once until another rests there. ARC-UI-051: with the window's art
 /// (<see cref="Look"/>) the frame draws the original look instead (<see cref="AreaInventoryArtLayout"/>, IW20–IW25). ARC-UI-052: in a
 /// loot window with the art the frame is the loot window's (<see cref="AreaLootArtLayout"/>, IW26–IW32): the holder's grid on the left,
-/// whose items are pressed and released on the hero's grid to take them, and the Take all button.
+/// whose items are pressed and released on the hero's grid to take them, and the Take all button. ARC-UI-065: the steal window (mode 3)
+/// draws the same frame without Take all; a release across the two grids, or a right release on an item, is a pick-pocket attempt (IW35–IW36).
 /// </summary>
 public partial class AreaInventoryGridArea : Control
 {
@@ -211,7 +212,8 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-052: the loot window's point under <paramref name="frame"/> with the current scroll.</summary>
     private AreaLootHit LootHit(Vector2 frame)
     {
-        var button = Look?.Art.GetValueOrDefault(AreaLootArtLayout.TakeAllArt);
+        // ARC-UI-065: the steal window has no Take all button (IW30), so nothing hits it.
+        var button = AreaLootArtLayout.TakeAllShown(Mode) ? Look?.Art.GetValueOrDefault(AreaLootArtLayout.TakeAllArt) : null;
         return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()));
     }
 
@@ -227,8 +229,15 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-025: a right release at a point of the frame: with nothing held, the item under it is offered for use (IW5).</summary>
     internal void RightReleaseAt(Vector2 frame)
     {
-        // ARC-UI-052: the right release uses an item only in the player's own window (mode 0, IW5).
-        if (Held is not null || _view is null || LootLook || AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
+        if (Held is not null || _view is null) return;
+        // ARC-UI-065: in the loot and steal windows the right release moves the item under it to the other side (IW36): a take, or in the
+        // steal window a theft or a plant attempt. ARC-UI-052: it uses an item only in the player's own window (mode 0, IW5).
+        if (LootLook)
+        {
+            if (AreaLootArtLayout.RightRelease(_view, LootHit(frame), Mode) is { } drop) Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
+            return;
+        }
+        if (AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is not { } item) return;
         Callable.From(() => UseRequested?.Invoke(item)).CallDeferred();
     }
 
@@ -258,7 +267,7 @@ public partial class AreaInventoryGridArea : Control
         }
         if (Held is not { } held) return;
         Held = null;
-        var drop = LootLook ? AreaLootArtLayout.Release(held, LootHit(frame)) : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
+        var drop = LootLook ? AreaLootArtLayout.Release(held, LootHit(frame), Mode) : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
         // The app re-renders the window, which may put an occupant on the cursor: after this input event returns.
         Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
@@ -476,7 +485,7 @@ public partial class AreaInventoryGridArea : Control
             if (item.Entity == Held?.Entity || AreaLootArtLayout.ItemRect(item, _lootScroll) is null) continue;
             Item(look.ItemArt(item.Entity), AreaLootArtLayout.FullRect(item, _lootScroll), item.Name, shownTop, shownBottom);
         }
-        Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
+        if (AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)

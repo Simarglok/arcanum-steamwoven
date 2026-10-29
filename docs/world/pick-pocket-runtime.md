@@ -67,7 +67,10 @@ all, no quantity window) and the hero's with **Plant:** buttons; each press is o
 neither seeing nor hearing the hero at normal loudness) and the round's world in a turn-based round. The status shows `skill_ui.mes`
 line 500 or 501 (the project's text when the file does not read). A noticed failure runs `AreaPickPocket.Caught`: the victim's
 catching-thief script through the use-script host (`RunCatchingThief`, its slot kept as `scr11.*` map changes), the leader test and
-the AI host's attack event of the hero on the victim, then the window closes.
+the AI host's attack event of the hero on the victim, then the window closes. Since ARC-UI-065 the window shows the original's steal
+window with the game's art (the loot frame without Take all; [steal window](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)):
+there each drag across the two grids, or a right release on an item, is the attempt, and the Steal and Plant buttons stay in the
+"Diagnostic view".
 
 ## Boundaries (NOT READY)
 
@@ -92,4 +95,5 @@ noticed, the fate, a refused insertion, the turn-based charge, refusals before a
 count) and the native smoke `ARC_AREA_MAP_SMOKE_ONLY=pickpocket` with `--hero` (only when named; marker
 `ARC-SKILLS-010 native-smoke pickpocket PASS`): the AI host on, the hero next to a living free NPC with a plain item, the palette arms,
 the start opens the steal window, a fated theft and a fated plant move the item, then up to ten plain thefts until one is noticed
-(a noticed one closes the window after its consequences); a critter the flags refuse floats the refusal.
+(a noticed one closes the window after its consequences); a critter the flags refuse floats the refusal. With the game's art the
+theft and the plant are drags in the original look and the first plain theft a right release (ARC-UI-065).
