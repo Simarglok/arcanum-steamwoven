@@ -181,7 +181,7 @@ public sealed class AreaConversationHost
         State = new AreaConversationState(session, map,
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => _companions(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null,
-            Speakers.Select(speaker => Scope(speaker.Row)).ToArray());
+            Speakers.Select(speaker => Scope(speaker.Row, session)).ToArray());
         Scripts = new AreaScriptHost(session, map, Speakers, State, content, npcAdvancement, npcSheet);
     }
 
@@ -228,6 +228,14 @@ public sealed class AreaConversationHost
     /// 0 when absent or not an NPC. They pick the reputation effects of its reaction to the PC.</summary>
     public static (int Origin, int Faction) Scope(AreaObjectRecord row) =>
         row.Type == 16 ? (Field(row, OriginSlot), Field(row, FactionSlot)) : (0, 0);
+
+    /// <summary>ARC-SCRIPT-049: <see cref="Scope(AreaObjectRecord)"/> with the faction a script's set faction gave the NPC
+    /// (<see cref="AreaUseScriptHost.Faction"/>).</summary>
+    public static (int Origin, int Faction) Scope(AreaObjectRecord row, GameSessionOwner session)
+    {
+        var (origin, faction) = Scope(row);
+        return row.Type == 16 ? (origin, AreaUseScriptHost.Faction(session, row, faction)) : (origin, faction);
+    }
 
     private const int OriginSlot = 80, FactionSlot = 81;
 

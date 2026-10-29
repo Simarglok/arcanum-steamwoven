@@ -194,7 +194,7 @@ public sealed class AreaShopSession : IDisposable
                 return null;
             }
         }
-        var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row)]);
+        var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row, owner)]);
         var barter = new AreaBarter(owner, inventory, data, merchant, () => state.Reaction(0),
             delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name);
         var opened = barter.Open();

@@ -45,6 +45,7 @@ public sealed class ScrHeartbeatTalkTests
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => [];
         public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) { Centres.Add(centre); return Critters.ToArray(); }
         public int Random(int low, int high) => low;
+        public (long X, long Y)? Location(ScrObjectRef obj) => null;
         public int SkillLevel(ScrObjectRef obj, int skill) => 0;
         public bool? IsIdentified(ScrObjectRef obj) => null;
         public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => null;

@@ -88,7 +88,7 @@ public static class ScrCatalogue
     public static class Condition
     {
         public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, PcQuestState = 6, HasItemNamed = 17, FollowingPc = 18, IsNamed = 20,
-            IsWieldingItem = 21, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50;
+            IsWieldingItem = 21, IsDead = 22, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50;
     }
 
     /// <summary>Action types the project reads by name.</summary>
@@ -102,7 +102,7 @@ public static class ScrCatalogue
             GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34,
             SetPcQuestState = 16, MarkMapLocation = 49, SetRumor = 50, AddReputation = 72, RemoveReputation = 73,
             AddEffect = 77, RemoveEffect = 78, MagickTechAdjustment = 91, PlayScriptEyeCandy = 120, Random = 37, CreateObject = 52,
-            ToggleState = 56, Kill = 58;
+            ToggleState = 56, Kill = 58, DistanceBetween = 71, SetFaction = 134;
     }
 
     /// <summary>Script file flags.</summary>

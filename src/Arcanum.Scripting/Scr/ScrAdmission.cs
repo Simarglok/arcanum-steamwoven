@@ -211,8 +211,20 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S17 { get; } = new("S17", S16.Conditions, S16.Actions, S16.ValueKinds,
         S16.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
-    /// <summary>The actions of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
-    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor };
+    /// <summary>
+    /// The heartbeat world set (ARC-SCRIPT-049, ledger HW1–HW4): <see cref="S17"/> plus the conditions obj is dead (22) and obj is switched
+    /// off (27), which the host answers through <see cref="IScrObjectStateQueries"/>, distance between (71), which stores the tile distance
+    /// of two objects (<see cref="IScrWorldQueries.Location"/>), and set faction (134), which hands one <see cref="ScrObjectStateRequest"/>
+    /// to the host.
+    /// </summary>
+    public static ScrAdmissionSet S18 { get; } = new("S18", S17.Conditions.Concat([ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff]),
+        S17.Actions.Concat([ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction]), S17.ValueKinds, S17.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S18"/> a host answers through <see cref="IScrObjectStateQueries"/>.</summary>
+    public static IReadOnlySet<int> ObjectStateQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff };
+
+    /// <summary>The actions of <see cref="S15"/> and <see cref="S18"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
+    public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
@@ -396,6 +408,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.Random && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // The magick-tech adjustment stores into its number operand 3 (ARC-SCRIPT-042, WE2).
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Distance between stores into its number operand 2 (ARC-SCRIPT-049, HW3).
+            if (!condition && type == ScrCatalogue.Action.DistanceBetween && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.
             if (slot != 0) continue;
             var literal = (ScrValueKind)kind == ScrValueKind.Number;

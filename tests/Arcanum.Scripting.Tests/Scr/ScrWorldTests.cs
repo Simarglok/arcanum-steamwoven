@@ -47,6 +47,7 @@ public sealed class ScrWorldTests
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) { Centres.Add(centre); return Vicinity.ToArray(); }
         public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => [];
         public int Random(int low, int high) { Asked.Add((low, high)); return Draws.Dequeue(); }
+        public (long X, long Y)? Location(ScrObjectRef obj) => null;
         // S15 holds S14's skill and item commands; the synthetic programs use none.
         public int SkillLevel(ScrObjectRef obj, int skill) => 0;
         public bool? IsIdentified(ScrObjectRef obj) => null;
