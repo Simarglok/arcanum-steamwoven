@@ -8,14 +8,15 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":57,\"world\"";
+    private const string Current = "\"schemaVersion\":58,\"world\"";
 
-    // The schema 56 text of a schema 57 one whose NPCs were never dressed: the same text without `inventory.npcWorn`.
+    // The schema 56 text of a schema 58 one whose NPCs were never dressed and that left no pool of blood: the same text without
+    // `inventory.npcWorn` and `inventory.bloodPools`.
     private static string Schema56(string text)
     {
         StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"npcWorn\":[]}");
-        return text.Replace(Current, "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[]}", "}");
+        StringAssert.Contains(text, ",\"npcWorn\":[],\"bloodPools\":[]}");
+        return text.Replace(Current, "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[],\"bloodPools\":[]}", "}");
     }
 
     [TestMethod]
@@ -26,6 +27,29 @@ public sealed class SnapshotUpgradeTests
                 GameSessionSnapshot.CurrentSchemaVersion - GameSessionSnapshotCodec.OldestReadableSchemaVersion).ToArray(),
             GameSessionSnapshotCodec.UpgradableSchemaVersions.ToArray(),
             "A schema bump adds the step from the previous schema (GameSessionSnapshotUpgrade.cs), so the saves of older builds keep loading.");
+    }
+
+    // ARC-RENDER-041: the schema 57 text of a schema 58 one that left no pool of blood: the same text without `inventory.bloodPools`.
+    private static string Schema57(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, ",\"bloodPools\":[]}");
+        return text.Replace(Current, "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[]}", "}");
+    }
+
+    [TestMethod]
+    public void A_schema_57_save_decodes_as_the_current_schema()
+    {
+        foreach (var current in new[] { GoldenJson, HeroStateTests.HeroGolden })
+        {
+            var older = Decode(Schema57(current));
+            Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, older.SchemaVersion);
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(older), "The upgraded save is the current save it stands for.");
+            using var restored = Restore(older);
+            Assert.AreEqual(0, restored.Capture().Inventory.BloodPools.Count, "No death of a schema 57 session left a pool of blood.");
+        }
+        var text = Schema57(GoldenJson);
+        Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"npcWorn\":[]}", ",\"npcWorn\":[],\"bloodPools\":[]}")).Failure);
     }
 
     [TestMethod]
@@ -100,6 +124,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":58,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

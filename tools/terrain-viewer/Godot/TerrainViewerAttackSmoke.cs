@@ -110,6 +110,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains("killed", StringComparison.Ordinal), "the status line names the kill");
             Require(_fallenBodies.ContainsKey(key), "the body is drawn fallen");
+            await RequireBloodPoolAsync(session, map.RuntimeMap, target.Holder.Entity);
 
             // A corpse clicked in combat mode without Alt does nothing.
             point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-COMBAT-005 smoke: corpse not visible");

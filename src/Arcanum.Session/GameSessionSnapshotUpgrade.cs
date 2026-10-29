@@ -26,6 +26,8 @@ public static partial class GameSessionSnapshotCodec
     {
         // ARC-WORLD-103 (schema 57): no NPC was dressed by a regeneration, so each NPC keeps its map data's inventory locations.
         [56] = root => AddField(Section(root, "inventory"), "$.inventory", "npcWorn", new JsonArray()),
+        // ARC-RENDER-041 (schema 58): no death left a pool of blood.
+        [57] = root => AddField(Section(root, "inventory"), "$.inventory", "bloodPools", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
