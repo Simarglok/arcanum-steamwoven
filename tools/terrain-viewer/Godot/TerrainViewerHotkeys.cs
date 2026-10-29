@@ -70,7 +70,8 @@ public partial class TerrainViewerApp
     /// <summary>The item the inventory window holds dropped on entry <paramref name="slot"/> (by its key, or ARC-UI-027 a click on its slot).</summary>
     private void DropHeldItemOnEntry(int slot)
     {
-        if (_inventoryPanel?.Held is not { } held || _areaSession is not { } session) return;
+        // ARC-UI-052: a looted holder's item is not the hero's: it does not go on the bar (it stays on the cursor).
+        if (_inventoryPanel?.Held is not { } held || held.Partner || _areaSession is not { } session) return;
         if (held.Worn is not null)
         {
             _inventoryStatus = "a worn item cannot go on the hotkey bar here (not ready)";
