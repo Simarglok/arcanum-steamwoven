@@ -11,25 +11,33 @@ namespace Arcanum.TerrainViewer;
 // tile on the same line; following the PC, his first step goes onto the tile, its script runs with him as the triggerer and calls 1696,
 // whose dialog opens his conversation with the PC at node 1 of DLG 1696 (no dialog script run); the smoke then closes it.
 // It is the stage that lets a scripted conversation open in a native smoke; the other stages hold them (ARC-WORLD-118).
+// ARC-SCRIPT-052: the "altar" stage (alone, `--sector 1452,1291`: a window with Virgil's home and the altar) does the same on the altar tiles of script 1328,
+// whose call-ex (81) runs Virgil's own dialog point from line 14, so his talk opens in the DLG of his dialog script 1324.
 public partial class TerrainViewerApp
 {
-    private const int WreckTileScript = 1695, WreckDialogScript = 1696;
+    private const int WreckTileScript = 1695, WreckDialogScript = 1696, AltarTileScript = 1328, AltarDialogScript = 1324;
 
-    private async Task RunAreaWreckTileSmokeAsync()
+    private Task RunAreaWreckTileSmokeAsync() => RunAreaVirgilTileSmokeAsync("ARC-SCRIPT-046 wreck smoke PASS", "wreck", WreckTileScript, WreckDialogScript, atDialogPoint: false);
+
+    private Task RunAreaAltarTileSmokeAsync() => RunAreaVirgilTileSmokeAsync("ARC-SCRIPT-052 altar smoke PASS", "altar", AltarTileScript, AltarDialogScript, atDialogPoint: true);
+
+    // passLine: the stage's PASS marker (its FAIL line has FAIL in place of PASS); atDialogPoint: the talk runs at Virgil's dialog point
+    // (a call-ex), which resumes his dialog slot, not a scripted conversation of a called script.
+    private async Task RunAreaVirgilTileSmokeAsync(string passLine, string place, int tileScript, int dialogScript, bool atDialogPoint)
     {
-        static void Require(bool value, string why)
+        void Require(bool value, string why)
         {
             if (value) return;
-            GD.Print("ARC-SCRIPT-046 wreck smoke FAIL: " + why);
-            throw new InvalidOperationException("AREA_WRECK_TILE_SMOKE_FAILED");
+            GD.Print(passLine.Replace(" PASS", " FAIL", StringComparison.Ordinal) + ": " + why);
+            throw new InvalidOperationException("AREA_" + place.ToUpperInvariant() + "_TILE_SMOKE_FAILED");
         }
         Require(_areaSession is not null && _conversationHost is { PartyWired: true } && _readyArea is not null && _worldActor.Session is AreaGridSession
             && _mapTransfers is not null, $"a map-mode session with a party (map {_readyMapName}: {_companionData?.Detail})");
         var session = _areaSession!; var grid = (AreaGridSession)_worldActor.Session!; var area = _readyArea!;
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var tiles = _mapTransfers!.ScriptTiles;
-        var wrecks = tiles.Where(c => _mapTransfers.TileScript(c)?.Script == WreckTileScript).OrderBy(c => c.Y).ThenBy(c => c.X).ToArray();
-        Require(wrecks.Length > 0, $"a tile of script {WreckTileScript} is in the window ({tiles.Count} script tiles)");
+        var wrecks = tiles.Where(c => _mapTransfers.TileScript(c)?.Script == tileScript).OrderBy(c => c.Y).ThenBy(c => c.X).ToArray();
+        Require(wrecks.Length > 0, $"a tile of script {tileScript} is in the window ({tiles.Count} script tiles)");
         var template = _companionTemplates.SingleOrDefault(t => t.Facts.ScriptId == AreaCompanionRoster.Virgil.ScriptId && t.Home.RuntimeMap == CurrentAreaMap);
         Require(template is not null, $"Virgil is a companion template here ({_companionTemplates.Count} templates)");
         // A line through one of its tiles: Virgil one cell before it and the PC four cells past it, so he starts to follow (farther than
@@ -39,6 +47,7 @@ public partial class TerrainViewerApp
             && routes.Contains(Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(from, direction))
             && routes.Assess(from, direction) == Arcanum.Simulation.Navigation.RouteStepVerdict.Open;
         (Arcanum.Data.Traversal.AreaStepCell Tile, CellCoord From, CellCoord Pc)? line = null;
+        var best = 0;
         foreach (var tile in wrecks)
         foreach (var direction in Enum.GetValues<NeighborDirection>())
         {
@@ -48,8 +57,9 @@ public partial class TerrainViewerApp
             for (var step = 0; step < 5; step++) cells.Add(Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(cells[^1], direction));
             if (line is null && cells.Take(5).All(c => Open(c, direction)))
                 line = (tile, from, cells[^1]);
+            best = Math.Max(best, cells.Take(5).TakeWhile(c => Open(c, direction)).Count());
         }
-        Require(line is not null, $"a walkable line through a wreck tile ({wrecks.Length} tiles: {string.Join(" ", wrecks)})");
+        Require(line is not null, $"a walkable line through a {place} tile ({wrecks.Length} tiles: {string.Join(" ", wrecks)}; longest open run {best} of 5)");
         var wreck = line!.Value.Tile;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var takesScripted = _smokeTakesScriptedConversations;
@@ -74,15 +84,15 @@ public partial class TerrainViewerApp
                 $"Virgil follows from {map.Chart.ToWorld(line.Value.From)}: {_areaCompanions?.Status()}");
             var frames = 0;
             for (; frames < 300 && !ConversationOpen; frames++) AreaSmokeFrame();
-            Require(ConversationOpen && _conversationScripted, $"his conversation opened in {frames} frames: Virgil at {map.Chart.ToWorld(companion!.Grid.State.CommittedCell)}, notice {_conversationNotice}");
-            Require(_voiceStart is { Status: AreaConversationStartStatus.Started, DialogScript: WreckDialogScript } && _conversationSpeaker?.Row.Key == template.Speaker.Row.Key,
-                $"the DLG of script {WreckDialogScript} with Virgil: {_voiceStart?.Status} {_voiceStart?.Detail}");
+            Require(ConversationOpen && _conversationScripted != atDialogPoint, $"his conversation opened in {frames} frames: Virgil at {map.Chart.ToWorld(companion!.Grid.State.CommittedCell)}, notice {_conversationNotice}");
+            Require(_voiceStart is { Status: AreaConversationStartStatus.Started } && _voiceStart.DialogScript == dialogScript && _conversationSpeaker?.Row.Key == template.Speaker.Row.Key,
+                $"the DLG of script {dialogScript} with Virgil: {_voiceStart?.Status} {_voiceStart?.Detail}");
             var node = _conversationPanel!.Conversation?.CurrentNode.Value;
             for (var close = 0; close < 8 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!ConversationOpen, "his conversation closed");
-            GD.Print("ARC-SCRIPT-046 wreck smoke PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            GD.Print(passLine + " " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Tile = wreck, Virgil = from, Pc = map.Chart.ToWorld(line.Value.Pc), Frames = frames, Node = node,
-                Script = WreckDialogScript, Parity = "NOT_VERIFIED" }));
+                Script = dialogScript, Parity = "NOT_VERIFIED" }));
         }
         finally
         {

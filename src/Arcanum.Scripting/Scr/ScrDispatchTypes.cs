@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Use = 1, Dialog = 9, FirstHeartbeat = 10, Heartbeat = 19, DialogOverride = 31, Count = 36;
+    public const int Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Heartbeat = 19, DialogOverride = 31, Count = 36;
 }
 
 /// <summary>
@@ -243,11 +243,18 @@ public enum ScrObjectStateChange
     /// <summary>ARC-SCRIPT-049: set faction (134) to <see cref="ScrObjectStateRequest.Value"/> (0x45D0C0, HW4): an NPC's faction field
     /// (0x124) is written; any other object is left as it is.</summary>
     SetFaction,
+    /// <summary>ARC-SCRIPT-052: destroy (68) of the first object of its operand (0x43CCA0, TD1, TD2): an object already destroyed is left as it
+    /// is; otherwise its destroy-point (2) script runs first and a skip default keeps it; else it is taken out of the world (object flag 0x1).</summary>
+    Destroy,
+    /// <summary>ARC-SCRIPT-052: stop attacking (109) of the first object of its operand (0x4AA4A0, TD3): for an NPC peace with its focus,
+    /// for the PC the same for each of its followers.</summary>
+    StopAttacking,
 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
 /// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
-/// faction as <paramref name="Value"/> (0 for the others). The host decides what the object is.</summary>
+/// faction as <paramref name="Value"/> (0 for the others), and (ARC-SCRIPT-052) a destroy (68) or stop attacking (109) for the first object of
+/// its operand. The host decides what the object is.</summary>
 public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
@@ -559,7 +566,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S19"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S20"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -580,7 +587,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S19)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S19.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S20)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S20.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

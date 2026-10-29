@@ -195,7 +195,9 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-047: the critters in a run's vicinity stand where the AI or the party walked them.
             ScriptCritterCell,
             // ARC-SCRIPT-050: get area reads the shown map's map-list row.
-            () => _mapTransfers?.Transitions is { Entry: { } entry } transitions ? (entry.Area, transitions.IsStartMap) : null);
+            () => _mapTransfers?.Transitions is { Entry: { } entry } transitions ? (entry.Area, transitions.IsStartMap) : null,
+            // ARC-SCRIPT-052: a tile script's stop attacking reads the AI host's facts and interrupts the stopped NPC's run, as an order's stop does.
+            npc => AreaAiHostNow()?.OrderFacts(npc) ?? new(), step => AreaAiHostNow()?.ApplyStop(step));
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);

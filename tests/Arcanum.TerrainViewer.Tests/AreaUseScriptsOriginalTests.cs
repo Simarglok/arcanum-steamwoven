@@ -72,6 +72,37 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.IsNull(host.RunPlaced(wreck, session.Rules.Scripts, _ => "no teleport", virgil).Dialog, "once seen, never again");
     }
 
+    // ARC-SCRIPT-052 (audit slice 8): Virgil stepping onto the altar tiles of script 1328 runs his own dialog point from line 14 through
+    // call-ex (81), with the player as the triggerer: line 14 of his dialog script 1324 asks for node 250 of its DLG. The tile sets global
+    // flag 2380 first, so it runs once.
+    [TestMethod, TestCategory("RealData")]
+    public void Virgil_stepping_onto_the_altar_tile_asks_for_his_altar_conversation()
+    {
+        var root = Root();
+        using var content = ConversationSessionFixture.Scripts(root);
+        var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Path.Combine(root, "modules", "Arcanum.dat"),
+            "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test", "--actor-resource", Path.Combine(root, "arcanum1.dat"),
+            "--game-root", root, "--area-map", "Arcanum1-024-fixed", "--area-map-sector", "1452,1292"]);
+        var result = AreaLoadOperation.Execute(1, arguments, default);
+        var snapshot = result.Area!.Snapshot;
+        var altars = result.MapTransitions!.Placed.Where(p => p.Script == 1328).ToArray();
+        Assert.IsTrue(altars.Length > 0, "the altar tiles are in the window");
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var host = new AreaUseScriptHost(session, snapshot.RuntimeMap, snapshot.Objects, [], content);
+        var virgil = snapshot.Objects.Where(r => r.Type == 16).Select(r => new ScrObjectRef(snapshot.RuntimeMap, AreaUseScriptHost.EntityId(r)))
+            .Single(r => host.NameOf(r) == 6409);
+        var altar = altars[0];
+
+        var pc = host.RunPlaced(altar, session.Rules.Scripts);
+        Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, (ScrDialogStart?)null), (pc.Outcome, pc.Dialog), "the player is not Virgil: " + pc.Detail);
+        var ran = host.RunPlaced(altar, session.Rules.Scripts, _ => "no teleport", virgil);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+        Assert.AreEqual(new ScrDialogStart(host.Pc, virgil, 1324, 14, 250) { Point = ScrPoint.Dialog }, ran.Dialog);
+        Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 1324, 250, session.Rules.Data).Status);
+        Assert.IsTrue(host.GlobalFlag(2380), "the tile set its flag");
+        Assert.IsNull(host.RunPlaced(altars[^1], session.Rules.Scripts, _ => "no teleport", virgil).Dialog, "once seen, never again");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void An_exit_tile_script_of_iron_clan_hq_takes_the_player_to_the_start_map()
     {
@@ -178,12 +209,12 @@ public sealed class AreaUseScriptsOriginalTests
         // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call). Since ARC-WORLD-081 (set
         // S15) the 15 own sector files with the plant generator 30285 run (here with no marker near the session's actor), and the 130 tiles of
         // script 1629 on the start map run to their create object of prototype 28464 (eight critters next to the PC), which the viewer does
-        // not create, so their effects are refused.
+        // not create, so their effects are refused. Since ARC-SCRIPT-052 (call-ex, destroy and stop attacking in the tile set) 829 run.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 678), ((tile, AreaScriptedUseOutcome.Refused), 2198),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 823), ((tile, AreaScriptedUseOutcome.Refused), 2053),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 130), ((sector, AreaScriptedUseOutcome.NoTeleport), 16), ((sector, AreaScriptedUseOutcome.Refused), 4),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }

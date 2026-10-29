@@ -119,7 +119,7 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `wreck`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `wreck`, `altar`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. A run whose stages include `debug-travel`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without

@@ -19,11 +19,13 @@ namespace Arcanum.TerrainViewer.Core;
 /// kill leaves the run unapplied. ARC-SCRIPT-047: <see cref="CritterCell"/> is an NPC's live cell when it is not where its map data puts
 /// it (an NPC the AI moved, a companion; null: its row's cell), for the critters in a run's vicinity. ARC-SCRIPT-050: <see cref="MapArea"/> is
 /// the shown map's map-list area and whether it is the start map, for get area (84); null when the viewer has no map-list row for it (outside
-/// map mode), and then get area is not answered.
+/// map mode), and then get area is not answered. ARC-SCRIPT-052: <see cref="PeaceFacts"/> are an NPC's facts for a script's stop attacking
+/// (109; null: the session's defaults) and <see cref="Stopped"/> is the host's part of each NPC's stop (its animation interrupt), run after
+/// the session took it.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
-    Func<(int Area, bool StartMap)?>? MapArea = null);
+    Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -73,6 +75,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>ARC-SCRIPT-049: the map-change key of the faction a script's set faction (134) gave an NPC (absent while it has its map
     /// data's; HW4). The original writes the NPC's faction field (0x124), which the save keeps; <see cref="Faction"/> reads it back.</summary>
     public const string FactionProperty = "npc.faction";
+    /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
+    /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
+    public const string DestroyedProperty = "obj.destroyed";
     private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
@@ -112,9 +117,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>
     /// ARC-SCRIPT-046: the set a tile or sector script runs (<see cref="RunPlaced"/>): <see cref="Admission"/> with the dialog action, which
     /// such a run, or a script it calls, uses to start a conversation of the PC with an NPC (<see cref="AreaScriptedUse.Dialog"/>).
+    /// ARC-SCRIPT-052 (audit slice 8, the first group of the tile scripts' refusals): plus call-ex (81), by which a tile an NPC steps on runs
+    /// his own dialog point (Virgil's talk at the altar, 1328), destroy (68) and stop attacking (109) of <see cref="ScrAdmissionSet.S20"/>,
+    /// which the story tiles apply to the NPC that steps on them.
     /// </summary>
-    public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog", Admission.Conditions,
-        Admission.Actions.Append(ScrCatalogue.Action.Dialog), Admission.ValueKinds, Admission.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
+        Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking]),
+        Admission.ValueKinds, Admission.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// ARC-WORLD-114: the set an NPC's first-heartbeat (10) and heartbeat (19) scripts run from the AI tick (<see cref="RunHeartbeat"/>):
@@ -142,6 +151,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
         (session ?? throw new ArgumentNullException(nameof(session))).QueryMapChange(new SessionMapId(map), MapChangeKey.ForEntity(entity, OffProperty)) == 1;
+
+    /// <summary>ARC-SCRIPT-052: whether a script destroyed the NPC <paramref name="entity"/> of map <paramref name="map"/>
+    /// (<see cref="DestroyedProperty"/>).</summary>
+    public static bool Destroyed(GameSessionOwner session, int map, string entity) =>
+        (session ?? throw new ArgumentNullException(nameof(session))).QueryMapChange(new SessionMapId(map), MapChangeKey.ForEntity(entity, DestroyedProperty)) == 1;
 
     /// <summary>ARC-SCRIPT-049: the faction of the NPC <paramref name="row"/> now: the one a script's set faction gave it
     /// (<see cref="FactionProperty"/>), else <paramref name="loaded"/>, its map data's.</summary>
@@ -675,6 +689,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || effects.Teleports.Count > 0))
             return new(AreaScriptedUseOutcome.Refused, null, lines, run, $"script {run.Script}: a conversation of script {dialog.Script} with "
                 + (dialog.Npc?.Code ?? "no NPC") + (effects.Teleports.Count > 0 ? " and a teleport" : "") + " is not modelled");
+        // ARC-SCRIPT-052: a conversation with an NPC destroyed (before or by this run) is not modelled (the view no longer has him).
+        if (effects.Dialog is { Npc: { } talker } && (AlreadyDestroyed(talker)
+            || effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Destroy && r.Object == talker)))
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: a conversation with the destroyed {talker.Code} is not modelled");
         // A slot a callee's dialog stored, or (ARC-SCRIPT-047) a call-ex run changed, is kept as the object's map changes of that point, which
         // need its loaded element; a point the host does not keep, or an object without the element (the original writes its sparse
         // attachment array), leaves the run unapplied, checked before anything applies.
@@ -728,10 +746,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             _created.Add(new(request.Prototype, request.Near, result));
             if (result.Disposition == GameSessionDisposition.Rejected) return false;
         }
-        // ARC-WORLD-114: toggle state and kill in action order (ObjectStateRefusal checked them).
+        // ARC-WORLD-114: toggle state and kill in action order (ObjectStateRefusal checked them); ARC-SCRIPT-052: destroy and stop attacking.
         foreach (var request in effects.ObjectStates)
         {
             if (request.Change == ScrObjectStateChange.Kill) { if (!_world!.Kill!(request.Object)) return false; continue; }
+            if (request.Change == ScrObjectStateChange.Destroy)
+            {
+                // TD2: an NPC already destroyed is left as it is.
+                if (AlreadyDestroyed(request.Object)) continue;
+                var destroyed = _session.ApplyChanges(_session.Version, null,
+                    [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+                if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.StopAttacking) { if (!StopAttacking(request.Object)) return false; continue; }
             if (request.Change == ScrObjectStateChange.SetFaction)
             {
                 // HW4: an NPC only (ObjectStateRefusal checked the map); a faction equal to its map data's clears the key.
@@ -754,13 +782,70 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 
+    // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
+    private bool AlreadyDestroyed(ScrObjectRef obj) =>
+        Row(obj) is { } row && ((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0 || Destroyed(_session, obj.Map, obj.Code);
+
+    // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's followers for the PC) with the world's facts for each.
+    private Dictionary<string, SessionPeaceFacts> StopFacts(ScrObjectRef obj)
+    {
+        var npcs = IsPc(obj) ? _session.QueryParty().Followers.Select(f => f.Entity).ToArray() : [obj.Code];
+        return npcs.ToDictionary(npc => npc, npc => _world?.PeaceFacts?.Invoke(npc) ?? new SessionPeaceFacts(), StringComparer.Ordinal);
+    }
+
+    // The session refuses a stop (InvalidDangerFacts) for an NPC with a focus on the hero's side and no reaction facts, or with a focus while in
+    // combat mode and no combat-mode facts: such a run is left unapplied before anything applies.
+    private string? StopRefusal(ScrObjectRef obj)
+    {
+        foreach (var (npc, facts) in StopFacts(obj))
+        {
+            if (_session.QueryDanger(npc).Focus is not { } focus) continue;
+            if ((focus.IsHero || _session.QueryCompanion(focus.Entity!).LedByPc) && facts.Reaction is null)
+                return $"stop attacking of {npc}, which fights the hero's side, needs its reaction facts";
+            if (_session.QueryCombatMode(SessionCombatant.Critter(npc)) && facts.CombatMode?.Facts is null)
+                return $"stop attacking of {npc}, in combat mode, needs its combat-mode facts";
+        }
+        return null;
+    }
+
+    // ARC-SCRIPT-052 (TD3): the session's stop attacking for the PC (each follower) or an NPC, with the world's facts for each NPC it reaches,
+    // then the host's part of each step.
+    private bool StopAttacking(ScrObjectRef obj)
+    {
+        var hero = IsPc(obj);
+        var facts = StopFacts(obj);
+        var stop = _session.StopAttacking(_session.Version, new SessionStopAttackingRequest
+            { Combatant = hero ? SessionCombatant.Hero : SessionCombatant.Critter(obj.Code), Facts = facts });
+        if (stop.Disposition == GameSessionDisposition.Rejected) return false;
+        foreach (var step in stop.Steps) _world?.Stopped?.Invoke(step);
+        return true;
+    }
+
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
     // of the shown map only; a kill needs the world's kill, and an NPC its map data has off is never switched on (its T0 body is not
-    // drawn at all).
+    // drawn at all). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
+    // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
     private string? ObjectStateRefusal(ScrEffects effects)
     {
         foreach (var request in effects.ObjectStates)
         {
+            if (request.Change == ScrObjectStateChange.StopAttacking)
+            {
+                if (!IsPc(request.Object) && (request.Object.Map != _shownMap || Row(request.Object) is not { Type: NpcType }))
+                    return $"stop attacking of {request.Object.Code} is not modelled (only the PC or an NPC of the shown map)";
+                if (StopRefusal(request.Object) is { } refused) return refused;
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.Destroy)
+            {
+                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
+                    return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+                // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
+                if (AlreadyDestroyed(request.Object)) continue;
+                if (Leader(request.Object) is not null) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
+                if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return $"destroy of {request.Object.Code} runs its destroy script {own.Script}, which is not modelled";
+                continue;
+            }
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
             if (request.Change == ScrObjectStateChange.SetFaction)
             {

@@ -240,6 +240,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="heartbeat-world-questions-arc-script-049"></a>[Heartbeat world questions (ARC-SCRIPT-049)](ledger/scripts.md#heartbeat-world-questions-arc-script-049) | [Scripts and events](ledger/scripts.md) | HW1–HW4 |
 | <a id="talk-commands-arc-script-050"></a>[Talk commands (ARC-SCRIPT-050)](ledger/scripts.md#talk-commands-arc-script-050) | [Scripts and events](ledger/scripts.md) | FL1–FL5, GA1–GA3, ML1 |
+| <a id="tile-script-actors-arc-script-052"></a>[Tile-script actors (ARC-SCRIPT-052)](ledger/scripts.md#tile-script-actors-arc-script-052) | [Scripts and events](ledger/scripts.md) | TD1–TD3 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 
 ## Decisions to revisit

@@ -28,7 +28,8 @@ public sealed record AreaObjectAttackTarget(string Entity, AreaObjectRecord Row,
 /// <see cref="SessionObjectFacts.ItemFacts"/>). A container's entity is its inventory holder's, so its spill reaches the
 /// holder's items; a portal's is the lock domain's; any other static object's is <see cref="AreaUseScriptHost.EntityId"/>. Whether
 /// an object's use script is a trap is the caller's (<see cref="AreaUseScriptHost.IsTrap"/>, ARC-COMBAT-011). It also names the objects the session destroyed or
-/// switched off, which the view no longer draws, and since ARC-WORLD-114 the NPCs a script switched off (<see cref="AreaUseScriptHost.OffProperty"/>).
+/// switched off, which the view no longer draws, and since ARC-WORLD-114 the NPCs a script switched off (<see cref="AreaUseScriptHost.OffProperty"/>),
+/// since ARC-SCRIPT-052 also those a script destroyed (<see cref="AreaUseScriptHost.DestroyedProperty"/>).
 /// </summary>
 public sealed class AreaObjectTargets
 {
@@ -118,7 +119,8 @@ public sealed class AreaObjectTargets
 
     private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
 
-    /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off): the view no
+    /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off, since ARC-SCRIPT-052
+    /// those a script destroyed): the view no
     /// longer draws them, and since ARC-WORLD-065 they no longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
     /// unchanged.</summary>
     public IReadOnlySet<AreaObjectKey> Gone(GameSessionOwner session)
@@ -128,7 +130,8 @@ public sealed class AreaObjectTargets
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
             or SessionObjectCondition.Off).Select(pair => pair.Key)
-            .Concat(_npcs.Where(pair => AreaUseScriptHost.SwitchedOff(session, _map.RuntimeMap, pair.Value)).Select(pair => pair.Key)).ToHashSet();
+            .Concat(_npcs.Where(pair => AreaUseScriptHost.SwitchedOff(session, _map.RuntimeMap, pair.Value)
+                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);

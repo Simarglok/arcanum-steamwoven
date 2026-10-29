@@ -610,6 +610,31 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   94 talks start and 14 end in their script, against 50 and 1 without the queries; 12 of them float a line and none reaches a floated
   line with an action field. The census admits 115 of the 180 dialog rows from line 0 (52 before).
 
+## Tile-script actors (ARC-SCRIPT-052, set S20)
+
+`ScrAdmissionSet.S20` is S19 (ARC-SCRIPT-050) plus destroy (68) and stop attacking (109); the interpreter runs at most S20. Slice 8 of
+the [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised), its first group: call-ex (81), destroy and stop
+attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](../research/ledger/scripts.md#tile-script-actors-arc-script-052)).
+
+- **Destroy, stop attacking.** One `ScrObjectStateRequest` (`Destroy`, `StopAttacking`) for the first object of operand 0, and the run
+  goes on; an absent object asks nothing (a project choice: the original passes the null handle on without a test). The original's
+  destroy (0x43CCA0, TD2) leaves an object already destroyed as it is, runs the object's destroy point (2) first and keeps it on a skip
+  default, then takes it out of the world (object flag 0x1); stop attacking is 0x4AA4A0 (TD3), the session's `StopAttacking`.
+- **Hosts.** The viewer's tile and sector set (`AreaUseScriptHost.PlacedAdmission`, "S4-area-placed-dialog-actor") adds call-ex, destroy
+  and stop attacking to the dialog action. A tile that an NPC steps on runs his own dialog point through call-ex as a heartbeat does
+  (ARC-SCRIPT-047): Virgil on the altar tiles (1328) runs his dialog script 1324 from line 14, which asks for node 250, and the viewer
+  opens that talk. Destroy acts on an NPC of the shown map: it is kept as the map change `obj.destroyed` (1), and the view no longer draws
+  or reaches the NPC (`AreaObjectTargets.Gone`, the object lists, the AI host); one destroyed already, in its map data or by a script,
+  changes nothing. The PC, a follower of the PC (the party removal is not read) and an NPC whose destroy point holds a script (the
+  destroy event is audit slice 4) leave the run unapplied. Stop attacking acts on the PC (each of its followers) or an NPC of the shown
+  map: the session's `StopAttacking` with the AI host's facts (`AreaScriptWorld.PeaceFacts`), then the AI host's part of each step
+  (`AreaScriptWorld.Stopped`, the animation interrupt), as an order's stop does; an NPC it reaches that fights the hero's side without
+  reaction facts, or is in combat mode without combat-mode facts, leaves the run unapplied before anything applies (the session would
+  refuse it). A destroy is not seen by later lines of the same run (a dead, switched-off or vicinity test still finds the NPC), and a run
+  that asks for a talk with an NPC destroyed before or by it is left unapplied.
+- **Installed original.** Of the 3,012 tile scripts of the 79 maps map mode opens, 829 run and 2,053 are refused (684 and 2,198 before),
+  each in a new game's state; the first refusals left are listed in the audit's slice 8.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -652,6 +677,13 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   separators-only action field, get area 0 off the start map and stopping on it, a floated action field leaving the run unapplied, the
   set widening only for a use host of the talk's map); `MapTransitionsTests` (the map list's area, ML1); opt-in
   `AreaMapConversationOriginalTests.Every_dialog_npc_of_every_interior_starts_with_the_talk_queries` and `ScriptTriggerCensusTests`.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrTileActorTests.cs` (ARC-SCRIPT-052): S20 over S19; destroy and stop attacking asking for the first
+  object with the run going on, an absent object asking nothing, a tile's call-ex of the stepping NPC's dialog point asking for his talk.
+  Viewer: `AreaUseScriptHostTests.A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him` (the session's stop and the host's
+  part, the destroyed NPC gone, a second destroy changing nothing, the PC and an NPC with a destroy script refused); opt-in
+  `AreaUseScriptsOriginalTests.Virgil_stepping_onto_the_altar_tile_asks_for_his_altar_conversation` and the tile census. Native:
+  `./arcanum smoke pr --stages altar --sector 1452,1291` (Virgil joins, follows the PC across an altar tile, his talk opens at node 250 of
+  DLG 1324 as a resumable dialog-point talk; the window holds his home and the altar).
 - `tests/Arcanum.Scripting.Tests/Scr/ScrSoundTests.cs` (ARC-SCRIPT-040): the sound actions refused below S7, returned in
   action order with value operands read, an absent object playing nothing, a run with only sounds not empty. Opt-in
   `ScrAdmissionRealDataTests`: S6 admits 336 installed scripts whole, S7 342; the six more each have a sound action.
@@ -715,7 +747,8 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
   the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
   obj is dead, obj is switched off, distance between and set faction (S18, ARC-SCRIPT-049; the viewer's heartbeat set and talks),
   float line and get area (S19, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
-  with area 0 not modelled).
+  with area 0 not modelled), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
+  follower or an NPC with a destroy script not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any

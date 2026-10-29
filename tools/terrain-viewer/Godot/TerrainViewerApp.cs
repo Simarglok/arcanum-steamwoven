@@ -213,6 +213,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
                                 if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
+                                // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
+                                if (only?.Contains("altar") == true) await RunAreaAltarTileSmokeAsync();
                                 // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
