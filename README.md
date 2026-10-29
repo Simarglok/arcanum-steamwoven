@@ -169,7 +169,8 @@ Both builds are signed for free only, so the first start of a copy that came fro
   seconds), `screenshot.png` and, when one can be taken, a save into a `reports/<date_time>/` folder next to the app
   (macOS) or the `.exe` (Windows), or into the user folder's `reports/` when that place cannot be written. It holds
   content of the player's own copy of Arcanum: never commit it
-  ([details](docs/player/alpha-build.md#9-reporting-a-bug-ctrlb)).
+  ([details](docs/player/alpha-build.md#9-reporting-a-bug-ctrlb)). A handled report (its fix thread started, or called
+  not a bug) is moved, never deleted, into `reports/archive/` with one line in `reports/archive/INDEX.md` (ARC-DEV-056).
 
 ## Hotkeys
 

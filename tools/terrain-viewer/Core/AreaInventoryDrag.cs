@@ -15,12 +15,17 @@ public readonly record struct AreaInventoryHit(int? Cell, EquipmentSlot? Slot, A
 
 /// <summary>ARC-UI-019: the item held on the cursor: its entity, the wear slot it was taken from (null: the grid) and the grab's offset in
 /// grid locations (the press cell minus the item's slot; 0 for a worn item and for an occupant a swap put on the cursor).</summary>
-public sealed record AreaInventoryHeld(string Entity, EquipmentSlot? Worn, int Offset);
+public sealed record AreaInventoryHeld(string Entity, EquipmentSlot? Worn, int Offset)
+{
+    /// <summary>ARC-UI-052: the item is the looted holder's (picked from its grid in the loot window), not the hero's.</summary>
+    public bool Partner { get; init; }
+}
 
-public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon }
+public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon, Take }
 
 /// <summary>ARC-UI-019: what a release does with the held item: put it back, move it in the grid, take it off into a grid slot, or put it
-/// into a wear slot; ARC-UI-025: drop it on the hero's tile (the drop icon) or use it (the use icon).</summary>
+/// into a wear slot; ARC-UI-025: drop it on the hero's tile (the drop icon) or use it (the use icon); ARC-UI-052: take the looted holder's
+/// item (released on the hero's grid in the loot window).</summary>
 public sealed record AreaInventoryDrop(AreaInventoryDropKind Kind, AreaInventoryHeld Held, int? GridSlot = null, EquipmentSlot? Slot = null);
 
 /// <summary>
