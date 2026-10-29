@@ -69,6 +69,7 @@ public partial class TerrainViewerApp
             Choose(30);
             for (var frame = 0; frame < 30 && !SaveListOpen; frame++) await Frames(1);
             Require(SaveListOpen && _saveList!.Mode == AreaSaveListMode.Save, "Save Game opened the save window");
+            await SaveListArtForSmoke(Require);
             Key(Godot.Key.Enter);
             Require(!SaveListOpen && !MainMenuOpen && _mainMenu is null && _saveLibraryForSelfTest.List().Entries.Count == 1, "the save ended the menu: " + _quickSaveStatus);
 

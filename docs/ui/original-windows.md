@@ -165,7 +165,15 @@ are F0 and are read by the slice.
    (Save / Load, hint 7021 / 7020), 323 `BackBut` at (69, 55) (hint 7002) and 32 `cncl_big` (38 × 37) at (115, 396) (hint 7022).
    The list, the slot thumbnails and the description field come from the opens 0x543380 (save) and 0x541F20 (load), their redraws
    and the save info 0x404270 (SL1–SL8, [save list](../research/ledger/ui-audio.md#save-list-arc-ui-010)). May split: (a) frame,
-   buttons and the list's text; (b) the save's thumbnail.
+   buttons and the list's text; (b) the save's thumbnail. Done by ARC-UI-062 (a), ledger MW11–MW16: the strips and the background,
+   Save / Load and Previous Screen on the bottom strip at the screen's (675, 496) and (69, 496) (table flag 1: y from the strip's
+   top), Delete at (115, 396), with their frames and sounds (`AreaSaveListArtView`); the list's eleven rows at (42, 161 + 20 × k),
+   141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
+   (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
+   (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
+   the list. Next slice (b): the save's picture as the original draws it (748 `SaveShotCover`, MW16), the info texts over it with the
+   toggle 747 at (499, 82), the lens 746 at the screen's (84, 51) with the hero's portrait (which needs the portrait in the save's
+   details, `NAME.meta.json` details schema 2), the scroll bar's art (0x5804E0) and the buttons' hints.
 3. **Pre-made character browser** (window 13): background 766 `PreGenCharacterBase` (800 × 400) at (0, 41) with the strips; buttons
    321 at (675, 55) (start, hint 7003), 323 at (69, 55) (back), 283 `Big_Grn_L` / 284 `Big_Grn_R` (34 × 33) at (43, 118) and
    (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);

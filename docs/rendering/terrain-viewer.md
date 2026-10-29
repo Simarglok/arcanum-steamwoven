@@ -1604,8 +1604,8 @@ and its three interface callbacks after the entry (button state, two refreshes, 
 While `crash-site-area` has a game session, the palette's **Save game (save list)** and **Load game (save list)**
 open the save and load windows over the session's save folder (`user://saves`, map mode `user://saves/map`, an
 automated run its own folder). The original opens these windows from its in-game menu, which is a later task; the
-rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)), the window's
-art and layout are the project's.
+rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)); since ARC-UI-062 the
+window's frame, buttons and list are the original's with the game's art (below), its picture and info the project's.
 
 - **Folder.** `GameSaveLibrary` ([save list](../world/game-session-runtime.md#save-list-arc-ui-010)): the auto-save
   (`quicksave`, the original's `SlotAuto` "Auto-Save" that F7 writes) and numbered saves `slot0000`..`slot9998`,
@@ -1632,6 +1632,22 @@ art and layout are the project's.
   confirms or answers yes, Escape answers no or closes; F7, F8 and the window letters do nothing under it. A
   controller confirm, cancel and menu direction do the same.
 
+- **Original look (ARC-UI-062,** [ledger MW11–MW16](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
+  game's art both windows draw over the 800 × 600 screen (the bars' whole factor) the strips 336 and 335 and the background 745
+  between them; Save or Load (321) and Previous Screen (323) on the bottom strip, Delete (32) under the list, each idle, lit under
+  the pointer and down while held, acting on a release over it with 3000 / 3001; the list's eleven rows in the art font 27 from the
+  scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
+  each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
+  the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
+  characters the font lacks are not drawn, though they are saved). PROJECT: the stored preview is fitted into the preview hole; the
+  selected save's details, a notice and the Yes/No question stand in the bottom strip's middle box (a question without the
+  details), and while a question is open the art buttons and rows do nothing. Not drawn yet (next slice): the original's picture
+  cover and info texts, the info toggle, the hero's portrait lens, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
+  diagnostic window. The menu stage (`ARC-UI-062 native-smoke save window art PASS`, Load Game from the single-player window with
+  the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
+  the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
+  saves each window's picture to an ignored path (`-load` / `-save` added to the name).
+
 Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
 temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
 Escape refuses, Return accepts) keeping the save's description, keys owned, the F7 auto-save's details (and the
@@ -1639,7 +1655,8 @@ preview when a frame can be read), the auto-save first and not deletable, a load
 loading the newest save (the auto-save, then a numbered save made newer; the HUD names the loaded save), a delete
 asked first that clears the selection. The native quick-save smoke checks the auto-save's
 details on the original data. Not done: the in-game menu that opens the windows (FR-UI-006, the next tasks), the
-original window art, sorting or paging options, a text cursor of the original's own, and the original `.gsi` format.
+original save picture, info texts and portrait (ARC-UI-062 next slice), sorting or paging options, a text cursor of the original's
+own, and the original `.gsi` format.
 
 ### Bug report (ARC-DEV-051)
 
