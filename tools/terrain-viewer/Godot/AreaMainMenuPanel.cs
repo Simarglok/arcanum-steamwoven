@@ -303,7 +303,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
             ("Race", creation.Race.ToString(), AreaNewCharacterButton.RacePrevious, AreaNewCharacterButton.RaceNext),
             ("Background", (text?.Name is { Length: > 0 } title ? title : "?") + $" ({creation.Background})", AreaNewCharacterButton.BackgroundPrevious,
                 AreaNewCharacterButton.BackgroundNext),
-            // ARC-UI-033: the portrait as its image's name and id (the art is not drawn yet).
+            // ARC-UI-033: the portrait as its image's name and id (ARC-UI-068: the image is drawn in the window's art).
             ("Portrait", $"{creation.PortraitText() ?? "?"} ({creation.Portrait})", AreaNewCharacterButton.PortraitPrevious, AreaNewCharacterButton.PortraitNext),
         };
         for (var i = 0; i < rows.Length; i++)

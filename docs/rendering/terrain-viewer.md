@@ -2027,12 +2027,12 @@ until ARC-UI-068 (the original look, below).
   may take and wrap (BD4), and each press sets the landed block with its description number and effect. The background
   row shows the description's name and the text below it, the game's `mes\gameback.mes`; before any background press (or after
   a clear) the window shows the default text 1000 and the character keeps background 0 without its effect, as in the
-  original. Race and gender names are the project's.
+  original. Race and gender names are the project's in the project's panel (the game's in the original look, below).
 - **Portrait** (ARC-UI-033, FR-CHAR-004, [NW9](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
   a row with the original's arrows over the portraits the race and gender may take (`PortraitCatalogue.Press`, PO9: next
   past the last takes the first, previous before the first takes the last); a race or gender change takes the first
   portrait of the new pair, a refused press keeps it. The window starts with the generic prototype's portrait 1005 and
-  shows the portrait's image name and number (the image is not drawn yet). The catalogue is read with the generic start
+  shows the portrait's image name and number in the project's panel (the large image in the original look, below). The catalogue is read with the generic start
   (`AreaHeroLoad.Portraits`); without it the arrows say so and a race change keeps the portrait.
 - **Name** (ARC-UI-033, FR-CHAR-002, [NW6–NW8](../research/ledger/character.md#new-character-name-and-portrait-arc-ui-033)):
   the field starts with main-menu message 500 (in the game's encoding, the project's text without the game). A click on it
@@ -2068,7 +2068,7 @@ until ARC-UI-068 (the original look, below).
   (MW29). Accept and Cancel stand in the bottom strip, the portrait's arrows beside the portrait and the gender's, race's and
   background's arrows (757 / 758) beside their fields; they light under the pointer, play 3000 and 3001 and act on a release
   over themselves; the name field is an art-less button (3026 entering it, 3027 on its press, a release over it starts the
-  typing), and a press elsewhere ends the typing first (NW8). PROJECT: the controller's focus row lights its buttons; the hints
+  typing), and a press elsewhere ends the typing first (NW8). PROJECT: the controller's focus row lights its buttons until the pointer moves; the hints
   are not shown; Accept's refusal (506) is the line at the top. Without the art (the self-tests) the window keeps the project's
   panel. The menu stage checks it after opening the window (`ARC-UI-068 native-smoke new character art PASS`: the art read, the
   generic human man's texts and portrait, the gender's and race's bands, a click on the race's right and left arrows, the name

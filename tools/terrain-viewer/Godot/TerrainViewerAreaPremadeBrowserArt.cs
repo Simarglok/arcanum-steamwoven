@@ -54,7 +54,12 @@ public partial class TerrainViewerApp
     private AreaNewCharacterView? NewCharacterArt(AreaNewCharacter creation, out Texture2D? portrait)
     {
         portrait = null;
-        if (_premadeArtContent is not { NewCharacterArtReady: true } content || content.NewCharacterView(creation) is not { } view) return null;
+        if (_premadeArtContent is not { NewCharacterArtReady: true } content) return null;
+        if (content.NewCharacterView(creation) is not { } view)
+        {
+            GD.Print($"ARC-UI-068 new-character art not drawn: the character or its stats did not read ({creation.Race} {creation.Gender} background {creation.Background})");
+            return null;
+        }
         portrait = CharacterPortrait(content, view.Character.Portrait);
         return view;
     }
@@ -237,7 +242,7 @@ public partial class TerrainViewerApp
         await Move(400, 20);
         GD.Print("ARC-UI-068 native-smoke new character art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             _premadeArtContent!.Detail, character.Name, character.Gender, character.Race, character.BackgroundName, character.DescriptionTitle,
-            Stats = character.Stats, character.Portrait, first.GenderText }));
+            Stats = character.Stats, character.Portrait, first.GenderText, GenericDescription = creation.Generic.Definition?.BackgroundDescription }));
     }
 }
 

@@ -277,7 +277,7 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
     /// <summary>
     /// ARC-UI-068: the new-character window's view of <paramref name="creation"/>, or null when the art or the tables are not ready or the
     /// character cannot be made. The character draw (MW18–MW20) of the window's object: its gender, race and portrait; the background's
-    /// name and story by the description number the last background press set (none: 0, which reads 1000; MW19); its stats under its
+    /// name and story by the description number the last background press set (none: the prototype's, 0, which reads 1000; MW19); its stats under its
     /// race, gender and that background's effect; the name field's text in the name's place (MW29).
     /// </summary>
     public AreaNewCharacterView? NewCharacterView(AreaNewCharacter creation)
@@ -286,7 +286,8 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
         if (!NewCharacterArtReady || creation.Hero(out _) is not { Definition: { } definition }) return null;
         var background = creation.Chosen is { } chosen ? AreaStartingHero.StatEffect(creation.Generic.Effects?.Invoke(chosen.Effect)) : null;
         if (AreaPremadeBrowserArtLayout.StatValues(definition, background) is not { } values) return null;
-        var number = creation.Chosen?.Description ?? 0;
+        // The object's field 0x102: the last background press's number, else the generic prototype's (0 installed).
+        var number = creation.Chosen?.Description ?? definition.BackgroundDescription;
         var description = Backgrounds!.Text(number);
         var story = number > AreaPremadeBrowserArtLayout.DefaultDescription && description.Status != BackgroundTextStatus.Missing;
         var (race, gender) = ((int)creation.Race, creation.Gender == CharacterGender.Female ? 0 : 1);

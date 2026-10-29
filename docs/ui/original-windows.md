@@ -234,7 +234,7 @@ are F0 and are read by the slice.
    the background's at (42, 381) / (255, 382) and the gender's at (42, 281) / (255, 282)), the character draw shared with the browser
    (its stats under the chosen background's effect too), the pointer's gender and race bands choosing the description field's text
    (hover flag 0x64C458), and the name field: an art-less button at (45, 224, 230 × 20) and the typed name with a closing "|"
-   (0x544100). PROJECT: the hints are not shown; the controller's focus row lights its buttons. The window is done but for these
+   (0x544100). PROJECT: the hints are not shown; the controller's focus row lights its buttons until the pointer moves. The window is done but for these
    points.
 5. **Character editor and opening shop** (windows 14 and 15): no background of their own (-1, MW1: the strips only); buttons 321 at
    (675, 55) and 323 at (69, 55) (back, target -2). The editor is the creation-mode character sheet over 22 `char_maint`: done with

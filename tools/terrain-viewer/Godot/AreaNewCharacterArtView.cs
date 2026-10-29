@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 /// pointer over the gender's or the race's band shows that text in the description field (0x5456B0); the band is forgotten when the
 /// window opens (0x5446F0 sets the flag to 0). The name field is an art-less button: 3026 when the pointer enters it, 3027 on its
 /// press, acting on a release over it, as the menu's text buttons (MW27). A press elsewhere than the field ends the name's typing
-/// first (NW8). PROJECT: the controller's focus row lights its buttons.
+/// first (NW8). PROJECT: the controller's focus row lights its buttons until the pointer moves.
 /// </summary>
 public partial class AreaNewCharacterArtView : Control
 {
@@ -20,6 +20,7 @@ public partial class AreaNewCharacterArtView : Control
     private AreaNewCharacterView? _view;
     private Texture2D? _portrait;
     private int _focus = -1;
+    private bool _focusLit;
     private AreaNewCharacterArtButton? _hovered, _pressed;
     private bool _overName, _pressedName;
     private AreaNewCharacterHover _hover;
@@ -64,6 +65,8 @@ public partial class AreaNewCharacterArtView : Control
     {
         ArgumentNullException.ThrowIfNull(view);
         if (_fonts is null) throw new InvalidOperationException("ARC-UI-068: the new-character art is not set");
+        // PROJECT: the focus row is lit at the opening and after a focus move, and the pointer darkens it (as the menu art's, ARC-UI-058).
+        if (!Visible || focus != _focus) _focusLit = true;
         if (!Visible) (_hovered, _pressed, _overName, _pressedName, _hover) = (null, null, false, false, AreaNewCharacterHover.None);
         (_view, _portrait, _focus) = (view, portrait, focus);
         Visible = true;
@@ -90,7 +93,7 @@ public partial class AreaNewCharacterArtView : Control
     {
         var frames = _art.TryGetValue(AreaNewCharacterArtLayout.Button(button).Art, out var art) ? art.Length : 1;
         return AreaCharacterArtDraw.Frame(frames, _pressed is not null || _pressedName, _pressed == button, _hovered == button,
-            AreaNewCharacterArtLayout.Focused(_focus).Contains(button));
+            _focusLit && AreaNewCharacterArtLayout.Focused(_focus).Contains(button));
     }
 
     public override void _Draw()
@@ -138,6 +141,7 @@ public partial class AreaNewCharacterArtView : Control
                 var over = ButtonAt(motion.Position);
                 var name = NameAt(motion.Position);
                 var hover = AreaNewCharacterArtLayout.Hover(motion.Position.X, motion.Position.Y);
+                if (_focusLit) { _focusLit = false; QueueRedraw(); }
                 if (name && !_overName) SoundRequested?.Invoke(AreaGameBarLayout.MenuHoverSound);
                 if (over == _hovered && name == _overName && hover == _hover) break;
                 (_hovered, _overName, _hover) = (over, name, hover);
