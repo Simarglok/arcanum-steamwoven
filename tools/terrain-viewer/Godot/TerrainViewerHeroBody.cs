@@ -17,6 +17,8 @@ public partial class TerrainViewerApp
     private readonly Dictionary<HeroBody, HeroBodyLoad> _heroBodies = new();
     private readonly Dictionary<HeroBody, string> _heroBodyFailures = new();
     private string _heroBodyStatus = "fixed human";
+    // ARC-COMBAT-021: why the human woman's own body (for a human or elf woman hero) did not read or swap; the fixed human draws her then.
+    private string? _heroWomanFailure;
     private IReadOnlyList<ActorDiagnosticFrame>? _humanActorFrames;
 
     // ARC-WORLD-112: the use art of each worn body armour, by item entity, for one session and kit (an item's art never changes).
@@ -51,7 +53,9 @@ public partial class TerrainViewerApp
         var wanted = WantedHeroBody();
         // A body that did not read or swap is drawn as the fixed human, with the human's profile and timing.
         if (_heroBodyFailures.ContainsKey(wanted)) wanted = HeroBody.HumanFemale;
-        if (wanted == HeroBody.HumanFemale)
+        // ARC-COMBAT-021: a hero drawn with the human woman's body (a human or elf woman) reads that body's ARTs as any other, so she
+        // has the fall and get-up the fixed human lacks; without a hero, or when they do not read, the fixed human stays.
+        if (wanted == HeroBody.HumanFemale && (_areaSession?.QueryHero() is null || _heroWomanFailure is not null))
         {
             // The fixed human is the published plan's own profile; a plan published since a swap already carries it.
             if (ReferenceEquals(_worldActor.Profile, ActorDiagnosticProfile.HumanFixedArea) && ReferenceEquals(_readyActorPlan.Profile, ActorDiagnosticProfile.HumanFixedArea)) return;
@@ -62,14 +66,14 @@ public partial class TerrainViewerApp
         if (_heroBodies.TryGetValue(wanted, out var known) && ReferenceEquals(_worldActor.Profile, known.Profile) && ReferenceEquals(_readyActorPlan.Profile, known.Profile)) return;
         if (known is null)
         {
-            if (_arguments?.ActorResourcePath is not { } path) { NoteHeroBodyFailure(wanted, "no actor archive"); return; }
+            if (_arguments?.ActorResourcePath is not { } path) { NoteHeroBodyFailure(wanted, "no actor archive", textures: true); return; }
             try
             {
                 using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
                 known = _heroBodies[wanted] = HeroBodyArt.Load(archive, wanted);
             }
             catch (Exception exception) when (exception is TerrainViewerException or DatException or IOException or UnauthorizedAccessException)
-            { NoteHeroBodyFailure(wanted, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name); return; }
+            { NoteHeroBodyFailure(wanted, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, textures: true); return; }
         }
         SwapHeroBody(wanted, known.Profile, known.Timing, known.Frames, known.Textures);
     }
@@ -91,11 +95,11 @@ public partial class TerrainViewerApp
         catch (Exception exception) when (exception is TerrainViewerException or ArgumentException or InvalidOperationException)
         {
             _worldActor.UseProfile(previousProfile, previousTiming);
-            NoteHeroBodyFailure(body, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name);
+            NoteHeroBodyFailure(body, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, textures is not null);
             return;
         }
         _readyActorPlan = plan; _readyActor = plan.Current; _readyActorInput = input;
-        _heroBodyStatus = body == HeroBody.HumanFemale ? "fixed human" : $"{body.Label} ({profile.Provenance})";
+        _heroBodyStatus = textures is null ? "fixed human" : $"{body.Label} ({profile.Provenance})";
         GD.Print($"ARC-UI-039 hero body={body.Label} profile={profile.Id} idle=0x{profile.Idle.Selector:x8} walkRate={timing.ArtRate(MovementGait.Walk)} runRate={timing.ArtRate(MovementGait.Run)}");
         PublishWorldSelection();
     }
@@ -114,8 +118,10 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         Require(!_heroBodyFailures.ContainsKey(body), "the body did not load: " + _heroBodyStatus);
         Require(ReferenceEquals(_readyActorPlan?.Profile, profile), "the plan draws the actor's profile");
-        Require(profile.Actions.All(action => profile.Resource(action).Selector == body.Selector(ActorDiagnosticProfile.HumanFixedArea.Resource(action).Selector)),
+        Require(profile.Actions.All(action => profile.Resource(action).Selector == body.Selector(ActorDiagnosticProfile.HumanSelector(action))),
             $"{hero.Race} {hero.Gender}: every action is the {body.Label} body");
+        // ARC-COMBAT-021: the body reads its fall-down and get-up ARTs.
+        Require(profile.FallDown is not null && profile.GetUp is not null, $"{body.Label}: the fall-down and get-up ARTs read");
         Require(_readyActor is { } drawn && (drawn.TextureKey.Selector & 0x0FF00030u) == body.Selector(0) && _cache.TryGet(drawn.TextureKey, out _),
             "the drawn frame is the body's and uploaded: " + _readyActor?.TextureKey);
         Require(_worldActor.AreaGaitTiming is { } timing && timing.RateBonus == body.GaitRateBonus
@@ -156,9 +162,11 @@ public partial class TerrainViewerApp
             + $"worn={dressed.Label} armor={dressed.Armor} palette={dressed.Palette}");
     }
 
-    private void NoteHeroBodyFailure(HeroBody body, string reason)
+    /// <param name="textures">The failure is of a body read from its ARTs (not of the fixed human's swap back).</param>
+    private void NoteHeroBodyFailure(HeroBody body, string reason, bool textures)
     {
-        _heroBodyFailures[body] = reason;
+        if (body == HeroBody.HumanFemale && textures) _heroWomanFailure = reason;
+        else _heroBodyFailures[body] = reason;
         _heroBodyStatus = $"fixed human ({body.Label} not drawn: {reason})";
         GD.Print($"ARC-UI-039 hero body={body.Label} FAILED {reason}; the fixed human is drawn");
     }

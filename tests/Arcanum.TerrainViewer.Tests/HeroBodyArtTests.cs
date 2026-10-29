@@ -113,7 +113,10 @@ public sealed class HeroBodyArtTests
             Assert.AreEqual((pinned.Ordinal, pinned.Selector, pinned.FramesPerGroup, pinned.RawFramesPerSecond, pinned.ActionFrame, pinned.Stride),
                 (read.Ordinal, read.Selector, read.FramesPerGroup, read.RawFramesPerSecond, read.ActionFrame, read.Stride), action.ToString());
         }
-        Assert.AreEqual((human.DistinctKeys, human.OriginalRgbaBytes!.Value), (woman.Textures.Count, woman.RgbaBytes));
+        // ARC-COMBAT-021: the five pinned actions' frames are the fixed human's; the fall-down and get-up frames come on top.
+        var fiveSelectors = human.Actions.Select(action => human.Resource(action).Selector).ToHashSet();
+        var five = woman.Textures.Values.Where(texture => fiveSelectors.Contains(texture.Key.Selector)).ToArray();
+        Assert.AreEqual((human.DistinctKeys, human.OriginalRgbaBytes!.Value), (five.Length, five.Sum(texture => (long)texture.Width * texture.Height * 4)));
         Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Run, NeighborDirection.XPlusYPlus), woman.Timing.For(MovementGait.Run, NeighborDirection.XPlusYPlus));
         var report = new List<string>();
         foreach (var body in Premade.Select(hero => HeroBody.For(hero.Race, hero.Gender)!.Value)
@@ -121,9 +124,15 @@ public sealed class HeroBodyArtTests
                 .Where(gender => CharacterCreationRules.Allows((CharacterRace)race, gender)).Select(gender => HeroBody.For((CharacterRace)race, gender)!.Value))).Distinct())
         {
             var load = HeroBodyArt.Load(archive, body);
-            // HB4: the human's frame counts and 195 keys for every creatable body.
-            Assert.AreEqual((195, 195), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
-            CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
+            // HB4: the human's frame counts and 195 keys for every creatable body; ARC-COMBAT-021 (UC5): every body also has its
+            // fall-down and get-up ARTs, five used groups of each.
+            Assert.IsNotNull(load.Profile.FallDown, body.Label); Assert.IsNotNull(load.Profile.GetUp, body.Label);
+            // The installed fall is 11 frames at 11 fps, the get-up 19 at 14, on every body.
+            Assert.AreEqual((11, 11, 19, 14), (load.Profile.FallDown.FramesPerGroup, load.Profile.FallDown.RawFramesPerSecond,
+                load.Profile.GetUp.FramesPerGroup, load.Profile.GetUp.RawFramesPerSecond), body.Label);
+            var downKeys = 5 * (load.Profile.FallDown.FramesPerGroup + load.Profile.GetUp.FramesPerGroup);
+            Assert.AreEqual((195 + downKeys, 195 + downKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
+            CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Take(5).Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
             // HB3: the installed strides (axis dx, dy, diagonal) of walk and run.
             var (walk, run) = body.Label switch
             {
@@ -170,7 +179,8 @@ public sealed class HeroBodyArtTests
                 var worn = bare.Wearing(item.UseArt);
                 Assert.IsNotNull(worn, $"{name} {item.Kind.Prototype}: subtype has no art");
                 var body = HeroBodyArt.Load(archive, worn.Value);
-                Assert.AreEqual(195, body.Textures.Count, $"{name} {item.Kind.Prototype} {worn.Value.Label}");
+                Assert.AreEqual(195 + 5 * (body.Profile.FallDown!.FramesPerGroup + body.Profile.GetUp!.FramesPerGroup), body.Textures.Count,
+                    $"{name} {item.Kind.Prototype} {worn.Value.Label}");
                 report.Add($"{name} {item.Kind.Prototype}: {worn.Value.Label} armor={worn.Value.Armor} palette={worn.Value.Palette}");
             }
         }

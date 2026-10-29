@@ -444,3 +444,25 @@ session restored while a boomerang flies has it in the hand and may attack at on
 hero's own tile ends the flight at once (the original's line of no step was not read). Not modelled: the return's hit script and
 item event (BR5, as PS5), the hook and the turn-based round's join of BR6, its goal-slot tests, a give-up's re-attack without a
 target, NPC boomerangs (no AI) and the struck object's alert.
+
+## Hero knockdown (ARC-COMBAT-021)
+
+Source: the [AREA hero's fall and getting up](../../world/hero-attack-runtime.md#hero-knockdown-arc-combat-021) (owner report
+of 2026-10-29: the hero at fatigue −3 did not fall unconscious). Read on 2026-10-29 by one reader with `llvm-objdump` (F1); every
+direct branch stays inside `.text`. UC5 counts the installed ART headers (real-data test, no original bytes in git).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| UC1 | knockdown (0x435A90) | The knockdown IC4's going unconscious calls: nothing for a null critter, one whose current art (0x406CA0 field 1, 0x503E20) already shows animation 7, or a dead one (0x45D8D0); after the goal test 0x424070 (critter, 5) it starts goal 62 (0x3E, 0x44D4E0/0x44D520), the fall-down animation 7, whose last frame stays. | Original |
+| UC2 | fatigue recovery (0x45E610), mode 0 | The recovery reads the current fatigue (0x45D700) before it writes the lowered damage (0x45D5A0); when it was above 0 the event ends there. When it was at most 0 and is above 0 after the write, the critter gets up (0x434DE0). | Original |
+| UC3 | get up (0x434DE0), start gate (0x4348E0) | The gate refuses a critter that is not active (0x45D790: dead, unconscious, stunned, paralysed or stoned); outside a round it passes; in a round (0x4B6D70) only the current participant (0x4B6D80) passes, an NPC by its action points or fatigue share. Then, only when the critter's art shows animation 7, goal 63 (0x3F) starts with animation 8; the get-up goal's own start charges 5 action points on the critter's own subturn (CT3, A3). | Original |
+| UC4 | in-game mouse handler (0x54DE50), world press (0x54ED30) | The world press reads the local PC (0x40DA50) and returns at once, doing nothing, when it is not active (0x45D790); the handler's object branch makes the same test (0x54DF37, 0x54E017, 0x54E0C5) before it acts. | Original |
+| UC5 | installed critter ART (resource 1) | Every creatable hero body (eight races, both genders, every armour part the pre-made kits wear) has its fall-down (`…XAh.art`, 11 frames at 11 fps) and get-up (`…XAi.art`, 19 frames at 14 fps) ARTs, eight rotations. | Original (data) |
+
+Anomalies: none. Implemented by ARC-COMBAT-021 in the AREA viewer for the hero (both rule modes): UC1 (the fall when the session's
+hero goes unconscious, once the hero stands on its cell; a dead hero lies on the same fall, as the dying animation's choice is not
+drawn for the hero), UC2 (the get-up when the session's fatigue recovery brings it round), UC3 (in a round on the hero's own subturn,
+paying `TurnBasedRules.GetUpCost`), UC4 (world presses and the Steamwoven walk keys and stick do nothing while the hero lies, falls or
+gets up) and UC5 (`HeroBodyArt` reads both ARTs; a body without them lies without a drawn fall). Not modelled: UC4 for a stunned
+or paralysed hero (it still takes presses), the goal test 0x424070, and an NPC's get-up animation (a recovered NPC stands up at
+once).

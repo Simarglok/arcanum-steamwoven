@@ -503,10 +503,13 @@ public partial class TerrainViewerApp
         ProcessAreaEyeCandy();
         // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
         ProcessTurnBasedRound();
+        // ARC-COMBAT-021: the hero falls, lies or gets up before its input is read.
+        ProcessHeroKnockdown();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
-        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal || _spellGoal is not null ? null
+        // ARC-COMBAT-021: a hero lying down (falling, unconscious, getting up) or dead does not walk.
+        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal || _spellGoal is not null || HeroLyingDown ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is null) _stickHeld = false;
@@ -688,6 +691,13 @@ public partial class TerrainViewerApp
         {
             portraits.CloseMenu();
             _worldRouteClick = "closed the follower order menu";
+            RefreshReadyStatus(); return;
+        }
+        // ARC-COMBAT-021: the original's world press handler (0x54ED30) does nothing for a PC that is not active (0x45D790); a hero
+        // lying down (falling, unconscious, getting up) or dead takes no press.
+        if (HeroLyingDown)
+        {
+            _worldRouteClick = "ignored (the hero is down)";
             RefreshReadyStatus(); return;
         }
         // ARC-COMBAT-020: in a turn-based round the world takes the hero's commands only on its own subturn (the original's world

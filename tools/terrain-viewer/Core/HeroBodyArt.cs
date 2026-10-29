@@ -104,8 +104,9 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
 
 /// <summary>ARC-UI-039: reads a hero body's five ARTs (stand, walk, run, vault, unarmed attack) by name from the actor archive
 /// (resource 1, where every critter ART of the installation is; SH-04) and decodes the frames the fixed facing table draws. The
-/// header gives frames, rate and action frame; the walk and run strides are the frame offsets of one cycle (research L7). Typed
-/// failures as <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
+/// header gives frames, rate and action frame; the walk and run strides are the frame offsets of one cycle (research L7). Since
+/// ARC-COMBAT-021 also the fall-down and get-up ARTs (animations 7 and 8) when the body has both. Typed failures as
+/// <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
 public static class HeroBodyArt
 {
     /// <summary>Upper bounds of one body: distinct frames and their RGBA bytes (the human uses 195 and 1,705,144).</summary>
@@ -122,12 +123,18 @@ public static class HeroBodyArt
         var read = new Dictionary<ActorDiagnosticAction, (ActorDiagnosticResource Resource, byte[] Bytes, DatEntry Entry, ArtMetadata Metadata)>();
         try
         {
-            foreach (var action in human.Actions)
+            // ARC-COMBAT-021: the fall-down and get-up ARTs follow the five; a body without both (none of the installed creatable
+            // bodies) loads without them, and its hero then lies down without a drawn fall.
+            var wanted = human.Actions.Select(action => (Action: action, Selector: human.Resource(action).Selector, Optional: false))
+                .Append((ActorDiagnosticAction.FallDown, ActorDiagnosticProfile.HumanFallDownSelector, true))
+                .Append((ActorDiagnosticAction.GetUp, ActorDiagnosticProfile.HumanGetUpSelector, true));
+            foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
-                var selector = body.Selector(human.Resource(action).Selector);
+                var selector = body.Selector(humanSelector);
                 var path = body.ArtPath(selector);
                 var entries = resource.Entries.Where(entry => string.Equals(Name(entry), path, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (optional && entries.Length == 0) continue;
                 if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 var bytes = resource.ReadEntry(entries[0]);
                 var metadata = ArtDecoder.Inspect(bytes, options);
@@ -143,10 +150,15 @@ public static class HeroBodyArt
                 if (descriptor.Stride is { IsValid: false }) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 read.Add(action, (descriptor, bytes, entries[0], metadata));
             }
-            var keys = human.Actions.Sum(action => human.UsedGroups(action).Count() * read[action].Resource.FramesPerGroup);
+            var falls = read.ContainsKey(ActorDiagnosticAction.FallDown) && read.ContainsKey(ActorDiagnosticAction.GetUp);
+            var actions = falls ? read.Keys.ToArray() : human.Actions.ToArray();
+            // Every action shares the fixed facing table, so the human's used groups are every action's.
+            var groups = human.UsedGroups(ActorDiagnosticAction.Idle).Count();
+            var keys = actions.Sum(action => groups * read[action].Resource.FramesPerGroup);
             if (keys > MaxKeys) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
             var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
-                read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys);
+                read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
+                falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null);
             var frames = new List<ActorDiagnosticFrame>(keys);
             var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
             long rgbaBytes = 0;
