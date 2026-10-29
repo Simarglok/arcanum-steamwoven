@@ -51,6 +51,36 @@ public sealed class AreaCompositionTests
     }
 
     [TestMethod]
+    public void MovedBodiesOnTheirOwnKeyKeepTheStableSortOrder()
+    {
+        // ARC-RENDER-035: a moved command with its T0 body's key (another frame) takes the T0 place, which must equal the
+        // stable sort of the remaining bodies with the moved commands appended, also among bodies with tied keys.
+        var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);
+        var random = new Random(11); var bodies = new List<AreaDrawCommand>();
+        for (var i = 0; i < 300; i++)
+        {
+            var tie = i % 7 == 0;
+            var identity = new AreaObjectKey("s", 1, tie ? AreaSourceKind.Mobile : (AreaSourceKind)random.Next(3), 1,
+                tie ? 5 : random.Next(4), tie ? 0 : random.Next(3), "id" + i, 1);
+            bodies.Add(new AreaDrawCommand(default, default!, identity, default, new(0,0,1,1), false, false, 4,
+                AreaScenePlan.CameraOriginX + random.Next(3), AreaScenePlan.CameraOriginY + random.Next(3), random.Next(-1,2), random.Next(-1,2), 255, false));
+        }
+        var commands = bodies.OrderBy(_ => random.Next()).ToArray();
+        var cached = new AreaUprightOrder(commands);
+        var actor = ActorDiagnosticScenePlan.Place(Placement(Cases[0]),frame,ActorDiagnosticProfile.HumanFixed);
+        for (var round = 0; round < 20; round++)
+        {
+            // Some bodies on another frame (same key, new destination), some truly moved.
+            var moving = bodies.Where(_ => random.Next(4) == 0).Select(b => random.Next(3) == 0
+                ? b with { MapX = b.MapX + 1, Destination = new(1,1,2,2) } : b with { Destination = new(5,5,3,3) }).ToList();
+            var keys = moving.Select(m => m.Identity).ToHashSet();
+            var expected = AreaScenePlan.UprightOrder(commands.Where(c => !keys.Contains(c.Identity)).Concat(moving), Placement(Cases[0]), actor, ActorKey);
+            var actual = cached.With(Placement(Cases[0]), actor, ActorKey, moving);
+            CollectionAssert.AreEqual(expected.ToArray(), actual.ToArray(), $"round {round}");
+        }
+    }
+
+    [TestMethod]
     public void CompleteNormalBranchMatrixHasLiteralGeometryAndInterleaving()
     {
         var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);

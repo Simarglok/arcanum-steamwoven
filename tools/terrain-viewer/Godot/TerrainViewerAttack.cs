@@ -822,13 +822,15 @@ public partial class TerrainViewerApp
         if (AiMoverCommands() is { Count: > 0 } walked)
             companions = [.. companions ?? [], .. walked.Where(c => companions?.Any(o => o.Identity == c.Identity) != true)];
         if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0
-            && _spellMissileBodies.Count == 0)
+            && _spellMissileBodies.Count == 0 && _sceneryBodies.Count == 0)
             || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
         // ARC-WORLD-051: doors and windows off their T0 frame.
         moving.AddRange(_portalBodies.Values);
+        // ARC-RENDER-035: animated scenery off its T0 frame (a busted scenery's ground body wins).
+        moving.AddRange(_sceneryBodies.Values.Where(c => !_groundBodies.ContainsKey(c.Identity!.Value)));
         // ARC-RENDER-033: busted scenery and traps, and the items lying away from a T0 body.
         moving.AddRange(_groundBodies.Values.Where(c => !taken.Contains(c.Identity)));
         // ARC-COMBAT-016: projectiles in flight.
