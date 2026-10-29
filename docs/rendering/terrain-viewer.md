@@ -736,7 +736,8 @@ game's state, never the object under the pointer: what a click would do there st
 
 Not built (F0 rows of CU6): the cursor arts `Cursor_UP`/`Cursor_DWN` over two interface buttons not yet identified, the
 spell cursor of the world map's state 3, a held item's art on the cursor (the viewer's inventory drag keeps its own image),
-the skill cursor, and scaling the art with the window (it stays at the art's pixel size).
+the skill cursor, and scaling the art with the window (it stays at the art's pixel size). The animation counts from the
+elapsed time, so after a long frame hitch it jumps to the frame of that time where the original steps one frame (CU5).
 
 Checks: `AreaCursorTests` (the art by mode, combat mode and key in both rule modes, the frame steps, content readiness; the
 opt-in `Original_cursor_art_reads` checks the installed arts' names, frames, rate and hot points), `RuleModeTests`, the
