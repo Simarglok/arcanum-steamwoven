@@ -219,6 +219,10 @@ Neither group replays each missed period.
 | P6 | The magic module parks and restores its own active runs with the same map-file mechanism; the reading does not follow it further. | teleport notify (0x45C720, 0x45C7B0) |
 | P7 | AI ticks are not saved and are cleared on map close (except those carried by P3); folding a sector's objects schedules an immediate first tick per non-destroyed NPC (its "first" marker compares the sector's stored time with now + 3 s, ARC-RES-042 H1), and creating an NPC schedules a normal one. A load therefore restarts every NPC's tick with fresh jitter. | type table, fold (0x441FC0), fold list (0x4F1CD0), create (0x442260) |
 
+Note (ARC-RES-076, [FM6, FM8](follower-map-transfer.md#rows)): the cross-map preparation of each moved object (0x4D3E20)
+removes its AI events; whether that runs before or after P3's carry was not read, so P3's carried AI tick and P7's
+double-tick inference may not occur.
+
 Consequence (inference): as read, an event belongs to the map of the objects it
 names, not to the map where it was scheduled, and time on a parked map is not
 frozen: deadlines are absolute, so returning after three days lets one day's

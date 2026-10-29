@@ -169,3 +169,27 @@ F1. Every direct branch and the jump table read (0x414DE0, 31 entries) stay insi
 
 Not read here: 0x4C2690 (GP4), the value 0x445090 returns (`c:`), and the conditions and actions of the questions node behind
 Virgil's `K:` (`ss`, `ar`, `ia`, `ce`; ARC-SCRIPT-045).
+
+## Followers across maps (ARC-RES-076)
+
+Source: [followers across maps](../follower-map-transfer.md) (rows FM1–FM14 with their full text and addresses). Read on
+2026-10-29 by two readers that each saw only the questions and starting addresses (method step 6). Both agree on every row
+except FM2 (what 0x45D800 tests: dead or fatigue-unconscious) and the parts marked F1 there (FM9 spells, FM11's time unit,
+FM12's world-map landing). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| FM1 | 0x4D3380, 0x4D3330, 0x4D3460, 0x4D3760 | The move list takes the object, its inventory and its non-waiting followers recursively (followers of followers too), all to one tile; a destination map opens only when a PC moves. | Original |
+| FM2 | 0x4D3460, 0x45D800, 0x4AA7A0 | Followers that 0x45D800 selects are made to wait before the walk unless flag 0x100; readers disagree whether it tests dead or fatigue-unconscious. | Original (F1, open) |
+| FM3 | 0x4D39A0, 0x409980, 0x4064B0, 0x406520 | Cross-map: whole objects with their own IDs appended to the destination's `mobile.mdy` as dynamic; source copies destroyed and extinct. | Original |
+| FM4 | 0x407EF0, 0x4E62D0, 0x4E62A0, 0x409AA0, 0x4E4FD0 | IDs never change on a move; positional IDs only for static walls, portals, scenery and traps, GUIDs for critters and items. | Original |
+| FM5 | 0x410070, 0x410830, 0x410B20, 0x40F4E0, 0x410D10, 0x405BF0, 0x411450 | The source's `mobile.des` gets the moved original's ID; a map opens data, `mobile.md`, `mobile.des`, patch, `mobile.mdy`; no duplicate check. | Original |
+| FM6 | 0x4D3D60, 0x4D3E20 | Both cases clear focus, last hitter, enemy list, substitute inventory, fleeing and set the teleport map if 0; cross-map also leaves combat, drops the object's AI events and its sector. | Original |
+| FM7 | 0x406520, 0x40BDB0, 0x4E50E0, 0x40BBF0, 0x410C50 | References rebind among loaded objects at map open; a GUID not found becomes null. Teleported objects get a redraw-only event. | Original |
+| FM8 | 0x45C720, 0x45C7B0, 0x45C500, 0x4D3420, 0x45BCE0, 0x45C2F0, 0x45C580, 0x45C610 | On a PC's map change, events whose objects all travel go to the destination's `TimeEvent.dat`; events naming a stayer are parked on the source. | Original |
+| FM9 | 0x45C720, 0x44F7A0, 0x422B10 | Active spells move to `MT.dat` only when all participants travel, else end; animations go to `Anim.dat`. | Original (F1) |
+| FM10 | 0x45F6D0, 0x4ACBB0, 0x4ACDB0, 0x4AD060, 0x45D320 | Field 243 (teleport map) is the only map tie; a forced waypoint or standpoint pass teleports a leaderless NPC home. | Original |
+| FM11 | 0x4D0540, 0x4D2750, 0x4F1A20, 0x4D1400, 0x443770, 0x4D1A30, 0x4F1CD0, 0x441FC0, 0x45A9B0, 0x4AD200 | Sector eviction frees only static objects; mobiles stay in memory and re-attach; a re-fold after 3,000 game ms (P7: 3 s) or a load outside the eviction history forces the home pass for leaderless NPCs. | Original |
+| FM12 | 0x4D39A0, 0x4EDF20, 0x43E770, 0x45C200 | Same map: one tile for the whole group, the both-cases clear only; world-map travel lands this way (F1). | Original |
+| FM13 | 0x45DFC0, 0x4AA8C0, 0x45E040, 0x4AA990, 0x4C31A0 | Leave, wait expiry and orders act on the current map only; no teleport. | Original |
+| FM14 | 0x40D760 | No follower state outside the per-map files (as NI5 and OL32). | Original |

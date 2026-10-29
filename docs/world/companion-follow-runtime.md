@@ -100,6 +100,9 @@ followers stay on the source map with their leader kept. Both cave scripts telep
 Virgil arrives on (2087,2018) in the cave and on (92913,82598) back outside. On the shared cell the next follow decision
 steps him to an Open neighbour (`Separate`, C10). Parity NOT_VERIFIED.
 
+The original moves the follower as a whole object of the destination map (no visitor mode); the gap between that and the
+visitor model below, and the fix plan, are in [followers across maps](../research/follower-map-transfer.md) (ARC-RES-076).
+
 **Where a companion is** (project policy, map-local changes, no snapshot schema change): on its home map (the map of
 its T0 record, the exterior for Virgil) unless the home map's entity change `npc.map` names another runtime map; there
 its cell is that map's `npc.cell` (absent on the home map = its T0 cell, required on any other map).
