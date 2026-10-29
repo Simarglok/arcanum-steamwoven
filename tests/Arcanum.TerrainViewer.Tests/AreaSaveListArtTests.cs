@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-062 save and load window art (ledger MW9–MW13): the art, the buttons' places, the rows' places, the scroll top, the
+/// <summary>ARC-UI-062 save and load window art (ledger MW11–MW15): the art, the buttons' places, the rows' places, the scroll top, the
 /// row a press picks and the "..." fit, on synthetic glyph frames.</summary>
 [TestClass]
 public sealed class AreaSaveListArtTests
@@ -16,7 +16,7 @@ public sealed class AreaSaveListArtTests
     public void The_window_reads_the_originals_art()
     {
         CollectionAssert.AreEqual(new[] { 745, 336, 335, 321, 323, 32, 27 }, AreaSaveListArtLayout.ArtNumbers.ToArray());
-        Assert.AreEqual((42, 161, 145, 213), AreaSaveListArtLayout.List, "MW11: the window's (42, 120) below the top strip");
+        Assert.AreEqual((42, 161, 145, 213), AreaSaveListArtLayout.List, "MW13: the window's (42, 120) below the top strip");
         Assert.AreEqual((281, 96, 468, 300), AreaSaveListArtLayout.Preview);
         Assert.AreEqual((213, 152, 12, 232), AreaSaveListArtLayout.ScrollBar);
         CollectionAssert.AreEqual(new[] { (200, 441, 400, 47), (0, 441, 200, 159), (600, 441, 200, 159) }, AreaSaveListArtLayout.BottomStripParts.ToArray());
@@ -28,7 +28,7 @@ public sealed class AreaSaveListArtTests
     [TestMethod]
     public void The_buttons_stand_at_the_exes_places()
     {
-        Assert.AreEqual((321, 675, 496), AreaSaveListArtLayout.Button(AreaSaveListArtButton.Confirm), "MW10: bottom strip (675, 55)");
+        Assert.AreEqual((321, 675, 496), AreaSaveListArtLayout.Button(AreaSaveListArtButton.Confirm), "MW12: bottom strip (675, 55)");
         Assert.AreEqual((323, 69, 496), AreaSaveListArtLayout.Button(AreaSaveListArtButton.Back));
         Assert.AreEqual((32, 115, 396), AreaSaveListArtLayout.Button(AreaSaveListArtButton.Delete), "a window button: the screen's point");
         Assert.AreEqual(7021, AreaSaveListArtLayout.Hint(AreaSaveListArtButton.Confirm, AreaSaveListMode.Save));

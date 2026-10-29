@@ -4,7 +4,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-062: the save and load window in the original's look (<see cref="AreaSaveListArtLayout"/>, ledger MW9–MW13): the strips and
+/// ARC-UI-062: the save and load window in the original's look (<see cref="AreaSaveListArtLayout"/>, ledger MW11–MW15): the strips and
 /// the background over the 800 × 600 screen at the bars' whole factor, centred in the window; the list's rows in the art font from the
 /// scroll top, the selected row gold; the three art buttons with their idle, down and lit frames (GB4) and push behaviour (GB3:
 /// down on the press, acting on a release over it), 3000 on the press and 3001 on the release (GB7). A press on a row selects it.
@@ -60,7 +60,7 @@ public partial class AreaSaveListArtView : Control
     }
 
     /// <summary>Shows the rows (the save window's new-save row first) with <paramref name="selected"/> lit; a new opening starts at the
-    /// scroll top 0 (0x543380), a changed selection is scrolled into view (MW13) and other renders keep the top (the wheel's too).
+    /// scroll top 0 (0x543380), a changed selection is scrolled into view (MW15) and other renders keep the top (the wheel's too).
     /// <paramref name="blocked"/>: a question is open.</summary>
     public void Render(AreaSaveListMode mode, IReadOnlyList<string> rows, int selected, Texture2D? preview, bool blocked)
     {
@@ -128,7 +128,7 @@ public partial class AreaSaveListArtView : Control
         // The background's preview hole is transparent: the preview shows through it.
         if (Art(AreaSaveListArtLayout.BackgroundArt) is { } background)
             DrawTextureRect(background, new Rect2(0, AreaSaveListArtLayout.WindowTop, background.GetWidth(), background.GetHeight()), false);
-        // MW11: the list's rectangle, five rows taller, is filled black before the rows.
+        // MW13: the list's rectangle, five rows taller, is filled black before the rows.
         var (lx, ly, lw, lh) = AreaSaveListArtLayout.List;
         DrawRect(new Rect2(lx, ly, lw, lh + AreaSaveListArtLayout.ListFillExtra), Colors.Black);
         for (var slot = 0; slot < AreaSaveListArtLayout.ShownRows && _top + slot < _rows.Count; slot++)

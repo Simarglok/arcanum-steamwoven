@@ -157,20 +157,21 @@ are F0 and are read by the slice.
    controls (sliders, value arrows, the checkbox look) come from the options window's own open 0x541C70 and close 0x541D70 and its
    control table (OP1–OP8, [options window](../research/ledger/ui-audio.md#options-window-arc-ui-013)); the slice reads their art and
    places the existing controls. Done by ARC-UI-059: the background and the page buttons (`AreaMenuArtView`, MW7) and the slot
-   points, x 261 / 531 and y 122 + 75 × row (MW8); the controls are still the project's rows at slot 0. Next slice: the control
-   build 0x57FAD0 and its arts 623, 667, 668, 669 (and 670 of the open), each control drawn at its slot.
+   points, x 261 / 531 and y 122 + 75 × row (MW8). Done by ARC-UI-061: each control in its own art at its slot (control build
+   0x57FAD0, MW9–MW10): background 688 (slider) or 671 (list), the label in `morph15font`, the arrows 667 and 668 as push buttons,
+   a slider's bar 623, a list's value in `Flare12Font`; the shown controls take the first slots. The window is done.
 2. **Save and load** (windows 8 save, 7 load; the palette's and F-keys' windows too): background 745 `SaveLoadBackground` (800 × 400)
    at (0, 41) with the strips 336 at the top and 335 at the bottom (MW1); art buttons 321 `NextBut` (61 × 61, 3 frames) at (675, 55)
    (Save / Load, hint 7021 / 7020), 323 `BackBut` at (69, 55) (hint 7002) and 32 `cncl_big` (38 × 37) at (115, 396) (hint 7022).
    The list, the slot thumbnails and the description field come from the opens 0x543380 (save) and 0x541F20 (load), their redraws
    and the save info 0x404270 (SL1–SL8, [save list](../research/ledger/ui-audio.md#save-list-arc-ui-010)). May split: (a) frame,
-   buttons and the list's text; (b) the save's thumbnail. Done by ARC-UI-062 (a), ledger MW9–MW14: the strips and the background,
+   buttons and the list's text; (b) the save's thumbnail. Done by ARC-UI-062 (a), ledger MW11–MW16: the strips and the background,
    Save / Load and Previous Screen on the bottom strip at the screen's (675, 496) and (69, 496) (table flag 1: y from the strip's
    top), Delete at (115, 396), with their frames and sounds (`AreaSaveListArtView`); the list's eleven rows at (42, 161 + 20 × k),
    141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
    (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
    (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
-   the list. Next slice (b): the save's picture as the original draws it (748 `SaveShotCover`, MW14), the info texts over it with the
+   the list. Next slice (b): the save's picture as the original draws it (748 `SaveShotCover`, MW16), the info texts over it with the
    toggle 747 at (499, 82), the lens 746 at the screen's (84, 51) with the hero's portrait (which needs the portrait in the save's
    details, `NAME.meta.json` details schema 2), the scroll bar's art (0x5804E0) and the buttons' hints.
 3. **Pre-made character browser** (window 13): background 766 `PreGenCharacterBase` (800 × 400) at (0, 41) with the strips; buttons

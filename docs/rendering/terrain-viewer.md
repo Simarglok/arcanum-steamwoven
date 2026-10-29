@@ -1632,7 +1632,7 @@ window's frame, buttons and list are the original's with the game's art (below),
   confirms or answers yes, Escape answers no or closes; F7, F8 and the window letters do nothing under it. A
   controller confirm, cancel and menu direction do the same.
 
-- **Original look (ARC-UI-062,** [ledger MW9–MW14](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
+- **Original look (ARC-UI-062,** [ledger MW11–MW16](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
   game's art both windows draw over the 800 × 600 screen (the bars' whole factor) the strips 336 and 335 and the background 745
   between them; Save or Load (321) and Previous Screen (323) on the bottom strip, Delete (32) under the list, each idle, lit under
   the pointer and down while held, acting on a release over it with 3000 / 3001; the list's eleven rows in the art font 27 from the
@@ -1876,9 +1876,14 @@ project's, except as below.
 - **Original look (ARC-UI-059,** [ledger MW7–MW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
   art the window draws its background 556 `OptionsMenuBack` over the 800 × 600 screen as the main menu's windows do, and its page
   buttons Game, Video, Sound and Done as art-font labels centred on (130, 221 + 40 × i), lit under the pointer, sounding and
-  choosing as the main menu's labels (the focused one lit while the focus is on a page button). PROJECT: the page's controls stay
-  the project's rows (label, arrows, value), alone in a panel placed at the page's first control slot (261, 122) on the scaled
-  screen, until the controls' own art (arts 623, 667–670, MW8 F0) is read; the line at the top names the hidden controls and the
+  choosing as the main menu's labels (the focused one lit while the focus is on a page button). ARC-UI-061
+  ([ledger MW9–MW10](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): each control in its own art at its slot (MW8):
+  its background (688 `OptionSlider` or 671 `OptionMultiChoice`, 213 × 56), its label centred on it in `morph15font` (white), the
+  arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
+  list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
+  press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122)); the control with the keyboard or controller
+  focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
 - **Pages.** The buttons Game, Video, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
@@ -1928,8 +1933,10 @@ Done back to the main menu, a new game as the first hero beginning under the Ori
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
 Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
 while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
-saves the Game page's picture to an ignored path). Not done: Brightness, Text Duration, Combat Taunts, Module,
-Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art of the controls.
+saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
+pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
+the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration, Combat
+Taunts, Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 

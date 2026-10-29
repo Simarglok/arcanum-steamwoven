@@ -8,7 +8,7 @@ public enum AreaSaveListArtButton { Confirm, Back, Delete }
 
 /// <summary>
 /// ARC-UI-062: the original look of the save (8) and load (7) windows, read from their descriptors, opens 0x543380 and 0x541F20,
-/// redraws 0x543990 and 0x5425C0 and the menu window build 0x546340 (ledger MW9–MW13). The background 745 `SaveLoadBackground`
+/// redraws 0x543990 and 0x5425C0 and the menu window build 0x546340 (ledger MW11–MW15). The background 745 `SaveLoadBackground`
 /// (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1). Three art buttons: Save / Load 321 `NextBut` and
 /// Previous Screen 323 `BackBut` in the bottom strip, Delete Save Game 32 `cncl_big` in the window. The list stands in the window's
 /// rectangle (42, 120, 145, 213): a row every 20 pixels from its top, eleven rows shown from the scroll top, each the save's
@@ -19,7 +19,7 @@ public static class AreaSaveListArtLayout
 {
     public const int ScreenWidth = 800, ScreenHeight = 600;
     public const int BackgroundArt = 745, TopStripArt = 336, BottomStripArt = 335, ConfirmArt = 321, BackArt = 323, DeleteArt = 32, FontArt = 27;
-    /// <summary>The window's top (a background not 600 rows high, MW1) and the bottom strip's (the art buttons' y origin, MW10).</summary>
+    /// <summary>The window's top (a background not 600 rows high, MW1) and the bottom strip's (the art buttons' y origin, MW12).</summary>
     public const int WindowTop = 41, BottomStripTop = 441, TopStripHeight = 41, BottomStripHeight = 159;
     public const int RowHeight = 20, RowTextShrink = 4, ShownRows = 11, ListFillExtra = 5;
     /// <summary>MainMenu.mes: the new-save row's label "New" (5055) and the buttons' hints (7021 Save Game, 7020 Load Game, 7002
@@ -48,7 +48,7 @@ public static class AreaSaveListArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, TopStripArt, BottomStripArt, ConfirmArt, BackArt, DeleteArt, FontArt];
 
     /// <summary>A button's art and its top-left on the screen: the bottom-strip buttons (table flag 1) at (675, 55) and (69, 55) of the
-    /// strip, Delete (flag 0) at the screen's (115, 396) (button create 0x5461C0, MW10).</summary>
+    /// strip, Delete (flag 0) at the screen's (115, 396) (button create 0x5461C0, MW12).</summary>
     public static (int Art, int X, int Y) Button(AreaSaveListArtButton button) => button switch
     {
         AreaSaveListArtButton.Confirm => (ConfirmArt, 675, BottomStripTop + 55),
@@ -57,7 +57,7 @@ public static class AreaSaveListArtLayout
         _ => throw new ArgumentOutOfRangeException(nameof(button)),
     };
 
-    /// <summary>The button's hint message in MainMenu.mes (the table's last field, MW10).</summary>
+    /// <summary>The button's hint message in MainMenu.mes (the table's last field, MW12).</summary>
     public static int Hint(AreaSaveListArtButton button, AreaSaveListMode mode) => button switch
     {
         AreaSaveListArtButton.Confirm => mode == AreaSaveListMode.Save ? SaveHint : LoadHint,

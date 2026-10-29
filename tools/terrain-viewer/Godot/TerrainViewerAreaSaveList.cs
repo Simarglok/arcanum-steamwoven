@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer;
 // was drawn; a new save takes the next number, saving onto a listed save asks first and keeps its description, the auto-save
 // cannot be deleted, a delete clears the selection (ledger SL3–SL6). A save or load that succeeds closes the window, as the
 // original; a failed one keeps it open with the reason. The description is typed on the new-save row only. ARC-UI-062: with a game
-// folder the window shows the original's look (AreaSaveListArtView; ledger MW9–MW13), the art read once a module; without one (the
+// folder the window shows the original's look (AreaSaveListArtView; ledger MW11–MW15), the art read once a module; without one (the
 // synthetic self-tests) it keeps the diagnostic window.
 public partial class TerrainViewerApp
 {
@@ -221,7 +221,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
     }
 
-    /// <summary>The smokes' art part of an open save or load window: the original's look with its rows at the exe's places (MW11),
+    /// <summary>The smokes' art part of an open save or load window: the original's look with its rows at the exe's places (MW13),
     /// the selected row in view; the pointer over the confirm button lights it (frame 2, GB4). ARC_AREA_SAVE_CAPTURE saves an in-app
     /// readback of the window to the caller's ignored path (the mode's name is added before the extension).</summary>
     private async Task SaveListArtForSmoke(Action<bool, string> require)
