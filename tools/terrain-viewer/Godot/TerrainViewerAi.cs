@@ -119,6 +119,13 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-WORLD-114 heartbeat-refused npc={npc} point={scrPoint} outcome={ran.Outcome} detail={ran.Detail}");
             return true;
         }
+        // ARC-SCRIPT-047: a heartbeat that called the NPC's dialog point with the PC (1100's opening talk) asks for the conversation; it
+        // opens once the event pump that ran this tick returned (OpenHeartbeatConversation).
+        if (ran.Dialog is { } talk)
+        {
+            _heartbeatDialog ??= talk;
+            GD.Print($"ARC-SCRIPT-047 heartbeat-talk npc={npc} point={scrPoint} script={ran.Run!.Script} dialog={talk.Script} line={talk.Line} node={talk.Node}");
+        }
         var states = ran.Run!.Effects.ObjectStates;
         // A skip default (the script's return, or one by rule: a missing script, the end of the script, the line budget) stops the
         // tick's pass; logged once per NPC, point and stop, so an NPC that stays still has a trace.
@@ -133,6 +140,34 @@ public partial class TerrainViewerApp
                 + string.Join(",", states.Select(s => $"{s.Change}:{s.Object.Code}")));
         }
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    // ARC-SCRIPT-047: the conversation a heartbeat asked for during the last event pump, opened after it.
+    private Arcanum.Scripting.Scr.ScrDialogStart? _heartbeatDialog;
+
+    /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100), after the event
+    /// pump that ran the tick; one asked for while another conversation or a window is open is dropped (the heartbeat removed itself, as
+    /// the original's start callback refuses a second dialog of the PC, G3).</summary>
+    private void OpenHeartbeatConversation()
+    {
+        if (_heartbeatDialog is not { } talk) return;
+        _heartbeatDialog = null;
+        BeginScriptedConversation(talk);
+    }
+
+    /// <summary>ARC-SCRIPT-047: an NPC's live cell for a script's vicinity: where the AI walked it, a companion's committed cell; null for
+    /// an NPC that stands where its map data puts it.</summary>
+    private CellCoord? ScriptCritterCell(Arcanum.Scripting.Scr.ScrObjectRef obj)
+    {
+        if (obj.Map != CurrentAreaMap) return null;
+        if (_aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) && ai.Movers.IsMoved(obj.Code) && ai.Movers.Of(obj.Code) is { } mover)
+            return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code) is { } companion && _worldActor.Session is AreaGridSession grid)
+        {
+            var cell = grid.Chart.ToWorld(companion.Grid.State.CommittedCell);
+            return new(checked((int)cell.X), checked((int)cell.Y));
+        }
+        return null;
     }
 
     /// <summary>ARC-WORLD-114: whether a script's kill can be applied: an NPC of the shown map whose combat values read.</summary>

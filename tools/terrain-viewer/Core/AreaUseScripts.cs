@@ -16,10 +16,11 @@ namespace Arcanum.TerrainViewer.Core;
 /// shown map as the create action's placement reads it (null when there is none). ARC-WORLD-114: <see cref="Kill"/> applies a script's
 /// kill (58) to an NPC of the shown map, a death with no killer, and answers whether the session took it; <see cref="CanKill"/> says
 /// beforehand whether it can (the NPC's combat values read; null: always). Without <see cref="Kill"/>, or for an NPC it cannot kill, a
-/// kill leaves the run unapplied.
+/// kill leaves the run unapplied. ARC-SCRIPT-047: <see cref="CritterCell"/> is an NPC's live cell when it is not where its map data puts
+/// it (an NPC the AI moved, a companion; null: its row's cell), for the critters in a run's vicinity.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
-    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null);
+    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -70,8 +71,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
-    /// <c>scr&lt;point&gt;.*</c> for the catching-thief point and (ARC-WORLD-114) the first-heartbeat and heartbeat points.</summary>
-    public static string SlotProperty(int point, string part) => point == ScrPoint.Use ? "use." + part : $"scr{point}.{part}";
+    /// <c>scr&lt;point&gt;.*</c> for the catching-thief point and (ARC-WORLD-114) the first-heartbeat and heartbeat points, and
+    /// (ARC-SCRIPT-047) the dialog point's <c>dialog.*</c>, the keys the dialog host keeps a speaker's dialog slot under
+    /// (<see cref="AreaScriptHost"/>), which a heartbeat's call-ex of the dialog point writes.</summary>
+    public static string SlotProperty(int point, string part) => point switch
+    {
+        ScrPoint.Use => "use." + part,
+        ScrPoint.Dialog => "dialog." + part,
+        _ => $"scr{point}.{part}",
+    };
     /// <summary>The spell flag the original reads as mind-controlled (field 20, bit 27; ledger SG3).</summary>
     public const uint MindControlledFlag = 0x0800_0000;
 
@@ -106,11 +114,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// ARC-WORLD-114: the set an NPC's first-heartbeat (10) and heartbeat (19) scripts run from the AI tick (<see cref="RunHeartbeat"/>):
     /// <see cref="ScrAdmissionSet.S2"/> (control flow, local and global flags, counters, arithmetic, story state, remove and change this
     /// script) with the single-object focus kinds of <see cref="ScrAdmissionSet.S3"/>, plus toggle state (56) and kill (58) of
-    /// <see cref="ScrAdmissionSet.S16"/>. A heartbeat runs every few seconds for every NPC near the PC, so the set stays this narrow; a
+    /// <see cref="ScrAdmissionSet.S16"/>. ARC-SCRIPT-047: plus what a heartbeat needs to open an NPC's talk with the PC once the PC is near
+    /// (1100, ledger TG3–TG6): loop for and loop end over everyone or anyone in the vicinity (<see cref="ScrAdmissionSet.S17"/>) with the
+    /// current looped object, get object type, call-ex (of the NPC's dialog point among others) and the dialog action, which in a call-ex
+    /// of the dialog point asks for the talk (<see cref="AreaScriptedUse.Dialog"/>; a heartbeat's own dialog action has the NPC as its
+    /// triggerer and starts nothing). A heartbeat runs every few seconds for every NPC near the PC, so the set stays this narrow; a
     /// script outside it is refused and the tick goes on as without a script.
     /// </summary>
-    public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill", ScrAdmissionSet.S2.Conditions,
-        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill]), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+    public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk", ScrAdmissionSet.S2.Conditions,
+        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
+            ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog]),
+        ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
@@ -157,8 +171,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return awards;
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
-    // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity.
-    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [];
+    // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity; ARC-SCRIPT-047: its NPCs likewise.
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [];
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
@@ -191,6 +205,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         {
             _shown.TryAdd(EntityId(row), row);
             if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
+            if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
 
@@ -208,6 +223,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-047 (TG4): the shown map's PCs and NPCs within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
+    /// destroyed or switched off, the centre itself and the dead included: the NPC rows in snapshot order at their live cells
+    /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
+    /// Empty for a centre of another map or without a place.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre)
+    {
+        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        static bool Near(CellCoord cell, CellCoord at) => Math.Abs((long)cell.X - at.X) <= ScrWorld.VicinityReach && Math.Abs((long)cell.Y - at.Y) <= ScrWorld.VicinityReach;
+        var list = _npcs.Where(n => _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
+            .Select(n => new ScrObjectRef(_shownMap, n.Entity)).ToList();
+        if (Place(Pc) is { } pc && Near(pc, at)) list.Add(Pc);
+        return list;
+    }
+
     /// <summary>ARC-WORLD-081 (PG5): a draw from the session's generator, labelled <see cref="RandomLabel"/>.</summary>
     public int Random(int low, int high)
     {
@@ -215,10 +246,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return roll.Roll?.Value ?? throw new InvalidOperationException($"AREA_USE_SCRIPT_RANDOM_REFUSED {roll.Failure}");
     }
 
-    // An object's tile: the PC's live cell (the session's placement without a world), a row's world cell.
+    // An object's tile: the PC's live cell (the session's placement without a world), an NPC's live cell (ARC-SCRIPT-047), a row's world cell.
     private CellCoord? Place(ScrObjectRef obj)
     {
         if (IsPc(obj)) return _world?.PcCell() ?? _session.QueryActor().Cell;
+        if (obj.Map == _shownMap && _world?.CritterCell?.Invoke(obj) is { } live) return live;
         return Row(obj) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
             ? new CellCoord((int)x, (int)y) : null;
     }
@@ -256,7 +288,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -340,7 +372,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
     public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+    // ARC-SCRIPT-047: the dialog gates of a call-ex of an NPC's dialog point (E6): dead as the session holds it (map data or killed);
+    // surrender and mind control are not modelled here (normal).
+    public ScrDialogState DialogState(ScrObjectRef attachee) =>
+        !IsPc(attachee) && attachee.Map == _shownMap && Row(attachee) is { Type: NpcType } && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
@@ -586,11 +621,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || effects.Teleports.Count > 0))
             return new(AreaScriptedUseOutcome.Refused, null, lines, run, $"script {run.Script}: a conversation of script {dialog.Script} with "
                 + (dialog.Npc?.Code ?? "no NPC") + (effects.Teleports.Count > 0 ? " and a teleport" : "") + " is not modelled");
-        // A slot a callee's dialog stored is kept as the object's use-slot map changes, which need its loaded use element; an object
-        // without one (the original writes its sparse attachment array) leaves the run unapplied, checked before anything applies.
-        if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || w.Point != ScrPoint.Use || w.Attachee is not { } owner
-            || Row(owner) is not { } held || LoadedSlot(held, ScrPoint.Use) is null) is { } unkept)
-            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the use slot of {unkept.Attachee?.Code ?? "no object"} that a dialog stored is not kept (no loaded use element)");
+        // A slot a callee's dialog stored, or (ARC-SCRIPT-047) a call-ex run changed, is kept as the object's map changes of that point, which
+        // need its loaded element; a point the host does not keep, or an object without the element (the original writes its sparse
+        // attachment array), leaves the run unapplied, checked before anything applies.
+        if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
+            || Row(owner) is not { } held || LoadedSlot(held, w.Point) is null) is { } unkept)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee changed is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         var teleport = effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
@@ -647,7 +683,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
             if (toggled.Disposition == GameSessionDisposition.Rejected) return false;
         }
-        // ARC-SCRIPT-046: the slots a called script's dialog action stored (an object's use slot), as map changes.
+        // ARC-SCRIPT-046: the slots a called script's dialog action stored (an object's use slot), and (ARC-SCRIPT-047) the slots call-ex
+        // runs changed, as map changes.
         foreach (var stored in effects.SlotWrites)
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
         return effects.Writeback is not { } writeback || writeSlot(writeback);

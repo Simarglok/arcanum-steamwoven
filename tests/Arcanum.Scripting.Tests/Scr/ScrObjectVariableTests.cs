@@ -209,7 +209,7 @@ public sealed class ScrObjectVariableTests
         host.Inner.Scripts[611] = ScrScriptLookup.Of(WithHeader(Program(Do(C(100, N(41))), Do(C(ScrCatalogue.Action.Dialog, N(5))), Do(C(100, N(42)))), 0b100, 0x0102));
         var talk = Use(host);
         Assert.AreEqual(ScrStop.ReturnSkipDefault, talk.Stop);
-        Assert.AreEqual(new ScrDialogStart(Pc, Chest, 611, 1, 5), talk.Effects.Dialog);
+        Assert.AreEqual(new ScrDialogStart(Pc, Chest, 611, 1, 5) { Point = ScrPoint.Use }, talk.Effects.Dialog);
         CollectionAssert.AreEqual(new[] { 9, 40, 41 }, talk.Effects.GlobalFlags.Select(f => f.Index).ToArray(), "611 ends at its dialog, 610 and the caller go on");
         Assert.AreEqual(new ScrWriteback(ScrSource.Object, Chest, ScrPoint.Use, new ScrSlot(2793, 0b100, 0x0102)), talk.Effects.SlotWrites.Single());
         Assert.IsNull(talk.Effects.Writeback, "the caller's own slot is unchanged");

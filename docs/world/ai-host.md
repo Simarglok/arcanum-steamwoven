@@ -190,7 +190,8 @@ without a script, and logs `ARC-WORLD-114 heartbeat-refused` once per NPC, point
 
 | Part | Original | What it does |
 | --- | --- | --- |
-| Set | `AreaUseScriptHost.HeartbeatAdmission` | S2 (control flow, local and global flags, counters, arithmetic, story state, remove and change this script) with the single-object focus kinds of S3, plus toggle state (56) and kill (58) of [set S16](../scripting/scr-dispatcher-runtime.md#object-state-actions-arc-world-114-set-s16). A heartbeat runs every few seconds for every NPC within 30 tiles, so the set stays this narrow. |
+| Set | `AreaUseScriptHost.HeartbeatAdmission` | S2 (control flow, local and global flags, counters, arithmetic, story state, remove and change this script) with the single-object focus kinds of S3, plus toggle state (56) and kill (58) of [set S16](../scripting/scr-dispatcher-runtime.md#object-state-actions-arc-world-114-set-s16), and since ARC-SCRIPT-047 loop for, loop end, get object type, call-ex (81) and dialog with the looped object and the critter vicinity kinds 8 and 9 of [set S17](../scripting/scr-dispatcher-runtime.md#critter-vicinity-and-the-dialog-point-in-call-ex-arc-script-047-set-s17). A heartbeat runs every few seconds for every NPC within 30 tiles, so the set stays this narrow. |
+| Talk | 0x44B170, 0x4449B0 (TG5, TG6) | A heartbeat that calls its NPC's dialog point (Virgil's 1100 for the PC in his vicinity) returns a dialog start; the viewer opens that talk after the event pump (`OpenHeartbeatConversation`, the first one of a frame; one while a conversation or window is open is dropped, the heartbeat has already removed itself) and logs `ARC-SCRIPT-047 heartbeat-talk`. The callee's slot is the NPC's dialog slot (map changes `dialog.*`), which the talk resumes. The vicinity answers NPC rows at their live cells (AI-moved, companions) and the PC. |
 | Kill | 0x45D900 (PM3) | The world's kill: `GameSessionOwner.Kill` on the NPC's life target (no killer: no experience, no kill notification), drawn with the plain fall; the NPC is then a dead NPC to loot. Only an NPC of the shown map whose combat values read (`AreaScriptWorld.CanKill`, checked before anything applies); anything else leaves the run unapplied. A session refusal of the kill itself, after the run's earlier effects applied, stops there as the other hosts' steps do (applied steps stay). |
 | Toggle state | 0x4487CE (PM2) | Flips the map change `obj.off` of an NPC of the shown map (1: switched off; absent: as its map data has it). A switched-off NPC is in the map's gone set (`AreaObjectTargets.Gone`): it is not drawn, not picked and blocks no step, the gate stops its passes (`Hidden`, object flags 0x102, now also for an NPC its map data has off), and the hostility facts read it as destroyed or off, as the original's object flag test does. An NPC its map data has off is never switched on (its T0 body is not drawn at all): that leaves the run unapplied. |
 | Slot | 0x441980 | The changed slot is written back as map changes (a removed script reads 0, so the next tick runs nothing). |
@@ -245,7 +246,8 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
 - **NPC ranged attacks** (bow, firearm, missile; a boomerang's throw) are refused by the hit step (`AttackUnsupported`); a "default
   throws" weapon is thrown through goal 37 (ARC-WORLD-113).
 - **Scripts and routines.** Of the AI points only the first heartbeat and the heartbeat run their scripts, and only within the
-  heartbeat set above (ARC-WORLD-114); start and end combat run none. A heartbeat's kill runs no dying script (point 12) and fires no
+  heartbeat set above (ARC-WORLD-114, ARC-SCRIPT-047); start and end combat run none; the turn-based subturn heartbeat (0x4B704A)
+  runs no script ([script trigger audit](../research/script-trigger-audit.md)). A heartbeat's kill runs no dying script (point 12) and fires no
   item events of the death; a script that switches off or kills another object than an NPC of the shown map is not applied. No
   waypoints, standpoints or day routines; the danger hooks are not run.
 - **Back-off.** The away path (0x41F3C0) is not walked: a back-off ends at once.
@@ -307,3 +309,6 @@ the hero, as its pass record's choice: the missile flies from it, is drawn and a
 south group of the twelve pre-made heroes' NPCs until their heartbeats have run; the chosen hero's NPC is switched off and not drawn,
 the eleven others are killed, drawn fallen and lootable as dead NPCs, the map data's own dead NPCs stay drawn and lootable; marker
 `ARC-WORLD-114 native-smoke premade PASS` (`ARC_PREMADE_SMOKE_SHOT` names an optional PNG of the view).
+`opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
+input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
+no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.

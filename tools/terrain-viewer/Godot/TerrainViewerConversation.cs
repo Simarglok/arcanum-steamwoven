@@ -275,7 +275,8 @@ public partial class TerrainViewerApp
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
         OpenConversation(speaker, start);
-        _conversationScripted = true;
+        // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
+        _conversationScripted = dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog;
         GD.Print($"ARC-SCRIPT-046 scripted conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         RefreshReadyStatus();
     }

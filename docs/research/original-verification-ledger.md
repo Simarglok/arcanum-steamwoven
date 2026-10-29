@@ -232,6 +232,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW6 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
+| <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 
 ## Decisions to revisit
