@@ -89,6 +89,8 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
+            AttackArt = NpcAttackArt,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -186,7 +188,9 @@ public partial class TerrainViewerApp
             switch (notice.Kind)
             {
                 case AreaAiNoticeKind.Swing:
-                    GD.Print($"ARC-WORLD-092 ai-swing npc={notice.Npc} target={notice.Target} action={notice.Swing.ActionFrameMs} rest={notice.Swing.RestMs}");
+                    GD.Print($"ARC-WORLD-092 ai-swing npc={notice.Npc} target={notice.Target} action={notice.Swing.ActionFrameMs} rest={notice.Swing.RestMs}"
+                        + $" animation={notice.Play?.Wanted.Animation} weapon={notice.Play?.Wanted.Weapon} shield={notice.Play?.Wanted.Shield}"
+                        + $" art={(notice.Play?.Art is { } art ? $"{art.Animation}/{art.Weapon}/{art.Shield} frames={art.Frames} actionFrame={art.ActionFrame}" : "fixed")}");
                     break;
                 case AreaAiNoticeKind.Hit:
                     AiHit(notice);
