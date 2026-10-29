@@ -45,15 +45,17 @@ executable):
   music volume. Ambient payloads are kept per module; songs are read when they start.
 - The AREA status line shows `music/ambient: slots A/B[, combat], voices N`.
 - The log has a line for every scheme song start (`ARC-UI-041 song start entry=N file=F window=S-E hour=H loop=L
-  started=B`) and fade (`ARC-UI-041 song fade entry=N hour=H`), so a report of silence shows whether a song was due
-  (ARC-RES-075).
+  started=B`) and fade (`ARC-UI-041 song fade entry=N hour=H faded=B`, B false when no playing voice was left to
+  fade), so a report of silence shows whether a song was due (ARC-RES-075).
 - **Night silence is the original's** (ARC-RES-075, bug report of 2026-10-29: no music at Crash Site at 22:28). The
   Crash Site's arrival sector pair is 16/49 (map default 1/40). Schemes 16 and 1 hold one song each,
   `sound/music/wilderness.mp3` with window 05–19; scheme 49 holds only ambient sounds (birds by day; crickets 19–23
-  and 0–6, howls and an owl hoot by night); scheme 40 loops `forest_day.wav` 05–19 and `forest_night.wav` 19–0 and
-  0–5. Between 20:00 and 04:59 no song of the pair is inside its window, so the original plays no music there, only
-  the night ambient on the effects channel. SN14 is not involved: 05–19 is not reversed. All these files are found in
-  the installed module folder, which the packaged game reads too (its log: 60 schemes, 0 issues).
+  and 0–6 and an owl hoot by night; howls at any hour and more of them around midnight); scheme 40 loops
+  `forest_day.wav` 05–19 and `forest_night.wav` 19–0 and 0–5 (the reversed 19–0 entry plays only in the Steamwoven
+  setting, SN14; the arrival sector's pair replaces 1/40 anyway). Between 20:00 and 04:59 no song of the pair is
+  inside its window, so the original plays no music there, only the night ambient on the effects channel. SN14 is not
+  involved: 05–19 is not reversed. All these files are found in the installed module folder, which the packaged game
+  reads too (its log: 60 schemes, 0 issues).
 - Known limits: only the pair the session holds when a frame begins reaches the player, so the once-songs of a pair
   replaced within the same frame (a map default immediately replaced by the arrival sector's pair) never start; the
   original's order there is not recorded. A loop song whose start failed is not retried until its window or slot
