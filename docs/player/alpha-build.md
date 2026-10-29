@@ -216,6 +216,20 @@ backwards from the key press (the `event` lines show what the game did, the `err
 loads the save as above, or reads it with the save list in code (`GameSaveLibrary` on the report's `save` folder). It keeps
 the report's contents (game texts, pictures, the save) out of commits, as for any original game content.
 
+**Archiving handled reports** (ARC-DEV-056). A report is read once: when it is handled, it moves out of the way so that
+nobody returns to it.
+
+- A report counts as handled once a fix thread has started for it (it has its task code) or the owner has called it not a
+  bug.
+- Move the handled report's whole folder, unchanged, into `archive/` inside the same `reports` folder (for example
+  `/Applications/reports/archive/2026-10-28_17-43-30/`, or the user folder's `reports/archive/` for a report that went
+  there). Never delete a report, and never move one that is not handled yet.
+- Append one line per report to `reports/archive/INDEX.md` (create it with the first one):
+  `- <report folder name> · <date handled> · <task code, or "not a bug"> · <short summary>`.
+- Reports to read are the dated folders directly in `reports/`; an agent asked to read the reports skips `archive/`
+  unless it is asked for an archived one. The archive holds the same original content as the reports: it never goes
+  into the repository either.
+
 Not built yet: an upload or a GitHub issue from the window, a report from the launcher screen (before the main menu), and a
 true pause of what runs on the wall clock while any window is open (NPC goal runs and flights in progress keep going under
 the report window, as under the game's other windows; the screenshot, log and save are taken before it opens).
