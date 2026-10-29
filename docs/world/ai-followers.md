@@ -58,11 +58,12 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
 
 ## Not ready
 
-- **Host.** No host implements `IHostilityWorld` or `ISessionAiWorld`, so the AREA viewer's attack order (F2, the portrait menu)
-  sends no target and does nothing (`NoTarget`) and its back off now stops attacking; the viewer runs no AI pass after an order.
-  The highlighted object (0x43C570) and the menu's target cursor are the host's (I10).
-- **The attack event in full.** No combat path or host runs the attack event with its fan-out, noise and reaction to an attack;
-  the curse returns its attack event for the host. The comment lines are rules the attack resolution and the damage step do not
+- **Host.** Since ARC-WORLD-115 the AREA viewer's AI host runs the hero's companions and its attack events tell the followers
+  ([AI host](ai-host.md#followers-in-combat-arc-world-115)). The viewer's attack order (F2, the portrait menu) still sends no
+  target and does nothing (`NoTarget`) and its back off stops attacking; the viewer runs no AI pass after an order. The highlighted
+  object (0x43C570) and the menu's target cursor are the host's.
+- **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115); the curse returns its attack event
+  for the host, which does not run it yet. The comment lines are rules the attack resolution and the damage step do not
   call yet; the "combat taunts" setting is not in the options (ARC-UI-013), and the line texts and the race-line selection are the
   host's.
 - **World-map travel.** Its window's stop attacking for the hero on opening and allow attacking on return (FO5, FO6) are the

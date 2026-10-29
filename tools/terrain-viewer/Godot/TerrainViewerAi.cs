@@ -17,12 +17,13 @@ namespace Arcanum.TerrainViewer;
 // runs the NPCs' subturn hooks with this host and their runs pay action points. ARC-WORLD-102: an NPC that knows a spell may choose it
 // at its danger update and cast it through the map's cast host (the hero's); its casting goal is timed by its cast eye candy (not
 // drawn on the NPC yet) and its release's effects reach the spell log, the bodies and the status line. ARC-WORLD-108: an NPC heals
-// and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item. NOT
-// READY: throws, pickups, skills, followers in combat, NPC ranged attacks, saved NPC positions.
+// and fights with the items it holds (potions, scrolls, wands) through the same cast host; the inventory follows a spent item.
+// ARC-WORLD-115: the hero's companions here are run too and fight beside it, stepping through their own walk. NOT READY: pickups,
+// the attack order's target, NPC ranged attacks, saved NPC positions.
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
-    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party)? _aiHostStamp;
+    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party, string Companions)? _aiHostStamp;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
@@ -51,8 +52,10 @@ public partial class TerrainViewerApp
             if (_aiHost is not null) { RetireAiHost(); _aiHostStamp = null; _aiPcOccupancy = null; }
             return null;
         }
-        // A follower joining or leaving changes who the host runs.
-        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)));
+        // A follower joining or leaving changes who the host runs; ARC-WORLD-115: so do the companions standing here (a rebuilt group
+        // with the same ones keeps the host: their walks are read from the group of the moment).
+        var stamp = (session, CurrentAreaMap, area, string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)),
+            string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         RetireAiHost();
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
@@ -89,16 +92,32 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk.
+            Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart, session) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
         var refused = host.ScheduleTicks();
-        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} ticks-refused={refused} table={scene.Parameters is not null}");
+        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
         return host;
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (those the hero leads, following or waiting), with their
+    /// home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
+    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart, GameSessionOwner session) : IAreaAiFollowers
+    {
+        public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions.Where(c => session.QueryCompanion(c.Entity).LedByPc)
+            .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
+
+        public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;
+
+        public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
+
+        private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
@@ -329,6 +348,26 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>
+    // ARC-WORLD-115: the AI's moved NPCs on a companion's overlay, one value per base overlay while the movers do not change (a planner
+    // asks at every step it assesses).
+    private readonly Dictionary<AreaOccupancy, AreaOccupancy> _aiCompanionOccupancy = new(ReferenceEqualityComparer.Instance);
+    private long _aiCompanionOccupancyVersion = -1;
+
+    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy)
+    {
+        if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;
+        if (_aiCompanionOccupancyVersion != host.Movers.Version || _aiCompanionOccupancy.Count > 64)
+        {
+            _aiCompanionOccupancy.Clear();
+            _aiCompanionOccupancyVersion = host.Movers.Version;
+        }
+        if (_aiCompanionOccupancy.TryGetValue(occupancy, out var known)) return known;
+        var value = new AreaOccupancy(occupancy.Moved.Concat(host.Movers.Moved),
+            occupancy.Occupied.Concat(host.Movers.Held().Select(cell => grid.Chart.ToChart(new(cell.X, cell.Y)))));
+        _aiCompanionOccupancy[occupancy] = value;
+        return value;
+    }
+
     private AreaOccupancy? WithAiMovers(AreaOccupancy? occupancy)
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;
