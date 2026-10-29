@@ -33,7 +33,9 @@ The owner (or an owner-authorized session) allocates the number only after
 checking that it is unused: git history, open and merged PRs, branch names and
 any codes already reserved in the project. Reuse the established code for work
 that belongs to it; a retry or follow-up of the same work item keeps its code.
-The code is never reused for different work.
+The code is never reused for different work. A thread that receives a code
+checked this way confirms it with one check, remote branches and a PR search
+for the code ([task code](tasks.md#task-code)).
 
 Historical references keep their meaning: native `t_...` task IDs, stage codes
 such as `ARC-INPUT-001-PLAN-001` and `arcanum-steamwoven/t_<id>-arc-*` branches

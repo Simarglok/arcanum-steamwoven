@@ -15,13 +15,20 @@ and its link holds the detail.
 - **Small context.** Search files first, then line ranges; no whole `cat`
   ([small search and read output](docs/workflow/tasks.md#small-search-and-read-output)).
   Batch independent tool calls in one response; update the checklist only when
-  a step changes ([fewer steps](docs/workflow/tasks.md#fewer-steps)).
+  a step changes ([fewer steps](docs/workflow/tasks.md#fewer-steps)). Orient
+  from the brief's entry files; a wide search goes to one Sonnet/Haiku Explore
+  subagent returning at most 40 lines ([lean orientation](docs/workflow/tasks.md#lean-orientation)).
+  Reviews run on Sonnet, Opus for large or mechanics/schema/threading diffs
+  ([review model](docs/workflow/tasks.md#review-model)). Smoke per PR: touched
+  stages plus Crash Site; the full map chain before packaging and daily
+  ([smoke scope](docs/workflow/tasks.md#smoke-scope)).
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
-  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. Check the
-  number is unused (git history, open/merged PRs, branches, other threads)
-  before taking it.
+  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. The
+  coordinator checks the number is unused (git history, open/merged PRs,
+  branches, other threads) before handing it out; the thread confirms with one
+  check, remote branches and a PR search ([task code](docs/workflow/tasks.md#task-code)).
 - **Language.** Talk to the owner in Russian; repository text (docs, code,
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
