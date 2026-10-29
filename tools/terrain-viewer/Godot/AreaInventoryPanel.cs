@@ -107,14 +107,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-063: the held item was released in the own window's round view: the map drop onto the game cursor (IW18).</summary>
     public event Action<AreaInventoryHeld>? MapDropRequested;
     public bool IsOpen => Visible;
-    /// <summary>ARC-UI-063: the item the window holds on the cursor (null when closed or nothing is held).</summary>
-    public AreaInventoryHeld? HeldItem => IsOpen ? _area.Held : null;
-    /// <summary>ARC-UI-063: the cursor shows the held item (ledger CU7), so the frame does not draw it again.</summary>
-    public void SetHeldOnCursor(bool shown)
-    {
-        if (_area.HeldOnCursor == shown) return;
-        _area.HeldOnCursor = shown; _area.QueueRedraw();
-    }
+
     /// <summary>ARC-UI-029: the quantity window is up.</summary>
     public bool Asking => _bar is not null;
     internal QuantityBar? QuantityForSelfTest => _bar;

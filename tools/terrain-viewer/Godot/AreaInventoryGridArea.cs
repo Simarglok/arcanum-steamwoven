@@ -51,9 +51,6 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>The item on the cursor, or null.</summary>
     public AreaInventoryHeld? Held { get; private set; }
 
-    /// <summary>ARC-UI-063: the original look's held item is the cursor's own image (ledger CU7), so the frame does not draw it.</summary>
-    internal bool HeldOnCursor { get; set; }
-
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown).</summary>
     public bool LootLook => Look is { LootReady: true } && _view is { Holder: not null };
 
@@ -415,7 +412,7 @@ public partial class AreaInventoryGridArea : Control
             if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, name: entry.Name ?? "?");
             else Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
         }
-        if (Held is { } held && !HeldOnCursor)
+        if (Held is { } held)
         {
             var placed = _view.Grid.FirstOrDefault(item => item.Entity == held.Entity);
             var texture = look.ItemArt(held.Entity);
@@ -494,7 +491,7 @@ public partial class AreaInventoryGridArea : Control
             Item(look.ItemArt(item.Entity), AreaLootArtLayout.FullRect(item, _lootScroll), item.Name, shownTop, shownBottom);
         }
         if (AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
-        if (Held is { } held && !HeldOnCursor)
+        if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
                 : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name) : (1, 1, "?");

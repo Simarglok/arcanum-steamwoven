@@ -1134,16 +1134,18 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   item stays and the window says why) and, NOT READY, gold and ammunition (the original splits a quantity first) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
-- **Cursor.** While an item is held, in the game view and in the inventory window's original look, the cursor's image is the item's
-  inventory art with its top-left corner 2 pixels up and left of the pointer and the cursor art over it on its own hot point
-  (`AreaHeldCursor.Compose`, CU7; the original sets the hot point at (2, 2) of the item art, the overlay's exact pixel place was not
-  read); the window then no longer draws its own drag image. Without the item's art the window keeps its drag image and the game
-  cursor stays the plain art. The status line shows the item and its thrown range (`QueryHeroThrowRange`).
+- **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
+  up and left of the pointer and the cursor art over it on its own hot point (`AreaHeldCursor.Compose`, CU7; the original sets the
+  hot point at (2, 2) of the item art, the overlay's exact pixel place was not read). Without the item's art the cursor stays the
+  plain art. PROJECT: the inventory window keeps its own drag image (the original's cursor there is the same CU7 image), drawn at the
+  window's scale with the grab offset its drop rule reads (IW10–IW13). The status line shows the item and its thrown range
+  (`QueryHeroThrowRange`).
 - **Press.** A left press in the game view, under the world press's guards (another critter's turn ignores it), throws the item: at
   the tile of the object under the pointer (0x54ED30), else at the pressed tile. A hero that cannot act puts it back (0x575770; the
   original's press on an object then leaves it held). The struck critter is the line of fire's blocker when it is a living NPC with
   combat values, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays on the cursor). In a turn-based
-  round the throw first charges `QueryHeroThrowCost` (Steamwoven 2, the Original setting 0, TT4); so does a "default throws" weapon's
+  round the throw first charges `QueryHeroThrowCost` (Steamwoven 2, the Original setting 0, TT4; a wielded boomerang still away or a
+  hero that cannot act puts the item back before the charge, and a throw ends the hero's walk); so does a "default throws" weapon's
   attack, which used to charge the attack's cost. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
   struck critter as the critter attack's flight, a throw without one (or a miss's scatter) to its destination without a target; the
   art is a weapon's projectile art, else the item's own art drawn unfaced (PF14's item rotation and PF11's size arc are NOT READY).

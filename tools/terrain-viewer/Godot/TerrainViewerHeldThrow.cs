@@ -19,6 +19,9 @@ public partial class TerrainViewerApp
 
     private GameCursorItem? _gameCursorItem;
     private string? _heldThrowNotice;
+    // When the notice was set: it shows while an item is held and for a while after.
+    private ulong _heldThrowNoticeAt;
+    private const ulong HeldThrowNoticeMs = 8000;
     private SessionHeroThrowResult? _lastHeldThrowForSelfTest;
     internal string? GameCursorItemForSelfTest => _gameCursorItem?.Item;
     internal SessionHeroThrowResult? LastHeldThrowForSelfTest => _lastHeldThrowForSelfTest;
@@ -43,7 +46,7 @@ public partial class TerrainViewerApp
         {
             _gameCursorItem = new(item, name, session, CurrentAreaMap);
             var range = session.QueryHeroThrowRange(item);
-            _heldThrowNotice = $"{name} on the cursor (thrown range {range?.ToString() ?? "-"}): left-click a tile to throw it, right-click puts it back";
+            SetHeldThrowNotice($"{name} on the cursor (thrown range {range?.ToString() ?? "-"}): left-click a tile to throw it, right-click puts it back");
             GD.Print($"ARC-UI-063 lift item={item} source={source} worn={worn} range={range?.ToString() ?? "-"}");
             EndInventory();
             RefreshReadyStatus();
@@ -60,7 +63,7 @@ public partial class TerrainViewerApp
     {
         if (_gameCursorItem is not { } held) return;
         _gameCursorItem = null;
-        _heldThrowNotice = $"{held.Name} went back ({why})";
+        SetHeldThrowNotice($"{held.Name} went back ({why})");
         GD.Print($"ARC-UI-063 put-back item={held.Item} why={why}");
         RefreshReadyStatus();
     }
@@ -113,19 +116,27 @@ public partial class TerrainViewerApp
     internal SessionHeroThrowResult? ThrowGameCursorItem(CellCoord tile)
     {
         if (_gameCursorItem is not { } held || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return null;
-        CancelAreaAttack("a throw replaced it");
-        CancelTalkApproach("a throw replaced it"); CancelAreaUseApproach("a throw replaced it"); CancelInventoryApproach("a throw replaced it");
         var from = HeroCellNow(grid);
         var struck = HeldThrowStruck(owner, from, tile);
         if (struck is { Companion: true })
         {
-            _heldThrowNotice = "throwing at a companion is NOT READY (the item stays on the cursor)";
+            SetHeldThrowNotice("throwing at a companion is NOT READY (the item stays on the cursor)");
             RefreshAreaStatus();
             return null;
         }
         if (_inventoryHost!.GridMoveItem(owner, held.Item, _areaKitGridMove) is not { } facts) { PutBackGameCursorItem("its facts do not read here"); return null; }
-        if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { _heldThrowNotice = _turnBasedNotice; return null; }
+        // The session's refusals a throw can meet after the lift, checked before the round's points are charged: a wielded boomerang
+        // still away, a hero that cannot act.
+        if (owner.QueryBoomerangInFlight() && owner.QueryEquipment().Worn.Any(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && w.Entity == held.Item))
+        { PutBackGameCursorItem("it is still in flight"); return null; }
+        if (owner.QueryHeroLife() is not { Status.IsActive: true }) { PutBackGameCursorItem("the hero cannot act"); return null; }
+        if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return null; }
+        CancelAreaAttack("a throw replaced it");
+        CancelTalkApproach("a throw replaced it"); CancelAreaUseApproach("a throw replaced it"); CancelInventoryApproach("a throw replaced it");
+        // The throw goal replaces the walk (the hero throws from the cell it stands on).
+        StopWorldRoute("ROUTE_REPLACED_BY_THROW");
         PlaceHeroForDrop();
+        var range = owner.QueryHeroThrowRange(held.Item) ?? 1;
         var wearable = _inventoryHost.Wearable(owner, held.Item, _areaKitWear);
         var request = new SessionHeroThrow(held.Item, facts, tile)
         {
@@ -155,7 +166,7 @@ public partial class TerrainViewerApp
             + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}");
         if (result.Disposition == GameSessionDisposition.Rejected)
         {
-            _heldThrowNotice = AreaHeldThrow.Refusal(result.Failure, held.Name) + " (it went back)";
+            SetHeldThrowNotice(AreaHeldThrow.Refusal(result.Failure, held.Name) + " (it went back)");
             _gameCursorItem = null;
             RefreshAreaStatus();
             return result;
@@ -165,10 +176,9 @@ public partial class TerrainViewerApp
         if (aimed is not null && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity);
         var (art, unfaced) = HeldThrowArt(held.Item, wearable);
         var hit = result.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
-        var range = owner.QueryHeroThrowRange(held.Item) ?? 1;
         foreach (var shot in result.Shots)
             FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null);
-        _heldThrowNotice = $"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? "" : hit ? $": it will hit {aimed.Entity}" : ": it missed");
+        SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? "" : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
         // A critical miss turned on the hero at once (its result is the attack's); a strike waits for the flight.
         if (aimed is not null && result.Attack is { } attack && (result.Shots.Count == 0 || attack.Life is not null)) FinishCritterHit(aimed, attack);
         SyncAreaInventory(); RefreshAreaStatus();
@@ -215,5 +225,8 @@ public partial class TerrainViewerApp
         return (KitArt(item), true);
     }
 
-    private string HeldThrowStatus() => _heldThrowNotice is null || !InventoryActive ? string.Empty : $" | throw: {_heldThrowNotice}";
+    private void SetHeldThrowNotice(string notice) { _heldThrowNotice = notice; _heldThrowNoticeAt = Time.GetTicksMsec(); }
+
+    private string HeldThrowStatus() => _heldThrowNotice is null || !InventoryActive
+        || _gameCursorItem is null && Time.GetTicksMsec() - _heldThrowNoticeAt > HeldThrowNoticeMs ? string.Empty : $" | throw: {_heldThrowNotice}";
 }

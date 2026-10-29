@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
     private AreaCursorContent? _cursorContentForSelfTest;
     // ARC-UI-063: the held item shown on the cursor (null: none) and its composed image for the art and frame shown.
     private string? _cursorHeldShown;
-    private (string Item, int Art, int Frame, AreaCursorContent Content, ImageTexture Texture, Vector2 Hot)? _heldCursorImage;
+    private (string Item, int Art, int Frame, AreaCursorContent Content, ImageTexture? Texture, Vector2 Hot)? _heldCursorImage;
 
     internal int CursorArtForSelfTest => _cursorArt;
     internal (int Art, int Frame)? CursorShownForSelfTest => _cursorShown;
@@ -61,7 +61,6 @@ public partial class TerrainViewerApp
                 Godot.Input.SetCustomMouseCursor(null);
                 SetCursorShape(_hoverCursor);
             }
-            _inventoryPanel?.SetHeldOnCursor(false);
             return;
         }
         var art = AreaCursorArt.Art(CursorMode, HeroInCombatMode, HeroInCombatMode ? HeldAim() : null,
@@ -74,9 +73,8 @@ public partial class TerrainViewerApp
         }
         var load = content.Art[art];
         var frame = AreaCursorArt.Frame((long)(now - Math.Min(_cursorSince, now)), load.Frames.Count, load.FramesPerSecond);
-        // ARC-UI-063: an item held on the game cursor, or in the inventory window's original look, is the cursor's image (CU7).
+        // ARC-UI-063: an item held on the game cursor is the cursor's image (CU7).
         var held = HeldCursorImage(art, frame, content, load.Frames[frame]);
-        _inventoryPanel?.SetHeldOnCursor(held is not null && _gameCursorItem is null);
         if (_cursorShown == (art, frame) && _cursorHeldShown == held?.Item && ReferenceEquals(_cursorTexturesOf, content)) return;
         if (!ReferenceEquals(_cursorTexturesOf, content)) { _cursorTextures.Clear(); _cursorTexturesOf = content; }
         if (!_cursorTextures.TryGetValue(art, out var textures))
@@ -91,17 +89,19 @@ public partial class TerrainViewerApp
         _cursorShown = (art, frame); _cursorHeldShown = held?.Item;
     }
 
-    /// <summary>ARC-UI-063: the item held on the game cursor, else the one the open inventory window's original look holds, composed with
-    /// the cursor art's frame (<see cref="AreaHeldCursor.Compose"/>); null when nothing is held or its inventory art does not read.</summary>
+    /// <summary>ARC-UI-063: the item held on the game cursor composed with the cursor art's frame (<see cref="AreaHeldCursor.Compose"/>);
+    /// null when nothing is held or its inventory art does not read (a failure is kept for the art and frame, not tried every frame).
+    /// PROJECT: the inventory window keeps its own drag image at its scale and grab offset, which its drop rule (IW10–IW13) reads.</summary>
     private (string Item, ImageTexture Texture, Vector2 Hot)? HeldCursorImage(int art, int frame, AreaCursorContent content, AreaInterfaceFrame cursor)
     {
-        var item = _gameCursorItem?.Item ?? (InventoryOpen && _inventoryPanel!.ArtMode ? _inventoryPanel.HeldItem?.Entity : null);
+        var item = _gameCursorItem?.Item;
         if (item is null) { _heldCursorImage = null; return null; }
         if (_heldCursorImage is { } cached && cached.Item == item && cached.Art == art && cached.Frame == frame && ReferenceEquals(cached.Content, content))
-            return (item, cached.Texture, cached.Hot);
-        _heldCursorImage = null;
+            return cached.Texture is { } kept ? (item, kept, cached.Hot) : null;
+        _heldCursorImage = (item, art, frame, content, null, default);
         if (InventoryItemArt(item)?.GetImage() is not { } image) return null;
         if (image.IsCompressed() && image.Decompress() != Error.Ok) return null;
+        if (image.HasMipmaps()) image.ClearMipmaps();
         if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);
         if (AreaHeldCursor.Compose(image.GetWidth(), image.GetHeight(), image.GetData(), cursor) is not { } composed) return null;
         var texture = ImageTexture.CreateFromImage(Image.CreateFromData(composed.Width, composed.Height, false, Image.Format.Rgba8, composed.Rgba));
