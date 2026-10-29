@@ -37,6 +37,47 @@ A run is evidence only when it ran what was intended. After starting any Godot o
 - **Not started:** the Godot project manager or an empty editor window (Godot did not get `--path` or its arguments); an argument failure on the viewer's HUD (`failure stage=Arguments code=Usage`, drawn on the window and not printed to the log, so the stage lines above never appear); "unrecognized arguments" from the launcher; a log without the expected mode's lines and no viewer window. An interactive viewer that has finished loading may idle at low CPU; that is not a failed start.
 - **Then:** stop only the process you started (check its PID and working directory first), fix the command and run it again. Never leave a stuck or wrong window on the owner's screen, and never report a result, PASS or failure, from a run that did not start the intended mode.
 
+### The launcher's start check (ARC-DEV-059)
+
+A quiet `./arcanum run` (the default; not `--verbose`, not a run nested in another one) does this check itself, so run
+it blocking in one step and read its result; this satisfies the one-minute rule. From the moment its command starts
+(after any wait for its turn), the wrapper reads the run's log as it fills, until the command's **start line**:
+
+| Outcome | Wrapper output | Exit |
+|---|---|---|
+| A start line within the window (default 60 s) | `ARCANUM_QUEUE started ticket=N after=Ss line=LINE` on stderr; the run goes on to its end as before | the command's |
+| A start failure line before it | `ARCANUM_QUEUE start-failed ticket=N line=LINE`; the command gets 5 s to exit by itself or print its start line (then the failure line was a harmless early line and the run goes on), then its process group is stopped | the command's own non-zero exit, or 125 |
+| No start line in the window | the process group is stopped | 125 |
+| The command ended non-zero before any start line | | the command's |
+| The command ended with 0 before any start line | `ARCANUM_QUEUE note: ticket=N ended with 0 before a start line; its mode was not checked` (an import, the WORLD settings test): check its log yourself when the mode matters | 0 |
+| The run's own limit (`--timeout`) came first | as for any timeout | 124 |
+
+A failed start adds `start check: REASON` under the `FAIL` line on stdout, before the log lines. Fix the command and run
+it again; a failed start is never a result of the change under test.
+
+- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
+  (printed when its arguments resolved a mode; check that `M`, `NAME` and `smoke` are the intended ones, since a viewer
+  that did not get its arguments starts from the launcher settings instead), `ARC-RENDER-004 load stage=begin` (a build
+  from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, the phase lines of the export
+  endpoint (`export-endpoint: validate ...`), the terrain export (`validate-macos: step NAME`) and the player package
+  (`package: ...`), never their failure lines, and Godot's import progress (`[  0% ] ...`, for `--import`). Godot's banner and the `ARC-DEV-047 build` line are not start lines:
+  the project manager and a start that then fails print them too. `dotnet` runs have none (a build or test ends by
+  itself and its quiet output may print nothing for minutes), so they are not checked.
+- **Start failure lines.** An argparse usage error (`usage: `, `PROG: error: unrecognized arguments ...`), the viewer's
+  `failure stage=Arguments` or `failure stage=GameFolder` (the viewer now also prints every failure it draws on its HUD
+  as `ARC-DEV-059 viewer failure TEXT`, except in the self-test's bootstrap apps, whose failures are expected), the shell's or `env`'s own `command not found` or `No such file or directory`
+  (`zsh: command not found: Godot`, `sh: ./x: No such file or directory`; an engine line about a missing file is not
+  one), Python's `can't open file` and Godot's `Invalid project path` or `Couldn't load project`. A failure after the start line is the run's result, not a start failure.
+- **`--expect REGEX`** replaces the default start lines (a Python search on each log line), and gives a `dotnet` run a
+  check. A command that runs longer than the window and whose output does not reach the run's log by then needs it,
+  or `--start-within 0`: a wrapper that
+  sends Godot's output to its own file (send it to stdout, or `tee` it, instead), the WORLD validation
+  (`world_validate.py` prints only its summary at the end), a lab that prints none of the lines above.
+- **`--start-within SEC`** changes the window; `0` turns the check off.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_start_check` (the start lines of each program and that the
+programs still print them, failure lines, stopped and ended runs, `--expect`, `dotnet`, `--verbose`).
+
 Known pitfalls:
 
 - zsh, the default shell on the owner's Mac, does not split an unquoted `$ARGS` string into words: pass arguments as separate words or an array (or run the line under `bash`), and check the started command line.
@@ -51,7 +92,7 @@ through one first-in, first-out queue, so Godot windows never open over each oth
 starved, and an export gets a quiet Mac in its turn instead of waiting for one. It replaces the earlier
 `lockf /tmp/arcanum-godot-window.lock` rule, which was not first-in, first-out and covered windows only.
 
-    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND [ARGS...]
+    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
 
@@ -68,9 +109,10 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 - **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
   (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
   `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr; a [quiet](#quiet-output-arc-dev-037) run also
-  prints `ARCANUM_QUEUE log ticket=N PATH` before it waits. Within the first minute after starting, check that
-  one of the `queued` or `start` lines is there; after `start`, check the command itself as [above](#checking-that-a-run-started-arc-dev-029),
-  in its log file for a quiet run.
+  prints `ARCANUM_QUEUE log ticket=N PATH` before it waits. A quiet run then checks its command's start itself
+  ([the launcher's start check](#the-launchers-start-check-arc-dev-059)); for a `--verbose` run, check within the
+  first minute that one of the `queued` or `start` lines is there and, after `start`, the command itself as
+  [above](#checking-that-a-run-started-arc-dev-029).
   A queued run is not stuck: `./arcanum queue` shows what it waits for.
 - **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
   exits 124 with `ARCANUM_QUEUE timeout`. `--timeout MIN` changes the limit, `--timeout 0` removes it. Stopping the
@@ -207,7 +249,8 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; counts of zero errors are not.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
-- **`--verbose`** streams the command's output to the terminal as before, with no log file and no summary. Use it only
+- **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no
+  [start check](#the-launchers-start-check-arc-dev-059). Use it only
   when the whole output is the point (a human watching a run). A nested run (`./arcanum run` inside a queued command)
   ignores the setting: its output goes wherever its parent's goes. `./arcanum area`, `world` and `map` are not quiet.
 - **dotnet.** Inside the queue, give `dotnet build` and `dotnet test` `-v q --nologo`, and tests

@@ -110,6 +110,8 @@ public partial class TerrainViewerApp : Node
     private void StartWithArguments(TerrainViewerArguments arguments)
     {
         _arguments = _launchArguments = arguments;
+        // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
+        GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
         ConfigureVisualProfile();
         ConfigureAudio();
         ConfigureGameSettings();
@@ -1112,7 +1114,13 @@ public partial class TerrainViewerApp : Node
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);
     // ARC-DEV-052: a failure stays on screen as a line of its own while the panel is hidden.
-    private void ShowFailure(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
+    // ARC-DEV-059: it is printed too, so `./arcanum run` sees a start that failed (the HUD alone is not in the log);
+    // not by the self-test's bootstrap apps, whose failures are the expected outcomes of its stages.
+    private void ShowFailure(string text)
+    {
+        if (!SelfTestBootstrap) GD.Print($"ARC-DEV-059 viewer failure {text}");
+        _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
+    }
     public override void _ExitTree()
     {
         if (_exiting) return;

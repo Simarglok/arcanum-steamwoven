@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Sequence
 
-from . import config, run_log
+from . import config, run_log, start_check
 
 SCHEMA = "arcanum-run-queue-v1"
 KINDS = ("window", "headless", "export", "dotnet")
@@ -374,12 +374,15 @@ def command_environment(kind: str, seq: int, base: dict[str, str] | None = None)
 
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
-        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False) -> int:
+        hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False,
+        start: start_check.StartCheck | None = None) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
     TIMEOUT_EXIT when it ran out of time, or 128+N when this wrapper was stopped by signal N. `hold`, called after the
     command succeeded, keeps the place while something the command left running is still open (the detached viewer).
     `quiet` (ARC-DEV-037) writes the command's output to a log file and prints only PASS or FAIL with the first error
-    (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes."""
+    (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes. `start`
+    (ARC-DEV-059) watches a quiet run's log for its start line and stops a run that did not start (FAILED_START_EXIT);
+    a nested or --verbose run is not checked."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not command:
@@ -395,6 +398,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes)
     log = None
+    reason: list[str] = []
     if quiet:
         try:
             log = run_log.open_log(ticket["seq"], kind)
@@ -446,13 +450,14 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         with _QueueLock():
             ticket["childPid"], ticket["childStart"] = child.pid, _process_start(child.pid)
             _write(fd, ticket)
-        exit_code = _supervise(child, minutes)
+        exit_code = _supervise(child, minutes, ticket["seq"], start if log is not None else None, log, reason, sleep)
         if exit_code == 0 and hold is not None:
             hold()
         if exit_code == TIMEOUT_EXIT:
             say(f"timeout ticket={ticket['seq']} after {minutes:g} min; stopped its process group")
     except KeyboardInterrupt:
         critical[0] = True
+        reason.clear()  # a stopped wrapper's exit is the signal's, not a start check's
         if child is not None and child.poll() is None:
             _stop_group(child)
         exit_code = 128 + (stopped[0] if stopped else signal.SIGINT)
@@ -475,7 +480,10 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         if legacy is not None:
             os.close(legacy)
     if log is not None and ticket.get("startedAt"):
-        print("\n".join(run_log.summary(log, exit_code, ended - ticket["startedAt"])), flush=True)
+        lines = run_log.summary(log, exit_code, ended - ticket["startedAt"])
+        if reason:  # ARC-DEV-059: why the start check failed the run, right under the FAIL line
+            lines.insert(1, f"start check: {reason[0]}")
+        print("\n".join(lines), flush=True)
     return exit_code
 
 
@@ -512,12 +520,77 @@ def _stop_group(child: subprocess.Popen[bytes]) -> None:
         child.wait()
 
 
-def _supervise(child: subprocess.Popen[bytes], minutes: float) -> int:
+def _supervise(child: subprocess.Popen[bytes], minutes: float, seq: int = 0, check: start_check.StartCheck | None = None,
+               log: Path | None = None, reason: list[str] | None = None,
+               sleep: Callable[[float], None] = time.sleep) -> int:
+    began = time.monotonic()
+    if check is not None and log is not None:
+        code = _watch_start(child, minutes, seq, check, log, began, reason if reason is not None else [], sleep)
+        if code is not None:
+            return code
     try:
-        return child.wait(minutes * 60 if minutes > 0 else None)
+        if minutes <= 0:
+            return child.wait()
+        return child.wait(max(0.0, minutes * 60 - (time.monotonic() - began)))
     except subprocess.TimeoutExpired:
         _stop_group(child)
         return TIMEOUT_EXIT
+
+
+def _watch_start(child: subprocess.Popen[bytes], minutes: float, seq: int, check: start_check.StartCheck, log: Path,
+                 began: float, reason: list[str], sleep: Callable[[float], None]) -> int | None:
+    """ARC-DEV-059: read the log as it fills until the start line. None once the command started or ended with 0
+    (the caller collects its end); otherwise the exit code: the command's own when it ended non-zero before its start
+    line, FAILED_START_EXIT when it was stopped, TIMEOUT_EXIT when its limit came first. A start line within the grace
+    after a start failure line still counts as a start (the failure line was a harmless early line)."""
+    limit = minutes * 60 if minutes > 0 else None
+    offset, partial, failed_at, failure = 0, b"", None, ""
+    while True:
+        ended = child.poll() is not None  # before the read: everything an ended command printed is then in the file
+        try:
+            with open(log, "rb") as handle:
+                handle.seek(offset)
+                data = handle.read()
+        except FileNotFoundError:
+            data = b""
+        offset += len(data)
+        chunk = (partial + data).replace(b"\r", b"\n")  # a progress line rewritten with \r is a line too
+        complete, _, partial = chunk.rpartition(b"\n")
+        if ended or len(partial) > start_check.MAX_PARTIAL:  # the last line without \n, or one that never ends
+            complete, partial = chunk, b""
+        for line in complete.decode(errors="replace").splitlines():
+            found = start_check.scan(check, [line])
+            if found is not None and found[0] == "started":
+                say(f"started ticket={seq} after={time.monotonic() - began:.0f}s line={start_check.cut(line)}")
+                return None
+            if found is not None and failed_at is None:
+                failed_at, failure = time.monotonic(), start_check.cut(line)
+                say(f"start-failed ticket={seq} line={failure}")
+        now = time.monotonic()
+        if ended:
+            code = child.returncode
+            if code == 0 and failed_at is None and not check.expected:
+                say(f"note: ticket={seq} ended with 0 before a start line; its mode was not checked")
+                return None
+            reason.append(f"the command did not start: {failure}" if failed_at is not None else
+                          f"the command ended before a start line ({check.describe()}); {start_check.REMEDY}")
+            say(f"start-failed ticket={seq} {reason[0]}")
+            return code if code != 0 else start_check.FAILED_START_EXIT
+        if limit is not None and now - began >= limit:
+            _stop_group(child)
+            return TIMEOUT_EXIT
+        if failed_at is not None and now - failed_at >= start_check.GRACE_SECONDS:
+            say(f"start-failed ticket={seq} stopped its process group")
+            _stop_group(child)
+            reason.append(f"the command did not start: {failure}; stopped it")
+            return start_check.FAILED_START_EXIT
+        if failed_at is None and now - began >= check.seconds:
+            say(f"start-failed ticket={seq} no start line within {check.seconds:g}s; stopped its process group")
+            _stop_group(child)
+            reason.append(f"no start line within {check.seconds:g}s ({check.describe()}); stopped it; "
+                          f"{start_check.REMEDY}")
+            return start_check.FAILED_START_EXIT
+        sleep(POLL_SECONDS)
 
 
 def _age(seconds: float) -> str:
