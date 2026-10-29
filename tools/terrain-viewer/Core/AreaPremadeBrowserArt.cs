@@ -112,17 +112,23 @@ public static class AreaPremadeBrowserArtLayout
     /// The lines of a text in a field <paramref name="width"/> wide, each glyph with its x from the line's left, as the text draw
     /// 0x535570 breaks them with 0x535C40 (MW22): a line ends at a line feed, or before the character that would pass the width (the
     /// last character counts its width, the others their advance) at the last space or after the last hyphen before it; the line
-    /// holds its break character and the next starts after it. A line with no space or hyphen to break at ends the text. The two
-    /// characters <c>\n</c> start a line and <c>\t</c> are five spaces (0x5418A0, 0x541830, MW21). PROJECT: a tab byte advances 20
-    /// (MW4) and draws nothing, another character without a glyph is skipped (the glyph lookup of 0x535D10 for them is not read).
+    /// holds its break character and the next starts after it. A line with no space or hyphen to break at ends its part. The text's
+    /// parts are split at the two characters <c>\n</c>, each broken on its own, and <c>\t</c> are five spaces (0x5418A0, 0x541830,
+    /// MW21). PROJECT: a tab byte advances 20 with no width and draws nothing, another character without a glyph is skipped (the
+    /// glyph lookup of 0x535D10 for them is not read).
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>> Wrap(AreaArtFont font, string text, int width)
     {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentOutOfRangeException.ThrowIfNegative(width);
-        text = text.Replace("\\n", "\n", StringComparison.Ordinal).Replace("\\t", "     ", StringComparison.Ordinal);
         var lines = new List<IReadOnlyList<(int, AreaArtGlyph)>>();
+        foreach (var part in text.Split("\\n", StringSplitOptions.None)) Lines(font, part.Replace("\\t", "     ", StringComparison.Ordinal), width, lines);
+        return lines;
+    }
+
+    private static void Lines(AreaArtFont font, string text, int width, List<IReadOnlyList<(int, AreaArtGlyph)>> lines)
+    {
         for (var start = 0; start < text.Length;)
         {
             var end = Break(font, text, start, width);
@@ -138,7 +144,6 @@ public static class AreaPremadeBrowserArtLayout
             lines.Add(line);
             start = end + 1;
         }
-        return lines;
     }
 
     /// <summary>0x535C40: the index of the character a line from <paramref name="start"/> ends at (drawn with it), the text's length

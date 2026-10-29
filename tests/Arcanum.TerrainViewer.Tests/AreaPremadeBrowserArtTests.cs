@@ -91,6 +91,11 @@ public sealed class AreaPremadeBrowserArtTests
         var hyphen = AreaPremadeBrowserArtLayout.Wrap(font, "aa-bb", 15);
         Assert.AreEqual((2, 3, 2), (hyphen.Count, hyphen[0].Count, hyphen[1].Count), "a line breaks after a hyphen, which it keeps");
         Assert.AreEqual(0, AreaPremadeBrowserArtLayout.Wrap(font, "aaaaaaaaaa", 10).Count, "a line with no break ends the text (0x535708)");
+        var after = AreaPremadeBrowserArtLayout.Wrap(font, "aaaa-bbbb", 20);
+        Assert.AreEqual((2, 5, 4), (after.Count, after[0].Count, after[1].Count), "a hyphen that fits is a break after it");
+        Assert.AreEqual(0, AreaPremadeBrowserArtLayout.Wrap(font, "aaaaa-b", 20).Count, "a hyphen that passes the width is no break");
+        var spaced = AreaPremadeBrowserArtLayout.Wrap(font, "aaaa  bb", 18);
+        Assert.AreEqual((2, 3, 4), (spaced.Count, spaced[1].Count, spaced[1][1].X), "only the breaking space is taken: the next line starts with the other");
         Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, "aa aaaaaaaaaa b", 10).Count, "the lines before it are drawn");
     }
 
@@ -107,6 +112,8 @@ public sealed class AreaPremadeBrowserArtTests
         var escaped = AreaPremadeBrowserArtLayout.Wrap(font, @"a\nb\tc", 395);
         Assert.AreEqual(2, escaped.Count, "the two characters \\n start a line (0x5418A0)");
         Assert.AreEqual(4 + 5 * 4, escaped[1][^1].X, "the two characters \\t are five spaces (0x541830)");
+        Assert.AreEqual(2, AreaPremadeBrowserArtLayout.Wrap(font, @"aaaa\nbbbb", 17).Count, "each part ends with its last character's width");
+        Assert.AreEqual(1, AreaPremadeBrowserArtLayout.Wrap(font, @"aaaaaaaaaa\nbb", 10).Count, "a part with no break ends only that part");
     }
 
     [TestMethod]

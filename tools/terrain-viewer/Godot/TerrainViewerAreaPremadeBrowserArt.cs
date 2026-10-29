@@ -68,17 +68,6 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             }
         }
-        async Task Click(Vector2 at)
-        {
-            foreach (var pressed in new[] { true, false })
-            {
-                GetViewport().PushInput(new InputEventMouseButton
-                {
-                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
-                });
-                await Frames(1);
-            }
-        }
         var panel = _mainMenuPanel!;
         var art = panel.PremadeArtForSelfTest;
         require(panel.PremadeArtMode && _premadeArtContent is { ArtReady: true }, "the browser shows the game's art: " + _premadeArtContent?.Detail);
@@ -98,9 +87,12 @@ public partial class TerrainViewerApp
         {
             var view = content.View(index, MainMenuHero(index));
             var field = view?.DescriptionTitle is null ? AreaPremadeBrowserArtLayout.Description : AreaPremadeBrowserArtLayout.RaceText;
-            return view is null ? 0 : AreaPremadeBrowserArtLayout.Wrap(font, view.Description, field.Width).Count;
+            var lines = view is null ? [] : AreaPremadeBrowserArtLayout.Wrap(font, view.Description, field.Width);
+            // The measurement the docs state: each story is longer than its field and starts with an empty line.
+            return lines.Count > field.Height / height && lines[0].Count == 0 ? lines.Count : -lines.Count;
         }).ToArray();
-        require(height > 0 && fits.All(lines => lines > 1), "every hero's story breaks into lines: " + string.Join(",", fits));
+        require(height > 0 && fits.All(lines => lines > 0), "every hero's story is longer than its field and starts empty (lines; negative: not): "
+            + string.Join(",", fits));
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_PREMADE_CAPTURE") is { Length: > 0 } capture)
         {
@@ -113,15 +105,15 @@ public partial class TerrainViewerApp
         await Frames(1);
         require(art.FrameForSelfTest(AreaPremadeBrowserButton.Next) == 2 && art.FrameForSelfTest(AreaPremadeBrowserButton.Previous) == 0,
             "the pointer over Next lights it: " + art.FrameForSelfTest(AreaPremadeBrowserButton.Next));
-        await Click(next);
+        await ClickPremadeForSmoke(AreaPremadeBrowserButton.Next);
         var second = art.ViewForSelfTest;
         require(_mainMenu!.Hero == 1 && second is { Index: 1 } && second.Name != first.Name, $"a click on Next shows the second hero: {_mainMenu.Hero} {second?.Name}");
-        var (_, px, py) = AreaPremadeBrowserArtLayout.Button(AreaPremadeBrowserButton.Previous);
-        await Click(art.ScreenPointForSelfTest(px + 15, py + 15));
+        await ClickPremadeForSmoke(AreaPremadeBrowserButton.Previous);
         require(_mainMenu!.Hero == 0 && art.ViewForSelfTest?.Name == first.Name, "a click on Previous shows the first hero again: " + _mainMenu.Hero);
         await ClickPremadeForSmoke(AreaPremadeBrowserButton.Back);
         require(_mainMenu!.Window == AreaMenuWindow.NewGame && !panel.PremadeArtMode, "a click on Back went back to the new-game window: " + _mainMenu.Window);
         var pick = _mainMenu.Shown.ToList().FindIndex(shown => shown.Message == 420);
+        require(pick >= 0, "the new-game window shows Pick Character");
         MainMenuCommand(() => _mainMenu!.Activate(pick));
         require(_mainMenu!.Window == AreaMenuWindow.PickCharacter && _mainMenu.Hero == 0 && panel.PremadeArtMode, "Pick Character opened the browser again");
         var away = art.ScreenPointForSelfTest(400, 20);
@@ -145,6 +137,7 @@ public partial class TerrainViewerApp
                 ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
             });
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         }
     }
 }
