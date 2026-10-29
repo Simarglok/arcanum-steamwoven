@@ -635,7 +635,7 @@ public sealed partial class GameSessionOwner
     /// </summary>
     public SessionAttackResult LandShot(GameSessionVersion expected, SessionShot shot, SessionAttack attack) => CritterAttack(expected, attack, shot);
 
-    private SessionAttackResult CritterAttack(GameSessionVersion expected, SessionAttack attack, SessionShot? landing)
+    private SessionAttackResult CritterAttack(GameSessionVersion expected, SessionAttack attack, SessionShot? landing, PackThrow? pack = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(attack);
@@ -646,12 +646,13 @@ public sealed partial class GameSessionOwner
         PendingShot? pending = null;
         if (landing is { } id && (!_shots.TryGetValue(id, out pending) || pending.Struck || pending.Returning || !pending.Hit && pending.Entity == target.Entity))
             return RejectAttack(GameSessionFailure.InvalidAttack);
-        var hero = QueryHeroAttack()!;
+        // ARC-COMBAT-023: a pack item's throw strikes with the item at its thrown range (ThrowHeroItem).
+        var hero = pack?.Hero ?? QueryHeroAttack()!;
         // ARC-COMBAT-016: the projectile carries its weapon (field 0x50) and skill to the strike.
         if (pending is not null) hero = hero with { Weapon = pending.Hero.Weapon, Skill = pending.Hero.Skill, SkillLevel = pending.Hero.SkillLevel, Training = pending.Hero.Training };
         var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = attack.HeroWorn };
         // The weapon's art subtype is item data, passed with its baseline (the session saves none of it).
-        if (pending is null && attack.HeroWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && hero.Weapon.Kind == WeaponKind.Weapon)
+        if (pending is null && pack is null && attack.HeroWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && hero.Weapon.Kind == WeaponKind.Weapon)
             hero = hero with { Weapon = hero.Weapon with { ArtSubtype = wielded.ArtSubtype } };
         var targetSide = new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn };
         if (!ValidWear(heroSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
@@ -659,15 +660,16 @@ public sealed partial class GameSessionOwner
             attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell))
             return RejectAttack(GameSessionFailure.InvalidAttack);
         // ARC-COMBAT-019: the attack start refuses while the hero's boomerang is away (0x434B00, attacker field 219 bit 0x4).
-        if (pending is null && HeroBoomerangAway()) return RejectAttack(GameSessionFailure.WeaponInFlight);
+        // ARC-COMBAT-023: the throw starter (0x434F80) makes no such test.
+        if (pending is null && pack is null && HeroBoomerangAway()) return RejectAttack(GameSessionFailure.WeaponInFlight);
         // ARC-COMBAT-017: the reach is the weapon's (RH1); a thrown weapon is then checked with the throwing skill and its thrown range.
-        string? thrown = null;
-        if (pending is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
+        var thrown = pack?.Item;
+        if (pending is null && pack is null && ThrowingHero(ref hero, attack.Throw, attack.Flight, out thrown) is var throwFailure && throwFailure != GameSessionFailure.None)
             return RejectAttack(throwFailure);
         if (pending is null && thrown is null) BoomerangHero(ref hero);
         if (pending is null && !hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         // ARC-COMBAT-018: a missed throw scatters from its target location (RH2).
-        var scatterFrom = thrown is null ? null : attack.Throw!.Target ?? attack.TargetCell;
+        var scatterFrom = thrown is null ? null : pack?.Target ?? attack.Throw!.Target ?? attack.TargetCell;
         if (thrown is not null && (scatterFrom is not { } from || !DropCellFits(from))) return RejectAttack(GameSessionFailure.InvalidAttack);
         if (pending is null && attack.Flight && _shots.Count > MaxShotsInFlight - ShotProjectiles(hero)) return RejectAttack(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
@@ -696,7 +698,8 @@ public sealed partial class GameSessionOwner
             CoverRating = pending is null ? attack.LineOfFire?.Cost ?? 0 : 0,
             LineOfFireBlocked = pending is null && (attack.LineOfFire?.Blocked ?? false),
             Difficulty = _difficulty,
-            AmmunitionShort = pending is null && ShotAmmunition() is { Short: true },
+            // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
+            AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
             DeferHit = pending is null && attack.Flight,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
@@ -729,7 +732,7 @@ public sealed partial class GameSessionOwner
         var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;
         if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).
-        var ammunition = pending is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
+        var ammunition = pending is null && pack is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;
         if (ammunition is { Disposition: GameSessionDisposition.Rejected } refusedSpend)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, refusedSpend.Failure, Version) { Ammunition = refusedSpend };
         var spent = ammunition is { Disposition: GameSessionDisposition.Changed };

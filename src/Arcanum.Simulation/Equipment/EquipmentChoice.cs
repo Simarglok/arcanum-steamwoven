@@ -71,7 +71,7 @@ public static class EquipmentChoice
         ArgumentNullException.ThrowIfNull(candidate);
         if (candidate.Item.Weapon is { } weapon && candidate.Throwable) return weapon.Damage;
         if (candidate.Weight is < 0 or > MaxWeight) throw new ArgumentOutOfRangeException(nameof(candidate));
-        return DamageRanges.None with { Normal = new((candidate.Weight + 99) / 100, (candidate.Weight + 49) / 50) };
+        return ThrowRules.ItemDamage(candidate.Weight);
     }
 
     /// <summary>

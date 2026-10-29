@@ -214,12 +214,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-COMBAT-017: the thrown weapon leaves the hero's hand and lies hidden on the hero's cell while it flies (0x434B00 →
     /// 0x466E00, then 0x4B3C00 → 0x4415C0, which schedules no decay), one revision; the hero's worn items for the attack's later steps
-    /// lose the weapon slot (the critical miss's weapon effects find the hand empty, CW3).</summary>
+    /// lose the weapon slot (the critical miss's weapon effects find the hand empty, CW3). ARC-COMBAT-023: a thrown pack item leaves
+    /// its list (or the slot it was worn in) the same way; a weapon the hero wields meanwhile stays in the hand.</summary>
     private IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? Throw(string item,
         IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? worn)
     {
         PlaceHeroItem(item, _actor.Cell, decays: false);
-        return worn?.Where(pair => pair.Key != Arcanum.Simulation.Equipment.EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value);
+        return worn?.Where(pair => pair.Value.Entity != item).ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     /// <summary>A struck shot ends, except a thrown one: it waits for its item's landing (<see cref="LandThrownItem"/>); ARC-COMBAT-019:

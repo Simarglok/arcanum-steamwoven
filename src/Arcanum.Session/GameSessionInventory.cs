@@ -22,6 +22,8 @@ public static class SessionScriptPoint
     public const int Use = 1;
     public const int Get = 4;
     public const int Drop = 5;
+    /// <summary>ARC-COMBAT-023: the item's throw script (0x4B3C00: point 6, whose skip default refuses the throw).</summary>
+    public const int Throw = 6;
     public const int InsertItem = 21;
     public const int WieldOn = 24;
     public const int WieldOff = 25;

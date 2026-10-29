@@ -19,6 +19,8 @@ public sealed class CombatAnomalyProfileTests
         Assert.AreEqual("original", original.Name);
         Assert.IsTrue(original.InvocationModifierCountedTwice && original.ArmorClassEffectsCountedTwice
             && original.CriticalSelfHitRolledTwice && original.BackstabDamageOnSelfHit);
+        // ARC-COMBAT-023: TT4's switch.
+        Assert.AreEqual((false, true), (steamwoven.PcThrowCostsNothing, original.PcThrowCostsNothing));
         // ARC-COMBAT-015: EX9's switch.
         Assert.AreEqual((false, true), (steamwoven.RangedApproachSkipsClearShot, original.RangedApproachSkipsClearShot));
         CollectionAssert.AreEqual(new[] { steamwoven, original }, CombatAnomalyProfile.All.ToArray());

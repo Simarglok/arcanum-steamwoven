@@ -174,4 +174,15 @@ public sealed class TurnBasedRulesTests
         Assert.IsFalse(steamwoven.FirstSubturnStartedTwice || steamwoven.StallCheckKeepsPreviousActionPoints ||
             steamwoven.OverexertionKnockoutClearsNextActionPoints);
     }
+
+    // ARC-COMBAT-023 (0x433270, ledger AG10, TT4): the throw goal charges 2 to anyone but the local PC.
+    [TestMethod]
+    public void AThrowCostsTwoAndTheOriginalLetsTheLocalPcThrowForNothing()
+    {
+        Assert.AreEqual(2, TurnBasedRules.ThrowActionCost(localPc: true, CombatAnomalyProfile.Steamwoven));
+        Assert.AreEqual(0, TurnBasedRules.ThrowActionCost(localPc: true, CombatAnomalyProfile.Original));
+        Assert.AreEqual(2, TurnBasedRules.ThrowActionCost(localPc: false, CombatAnomalyProfile.Original));
+        Assert.AreEqual(2, TurnBasedRules.ThrowActionCost(localPc: false, CombatAnomalyProfile.Steamwoven));
+        Assert.ThrowsExactly<ArgumentNullException>(() => TurnBasedRules.ThrowActionCost(true, null!));
+    }
 }
