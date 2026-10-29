@@ -103,6 +103,9 @@ public sealed class RealTimeCombatRulesTests
         // Not a critter ART, or under a body-of-element spell: the ART's own rate.
         Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 20, 12, critterArt: false));
         Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 20, 12, elementalBody: true));
+        // ARC-RENDER-039 (WA9): the throw keeps its ART's rate whatever the Speed and weapon.
+        foreach (var weapon in Enum.GetValues<AttackArtWeapon>())
+            Assert.AreEqual(12, RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Throw, weapon, 20, 12), weapon.ToString());
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 0, 12));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Sword, 8, 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, (AttackArtWeapon)15, 8, 12));

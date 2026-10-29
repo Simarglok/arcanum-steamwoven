@@ -3,7 +3,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW6). The art is read once a
+// ARC-UI-058: the menu's button windows in the original's look (docs/ui/original-windows.md; ledger MW1–MW8). The art is read once a
 // module; without a game folder (the synthetic self-tests) the menu keeps its diagnostic window.
 public partial class TerrainViewerApp
 {
@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-058 menu art not ready: {_menuArtContent.Detail}");
             return;
         }
-        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt }
+        var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt, AreaMenuArtLayout.OptionsArt }
             .ToDictionary(number => number, number => (Texture2D)HotkeyTexture(_menuArtContent.Art[number].Frames[0]));
         var glyphs = _menuArtContent.Art[AreaMenuArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
             .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));

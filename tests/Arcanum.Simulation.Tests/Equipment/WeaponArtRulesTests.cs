@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Equipment;
 
-// The weapon art and the attack animation (ARC-RENDER-037, ledger WA1–WA8). Art ids are built from their bit fields; none is an
+// The weapon art and the attack animation (ARC-RENDER-037, ledger WA1–WA8; ARC-RENDER-039 WA9). Art ids are built from their bit fields; none is an
 // original object's.
 [TestClass]
 public sealed class WeaponArtRulesTests
@@ -73,5 +73,16 @@ public sealed class WeaponArtRulesTests
         Assert.AreEqual(WeaponArtRules.AttackAnimation, WeaponArtRules.Animation(0, 0, 6, standing));
         Assert.AreEqual(WeaponArtRules.LowAttackAnimation, WeaponArtRules.Animation(0, 0, 0, Monster(9)));
         Assert.AreEqual(WeaponArtRules.AttackAnimation, WeaponArtRules.Animation(0, 0, 0, Monster(8)));
+    }
+
+    /// <summary>ARC-RENDER-039: an art's animation (0x503E20) is bits 6..10 of a critter, monster or unique NPC art id, 0 for another type.</summary>
+    [TestMethod]
+    public void TheAnimationOfAnArtIsReadOnlyFromCritterMonsterAndUniqueNpcArts()
+    {
+        Assert.AreEqual(7, WeaponArtRules.AnimationOf(Critter(2, 1) | 7u << 6));
+        Assert.AreEqual(31, WeaponArtRules.AnimationOf(Monster(3) | 31u << 6));
+        Assert.AreEqual(21, WeaponArtRules.AnimationOf(0xD0000000u | 21u << 6), "a unique NPC art");
+        Assert.AreEqual(0, WeaponArtRules.AnimationOf(0x50000000u | 7u << 6), "a scenery art has no animation");
+        Assert.AreEqual(0, WeaponArtRules.AnimationOf(0x10000000u | 9u << 6), "a wall art has no animation");
     }
 }

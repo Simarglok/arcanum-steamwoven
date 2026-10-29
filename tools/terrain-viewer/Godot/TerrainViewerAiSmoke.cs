@@ -71,6 +71,8 @@ public partial class TerrainViewerApp
             var frames = 0; var drawnMoved = false; var swing = false;
             // ARC-WORLD-111: its steps are drawn with its own walk or run cycle.
             var stepFrames = new HashSet<AreaFrameKey>(); var steppingFrames = 0;
+            // ARC-RENDER-038: its attack is drawn with its body's attack ART, and in combat mode it stands with what it shows.
+            _npcAttackFrames.Clear(); var attackFrames = 0; var armedStands = _npcArmedStandDraws;
             // Automated runs drive the clock themselves: a frame is 50 host milliseconds, as the world frame (the game clock runs 8x).
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
@@ -107,6 +109,10 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_aiFidgets > fidgets, "its done attack run was followed by its fidget");
+            Require(_npcAttackFrames.Count - attackFrames >= 3, $"its attack was drawn with its attack ART: {_npcAttackFrames.Count - attackFrames} distinct frames; "
+                + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
+            var shown = host.ShownWeapon(entity);
+            Require(shown.Weapon >= 1, $"in combat mode it shows its weapon or bare hands (WA1): {shown}");
             // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
             var skills = _aiSkills;
             Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
@@ -150,7 +156,8 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit, StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
+                Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
+                AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
@@ -234,6 +241,8 @@ public partial class TerrainViewerApp
             var hostMs = 31_000_000L;
             TickAreaClock(hostMs);
             var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
+            // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART (distinct frames counted from here).
+            _npcAttackFrames.Clear(); var attackFrames = 0;
             string? hit = null;
             for (; frames < 6000 && hit is null; frames++)
             {
@@ -267,6 +276,8 @@ public partial class TerrainViewerApp
             Require(!offTurn, "it never walked on another participant's subturn");
             Require(_roundLog.Any(e => e.Kind == SessionCombatEventKind.SubturnEnded && e.Combatant == critter), "its subturn ended and passed on");
             Require(trace?.EndCombatScripts > 0, "its subturn end asked its end-combat script (point 16)");
+            Require(_npcAttackFrames.Count - attackFrames >= 2, $"its attack was drawn with its attack ART: {_npcAttackFrames.Count - attackFrames} distinct frames; "
+                + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
             var at = host.Tile(entity)!.Value;
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
@@ -275,7 +286,7 @@ public partial class TerrainViewerApp
             Require(hud.Contains("turn-based: round", StringComparison.Ordinal) && hud.Contains(" | AI: ", StringComparison.Ordinal), "the status line shows the round and the AI");
             GD.Print("ARC-WORLD-095 native-smoke ai-turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Frames = frames, Held = held, HeroTurns = heroTurns, Hit = hit,
-                EndCombatScripts = trace!.EndCombatScripts,
+                EndCombatScripts = trace!.EndCombatScripts, AttackFrames = _npcAttackFrames.Count - attackFrames,
                 Rounds = _roundLog.Count(e => e.Kind == SessionCombatEventKind.RoundBegan),
                 Parity = "NOT_VERIFIED (round hooks read in the original executable; no original-runtime run)" }));
         }

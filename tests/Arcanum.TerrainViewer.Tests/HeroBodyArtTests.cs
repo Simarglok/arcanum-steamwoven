@@ -171,7 +171,11 @@ public sealed class HeroBodyArtTests
             Assert.AreEqual((11, 11, 19, 14), (load.Profile.FallDown.FramesPerGroup, load.Profile.FallDown.RawFramesPerSecond,
                 load.Profile.GetUp.FramesPerGroup, load.Profile.GetUp.RawFramesPerSecond), body.Label);
             var downKeys = 5 * (load.Profile.FallDown.FramesPerGroup + load.Profile.GetUp.FramesPerGroup);
-            Assert.AreEqual((195 + downKeys, 195 + downKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
+            // ARC-RENDER-039: every body also has its bare-handed low attack and its throw (installed in underwear: 7 frames at 13 fps,
+            // action frame 5, and 11 frames at 12 fps, action frame 4; 435 keys a body).
+            Assert.IsNotNull(load.Profile.LowAttack, body.Label); Assert.IsNotNull(load.Profile.Throw, body.Label);
+            var attackKeys = 5 * (load.Profile.LowAttack.FramesPerGroup + load.Profile.Throw.FramesPerGroup);
+            Assert.AreEqual((195 + downKeys + attackKeys, 195 + downKeys + attackKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
             CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Take(5).Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
             // HB3: the installed strides (axis dx, dy, diagonal) of walk and run.
             var (walk, run) = body.Label switch
@@ -219,7 +223,8 @@ public sealed class HeroBodyArtTests
                 var worn = bare.Wearing(item.UseArt);
                 Assert.IsNotNull(worn, $"{name} {item.Kind.Prototype}: subtype has no art");
                 var body = HeroBodyArt.Load(archive, worn.Value);
-                Assert.AreEqual(195 + 5 * (body.Profile.FallDown!.FramesPerGroup + body.Profile.GetUp!.FramesPerGroup), body.Textures.Count,
+                Assert.AreEqual(195 + 5 * (body.Profile.FallDown!.FramesPerGroup + body.Profile.GetUp!.FramesPerGroup
+                    + body.Profile.LowAttack!.FramesPerGroup + body.Profile.Throw!.FramesPerGroup), body.Textures.Count,
                     $"{name} {item.Kind.Prototype} {worn.Value.Label}");
                 report.Add($"{name} {item.Kind.Prototype}: {worn.Value.Label} armor={worn.Value.Armor} palette={worn.Value.Palette}");
             }
@@ -234,7 +239,13 @@ public sealed class HeroBodyArtTests
                 var body = HeroBodyArt.Load(archive, armed);
                 Assert.AreEqual((armed.Weapon, armed.Weapon, 0), ((int)(body.Profile.Idle.Selector & 15), (int)(body.Profile.Attack!.Selector & 15),
                     (int)(body.Profile.Walk.Selector & 15)), $"{name} weapon {armed.Weapon}");
-                report.Add($"{name} combat: {armed.Label} weapon={armed.Weapon} attack={body.Profile.Attack.FramesPerGroup}f/{body.Profile.Attack.RawFramesPerSecond}fps action={body.Profile.Attack.ActionFrame}");
+                // ARC-RENDER-039: bare hands and the bow have their own low attack; every other kit weapon's is repaired to the attack
+                // (MA1) and not read; the throw drops the weapon (MA2).
+                Assert.AreEqual(armed.Weapon is 1 or 8, body.Profile.LowAttack is not null, $"{name} weapon {armed.Weapon} low attack");
+                Assert.AreEqual(0u, body.Profile.Throw!.Selector & 15, $"{name} throw");
+                report.Add($"{name} combat: {armed.Label} weapon={armed.Weapon} attack={body.Profile.Attack.FramesPerGroup}f/{body.Profile.Attack.RawFramesPerSecond}fps action={body.Profile.Attack.ActionFrame}"
+                    + $" low={(body.Profile.LowAttack is { } low ? $"{low.FramesPerGroup}f/{low.RawFramesPerSecond}fps action={low.ActionFrame}" : "attack")}"
+                    + $" throw={body.Profile.Throw.FramesPerGroup}f/{body.Profile.Throw.RawFramesPerSecond}fps action={body.Profile.Throw.ActionFrame}");
             }
             // With a shield (no kit holds one): the dagger's stand and attack are the shield files, the walk the plain walk.
             var shielded = dressed.Armed(true, 0x60000000u | 2u << 6, Arcanum.Simulation.Equipment.WeaponArtRules.ArmorItemType)!.Value;

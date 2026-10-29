@@ -4,12 +4,12 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-058: a menu button window in the original's look (<see cref="AreaMenuArtLayout"/>, ledger MW1–MW6): the window's background
+/// ARC-UI-058: a menu button window in the original's look (<see cref="AreaMenuArtLayout"/>, ledger MW1–MW8): the window's background
 /// over the 800 × 600 screen at the whole factor the bars use, centred in the window, and its labels in the art font with their three
 /// colour passes. The pointer over a label lights its face and plays 3026, a press plays 3027, and a release over the pressed label
 /// chooses it (as the diagnostic window's buttons do). PROJECT: the shown buttons take the first slots in order (the original's
 /// windows have no hidden buttons), and the focused label is lit as the pointer lights it at the window's opening and after a
-/// controller's or key's focus move.
+/// controller's or key's focus move. ARC-UI-059: the options window's page buttons at their own points (MW7).
 /// </summary>
 public partial class AreaMenuArtView : Control
 {
@@ -56,19 +56,21 @@ public partial class AreaMenuArtView : Control
     /// <summary>True when the art is set and <paramref name="window"/> is one this look draws.</summary>
     public bool Draws(AreaMenuWindow window) => _font is not null && AreaMenuArtLayout.Background(window) is { } art && _backgrounds.ContainsKey(art);
 
-    /// <summary>Shows <paramref name="window"/> with its shown labels; <paramref name="focus"/> is the menu's focused button.</summary>
+    /// <summary>Shows <paramref name="window"/> with its shown labels; <paramref name="focus"/> is the menu's focused button (-1 or
+    /// below for none, as the options window's focus on a control).</summary>
     public void Render(AreaMenuWindow window, IReadOnlyList<string> labels, int focus)
     {
         ArgumentNullException.ThrowIfNull(labels);
         if (_font is null || AreaMenuArtLayout.Background(window) is not { } art || !_backgrounds.TryGetValue(art, out var background))
             throw new InvalidOperationException("ARC-UI-058: the menu art does not draw " + window);
+        focus = Math.Max(focus, -1);
         var opened = _window != window || !Visible;
         // The focused label is lit when a window opens and after a focus move of the controller or a key (PROJECT); the pointer's next
         // move takes it over again.
         if (opened) { _hovered = focus; _pointer = -1; _pressed = -1; }
         else if (focus != _focus) _hovered = focus;
         (_window, _focus, _background, _labels) = (window, focus, background, labels);
-        _buttons = [.. labels.Select((label, slot) => AreaMenuArtLayout.Button(slot, _font.Measure(label)))];
+        _buttons = [.. labels.Select((label, slot) => AreaMenuArtLayout.Button(window, slot, _font.Measure(label)))];
         if (_hovered >= _buttons.Count) _hovered = -1;
         Visible = true;
         Place();

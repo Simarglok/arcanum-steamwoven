@@ -415,7 +415,9 @@ and which attack animation does it play? Read on 2026-10-29 by this task alone (
 art id setters 0x504100 and 0x504180, the height 0x503F60 with its tables 0x5BE980 and 0x5BE994 and the body lookup 0x502710, the
 combat-mode toggle 0x4B3F80 (its art part 0x4B40D9..0x4B425E), the attempt-attack goal's node 0x42B9C0 (its animation part
 0x42BA92..0x42BBFF) and the weapon and shield part of the wear check 0x464D20 (0x464F19..0x464F55, 0x464FC3..0x465000). Every direct
-branch stays inside `.text`.
+branch stays inside `.text`. ARC-RENDER-039 read on 2026-10-29 (one reading, F1) the attack rate 0x437990 (0x437990..0x437BDD with its two jump tables),
+the art animation 0x503E20 (0x503E20..0x503E4A) and the missing-art pair tables 0x5A106C..0x5A119B (WA9, WA10); every direct branch
+stays inside `.text`.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
@@ -427,8 +429,10 @@ branch stays inside `.text`.
 | WA6 | height 0x503F60, 0x502710 | A critter art (type 2) reads entry 0x502710 of table 0x5BE980 (1, 0, 0, 2, 1), and 0x502710 answers 0 for art types 0, 1, 2, 12 and 13, so every critter is 1; a monster (12) reads its species (bits 23..27, 0x503F20) in the 32-entry table 0x5BE994 (0 short, 1 middle, 2 tall); any other type is 1. | Original |
 | WA7 | attack art 0x4650D0 | As WA1 with combat mode assumed and animation 20 (0x503E50): the art the critter would attack with. Its only callers are the wear check's weapon and shield parts. | Original |
 | WA8 | wear check 0x464D20, weapon and shield | A shield (type 7) in slot 1005: refused with 9 (not wieldable) when the attack art (WA7) with shield 1 does not exist (0x502220). A weapon: the attack art with the item's subtype as weapon part (0 too) is built; a part that does not read back refuses with 9, and a file that does not exist refuses as BA6 does. So a critter can wield only a weapon or shield its body has an attack art for. | Original; the session's wear check leaves the art test to the host (as BA6), NOT READY |
+| WA9 | attack rate 0x437990 (jump tables 0x437BB0, 0x437BC8), art animation 0x503E20 | ARC-RENDER-039: the rate reads the animation of the art id (0x503E20: bits 6..10 of a critter, monster or unique NPC art, else 0) and maps animations 1, 3, 6, 20 and 21 to their cases; every other animation, the throw (14) among them, takes the default, the ART's own rate (10 when the art's data does not read). The art id keeps the chosen animation when the missing-art repair names the attack's file (MA1 acts on the name only, MA3), so a repaired low attack plays the attack's ART at the low attack's rate. | Original |
+| WA10 | missing-art pairs 0x5A10B8, 0x5A1104, 0x5A1150 | ARC-RENDER-039: the ten low-attack pairs (animation 21) name weapons 1..8, 10 and 13, each repaired to the attack (20); a low attack with weapon 0, 9, 11, 12 or 14 is never repaired (its node fails, WA5). | Original |
 
 No anomaly. The file the art id names follows MA1–MA3: animations 6–19 clear weapon and shield, a walk clears the shield, a missing
-armed walk is the walk without the weapon, a missing low attack the attack. The 44 installed creatable body and armour ARTs
+armed walk is the walk without the weapon, a missing low attack the attack (WA10). The 44 installed creatable body and armour ARTs
 (`arcanum1.dat`) have stand and attack ARTs for weapons 1..8, 10 and 13 (the half-ogre's without 6; with a shield for 1..6, the
 half-ogre's 1..5) and a walk only without a weapon, so an armed hero walks without its weapon and stands and attacks with it.

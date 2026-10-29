@@ -1690,7 +1690,7 @@ and layout (below), the other windows the project's.
   under the pointer. The pointer over a label plays 3026, a press 3027, a release over it chooses it; letters, Escape and the
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
-  names them and the window's notice. The quit box, the options, save and load, browser, new-character, editor and shop windows keep
+  names them and the window's notice. ARC-UI-059: the options window too (below). The quit box, the save and load, browser, new-character, editor and shop windows keep
   the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
@@ -1854,7 +1854,15 @@ animation.
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
 in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
-project's.
+project's, except as below.
+
+- **Original look (ARC-UI-059,** [ledger MW7–MW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
+  art the window draws its background 556 `OptionsMenuBack` over the 800 × 600 screen as the main menu's windows do, and its page
+  buttons Game, Video, Sound and Done as art-font labels centred on (130, 221 + 40 × i), lit under the pointer, sounding and
+  choosing as the main menu's labels (the focused one lit while the focus is on a page button). PROJECT: the page's controls stay
+  the project's rows (label, arrows, value), alone in a panel placed at the page's first control slot (261, 122) on the scaled
+  screen, until the controls' own art (arts 623, 667–670, MW8 F0) is read; the line at the top names the hidden controls and the
+  notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
 - **Pages.** The buttons Game, Video, Sound and Done with the game's `MainMenu.mes` labels and letters (messages 4000–4003,
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
@@ -1901,9 +1909,10 @@ from play, Done going back from the main menu, the Rules line switching the sess
 texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
 Done back to the main menu, a new game as the first hero beginning under the Original rules, then in play a difficulty
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
-Steamwoven on the session, the O key closing the menu). Not done: Brightness, Text Duration, Combat Taunts, Module,
-Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art and
-button sounds.
+Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
+while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
+saves the Game page's picture to an ignored path). Not done: Brightness, Text Duration, Combat Taunts, Module,
+Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet), the original's art of the controls.
 
 ### New-character window (ARC-UI-030)
 
