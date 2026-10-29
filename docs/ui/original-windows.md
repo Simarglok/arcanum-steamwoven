@@ -1,4 +1,4 @@
-# Original look of the inventory, loot, character, logbook and world-map windows (ARC-UI-051, ARC-UI-052)
+# Original look of the inventory, loot, character, logbook, world-map and menu windows (ARC-UI-051, ARC-UI-052, ARC-UI-058)
 
 The owner's playtest of the packaged alpha (main `72c7b932`, 2026-10-28) found that the inventory (`I`),
 character sheet (`C`), logbook (`L`) and world map (`W`) open diagnostic panels without the original graphics.
@@ -113,3 +113,61 @@ created with callback 0x5618B0 and the table at 0x5C9B00 (0x5572D0). Buttons 811
 world-map tiles, F0); town maps are 668 × 400 arts (626 `TarantMap`, 627 `Saltys_Map`, 687, 749, 763, 764, 806).
 Suggested split: (a) background, buttons and the existing travel panel's controls at their places; (b) the
 world-map picture and the party marker; (c) town maps.
+
+## Main menu (done: ARC-UI-058)
+
+The owner's bug report of 2026-10-29 (build `6e793c18`): the main menu and its windows (options, save and load, character creation)
+drew the project's panel, "PROJECT window over the original's menu windows". Read in the window table 0x5C3A40, the window build
+0x546340, the label draw 0x546B40 and the menu's fonts; rows [MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058).
+The menu's windows are the 800 × 600 screen, not the 800 × 400 window of the game windows above.
+
+| Part | Art | Place on the screen | Notes |
+| --- | --- | --- | --- |
+| Background | 329 `MainMenuBack` 800 × 600 (windows 2, 3, 4, 11, 26), 331 `SinglePlayerBack` (window 5) | (0, 0) | an art 600 rows high fills the screen (MW1) |
+| Labels | font 327 `Morph30Font` (225 glyphs, 33 rows) | i-th centred on (410, 143 + 50 × i) | text-only buttons, hit area = the label's size (MW2, MW4) |
+| Label colours | black, brown (97, 61, 42), face dark red (100, 0, 0) | the passes at (−1, −1), (+1, +1), (0, 0) | the face bright red (240, 15, 15) under the pointer (MW3, MW5, MW6) |
+
+Done in the viewer (`AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`): with the game's art the main, single-player, new-game and
+in-play windows show the background over the whole screen at the bars' whole factor (black around it) and their labels in the art
+font with the three passes; the pointer over a label lights it and plays 3026, a press plays 3027 and a release over the label
+chooses it; the letters, Escape and the controller work as before (the labels show no letters, as the original's; the focused label is lit at
+the window's opening and after a focus move, PROJECT). PROJECT: the
+buttons Steamwoven hides (MultiPlayer, Credits, View Intro, a refused new game's) leave no gap, and a line at the top of the
+window names them and the window's notice (for example "no save to continue from"). The quit box and every window below keep the
+diagnostic panel; the synthetic self-tests, which have no game folder, keep it everywhere. `AreaArtFont` is the first art font of the
+project: the next slices draw their texts with it.
+
+## Menu windows plan (ARC-UI-058)
+
+The remaining menu windows, each its own task and thread, in this order (read in the window table and the build; MW1). Every window
+keeps its existing behaviour and its diagnostic look for the self-tests, as above; coordinates are the screen's; facts not in MW1–MW6
+are F0 and are read by the slice.
+
+1. **Options** (window 6, `O` in play): background 556 `OptionsMenuBack` (800 × 600, full screen); its four page buttons (Game, Video,
+   Sound, Done; messages 4000–4003) are text buttons with flags 0xD like the main menu's, but at x 130, y 221 + 40 × i. The page's
+   controls (sliders, value arrows, the checkbox look) come from the options window's own open 0x541C70 and close 0x541D70 and its
+   control table (OP1–OP8, [options window](../research/ledger/ui-audio.md#options-window-arc-ui-013)); the slice reads their art and
+   places the existing controls. Smallest next step: the background and the page buttons reuse `AreaMenuArtView`.
+2. **Save and load** (windows 8 save, 7 load; the palette's and F-keys' windows too): background 745 `SaveLoadBackground` (800 × 400)
+   at (0, 41) with the strips 336 at the top and 335 at the bottom (MW1); art buttons 321 `NextBut` (61 × 61, 3 frames) at (675, 55)
+   (Save / Load, hint 7021 / 7020), 323 `BackBut` at (69, 55) (hint 7002) and 32 `cncl_big` (38 × 37) at (115, 396) (hint 7022).
+   The list, the slot thumbnails and the description field come from the opens 0x543380 (save) and 0x541F20 (load), their redraws
+   and the save info 0x404270 (SL1–SL8, [save list](../research/ledger/ui-audio.md#save-list-arc-ui-010)). May split: (a) frame,
+   buttons and the list's text; (b) the save's thumbnail.
+3. **Pre-made character browser** (window 13): background 766 `PreGenCharacterBase` (800 × 400) at (0, 41) with the strips; buttons
+   321 at (675, 55) (start, hint 7003), 323 at (69, 55) (back), 283 `Big_Grn_L` / 284 `Big_Grn_R` (34 × 33) at (43, 118) and
+   (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);
+   the slice reads them and draws the browsed hero with the character sheet's parts where they match.
+4. **New character** (window 12): background 765 `CreateCharacterBase` (800 × 400) at (0, 41) with the strips; buttons 321 / 323 as in
+   the browser, 283 / 284 at (43, 118) / (244, 118), 757 `MPCycleLeftButton` / 758 `MPCycleRightButton` (23 × 23) at (42, 331),
+   (255, 332), (42, 381), (255, 382) (the gender, race, background and portrait arrows, F0 which is which), the name field and the
+   portrait from the window's callbacks (NW1–NW6).
+5. **Character editor and opening shop** (windows 14 and 15): no background of their own (-1, MW1: the strips only); buttons 321 at
+   (675, 55) and 323 at (69, 55) (back, target -2). The editor is the creation-mode character sheet over 22 `char_maint`: done with
+   the character sheet's slice (above) rather than here; the shop is the barter window's look (ARC-UI-038).
+6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3); its art is the game's common dialog box (not
+   read, F0), shared with the other yes/no questions: one slice for the dialog box.
+
+Not planned here: Credits (25), View Intro (10) and the network windows (16–24), which Steamwoven does not build (FR-MEDIA-001,
+FR-MEDIA-002, network play).
+
