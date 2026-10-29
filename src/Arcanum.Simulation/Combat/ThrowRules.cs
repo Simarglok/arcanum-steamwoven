@@ -34,9 +34,9 @@ public static class ThrowRules
     /// <summary>
     /// ARC-COMBAT-023 (0x462330, ledger WB8): the damage of a thrown item that is not a throwable weapon (weapon flag 0x10): normal
     /// <c>(weight + 99) / 100 .. (weight + 49) / 50</c> from its effective <paramref name="weight"/> (0x461370 with its holder), signed
-    /// and toward zero, and no other type.
+    /// and toward zero, and no other type (the throwable weapon's half is <see cref="EquipmentChoice.ThrownDamage"/>'s, which carries
+    /// the address).
     /// </summary>
-    [OriginalFunction(0x462330, OriginalFunctionScope.Partial)]
     public static DamageRanges ItemDamage(int weight)
     {
         if (weight is < 0 or > MaxWeight) throw new ArgumentOutOfRangeException(nameof(weight));

@@ -152,6 +152,7 @@ public sealed class HeroItemThrowStateTests
             "a listed weapon needs its combat facts");
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.ThrowHeroItem(owner.Version, AtRat(owner) with { Combat = Sword }).Failure,
             "an armour has no weapon block");
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.ThrowHeroItem(owner.Version, AtRat(owner) with { Combat = Sword with { Weapon = null } }).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.ThrowHeroItem(owner.Version, AtRat(owner) with { StruckCell = null }).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.ThrowHeroItem(owner.Version, AtRat(owner) with { Target = new CellCoord(-1, 0) }).Failure);
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.ThrowHeroItem(owner.Version with { Revision = owner.Version.Revision + 1 }, AtRat(owner)).Failure);
@@ -170,5 +171,34 @@ public sealed class HeroItemThrowStateTests
         using var owner = Owner();
         Assert.AreEqual(TurnBasedRules.ThrowActionCost(localPc: true, CombatAnomalyProfile.Steamwoven), owner.QueryHeroThrowCost());
         Assert.IsNull(owner.QueryHeroThrowRange("kit:9"));
+    }
+
+    [TestMethod]
+    public void AListedThrowableWeaponStrikesWithItsOwnDamage()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        for (var i = 0; i < 80; i++)
+        {
+            var thrown = owner.ThrowHeroItem(owner.Version, AtRat(owner, "kit:1", new(Kit[0].Kind, false, [])) with { Combat = Sword, Throwable = true });
+            Assert.AreEqual(GameSessionFailure.None, thrown.Failure);
+            if (thrown.Attack!.Resolution!.Outcome == AttackOutcome.Hit)
+            {
+                var struck = owner.LandShot(owner.Version, thrown.Shots[0], new(rat));
+                Assert.IsTrue(struck.Resolution!.Damage!.Rolled.Normal is >= 2 and <= 6, "the weapon's own 2 .. 6, not its weight's 1 .. 1");
+                return;
+            }
+            Assert.IsTrue(owner.EndShot(thrown.Shots[0]));
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "kit:1", Accept).Disposition);
+        }
+        Assert.Fail("no hit");
+    }
+
+    [TestMethod]
+    public void AListedArmourMayCarryItsFactsForTheUberFlag()
+    {
+        using var owner = Owner();
+        var armour = new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor(), Uber = true };
+        Assert.AreEqual(GameSessionFailure.None, owner.ThrowHeroItem(owner.Version, AtRat(owner) with { Combat = armour }).Failure);
     }
 }

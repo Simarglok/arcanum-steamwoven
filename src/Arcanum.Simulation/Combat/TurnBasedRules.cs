@@ -188,7 +188,8 @@ public static class TurnBasedRules
     /// round: the goal charges <see cref="ThrowCost"/> through the shared goal callback (0x433270), which exempts the local PC, and
     /// nothing else of the throw charges (the starter's gate 0x4348E0 is called with 0, the attack cost 0x4B7C30 is skipped). With
     /// <see cref="CombatAnomalyProfile.PcThrowCostsNothing"/> the local PC throws for 0, as in the original; Steamwoven charges it
-    /// <see cref="ThrowCost"/> too. An NPC's end-step charge of its pending cost (EX6) is the AI host's.
+    /// <see cref="ThrowCost"/> too. An NPC's end-step charge of its pending cost (EX6) is the AI host's; the turn-based host charges it
+    /// (the viewer's "default throws" attack still pays the attack cost until ARC-UI-063).
     /// </summary>
     public static int ThrowActionCost(bool localPc, CombatAnomalyProfile profile)
     {

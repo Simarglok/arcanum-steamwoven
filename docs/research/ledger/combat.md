@@ -407,7 +407,10 @@ target object, what it costs in a round and what damage a thrown item deals). Re
 Anomalies: TT2's lost item is a technical bug (as TA1), fixed in both modes: the session refuses a throw before the item leaves.
 TT4 is a gameplay bug under the owner's rule (2026-10-28): Original keeps the free throw, Steamwoven charges the PC the goal's 2.
 Implemented by ARC-COMBAT-023 in the session and rules (`ThrowHeroItem`, `ThrowRules.ItemDamage`/`ThrownWeapon`,
-`TurnBasedRules.ThrowActionCost`). Steamwoven difference: the item leaves the hero at the throw, not at the lift. Not ready: TT3's
+`TurnBasedRules.ThrowActionCost`). Steamwoven differences: the item leaves the hero at the throw, not at the lift, so a worn item's
+own values still count for the throw's range and check; a critical miss's weapon and ammunition steps read the wielded weapon (as
+CW3, not read for a pack throw). Not ready: the viewer still charges a "default throws" weapon's throw the attack cost in both
+modes (ARC-UI-063 moves both throws to `ThrowActionCost`), TT3's
 target-less check (the session flies the item to the location unrolled), gold and ammunition, the throw script (point 6) and the
 removal's scripts (an item with any is refused), the hotkey bar's held item, the viewer's cursor and press (ARC-UI-063).
 

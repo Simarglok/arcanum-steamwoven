@@ -344,6 +344,11 @@ rules only: the viewer's game cursor holding the item and its press in the game 
 | Damage (TT5, WB8) | `ThrowRules.ThrownWeapon`: a throwable weapon (flag 0x10) its own damage, any other weapon `ThrowRules.ItemDamage` of its weight with its magic damage adjustment, anything else a `WeaponKind.ThrownItem` with `ItemDamage`: normal `(W + 99) / 100 .. (W + 49) / 50`. No strength bonus (melee only). |
 | Action points (TT4) | `TurnBasedRules.ThrowActionCost` / `QueryHeroThrowCost`: the throw goal charges 2 to every thrower but the local PC (0x433270), so the original PC throws for nothing in a round; Original switch `PcThrowCostsNothing`, Steamwoven charges the hero 2. The turn-based host charges it. |
 
+Steamwoven differences: the item leaves at the throw, so a worn item's own values still count for the range and check, and a critical
+miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead struck critter refuses (NoChange): the host throws
+again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). The viewer's "default throws" attack still
+pays the attack cost in a round until ARC-UI-063 moves both throws to `ThrowActionCost`.
+
 Not ready: gold and ammunition (the lift's quantity split, `AttackUnsupported`), the item's throw script (point 6) and the removal's
 wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck
 object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (TT1:

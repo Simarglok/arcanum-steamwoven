@@ -11,7 +11,7 @@ namespace Arcanum.Session;
 /// throws it: the item held on the game cursor and a left press in the game view (ledger TT rows). <see cref="Item"/> is a held item,
 /// listed or worn; <see cref="Facts"/> its kind, no-drop flag and script points (a worn item's are the session's own worn record's);
 /// <see cref="Target"/> the pressed tile, the throw goal's location. <see cref="Combat"/> is a listed weapon's combat facts (its weapon
-/// block; a worn item's are the session's, anything else has none) and <see cref="Throwable"/> its weapon flag 0x10, which keeps its own
+/// block, or another item's facts for its uber flag; a worn item's are the session's) and <see cref="Throwable"/> its weapon flag 0x10, which keeps its own
 /// damage (WB8). The critter the line of fire to the location names (TW4: a blocker before it, or the critter on its tile) is
 /// <see cref="Struck"/> on <see cref="StruckCell"/>, with <see cref="LineOfFire"/> to it and its <see cref="StruckWorn"/> items;
 /// without one the item flies to the location unchecked. <see cref="HeroWorn"/>, <see cref="DropMap"/> and <see cref="ItemTriggers"/>
@@ -69,17 +69,23 @@ public sealed partial class GameSessionOwner
     /// <see cref="TurnBasedRules.ThrowActionCost"/>. NOT READY: gold and ammunition (the lift's quantity split refuses them,
     /// <see cref="GameSessionFailure.AttackUnsupported"/>), the item's throw script (point 6) and its removal's wield-off and remove-item
     /// scripts (an item with any of them is refused, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a non-critter blocker
-    /// (the host names none), the struck critter's alert and the landing's item event (PF10).
-    /// Refused before any effect: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>), invalid item facts
-    /// (<see cref="GameSessionFailure.InvalidItem"/>, also a weapon without its weapon block or combat facts for another kind), a location
-    /// or struck cell outside 0 .. 2^24 − 1, a struck critter without its cell or the reverse, a line-of-fire cost outside 0 .. 100,000
-    /// (<see cref="GameSessionFailure.InvalidAttack"/>), an item the hero does not hold (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// a kind other than the saved one (<see cref="GameSessionFailure.InventoryMismatch"/>), the no-drop flag (the remove check:
-    /// <see cref="GameSessionFailure.ItemNotDroppable"/>), an item that is the source of a spell run or a worn item with the item spells
-    /// mark without triggers (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), then <see cref="AttackCritter"/>'s refusals, the
-    /// version, the revision, a full flight budget. An inactive hero throws nothing (NoChange; the original puts the item back, 0x575770).
+    /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
+    /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
+    /// throw's range and check; a critical miss's weapon and ammunition steps read the weapon the hero still wields (as CW3; not read for
+    /// a pack throw). A struck critter that is dead refuses the attack (NoChange, the item stays): the host throws again without one, as
+    /// the original's press throws at the location anyway.
+    /// Refused before any effect, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>), invalid item facts
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), a location or struck cell outside 0 .. 2^24 − 1, a struck critter without its cell
+    /// or the reverse, a line-of-fire cost outside 0 .. 100,000 (<see cref="GameSessionFailure.InvalidAttack"/>), an item the hero does not
+    /// hold (<see cref="GameSessionFailure.ItemNotAvailable"/>), a kind other than the saved one (<see cref="GameSessionFailure.InventoryMismatch"/>),
+    /// invalid combat facts (<see cref="GameSessionFailure.InvalidItem"/>: a weapon without its weapon block, a weapon block on another
+    /// kind), gold or ammunition (<see cref="GameSessionFailure.AttackUnsupported"/>), the scripts above
+    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), the no-drop flag (the remove check: <see cref="GameSessionFailure.ItemNotDroppable"/>),
+    /// an item that is the source of a spell run or a worn item with the item spells mark without triggers
+    /// (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), a wielded boomerang whose shot is away (<see cref="GameSessionFailure.WeaponInFlight"/>),
+    /// then <see cref="AttackCritter"/>'s refusals (with a struck critter) or the hero's worn items, the flight budget, the version and the
+    /// revision. An inactive hero throws nothing (NoChange; the original puts the item back, 0x575770).
     /// </summary>
-    [OriginalFunction(0x434F80, OriginalFunctionScope.Partial)]
     public SessionHeroThrowResult ThrowHeroItem(GameSessionVersion expected, SessionHeroThrow request)
     {
         ThrowIfDisposed();
@@ -99,8 +105,7 @@ public sealed partial class GameSessionOwner
         var combat = worn?.Item ?? request.Combat;
         var weapon = kind.Type == SessionItemType.Weapon;
         if (worn is null && request.Combat is not null && !EquipmentRules.IsValid(request.Combat) ||
-            weapon != (combat is { Kind: EquipmentItemKind.Weapon, Weapon: not null }) || !weapon && worn is null && combat is not null)
-            return Refused(GameSessionFailure.InvalidItem);
+            weapon != (combat is { Kind: EquipmentItemKind.Weapon, Weapon: not null })) return Refused(GameSessionFailure.InvalidItem);
         // The lift's quantity split (0x4658E0) takes gold and ammunition another way.
         if (kind.Type is SessionItemType.Gold or SessionItemType.Ammo) return Refused(GameSessionFailure.AttackUnsupported);
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
@@ -109,6 +114,8 @@ public sealed partial class GameSessionOwner
         if (facts.NoDrop || worn?.Item.NoDrop == true) return Refused(GameSessionFailure.ItemNotDroppable);
         var triggers = request.ItemTriggers;
         if (triggers is null && (worn?.ItemSpells == true || HasItemRuns(request.Item))) return Refused(GameSessionFailure.ItemEffectUnsupported);
+        // A wielded boomerang away on its own shot is not in the hand to throw (its shot still names it).
+        if (_shots.Values.Any(pending => pending.Boomerang && pending.WeaponItem == request.Item)) return Refused(GameSessionFailure.WeaponInFlight);
 
         // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's
         // weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.

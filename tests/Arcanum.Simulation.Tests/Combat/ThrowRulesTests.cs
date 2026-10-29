@@ -87,14 +87,16 @@ public sealed class ThrowRulesTests
             Weapon = new EquipmentWeapon
             {
                 Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(4, 12) }, MagicDamage = new(3, 0, 0, 0, 0), ToHit = 7,
-                Range = 1, CriticalHitChart = CriticalHitChart.Edged,
+                Range = 1, CriticalHitChart = CriticalHitChart.Cutting,
             },
         };
         var thrown = ThrowRules.ThrownWeapon(sword, throwable: false, weight: 150, aptitude: 0, range: 5);
-        Assert.AreEqual((WeaponKind.Weapon, 5, 7, CriticalHitChart.Edged), (thrown.Kind, thrown.Range, thrown.ToHitBonus, thrown.CriticalHitChart),
+        Assert.AreEqual((WeaponKind.Weapon, 5, 7, CriticalHitChart.Cutting), (thrown.Kind, thrown.Range, thrown.ToHitBonus, thrown.CriticalHitChart),
             "a weapon keeps its own values but the range");
         Assert.AreEqual(ThrowRules.ItemDamage(150), thrown.Damage, "a weapon without flag 0x10 strikes with its weight's damage");
-        Assert.AreEqual(3, thrown.MagicDamageAdjustment.Normal, "and keeps its magic damage adjustment (a weapon's, 0x461590)");
+        var wielded = EquipmentRules.Weapon(new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = sword }, 0);
+        Assert.AreEqual((wielded.MagicDamageAdjustment, true), (thrown.MagicDamageAdjustment, thrown.MagicDamageAdjustment.Normal > 0),
+            "and keeps its magic damage adjustment under the aptitude (a weapon's, 0x461590)");
         Assert.AreEqual(sword.Weapon!.Damage, ThrowRules.ThrownWeapon(sword, throwable: true, 150, 0, 5).Damage, "a throwable weapon keeps its own");
 
         var rock = ThrowRules.ThrownWeapon(null, throwable: true, weight: 500, aptitude: 0, range: 3);
