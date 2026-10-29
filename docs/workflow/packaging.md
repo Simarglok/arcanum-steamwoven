@@ -84,8 +84,10 @@ thread to find and fix it starts from the report; the first day after the fix pa
 1. `git fetch origin main` in the main checkout (`--no-fetch` skips it). `SKIP` (exit 0, nothing written) when the
    `BUILD.txt` of both `artifacts/packages/macos` and `artifacts/packages/windows` holds that commit with a
    `map-smoke PASS` line, the mark of a package `daily` made: a package made by hand (`map-smoke NOT RUN`) does not
-   count, so the chain still runs for it. `SKIP` with exit 1 when the last `daily` report is a failure on that same
-   commit: a failing `main` is not run again every day; the fix's commit runs, or `--force`.
+   count, so the chain still runs for it. `SKIP` with exit 1 when the last `daily` run found that same commit failing
+   its root checks or smoke (its report's `failed commit` line): a failing `main` is not run again every day; the fix's
+   commit runs, or `--force`. A stopped run, a cut-off smoke chain or a failed package is not the commit's failure and
+   is tried again.
 2. A fresh detached `git worktree` of that commit in an `arcanum-daily-*` folder of the system temporary folder: the
    steps run the commit's own commands there, never the owner's checkout or working tree. The worktree is removed at
    the end, also when the run is stopped; one kept by `--keep-work` or left by a killed run is removed by the next
@@ -102,12 +104,13 @@ thread to find and fix it starts from the report; the first day after the fix pa
    plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.
 
 Every step's whole output goes to `artifacts/packages/logs/daily/STEP.log` (the queue's own run logs as well), and the
-report, one line per step, each failed smoke's run log and first error, and a `RESULT` line, to
+report, one line per step, for each failed step (and each failed smoke) its run log, first error with up to 8 lines
+of context and last error, and a `RESULT` line, to
 `artifacts/packages/logs/daily/report.txt` (the next run replaces the folder); stdout shows the same `DAILY` lines.
 Nothing else under `artifacts/packages` is written by `daily` itself, so the bug reports beside a package
 (`artifacts/packages/macos/reports/`) are never touched. Exit codes: 0 `RESULT PASS` or `SKIP` of a packaged commit;
-1 `RESULT FAIL` (a check, the smoke chain or a package failed; a package that passed is still installed and named) or
-`SKIP` of a commit that already failed.
+1 `RESULT FAIL` (a check, the smoke chain or a package failed; a package that passed is still installed and named),
+`RESULT STOPPED` (a stop signal; the worktree is still removed) or `SKIP` of a commit that already failed.
 
 ## What makes the package different from a developer build
 

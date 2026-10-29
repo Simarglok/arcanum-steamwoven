@@ -78,6 +78,25 @@ class SmokeSummaryTests(unittest.TestCase):
         self.assertIn("smoke failed: exit 1", daily.parse_smoke(SMOKE_PASS, 1).failure or "")
 
 
+class FailureLinesTests(unittest.TestCase):
+    def test_the_headers_stay_and_only_the_context_is_cut(self) -> None:
+        context = [f"  context {number}" for number in range(40)]
+        lines = ["noise", "FAIL exit=1 ran=60s lines=900 log=/q/run-4-window.log",
+                 "first error at line 10 of 900 (2 error line(s)):", *context,
+                 "last error (line 890): ARC smoke FAIL stage=Upload code=RenderFailure"]
+        shown = daily.failure_lines(lines)
+        self.assertEqual(shown[:2], lines[1:3])
+        self.assertEqual(shown[2:2 + daily.CONTEXT_LINES], context[:daily.CONTEXT_LINES])
+        self.assertEqual(shown[-1], lines[-1])
+        self.assertEqual(len(shown), 3 + daily.CONTEXT_LINES)
+
+    def test_a_plain_tail_shows_its_end_and_output_without_a_summary_its_last_lines(self) -> None:
+        tail = [f"line {number}" for number in range(40)]
+        shown = daily.failure_lines(["FAIL exit=1 ran=1s lines=40 log=/q/x.log", "no error line found; the last 40 lines:", *tail])
+        self.assertEqual(shown[2:], tail[-daily.CONTEXT_LINES:])
+        self.assertEqual(daily.failure_lines(["a", "", *tail]), tail[-daily.CONTEXT_LINES:])
+
+
 class DailyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -106,6 +125,7 @@ class DailyTests(unittest.TestCase):
         self.calls: list[tuple[str, tuple[str, ...], Path, dict[str, str], float | None]] = []
         self.codes: dict[str, int] = {}
         self.smoke_text = SMOKE_PASS
+        self.texts: dict[str, str] = {}
         quiet = mock.patch.object(daily, "say"); quiet.start(); self.addCleanup(quiet.stop)
 
     def tearDown(self) -> None:
@@ -115,7 +135,7 @@ class DailyTests(unittest.TestCase):
         name = log.stem
         self.calls.append((name, tuple(command), cwd, environment, minutes))
         self.assertTrue((cwd / "tracked.txt").is_file(), "each step runs in the fresh checkout of the commit")
-        log.write_text(self.smoke_text if name == "smoke" else f"{name} output\n")
+        log.write_text(self.smoke_text if name == "smoke" else self.texts.get(name, f"{name} output\n"))
         if self.codes.get(name) == -1:
             raise package.PackageError("stopped by signal 15")
         return self.codes.get(name, 0)
@@ -196,10 +216,19 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(environments["smoke"]["DAT_ROOT"], "/game", "the smoke runner drops them for the viewer itself")
 
     def test_failed_root_checks_stop_before_the_smoke_and_the_packages(self) -> None:
-        self.codes["oracle"] = 1
+        self.codes["oracle"] = self.codes["dotnet"] = 1
+        self.texts["dotnet"] = ("ARCANUM_QUEUE start ticket=9 kind=dotnet waited=0s\nFAIL exit=1 ran=30s lines=80 log=/q/run-9-dotnet.log\n"
+                                "first error at line 70 of 80 (1 error line(s)):\n  error CS1002: ; expected\n")
+        self.texts["oracle"] = "oracle: installing the locked Unicorn failed (network or an unsupported platform)\n"
         self.assertEqual(self.run_daily(), daily.FAIL)
         self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle"])
-        self.assertIn("RESULT FAIL root checks failed (oracle)", self.report())
+        report = self.report()
+        self.assertIn("RESULT FAIL root checks failed (dotnet, oracle)", report)
+        self.assertIn("  FAIL exit=1 ran=30s lines=80 log=/q/run-9-dotnet.log\n", report)
+        self.assertIn("    error CS1002: ; expected\n", report)
+        self.assertIn("  oracle: installing the locked Unicorn failed", report)
+        self.assertNotIn("ARCANUM_QUEUE", report)
+        self.assertIn(f"failed commit {self.commit}", report)
         self.assertEqual(self.worktrees(), 1)
 
     def test_failed_smokes_make_no_package_and_the_report_names_each_with_its_log(self) -> None:
@@ -232,10 +261,23 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(self.names()[-2:], ["package-mac", "package-win"])
         self.assertIn("RESULT FAIL package mac failed (installed: win)", self.report())
 
+    def test_a_cut_off_chain_shows_the_running_smoke_and_is_tried_again(self) -> None:
+        self.smoke_text = SMOKE_FAIL.split("SMOKE step ruins")[0]
+        self.codes["smoke"] = 143
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        report = self.report()
+        self.assertIn("failed smoke town:\n  FAIL exit=1", report)
+        self.assertIn("RESULT FAIL the smoke chain was stopped (exit 143)", report)
+        self.assertNotIn("failed commit", report)
+        self.calls.clear()
+        self.smoke_text, self.codes["smoke"] = SMOKE_PASS, 0
+        self.assertEqual(self.run_daily(), daily.PASS)
+
     def test_a_stop_mid_run_or_a_failed_worktree_still_cleans_up_and_reports(self) -> None:
         self.codes["smoke"] = -1
         self.assertEqual(self.run_daily(), daily.FAIL)
-        self.assertIn("RESULT FAIL stopped by signal 15", self.report())
+        self.assertIn("RESULT STOPPED stopped by signal 15", self.report())
+        self.assertNotIn("failed commit", self.report())
         self.assertEqual(self.worktrees(), 1)
         self.assertEqual(list(self.tmp.iterdir()), [])
         self.calls.clear()

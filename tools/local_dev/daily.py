@@ -46,7 +46,9 @@ SMOKE_GATES = ("build", "import")
 SUMMARY_LINE = re.compile(r"^\s+(\S+)\s+(PASS|FAIL) exit=(\d+)$")
 LOCK = "arcanum-daily.lock"
 DAILY_RAN = re.compile(r"^map-smoke PASS\b", re.MULTILINE)  # BUILD.txt of a package that ./arcanum daily made
-DETAIL_LINES = 12  # a failed smoke's lines in the report: its run's FAIL line (with the log) and the first error
+CONTEXT_LINES = 8  # of a failed step's first error (or of its last lines) in the report; its headers are always kept
+HEADERS = ("FAIL exit=", "first error at line", "last error (line", "no error line found", "the command printed nothing")
+FAILED_COMMIT = "failed commit "  # the report line of a commit that failed its checks or smoke (not a stop or a package)
 PASS, FAIL = 0, 1
 
 Runner = Callable[[Sequence[str], Path, dict[str, str], Path, float | None], int]
@@ -135,13 +137,35 @@ def packaged_commit(folder: Path) -> str | None:
 
 
 def failed_attempt(logs: Path) -> str | None:
-    """The commit of the last daily run when it ended in RESULT FAIL (its report), else None."""
+    """The commit the last daily run found failing its root checks or smoke chain (its report), else None. A stopped
+    run, a failed package or a worktree that could not be made is not the commit's failure, so the next day retries it."""
     try:
         text = (logs / "report.txt").read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    found = re.search(r"^daily package build \S+ commit ([0-9a-f]{40}) ", text, re.MULTILINE)
-    return found.group(1) if found and re.search(r"^RESULT FAIL ", text, re.MULTILINE) else None
+    found = re.search(rf"^{FAILED_COMMIT}([0-9a-f]{{40}})$", text, re.MULTILINE)
+    return found.group(1) if found else None
+
+
+def failure_lines(lines: Sequence[str]) -> list[str]:
+    """What the report shows of a failed step: from a quiet run's summary (run_log.summary: FAIL with its log, the first
+    error with context, the last error) the headers and at most CONTEXT_LINES lines after each; else its last lines."""
+    start = next((index for index, line in enumerate(lines) if line.lstrip().startswith("FAIL exit=")), None)
+    if start is None:
+        return [line for line in lines if line.strip()][-CONTEXT_LINES:]
+    shown, budget = [], 0
+    body = lines[start:]
+    for index, line in enumerate(body):
+        if line.startswith(HEADERS) or line.lstrip().startswith("FAIL exit="):
+            shown.append(line)
+            budget = CONTEXT_LINES
+            if line.startswith("no error line found"):  # the useful part of a plain tail is its end
+                shown.extend(body[index + 1:][-CONTEXT_LINES:])
+                break
+        elif budget > 0:
+            shown.append(line)
+            budget -= 1
+    return shown
 
 
 def check_steps(python: str) -> list[Step]:
@@ -194,6 +218,9 @@ class Daily:
         code = self.runner(step.command, self.checkout, environment, log, step.minutes)
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
         self.note(f"{step.name} {'PASS' if code == 0 else 'FAIL'} exit={code} log={log}")
+        if code != 0 and step.name != "smoke":  # the smoke chain's failures are shown per smoke
+            for line in failure_lines([line for line in text.splitlines() if not line.startswith("ARCANUM_QUEUE ")]):
+                self.note(f"  {line}")
         return code, text
 
 
@@ -204,7 +231,10 @@ def remove_stale(root: Path, temporary: Path) -> list[Path]:
     listed = package.git(root, "worktree", "list", "--porcelain").splitlines()
     for path in (Path(line[len("worktree "):]) for line in listed if line.startswith("worktree ")):
         if path.parent.name.startswith(TEMP_PREFIX) and path.parent.parent == temporary:
-            package.git(root, "worktree", "remove", "--force", str(path))
+            try:
+                package.git(root, "worktree", "remove", "--force", str(path))
+            except package.PackageError as error:  # a locked one: its folder still goes below, git prunes the rest later
+                say(f"note: {error}")
     for folder in sorted(temporary.glob(TEMP_PREFIX + "*")):
         if folder.is_dir() and not folder.is_symlink():
             shutil.rmtree(folder, ignore_errors=True)
@@ -262,8 +292,11 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
         package.git(root, "worktree", "add", "--detach", str(checkout), commit)
         added = True
         day.note(f"checkout {checkout}")
-        failed = [step.name for step in check_steps(python) if day.run(step)[0] != 0]
+        codes = {step.name: day.run(step)[0] for step in check_steps(python)}
+        failed = [name for name, value in codes.items() if value != 0]
         if failed:
+            if any(value < smoke.STOPPED for value in codes.values() if value != 0):
+                day.note(f"{FAILED_COMMIT}{commit}")
             day.note(f"RESULT FAIL root checks failed ({', '.join(failed)}): no smoke, no package")
             return code
         smoke_code, text = day.run(smoke_step())
@@ -272,10 +305,14 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
                  + (f"; not run {', '.join(result.not_run)}" if result.not_run else ""))
         failure = result.failure
         if failure:
-            for name in result.failed:
+            # Without a summary (the chain was cut off) the step that was running is the one to show.
+            shown = result.failed or list(result.details)[-1:]
+            for name in shown:
                 day.note(f"failed smoke {name}:")
-                for detail in result.details.get(name, [])[:DETAIL_LINES]:
+                for detail in failure_lines(result.details.get(name, [])):
                     day.note(f"  {detail}")
+            if smoke_code < smoke.STOPPED and result.failed:  # not a stopped or cut-off chain
+                day.note(f"{FAILED_COMMIT}{commit}")
             day.note(f"RESULT FAIL {failure}: no package (the packages stay at their last commit)")
             return code
         line = result.line()
@@ -289,11 +326,11 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
             day.note(f"RESULT PASS packaged {commit[:10]} for {', '.join(packaged)}")
         return code
     except package.PackageError as error:
-        day.note(f"RESULT FAIL {error}")
+        day.note(f"RESULT {'STOPPED' if str(error).startswith('stopped by signal') else 'FAIL'} {error}")
         return FAIL
     finally:
         # A second stop while cleaning up must not leave the worktree behind (the next day removes it anyway).
-        held = {number: signal.signal(number, signal.SIG_IGN) for number in (signal.SIGTERM, signal.SIGHUP)}
+        held = {number: signal.signal(number, signal.SIG_IGN) for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
         try:
             if keep_work:
                 say(f"work kept at {work} (the next daily run removes it)")
@@ -334,6 +371,8 @@ def configure(command: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> int:
     def stopped(number: int, _frame: object) -> None:
+        for other in (signal.SIGTERM, signal.SIGHUP):  # once: a second stop must not cut the cleanup short
+            signal.signal(other, signal.SIG_IGN)
         raise package.PackageError(f"stopped by signal {number}")
     # A stop (SIGTERM, SIGHUP) unwinds like an error, so the temporary worktree is removed.
     for number in (signal.SIGTERM, signal.SIGHUP):
