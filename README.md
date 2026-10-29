@@ -105,6 +105,17 @@ Each fetches `origin main` and builds its newest commit (`--ref` defaults to `or
 [launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033) as an `export` and prints `PASS` or `FAIL` with the
 failed step, its log and the log's last lines.
 
+### The daily build
+
+```sh
+./arcanum daily      # when main changed since the last package: root checks, full map smoke chain, both packages
+```
+
+It skips when both packages already hold the newest `main` commit (their `BUILD.txt`), builds from a fresh worktree of
+that commit, and writes `map-smoke PASS (...)` into each `BUILD.txt`. Any failed check or smoke stops it before packaging:
+the packages stay at their last commit and the report, `artifacts/packages/logs/daily/report.txt`, names each failed step
+with its log and first error ([daily package build](docs/workflow/packaging.md#daily-package-build-arc-dev-062)).
+
 ### Build from a specific commit
 
 ```sh
@@ -131,7 +142,7 @@ In the main checkout (also when the command runs from a worktree):
 
     artifacts/packages/macos/Arcanum Steamwoven.app
     artifacts/packages/windows/Arcanum Steamwoven Windows x64.zip
-    artifacts/packages/<platform>/BUILD.txt     the full commit, its date, the product and the smoke result
+    artifacts/packages/<platform>/BUILD.txt     the full commit, its date, the product, the smoke and map smoke results
     artifacts/packages/<platform>/README.md     the player instruction of that commit
     artifacts/packages/<platform>/previous/     the build before (the next build replaces it)
     artifacts/packages/logs/<platform>/         the last run's step logs

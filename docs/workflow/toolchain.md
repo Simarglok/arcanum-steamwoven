@@ -101,8 +101,8 @@ history held about 500 runs of such copies of one template).
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the
   Crash Site, or at `--sector`), with the Crash Site smoke first only when the change is related to it
-  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build (when main
-  changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
+  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
+  (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-male`.
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
