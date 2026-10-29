@@ -2430,7 +2430,9 @@ input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PA
 WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
 
 The same automated runs keep drawing, at full speed, while the window cannot draw (minimized): see
-[minimized window draw](../workflow/toolchain.md#minimized-window-draw-arc-dev-045) (ARC-DEV-045).
+[minimized window draw](../workflow/toolchain.md#minimized-window-draw-arc-dev-045) (ARC-DEV-045), and take no system
+pointer events: see [system pointer in automated runs](../workflow/toolchain.md#system-pointer-in-automated-runs-arc-dev-060)
+(ARC-DEV-060).
 
 ## Reproducible local verification
 

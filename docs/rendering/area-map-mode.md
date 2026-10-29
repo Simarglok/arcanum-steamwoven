@@ -135,6 +135,15 @@ estimate is meant to exclude free space, and the mechanism is not established.
 With compaction, in four runs, the samples equal the live bytes to within about
 10 KB (543.4 MB before, 533.0 MB after each time).
 
+Since ARC-DEV-060 a growth over the bound gets one more reload before the check
+fails. After the whole map chain on `elven ruins` (about 400 MB live heap, a 16 MB
+bound) the reload grew the heap by 21 to 24 MB in three of four runs in the run
+logs; with two extra reloads in one run the growth was 14.2 MB after the overlapped
+pair, 20.8 MB after the next reload and the same after the one after it: the first
+reloads fill content once, then the heap stays flat. A retention that every replaced
+generation adds grows the heap again by as much, so the check takes the smaller of
+the two growths, and the generation the extra reload replaces must be collected too.
+
 ## Body blends and wading (ARC-RENDER-018)
 
 The scene plan draws three more serialized body states, by rules checked in the

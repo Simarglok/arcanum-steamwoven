@@ -74,7 +74,8 @@ public partial class TerrainViewerApp : Node
             ViewerAutomatedStorage.MarkAutomated();
             _hud.ShowPanel("automated run");
             // ARC-DEV-045: an automated run keeps drawing while its window cannot draw (minimized).
-            if (DisplayServer.GetName() != "headless") AddChild(new HiddenWindowDrawKeeper());
+            // ARC-DEV-060: its pointer is only the events its tests push or parse, never the system pointer.
+            if (DisplayServer.GetName() != "headless") { AddChild(new HiddenWindowDrawKeeper()); AddChild(new AutomatedPointerGate()); }
         }
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
@@ -453,16 +454,16 @@ public partial class TerrainViewerApp : Node
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
         await NextFrameAsync();
         GD.Print("ARC-RENDER-004 native-smoke stage=input-keyboard-release-frame");
-        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+        Input.ParseInputEvent(new InputEventMouseButton { Device = AutomatedPointerGate.TestDevice, ButtonIndex = MouseButton.WheelUp, Pressed = true });
         await NextFrameAsync();
         GD.Print("ARC-RENDER-004 native-smoke stage=input-wheel-frame");
         if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom || afterKeyboard.Y >= initial.Y
             || _camera.Camera.Position == initialCameraPosition || _camera.Camera.Zoom.X <= initial.Zoom
             || _hud.GlobalPosition != initialHudPosition || !HasReadyHudContent(textureCount)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         var beforeDrag = _camera.State;
-        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
-        Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
-        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        Input.ParseInputEvent(new InputEventMouseButton { Device = AutomatedPointerGate.TestDevice, ButtonIndex = MouseButton.Left, Pressed = true });
+        Input.ParseInputEvent(new InputEventMouseMotion { Device = AutomatedPointerGate.TestDevice, Relative = new Vector2(20, -10) });
+        Input.ParseInputEvent(new InputEventMouseButton { Device = AutomatedPointerGate.TestDevice, ButtonIndex = MouseButton.Left, Pressed = false });
         await NextFrameAsync();
         GD.Print("ARC-RENDER-004 native-smoke stage=input-drag-frame");
         var manual = _camera.State;
@@ -518,14 +519,14 @@ public partial class TerrainViewerApp : Node
             var beforeZoom = _camera.Camera.Zoom;
             try
             {
-                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+                Input.ParseInputEvent(new InputEventMouseButton { Device = AutomatedPointerGate.TestDevice, ButtonIndex = MouseButton.WheelUp, Pressed = true });
                 await NextFrameAsync();
                 if (_camera.State.FitMode || _camera.Camera.Zoom.X <= beforeZoom.X || _camera.Camera.Position == new Vector2((float)beforePan.X, (float)beforePan.Y))
                     ThrowNativeSmokeCycleFailure(cycle, "wheel-pan");
             }
             finally
             {
-                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = false });
+                Input.ParseInputEvent(new InputEventMouseButton { Device = AutomatedPointerGate.TestDevice, ButtonIndex = MouseButton.WheelUp, Pressed = false });
             }
             try
             {

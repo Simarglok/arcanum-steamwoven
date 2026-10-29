@@ -186,6 +186,28 @@ stage line is the case this node covers; a window that reads true still draws by
 Not covered: Windows and Linux were not run; another OS window of the process that can draw while the main one cannot
 would get a second draw in that frame (the viewer opens none).
 
+### System pointer in automated runs (ARC-DEV-060)
+
+The viewer's smokes and self-tests drive the pointer themselves: they push mouse events into the viewport
+(`Viewport.push_input`) or, in the terrain smoke, parse them (`Input.parse_input_event`). The system pointer reached the
+same GUI through the window, and on macOS the key window receives the pointer's moves anywhere on the screen. Godot also
+replays a motion at the system pointer on every cursor shape change (`Input.set_default_cursor_shape`), and the AREA
+hover changed the shape whenever the system pointer rested inside the window over the world. Either took the GUI's hover
+off the control a test had just entered, one frame later: the hotkey bar smoke's `entering slot 2 shows the spell's hint:
+Plain texts=2` (15 of 43 runs in the run logs before the fix) and the bar smoke's button hover and release failures.
+Whether a run failed depended on where the owner's pointer was and whether it moved.
+
+The process that hosts an automated run (as for the draw keeper above) adds an `AutomatedPointerGate` node and prints
+`ARC-DEV-060 automated pointer gate window=0`. It takes the main window's input callback and passes every event as the
+window would (the `window_input` signal for all but internal events, then the window's input), except mouse and gesture
+events, which pass only when a test parsed them with the gate's test device (48). The AREA hover of an automated run
+reads no system pointer either: it is over the world only where a test places the pointer. The hotkey bar smoke checks
+the gate: a mouse move parsed as the system's while slot 2 shows its hint keeps the hint (without the gate this fails
+every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
+
+Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
+(mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
+
 ### Quiet output (ARC-DEV-037)
 
 Owner decision 2026-10-27 (token audit item 4): every tool output stays in an agent session's context and is re-read
