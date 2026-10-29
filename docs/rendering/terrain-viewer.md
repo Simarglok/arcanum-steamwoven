@@ -665,7 +665,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   so the name does not change after the first talk (NOT READY). The tooltip sits below
   right of the pointer and flips inside the window; it is recomputed when the pointer, the
   camera, the map, the actor's cell or the input guards change, so it never stays on an
-  old position. The area status line repeats it as `hover <name> -> <action>`.
+  old position. The area status line repeats it as `hover <name> -> <action>`. Since ARC-UI-057
+  the tooltip is shown only while the interface bars are not drawn (the diagnostic viewer): with the bars the
+  object is described in the message window as in the original ([below](#hovered-object-window-and-highlight-arc-ui-057)).
 - **Names.** The description tables come from the content stack of the game folder that
   holds the area's module archive (`<game>/modules/<Name>.dat`, the installed layout; the
   mounted module archive must be that same file). They load once in the background
@@ -709,6 +711,42 @@ entrance walk to use, click-through sprites passed through to the body behind, t
 does what the cursor showed). Not
 verified: original message-window parity (the cursor art follows the executable since ARC-UI-056), hover art (the animated underlay), a
 human on a physical mouse and display.
+
+### Hovered object window and highlight (ARC-UI-057)
+
+The owner's bug reports of 2026-10-29: an item under the pointer was not highlighted, and its name floated at the pointer
+instead of the message window. Both follow the executable now (ledger [OH1–OH9](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)),
+on the pick of ARC-UI-005.
+
+- **Highlight.** The hovered portal, container, scenery or item (types 1–3 and 5–14, without `OF_DONTDRAW` or `OF_INVISIBLE`)
+  is drawn a second time over itself (0x43C690): after every body and before the roofs, its frame additive, the source tinted
+  by the constant colour (200, 200, 200), unlit, without its alpha modes and its wall fade (`TerrainCanvas.AreaHighlight`,
+  rule `AreaHoverWindow.Highlighted`). The item brightens by about 78 % of its own colour. A wall, a projectile, a critter or a
+  trap gets no second draw. NOT READY: the critters' coloured rings under and over them (arts 467 and 468 in the reaction
+  category's colour, 555 in combat mode), the detect-invisible exception, the wading object's two-part draw (the same blit
+  for both parts, so no visible difference).
+- **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
+  tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
+  ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
+  by their image at (217, 510) and their name, scenery's in its three-line block; a critter by its name, the bars of
+  ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn) and its image (a
+  follower's portrait, ARC-UI-024, else by its flags or race as the loot window's); a trap's name as a hover text. In a pane
+  mode only the name goes into the pane's text area. A scenery with an empty name, a wall and a projectile draw nothing.
+  Leaving the object shows the viewed entry again (Steamwoven's ML7; the original keeps its drawing). NOT READY: a portal's
+  and container's lock state and hit points line, scenery's hit points, a critter's level or reaction line and the combat
+  panel of 0x554830, the item window's further lines (HK22), the PC's own portrait.
+- **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
+  `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
+  the original's behaviour, not a Steamwoven bug (OH8).
+
+Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
+its show and leave), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: on the start map an item, a container and a scenery are
+hovered with the bars drawn, the highlight is the body's frame drawn additive, none of its picked pixels gets darker and some
+get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
+`ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
+follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
+original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
 
 ### Original cursor art (ARC-UI-056)
 

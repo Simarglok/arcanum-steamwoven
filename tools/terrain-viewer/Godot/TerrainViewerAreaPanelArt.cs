@@ -51,16 +51,10 @@ public partial class TerrainViewerApp
         art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number,
             load => (Texture2D)ImageTexture.CreateFromImage(Image.CreateFromData(load.Frames[0].Width, load.Frames[0].Height, false, Image.Format.Rgba8, load.Frames[0].Rgba)));
 
-    /// <summary>The message window's hovered-critter image while the bars are drawn: the portrait and name of a hovered follower the
-    /// PC leads that has one (the original's 0x553D10 gives the PC's followers their portrait); nothing otherwise. NOT READY: the PC
-    /// itself (the viewer cannot hover the PC, and its portrait is not session state) and the critter art of anyone else.</summary>
-    private void SyncHoverPortrait(AreaObjectKey? key)
-    {
-        if (_gameBarPanel is not { Visible: true } bars) return;
-        Texture2D? portrait = null; string? name = null;
-        if (key is { } hit && _areaSession is { } session && _areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == hit) is { } companion
-            && session.QueryCompanion(companion.Entity).LedByPc && FollowerPortrait(companion) is { } texture)
-            (portrait, name) = (texture, CompanionName(companion));
-        bars.ShowHoverPortrait(portrait, name);
-    }
+    /// <summary>The message window's hovered-critter portrait while the bars are drawn: a hovered follower the PC leads that has one (the
+    /// original's 0x553D10 gives the PC's followers their portrait); null otherwise. NOT READY: the PC itself (the viewer cannot hover the
+    /// PC, and its portrait is not session state).</summary>
+    private Texture2D? HoverPortrait(AreaObjectKey key) =>
+        _areaSession is { } session && _areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == key) is { } companion
+            && session.QueryCompanion(companion.Entity).LedByPc ? FollowerPortrait(companion) : null;
 }
