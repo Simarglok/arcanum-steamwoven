@@ -12,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 /// spell pane (bar mode 8) in place of the spell list, and a second press returns to the list (0x5506C0's toggle). The weapon pane
 /// shows a button per spell slot (0x551660) and the charges gauge; a slot whose spell has item triggers shows disabled (its press
 /// does nothing in the original, 0x57C040).
+/// ARC-UI-053: while the interface bars show the original's spell pane in the bottom strip (<see cref="ListInStrip"/>, AreaSpellBarView),
+/// this pane lists no spells: it shows only while the weapon button or the weapon's pane has something to show (both stay diagnostic).
 /// </summary>
 public partial class AreaSpellPane : CanvasLayer
 {
@@ -21,6 +23,7 @@ public partial class AreaSpellPane : CanvasLayer
     private HFlowContainer _buttons = null!;
     private IReadOnlyList<AreaSpellChoice> _shown = [];
     private AreaWeaponSpellPane? _weaponShown;
+    private bool _open, _listInStrip;
 
     /// <summary>A spell button was pressed (the spell's number).</summary>
     public event Action<int>? Activated;
@@ -36,7 +39,22 @@ public partial class AreaSpellPane : CanvasLayer
     public event Action<int>? SpellDragStarted;
     public event Action<int>? ItemDragStarted;
 
-    public bool Shown => _panel.Visible;
+    /// <summary>Whether the pane is open (M or the Spells button), drawn here or, for the spell list, in the bottom strip.</summary>
+    public bool Shown => _open;
+
+    /// <summary>ARC-UI-053: the bottom strip draws the spell list (the bars show with the pane's art): this pane leaves it out.</summary>
+    public bool ListInStrip
+    {
+        get => _listInStrip;
+        set
+        {
+            if (_listInStrip == value) return;
+            _listInStrip = value;
+            if (_open) Rebuild();
+        }
+    }
+
+    internal bool DrawnForSelfTest => _panel.Visible;
 
     internal IReadOnlyList<AreaSpellChoice> ShownForSelfTest => _shown;
 
@@ -68,16 +86,25 @@ public partial class AreaSpellPane : CanvasLayer
     public void Show(IReadOnlyList<AreaSpellChoice> spells, AreaWeaponSpellPane? weapon = null)
     {
         ArgumentNullException.ThrowIfNull(spells);
-        if (!_panel.Visible || !_shown.SequenceEqual(spells) || !Equals(_weaponShown, weapon))
+        if (!_open || !_shown.SequenceEqual(spells) || !Equals(_weaponShown, weapon))
         {
-            _shown = spells; _weaponShown = weapon;
-            foreach (var child in _buttons.GetChildren()) child.QueueFree();
-            _weapon.Visible = weapon is { ButtonShown: true } || weapon is { Open: true };
-            _weapon.SetPressedNoSignal(weapon is { Open: true });
-            if (weapon is { Open: true } open) ShowWeapon(open);
-            else ShowSpells(spells);
+            _shown = spells; _weaponShown = weapon; _open = true;
+            Rebuild();
         }
-        _panel.Show();
+    }
+
+    private void Rebuild()
+    {
+        foreach (var child in _buttons.GetChildren()) child.QueueFree();
+        var weapon = _weaponShown;
+        _weapon.Visible = weapon is { ButtonShown: true } || weapon is { Open: true };
+        _weapon.SetPressedNoSignal(weapon is { Open: true });
+        _title.Visible = true;
+        if (weapon is { Open: true } open) ShowWeapon(open);
+        else if (!_listInStrip) ShowSpells(_shown);
+        else _title.Visible = false;
+        _buttons.Visible = weapon is { Open: true } || !_listInStrip;
+        _panel.Visible = _open && (!_listInStrip || _weapon.Visible);
         Place();
     }
 
@@ -115,7 +142,7 @@ public partial class AreaSpellPane : CanvasLayer
         }
     }
 
-    public void HidePane() => _panel.Hide();
+    public void HidePane() { _open = false; _panel.Hide(); }
 
     private static void RightPress(Control button, InputEvent input, Action started)
     {
@@ -128,7 +155,7 @@ public partial class AreaSpellPane : CanvasLayer
     internal Vector2? SpellButtonCentreForSelfTest(int spell)
     {
         var index = _shown.Select((choice, i) => (choice, i)).FirstOrDefault(pair => pair.choice.Spell == spell, (null!, -1)).Item2;
-        return _weaponShown is { Open: true } || index < 0 || index >= _buttons.GetChildCount() ? null : ((Control)_buttons.GetChild(index)).GetGlobalRect().GetCenter();
+        return _weaponShown is { Open: true } || _listInStrip || index < 0 || index >= _buttons.GetChildCount() ? null : ((Control)_buttons.GetChild(index)).GetGlobalRect().GetCenter();
     }
 
     internal void PressForSelfTest(int spell) => Activated?.Invoke(spell);

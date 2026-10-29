@@ -182,8 +182,7 @@ public partial class TerrainViewerApp
         if (_spellPane is null)
         {
             _spellPane = new AreaSpellPane(); AddChild(_spellPane);
-            // ARC-UI-022: the press becomes the latest recent action first (0x57EFA0), then the activation.
-            _spellPane.Activated += spell => { RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell)); ActivateSpell(spell); };
+            _spellPane.Activated += PressPaneSpell;
             _spellPane.WeaponToggled += ToggleWeaponPane;
             _spellPane.ItemActivated += ActivateItemSlot;
             // ARC-UI-027: a right press there starts a drag onto the hotkey bar.
@@ -191,8 +190,17 @@ public partial class TerrainViewerApp
             _spellPane.ItemDragStarted += HotkeyWeaponPaneDrag;
         }
         AdoptSpellData();
+        _spellPane.ListInStrip = SpellListInStrip;
         _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());
         _spellNotice = _spellData?.Data is null ? "spell data loading" : null;
+    }
+
+    /// <summary>A spell of the pane was pressed (the diagnostic pane's button, or ARC-UI-053's release over its icon in the bottom strip):
+    /// ARC-UI-022: the press becomes the latest recent action first (0x57EFA0), then the activation.</summary>
+    private void PressPaneSpell(int spell)
+    {
+        RecordRecentAction(Arcanum.Simulation.Hotkeys.HotkeyEntry.ForSpell(spell));
+        ActivateSpell(spell);
     }
 
     /// <summary>Per frame: the pane follows the hero's spell book; the casting goal plays; a window, a lost hero or another map
