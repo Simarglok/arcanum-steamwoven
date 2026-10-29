@@ -21,14 +21,20 @@ public enum AreaFallenStatus
     PoseUnreadable,
 }
 
-/// <summary>One fallen pose: its frame key, the decoded last frame and its geometry, and the animation it shows.</summary>
+/// <summary>One frame of a fallen pose's animation: its frame key, the decoded frame and its geometry, and the animation it shows.</summary>
 public sealed record AreaFallenFrame(AreaFrameKey Key, DecodedAreaFrame Frame, int HotX, int HotY, int Animation);
 
-public sealed record AreaFallenLoad(AreaFallenStatus Status, AreaFallenFrame? Pose, string Detail);
+/// <summary>A pose read: <see cref="Pose"/> is the last frame the critter keeps; ARC-RENDER-040: <see cref="Frames"/> holds every frame of
+/// the animation for the body's facing, frame 0 first, and <see cref="FramesPerSecond"/> the ART's rate, so the fall can be played.</summary>
+public sealed record AreaFallenLoad(AreaFallenStatus Status, AreaFallenFrame? Pose, string Detail)
+{
+    public IReadOnlyList<AreaFallenFrame> Frames { get; init; } = [];
+    public int FramesPerSecond { get; init; }
+}
 
 /// <summary>
 /// ARC-COMBAT-005: the pose a critter ends in when it dies or falls unconscious, read on demand from the archive its standing art
-/// came from. The original sets the dying animation (7 the fall for a death of at most 20 damage or a kill, 17 decapitation for a
+/// came from (ARC-RENDER-040: every frame of it, so the view can play it). The original sets the dying animation (7 the fall for a death of at most 20 damage or a kill, 17 decapitation for a
 /// head hit, 19 severed leg for a leg hit, 18 otherwise; ledger FA10) or the fall-down animation (7) for a knockdown, plays it and
 /// keeps its last frame. A critter's ART name ends in the shield, weapon and animation letters, and an animation from 6 to 19
 /// drops shield and weapon, so the pose's file is the body's name with <c>x</c>, <c>a</c> and the animation letter; a bloody death
@@ -51,8 +57,8 @@ public static class AreaFallenPoses
         _ => FallDown,
     };
 
-    /// <summary>Reads the last frame of <paramref name="animation"/> for <paramref name="visual"/>'s facing from the archive at
-    /// <paramref name="archivePath"/> (the source of the visual's entry).</summary>
+    /// <summary>Reads the frames of <paramref name="animation"/> for <paramref name="visual"/>'s facing from the archive at
+    /// <paramref name="archivePath"/> (the source of the visual's entry); the pose is the last.</summary>
     public static AreaFallenLoad Load(AreaVisualRecord visual, string? archivePath, int animation)
     {
         ArgumentNullException.ThrowIfNull(visual);
@@ -85,13 +91,19 @@ public static class AreaFallenPoses
             if (group >= metadata.Header.PhysicalGroupCount || metadata.Header.FramesPerGroup < 1)
                 return Refused(AreaFallenStatus.PoseUnreadable, $"group {visual.PhysicalGroup}");
             var last = metadata.Header.FramesPerGroup - 1;
-            var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, last, visual.RequestedPalette), options);
-            var rgba = decoded.Rgba.ToArray();
             var identity = new AreaEntryIdentity(visual.Entry.Source, entry.Ordinal, entry.Flags, entry.StoredSize, entry.DeclaredOutputSize, entry.Offset,
                 Digest(entry.RawNameBytes.ToArray()));
-            var key = new AreaFrameKey(identity, decoded.EffectivePaletteSlot, group, last, Policy, Digest(bytes), bytes.Length, Digest(rgba));
-            return new(AreaFallenStatus.Ready, new(key, new(decoded.Width, decoded.Height, rgba), decoded.Frame.HotX, decoded.Frame.HotY, used),
-                $"{Name(entry)} frame {last}");
+            var artDigest = Digest(bytes);
+            var frames = new AreaFallenFrame[last + 1];
+            for (var index = 0; index <= last; index++)
+            {
+                var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, index, visual.RequestedPalette), options);
+                var rgba = decoded.Rgba.ToArray();
+                var key = new AreaFrameKey(identity, decoded.EffectivePaletteSlot, group, index, Policy, artDigest, bytes.Length, Digest(rgba));
+                frames[index] = new(key, new(decoded.Width, decoded.Height, rgba), decoded.Frame.HotX, decoded.Frame.HotY, used);
+            }
+            return new(AreaFallenStatus.Ready, frames[last], $"{Name(entry)} frame {last}")
+                { Frames = frames, FramesPerSecond = metadata.Header.FramesPerSecond };
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {

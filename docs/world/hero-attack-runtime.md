@@ -51,7 +51,7 @@ ARC-COMBAT-021 the hero falls when it goes unconscious, lies while it stays so a
 | Animation | The hero's attack ART (animation 20) with the weapon its body shows in combat mode (since ARC-RENDER-037, [below](#weapon-art-arc-render-037): the wielded weapon's art slot, bare hands slot 1: 9 frames, 15 fps, action frame 6; the dagger's 5 frames, action frame 3) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and that weapon slot and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
 | Repeat | Auto attack (the options window's setting, ARC-UI-013; on by default, as the original's) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
-| Dying pose (FA10) | A death-flag hit or a death of at most 20 hit points falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body keeps the last frame of that animation in its facing (group 0 for a single-rotation pose ART); a bloody death without its file falls (the original's missing-art repair). |
+| Dying pose (FA10) | A death-flag hit or a death of at most 20 hit points falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body plays that animation in its facing (group 0 for a single-rotation pose ART) and keeps its last frame (since ARC-RENDER-040, [below](#dying-animation-arc-render-040)); a bloody death without its file falls (the original's missing-art repair). |
 
 ## Session API (`GameSessionOwner`)
 
@@ -494,17 +494,39 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
   per recorded death while its pool is kept (a repeated call is NoChange; the host asks once per death), a refusal is NoChange with its reason. A pool is `pool:n`, keeps the death time
   and its creation time, and is not returned from two game days on (the session keeps no queued event: a decayed pool is dropped
   when the next one is left). At most 4096 pools (project bound). A schema 57 save loads with no pools.
-- **Viewer (AREA)**: when a sync sees a recorded death on the shown map that it did not see when the map and session were first
-  shown, it leaves the pool: an NPC at the cell its body is drawn on (a companion's or AI walker's cell with no offset, else its
+- **Viewer (AREA)**: when a recorded death on the shown map that it did not see when the map and session were first shown has
+  played its dying animation (ARC-RENDER-040: its dying goal has ended; at once for an NPC whose pose cannot be drawn or who lay in
+  its fall; the hero's dying is its fall, ARC-COMBAT-021), it leaves the pool: an NPC at the cell its body is drawn on (a companion's or AI walker's cell with no offset, else its
   map cell and offsets) with its map data's flags, the hero at its committed cell. The tile blocks when the step evidence settles it
   as not open. Each pool is drawn flat from prototype 4048's art (`art\scenery\blood.ART`, 4 frames at 8 a second), offset by
   its critter's pixels, never hovered or picked; a pool this view left plays its frames, any other shows its last frame. The
   log says `ARC-RENDER-041 blood-pool critter=… disposition=… refusal=…` for each death and `blood-pool-art 0x…` once.
-- **Not ready**: the original leaves the pool when the dying animation has played (ARC-RENDER-040), the view when it sees the
-  death; an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
+- **Not ready**: an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
   setting); the hit's blood eye candy (`Rules\AnimEyeCandy.mes`); the dead critter's own one-day decay; a visiting companion from another
   map's seed (such as Virgil in the cave) that dies on the shown map leaves no pool (the view reads the shown map's seed holders
   only); the multiplayer and editor cases.
+
+## Dying animation (ARC-RENDER-040)
+
+A killed NPC plays its dying animation and a knocked-out one its fall, as the original does (read in the executable by two readers,
+ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040)):
+
+- **Rules** (`Arcanum.Simulation.Combat.DyingAnimationRules`): `LiesFallen` (the dying goal's test 0x45D730): a critter whose art
+  shows the fall (7, any frame) keeps it and its dying goal ends at once. `Start` (0x42D570) and `Delay` (also the knockdown's start
+  0x42E4B0): the delay 1000 / the ART's frame rate (integer division; 100 ms when the header does not read). `Frame`: frame 1 at
+  once, one more per delay, the last kept (the dying step 0x42D6F0, the knockdown's animate step 0x42CC80 alike). `EndMs`: the dying
+  goal ends (frames − 1) delays after its start, when the step finds the last frame; its pool node and its end run then.
+- **Viewer (AREA)**: the pose read (`AreaFallenPoses`) decodes every frame of the animation for the body's facing (kept per NPC and
+  animation for the session, so a fallen body costs its frame count times one frame's pixels). A death or
+  knockout the view sees plays from that moment on the world clock and keeps its last frame; a body already lying when the map and
+  session are first shown (a load, a map change) holds its last frame. An NPC killed while lying in its fall keeps the fall (after a
+  load too). The hero's pool waits until the dead hero lies down (its fall, ARC-COMBAT-021). A
+  recovered or raised NPC stands at once. The pool of blood comes when the dying goal ends ([above](#pool-of-blood-arc-render-041)).
+  The log says `ARC-RENDER-040 lying entity=… wanted=… shows=… frames=… delay=… plays|held|kept ends-in=…` once per change.
+- **Smoke** (stage `attack`): the killed NPC's dying animation draws its frames on the world clock, no pool lies before its dying
+  goal ends, the last frame stays (`ARC-RENDER-040 smoke dying npc=… drawn=…`); the knockout plays the fall.
+- **Not ready**: the dying sounds (DA3), the hero's own dying animation (it falls, ARC-COMBAT-021), the dying goal's finish when
+  interrupted (DA6: the viewer holds the last frame after a map change or load), an NPC's get-up animation, and HD frames of the poses.
 
 ## Not ready
 
@@ -519,7 +541,7 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
   and dying scripts, the hit's blood eye candy (the pool of blood is in since ARC-RENDER-041), the corpse's decay timer, alignment
   and the kill log.
 - The low attack (21) and the boomerang's throw animation (14): the hero always plays the attack (20; ARC-RENDER-039), the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
-  and lies on that fall when dead), the dying animation itself (the body jumps to its last frame), an NPC's get-up animation
+  and lies on that fall when dead), an NPC's get-up animation
   after a knockout (a recovered NPC stands at once), and HD frames of the fallen poses (Legacy per frame).
 - A killed NPC still blocks its cell: step evidence is T0 map data.
 - Companions (Virgil while he stands as a companion actor) are not attackable: their combat goal would need their live cell;

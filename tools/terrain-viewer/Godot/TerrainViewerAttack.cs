@@ -808,8 +808,9 @@ public partial class TerrainViewerApp
             : life.Status.IsUnconscious ? AreaFallenPoses.FallDown : null;
     }
 
-    // The fallen bodies of the shown map (an NPC the session killed or knocked out, drawn in its pose's last frame in place of its
-    // T0 body), the poses read so far, the dying animation each kill chose, and the frame repository with the poses added.
+    // The fallen bodies of the shown map (an NPC the session killed or knocked out, drawn in its pose in place of its T0 body; the
+    // frame its animation shows, ARC-RENDER-040), the poses read so far, the dying animation each kill chose, and the frame repository
+    // with the poses added.
     private Dictionary<AreaObjectKey, AreaDrawCommand> _fallenBodies = [];
     private readonly Dictionary<(int Map, string Entity, int Animation), AreaFallenLoad> _fallenPoses = [];
     private readonly Dictionary<(int Map, string Entity), int> _deathAnimations = [];
@@ -866,9 +867,10 @@ public partial class TerrainViewerApp
         return moving;
     }
 
-    /// <summary>The NPCs of the shown map the session killed or knocked out are drawn fallen: the last frame of the dying
-    /// animation the kill chose (the fall after a reload), or of the fall-down animation while unconscious. Recomputed when the
-    /// session or the map changes; a pose that cannot be read leaves the T0 body and says why once.</summary>
+    /// <summary>The NPCs of the shown map the session killed or knocked out are drawn fallen: the dying animation the kill chose (the
+    /// fall after a reload), or the fall-down animation while unconscious, played from the moment the view sees it and then held on its
+    /// last frame (ARC-RENDER-040, <see cref="ObserveLying"/>). Recomputed when the session or the map changes or a played frame does;
+    /// a pose that cannot be read leaves the T0 body and says why once.</summary>
     private void SyncAreaCombatBodies()
     {
         if (_readyArea is not { } area || _areaSession is not { } session || _combatHost is null || _inventoryHost is null
@@ -878,11 +880,18 @@ public partial class TerrainViewerApp
             return;
         }
         var frames = (AreaFrameOverlay)AreaFrames();
-        var stamp = (area, session, session.Version.Revision);
+        var now = WorldMilliseconds();
+        var framesStamp = LyingFramesStamp(now);
+        var stamp = (area, session, session.Version.Revision, framesStamp);
         if (Equals(stamp, _fallenStamp)) return;
         _fallenStamp = stamp;
+        _lyingFramesDrawn = framesStamp;
         var overlay = _areaOverlay!.Value;
         var fallen = new Dictionary<AreaObjectKey, AreaDrawCommand>();
+        // ARC-RENDER-040: the bodies lying when the map and session are first seen hold their last frame; the ones that stood up go.
+        var firstSight = !Equals((area, session), _lyingBaseline);
+        if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); }
+        var lying = new HashSet<(int Map, string Entity)>();
         foreach (var holder in map.Seed.Holders)
         {
             if (holder.Kind != SessionHolderKind.Npc || holder.Dead || session.QueryLifeRecord(holder.Entity) is null) continue;
@@ -897,10 +906,18 @@ public partial class TerrainViewerApp
                 _fallenPoses[(map.RuntimeMap, holder.Entity, anim)] = load;
                 GD.Print($"ARC-COMBAT-005 fallen-pose entity={holder.Entity} animation={anim} status={load.Status} used={load.Pose?.Animation} detail={load.Detail}");
             }
-            if (load.Pose is not { } pose) continue;
+            if (load.Pose is null) continue;
+            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, session.QueryLifeRecord(holder.Entity)?.DeathTimeMs, load, now,
+                firstSight);
+            lying.Add((map.RuntimeMap, holder.Entity));
+            var pose = show.Load.Frames[show.FrameAt(now)];
             frames.Add(pose.Key, pose.Frame);
             fallen[row.Key] = AreaScenePlan.Repose(command, row, visual, pose.Key, pose.Frame.Width, pose.Frame.Height, pose.HotX, pose.HotY);
         }
+        foreach (var key in _lyingShows.Keys.Where(k => k.Map == map.RuntimeMap && !lying.Contains(k)).ToArray()) _lyingShows.Remove(key);
+        // The shows this sync started are in the stamp, so the next frame does not draw the same frames again.
+        _lyingFramesDrawn = LyingFramesStamp(now);
+        _fallenStamp = (area, session, session.Version.Revision, _lyingFramesDrawn);
         _fallenBodies = fallen;
     }
 

@@ -1443,8 +1443,8 @@ action frame resolves the hit through the session, and the attack repeats (auto 
 it the attempt-attack goal (here the same attack); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
 head, an arm or a leg; a corpse is looted only with Alt, a plain click on it does nothing. The cursor over a living NPC is the
 closed hand (`attack`, `walk to attack`). The status line names the outcome, damage, the target's hit points, a knockout or
-kill and the experience paid. A killed or unconscious NPC is drawn in the last frame of its dying or fall-down animation,
-read on demand from the archive its body came from; out of combat mode a plain click loots the corpse. The stick, another
+kill and the experience paid. A killed or unconscious NPC plays its dying or fall-down animation, read on demand from the
+archive its body came from, and keeps its last frame (ARC-RENDER-040; a body already lying when the map is shown holds it); out of combat mode a plain click loots the corpse. The stick, another
 click, a dialog or window, a map change or a hero that cannot act stop the attack. Native smoke with `--hero` (after the
 combat-mode stage, exterior and map mode): `ARC-COMBAT-005 native-smoke attack PASS`, or `NO-TARGET` on a map without a
 living NPC with combat values.

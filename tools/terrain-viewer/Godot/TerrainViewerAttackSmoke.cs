@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains("killed", StringComparison.Ordinal), "the status line names the kill");
             Require(_fallenBodies.ContainsKey(key), "the body is drawn fallen");
+            // ARC-RENDER-040: the dying animation plays, then the pool of blood comes.
+            RequireDyingAnimation(session, map.RuntimeMap, target.Holder.Entity, key);
             await RequireBloodPoolAsync(session, map.RuntimeMap, target.Holder.Entity);
 
             // A corpse clicked in combat mode without Alt does nothing.
@@ -148,6 +150,9 @@ public partial class TerrainViewerApp
                 lowAction = _worldActor.Profile.LowAttack is null ? ActorDiagnosticAction.Attack : ActorDiagnosticAction.LowAttack;
                 PublishWorldSelection();
                 Require(_fallenBodies.ContainsKey(key), "the knocked-out body is drawn fallen");
+                // ARC-RENDER-040: the fall plays from the knockout (the earlier death's show went when the NPC stood).
+                Require(_lyingShows.TryGetValue((map.RuntimeMap, target.Holder.Entity), out var fall) && fall.StartMs is not null && fall.EndsAtMs is null
+                    && fall.Load.Pose!.Animation == AreaFallenPoses.FallDown, "the knockout plays the fall: " + fall);
                 point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-RENDER-039 smoke: knocked-out body not visible");
                 HoverAtForSelfTest(point);
                 AreaSmokeClick(point);
