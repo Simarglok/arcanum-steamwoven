@@ -274,11 +274,14 @@ public sealed class AreaGameBarTexts
 
 public enum AreaInterfaceArtStatus { Ready, Unnamed, MissingFile, Unreadable, LimitExceeded }
 
-/// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent).</summary>
-public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba);
+/// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent), and its hot point
+/// (the frame header's centre, which a cursor puts on the pointer, ARC-UI-056).</summary>
+public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int HotX = 0, int HotY = 0);
 
 /// <param name="Name">The file name <c>interface.mes</c> gives the number; null when it names none.</param>
-public sealed record AreaInterfaceArtLoad(int Number, AreaInterfaceArtStatus Status, string? Name, IReadOnlyList<AreaInterfaceFrame> Frames, string Detail);
+/// <param name="FramesPerSecond">The art header's frame rate (ARC-UI-056: an animated cursor's).</param>
+public sealed record AreaInterfaceArtLoad(int Number, AreaInterfaceArtStatus Status, string? Name, IReadOnlyList<AreaInterfaceFrame> Frames, string Detail,
+    int FramesPerSecond = 0);
 
 /// <summary>Explicit limits of the interface art one load reads: one file's size, frames per file and the pixels of all files.</summary>
 public sealed record AreaInterfaceArtLimits(int MaxFileBytes = 4 * 1048576, int MaxFrames = 32, long MaxRgbaBytes = 16L * 1048576);
@@ -342,9 +345,9 @@ public static class AreaInterfaceArt
                 var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, i, 0), options);
                 total += frame.Rgba.Count;
                 if (total > rgbaLeft) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path}: more than {limits.MaxRgbaBytes} bytes of pixels");
-                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba]));
+                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba], frame.Frame.HotX, frame.Frame.HotY));
             }
-            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames");
+            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond);
         }
         catch (ArtException error)
         {
@@ -356,9 +359,11 @@ public static class AreaInterfaceArt
 /// <summary>ARC-UI-018: what the bars draw from the game folder: their interface art and their hover names. Godot-free.</summary>
 public sealed record AreaGameBarContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, AreaGameBarTexts Texts, string Detail)
 {
-    /// <summary>Every interface art number read for the bars: theirs (<see cref="AreaGameBarLayout.ArtNumbers"/>) and the message
-    /// window's (<see cref="AreaMessageLayout.ArtNumbers"/>, ARC-UI-023).</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Distinct()];
+    /// <summary>Every interface art number read for the bars: theirs (<see cref="AreaGameBarLayout.ArtNumbers"/>), the message
+    /// window's (<see cref="AreaMessageLayout.ArtNumbers"/>, ARC-UI-023) and the maintain bar's slots
+    /// (<see cref="AreaMaintainBarLayout.ArtNumbers"/>, ARC-MAGIC-026).</summary>
+    public static IReadOnlyList<int> ArtNumbers { get; } =
+        [.. AreaGameBarLayout.ArtNumbers.Concat(AreaMessageLayout.ArtNumbers).Concat(AreaMaintainBarLayout.ArtNumbers).Distinct()];
 
     /// <summary>True when every art number of <see cref="ArtNumbers"/> read.</summary>
     public bool ArtReady => ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);

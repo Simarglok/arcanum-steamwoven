@@ -182,8 +182,9 @@ The viewer starts from the original new-game flags (all 0..3199 known false, so 
 chosen hero's flag true (`AreaStartingHero.NewGameFlags`); on the installed original that is flag 2350 + i (CC-07).
 Project admission: the chosen message must be one to five ASCII digits (space-padded allowed) naming a flag below 3,200;
 anything else is `FlagInvalid` instead of `atoi`'s partial or zero value. The original writes any non-negative result, flag
-0 included (ledger row Pre-made flags). Whether Crash Site scripts read these flags stays the open
-ARC-RES-025 question. The main menu's gate on prototype 16075 and its ART, which makes the four female heroes selectable, is not evaluated
+0 included (ledger row Pre-made flags). Since ARC-WORLD-114 the Crash Site scripts that read these flags run: the
+unchosen heroes' NPCs die and the chosen one's double is switched off at their first heartbeat
+([heartbeat scripts](ai-host.md#heartbeat-scripts-arc-world-114)). The main menu's gate on prototype 16075 and its ART, which makes the four female heroes selectable, is not evaluated
 (it is open on the pinned installation, SH-04).
 
 The session is created with that hero (`AreaTransitionCoordinator.CreateSession(…, hero)`); the snapshot schema is

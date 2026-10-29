@@ -126,6 +126,12 @@ public partial class TerrainViewerApp
             Require(_spellPane is { Shown: true } && _spellPane.ShownForSelfTest.Any(c => c.Spell == spell.Data.Number), "M shows the pane with the spell: " + _spellNotice);
             _spellPane!.PressForSelfTest(spell.Data.Number);
             Require(_spellTargeting?.Spell == spell.Data.Number, "the spell opened the targeting cursor: " + _spellNotice);
+            // ARC-UI-056: the targeting cursor shows spellcur.art, stepping its frames at its rate (CU1, CU5).
+            SyncCursorArt(); SetCursorClockForSelfTest(1_000, restart: true); SyncCursorArt();
+            Require(CursorShownForSelfTest == (AreaCursorArt.Spell, 0), $"the spell cursor's first frame: {CursorShownForSelfTest}");
+            SetCursorClockForSelfTest(1_100); SyncCursorArt();
+            Require(CursorShownForSelfTest == (AreaCursorArt.Spell, 1), $"the spell cursor's second frame after 100 ms: {CursorShownForSelfTest}");
+            SetCursorClockForSelfTest(null);
 
             var point = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-MAGIC-015 smoke: target not visible");
             HoverAtForSelfTest(point);
@@ -139,6 +145,9 @@ public partial class TerrainViewerApp
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
+            // The targeting cursor stays open after a cast (SU9), and so does its art.
+            SyncCursorArt();
+            Require(_spellTargeting is not null && CursorShownForSelfTest?.Art == AreaCursorArt.Spell, $"the spell cursor stays after the cast: {CursorShownForSelfTest}");
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
             // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
@@ -413,6 +422,8 @@ public partial class TerrainViewerApp
             HotkeyKey(Key.Key1);
             Require(_spellTargeting is null && _hotkeyActivations == activations + 2, "an empty entry does nothing: " + _hotkeyNotice);
             GD.Print($"ARC-UI-022 native-smoke hotkeys PASS spell={latest.Index} weapon-entry={(weaponCast is null ? "skipped" : "activated")} activations={_hotkeyActivations - activations}");
+            // ARC-MAGIC-026: the top strip's maintain bar shows a maintained spell and a click on its slot ends it.
+            await RunAreaMaintainBarSmokeAsync(session, target.Holder.Entity);
             // ARC-UI-027: the bar's art, its clicks and its right-button drag.
             await RunAreaHotkeyBarSmokeAsync(session, latest.Index);
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -421,7 +432,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            CancelSpellCast(null); _spellPane?.HidePane(); _lentItemSpellsForSelfTest = null; _itemPaneItem = null;
+            CancelSpellCast(null); _spellPane?.HidePane(); _lentItemSpellsForSelfTest = null; _itemPaneItem = null; SetCursorClockForSelfTest(null);
             // ARC-MAGIC-018: a missile still flying is lost; the later stages see the hero unturned.
             ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
             // The later stages see the map and the hero as they were (the learned spells and the experience stay).

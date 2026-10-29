@@ -44,6 +44,7 @@ public sealed class AreaMapPlansRealDataTests
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);
 
+        var animatedMaps = 0; var animatedScenery = 0;
         var complete = new List<string>(); var roofs = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
@@ -60,12 +61,24 @@ public sealed class AreaMapPlansRealDataTests
                 roofs.Add(map.Name, inspection.Snapshot.Roofs.Count);
                 Assert.AreEqual(new AreaRoofShades(255, 200, 80), inspection.Snapshot.RoofShades);
             }
+            // ARC-RENDER-035: every other frame of each animated scenery is decoded for its animation loop; no installed frame of
+            // them has a delta (ledger AS6) and every one has a positive frame rate (AS3).
+            var sceneryFrames = inspection.Snapshot!.Visuals.Where(v => v.Key.Layer == AreaLayerKind.SceneryFrame).ToArray();
+            if (sceneryFrames.Length > 0)
+            {
+                var owners = sceneryFrames.GroupBy(v => v.Key.Object!.Value).ToDictionary(g => g.Key, g => g.Count());
+                var bodies = inspection.Snapshot.Visuals.Where(v => v.Key.Layer == AreaLayerKind.Body && v.Key.Object is { } o && owners.ContainsKey(o)).ToArray();
+                Assert.IsTrue(bodies.All(b => b.FramesPerSecond > 0 && owners[b.Key.Object!.Value] == b.FrameCount - 1), map.Name);
+                Assert.IsFalse(sceneryFrames.Concat(bodies).Any(v => v.ArtOffsetX != 0 || v.ArtOffsetY != 0), map.Name);
+                animatedMaps++; animatedScenery += owners.Count;
+            }
             Assert.IsFalse(inspection.Issues.Any(i => i.SourceIndex >= 4096 && i.Stage is AreaStage.Appearance or AreaStage.Mapping or AreaStage.Frame), map.Name);
             // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
             if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
             // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once (488 since
-            // ARC-WORLD-051 also decodes the other frames of its multi-frame door and window ARTs: 11 more).
-            if (map.Name == "k'na tha") Assert.AreEqual(488, inspection.Usage.FrameRequests);
+            // ARC-WORLD-051 also decodes the other frames of its multi-frame door and window ARTs: 11 more; 615 since ARC-RENDER-035
+            // decodes those of its 80 animated scenery, 7 ARTs).
+            if (map.Name == "k'na tha") Assert.AreEqual(615, inspection.Usage.FrameRequests);
             if (map.Name == "crash site cave")
             {
                 // The generic plan reaches what the pinned cave profile pins, without its exceptions.
@@ -74,10 +87,11 @@ public sealed class AreaMapPlansRealDataTests
                 Assert.AreEqual(4096, cave.Reconciliation.CoreTerrain);
                 Assert.AreEqual(138, cave.Reconciliation.Statics);
                 Assert.AreEqual(39, cave.Reconciliation.Aggregate);
-                Assert.AreEqual(194, cave.Reconciliation.Visuals);
+                Assert.AreEqual(250, cave.Reconciliation.Visuals); // 194 + 56 frames of 4 animated scenery (ARC-RENDER-035)
             }
         }
         Assert.AreEqual(80, catalog.Maps.Count - 1);
+        Assert.AreEqual((60, 1063), (animatedMaps, animatedScenery), "interiors with animated scenery, and the scenery");
         Assert.AreEqual("bates mansion lev 2=72, caladon-mafia underground=28, tulla interior=515, tulla interior - battle - air=132, tulla interior - battle - earth=184",
             string.Join(", ", roofs.Select(p => $"{p.Key}={p.Value}")));
         CollectionAssert.IsSubsetOf(Complete, complete, string.Join(", ", Complete.Except(complete)));

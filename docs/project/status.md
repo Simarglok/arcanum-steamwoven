@@ -60,7 +60,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Directed step assessment | [World, maps and movement](status/world.md) | — |
 | Exact movement | [World, maps and movement](status/world.md) | — |
 | Click-to-move route | [World, maps and movement](status/world.md) | ARC-WORLD-073, ARC-WORLD-042, ARC-WORLD-060 |
-| Hover tooltip and action cursor | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-005 |
+| Hover tooltip and action cursor | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-005, ARC-UI-056 |
 | Health and fatigue bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-020, ARC-UI-024 |
 | Floating text | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-021 |
 | Inventory window, pickup and loot | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-014, ARC-SCRIPT-013, ARC-UI-004 |
@@ -144,7 +144,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
-| Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043, ARC-DEV-055 |
+| Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043, ARC-DEV-055, ARC-DEV-059 |
 | Packaged alpha build (macOS, Windows) | [Verification and tools](status/tools.md) | ARC-DEV-047, ARC-DEV-048, ARC-DEV-049 |
 | In-game bug report | [Verification and tools](status/tools.md) | ARC-DEV-051 |
 

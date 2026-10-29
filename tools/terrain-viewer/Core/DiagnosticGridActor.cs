@@ -25,7 +25,7 @@ public sealed class DiagnosticGridActor
         AreaGaitTiming = timing;
         if (Session is AreaGridSession { Timing: not null } area) area.Timing = timing;
         if (ReferenceEquals(profile, Profile)) return;
-        Profile = profile; AttackPose = null;
+        Profile = profile; AttackPose = null; DownPose = null;
         _timeline = Timeline(Session is { } session ? RenderState(session.State).Action : ActorDiagnosticAction.Idle);
     }
     public int CurrentFrame => Pose is { } pose ? pose.Frame : _timeline.CurrentFrame;
@@ -35,18 +35,23 @@ public sealed class DiagnosticGridActor
     /// <summary>ARC-COMBAT-005: the attack pose the host draws while the settled actor attacks in place (facing octant and
     /// attack frame); null otherwise. A moving actor is drawn by its movement whatever the pose says.</summary>
     public (int Octant, int Frame)? AttackPose { get; set; }
-    private (int Octant, int Frame)? Pose => AttackPose is { } pose && Session?.State.Phase == MovementPhase.Settled ? pose : null;
+    /// <summary>ARC-COMBAT-021: the pose the host draws while the settled hero falls, lies unconscious or gets up (the profile's
+    /// <see cref="ActorDiagnosticAction.FallDown"/> or <see cref="ActorDiagnosticAction.GetUp"/>, facing octant and frame); it wins over
+    /// <see cref="AttackPose"/>. Null otherwise.</summary>
+    public (ActorDiagnosticAction Action, int Octant, int Frame)? DownPose { get; set; }
+    private (ActorDiagnosticAction Action, int Octant, int Frame)? Pose => Session?.State.Phase != MovementPhase.Settled ? null
+        : DownPose ?? (AttackPose is { } attack ? (ActorDiagnosticAction.Attack, attack.Octant, attack.Frame) : null);
     /// <summary>ARC-MAGIC-018: the octant a settled actor was turned to in place (the casting goal's facing turn, 0x42C850) and the
     /// movement facing it was turned from; drawn while the actor stays settled with that facing, dropped when it moves. Null otherwise.</summary>
     public (int Octant, NeighborDirection From)? TurnedFacing { get; set; }
     private DiagnosticActorState Render(MovementState state) => Pose is { } pose && state.Phase == MovementPhase.Settled
-        ? RenderState(state) with { Facing = pose.Octant, Action = ActorDiagnosticAction.Attack }
+        ? RenderState(state) with { Facing = pose.Octant, Action = pose.Action }
         : TurnedFacing is { } turned && state.Phase == MovementPhase.Settled && state.Facing == turned.From
             ? RenderState(state) with { Facing = turned.Octant } : RenderState(state);
     public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
-        Session = session; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; DownPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
     public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
@@ -62,9 +67,9 @@ public sealed class DiagnosticGridActor
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
         var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, CrittersPass = AreaCrittersPass, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait, StepCharge = AreaStepCharge };
-        Session = session; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; DownPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
-    public void DisposeSession() { Session = null; AttackPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
+    public void DisposeSession() { Session = null; AttackPose = null; DownPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
 
     public GridAdvance Advance(SimulationTime time, ReadOnlySpan<InputBatch> batches,
         Action<ActorDiagnosticPlacementInput>? validateSelection = null)

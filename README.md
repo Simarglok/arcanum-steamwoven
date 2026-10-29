@@ -60,6 +60,7 @@ from the exported developer builds, builds the player's alpha and puts every God
 ./arcanum package mac|win         # the player's alpha (below)
 ./arcanum run --kind window|headless|export|dotnet -- COMMAND   # any Godot run, export or dotnet build/test through the queue
 ./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones)
+./arcanum smoke pr --stages S,... # the per-PR smoke: only the touched stages (--crash-site when related); `smoke full`: the full map chain (ARC-DEV-061)
 ./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle, then the OriginalExe tests
 ./arcanum clean                   # which builds are protected and which may go (dry run; --apply removes only those)
 ```
@@ -68,7 +69,9 @@ from the exported developer builds, builds the player's alpha and puts every God
 exported by ARC-DEV-015 (the universal map-mode build, preferred) or ARC-RENDER-008, so a feature on `main` shows only
 after that build is exported again ([universal map-mode export](docs/workflow/local-development.md#universal-map-mode-candidate-arc-dev-015)).
 Runs are quiet: the whole output goes to a log file, the terminal keeps `PASS` or `FAIL` with the first error
-([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)).
+([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). A Godot run checks its own start: it waits up to
+60 s for the command's start line and fails a run that showed a usage error or did not start
+([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 
 Never delete `artifacts/` or a build in it by hand: the launcher and the export need the current builds. See
 [which builds may be deleted](docs/workflow/build-retention.md).
@@ -245,6 +248,7 @@ are this project's own.
 | Left press on a college's button in the spell pane; left click on a spell's icon there | Show that college's known spells; use the spell (as the hotkey does) |
 | Right press and drag from a quick bar slot, a spell of the spell pane or a slot of the weapon pane | Move it on the bar, put it on a slot, or drag it off the bar to empty the slot |
 | Click on a follower's portrait | That follower's order menu (a walk order takes the next left click as its tile) |
+| Left click on a spell icon in the five top slots | End that maintained spell (hovering it shows the spell) |
 
 **Inside windows** (the open window takes every key)
 

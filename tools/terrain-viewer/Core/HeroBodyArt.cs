@@ -104,8 +104,9 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
 
 /// <summary>ARC-UI-039: reads a hero body's five ARTs (stand, walk, run, vault, unarmed attack) by name from the actor archive
 /// (resource 1, where every critter ART of the installation is; SH-04) and decodes the frames the fixed facing table draws. The
-/// header gives frames, rate and action frame; the walk and run strides are the frame offsets of one cycle (research L7). Typed
-/// failures as <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
+/// header gives frames, rate and action frame; the walk and run strides are the frame offsets of one cycle (research L7). Since
+/// ARC-COMBAT-021 also the fall-down and get-up ARTs (animations 7 and 8) when the body has both. Typed failures as
+/// <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
 public static class HeroBodyArt
 {
     /// <summary>Upper bounds of one body: distinct frames and their RGBA bytes (the human uses 195 and 1,705,144).</summary>
@@ -122,19 +123,34 @@ public static class HeroBodyArt
         var read = new Dictionary<ActorDiagnosticAction, (ActorDiagnosticResource Resource, byte[] Bytes, DatEntry Entry, ArtMetadata Metadata)>();
         try
         {
-            foreach (var action in human.Actions)
+            // ARC-COMBAT-021: the fall-down and get-up ARTs follow the five; a body without both, or with one that is not one entry
+            // with a readable header in the body's palette (none of the installed creatable bodies), loads without them, and its hero
+            // then lies down without a drawn fall.
+            var wanted = human.Actions.Select(action => (Action: action, Selector: human.Resource(action).Selector, Optional: false))
+                .Append((ActorDiagnosticAction.FallDown, ActorDiagnosticProfile.HumanFallDownSelector, true))
+                .Append((ActorDiagnosticAction.GetUp, ActorDiagnosticProfile.HumanGetUpSelector, true));
+            foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
-                var selector = body.Selector(human.Resource(action).Selector);
+                var selector = body.Selector(humanSelector);
                 var path = body.ArtPath(selector);
                 var entries = resource.Entries.Where(entry => string.Equals(Name(entry), path, StringComparison.OrdinalIgnoreCase)).ToArray();
-                if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+                if (entries.Length != 1)
+                {
+                    if (optional) continue;
+                    throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+                }
                 var bytes = resource.ReadEntry(entries[0]);
-                var metadata = ArtDecoder.Inspect(bytes, options);
+                ArtMetadata metadata;
+                try { metadata = ArtDecoder.Inspect(bytes, options); }
+                catch (ArtException) when (optional) { continue; }
                 var h = metadata.Header;
                 if (h.PhysicalGroupCount != 8 || h.FramesPerGroup <= 0 || h.FramesPerSecond <= 0 || h.PalettePresenceWords.Count <= palette
                     || h.PalettePresenceWords[palette] == 0 || (action == ActorDiagnosticAction.Attack && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup)))
+                {
+                    if (optional) continue;
                     throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+                }
                 var descriptor = new ActorDiagnosticResource(action, selector, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                 {
                     Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
@@ -143,10 +159,17 @@ public static class HeroBodyArt
                 if (descriptor.Stride is { IsValid: false }) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 read.Add(action, (descriptor, bytes, entries[0], metadata));
             }
-            var keys = human.Actions.Sum(action => human.UsedGroups(action).Count() * read[action].Resource.FramesPerGroup);
+            // Every action shares the fixed facing table, so the human's used groups are every action's. The fall and get-up come only
+            // together and only within the key cap.
+            var groups = human.UsedGroups(ActorDiagnosticAction.Idle).Count();
+            var keys = human.Actions.Sum(action => groups * read[action].Resource.FramesPerGroup);
+            var falls = read.TryGetValue(ActorDiagnosticAction.FallDown, out var fall) && read.TryGetValue(ActorDiagnosticAction.GetUp, out var rise)
+                && keys + groups * (fall.Resource.FramesPerGroup + rise.Resource.FramesPerGroup) <= MaxKeys;
+            if (falls) keys += groups * (read[ActorDiagnosticAction.FallDown].Resource.FramesPerGroup + read[ActorDiagnosticAction.GetUp].Resource.FramesPerGroup);
             if (keys > MaxKeys) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
             var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
-                read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys);
+                read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
+                falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null);
             var frames = new List<ActorDiagnosticFrame>(keys);
             var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
             long rgbaBytes = 0;

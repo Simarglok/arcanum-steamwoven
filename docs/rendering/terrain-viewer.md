@@ -674,7 +674,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   type, e.g. `[NPC: name unavailable]`, and the status line gives the status (never a path).
 - **Action cursor.** Project policy, not original behaviour: the original main-mode cursor
   changes with weapon and called-shot keys, not with the target
-  (the cursor refresh, 0x553990).
+  (the cursor refresh, 0x553990). Since ARC-UI-056 the player sees the original's cursor art
+  ([below](#original-cursor-art-arc-ui-056)) and these system shapes only while that art is not read (the self-test, an
+  unreadable game folder); the action is still decided, named in the tooltip's second line and the status line.
   The decision follows `WorldRouteClick` in its order and guards without running it:
   a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
@@ -705,8 +707,44 @@ modal, closed gate, focus and window guards, injected names) and, with the cave 
 pick PASS` (a faded wall is never picked, the same wall drawn opaque is) (Virgil walk to talk with his unknown description, the
 entrance walk to use, click-through sprites passed through to the body behind, the press
 does what the cursor showed). Not
-verified: original cursor or message-window parity, hover art (the animated underlay), a
+verified: original message-window parity (the cursor art follows the executable since ARC-UI-056), hover art (the animated underlay), a
 human on a physical mouse and display.
+
+### Original cursor art (ARC-UI-056)
+
+In `crash-site-area` (the exterior, the cave and `--area-map`) the pointer is the original's cursor art, picked as the 1.0.7.4
+executable picks it ([ledger CU1–CU6](../research/ledger/ui-audio.md#cursor-art-arc-ui-056), FR-UI-005). It follows the
+game's state, never the object under the pointer: what a click would do there stays in the tooltip (ARC-UI-005).
+
+- **Which art** (`AreaCursorArt.Art`, CU1–CU3). The spell's targeting cursor open: `spellcur.art` (21). A window over the game
+  (inventory, sheet, logbook, schematics, barter, reading, world map, save list, main menu, palette, dialog, bug report, the
+  death cover): the gauntlet `cursor.art` (0). In the game out of combat mode: the gauntlet; in combat mode: `battlecur.art`
+  (353), or with a called-shot key held (`,` first, then `.`, then `/`, the physical keys, as the attack reads them, FA4) its
+  called-shot cursor (818 head, 819 leg picture, 820 arm picture). `skillcur.art` (352) belongs to the skill cursor, which the
+  viewer does not have yet.
+- **Rule modes** (CUA1). The original shows the leg picture for `.`, which aims at the arm, and the arm picture for `/`,
+  which aims at the leg. Original keeps that; Steamwoven (default) shows the aimed location's picture
+  (`InterfaceRuleProfile.CalledShotCursorsSwapped`, [rule modes](../world/rule-modes.md)). A mode switch shows at the next frame.
+- **Drawing** (CU4, CU5). Each art's frames are read once a run from the game folder of the area's module (as the interface
+  bars' art) and shown at their own pixel size as Godot's custom arrow cursor with the frame's hot point (the ART frame
+  header's centre) on the pointer. `spellcur.art` steps its 7 frames every 100 ms (10 fps) from the moment the art was set,
+  wrapping; the others have one frame. The same cursor serves the world, the bars and the windows, as in the original;
+  controls with a cursor shape of their own (a text field's I-beam) keep it. The log prints `ARC-UI-056 cursor art ready=…`
+  once and `ARC-UI-056 cursor art=N mode=M` at each change.
+- **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file, a frame
+  larger than 256 × 256 or with its hot point outside it) the ARC-UI-005 system shapes stay, as before.
+
+Not built (F0 rows of CU6): the cursor arts `Cursor_UP`/`Cursor_DWN` over two interface buttons not yet identified, the
+spell cursor of the world map's state 3, a held item's art on the cursor (the viewer's inventory drag keeps its own image),
+the skill cursor, and scaling the art with the window (it stays at the art's pixel size). The animation counts from the
+elapsed time, so after a long frame hitch it jumps to the frame of that time where the original steps one frame (CU5).
+
+Checks: `AreaCursorTests` (the art by mode, combat mode and key in both rule modes, the frame steps, content readiness; the
+opt-in `Original_cursor_art_reads` checks the installed arts' names, frames, rate and hot points), `RuleModeTests`, the
+ARC-UI-005 self-test with injected synthetic art (the gauntlet over a walk target and under the palette, the system shapes
+back without the art), the ARC-COMBAT-004 combat-mode smoke (`battlecur` in combat mode, each called-shot key in both rule
+modes, the gauntlet after leaving) and the ARC-MAGIC-015 cast smoke (`spellcur` frame 0, frame 1 after 100 ms, still shown
+after the cast, as the targeting cursor stays open, SU9). Not verified: a human on a physical mouse and display, original parity of the cursor's on-screen size.
 
 ### Health and fatigue bars (ARC-UI-020)
 
@@ -937,8 +975,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
   window's frame ([ledger IW14](../research/ledger/ui-audio.md#inventory-grid-arc-ui-019); `AreaInventoryDrag`, plain shapes and
   names, no original art), scaled to the window. The grid is the session's (`QueryHeroGrid`,
-  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (1 × 1 until the
-  inventory art's size is read, NOT READY) at the first free place, and the items without room are named in the hint line. A left
+  [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)): every item takes its size in cells (its inventory art's
+  frame in 32-pixel cells, ARC-UI-055; 1 × 1 without the game's art) at the first free place, and the items without room are named in the hint line. A left
   press on an item of the grid or the doll holds it (it stays in its place and is not drawn there, IW2); the next left release puts it
   where the pointer is: on a cell, the target is the cell minus the grab's offset in grid locations (IW10), a grid item moves there
   (`MoveHeroItem`) and a worn item comes off into it (`Unequip` with the slot); on a slot, `Equip` runs with its checks and an
@@ -990,19 +1028,20 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger IW20–IW25](../research/ledger/ui-audio.md#inventory-window-art-arc-ui-051); `AreaInventoryArtLayout`, `AreaInventoryArtContent`):
   the 800 × 400 frame at its place between the interface bars, scaled to the free part, with the paper doll (223) and pack (221)
   arts, a cover art on every empty wear slot (241–249), each item's inventory art (field 0x5D) centred in its slot or cells
-  (scaled down when larger, since items are 1 × 1), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
+  (scaled down only when larger than its place; a grid item's cells fit its art since ARC-UI-055; a worn item on the cursor
+  takes its art's cells), the drop and use boxes (224/225, 342/343, "on" under a held item; their hit
   areas are now the arts' 80 × 43), the weight, encumbrance and speed lines (`inven_ui.mes` 9, 6, 10, 11 and `critter.mes`
   18 + level) and the gold and ammunition counts in the project's font. Every action of the diagnostic window stays: the doll, the
   grid, the boxes and a right click act as before, and a *Diagnostic view* switch below the frame shows the diagnostic panel (its
-  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. NOT READY: item sizes from their
-  art, the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
+  buttons) and back. The synthetic self-tests have no game folder and keep the diagnostic look. Grid items take their art's cells
+  (ARC-UI-055, `ARC-UI-055 native-smoke item sizes PASS` in the same stage). NOT READY: the paper-doll art of worn weapons and armour (fields 0x71, 0x97), the original fonts, the other modes' art and the doll
   toggle (plan). The native smoke checks it in the inventory stage (`ARC-UI-051 native-smoke inventory-art PASS`: every window
   art read, every grid and worn item's art read, three lines).
 - **Loot window art (ARC-UI-052,** [plan](../ui/original-windows.md#loot-window-done-arc-ui-052),
   [ledger IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052); `AreaLootArtLayout`): with the game's art a dead
   NPC's, junk pile's or container's window (not the steal window) shows the loot window's look in the same frame: the `Loot` art (234)
   on the left with the body's image at (183, 33) (by race or critter flags, a container by its description), the body's grid of 10 × 8
-  cells from (8, 136) with each item's inventory art at its inventory location (a junk pile's at its pile slot; PROJECT: an item the
+  cells from (8, 136) with each item's inventory art at its inventory location, over its art's cells (ARC-UI-055, `QueryItemCells`; a junk pile's at its pile slot; PROJECT: an item the
   session keeps at no location at the first free place; worn items left out, as the original's grid view), cut
   to the shown rows and scrolled by the mouse wheel (maximum 4 rows, a container 88), the Take all button (808) at (301, 47), and the
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
@@ -1030,7 +1069,7 @@ and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PA
 readback of the open window; ARC-UI-015: with `--hero` every worn item comes off by its button and goes back on by its wear
 button, `WornCycled` in the PASS line) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
-(grid, drag and drop; ARC-UI-051 draws the own window's art and layout, the fonts and item sizes are not the original's), a human on a physical mouse and display.
+(grid, drag and drop; ARC-UI-051 draws the own window's art and layout and ARC-UI-055 the items' sizes; the fonts are not the original's), a human on a physical mouse and display.
 
 ### HD render path (ARC-RENDER-014)
 
@@ -2005,7 +2044,9 @@ diagnostic HUD moves below the top strip and the follower portraits and spell pa
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
 the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
-right-button drag). The top strip's clock and maintained-spell slots are drawn as the art shows them and do nothing yet. Automated
+right-button drag). Since ARC-MAGIC-026 the top strip's five slots are the
+[maintain bar](../world/spell-cast-host.md#the-maintain-bar-arc-magic-026): they show the hero's maintained spells and a click on one
+ends its spell. The top strip's clock is drawn as the art shows it and does nothing yet. Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the

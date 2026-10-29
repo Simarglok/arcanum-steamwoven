@@ -13,9 +13,13 @@ namespace Arcanum.TerrainViewer.Core;
 /// ARC-WORLD-081: what the world actions of a use, tile or sector script read from the viewer (set S15): the PC's live cell (the session's
 /// actor placement follows the walking actor only at a save or a map change), whether a shown row is destroyed or switched off in the session
 /// (the original's object lists skip it), the item a script's prototype number names (<see cref="AreaPrototypeItems.ScriptItem"/>), and the
-/// shown map as the create action's placement reads it (null when there is none).
+/// shown map as the create action's placement reads it (null when there is none). ARC-WORLD-114: <see cref="Kill"/> applies a script's
+/// kill (58) to an NPC of the shown map, a death with no killer, and answers whether the session took it; <see cref="CanKill"/> says
+/// beforehand whether it can (the NPC's combat values read; null: always). Without <see cref="Kill"/>, or for an NPC it cannot kill, a
+/// kill leaves the run unapplied.
 /// </summary>
-public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap);
+public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
+    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -53,10 +57,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
     /// <summary>ARC-SKILLS-010: the catching-thief point (11) whose slot an NPC's run keeps as map changes too, under <c>scr11.*</c>.</summary>
     public const int CatchingThiefPoint = 11;
+    /// <summary>ARC-WORLD-114: the map-change key of an NPC a script's toggle state (56) switched off (value 1; absent while it is as its
+    /// map data has it). The original flips object flag 0x2; an NPC switched off is neither drawn nor in the object lists, and its AI
+    /// passes stop at the gate (<see cref="SwitchedOff"/>).</summary>
+    public const string OffProperty = "obj.off";
+    private const int NpcType = 16, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
-    /// <c>scr&lt;point&gt;.*</c> for the catching-thief point.</summary>
+    /// <c>scr&lt;point&gt;.*</c> for the catching-thief point and (ARC-WORLD-114) the first-heartbeat and heartbeat points.</summary>
     public static string SlotProperty(int point, string part) => point == ScrPoint.Use ? "use." + part : $"scr{point}.{part}";
     /// <summary>The spell flag the original reads as mind-controlled (field 20, bit 27; ledger SG3).</summary>
     public const uint MindControlledFlag = 0x0800_0000;
@@ -80,6 +89,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S4.ValueKinds,
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-WORLD-114: the set an NPC's first-heartbeat (10) and heartbeat (19) scripts run from the AI tick (<see cref="RunHeartbeat"/>):
+    /// <see cref="ScrAdmissionSet.S2"/> (control flow, local and global flags, counters, arithmetic, story state, remove and change this
+    /// script) with the single-object focus kinds of <see cref="ScrAdmissionSet.S3"/>, plus toggle state (56) and kill (58) of
+    /// <see cref="ScrAdmissionSet.S16"/>. A heartbeat runs every few seconds for every NPC near the PC, so the set stays this narrow; a
+    /// script outside it is refused and the tick goes on as without a script.
+    /// </summary>
+    public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill", ScrAdmissionSet.S2.Conditions,
+        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill]), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+
+    /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
+    /// (<see cref="OffProperty"/>).</summary>
+    public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
+        (session ?? throw new ArgumentNullException(nameof(session))).QueryMapChange(new SessionMapId(map), MapChangeKey.ForEntity(entity, OffProperty)) == 1;
 
     /// <summary>ARC-WORLD-081: the label of a script's random draws on the session's generator.</summary>
     public const string RandomLabel = "scr.random";
@@ -211,13 +235,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
-        if (point != ScrPoint.Use && point != CatchingThiefPoint) return loaded;
+        if (!KeptAsMapChanges(point)) return loaded;
         long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
         var slot = new ScrSlot(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
             Read(SlotProperty(point, LocalFlagsPart)) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(SlotProperty(point, CountersPart)) is { } counters ? checked((uint)counters) : loaded.Counters);
         return point == ScrPoint.Use && TrapStateOf(row, attachee.Code, slot) is { Removed: true } ? slot with { Script = 0 } : slot;
     }
+
+    // The points whose slot a run writes back as map changes (SlotProperty).
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -424,6 +451,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     /// <summary>
+    /// ARC-WORLD-114: an NPC's first-heartbeat (10) or heartbeat (19) script, which the AI tick runs with the NPC as the attachee and
+    /// the triggerer (0x4AD200), under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).
+    /// Its toggle state switches an NPC of the shown map off and back on (<see cref="OffProperty"/>), its kill goes to the world's
+    /// <see cref="AreaScriptWorld.Kill"/>; either for another object, or switching on an NPC its map data has off, leaves the run
+    /// unapplied. The caller reads the outcome: anything but "run default" stops the tick's pass.
+    /// </summary>
+    public AreaScriptedUse RunHeartbeat(AreaObjectRecord row, int point, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat)) throw new ArgumentOutOfRangeException(nameof(point), "Not a heartbeat point.");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        // A tick runs often: as for a step, only the files this run reads are checked (after the run, in Finish).
+        var entity = EntityId(row);
+        if (row.Key.RuntimeMap != _shownMap || row.Type != NpcType) return new(AreaScriptedUseOutcome.Refused, null, [], null, "not an NPC of the shown map");
+        _clicked = (entity, row);
+        try
+        {
+            var npc = new ScrObjectRef(_shownMap, entity);
+            var run = ScrDispatcher.RunObject(new(point, npc, npc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a heartbeat script is not modelled", writeback => WriteObjectSlot(writeback, npc));
+        }
+        finally { _clicked = null; }
+    }
+
+    /// <summary>
     /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
     /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
     /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
@@ -508,6 +560,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // map) leaves the whole run unapplied.
         if (Creatable(effects) is { } refusedCreation)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: create object {refusedCreation}");
+        // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
+        if (ObjectStateRefusal(effects) is { } refusedState)
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         var teleport = effects.Teleports.FirstOrDefault();
         return teleport is null
@@ -552,7 +607,34 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             _created.Add(new(request.Prototype, request.Near, result));
             if (result.Disposition == GameSessionDisposition.Rejected) return false;
         }
+        // ARC-WORLD-114: toggle state and kill in action order (ObjectStateRefusal checked them).
+        foreach (var request in effects.ObjectStates)
+        {
+            if (request.Change == ScrObjectStateChange.Kill) { if (!_world!.Kill!(request.Object)) return false; continue; }
+            var key = MapChangeKey.ForEntity(request.Object.Code, OffProperty);
+            var toggled = _session.ApplyChanges(_session.Version, null,
+                [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
+            if (toggled.Disposition == GameSessionDisposition.Rejected) return false;
+        }
         return effects.Writeback is not { } writeback || writeSlot(writeback);
+    }
+
+    // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
+    // of the shown map only; a kill needs the world's kill, and an NPC its map data has off is never switched on (its T0 body is not
+    // drawn at all).
+    private string? ObjectStateRefusal(ScrEffects effects)
+    {
+        foreach (var request in effects.ObjectStates)
+        {
+            var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
+            if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
+                return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
+            if (request.Change == ScrObjectStateChange.Kill && (_world?.Kill is null || _world.CanKill?.Invoke(request.Object) == false))
+                return $"kill of {request.Object.Code} needs its combat values";
+            if (request.Change == ScrObjectStateChange.ToggleOff && ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0)
+                return $"toggle state of {request.Object.Code}, off in its map data, is not modelled";
+        }
+        return null;
     }
 
     // The first create object of the run the viewer or the session cannot apply, named; null when every one can be, so a run is never left
@@ -581,7 +663,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
     {
-        if (writeback.Source != ScrSource.Object || writeback.Point is not (ScrPoint.Use or CatchingThiefPoint) || writeback.Attachee != attachee
+        if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
             || Row(attachee) is not { } row || LoadedSlot(row, writeback.Point) is not { } loaded) return false;
         var map = new SessionMapId(attachee.Map);
         MapChangeEdit Edit(string property, long value, long baseline) => new(map, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);

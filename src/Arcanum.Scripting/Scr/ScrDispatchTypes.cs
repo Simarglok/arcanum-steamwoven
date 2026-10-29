@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Use = 1, Dialog = 9, DialogOverride = 31, Count = 36;
+    public const int Use = 1, Dialog = 9, FirstHeartbeat = 10, Heartbeat = 19, DialogOverride = 31, Count = 36;
 }
 
 /// <summary>
@@ -193,6 +193,20 @@ public static class ScrWorld
 /// 20 to find the prototype, PG8) and the first object of operand 1, next to which the host places the new object.
 /// </summary>
 public readonly record struct ScrCreateRequest(int Prototype, ScrObjectRef Near);
+
+/// <summary>ARC-WORLD-114: what a toggle-state (56) or kill (58) action asks of one object (ledger SU6, PM1).</summary>
+public enum ScrObjectStateChange
+{
+    /// <summary>Toggle state (56): the object flag "off" (0x2) is flipped by the raw field writes (0x4EFEE0, 0x4EFF50), not the
+    /// object flag setter (0x43D0E0), so the object's lights are left as they are.</summary>
+    ToggleOff,
+    /// <summary>Kill (58): a death with no killer (0x45D900).</summary>
+    Kill,
+}
+
+/// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
+/// of the operand's list in turn, 0x44B4E0). The host decides what the object is.</summary>
+public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
@@ -392,9 +406,10 @@ public sealed class ScrEffects
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
-        IReadOnlyList<ScrCreateRequest>? creations = null)
+        IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null)
     {
         Creations = creations ?? Array.Empty<ScrCreateRequest>();
+        ObjectStates = objectStates ?? Array.Empty<ScrObjectStateRequest>();
         States = states ?? Array.Empty<ScrStateRequest>();
         EffectChanges = effectChanges ?? Array.Empty<ScrEffectRequest>();
         EyeCandies = eyeCandies ?? Array.Empty<ScrEyeCandy>();
@@ -447,9 +462,11 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrWriteback> SlotWrites { get; }
     /// <summary>ARC-WORLD-081: the objects to create, in action order (ledger PG1).</summary>
     public IReadOnlyList<ScrCreateRequest> Creations { get; }
+    /// <summary>ARC-WORLD-114: the toggle-state and kill requests, in action order (ledger SU6, PM1).</summary>
+    public IReadOnlyList<ScrObjectStateRequest> ObjectStates { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
-        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0;
+        && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -476,7 +493,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S15"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S16"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -497,7 +514,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S15)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S15.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S16)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S16.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

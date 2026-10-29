@@ -12,8 +12,10 @@ public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha
 public enum AreaScope { Core, Context, Outside, Unknown }
 public enum AreaSourceKind { Terrain, Static, Mobile }
 /// <summary>Layers of a visual. <see cref="PortalFrame"/> (ARC-WORLD-051) is another frame of a door or window's ART, its
-/// frame number in <see cref="AreaVisualKey.SparseIndex"/>: drawn only when the portal's runtime state selects that frame.</summary>
-public enum AreaLayerKind { Body, Foreground, Background, Underlay, Roof, PortalFrame }
+/// frame number in <see cref="AreaVisualKey.SparseIndex"/>: drawn only when the portal's runtime state selects that frame.
+/// <see cref="SceneryFrame"/> (ARC-RENDER-035) is another frame of an animated scenery's ART, its frame number in
+/// <see cref="AreaVisualKey.SparseIndex"/>: drawn when the scenery's animation loop reaches it.</summary>
+public enum AreaLayerKind { Body, Foreground, Background, Underlay, Roof, PortalFrame, SceneryFrame }
 public enum AreaPresence { Absent, Null, Value, Empty, Array }
 public enum AreaValueOrigin { Instance, Prototype }
 public enum AreaDisposition { BodyEligibleConditionally, ExteriorSectorInsertionRefusedByInventory, BodySuppressedBySerializedState, ContextOnly, MissingMandatoryFact }

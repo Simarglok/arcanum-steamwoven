@@ -111,6 +111,8 @@ public partial class TerrainViewerApp : Node
     private void StartWithArguments(TerrainViewerArguments arguments)
     {
         _arguments = _launchArguments = arguments;
+        // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
+        GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
         ConfigureVisualProfile();
         ConfigureAudio();
         ConfigureGameSettings();
@@ -152,20 +154,22 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters, death, debug-travel, report)
+                        // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, premade, life, floaters, death, debug-travel, report)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
                         var only = MapSmokeStages();
                         bool Stage(string name) => only is null || only.Contains(name);
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
                             // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
                                 if (Stage("cast")) await RunAreaCastSmokeAsync(result);
                                 // ARC-COMBAT-020: the turn-based round alone (the map battery runs it too).
                                 if (Stage("turn-based")) await RunAreaTurnBasedSmokeAsync(result);
+                                // ARC-COMBAT-021: the hero's fall and getting up alone (with --hero; the map battery runs it too).
+                                if (Stage("knockdown")) await RunAreaHeroKnockdownSmokeAsync(result);
                                 // ARC-COMBAT-015: the combat stages after the cast (object attack, critical, line of fire, ranged shot), as the
                                 // map battery runs them last.
                                 if (Stage("ranged")) { await RunAreaObjectAttackSmokeAsync(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); }
@@ -198,6 +202,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                                 // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
+                                // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
+                                if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
@@ -964,7 +970,7 @@ public partial class TerrainViewerApp : Node
             }
             // ARC-UI-026: the hero's death, on the frame's real time.
             SyncHeroDeath(delta);
-            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover();
+            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); SyncCursorArt();
             // ARC-DEV-051: the session-event lines of the bug report's log.
             SyncBugReport();
             return;
@@ -1042,7 +1048,7 @@ public partial class TerrainViewerApp : Node
     {
         // The conversation host borrows the area session, so it is unbound before the session is disposed.
         UnbindAreaConversations(); UnbindAreaHover();
-        StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls(); StopAreaRoofs();
+        StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls(); StopAreaRoofs(); StopSceneryAnimation();
         _readyArea = null; _readyMapName = null;
         _readySourceId = null;
         _readyDecodedCount = 0;
@@ -1109,7 +1115,13 @@ public partial class TerrainViewerApp : Node
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);
     // ARC-DEV-052: a failure stays on screen as a line of its own while the panel is hidden.
-    private void ShowFailure(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
+    // ARC-DEV-059: it is printed too, so `./arcanum run` sees a start that failed (the HUD alone is not in the log);
+    // not by the self-test's bootstrap apps, whose failures are the expected outcomes of its stages.
+    private void ShowFailure(string text)
+    {
+        if (!SelfTestBootstrap) GD.Print($"ARC-DEV-059 viewer failure {text}");
+        _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
+    }
     public override void _ExitTree()
     {
         if (_exiting) return;

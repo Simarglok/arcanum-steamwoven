@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S15"/>.
+/// <see cref="ScrAdmissionSet.S16"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -37,6 +37,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrEyeCandy> EyeCandies = new();
         // ARC-WORLD-081: the create-object requests (PG1).
         public readonly List<ScrCreateRequest> Creations = new();
+        // ARC-WORLD-114: the toggle-state and kill requests (SU6, PM1).
+        public readonly List<ScrObjectStateRequest> ObjectStates = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -158,7 +160,8 @@ internal sealed class ScrInterpreter
             _shared.EffectChanges.Count == 0 ? null : Array.AsReadOnly(_shared.EffectChanges.ToArray()),
             _shared.EyeCandies.Count == 0 ? null : Array.AsReadOnly(_shared.EyeCandies.ToArray()),
             _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()),
-            _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()));
+            _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()),
+            _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -361,6 +364,15 @@ internal sealed class ScrInterpreter
                 var add = a.Type == ScrCatalogue.Action.AddEffect;
                 var cause = add ? Get(a, 2) : 0;
                 foreach (var obj in Objects(a, 0)) _shared.EffectChanges.Add(new(add ? ScrEffectChange.Add : ScrEffectChange.Remove, obj, effect, cause));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleState:
+            case ScrCatalogue.Action.Kill:
+            {
+                // SU6, PM1: each object of operand 0 in turn (0x44B4E0's list); toggle state flips its "off" flag, kill is a death with no
+                // killer. An empty list does nothing.
+                var change = a.Type == ScrCatalogue.Action.Kill ? ScrObjectStateChange.Kill : ScrObjectStateChange.ToggleOff;
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(change, obj));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MagickTechAdjustment:

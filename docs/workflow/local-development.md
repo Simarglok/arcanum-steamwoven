@@ -14,8 +14,9 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
     ./arcanum clean [--apply] [--json]                    # which builds are protected and which disposable (dry run); --apply removes only disposable payloads (ARC-DEV-028)
-    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] [--verbose] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033), quiet unless --verbose (ARC-DEV-037)
+    ./arcanum run --kind KIND [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND  # run COMMAND through the launch queue (ARC-DEV-033), quiet unless --verbose (ARC-DEV-037), start checked (ARC-DEV-059)
     ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
+    ./arcanum smoke pr|full|map NAME|crash-site|self-test [--dry-run]  # the viewer's smokes from this checkout, each queued with its own settings folder and start check (ARC-DEV-061, toolchain.md#smoke-runner-arc-dev-061)
     ./arcanum package mac|win [--ref COMMIT] [--no-smoke] # the packaged alpha for a player from a fresh origin/main into artifacts/packages/macos|windows (ARC-DEV-047/048, docs/workflow/packaging.md)
 
 `area`, `world` and `map` select the build named by that task's `current.json` pointer

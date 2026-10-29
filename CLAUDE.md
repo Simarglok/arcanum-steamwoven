@@ -15,13 +15,25 @@ and its link holds the detail.
 - **Small context.** Search files first, then line ranges; no whole `cat`
   ([small search and read output](docs/workflow/tasks.md#small-search-and-read-output)).
   Batch independent tool calls in one response; update the checklist only when
-  a step changes ([fewer steps](docs/workflow/tasks.md#fewer-steps)).
+  a step changes ([fewer steps](docs/workflow/tasks.md#fewer-steps)). Orient
+  from the brief's entry files; a wide search goes to one Sonnet/Haiku Explore
+  subagent returning at most 40 lines ([lean orientation](docs/workflow/tasks.md#lean-orientation)).
+  Reviews run on Sonnet by default; Opus for a diff over about 800 lines or one
+  that changes original-game mechanics, the save schema or threading
+  ([review model](docs/workflow/tasks.md#review-model)). Per PR, run only the
+  smoke stages the change touches or is directly related to, the Crash Site
+  smoke only when related; the full map smoke chain runs only in the daily
+  package build, when main changed since the last package
+  ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
+  `./arcanum smoke pr --stages S,... [--crash-site]` and `./arcanum smoke full`,
+  never a scratch smoke script ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
-  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. Check the
-  number is unused (git history, open/merged PRs, branches, other threads)
-  before taking it.
+  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. The
+  coordinator checks the number is unused (git history, open/merged PRs,
+  branches, other threads) before handing it out; the thread confirms with one
+  check: remote branches and a PR search ([task code](docs/workflow/tasks.md#task-code)).
 - **Language.** Talk to the owner in Russian; repository text (docs, code,
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
@@ -35,8 +47,10 @@ and its link holds the detail.
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). It is
   quiet: the whole output goes to a log file, stdout keeps PASS/FAIL and the
   first error ([quiet run output](docs/workflow/tasks.md#quiet-run-output)).
-  Within a minute of starting any Godot or launcher run, confirm it started the
-  intended mode, or stop it and fix the command ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
+  Every Godot or launcher run must be seen to start the intended mode within a
+  minute; a quiet `./arcanum run` checks it itself (start line, usage error),
+  so run it blocking in one step; check any other run by hand
+  ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - **Pull requests.** Every change goes through a PR from a branch (never push
   to `main`) as GitHub user `Simarglok`. A fresh subagent reviews the exact
   diff first. Once the acceptance criteria, task checks and root checks pass

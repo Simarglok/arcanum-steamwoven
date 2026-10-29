@@ -11,7 +11,8 @@ namespace Arcanum.TerrainViewer;
 // pixel under the pointer, skipping OF_CLICK_THROUGH bodies (the source's target pick 0x43D9F0). The action mirrors WorldRouteClick's
 // guards and order (talk, use, ground) without running any of them. Everything is recomputed only when the pointer,
 // the raster transform, the map, the actor cell or the guard state changes, so an idle frame costs one comparison.
-// The original's main-mode cursor does not change per target; the action cursor is project policy.
+// The original's main-mode cursor does not change per target; the action cursor is project policy, shown as system cursor shapes
+// only while the original's cursor art (ARC-UI-056) is not read.
 public partial class TerrainViewerApp
 {
     private Task<AreaNamesLoad>? _hoverNamesTask;
@@ -213,7 +214,8 @@ public partial class TerrainViewerApp
             AreaHoverAction.CastNoTarget => Godot.Input.CursorShape.Forbidden,
             _ => Godot.Input.CursorShape.Arrow,
         };
-        if (cursor != _hoverCursor) { _hoverCursor = cursor; Godot.Input.SetDefaultCursorShape(cursor); }
+        // ARC-UI-056: while the original's cursor art is shown these shapes are not (it does not change per target).
+        if (cursor != _hoverCursor) { _hoverCursor = cursor; if (_cursorShown is null) SetCursorShape(cursor); }
         if (_hoverPanel is not null && _hoverLabel is not null)
         {
             if (text is null || screen is not { } at) _hoverPanel.Visible = false;

@@ -40,7 +40,9 @@ public partial class TerrainViewerApp
                 && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0;
             var holders = session.QueryMapInventory(mapId)!.Holders
                 .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free && inventory.TryGetRow(h.Entity, out var row) &&
-                    row.Scope == AreaScope.Core && row.WorldX is not null && combat.Fields(map.RuntimeMap, h.Entity) is { Critter: not null })
+                    row.Scope == AreaScope.Core && row.WorldX is not null && combat.Fields(map.RuntimeMap, h.Entity) is { Critter: not null }
+                    // ARC-WORLD-114: an NPC a script switched off is not drawn and cannot be pressed.
+                    && !AreaRemovedObjects().Contains(row.Key))
                 .OrderBy(h => h.Entity, StringComparer.Ordinal).ToArray();
             var refused = holders.FirstOrDefault(h => combat.Fields(map.RuntimeMap, h.Entity) is { Critter: { } c } && PickPocketRules.NotAllowed(c.Flags, c.Flags2));
             var candidates = holders.Where(h => h.Items.Any(Plain) && combat.Fields(map.RuntimeMap, h.Entity) is { Critter: { } c } && !PickPocketRules.NotAllowed(c.Flags, c.Flags2)).ToArray();

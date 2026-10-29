@@ -34,6 +34,12 @@ code, even a small fix found on the way, which goes back to the coordinator
 thread. Inside one task, do not clear or restart the context while it is still
 needed for correctness (part of the same decision).
 
+Sessions compact their context at 500k tokens: the committed
+`.claude/settings.json` sets `autoCompactWindow` to 500000 for every checkout
+and worktree (ARC-DEV-058, owner decision 2026-10-29). Keep the handoff record
+current in the thread's checklist, together with the branch, changed files and
+checks run, so a compaction keeps it.
+
 Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
 days across 13 to 25 codes at a median context of about 550 thousand tokens.
@@ -106,6 +112,70 @@ Why: in the token audit of 2026-10-21, lanes made about one tool call per step,
 status (progress-checklist) and no-reply calls were 12 to 21 percent of all
 steps (about 220 such calls per audited lane), and each lane received 16 to 23 coordinator messages,
 many for information only.
+
+### Lean orientation
+
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 3):
+orientation does not fill the main context with search output.
+
+- Start from the entry files, types and docs the brief names (taken from the
+  previous handoff).
+- A search wider than a few files goes to one subagent on a cheaper model
+  (Sonnet or Haiku, Explore type) with a narrow question; it returns at most 40
+  lines: paths, line ranges and the answer, never file dumps. Read the ranges
+  yourself only where you edit or cite them.
+
+Why: in the token audit of 2026-10-29, re-read search and reading output was 22
+percent of the week's cache-read tokens (about 62 searches and 20 reads per
+session), and the [small search and read output](#small-search-and-read-output)
+rule made no visible difference: per-call output was already small, the count is
+the cost.
+
+### Review model
+
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 4):
+
+- The independent review runs on Sonnet by default. Use Opus for a diff over
+  about 800 changed lines or one that changes original-game mechanics, the save
+  schema or threading. Readings of the original executable stay on Opus.
+
+Why: in the token audit of 2026-10-29, reviews were 8 percent of the week's
+cache-read tokens (146 review subagents), all of them on Opus.
+
+### Smoke scope
+
+Owner decisions 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 5;
+narrowed the same day in ARC-DEV-061):
+
+- Per PR, run only the smoke stages the change touches or is directly related
+  to; the Crash Site smoke only when the change is related to it (the pinned
+  exterior, the cave, their inputs). A PR whose change no smoke stage covers
+  runs none and says so.
+- The full map smoke chain runs only as part of the daily package build, and
+  only when main changed since the last package; not per PR.
+- A stage that also fails on clean main is not this PR's failure: name it in
+  the PR and go on; do not investigate it in the task thread.
+- Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
+  `./arcanum smoke pr --stages S,... [--crash-site]` per PR and
+  `./arcanum smoke full` for the chain; no scratch smoke scripts.
+
+Why: in the token audit of 2026-10-29, a merged PR took 162 steps (94 before),
+much of it the full check and smoke ritual every thread repeats; smoke runs
+took long even on small fixes.
+
+### Task code
+
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7):
+
+- The coordinator checks the code is unused before handing it out; the thread
+  confirms with one check (remote branches and a PR search for the code), not a
+  full history search ([task naming](task-naming.md)).
+- No checklist-only steps: a checklist update rides with other work
+  ([fewer steps](#fewer-steps)).
+
+Why: in the token audit of 2026-10-29, checklist-only steps were still 8.6 per
+session (about 5 percent of the cache-read tokens), and every new thread paid
+its own orientation and code check.
 
 ### Quiet run output
 

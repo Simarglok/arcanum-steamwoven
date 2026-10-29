@@ -196,6 +196,13 @@ public sealed class ScrAdmissionSet
         S14.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject]), S14.ValueKinds,
         S14.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]), counterIndexWraps: true);
 
+    /// <summary>
+    /// The object state set (ARC-WORLD-114): <see cref="S15"/> plus toggle state (56) and kill (58), which hand one
+    /// <see cref="ScrObjectStateRequest"/> per object of their object operand to the host (ledger SU6, PM1).
+    /// </summary>
+    public static ScrAdmissionSet S16 { get; } = new("S16", S15.Conditions, S15.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill]),
+        S15.ValueKinds, S15.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor };
 
