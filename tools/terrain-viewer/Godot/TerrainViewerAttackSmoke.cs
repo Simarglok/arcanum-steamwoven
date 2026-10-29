@@ -88,10 +88,22 @@ public partial class TerrainViewerApp
             }
             Require(session.QueryNpcKilled(target.Holder.Entity), $"killed after {frames} frames, attack {_attack is not null}: {_attackNotice}");
             Require(attackFrames > 0, "the attack ART was drawn");
+            // ARC-RENDER-037: in combat mode the hero attacks and stands with its wielded weapon (bare hands without one, WA1).
+            // A wielded weapon whose use art reads shows its own part (above 1); bare hands show 1.
+            var wielded = session.QueryEquipment().Worn.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
+            var readUse = wielded is null ? null : _inventoryHost!.Wearable(session, wielded.Entity, _areaKitWear)?.UseArt;
+            var armedBody = ArmedBody(session, session.QueryEquipment().Worn, HeroBody.HumanFemale);
+            Require(armedBody is not null, "the wielded weapon has a weapon part");
+            var armed = armedBody!.Value.Weapon;
+            Require((readUse is { } use && Arcanum.Simulation.Equipment.BodyArmorArtRules.ItemArmor(use) > 0 ? armed > 1 : armed == 1) && WantedHeroBody().Weapon == armed && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector) == armed
+                && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Idle.Selector) == armed,
+                $"the attack and stand ARTs show weapon {armed}: attack 0x{_worldActor.Profile.Attack!.Selector:x8} idle 0x{_worldActor.Profile.Idle.Selector:x8} ({_heroBodyStatus})");
             Require(session.QueryRandom().Draws > draws, "the attacks rolled");
             // ARC-UI-042: every attack plays its result on the hero (a miss always has 4010, an unarmed hit the material sounds).
             Require(_audio is null || _cuePlays.GetValueOrDefault("attack") > attackSounds, "the attacks played their sounds: " + _cueNotice);
-            for (var i = 0; i < 4; i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            // The killing attack plays its ART to the last frame (a weapon's frames after the action frame may outlast 4 frames:
+            // the staff's 4 at 83 ms, ARC-RENDER-037), then the auto attack does not repeat.
+            for (var i = 0; i < 40 && (i < 4 || _attack is not null); i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
             Require(_attack is null && _worldActor.State.Action != ActorDiagnosticAction.Attack, "the attack stops with the death");
             Require(session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == target.Holder.Entity).Dead, "the corpse can be looted");
             Require(experience is null || session.QueryHeroExperience()!.Experience > experience, "the kill paid experience");
@@ -109,6 +121,10 @@ public partial class TerrainViewerApp
             Require(_attack is null && !InventoryOpen && _worldRoute?.Target == route, "a corpse click without Alt does nothing");
             ToggleCombatMode();
             HoverReleaseForSelfTest();
+            // Out of combat mode the hero shows no weapon again (WA1, WA3).
+            SyncHeroBody();
+            Require(WantedHeroBody().Weapon == 0 && Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Idle.Selector) == 0,
+                $"out of combat mode the stand shows no weapon: idle 0x{_worldActor.Profile.Idle.Selector:x8}");
             // The later stages see the map as it was: the NPC is brought back (experience stays).
             var raised = session.Heal(session.Version, target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             Require(raised.Disposition != GameSessionDisposition.Rejected && !session.QueryNpcKilled(target.Holder.Entity), "the NPC is brought back: " + raised.Failure);
@@ -116,7 +132,7 @@ public partial class TerrainViewerApp
             Require(!_fallenBodies.ContainsKey(key), "the body stands again");
             GD.Print("ARC-COMBAT-005 native-smoke attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
-                Walked = walked, Frames = frames, AttackFrames = attackFrames, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
+                Walked = walked, Frames = frames, AttackFrames = attackFrames, Weapon = armed, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
                 Experience = session.QueryHeroExperience()?.Experience - experience, Refused = refused,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

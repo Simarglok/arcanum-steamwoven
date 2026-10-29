@@ -466,3 +466,21 @@ subturn, paying `TurnBasedRules.GetUpCost`), UC4 (world presses and the Steamwov
 gets up) and UC5 (`HeroBodyArt` reads both ARTs; a body without them lies without a drawn fall). Not modelled: UC4 for a stunned
 or paralysed hero (it still takes presses), the goal test 0x424070, and an NPC's get-up animation (a recovered NPC stands up at
 once).
+
+## Right release (ARC-COMBAT-022)
+
+Source: the [AREA viewer's right release](../../world/real-time-combat-runtime.md#viewer-area) (owner report of 2026-10-29: a
+right click did not leave combat mode with no enemy near). Read on 2026-10-29 with `llvm-objdump` by two independent readers
+(F2), who agree; every direct branch of the handler and its callees stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RR1 | in-game mouse handler (0x54DE50) | It reads the local PC (0x40DA50). In a turn-based round (0x4B6D70) it returns at once, for every event, unless the current participant (0x4B6D80) is the PC. A mouse event whose subtype is 3, the right release, takes the branch at 0x54E082; a null PC does nothing. | Original |
+| RR2 | right release, PC tests (0x54E095–0x54E0E1) | In order: spell flag 0x10000 (stoned, field 0x14), critter flags 0x60 (stunned or paralysed), not active (0x45D790: destroyed or off, dead, unconscious, stunned, paralysed or stoned) and lying down (0x45D730: a PC or NPC whose current art shows animation 7, the fall-down pose) each skip every action below. | Original |
+| RR3 | right release in combat mode (0x4B3D50), 0x44E830, 0x423300 | The combat-mode toggle (0x54EBF0, RT3) runs when the PC's first animation run is a fidget (goal 2; its related-goal list is empty) or when the PC runs no animation that is not an overlay; otherwise (walking, attacking, casting) it does not. The toggle is reached only in combat mode, so the release leaves through the exit gate (RT2, refused with message 24) and never enters. | Original |
+| RR4 | right release out of combat mode, 0x45EDE0, 0x45EE30 | When the PC is concealed (critter flag 0x1) and runs no animation that is not an overlay, its concealment ends (0x45EE30 with 0: the PC and every follower, ST1). | Original |
+| RR5 | right release, the tail (0x424070, 0x4B8D50, 0x433440) | Then, in both cases, the PC's animations are interrupted at priority 3 (a refusing run, priority 4 or 5, skips the rest); when the pointer is on the game view, the PC turns toward it: a turn goal (0x35) when it runs nothing, the art turned in place under a fidget. | Original |
+
+Anomalies: none. Implemented by ARC-COMBAT-022 for the AREA hero in both rule modes: RR1 (the subturn gate), RR2 (the session's
+active test and the hero's knockdown), RR3 and RR4 (`RealTimeCombatRules.RightRelease`; the viewer's hero is animating while it
+walks, attacks or casts, and never fidgets, TH9). Not modelled: RR5 (the interrupt and the turn toward the pointer).

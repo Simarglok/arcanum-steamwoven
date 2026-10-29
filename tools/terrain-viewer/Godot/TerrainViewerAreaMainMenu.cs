@@ -100,6 +100,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _mainMenuPanel.NameClicked += () => MainMenuCommand(() => { _mainMenu!.BeginName(); return AreaMenuCommand.Nothing; });
         }
+        AttachMenuArt(_mainMenuPanel);
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("MAIN_MENU");
@@ -667,6 +668,7 @@ public partial class TerrainViewerApp
             Require(_arguments?.MainMenu == true && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main, "the menu is open over the map (run with --main-menu true)");
             var texts = _mainMenu!.Texts;
             Require(texts.FromGame && texts.Text(10).Length > 0 && texts.Text(52).Length > 0, "the texts come from the game: " + texts.Detail);
+            await MainMenuArtForSmoke(Require);
             Require(_mainMenu.NewGameRefusal is null, "a new game can start on this map: " + _mainMenu.NewGameRefusal);
             var placeholder = _areaSession;
             Choose(10);
