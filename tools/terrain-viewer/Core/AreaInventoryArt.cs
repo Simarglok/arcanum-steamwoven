@@ -130,9 +130,11 @@ public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterf
 
     private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready;
 
-    /// <summary>Every art number the window reads: the inventory window's, the loot window's and the holders' images.</summary>
+    /// <summary>Every art number the window reads: the inventory window's, the loot window's, the holders' images and (ARC-UI-054) the
+    /// arts over the round view, which are drawn when they read and are no reason for the diagnostic window.</summary>
     public static IReadOnlyList<int> Numbers { get; } =
-        AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers).Distinct().ToArray();
+        AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers)
+            .Concat([AreaInventoryHole.InventoryArt, AreaInventoryHole.LootArt]).Distinct().ToArray();
 
     public static AreaInventoryArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaInventoryTexts.Project(reason), reason);
 
