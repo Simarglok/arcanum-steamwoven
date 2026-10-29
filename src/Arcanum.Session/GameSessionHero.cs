@@ -68,6 +68,9 @@ public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, Ch
     /// <summary>ARC-UI-033: the PC's portrait (the original's field 0xE7): a pre-made prototype's, or the one the new-character window
     /// chose; 0 for none (the portrait code then draws 1000, ledger PO2). Negative is refused.</summary>
     public int Portrait { get; init; }
+    /// <summary>ARC-UI-068: the background's description number (the original's field 0x102, ledger MW19): a pre-made prototype's
+    /// story (1039..1050 installed), 0 for none (the background texts then read 1000). Any number is kept, as the saved hero's is.</summary>
+    public int BackgroundDescription { get; init; }
 }
 
 /// <summary>

@@ -79,85 +79,21 @@ public partial class AreaPremadeBrowserArtView : Control
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2));
     }
 
-    private Texture2D? Art(int number, int frame = 0) => _art.TryGetValue(number, out var frames) && frame < frames.Length ? frames[frame] : null;
+    private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
 
     private int Frame(AreaPremadeBrowserButton button)
     {
         var frames = _art.TryGetValue(AreaPremadeBrowserArtLayout.Button(button).Art, out var art) ? art.Length : 1;
-        // GB3/GB4: a held button shows down over it and idle away from it; another button is not lit while one is held.
-        var look = _pressed is { } held ? held == button && _hovered == button ? AreaBarButtonLook.Down : AreaBarButtonLook.Idle
-            : _hovered == button ? AreaBarButtonLook.Hovered : AreaBarButtonLook.Idle;
-        return AreaGameBarLayout.Frame(look, Math.Max(1, frames));
-    }
-
-    private void Fill((int X, int Y, int Width, int Height) field) => DrawRect(new Rect2(field.X, field.Y, field.Width, field.Height), Colors.Black);
-
-    private void Glyphs(IReadOnlyDictionary<int, Texture2D> glyphs, IEnumerable<(int X, AreaArtGlyph Glyph)> placed, int x, int y, (byte R, byte G, byte B) colour)
-    {
-        // PROJECT: a glyph's grey levels scale the font's colour (the text blit's blend is not read, F0; as the menu's labels).
-        var tint = Color.Color8(colour.R, colour.G, colour.B);
-        foreach (var (gx, glyph) in placed)
-            if (glyphs.TryGetValue(glyph.Frame, out var texture)) DrawTextureRect(texture, new Rect2(x + gx, y, glyph.Width, glyph.Height), false, tint);
-    }
-
-    /// <summary>A one-line text centred in its field (0x542DF0), the field filled black first.</summary>
-    private void Centred((int X, int Y, int Width, int Height) field, string text, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs,
-        (byte R, byte G, byte B) colour)
-    {
-        Fill(field);
-        Glyphs(glyphs, font.Layout(text), AreaPremadeBrowserArtLayout.Centred(field, font.Measure(text).Width), field.Y, colour);
-    }
-
-    /// <summary>A text from its field's top-left, broken at its width; a line the field's remaining height cannot hold ends the draw
-    /// (0x5356D8, MW26).</summary>
-    private void Lines((int X, int Y, int Width, int Height) field, string text, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs,
-        (byte R, byte G, byte B) colour)
-    {
-        var height = font.Measure("A").Height;
-        var y = field.Y;
-        foreach (var line in AreaPremadeBrowserArtLayout.Wrap(font, text, field.Width))
-        {
-            if (height <= 0 || y + height > field.Y + field.Height) break;
-            Glyphs(glyphs, line, field.X, y, colour);
-            y += height;
-        }
+        return AreaCharacterArtDraw.Frame(frames, _pressed is not null, _pressed == button, _hovered == button);
     }
 
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
-        DrawRect(new Rect2(0, 0, AreaPremadeBrowserArtLayout.ScreenWidth, AreaPremadeBrowserArtLayout.ScreenHeight), Colors.Black);
-        if (Art(AreaPremadeBrowserArtLayout.TopStripArt) is { } top) DrawTextureRect(top, new Rect2(0, 0, top.GetWidth(), top.GetHeight()), false);
-        if (Art(AreaPremadeBrowserArtLayout.BottomStripArt) is { } bottom)
-            foreach (var (x, y, width, height) in AreaSaveListArtLayout.BottomStripParts)
-                DrawTextureRectRegion(bottom, new Rect2(x, y, width, height), new Rect2(x, 0, width, height));
-        if (Art(AreaPremadeBrowserArtLayout.BackgroundArt) is { } background)
-            DrawTextureRect(background, new Rect2(0, AreaPremadeBrowserArtLayout.WindowTop, background.GetWidth(), background.GetHeight()), false);
-        // The character draw 0x5448E0: the portrait's field, then the large portrait at its corner (0x4CE640).
-        Fill(AreaPremadeBrowserArtLayout.PortraitFill);
-        if (_portrait is not null)
-            DrawTextureRect(_portrait, new Rect2(AreaPremadeBrowserArtLayout.Portrait.X, AreaPremadeBrowserArtLayout.Portrait.Y, _portrait.GetWidth(), _portrait.GetHeight()), false);
-        var (white, red) = (AreaPremadeBrowserArtLayout.White, AreaPremadeBrowserArtLayout.Red);
-        Centred(AreaPremadeBrowserArtLayout.Gender, view.Gender, fonts.Text, fonts.TextGlyphs, red);
-        Centred(AreaPremadeBrowserArtLayout.Race, view.Race, fonts.Text, fonts.TextGlyphs, red);
-        Centred(AreaPremadeBrowserArtLayout.Background, view.BackgroundName, fonts.Text, fonts.TextGlyphs, red);
-        Fill(AreaPremadeBrowserArtLayout.Description);
-        if (view.DescriptionTitle is { } title)
-        {
-            Centred(AreaPremadeBrowserArtLayout.RaceTitle, title, fonts.Name, fonts.NameGlyphs, white);
-            Lines(AreaPremadeBrowserArtLayout.RaceText, view.Description, fonts.Text, fonts.TextGlyphs, white);
-        }
-        else Lines(AreaPremadeBrowserArtLayout.Description, view.Description, fonts.Text, fonts.TextGlyphs, white);
-        Centred(AreaPremadeBrowserArtLayout.StatsTitle, view.StatsTitle, fonts.Name, fonts.NameGlyphs, white);
-        for (var slot = 0; slot < view.Stats.Count && slot < AreaPremadeBrowserArtLayout.StatFields.Count; slot++)
-        {
-            var field = AreaPremadeBrowserArtLayout.StatFields[slot];
-            Fill(field);
-            // 0x5418A0 from the field's corner; a stat's line is taller than its 15-row field, so it is not clipped to it.
-            Glyphs(fonts.TextGlyphs, fonts.Text.Layout(view.Stats[slot]), field.X, field.Y, white);
-        }
+        AreaCharacterArtDraw.Window(this, _art, AreaPremadeBrowserArtLayout.BackgroundArt);
+        AreaCharacterArtDraw.Character(this, fonts, view, _portrait, AreaCharacterDescription.Of(view));
         // The redraw 0x5458D0: the player name over the character draw.
-        Centred(AreaPremadeBrowserArtLayout.Name, view.Name, fonts.Name, fonts.NameGlyphs, red);
+        AreaCharacterArtDraw.Centred(this, AreaPremadeBrowserArtLayout.Name, view.Name, fonts.Name, fonts.NameGlyphs, AreaPremadeBrowserArtLayout.Red);
         foreach (var button in AllButtons)
         {
             var (art, x, y) = AreaPremadeBrowserArtLayout.Button(button);
