@@ -75,12 +75,13 @@ public sealed record AreaAiScene
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
-    /// the companions run no AI (their follow goal moves them).</summary>
+    /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
 }
 
 /// <summary>
-/// ARC-WORLD-115: the companions of the shown map as the AI host runs them. A companion stands where its own walk put it (the
+/// ARC-WORLD-115: the companions of the shown map as the AI host runs them (ARC-WORLD-119: whether the hero leads them or they are
+/// free, released or cursed: the removal leaves no mark but the null leader, which the AI's follower branches read, FO20). A companion stands where its own walk put it (the
 /// scene's <see cref="AreaAiScene.Companions"/> answers its cell); the host's step and turn of one go through the viewer's walk of
 /// that companion, which follows nothing else while the host holds it (<see cref="AreaAiHost.Holds"/>).
 /// </summary>
@@ -158,6 +159,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// ARC-WORLD-115 (I9's host part): the companions of the shown map are run too (<see cref="AreaAiScene.Followers"/>): their ticks, passes
 /// and goal runs, their steps and turns through their own walk, which the host holds while they fight (<see cref="Holds"/>); every
 /// attack event tells the attacker's and the victim's followers (the follower rule, <see cref="TellFollowers"/>).
+/// ARC-WORLD-119: free companions are run as any leaderless NPC; a leave ends the leaver's run (<see cref="ObserveLeaves"/>), and an
+/// order's attack event (the curse's) runs through <see cref="OrderAttack"/>.
 /// NOT READY (later slices): the heal skill's rung and goal 40, pickups, a thrown item's flight,
 /// grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
@@ -204,8 +207,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private readonly ISessionScriptWorld _events;
     private readonly ISessionCombatWorld _round;
     private readonly Dictionary<string, AreaAiNpc> _npcs;
-    // ARC-WORLD-115: the companions the host runs (their cells are their walk's, never the movers').
+    // ARC-WORLD-115: the companions the host runs (their cells are their walk's, never the movers'); ARC-WORLD-119: free ones too.
     private readonly Dictionary<string, AreaAiNpc> _followers;
+    // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
+    private readonly HashSet<string> _led;
     private readonly Dictionary<string, (AiGoalRun Run, long DueMs)> _runs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
     private readonly List<AreaAiNotice> _notices = [];
@@ -251,6 +256,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _round = round ?? throw new ArgumentNullException(nameof(round));
         _npcs = scene.Npcs.ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
+        _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
     }
 
     public AreaAiScene Scene => _scene;
@@ -366,6 +372,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var steps = 0;
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Settle(_nowMs);
+        ObserveLeaves();
         // Before each step: a step that began a round (an attack putting the hero into combat mode) or passed the subturn on
         // interrupts runs as the original's round start and turn set do, its own run too (inside its step the original marks it done).
         for (; ; )
@@ -473,9 +480,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         Movers.Clear();
     }
 
-    private void AttackEvent(string attacker, string victim)
+    private void AttackEvent(string attacker, string victim, AttackEventFlags flags = AttackEventFlags.None, Loudness loudness = Loudness.Normal)
     {
-        var plan = HostilityRules.AttackEvent(this, attacker, victim, AttackEventFlags.None);
+        var plan = HostilityRules.AttackEvent(this, attacker, victim, flags);
         Trace(victim).Event = $"{plan.Stop}";
         if (plan.Stop is AttackEventStop.Missing or AttackEventStop.VictimProtected or AttackEventStop.VictimDead or AttackEventStop.VictimGone
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
@@ -485,7 +492,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (plan.PcVictimResponds) HeroIntoCombatMode();
         // ARC-WORLD-115: then the victim's followers (side victim, the attacker the other), before the noise.
         if (plan.TellsVictimFollowers) TellFollowers(victim, attacker, FollowerSide.Victim);
-        if (plan.RaisesNoise) Witnesses(attacker, victim);
+        if (plan.RaisesNoise) Witnesses(attacker, victim, loudness);
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there);
@@ -561,16 +568,55 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         return step.Interrupted && Interrupt(step.Entity);
     }
 
+    /// <summary>
+    /// ARC-WORLD-119: the leaves since the last look. A companion the host runs that the hero led and leads no more (any leave: an
+    /// order's or the curse's, a dialog's, the loyalty step's, a script's disband) has its run dropped with its end nodes, as the
+    /// original's removal (0x45E040, ledger FO20) nulls the leader and then interrupts the NPC's animations at priority 5 (0x424070),
+    /// which ends every run of this host (its goals are of priority 4 or less); from then on it is run as any leaderless NPC. A join
+    /// interrupts nothing (0x45DE90, C5): the joined companion keeps its run. The pump calls it before its steps and perform before it
+    /// reads the run; an order's host part calls it right after the order (<see cref="AreaCompanionOrders.Send"/>), so the curse's
+    /// attack event and the pass after it meet the leave already done. Returns the companions whose run was dropped.
+    /// </summary>
+    public IReadOnlyList<string> ObserveLeaves()
+    {
+        List<string>? dropped = null;
+        foreach (var companion in _followers.Keys)
+        {
+            var led = _session.QueryCompanion(companion).LedByPc;
+            if (led) { _led.Add(companion); continue; }
+            if (!_led.Remove(companion)) continue;
+            Trace(companion).Event = "left the hero";
+            if (RunOf(companion) is null) continue;
+            DropRun(companion);
+            (dropped ??= []).Add(companion);
+        }
+        return dropped ?? (IReadOnlyList<string>)[];
+    }
+
+    /// <summary>
+    /// ARC-WORLD-119: the attack event an order leaves to the host (<see cref="CompanionOrderOutcome.CurseAttack"/>: the curse's, the
+    /// hero on the former follower at loudness 1 with no flags, FO2), run in full as the hero's attacks are (<see cref="HeroAttacked"/>):
+    /// the hero's remaining followers are told, the noise's witnesses react, and the victim, now free, reacts to the attack (fight or
+    /// flee through the setter). False: an attacker or victim this host does not know (nothing runs).
+    /// </summary>
+    public bool OrderAttack(CompanionOrderAttack attack)
+    {
+        ArgumentNullException.ThrowIfNull(attack);
+        if (Id(attack.Attacker) is not { } attacker || Id(attack.Victim) is not { } victim || Find(attacker) is null || Find(victim) is null) return false;
+        AttackEvent(attacker, victim, attack.Flags, attack.Loudness);
+        return true;
+    }
+
     // The witnesses of an attack's noise: the attacker's square when under 30 tiles apart, then the victim's (AW16 under the switch).
-    private void Witnesses(string attacker, string victim)
+    private void Witnesses(string attacker, string victim, Loudness loudness)
     {
         var distance = Distance(attacker, victim);
-        var radius = AwarenessRules.NoiseRadius(Loudness.Normal);
+        var radius = AwarenessRules.NoiseRadius(loudness);
         var witnesses = HostilityRules.NoiseWitnesses(distance, Square(attacker, radius), Square(victim, radius), _session.Rules.Combat);
         foreach (var witness in witnesses)
         {
             if (witness == Pc || witness == attacker || witness == victim || !Walks(witness)) continue;
-            var outcome = HostilityRules.Witness(this, witness, attacker, victim, Loudness.Normal);
+            var outcome = HostilityRules.Witness(this, witness, attacker, victim, loudness);
             switch (outcome.Response)
             {
                 case WitnessResponse.ReactToAttacker: React(witness, attacker); break;
@@ -687,6 +733,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// the host does not hold it (<see cref="Holds"/>), so a follow the perform starts for one is not run here.</summary>
     public void Perform(string npc)
     {
+        ObserveLeaves();
         var danger = _session.QueryDanger(npc);
         var target = danger.Source is { } source ? Id(source) : null;
         var current = RunOf(npc);
@@ -711,7 +758,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool Holds(string entity) =>
         _followers.ContainsKey(entity) && (_runs.ContainsKey(entity) || _session.QueryDanger(entity).State != DangerState.None);
 
-    /// <summary>ARC-WORLD-115: the companions the host runs.</summary>
+    /// <summary>ARC-WORLD-115: the companions the host runs (ARC-WORLD-119: free ones too).</summary>
     public IReadOnlyCollection<string> RunCompanions => _followers.Keys;
 
     /// <summary>ARC-WORLD-113 test seam: the attack starter (0x434B00, <see cref="AiExecutorRules.StartAttack"/>) on

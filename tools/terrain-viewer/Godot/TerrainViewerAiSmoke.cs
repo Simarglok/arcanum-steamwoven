@@ -725,6 +725,32 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-117 native-smoke ai-order PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 BackOff = AreaCompanionOrders.Describe(backOff!), Attack = AreaCompanionOrders.Describe(ordered!), Frames = orderFrames, Hit = orderHit,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+
+            // ARC-WORLD-119: the curse through the AI host (the viewer reads no typed order text, so the smoke sends it): the follower
+            // leaves (its run ends, FO20), the hero's attack event on it runs in full and asks its reaction, then its pass runs; the
+            // host is kept and runs it on as a free NPC.
+            var leftRun = host.RunOf(follower) is not null;
+            var cursed = IssueAreaOrder("smoke", new(CompanionOrderType.Curse, CompanionOrderAddressing.All, []))?.Outcomes.SingleOrDefault(o => o.Entity == follower);
+            Require(cursed is { Effect: CompanionOrderEffect.Cursed, CurseAttack: not null, Pass.Failure: GameSessionFailure.None }
+                && !session.QueryCompanion(follower).LedByPc, $"the curse freed the follower and its pass ran: {(cursed is null ? "none" : AreaCompanionOrders.Describe(cursed))}");
+            joined = false;
+            Require(ReferenceEquals(AreaAiHostNow(), host) && host.RunCompanions.Contains(follower), "the leave kept the host, which runs the free companion");
+            // The trace is live: its lines are kept as they stand after the order.
+            var (curseEvent, curseReaction, cursePerform) = (host.TraceOf(follower)?.Event, host.TraceOf(follower)?.Reaction, host.TraceOf(follower)?.Perform);
+            Require(curseEvent == nameof(AttackEventStop.None) && curseReaction is not null, $"the hero's attack event on it ran and asked its reaction: {curseEvent} {curseReaction}");
+            var freed = session.QueryDanger(follower);
+            var freeFrames = 0;
+            for (; freeFrames < 200; freeFrames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(host.RunCompanions.Contains(follower) && !session.QueryCompanion(follower).LedByPc, "it stays a free companion the host runs");
+            GD.Print("ARC-WORLD-119 native-smoke ai-free PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Curse = AreaCompanionOrders.Describe(cursed!), LeftRun = leftRun, Reaction = curseReaction, Danger = freed.State.ToString(),
+                Source = freed.Source is { IsHero: true } ? "hero" : freed.Source?.Entity, Perform = cursePerform, Frames = freeFrames,
+                After = host.TraceOf(follower)?.Perform, Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
             RefreshAreaStatus();
             GD.Print("ARC-WORLD-115 native-smoke ai-follower PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Follower = template.Speaker.Row.PrototypeNumber, Target = target.Row.PrototypeNumber, Apart = apart, Walked = walked, Frames = frames,

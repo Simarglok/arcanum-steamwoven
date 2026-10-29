@@ -3,8 +3,8 @@
 Status: **Implemented bounded component**, ARC-WORLD-091, NPC combat AI plan slice
 [I9](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
 The followers-in-combat rules of the retail 1.0.7.4 executable ([followers study](../research/npc-ai-followers.md), stage A7;
-ledger [FO1–FO19](../research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067); FO18 and FO19 read by this task, one
-reader) as pure rules in `Arcanum.Simulation.Ai.FollowerRules` over the hostility slice's `IHostilityWorld` and an
+ledger [FO1–FO20](../research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067); FO18 and FO19 read by this task, FO20 by
+ARC-WORLD-119, one reader) as pure rules in `Arcanum.Simulation.Ai.FollowerRules` over the hostility slice's `IHostilityWorld` and an
 `IAiRollSource`, the follower rule's writes in `Arcanum.Session` (`GameSessionFollowers.cs`) and the combat orders attack, back
 off and curse in the companions thread's single order entry `GameSessionOwner.IssueCompanionOrder` (ARC-WORLD-046,
 [companion orders](companion-orders-runtime.md)). It covers the combat half of
@@ -62,11 +62,14 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   ([AI host](ai-host.md#followers-in-combat-arc-world-115)). Since ARC-WORLD-117 the viewer's orders go through that host: the
   attack order's target is the highlighted object (F2: the one under the pointer at the release; the portrait menu: the object of
   the next press, its target cursor; U2 stays an inference), the followers' combat facts and the attack event's world are the
-  host's, each reached follower's AI pass runs through it, and a back off's interrupt is the host's. The host's world knows
-  critters only (an order on a container or a ground item is ignored at its attack event; a door or scenery has no session entity,
-  so no target), it does not run the curse's attack event.
-- **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115); the curse returns its attack event
-  for the host, which does not run it yet. The comment lines are rules the attack resolution and the damage step do not
+  host's, each reached follower's AI pass runs through it, and a back off's interrupt is the host's. Since ARC-WORLD-119 the host
+  runs free companions (released or cursed) as any leaderless NPC (FO20: the removal leaves no mark but the null leader, which the AI's follower branches read),
+  a leave ends the leaver's run (the removal's interrupt at priority 5), and the curse's attack event runs through the host right
+  after the order, before the former follower's pass. The host's world knows critters only (an order on a container or a ground
+  item is ignored at its attack event; a door or scenery has no session entity, so no target). The viewer sends no curse: the
+  typed order text (the Enter chat and `broadcast.mes`) is not read, so only tests reach it.
+- **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115) and, since ARC-WORLD-119, the curse's;
+  its race insult is not floated. The comment lines are rules the attack resolution and the damage step do not
   call yet; the "combat taunts" setting is not in the options (ARC-UI-013), and the line texts and the race-line selection are the
   host's.
 - **World-map travel.** Its window's stop attacking for the hero on opening and allow attacking on return (FO5, FO6) are the
@@ -83,7 +86,10 @@ target and the party filter, FO9 with an ignored event, a complaint with −5 in
 (FO7) and an extraordinary leader, one AI pass per reached follower and before the next follower's order, the host's part of each
 order before its pass (ARC-WORLD-117), an origin complaint,
 a target in combat mode and a door through the order, a failed step that still lifts the stop, refused facts, and
-`ApplyFollowerRule`'s writes.
+`ApplyFollowerRule`'s writes. `AreaAiFollowerTests` (TerrainViewer, ARC-WORLD-119): a free companion is run as any leaderless NPC
+(the routine, not told of the hero's fight, a victim's reaction, an attack through its own walk), the curse through the host ends
+the follower's run, runs the attack event before its pass and is seen once, a leave outside an order ends only the leaver's run at
+the next pump, and a join keeps it.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests --no-build --filter "FullyQualifiedName~FollowerRules"
