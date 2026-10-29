@@ -32,8 +32,8 @@ public static class AreaLootArtLayout
     public static readonly (int X, int Y, int Width, int Height) ScrollBar = (330, 136, 17, 256);
     /// <summary>The scroll's largest value in rows (0x681510): 4 for a critter, 88 for a container (type 2).</summary>
     public const int CritterScrollMax = 4, ContainerScrollMax = 88;
-    /// <summary>The image of an object 0x553D10 found no rule for, a critter of a race beyond the table, and a container of another
-    /// description: <c>LevelUpIcon</c> (general), <c>ContainerIcon</c>.</summary>
+    /// <summary>The image of an object type 0x553D10 has no rule for (<c>LevelUpIcon</c>, not built: the viewer loots critters and
+    /// containers only) and of a container of another description (<c>ContainerIcon</c>).</summary>
     public const int GeneralImage = 432, ContainerImage = 435;
     /// <summary>A critter's image by its race (base stat 27), table 0x5C6FA0 (12 entries).</summary>
     public static IReadOnlyList<int> RaceImages { get; } = [375, 378, 376, 377, 379, 380, 381, 382, 376, 382, 381, 634];
@@ -55,7 +55,7 @@ public static class AreaLootArtLayout
     /// The image 0x553D10 draws for a looted holder with the PC as observer: a critter (types 15, 16) by its critter flags (field 0xDA:
     /// 0x4 undead 384, 0x8000 monster 383, 0x8 animal 385, 0x20000000 mechanical 434, in this order), else by its race; a container by its
     /// description. NOT READY: a PC's or a follower's portrait (the observer's own followers show their portrait first), and the other
-    /// object types. Null when the facts do not decide it.
+    /// object types. Null when the facts do not decide it (a race beyond the table, which the original reads past its end).
     /// </summary>
     public static int? HolderImage(int type, uint critterFlags, int race, int description) => type switch
     {
@@ -101,6 +101,33 @@ public static class AreaLootArtLayout
         return own.Slot is not null ? AreaLootHit.None : new(own.Cell, own.Icon, null, false);
     }
 
+    /// <summary>
+    /// The holder's grid as the window shows it: items at a grid location keep it; PROJECT: an item the session holds at no location (-1:
+    /// a made item added to an NPC, an item an NPC took off) goes to the first free place of its size, row by row, as an insert finds one
+    /// (0x466390 fit test over 10 columns; the original stores a location for every item it inserts); worn items (1000..1008) and anything
+    /// else outside the grid are left out (IW28). Order is kept.
+    /// </summary>
+    public static IReadOnlyList<AreaLootGridItem> Arrange(IReadOnlyList<AreaLootGridItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var placed = items.Where(item => GridLocation(item.Location)).ToList();
+        bool Fits(int location, int width, int height) => location % Columns + width <= Columns && placed.All(other =>
+            location % Columns + width <= other.Location % Columns || other.Location % Columns + other.Width <= location % Columns ||
+            location / Columns + height <= other.Location / Columns || other.Location / Columns + other.Height <= location / Columns);
+        var result = new List<AreaLootGridItem>(items.Count);
+        foreach (var item in items)
+        {
+            if (GridLocation(item.Location)) { result.Add(item); continue; }
+            if (item.Location != -1) continue;
+            var (width, height) = (Math.Clamp(item.Width, 1, Columns), Math.Max(1, item.Height));
+            var free = Enumerable.Range(0, 1000 - (height - 1) * Columns).Cast<int?>().FirstOrDefault(location => Fits(location!.Value, width, height));
+            if (free is not { } location) continue;
+            var put = item with { Location = location, Width = width, Height = height };
+            placed.Add(put); result.Add(put);
+        }
+        return result;
+    }
+
     /// <summary>The holder's item that covers a location, or null.</summary>
     public static AreaLootGridItem? ItemAt(IReadOnlyList<AreaLootGridItem> grid, int location)
     {
@@ -110,13 +137,13 @@ public static class AreaLootArtLayout
             column >= item.Location % Columns && column < item.Location % Columns + item.Width);
     }
 
-    /// <summary>A left press with nothing held: the holder's item under the point goes on the cursor (marked as the holder's), or the hero's
-    /// grid item as in mode 0; null elsewhere.</summary>
+    /// <summary>A left press with nothing held: the holder's item under the point goes on the cursor (marked as the holder's, with the grab's
+    /// offset in its grid), or the hero's grid item as in mode 0; null elsewhere.</summary>
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaLootHit hit)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (hit.Location is { } location)
-            return ItemAt(view.LootGrid, location) is { } item ? new(item.Entity, null, 0) { Partner = true } : null;
+            return ItemAt(view.LootGrid, location) is { } item ? new(item.Entity, null, location - item.Location) { Partner = true } : null;
         return hit.Cell is { } cell && AreaInventoryDrag.ItemAt(view.Grid, cell) is { } own ? new(own.Entity, null, cell - own.Slot) : null;
     }
 

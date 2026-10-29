@@ -75,7 +75,8 @@ container); the frame is the inventory window's.
 | Take all | 808 `TakeAllButt` | (301, 47) | mode 2 only |
 
 Done in the viewer: the backgrounds, the body's image, the body's items at their inventory locations with their art (cut to the
-eight shown rows), the hero's grid, counts and boxes, the Take all button; a press on a body's item and its release on the hero's
+eight shown rows; a junk pile's items at their pile slots; PROJECT: an item the session keeps at no location, -1, at the first free
+place), the hero's grid, counts and boxes, the Take all button; a press on a body's item and its release on the hero's
 grid takes it (a gold pile or ammunition stack asks how many), on a box or elsewhere it goes back; the mouse wheel scrolls the
 body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the "Diagnostic view" switch shows the diagnostic
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.

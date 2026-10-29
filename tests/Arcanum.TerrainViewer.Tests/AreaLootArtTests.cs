@@ -62,7 +62,7 @@ public sealed class AreaLootArtTests
     {
         var view = View(new AreaLootGridItem("loot:1", 11, 1, 2, "Sword", Kind));
         var held = AreaLootArtLayout.Press(view, new AreaLootHit(null, null, 21, false));
-        Assert.AreEqual(new AreaInventoryHeld("loot:1", null, 0) { Partner = true }, held, "its lower cell");
+        Assert.AreEqual(new AreaInventoryHeld("loot:1", null, 10) { Partner = true }, held, "its lower cell: the grab's offset");
         Assert.IsNull(AreaLootArtLayout.Press(view, new AreaLootHit(null, null, 12, false)));
         Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.Release(held!, new AreaLootHit(5, null, null, false)).Kind);
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false)).Kind);
@@ -108,5 +108,18 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(833, AreaLootArtLayout.HolderImage(2, 0, -1, 3056));
         Assert.AreEqual(435, AreaLootArtLayout.HolderImage(2, 0, -1, 3024));
         Assert.IsNull(AreaLootArtLayout.HolderImage(3, 0, 0, 0));
+    }
+
+    [TestMethod]
+    public void AnItemWithoutALocationGoesToTheFirstFreePlaceAndWornItemsAreLeftOut()
+    {
+        var grid = AreaLootArtLayout.Arrange([
+            new AreaLootGridItem("made:1", -1, 1, 1, "Made", Kind), new AreaLootGridItem("seed:1", 0, 2, 2, "Big", Kind),
+            new AreaLootGridItem("worn:1", 1004, 1, 1, "Sword", Kind), new AreaLootGridItem("off:1", -1, 1, 3, "Staff", Kind),
+            new AreaLootGridItem("odd:1", 2003, 1, 1, "Odd", Kind)]);
+        CollectionAssert.AreEqual(new[] { "made:1", "seed:1", "off:1" }, grid.Select(item => item.Entity).ToArray());
+        Assert.AreEqual(2, grid[0].Location, "right of the 2 × 2 item placed at 0");
+        Assert.AreEqual(3, grid[2].Location);
+        Assert.AreEqual(0, grid[1].Location);
     }
 }

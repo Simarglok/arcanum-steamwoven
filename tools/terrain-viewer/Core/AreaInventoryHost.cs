@@ -417,9 +417,12 @@ public sealed class AreaInventoryHost
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
             { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
         // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
-        var lootGrid = list.Where(item => AreaLootArtLayout.GridLocation(item.Facts.InventoryLocation)).Select(item => new AreaLootGridItem(item.Entity,
-            item.Facts.InventoryLocation, item.Facts.InventoryWidth, item.Facts.InventoryHeight,
-            Rowless(item.Entity) is not null ? KindName(item.Facts.Kind, catalog) : Name(item.Entity, catalog), item.Facts.Kind)).ToArray();
+        // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from).
+        var pileSlots = pile is null ? null : session.QueryJunkPiles().FirstOrDefault(p => p.Entity == holder)?.Items.ToDictionary(entry => entry.Entity, StringComparer.Ordinal);
+        var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
+            .Select(pair => new AreaLootGridItem(pair.Entry.Entity, pair.Pile?.Slot ?? pair.Entry.Facts.InventoryLocation, pair.Pile?.Width ?? pair.Entry.Facts.InventoryWidth,
+                pair.Pile?.Height ?? pair.Entry.Facts.InventoryHeight,
+                Rowless(pair.Entry.Entity) is not null ? KindName(pair.Entry.Facts.Kind, catalog) : Name(pair.Entry.Entity, catalog), pair.Entry.Facts.Kind)).ToArray());
         var (image, container) = pile is not null
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);

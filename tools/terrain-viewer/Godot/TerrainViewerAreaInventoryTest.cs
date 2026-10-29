@@ -465,7 +465,7 @@ public partial class TerrainViewerApp
                 && !panel.ViewForSelfTest!.LootGrid.Any(item => item.Entity == taken.Entity), "the release on the hero's grid took it: " + _inventoryStatus);
             dragged = taken.Entity;
         }
-        GD.Print($"ARC-UI-052 native-smoke loot-art PASS holder={view.Holder} image={view.HolderImage} grid={view.LootGrid.Count} drawn={drawn} worn-left-out={view.Loot.Count - view.LootGrid.Count} dragged={dragged}");
+        GD.Print($"ARC-UI-052 native-smoke loot-art PASS holder={view.Holder} image={view.HolderImage} grid={view.LootGrid.Count} drawn={drawn} not-in-grid={view.Loot.Count - view.LootGrid.Count} dragged={dragged}");
         return dragged != "-";
     }
 

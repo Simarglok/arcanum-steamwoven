@@ -1002,7 +1002,8 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger IW26–IW32](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052); `AreaLootArtLayout`): with the game's art a dead
   NPC's, junk pile's or container's window (not the steal window) shows the loot window's look in the same frame: the `Loot` art (234)
   on the left with the body's image at (183, 33) (by race or critter flags, a container by its description), the body's grid of 10 × 8
-  cells from (8, 136) with each item's inventory art at its inventory location (worn items left out, as the original's grid view), cut
+  cells from (8, 136) with each item's inventory art at its inventory location (a junk pile's at its pile slot; PROJECT: an item the
+  session keeps at no location at the first free place; worn items left out, as the original's grid view), cut
   to the shown rows and scrolled by the mouse wheel (maximum 4 rows, a container 88), the Take all button (808) at (301, 47), and the
   hero's pack, grid, counts and boxes as in the own window (no doll, no weight lines). A body's item pressed and released on the hero's
   grid is taken through the same path as its Take button (a stack asks how many; PROJECT: into the first free cells); released on a

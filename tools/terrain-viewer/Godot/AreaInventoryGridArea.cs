@@ -82,7 +82,7 @@ public partial class AreaInventoryGridArea : Control
     public void SetLook(AreaInventoryArtLook? look)
     {
         if (ReferenceEquals(look, Look)) return;
-        Look = look; QueueRedraw();
+        Look = look; _takeAllDown = false; QueueRedraw();
     }
 
     public void Render(AreaInventoryView view)
@@ -155,6 +155,9 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>The window opened or closed: the still pointer forgets the last item it reported and waits for a move.</summary>
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
+
+    /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; }
 
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
