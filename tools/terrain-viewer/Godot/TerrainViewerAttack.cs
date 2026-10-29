@@ -394,9 +394,11 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
         if (!ChargeHeroAction(TurnBasedRules.AttackCost(hero.WeaponSpeed), "attack")) { CancelAreaAttack(_turnBasedNotice); return; }
         var art = _worldActor.Profile.Attack!;
-        var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, AttackArtWeapon.Unarmed, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
+        // ARC-RENDER-037: the rate is the drawn attack ART's weapon slot's (the hero's body shows its weapon in combat mode, WA1).
+        var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(art.Selector);
+        var rate = RealTimeCombatRules.AttackFramesPerSecond(AttackAnimation.Attack, weapon, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);
-        var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), AttackArtWeapon.Unarmed);
+        var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), weapon);
         var sound = _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
         var session = (AreaGridSession)_worldActor.Session!;
         var (tx, ty) = LiveWorldCell(goal.Row);
@@ -407,7 +409,7 @@ public partial class TerrainViewerApp
         goal.RepeatAtMs = null;
         _worldActor.AttackPose = (goal.Octant, 0);
         PlayAttackStartSounds(sound.Roll?.Value);
-        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
+        GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
     }
