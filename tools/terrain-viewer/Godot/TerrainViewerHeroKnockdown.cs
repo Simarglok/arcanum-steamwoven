@@ -13,7 +13,8 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private readonly AreaHeroKnockdown _heroKnockdown = new();
-    private (object? Session, object? Area, ActorDiagnosticProfile? Profile) _heroKnockdownFor;
+    // The session's identity and the map generation the knockdown follows (no reference to the result, which a reload must free).
+    private (Arcanum.Session.GameSessionOwnerIdentity? Session, long? Generation, ActorDiagnosticProfile? Profile) _heroKnockdownFor;
     private long? _heroKnockdownMs;
     private int _heroKnockdownOctant;
 
@@ -38,7 +39,7 @@ public partial class TerrainViewerApp
         var (fall, getUp) = (Clip(profile.FallDown), Clip(profile.GetUp));
         var down = status.IsDead || status.IsUnconscious;
         var now = WorldMilliseconds();
-        if (!ReferenceEquals(_heroKnockdownFor.Session, session) || !ReferenceEquals(_heroKnockdownFor.Area, area))
+        if (_heroKnockdownFor.Session != session.Version.Owner || _heroKnockdownFor.Generation != area.Generation)
         {
             // A new session or map (a load, a transfer, a window move): a hero down already lies, none falls.
             _heroKnockdown.Rebase(down, fall);
@@ -49,7 +50,7 @@ public partial class TerrainViewerApp
         else if (!ReferenceEquals(_heroKnockdownFor.Profile, profile) && _heroKnockdown.Lying)
             // Another body (its ARTs read, armour changed): the lying hero keeps its stage on the new body's last fall frame.
             _heroKnockdown.Rebase(down || _heroKnockdown.Stage != AreaKnockdownStage.GettingUp, fall);
-        _heroKnockdownFor = (session, area, profile);
+        _heroKnockdownFor = (session.Version.Owner, area.Generation, profile);
         var elapsed = Math.Max(0, now - (_heroKnockdownMs ?? now));
         _heroKnockdownMs = now;
         var settled = grid.State.Phase == MovementPhase.Settled;
