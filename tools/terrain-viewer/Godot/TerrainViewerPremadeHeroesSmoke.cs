@@ -47,7 +47,8 @@ public partial class TerrainViewerApp
             bool Handled((SessionHolderInventory Holder, AreaObjectRecord Row, int Script) h) => h.Holder.Entity == chosen.Holder.Entity
                 ? AreaUseScriptHost.SwitchedOff(session, map.RuntimeMap, h.Holder.Entity) : session.QueryNpcKilled(h.Holder.Entity);
             // The north group, then the south group: a heartbeat runs only for an NPC within 30 tiles of the PC (0x4AD420).
-            foreach (var group in new[] { heroes.Where(h => h.Row.WorldY!.Value < 82595).ToArray(), heroes.Where(h => h.Row.WorldY!.Value >= 82595).ToArray() })
+            var byY = heroes.OrderBy(h => h.Row.WorldY!.Value).ToArray();
+            foreach (var group in new[] { byY[..6], byY[6..] })
             {
                 var x = (long)group.Average(h => h.Row.WorldX!.Value); var y = (long)group.Average(h => h.Row.WorldY!.Value);
                 var stand = AreaSmokeStandable(map, map.Chart.ToChart(new(x, y)), 6);
@@ -84,6 +85,8 @@ public partial class TerrainViewerApp
                     .Concat(t0Dead.Take(1).Select(r => (r, System.IO.Path.ChangeExtension(shot, ".t0.png")))))
                 {
                     AreaSmokePlace(map, AreaSmokeStandable(map, map.Chart.ToChart(new(focus.WorldX!.Value + 3, focus.WorldY!.Value)), 4));
+                    _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+                    PublishWorldSelection();
                     for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     using var image = GetViewport().GetTexture().GetImage();

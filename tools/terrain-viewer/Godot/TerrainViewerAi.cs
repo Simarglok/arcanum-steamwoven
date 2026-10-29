@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
             || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(npc, out var row)) return true;
         var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
-        if (AreaUseScriptHost.LoadedSlot(row, scrPoint) is not { Script: > 0 }) return true;
+        if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return true;
         var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
         if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
         {
@@ -120,6 +120,11 @@ public partial class TerrainViewerApp
             return true;
         }
         var states = ran.Run!.Effects.ObjectStates;
+        // A skip default (the script's return, or one by rule: a missing script, the end of the script, the line budget) stops the
+        // tick's pass; logged once per NPC, point and stop, so an NPC that stays still has a trace.
+        if (ran.Run.Outcome != Arcanum.Scripting.Scr.ScrOutcome.RunDefault && states.Count == 0
+            && _heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|skip|{ran.Run.Script}|{ran.Run.Stop}"))
+            GD.Print($"ARC-WORLD-114 heartbeat-skip npc={npc} point={scrPoint} script={ran.Run.Script} stop={ran.Run.Stop}");
         if (states.Count > 0)
         {
             _heartbeatKills += states.Count(s => s.Change == Arcanum.Scripting.Scr.ScrObjectStateChange.Kill);
@@ -129,6 +134,10 @@ public partial class TerrainViewerApp
         }
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
+
+    /// <summary>ARC-WORLD-114: whether a script's kill can be applied: an NPC of the shown map whose combat values read.</summary>
+    private bool CanKillByScript(Arcanum.Scripting.Scr.ScrObjectRef obj) => _areaSession is { } session && _combatHost is not null
+        && obj.Map == CurrentAreaMap && _combatHost.Build(session, obj.Map, obj.Code).Combat is not null;
 
     /// <summary>ARC-WORLD-114: a script's kill (58) of an NPC of the shown map: a death with no killer through the session's life domain
     /// (no experience, no killer's notification), drawn with the plain fall; false when it has no combat values or the session refuses.</summary>

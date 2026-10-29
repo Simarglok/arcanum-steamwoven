@@ -183,15 +183,16 @@ The scheduler's first-heartbeat (point 10) and heartbeat (point 19) script calls
 `RunScript` asks the scene's `Heartbeat` port for these two points (the other AI points still run no script and continue). The viewer
 answers it with the shown map's use-script host (`AreaUseScriptHost.RunHeartbeat`): the NPC is the attachee and the triggerer, its
 slot is its row's attachment under the session's map changes `scr10.*` / `scr19.*`, and the run's outcome is the tick's ("run
-default" goes on to the pass; "skip default" stops it). A run that is refused (a script outside the set below, missing content) or
-whose effects the viewer cannot apply goes on as without a script, and logs `ARC-WORLD-114 heartbeat-refused` once per NPC, point and
-reason.
+default" goes on to the pass; "skip default" stops it, also a skip default by the dispatcher's rule: a missing script file, a run
+that falls off the end or uses up its line budget; each logs `ARC-WORLD-114 heartbeat-skip` once per NPC, point and stop). A run that
+is refused (a script outside the set below, the content unavailable or changed) or whose effects the viewer cannot apply goes on as
+without a script, and logs `ARC-WORLD-114 heartbeat-refused` once per NPC, point and reason.
 
 | Part | Original | What it does |
 | --- | --- | --- |
 | Set | `AreaUseScriptHost.HeartbeatAdmission` | S2 (control flow, local and global flags, counters, arithmetic, story state, remove and change this script) with the single-object focus kinds of S3, plus toggle state (56) and kill (58) of [set S16](../scripting/scr-dispatcher-runtime.md#object-state-actions-arc-world-114-set-s16). A heartbeat runs every few seconds for every NPC within 30 tiles, so the set stays this narrow. |
-| Kill | 0x45D900 (PM3) | The world's kill: `GameSessionOwner.Kill` on the NPC's life target (no killer: no experience, no kill notification), drawn with the plain fall; the NPC is then a dead NPC to loot. Only an NPC of the shown map; anything else leaves the run unapplied. |
-| Toggle state | 0x4487CE (PM2) | Flips the map change `obj.off` of an NPC of the shown map (1: switched off; absent: as its map data has it). A switched-off NPC is in the map's gone set (`AreaObjectTargets.Gone`): it is not drawn, not picked and blocks no step, and the gate stops its passes (`Hidden`, object flags 0x102, now also for an NPC its map data has off). An NPC its map data has off is never switched on (its T0 body is not drawn at all): that leaves the run unapplied. |
+| Kill | 0x45D900 (PM3) | The world's kill: `GameSessionOwner.Kill` on the NPC's life target (no killer: no experience, no kill notification), drawn with the plain fall; the NPC is then a dead NPC to loot. Only an NPC of the shown map whose combat values read (`AreaScriptWorld.CanKill`, checked before anything applies); anything else leaves the run unapplied. A session refusal of the kill itself, after the run's earlier effects applied, stops there as the other hosts' steps do (applied steps stay). |
+| Toggle state | 0x4487CE (PM2) | Flips the map change `obj.off` of an NPC of the shown map (1: switched off; absent: as its map data has it). A switched-off NPC is in the map's gone set (`AreaObjectTargets.Gone`): it is not drawn, not picked and blocks no step, the gate stops its passes (`Hidden`, object flags 0x102, now also for an NPC its map data has off), and the hostility facts read it as destroyed or off, as the original's object flag test does. An NPC its map data has off is never switched on (its T0 body is not drawn at all): that leaves the run unapplied. |
 | Slot | 0x441980 | The changed slot is written back as map changes (a removed script reads 0, so the next tick runs nothing). |
 
 At the Crash Site this is what makes the eleven unchosen pre-made heroes corpses and takes the chosen hero's double away

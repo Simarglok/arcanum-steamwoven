@@ -168,6 +168,12 @@ public sealed class AreaHeartbeatScriptTests
             var npc = Row(1, 16, 781);
             var noKill = Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, noKill.Outcome, noKill.Detail);
+            // A kill the world says it cannot apply (no combat values) is refused before anything applies.
+            var kills = new List<ScrObjectRef>();
+            var cannot = new AreaUseScriptHost(session, 1, [npc], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                obj => { kills.Add(obj); return true; }, _ => false)).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, cannot.Outcome, cannot.Detail);
+            Assert.AreEqual(0, kills.Count);
             // Switching on an NPC its map data has off.
             var off = Row(2, 16, 782, objectFlags: 0x2);
             var on = Host(session, content, null, off).RunHeartbeat(off, ScrPoint.Heartbeat, session.Rules.Scripts);

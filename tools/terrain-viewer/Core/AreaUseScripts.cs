@@ -14,11 +14,12 @@ namespace Arcanum.TerrainViewer.Core;
 /// actor placement follows the walking actor only at a save or a map change), whether a shown row is destroyed or switched off in the session
 /// (the original's object lists skip it), the item a script's prototype number names (<see cref="AreaPrototypeItems.ScriptItem"/>), and the
 /// shown map as the create action's placement reads it (null when there is none). ARC-WORLD-114: <see cref="Kill"/> applies a script's
-/// kill (58) to an NPC of the shown map, a death with no killer, and answers whether the session took it; without it a kill is not applied
-/// (the run's effects are refused).
+/// kill (58) to an NPC of the shown map, a death with no killer, and answers whether the session took it; <see cref="CanKill"/> says
+/// beforehand whether it can (the NPC's combat values read; null: always). Without <see cref="Kill"/>, or for an NPC it cannot kill, a
+/// kill leaves the run unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
-    Func<ScrObjectRef, bool>? Kill = null);
+    Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -628,7 +629,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
-            if (request.Change == ScrObjectStateChange.Kill && _world?.Kill is null) return "kill needs the shown map's combat values";
+            if (request.Change == ScrObjectStateChange.Kill && (_world?.Kill is null || _world.CanKill?.Invoke(request.Object) == false))
+                return $"kill of {request.Object.Code} needs its combat values";
             if (request.Change == ScrObjectStateChange.ToggleOff && ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0)
                 return $"toggle state of {request.Object.Code}, off in its map data, is not modelled";
         }
