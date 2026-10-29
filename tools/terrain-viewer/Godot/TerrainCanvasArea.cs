@@ -375,7 +375,7 @@ public partial class TerrainCanvas
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
-            item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
+            item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null; item.ShowGuide = _showActorGuides;
             // A roof is tinted by the outdoor light only (RF2); a covered tile's mask is black.
             if (mask) (item.Ambient, item.AmbientRight, item.Lattice) = (Colors.Black, Colors.Black, null);
             else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice) = (outdoor, outdoor, null); }

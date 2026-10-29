@@ -897,6 +897,9 @@ says how to turn it on.
 - **Marks.** A save made in debug mode has `[DEBUG] ` before its location, so the save list names it; the build line of the
   main menu ends in "DEBUG MODE"; the status line says "W world map (DEBUG MODE: teleport)". The session's rules and its
   snapshot are not changed by the mode: a debug save loads in a run without it as any save does.
+- **Actor guides** (ARC-DEV-064). The controlled actor's magenta frame and yellow anchor cross are drawn only in debug mode
+  (AREA and WORLD modes); in play they are not drawn. Self-test raster oracles that check them turn them on for their own
+  canvas. The `report` smoke stage checks that the guides follow the mode.
 - **Native smoke** (stage `debug-travel`, only when named, with `--debug-mode`): W shows the list and Teleport; Teleport on the
   farthest placed area loads the start map around it with the session carried, the actor within 64 tiles of the area, no
   area discovered and less than one game hour gained; a save location is marked: `ARC-DEV-050 native-smoke debug-travel PASS`.

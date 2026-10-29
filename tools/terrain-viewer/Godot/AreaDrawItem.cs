@@ -108,6 +108,8 @@ public partial class AreaDrawItem : Node2D
     public int HdScale { get; set; } = 1;
     public AreaDrawCommand? Command { get; set; }
     public ActorDiagnosticDrawCommand? Actor { get; set; }
+    /// <summary>ARC-DEV-064: draws the actor's frame and anchor cross (the canvas's debug-mode guides); off in play.</summary>
+    public bool ShowGuide { get; set; }
     /// <summary>ARC-RENDER-010 ambient multiplier of this item's channel; white leaves source pixels unchanged.</summary>
     public Color Ambient { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-011 wall check fade of this item; None draws it opaque.</summary>
@@ -309,8 +311,8 @@ public partial class AreaDrawItem : Node2D
         if (Command is not { } command || FrameTexture is null) return;
         PrepareMapping(command);
         if (_mapping is not null) DrawTextureRect(FrameTexture, _primitive, false);
-        if (Actor is not null && _guide is null) { _guide = new AreaActorGuide(); AddChild(_guide); }
-        if (_guide is not null) { _guide.Actor = Actor; _guide.QueueRedraw(); }
+        if (Actor is not null && ShowGuide && _guide is null) { _guide = new AreaActorGuide(); AddChild(_guide); }
+        if (_guide is not null) { _guide.Actor = ShowGuide ? Actor : null; _guide.QueueRedraw(); }
     }
 
     public override void _ExitTree()

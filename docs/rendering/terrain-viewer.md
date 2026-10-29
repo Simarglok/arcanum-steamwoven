@@ -43,8 +43,9 @@ and every caller-selected actor field:
 original state. Missing, duplicate, cached, scaled, shrunk, unknown, or
 out-of-range values fail closed. The actor route uses only the bounded
 source-derived normal branch and draws terrain, then actor, then its magenta
-rectangle and yellow anchor cross. That is diagnostic layering, not original
-occlusion or placement parity.
+rectangle and yellow anchor cross (only in the run's debug mode, ARC-DEV-064, or
+for a self-test raster oracle that asks for them). That is diagnostic layering,
+not original occlusion or placement parity.
 
 `--mode world-diagnostic` (ARC-WORLD-003 grid bridge) combines the same terrain, exactly
 five admitted statics and the fixed-profile actor. It requires explicit
