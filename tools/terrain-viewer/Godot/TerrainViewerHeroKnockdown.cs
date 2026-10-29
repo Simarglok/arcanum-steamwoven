@@ -29,7 +29,7 @@ public partial class TerrainViewerApp
         {
             // No hero drawn on an AREA map: nothing lies, and the next one is rebased.
             if (_heroKnockdown.Lying) _heroKnockdown.Rebase(false, null);
-            if (_worldActor.DownPose is not null) _worldActor.DownPose = null;
+            if (_worldActor.DownPose is not null) { _worldActor.DownPose = null; PublishWorldSelection(); }
             _heroKnockdownFor = default;
             return;
         }
@@ -70,10 +70,12 @@ public partial class TerrainViewerApp
         PublishWorldSelection();
     }
 
-    /// <summary>A conscious hero lying down gets up: at once in real time; in a turn-based round only on its own subturn and when the
-    /// get-up's action points are paid (A3; a refusal passes the subturn as any refused charge).</summary>
+    /// <summary>A conscious hero lying down gets up when it is active (UC3: not stunned, paralysed or stoned either): at once in real
+    /// time; in a turn-based round only on its own subturn and when the get-up's action points are paid (A3; a refusal passes the
+    /// subturn as any refused charge).</summary>
     private bool HeroMayGetUp()
     {
+        if (_areaSession?.QueryHeroLife()?.Status is not { IsActive: true }) return false;
         if (!InTurnBasedRound) return true;
         if (_areaSession?.QueryCombatRound() is not { Actor.IsHero: true }) return false;
         return ChargeHeroAction(TurnBasedRules.GetUpCost, "get up");

@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using Arcanum.Data;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -104,6 +106,80 @@ public sealed class AreaHeroKnockdownTests
             Assert.Throws<TerrainViewerException>(() => half.Resource(ActorDiagnosticAction.FallDown));
             Assert.Throws<TerrainViewerException>(() => half.ActionFor(ActorDiagnosticProfile.HumanGetUpSelector));
         }
+    }
+
+    // A minimal 8-bit ART: 8 groups of `frames` 1×1 frames each moving the anchor (1, 1), palette 0 white unless `palette` is false.
+    private static byte[] Art(int frames, int fps = 10, int actionFrame = 0, bool palette = true)
+    {
+        const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28;
+        var total = 8 * frames;
+        var table = headerBytes + paletteBytes;
+        var payload = table + total * frameHeaderBytes;
+        var bytes = new byte[payload + total];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), fps);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), palette ? 1u : 0u);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(28), actionFrame);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), frames);
+        bytes[headerBytes + 4] = 255; bytes[headerBytes + 5] = 255; bytes[headerBytes + 6] = 255; bytes[headerBytes + 7] = 255;
+        for (var index = 0; index < total; index++)
+        {
+            var frame = table + index * frameHeaderBytes;
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 4), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 8), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 20), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 24), 1);
+            bytes[payload + index] = 1;
+        }
+        return bytes;
+    }
+
+    private static HeroBodyLoad LoadWoman(params (string Name, byte[] Payload)[] downArts)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"arc-combat-021-{Guid.NewGuid():N}.dat");
+        try
+        {
+            File.WriteAllBytes(path, AreaCombatTests.Dat([("art/critter/HMF/HMFUWXAa.art", Art(1)), ("art/critter/HMF/HMFUWXAb.art", Art(2)),
+                ("art/critter/HMF/HMFUWXAg.art", Art(2)), ("art/critter/HMF/HMFUWXAn.art", Art(2)), ("art/critter/HMF/HMFUWXBu.art", Art(3, actionFrame: 1)),
+                .. downArts]));
+            using var archive = DatArchive.Open(path);
+            return HeroBodyArt.Load(archive, HeroBody.HumanFemale);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void AHeroBodyReadsItsFallAndGetUpOnlyWhenBothRead()
+    {
+        // Five used groups a frame: 1 + 2 + 2 + 2 + 3 = 10 frames → 50 keys, with a 4-frame fall and a 3-frame get-up 35 more.
+        var both = LoadWoman(("art/critter/HMF/HMFUWXAh.art", Art(4, 11)), ("art/critter/HMF/HMFUWXAi.art", Art(3, 14)));
+        Assert.AreEqual((4, 11, 3, 14), (both.Profile.FallDown!.FramesPerGroup, both.Profile.FallDown.RawFramesPerSecond,
+            both.Profile.GetUp!.FramesPerGroup, both.Profile.GetUp.RawFramesPerSecond));
+        Assert.AreEqual((85, 85), (both.Profile.DistinctKeys, both.Textures.Count));
+        Assert.AreEqual(ActorDiagnosticProfile.HumanFallDownSelector, both.Profile.FallDown.Selector);
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, both.Plan(new ActorDiagnosticPlacementInput(6, 1, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached,
+            100, false, ActorDiagnosticAction.FallDown, 5, 3, 0, 0, 0, 0, 0, 0)).Current.Action);
+        // Without both, or with one that does not read in the body's palette, the body loads without them (no failure).
+        foreach (var load in new[] { LoadWoman(), LoadWoman(("art/critter/HMF/HMFUWXAh.art", Art(4))),
+            LoadWoman(("art/critter/HMF/HMFUWXAh.art", Art(4)), ("art/critter/HMF/HMFUWXAi.art", Art(3, palette: false))),
+            LoadWoman(("art/critter/HMF/HMFUWXAh.art", [1, 2, 3]), ("art/critter/HMF/HMFUWXAi.art", Art(3))) })
+        {
+            Assert.IsNull(load.Profile.FallDown); Assert.IsNull(load.Profile.GetUp);
+            Assert.AreEqual((50, 50, 5), (load.Profile.DistinctKeys, load.Textures.Count, load.Profile.Actions.Count));
+        }
+        // A required ART that does not read still fails the body.
+        Assert.ThrowsExactly<TerrainViewerException>(() =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"arc-combat-021-{Guid.NewGuid():N}.dat");
+            try
+            {
+                File.WriteAllBytes(path, AreaCombatTests.Dat([("art/critter/HMF/HMFUWXAa.art", Art(1, palette: false))]));
+                using var archive = DatArchive.Open(path);
+                HeroBodyArt.Load(archive, HeroBody.HumanFemale);
+            }
+            finally { File.Delete(path); }
+        });
     }
 
     [TestMethod]

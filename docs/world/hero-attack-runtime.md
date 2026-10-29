@@ -372,7 +372,8 @@ fatigue −3 kept standing and acting.
   event (0x45E610) on the session queue, pumped by the viewer's clock, brings it round. No snapshot change.
 - **Body.** `HeroBodyArt` also reads the body's fall-down (animation 7, `…XAh.art`) and get-up (animation 8, `…XAi.art`) ARTs
   into the profile (`ActorDiagnosticProfile.FallDown`, `GetUp`, both or neither; actions `FallDown`, `GetUp`); every creatable
-  body has them, 11 frames at 11 fps and 19 at 14 fps (UC5; 345 keys a body). A human or elf woman, until now drawn with the
+  body has them, 11 frames at 11 fps and 19 at 14 fps (UC5; 345 keys a body); a body whose fall or get-up ART is missing, is not one
+  entry, does not read in its palette or would pass the key cap loads without both. A human or elf woman, until now drawn with the
   fixed human (which has neither ART), is read as her own body when the session has a hero; without a hero, or when the body
   does not read, the fixed human stays and the hero lies down without a drawn fall.
 - **Stages** (`AreaHeroKnockdown`, Godot-free): standing → falling (the fall played once from frame 0 at the ART rate on the
@@ -380,6 +381,7 @@ fatigue −3 kept standing and acting.
   getting up (once conscious, UC2–UC3) → standing. A hero that goes down again while getting up falls from the start. A new
   session or map (a load, a transfer, a window move) rebases: a hero down already lies, none falls. The drawn pose is
   `DiagnosticGridActor.DownPose` (action, facing octant at the fall, frame), which wins over the attack pose on a settled actor.
+- **Getting up** needs an active hero (UC3): a conscious hero that is stunned, paralysed or stoned stays down until it is active.
 - **Turn-based round.** The get-up waits for the hero's own subturn and pays `TurnBasedRules.GetUpCost` (5) through the hero's
   charge (A3, CT3, UC3); a refused charge keeps the hero down and passes the subturn as any refused charge. An unconscious hero
   is skipped by the round (ARC-COMBAT-020).
@@ -391,8 +393,8 @@ fatigue −3 kept standing and acting.
   drawn for the hero).
 - Log lines `ARC-COMBAT-021 hero knockdown stage=… fatigue=…`; the status line adds ` | hero: falling`, `unconscious`, `dead` or
   `getting up`.
-- Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the combat-mode stage on the Crash Site exterior
-  and in the map battery; alone as `ARC_AREA_MAP_SMOKE_ONLY=knockdown`): a fatigue packet leaves the hero at fatigue −3; it falls
+- Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the audio stage on the Crash Site exterior and in
+  the map battery, as its recovery moves the game clock on; alone as `ARC_AREA_MAP_SMOKE_ONLY=knockdown`): a fatigue packet leaves the hero at fatigue −3; it falls
   over drawn frames to the fall's last frame (uploaded), the status line names it, a ground press and the stick do nothing;
   game-time jumps of 10 s fire the recovery, the hero gets up over drawn frames, stands idle and takes a press again; the fatigue
   is healed back.
@@ -449,5 +451,6 @@ weapon effects and invulnerability, the hero's weapon to its break, bare hands n
 missing item data, a refused step, refusals, and the wear of the hero's attack on a stone golem), `tests/Arcanum.TerrainViewer.Tests/AreaCombatTests.cs` (facing, the attack player, the status text,
 `Repose`, the frame overlay, the dying animation and the pose read from a synthetic archive with its refusals),
 `tests/Arcanum.TerrainViewer.Tests/AreaHeroKnockdownTests.cs` (ARC-COMBAT-021: the stages, the refused get-up, a fall while
-getting up, the rebase, a body without the ARTs, the profile's fall and get-up and the down pose; the opt-in real-data
+getting up, the rebase, a body without the ARTs, the profile's fall and get-up, a synthetic body read with both, one or an unreadable
+one, and the down pose; the opt-in real-data
 `HeroBodyArtTests` count every body's fall and get-up frames) and the native smokes above; synthetic only in git.

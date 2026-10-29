@@ -116,7 +116,8 @@ public partial class TerrainViewerApp
         Require(bare.Wearing(_areaSession is { } session ? WornBodyArmorUseArt(session) : null) is not { } worn || worn == body,
             $"the worn body armour's body is drawn: {_heroBodyStatus}");
         var profile = _worldActor.Profile;
-        Require(!_heroBodyFailures.ContainsKey(body), "the body did not load: " + _heroBodyStatus);
+        Require(!_heroBodyFailures.ContainsKey(body) && (body != HeroBody.HumanFemale || _heroWomanFailure is null),
+            "the body did not load: " + (_heroWomanFailure ?? _heroBodyStatus));
         Require(ReferenceEquals(_readyActorPlan?.Profile, profile), "the plan draws the actor's profile");
         Require(profile.Actions.All(action => profile.Resource(action).Selector == body.Selector(ActorDiagnosticProfile.HumanSelector(action))),
             $"{hero.Race} {hero.Gender}: every action is the {body.Label} body");

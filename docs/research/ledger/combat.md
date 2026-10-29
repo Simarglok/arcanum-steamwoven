@@ -461,8 +461,8 @@ direct branch stays inside `.text`. UC5 counts the installed ART headers (real-d
 
 Anomalies: none. Implemented by ARC-COMBAT-021 in the AREA viewer for the hero (both rule modes): UC1 (the fall when the session's
 hero goes unconscious, once the hero stands on its cell; a dead hero lies on the same fall, as the dying animation's choice is not
-drawn for the hero), UC2 (the get-up when the session's fatigue recovery brings it round), UC3 (in a round on the hero's own subturn,
-paying `TurnBasedRules.GetUpCost`), UC4 (world presses and the Steamwoven walk keys and stick do nothing while the hero lies, falls or
+drawn for the hero), UC2 (the get-up when the session's fatigue recovery brings it round), UC3 (only an active hero gets up; in a round on the hero's own
+subturn, paying `TurnBasedRules.GetUpCost`), UC4 (world presses and the Steamwoven walk keys and stick do nothing while the hero lies, falls or
 gets up) and UC5 (`HeroBodyArt` reads both ARTs; a body without them lies without a drawn fall). Not modelled: UC4 for a stunned
 or paralysed hero (it still takes presses), the goal test 0x424070, and an NPC's get-up animation (a recovered NPC stands up at
 once).

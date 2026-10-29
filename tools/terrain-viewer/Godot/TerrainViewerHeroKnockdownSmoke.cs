@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-COMBAT-021 native observation (with --hero, on the installed exterior and in map mode, after the combat-mode stage): a fatigue
+    // ARC-COMBAT-021 native observation (with --hero, on the installed exterior and in map mode, after the audio stage, as it moves the
+    // game clock on by the recovery's minutes, which the audio's night checks would see): a fatigue
     // packet leaves the hero unconscious; it falls (the body's fall-down ART, last frame drawn and uploaded), a press on the ground and the
     // stick do nothing; the session clock flows until the recovery brings it round, and it gets up (the get-up ART) and stands, taking a
     // press again. The hero's fatigue is healed back afterwards. ARC_AREA_KNOCKDOWN_CAPTURE saves in-app readbacks (down, standing) to
