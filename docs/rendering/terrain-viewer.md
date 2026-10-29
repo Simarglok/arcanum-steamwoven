@@ -1744,14 +1744,14 @@ and layout (below), the other windows the project's.
   `--sector`; on another map, in the cave, with `--sector` or with a session a transfer carried, Start first loads the
   start scene ([scene flow](#scene-flow-arc-ui-012), ARC-UI-012). The original's start movies, fade, newspaper event and
   random-encounter schedule are not modelled.
-- **Browser's original look (ARC-UI-066,** [ledger MW17–MW22](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
+- **Browser's original look (ARC-UI-066,** [ledger MW17–MW21, MW26](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
   game's art the browser is window 13's screen (`AreaPremadeBrowserArtView`): the strips, the background 766 and the browsed hero
   as the original draws it: the large portrait at (95, 69), the player name (`Cloister18Font`, red), the gender, race and
   background names (`morph15font`, red) centred in their fields, the hero's story from `gameback.mes` (its background description,
   field 0x102: 1039..1050), "Initial Stats" and fifteen stats "ST: 8" of the start's effective values (the stored stats under the
   race and gender effects), each field filled black first. Start and Back stand in the bottom strip, Previous and Next beside the
   portrait; they light under the pointer, play 3000 on the press and 3001 on the release and act on a release over themselves.
-  The story breaks into lines as the original's text draw does (MW22) and shows its first 11, as the original's: every installed
+  The story breaks into lines as the original's text draw does (MW26) and shows its first 11, as the original's: every installed
   story is longer (14–18 lines). PROJECT: the hints are not shown; a portrait that does not read leaves its field black. A hero that does not read, and every self-test
   without a game folder, keeps the diagnostic window. The menu stage checks it after opening the browser
   (`ARC-UI-066 native-smoke browser art PASS`: the art read, the first hero's texts, its portrait, Next lit under the pointer, a

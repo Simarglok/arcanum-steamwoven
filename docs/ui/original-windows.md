@@ -186,12 +186,12 @@ are F0 and are read by the slice.
    321 at (675, 55) (start, hint 7003), 323 at (69, 55) (back), 283 `Big_Grn_L` / 284 `Big_Grn_R` (34 × 33) at (43, 118) and
    (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);
    the slice reads them and draws the browsed hero with the character sheet's parts where they match. Done by ARC-UI-066, ledger
-   MW17–MW22 (`AreaPremadeBrowserArtView`): the strips, the background and the four art buttons with their frames and sounds; the
+   MW17–MW21, MW26 (`AreaPremadeBrowserArtView`): the strips, the background and the four art buttons with their frames and sounds; the
    hero's large portrait at (95, 69) (128 × 128); its player name in `Cloister18Font` red at (46, 224, 228 × 19); its gender, race and
    background name in `morph15font` red, centred in their fields at y 284, 334 and 384; its story (`gameback.mes` 1039..1050, the
    background description field 0x102) in the field (350, 196, 395 × 212); "Initial Stats" and fifteen stats "ST: 8" (`stat.mes`
    500 + stat, the start's effective values) in four columns from (346, 87); each field filled black first. The story's lines are
-   the original's (MW22): every installed story is longer than its field (14–18 lines) and, as in the original, its first 11 show
+   the original's (MW26): every installed story is longer than its field (14–18 lines) and, as in the original, its first 11 show
    (an anomaly for the owner: a "Steamwoven" setting could show the rest). PROJECT: the hints are not shown. A hero that does not
    read keeps the diagnostic window, and a portrait that does not read leaves its field black. The window is done but for these
    points.

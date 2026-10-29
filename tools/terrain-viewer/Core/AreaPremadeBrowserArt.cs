@@ -13,7 +13,7 @@ public enum AreaPremadeBrowserButton { Start, Back, Previous, Next }
 /// <summary>
 /// ARC-UI-066: the original look of the pre-made character browser (window 13), read from its descriptor 0x5C5270, open 0x545870,
 /// redraw 0x5458D0, button callback 0x5459F0 and the character draw 0x5448E0 it shares with the new-character window (ledger
-/// MW17–MW22). The background 766 `PreGenCharacterBase` (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1).
+/// MW17–MW21, MW26). The background 766 `PreGenCharacterBase` (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1).
 /// Four art buttons: Start 321 `NextBut` and Back 323 `BackBut` in the bottom strip, Previous 283 `Big_Grn_L` and Next 284
 /// `Big_Grn_R` beside the portrait. The browsed hero shows its large portrait, its player name, gender, race and background name
 /// centred in their fields, its background's story (or its race's text) and fifteen stats "ST: 8" in the art fonts 27 `morph15font`
@@ -110,7 +110,7 @@ public static class AreaPremadeBrowserArtLayout
 
     /// <summary>
     /// The lines of a text in a field <paramref name="width"/> wide, each glyph with its x from the line's left, as the text draw
-    /// 0x535570 breaks them with 0x535C40 (MW22): a line ends at a line feed, or before the character that would pass the width (the
+    /// 0x535570 breaks them with 0x535C40 (MW26): a line ends at a line feed, or before the character that would pass the width (the
     /// last character counts its width, the others their advance) at the last space or after the last hyphen before it; the line
     /// holds its break character and the next starts after it. A line with no space or hyphen to break at ends its part. The text's
     /// parts are split at the two characters <c>\n</c>, each broken on its own, and <c>\t</c> are five spaces (0x5418A0, 0x541830,

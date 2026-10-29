@@ -8,7 +8,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-066 pre-made browser art (ledger MW17–MW22): the art, the buttons' and fields' places, the stats' order and labels,
+/// <summary>ARC-UI-066 pre-made browser art (ledger MW17–MW21, MW26): the art, the buttons' and fields' places, the stats' order and labels,
 /// the centring and the story's lines, and the browsed hero's view, on synthetic glyph frames and tables.</summary>
 [TestClass]
 public sealed class AreaPremadeBrowserArtTests

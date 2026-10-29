@@ -3,7 +3,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-066: the pre-made character browser (window 13) in the original's look (docs/ui/original-windows.md; ledger MW17–MW22). The art
+// ARC-UI-066: the pre-made character browser (window 13) in the original's look (docs/ui/original-windows.md; ledger MW17–MW21, MW26). The art
 // and tables are read once a module, each hero's large portrait on its first showing; without a game folder (the synthetic self-tests)
 // or for a hero that did not read the browser keeps its diagnostic window.
 public partial class TerrainViewerApp
@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
         require(first.Stats.Count == AreaPremadeBrowserArtLayout.StatOrder.Count && first.Stats[0].StartsWith("ST: ", StringComparison.Ordinal),
             "fifteen stats with their short labels: " + string.Join(", ", first.Stats));
         require(art.PortraitForSelfTest, "the hero's large portrait read: " + first.Portrait);
-        // The story's lines as the original breaks them (MW22); the field shows as many as fit, the original's draw stops there: the
+        // The story's lines as the original breaks them (MW26); the field shows as many as fit, the original's draw stops there: the
         // smoke reports each hero's line count (the installed stories are longer than the field).
         var content = _premadeArtContent!;
         var font = content.TextFont!;
