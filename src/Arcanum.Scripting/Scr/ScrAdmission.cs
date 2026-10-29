@@ -203,11 +203,20 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S16 { get; } = new("S16", S15.Conditions, S15.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill]),
         S15.ValueKinds, S15.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The critter vicinity set (ARC-SCRIPT-047): <see cref="S16"/> plus the focus kinds everyone (8) and anyone (9) in the vicinity, the
+    /// PCs and NPCs around the attachee (<see cref="IScrWorldQueries.CrittersInVicinity"/>, ledger TG4), in actions only (a condition
+    /// over a list is not modelled). With call-ex of an NPC's dialog point (TG5) it runs the heartbeat that opens a talk (1100).
+    /// </summary>
+    public static ScrAdmissionSet S17 { get; } = new("S17", S16.Conditions, S16.Actions, S16.ValueKinds,
+        S16.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
-    public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EverySceneryInVicinity };
+    public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
+        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
 
     /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
     public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
@@ -373,6 +382,10 @@ public static class ScrAdmission
                     if (!ScrCatalogue.IsKnownFocusKind(kind)) return Refuse(ScrRefusalCode.UnknownFocusKind);
                     if (!set.FocusKinds.Contains((ScrFocusKind)kind)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
+                    // ARC-SCRIPT-047: a condition tests every object of a list focus kind (the "any" kinds some of them, SG6); the
+                    // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
+                    // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list).
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).

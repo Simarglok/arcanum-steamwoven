@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S16"/>.
+/// <see cref="ScrAdmissionSet.S17"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -219,7 +219,7 @@ internal sealed class ScrInterpreter
                     // limit refuses a second one.
                     if (_dialog is not null) throw new CallRefusedStop(new(line, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), _number, ScrStop.Refused);
                     if (_depth > 0) StoreDialogSlot();
-                    _dialog = new(pc, _roles.Attachee, _number, line, node);
+                    _dialog = new(pc, _roles.Attachee, _number, line, node) { Point = _point };
                 }
                 return (Step.Dialog, 0);
             }
@@ -523,17 +523,21 @@ internal sealed class ScrInterpreter
     /// ARC-SCRIPT-042, WE3: call-ex runs the object's attachment of the point as an event of its own (0x441980): the object's slot, the
     /// triggerer, no extra object, from the line; its result is ignored and the caller goes on. The run shares the dispatch's effects,
     /// global overlay and bounds; its changed slot is kept for <see cref="ScrEffects.SlotWrites"/> and read by a later call-ex of the same
-    /// slot. No slot, script 0, a missing or trap script and a monster generator run nothing, as for an event. Project limits: an absent
-    /// object stops the caller's run; a use or dialog point (the trap spot and the dialog gates are not modelled for a nested run), a
-    /// dialog action in the callee and a trap object whose script becomes 0 refuse the dispatch, and a point outside 0..35 or the
-    /// dialog-override slot ends it (<see cref="ScrStop.CallExPoint"/>).
+    /// slot. No slot, script 0, a missing or trap script and a monster generator run nothing, as for an event. ARC-SCRIPT-047: the dialog
+    /// point (a heartbeat's opening talk, ledger TG5) meets the runner's dialog gates as an event does (E6, 0x4449B0): a dead NPC without
+    /// the death-speech file flag or a surrendered one without the surrender-speech flag runs nothing, a mind-controlled one runs 2188 in
+    /// place of its own (its own number kept); a dialog action in the callee stores the run's flags and counters in the very slot the
+    /// call-ex then writes back (X11), so the writeback is the slot it leaves; a callee that reaches call script is refused (the called
+    /// script would skip the gates). Project limits: an absent object stops the caller's run; the
+    /// use point (the trap spot is not modelled for a nested run) and a trap object whose script becomes 0 refuse the dispatch, and a point
+    /// outside 0..35 or the dialog-override slot ends it (<see cref="ScrStop.CallExPoint"/>).
     /// </summary>
     [OriginalFunction(0x44B170, OriginalFunctionScope.Partial)]
     private void CallEx(ScrObjectRef? attachee, int point, int line, ScrObjectRef? triggerer, int at)
     {
         if (attachee is not { } obj) throw new MissingObjectStop(at);
         if (point is < 0 or >= ScrPoint.Count || point == ScrPoint.DialogOverride) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
-        if (point is ScrPoint.Use or ScrPoint.Dialog)
+        if (point == ScrPoint.Use)
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
         if (_depth + 1 > _options.MaxCallDepth) throw new CallRefusedStop(null, _number, ScrStop.CallDepth);
         var slot = _shared.Slots.TryGetValue((obj, point), out var written) ? written : _host.Slot(obj, point);
@@ -546,27 +550,54 @@ internal sealed class ScrInterpreter
         }
         var program = lookup.Program!;
         if (ScrDispatcher.IsTrapScript(own.Script, program) || _host.IsMonsterGenerator(obj)) return;
+        var number = own.Script;
+        // The auto-removal flag is read from the attachment's own script, as for an event (RunObject).
+        var ownFlags = program.FileFlags;
+        if (point == ScrPoint.Dialog)
+        {
+            // E6 (0x4449B0, ledger TG5): the gates read the NPC's own file flags before a mind-controlled swap.
+            var state = _host.DialogState(obj);
+            if ((state & ScrDialogState.Dead) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0) return;
+            if ((state & ScrDialogState.Surrendered) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0) return;
+            if ((state & ScrDialogState.MindControlled) != 0)
+            {
+                number = ScrDispatcher.MindControlScript;
+                var swapped = _host.Script(number);
+                if (ScrDispatcher.Unavailable(swapped) is { } absent)
+                {
+                    if (absent == ScrStop.MissingScript) return;
+                    throw new CallRefusedStop(null, number, ScrStop.UnreadableScript);
+                }
+                program = swapped.Program!;
+            }
+        }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
-        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, own.Script, ScrStop.Refused);
-        RefuseDialogIn(admission.Admitted!, own.Script);
-        var run = new ScrInterpreter(admission.Admitted!, own.Script, own, program.FileFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
+        if (point == ScrPoint.Dialog) RefuseCallScriptIn(admission.Admitted!, number);
+        var writes = _shared.SlotWrites.Count;
+        var ran = new ScrInterpreter(admission.Admitted!, number, own, ownFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
+        // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
+        var run = number == own.Script ? ran : ran with { Slot = ran.Slot with { Script = own.Script } };
         if (run.Slot == own) return;
         if (run.Slot.Script == 0 && _host.IsTrapObject(obj))
             throw new CallRefusedStop(new(at, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScriptEx), _number, ScrStop.Refused);
         _shared.Slots[(obj, point)] = run.Slot;
+        // The callee's own dialog store of this slot (StoreDialogSlot) is superseded by the writeback; earlier call-exes keep theirs.
+        for (var i = _shared.SlotWrites.Count - 1; i >= writes; i--)
+            if (_shared.SlotWrites[i] is { Source: ScrSource.Object, Point: var p } w && p == point && w.Attachee == obj) _shared.SlotWrites.RemoveAt(i);
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
     }
 
-    // A dialog action inside a call-ex run is not modelled (its store would write the slot the run itself changes; call script's is,
-    // ARC-SCRIPT-046): the dispatch is refused at that line.
-    private static void RefuseDialogIn(ScrAdmittedProgram admitted, int script)
+    // As RunObject refuses a dialog-point event whose set holds call script, a call-ex of the dialog point refuses a callee that
+    // reaches one: the called script would run at the dialog point without the runner's dialog gates (E6), which call script skips.
+    private static void RefuseCallScriptIn(ScrAdmittedProgram admitted, int script)
     {
         foreach (var at in admitted.Region)
         {
             var row = admitted.Program.Lines[at];
-            var side = row.OnTrue.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnTrue
-                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.Dialog ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
-            if (side is { } dialog) throw new CallRefusedStop(new(at, dialog, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Dialog), script, ScrStop.Refused);
+            var side = row.OnTrue.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnTrue
+                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
+            if (side is { } call) throw new CallRefusedStop(new(at, call, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScript), script, ScrStop.Refused);
         }
     }
 
@@ -641,20 +672,26 @@ internal sealed class ScrInterpreter
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
         // A group's first object (0x44B960), none for an empty one.
-        ScrFocusKind.EverySceneryInVicinity => Vicinity() is { Count: > 0 } list ? list[0] : null,
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity
+            => Vicinity((ScrFocusKind)c.Kind(slot)) is { Count: > 0 } list ? list[0] : null,
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
-    // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15.
-    private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) == ScrFocusKind.EverySceneryInVicinity ? Vicinity()
-        : OptionalObject(c, slot) is { } obj ? [obj] : [];
+    // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15; ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
+    private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
+    {
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
+        _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
+    };
 
-    // PG3: the scenery around the run's attachee (none without one), the first 100 under the original's rule.
-    private IReadOnlyList<ScrObjectRef> Vicinity()
+    // PG3, TG4: the scenery (type mask 0x8) or the PCs and NPCs (0x18000) around the run's attachee (none without one), the first 100
+    // under the original's rule.
+    private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
-        var list = World.SceneryInVicinity(centre) ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
+        var list = (kind == ScrFocusKind.EverySceneryInVicinity ? World.SceneryInVicinity(centre) : World.CrittersInVicinity(centre))
+            ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
 

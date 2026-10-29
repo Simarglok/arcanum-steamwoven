@@ -307,7 +307,8 @@ the revision. One revision. The viewer's caller is the [opening shop merchant](.
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
-  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): the window has no gamble slot.
+  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): the window has no gamble slot (ARC-UI-064's original look draws
+  the gamble box in its off art; an item released on it goes back).
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and
   follower cycling open nothing.
 - The uninitialised "buys everything" flag of a set without a buy line and of an out-of-range source (BT8): read as 0 (buys nothing).

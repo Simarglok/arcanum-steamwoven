@@ -105,7 +105,7 @@ public sealed class ScrDeferredCallTests
         host.Slots[(Npc, ScrPoint.Use)] = new(4242, 0, 0x11);
         var r = ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host);
         Assert.AreEqual(ScrStop.Dialog, r.Stop);
-        Assert.AreEqual(new ScrDialogStart(Pc, Npc, 1699, 1, 5), r.Effects.Dialog);
+        Assert.AreEqual(new ScrDialogStart(Pc, Npc, 1699, 1, 5) { Point = ScrPoint.Use }, r.Effects.Dialog);
         // The use slot keeps its number and takes the run's flags and counters (the header's counter 0 replaces 0x11).
         Assert.AreEqual(new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Use, new(4242, 8, 0)), r.Effects.Writeback);
         // No slot yet: one is created with number 0; no PC: no conversation, no write; no change: no write.

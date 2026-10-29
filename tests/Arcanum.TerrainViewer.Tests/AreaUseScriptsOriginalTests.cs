@@ -64,7 +64,7 @@ public sealed class AreaUseScriptsOriginalTests
         Assert.IsNull(host.RunPlaced(wreck, session.Rules.Scripts).Dialog, "the player is not Virgil");
         var ran = host.RunPlaced(wreck, session.Rules.Scripts, _ => "no teleport", virgil);
         Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
-        Assert.AreEqual(new ScrDialogStart(host.Pc, virgil, 1696, 0, 1), ran.Dialog);
+        Assert.AreEqual(new ScrDialogStart(host.Pc, virgil, 1696, 0, 1) { Point = ScrPoint.Use }, ran.Dialog);
         Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 1696, 1, session.Rules.Data).Status);
 
         var flags = session.Flags;

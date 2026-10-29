@@ -168,6 +168,15 @@ public interface IScrWorldQueries
     /// </summary>
     IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre);
 
+    /// <summary>
+    /// ARC-SCRIPT-047: everyone in the vicinity of <paramref name="centre"/> (focus kinds 8 and 9, 0x44B4E0 with 0x440FC0 and the type
+    /// mask 0x18000, ledger TG4): every PC and NPC of the centre's map whose tile is within <see cref="ScrWorld.VicinityReach"/> tiles of
+    /// the centre's tile on both axes and that is not destroyed or switched off (the list's flag mask), the centre itself and dead critters
+    /// included, in the host's list order (the original's order is not read); empty when the host does not know the centre or its place.
+    /// The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre);
+
     /// <summary>A number from <paramref name="low"/> to <paramref name="high"/>, both included (<paramref name="low"/> ≤
     /// <paramref name="high"/>), from the game's generator (random between, 0x4CEF00; PG5).</summary>
     int Random(int low, int high);
@@ -313,7 +322,13 @@ public sealed record ScrWriteback(ScrSource Source, ScrObjectRef? Attachee, int 
 /// triggerer and the attachee. A DLG end of 0 resumes the attachee's dialog slot at <paramref name="Line"/> + 1, and −N at
 /// line N (the original runs the NPC's SAP_DIALOG slot, dialog_ui.c 400–407): for a talk that is this script, for a
 /// conversation a deferred call started it is whatever the NPC's dialog slot holds.</summary>
-public sealed record ScrDialogStart(ScrObjectRef Pc, ScrObjectRef? Npc, int Script, int Line, int Node);
+public sealed record ScrDialogStart(ScrObjectRef Pc, ScrObjectRef? Npc, int Script, int Line, int Node)
+{
+    /// <summary>ARC-SCRIPT-047: the attachment point of the run whose dialog action asked for the conversation (the point whose slot of
+    /// <see cref="Npc"/> the action stored its flags and counters in, X11): <see cref="ScrPoint.Dialog"/> for a talk, for a resumption and
+    /// for a call-ex of the NPC's dialog point (a heartbeat's opening talk), the use point for a tile or sector script.</summary>
+    public int Point { get; init; } = ScrPoint.Dialog;
+}
 
 public enum ScrCallKind { Schedule, Remove }
 
@@ -495,7 +510,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S16"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S17"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -516,7 +531,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S16)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S16.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S17)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S17.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

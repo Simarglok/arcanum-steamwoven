@@ -76,7 +76,7 @@ STAGE_PASS = {
     "plants": "ARC-WORLD-081 native-smoke plants PASS", "bar": "ARC-UI-018 native-smoke bar PASS",
     "ai": "ARC-WORLD-092 native-smoke ai PASS", "ai-turn-based": "ARC-WORLD-095 native-smoke ai-turn-based PASS",
     "ai-cast": "ARC-WORLD-102 native-smoke ai-cast PASS", "ai-follower": "ARC-WORLD-115 native-smoke ai-follower PASS",
-    "premade": "ARC-WORLD-114 native-smoke premade PASS",
+    "premade": "ARC-WORLD-114 native-smoke premade PASS", "opening": "ARC-SCRIPT-047 native-smoke opening PASS",
     "life": "ARC-UI-020 native-smoke life PASS", "floaters": "ARC-UI-021 native-smoke floaters PASS",
     "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS",
     "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
@@ -86,14 +86,14 @@ BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "pickpocket"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
-                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "pickpocket", "wreck"})
+                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report"})
 SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 
