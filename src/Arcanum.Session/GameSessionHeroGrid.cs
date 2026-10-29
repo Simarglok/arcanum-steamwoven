@@ -34,7 +34,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-UI-055: attaches the host's inventory art frames: for an item (its entity and kind) the width and height in pixels of the frame
-    /// of its inventory art (field 0x5D), or null when the host cannot read it. The session turns a frame into the item's size in grid
+    /// of its inventory art (field 0x5D), or null when the host cannot read it. The source must not change the session: the session asks it in the middle of its own changes
+    /// (the grid's settling after every change, a drop's placement) and only checks that it was not disposed meanwhile. The session turns a frame into the item's size in grid
     /// cells as the original does (0x461780, ledger JP3: (pixels − 1) / 32 + 1 per side, a 0-pixel side never fits), for the hero's
     /// grid and for the junk piles; without an answer it keeps the seed's size or 1 × 1. Not state: it is never saved and is attached again
     /// after a restore; null detaches it. Attaching it lays out again every grid item whose kept size differs from its art's (a grid made
@@ -65,13 +66,15 @@ public sealed partial class GameSessionOwner
     private (int Width, int Height)? ArtCells(string entity, SessionSeedItem? row)
     {
         if (_itemArtSizes is null) return null;
-        var added = row is null && _inventory.NpcOf(entity) is { } npc
-            ? _inventory.AddedTo(npc).Where(item => item.Entity == entity).Select(item => (SessionItemKind?)item.Kind).FirstOrDefault() : null;
-        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? added ?? row?.Facts.Kind) is not { } kind) return null;
+        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? row?.Facts.Kind ?? AddedKind(entity)) is not { } kind) return null;
         var pixels = _itemArtSizes(entity, kind);
         ThrowIfDisposed();
         return pixels is { } frame ? InventoryGridRules.CellsOf(frame) : null;
     }
+
+    // The kind of a made item the session added to an NPC's list.
+    private SessionItemKind? AddedKind(string entity) => _inventory.NpcOf(entity) is { } npc
+        ? _inventory.AddedTo(npc).Where(item => item.Entity == entity).Select(item => (SessionItemKind?)item.Kind).FirstOrDefault() : null;
 
     // Whether a grid item's kept size differs from its art's (only while an art source answers for it).
     private bool SizeChanged(SessionHeroGridItem item) => ArtCells(item.Entity, SeedRow(item.Entity)) is { } cells && cells != (item.Width, item.Height);

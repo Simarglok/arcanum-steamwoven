@@ -752,8 +752,9 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
   moves nothing). While it answers, an item whose kept size differs from its art's loses its slot at the next change and takes the
   first free place for its size again; attaching it does so at once, in one revision, when anything differs (PROJECT: a new hero's kit
   placed before the source was attached, or a grid saved before ARC-UI-055; the original's sizes never change). The viewer attaches
-  it wherever its running session is set (after the seeds, so a taken item's own map row is read before its prototype's), reading the
-  art through `AreaItemIcons.InventoryFrame`; the synthetic self-tests have no game folder and keep 1 × 1.
+  it wherever its running session is set (after the seeds), reading the art through `AreaItemIcons.InventoryFrame` from the item's own map
+  row while its map is loaded in the run, else from its prototype (an item whose row and prototype name different art can then
+  change size, and be laid out again, between runs on different maps), once per item and session; the synthetic self-tests have no game folder and keep 1 × 1.
 
 **Not ready.** The room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
