@@ -1,8 +1,8 @@
 # Architecture audit against the original: plan
 
-Status: **Plan**, work item ARC-RES-077 (2026-10-29). Docs-only: no code changes and
-no checks run. Nothing below is started; every slice waits for the owner's go and
-takes its own task code from the coordinator, its own thread and its own PR.
+Status: **Plan, accepted by the owner** (2026-10-29), work item ARC-RES-077. Docs-only:
+no code changes and no checks run. Every slice takes its own task code from the
+coordinator, its own thread and its own PR; R1 is ARC-RES-078 and M1 is ARC-RES-079.
 
 The owner's ask: before more bug fixes or features, review the whole existing
 implementation against the original game, find every mismatch at the level of the
@@ -160,9 +160,10 @@ concept document even if it is partly built today.
 
 ## Work on hold
 
-The follower fix slices V1–V6 of ARC-RES-076 wait for G1. New bug fixes and
-features wait for the owner's word on how far the hold goes; the audit itself does
-not change code.
+Owner decision (2026-10-29, Aleksandr, answers "1 - A", "2 - 2"): the plan is taken
+as written, and every other bug fix and feature waits while the audit runs. The
+follower fix slices V1–V6 of ARC-RES-076 fold into G1. The audit itself does not
+change code.
 
 ## Size
 
