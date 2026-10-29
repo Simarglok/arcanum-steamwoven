@@ -61,7 +61,8 @@ public sealed class AreaAiFollowerTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion);
 
-    private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null)
+    private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
+        CellCoord? companionHome = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -88,6 +89,9 @@ public sealed class AreaAiFollowerTests
             [new(EnemyCell.X, EnemyCell.Y)] = [new(Key(0), new(EnemyCell.X, EnemyCell.Y), 16, CardinalTraversalCoverage.Supported,
                 CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")],
         };
+        // The companion's own T0 record on its home cell, blocking it in the step evidence as a critter's does.
+        if (companionHome is { } h) objects[new(h.X, h.Y)] = [new(Key(1), new(h.X, h.Y), 16, CardinalTraversalCoverage.Supported,
+            CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")];
         // A scenery object (type 5) blocking a corner cell.
         if (corner is { } c) objects[new(c.X, c.Y)] = [new(Key(9), new(c.X, c.Y), 5, CardinalTraversalCoverage.Supported,
             CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")];
@@ -217,5 +221,17 @@ public sealed class AreaAiFollowerTests
         host.Perform(companion);
         Assert.IsNull(host.RunOf(companion));
         Assert.AreEqual("Follow by its own walk", host.TraceOf(companion)?.Perform);
+    }
+
+    [TestMethod]
+    public void The_companions_step_onto_its_own_home_record_is_not_refused()
+    {
+        // The planner moves a companion's T0 record (it stands elsewhere); the step test must agree, or the route is planned and refused
+        // step by step for ever. A map NPC's record on its cell still blocks a walker's step there (the enemy at (10, 20)).
+        var (_, host, _, enemy, companion) = Open(companionAt: new(13, 21), companionHome: new(12, 21));
+        Assert.AreEqual(AiStepBlock.Clear, host.StepBlocked(companion, new(12, 21), false), "its own home record does not block it");
+        var (_, other, _, wolf, next) = Open(companionAt: new(11, 21));
+        Assert.AreEqual(AiStepBlock.Occupied, other.StepBlocked(next, EnemyCell, false), "the living enemy on its cell (LivingCritterOn)");
+        Assert.IsNotNull(enemy); Assert.IsNotNull(wolf);
     }
 }

@@ -72,6 +72,7 @@ waiting; `AreaAiScene.Followers`, `IAreaAiFollowers`) are run by the host like i
 | Hold | — | `AreaAiHost.Holds`: while a companion has a goal run of the host or its danger state is not NONE, its walk makes no follow decision (`AreaCompanionGroup.HeldByAi`) and drives only the host's steps. |
 | Steps and turns | — | The host's step of a companion (`BeginStep`) orders its own walk one step onto the next cell (`AreaCompanionGroup.StepTo`, the walk-here order's ordered goal `CompanionFollower.WalkTo`; a refused one is traced); its cell is that walk's, so the host reads it from the scene's companions. A turn stands its settled grid again with the new facing (`FaceTo`). Its body is the companion group's (the T0 frame with the walk or run cycle). The companions' walks see the AI's moved NPCs (`AreaCompanionGroup.Extra`: their T0 records away, their live cells held), as the hero's does. |
 | First-step test | 0x425130 (AP1) | The arrival test's step toward the target reads the walker's overlay toward it (`Occupancy`): the target is made no-block (its T0 record and every moved record away), the other critters' live cells block. Before, it read the bare map data, so an attacker next to an NPC standing on its own record's cell met that record as an object in its way and found no first step. Next to the target past a corner object there is no first step and, as in the original, no route (AP2), so the attack ends (AP4). |
+| Step test | — | A step's terrain test reads the map with the T0 records the planner moves too (the walked NPCs', the companions', the removed ones) and no live cells (the destination's critter is the living-critter test's): a route through a companion's home cell or a walked NPC's origin is no longer refused step by step while the planner keeps planning it. |
 
 ## Turn-based round (ARC-WORLD-095)
 
@@ -279,7 +280,8 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
 is held, starts its attack run, walks up through its own walk and strikes through the session in combat mode; an NPC's hit on the hero
 tells the victim's follower; a waiting companion is not told; a peaceful companion's follow is its own walk's; without followers in
 the scene nothing is run; next to the enemy past a corner object there is no first step and no route (AP1, AP2), while the enemy's
-own T0 record on its cell does not block the first step; after the fight (state NONE, no run) the companion is released to its walk. `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
+own T0 record on its cell does not block the first step; after the fight (state NONE, no run) the companion is released to its walk;
+its step onto its own home record is not refused. `NpcAttackStateTests` (Session): the monster table, bare hands and gauntlets, a wielded weapon, a bow refused; the hero bitten and
 paying nothing; an NPC victim's pool and the kill award for a PC-led killer only; the hero's critical-miss fate; the refusals.
 `AreaAiHostTests` (viewer Core): the movers' steps and slide; on the installed original (`ARC_AREA_CONVERSATION_GAME_ROOT`,
 `ARC_CAVE_MOBILE`) an animal of the Crash Site cave that the hero hits reacts, focuses the hero through its tick's danger update,

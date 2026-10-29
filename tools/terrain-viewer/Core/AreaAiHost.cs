@@ -872,13 +872,23 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(_scene.Steps, _scene.Chart).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(_scene.Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 
     /// <summary>The step onto <paramref name="next"/>: a map NPC's mover takes the cell at once and slides its body there over the step's
     /// time; ARC-WORLD-115: a companion's own walk is told to step there (<see cref="IAreaAiFollowers.Step"/>), its cell changing as
     /// that walk goes.</summary>
+    // ARC-WORLD-115: the step's terrain test with the T0 records the planner moves too (the moved NPCs' and the companions'; the ones
+    // the session removed), no live cells (the destination's critter is LivingCritterOn's): a route through a companion's home cell or
+    // a walked NPC's origin is then not refused step by step while its planner keeps planning it.
+    private AreaOccupancy MovedRecords()
+    {
+        var occupancy = new AreaOccupancy(Movers.Moved.Concat(_followers.Values.Select(n => n.Row.Key))
+            .Concat((_scene.Companions?.Invoke() ?? []).Select(c => c.Key)), []);
+        return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
+    }
+
     public int BeginStep(string id, CellCoord next, bool running)
     {
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
