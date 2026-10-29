@@ -530,8 +530,9 @@ at most S17. Both name the list `IScrWorldQueries.CrittersInVicinity(centre)`: t
 `ScrWorld.VicinityReach` (10) tiles of the attachee's on both axes, the attachee itself and dead critters included, destroyed or
 switched-off ones left out, at most 100 (`VicinityListCapped` past that; ledger
 [TG4](../research/ledger/scripts.md#script-triggers-arc-script-047)). An action names the whole list (loop for, or one request per
-object), an optional single object takes its first object. A condition over a list kind (SG6: every object, or any) is not modelled,
-so `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`).
+object), an optional single object takes its first object. `Check` refuses kinds 8 and 9 in a condition operand (`FocusKindNotAdmitted`);
+the list rule of SG6 (every object, or any) is the interpreter's since S18 for the dead and switched-off conditions, which a set may
+pair with the scenery list (15).
 
 Call-ex (81) now runs the dialog point (9): it goes through the object entry as the original's 0x44B170 does, so the dialog gates of
 0x4449B0 apply (TG5): a dead attachee whose script lacks file flag 0x8 or a surrendered one without 0x10 runs nothing (the action
@@ -543,14 +544,40 @@ modelled). A callee of the dialog point that reaches call script (7) is refused,
 call script (the called script would run at the dialog point without the gates). The call-ex's writeback supersedes the callee's
 dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier call-ex of the slot keeps its own).
 
-- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (below and
+- **Hosts.** The viewer's heartbeat set "S2-area-heartbeat-state-kill-talk" (since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world", below and
   [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits 8 and 9 with loop for, loop end, get object type,
   call-ex and dialog: that runs Virgil's opening heartbeat 1100 ([script trigger audit](../research/script-trigger-audit.md)). No
   other host's set holds the critter kinds.
 
-## Talk set (ARC-SCRIPT-050)
+## Heartbeat world questions (ARC-SCRIPT-049, set S18)
 
-`ScrAdmissionSet.S18` is S17 plus float line (23) and get area (84); the interpreter runs at most S18. Slice 2 of the
+`ScrAdmissionSet.S18` is S17 plus the conditions obj is dead (22) and obj is switched off (27) and the actions distance between (71)
+and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../research/ledger/scripts.md#heartbeat-world-questions-arc-script-049)).
+
+- **Obj is dead, obj is switched off.** A host that admits them implements `IScrObjectStateQueries` (`IsDead`, `IsSwitchedOff`;
+  the run options refuse a set with them for a host without it). Each tests the objects of operand 0 and holds by the list rule of SG6: at least one holds,
+  and all of them or the focus kind is an "any" kind; an empty list (an absent single object) is false. Dead is the original's test
+  0x45D8D0 (current hit points 0 or less), switched off the object flag 0x2. A null answer is an object the host does not know: the
+  run stops (`MissingObject`). The critter list kinds stay refused in a condition operand; the scenery list (15) is the one list a
+  set may test (the viewer's heartbeat set has none).
+- **Distance between.** The first objects of operands 0 and 1, their tile distance (the larger of the two axis differences, 0x441AE0 →
+  0x4B96F0) into operand 2, cut to 32 bits; a literal store is refused (`WriteToNumber`). The places come from
+  `IScrWorldQueries.Location`; an absent object, or one without a place, stops the run (the original reads the null handle's
+  location).
+- **Set faction.** One `ScrObjectStateRequest` (`SetFaction`, the first object of operand 0, the faction as `Value`); an absent object
+  asks nothing. The original (0x45D0C0) writes the faction field 0x124 of an NPC only; the host leaves any other object as it is.
+- **Run order.** A toggle state (56) or kill (58) earlier in the same dispatch counts for a later dead or switched-off test of that
+  object (the original flips the flag and kills at once): the interpreter keeps the toggles' parity and the killed objects of the
+  dispatch over the host's answers.
+- **Hosts.** The viewer's heartbeat set (since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world",
+  [heartbeat scripts](../world/ai-host.md#heartbeat-scripts-arc-world-114)) admits the four with following (18), is named (20), has a
+  reputation (33) and call script in (54). A heartbeat's call script in is queued; the call runs later under the talk host's set when it
+  fires, and is refused there when that set does not admit the callee or no talk host is open on the map (the census counts the
+  heartbeat, not its callee).
+
+## Talk set (ARC-SCRIPT-050, set S19)
+
+`ScrAdmissionSet.S19` is S18 (ARC-SCRIPT-049) plus float line (23) and get area (84); the interpreter runs at most S19. Slice 2 of the
 [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised); both actions read in the executable (ledger
 [FL1–FL5, GA1–GA3, ML1](../research/ledger/scripts.md#talk-commands-arc-script-050)).
 
@@ -574,14 +601,14 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   still `Unsupported`.
 - **Hosts.** The AREA viewer's dialog host (`AreaScriptHost`) runs the talk set "S3-area-talk-queries" (with a session hero
   "S3-area-talk-queries-skill"): its earlier set plus the guard conditions of S4 (PC quest state, holds an item named, is named, wields an
-  item named, has a reputation), random (37), float line and get area, while its `QueryHost` gives the shown map's use host
+  item named, has a reputation), obj is dead and obj is switched off of S18, random (37), float line and get area, while its `QueryHost` gives the shown map's use host
   (`AreaUseScriptHost`) of the talk's map with the PC on it, built for the shown snapshot only, which answers them as for a use or heartbeat run (map mode wires it; a visitor's host keeps
   the earlier set). `AreaScriptWorld.MapArea` gives the use host the shown map's map-list area and whether it is the start map.
   The dialog host applies a run's float lines first: a missing or unreadable DLG floats nothing (the original's load fails), a line
   with an action field or generated text leaves the whole run unapplied; the shown texts go to the viewer (`TakeFloats`), which floats
   them over the speaker in the floater field. Over the installed interiors (the opt-in walk of `AreaMapConversationOriginalTests`):
-  89 talks start and 14 end in their script, against 50 and 1 without the queries; 12 of them float a line and none reaches a floated
-  line with an action field. The census admits 110 of the 180 dialog rows from line 0 (52 before).
+  94 talks start and 14 end in their script, against 50 and 1 without the queries; 12 of them float a line and none reaches a floated
+  line with an action field. The census admits 115 of the 180 dialog rows from line 0 (52 before).
 
 ## Checks
 
@@ -618,10 +645,10 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
 - `tests/Arcanum.Scripting.Tests/Scr/ScrPrintLineTests.cs` (ARC-SCRIPT-013): print line refused below S6, its lines
   in order from an object event and a call, none without an attachee, options wider than S6 refused, and the printed
   text rules (missing line, alternate text, tokens, action field, generated text; ARC-SCRIPT-050: a separators-only action field).
-- `tests/Arcanum.Scripting.Tests/Scr/ScrTalkCommandTests.cs` (ARC-SCRIPT-050): S18 over S17; float line over one object and over a list
+- `tests/Arcanum.Scripting.Tests/Scr/ScrTalkCommandTests.cs` (ARC-SCRIPT-050): S19 over S18; float line over one object and over a list
   with the PC around the triggerer, nothing without a PC or a triggerer, an absent object floating nothing; get area storing the host's
   area, a host without an answer or an absent object stopping the run; sets with either action refused for a host that cannot answer,
-  and a set wider than S18 refused. Viewer: `AreaTalkQueryTests` (the talk set through the use host, the floated text and the
+  and a set wider than S19 refused. Viewer: `AreaTalkQueryTests` (the talk set through the use host, the floated text and the
   separators-only action field, get area 0 off the start map and stopping on it, a floated action field leaving the run unapplied, the
   set widening only for a use host of the talk's map); `MapTransitionsTests` (the map list's area, ML1); opt-in
   `AreaMapConversationOriginalTests.Every_dialog_npc_of_every_interior_starts_with_the_talk_queries` and `ScriptTriggerCensusTests`.
@@ -677,7 +704,7 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   enters, and since ARC-SCRIPT-020 the use script of a written item the PC reads (`AreaUseScriptHost.RunItemUse`: attachment point 1,
   the PC as the user, no target, the item's inventory row; skip default stops the reading, a teleport is refused); since ARC-WORLD-114
   an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill", since ARC-SCRIPT-047
-  "S2-area-heartbeat-state-kill-talk"); combat is a later slice. Which points the original fires and which have no host here: the
+  "S2-area-heartbeat-state-kill-talk", since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world"); combat is a later slice. Which points the original fires and which have no host here: the
   [script trigger audit](../research/script-trigger-audit.md).
 - Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, reactions and most other world
   actions; create object makes items only (ARC-WORLD-081).
@@ -686,7 +713,8 @@ dialog store of the same slot (one `SlotWrites` entry for the pair; an earlier c
   location, set rumor and add or remove reputation (S13), the item-effect commands and call-ex (S14, the session's item events only), random,
   loop for and loop end over the vicinity's scenery and create object (S15, ARC-WORLD-081), toggle state and kill (S16, ARC-WORLD-114;
   the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
-  float line and get area (S18, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
+  obj is dead, obj is switched off, distance between and set faction (S18, ARC-SCRIPT-049; the viewer's heartbeat set and talks),
+  float line and get area (S19, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
   with area 0 not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer

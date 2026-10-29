@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrAreaQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -51,15 +51,16 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <summary>
     /// ARC-SCRIPT-050 (slice 2 of the script trigger audit): <see cref="Admission"/> plus what the shown map's use host answers for a talk
     /// (<see cref="QueryHost"/>): the guard conditions of <see cref="ScrAdmissionSet.S4"/> (PC quest state, holds an item named, is named,
-    /// wields an item named, has a reputation), random (37) of <see cref="ScrAdmissionSet.S15"/>, and float line (23) and get area (84) of
-    /// <see cref="ScrAdmissionSet.S18"/>.
+    /// wields an item named, has a reputation), obj is dead (22) and obj is switched off (27) of <see cref="ScrAdmissionSet.S18"/>, random (37) of
+    /// <see cref="ScrAdmissionSet.S15"/>, and float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>.
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
     /// <summary>ARC-SCRIPT-050: <see cref="SkillAdmission"/> with the commands of <see cref="TalkAdmission"/>.</summary>
     public static ScrAdmissionSet SkillTalkAdmission { get; } = WithQueries("S3-area-talk-queries-skill", SkillAdmission);
 
-    private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id, set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions),
+    private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
+        set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions),
         set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]), set.ValueKinds, set.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
@@ -94,6 +95,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int? ObjectType(ScrObjectRef obj) => Answering.ObjectType(obj);
     public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => Answering.SceneryInVicinity(centre);
     public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => Answering.CrittersInVicinity(centre);
+    public (long X, long Y)? Location(ScrObjectRef obj) => Answering.Location(obj);
+    public bool? IsDead(ScrObjectRef obj) => Answering.IsDead(obj);
+    public bool? IsSwitchedOff(ScrObjectRef obj) => Answering.IsSwitchedOff(obj);
     public int Random(int low, int high) => Answering.Random(low, high);
     public int? AreaOf(ScrObjectRef obj) => Answering.AreaOf(obj);
 

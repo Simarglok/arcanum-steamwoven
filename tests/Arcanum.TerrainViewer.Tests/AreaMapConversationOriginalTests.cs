@@ -118,9 +118,9 @@ public sealed class AreaMapConversationOriginalTests
         Console.WriteLine("stops " + string.Join("; ", stops.Select(d => $"{d.Key}={d.Value}")));
         Console.WriteLine($"floated {floated.Count}: " + string.Join(", ", floated));
         Assert.AreEqual(182, speakers);
-        // 39 more talks start and 13 more end in their script (52 fewer entries refused); 12 of them float a line, and none reaches a floated
-        // line with an action field. The counts move only when the talk set or the dialog runtime grows.
-        Assert.AreEqual("EntryNotAdmitted=79, ScriptEnded=14, Started=89", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
+        // 44 more talks start and 13 more end in their script (57 fewer entries refused; obj is dead of ARC-SCRIPT-049 included); 12 of them
+        // float a line, and none reaches a floated line with an action field. The counts move only when the talk set or the dialog runtime grows.
+        Assert.AreEqual("EntryNotAdmitted=74, ScriptEnded=14, Started=94", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
         Assert.AreEqual(12, floated.Count);
         Assert.IsFalse(stops.Keys.Any(k => k.StartsWith("effects ", StringComparison.Ordinal)), string.Join("; ", stops.Keys));
     }

@@ -5,14 +5,14 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 
 namespace Arcanum.Scripting.Tests.Scr;
 
-/// <summary>ARC-SCRIPT-050: the talk set's float line (23, ledger FL1–FL5) and get area (84, GA1–GA3) of <see cref="ScrAdmissionSet.S18"/>.</summary>
+/// <summary>ARC-SCRIPT-050: the talk set's float line (23, ledger FL1–FL5) and get area (84, GA1–GA3) of <see cref="ScrAdmissionSet.S19"/>.</summary>
 [TestClass]
 public sealed class ScrTalkCommandTests
 {
     private const byte Triggerer = 0, Attachee = 1, ExtraObject = 12, Everyone = 8;
     private const int Talk = 1952;
     private static readonly ScrObjectRef Other = new(1, "npc.2");
-    // The commands of S18 these runs need: S3 with float line, get area and the everyone-in-vicinity list.
+    // The commands of S19 these runs need: S3 with float line, get area and the everyone-in-vicinity list.
     private static readonly ScrRunOptions Options = new()
     {
         Admission = new("talk", ScrAdmissionSet.S3.Conditions, ScrAdmissionSet.S3.Actions.Concat([ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]),
@@ -48,6 +48,7 @@ public sealed class ScrTalkCommandTests
         public int? ObjectType(ScrObjectRef obj) => null;
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => [];
         public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) { Centres.Add(centre); return Critters.ToArray(); }
+        public (long X, long Y)? Location(ScrObjectRef obj) => null;
         public int Random(int low, int high) => high;
         public int? AreaOf(ScrObjectRef obj) { AreaAsked.Add(obj); return Area; }
     }
@@ -65,13 +66,14 @@ public sealed class ScrTalkCommandTests
         ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, triggerer ?? Pc, Other), host, Options);
 
     [TestMethod]
-    public void S18_adds_float_line_and_get_area_to_S17()
+    public void S19_adds_float_line_and_get_area_to_S18()
     {
-        Assert.IsTrue(ScrAdmissionSet.S17.IsSubsetOf(ScrAdmissionSet.S18));
-        Assert.IsFalse(ScrAdmissionSet.S17.Actions.Contains(ScrCatalogue.Action.FloatLine) || ScrAdmissionSet.S17.Actions.Contains(ScrCatalogue.Action.GetArea));
+        Assert.IsTrue(ScrAdmissionSet.S18.IsSubsetOf(ScrAdmissionSet.S19));
+        Assert.IsFalse(ScrAdmissionSet.S18.Actions.Contains(ScrCatalogue.Action.FloatLine) || ScrAdmissionSet.S18.Actions.Contains(ScrCatalogue.Action.GetArea));
         CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea },
-            ScrAdmissionSet.S18.Actions.Except(ScrAdmissionSet.S17.Actions).ToArray());
-        Assert.IsTrue(ScrAdmissionSet.S18.CounterIndexWraps);
+            ScrAdmissionSet.S19.Actions.Except(ScrAdmissionSet.S18.Actions).ToArray());
+        CollectionAssert.AreEquivalent(ScrAdmissionSet.S18.Conditions.ToArray(), ScrAdmissionSet.S19.Conditions.ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S19.CounterIndexWraps);
     }
 
     [TestMethod]
@@ -154,8 +156,8 @@ public sealed class ScrTalkCommandTests
             ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
         foreach (var set in new[] { area, floats })
             Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), plain, new() { Admission = set }), set.Id);
-        var beyond = new ScrAdmissionSet("beyond", ScrAdmissionSet.S18.Conditions, ScrAdmissionSet.S18.Actions.Append(CritterDisband),
-            ScrAdmissionSet.S18.ValueKinds, ScrAdmissionSet.S18.FocusKinds, counterIndexWraps: true);
+        var beyond = new ScrAdmissionSet("beyond", ScrAdmissionSet.S19.Conditions, ScrAdmissionSet.S19.Actions.Append(CritterDisband),
+            ScrAdmissionSet.S19.ValueKinds, ScrAdmissionSet.S19.FocusKinds, counterIndexWraps: true);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), Host(Program(Do(C(ScrCatalogue.Action.ReturnSkipDefault))), Pc), new() { Admission = beyond }));
     }
 }

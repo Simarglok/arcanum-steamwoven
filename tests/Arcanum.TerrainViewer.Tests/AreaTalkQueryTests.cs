@@ -168,10 +168,10 @@ public sealed class AreaTalkQueryTests
             // Without the query commands the talk is refused at its float line, as before.
             Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.FloatLine), (other.Run().Outcome, other.Run().Refusal!.Type));
             Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(AreaScriptHost.TalkAdmission) && AreaScriptHost.SkillAdmission.IsSubsetOf(AreaScriptHost.SkillTalkAdmission));
-            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOf(ScrAdmissionSet.S18));
+            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOf(ScrAdmissionSet.S19));
             CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea },
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
-            CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.ToArray(), AreaScriptHost.TalkAdmission.Conditions.Except(AreaScriptHost.Admission.Conditions).ToArray());
+            CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).ToArray(), AreaScriptHost.TalkAdmission.Conditions.Except(AreaScriptHost.Admission.Conditions).ToArray());
         });
     }
 }

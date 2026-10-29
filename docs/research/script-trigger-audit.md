@@ -73,7 +73,7 @@ from line 0, static.
 | 7 | hit | 0x4B2B7F, 0x4B2F90, 0x4B37A3 | **none** | 26 (11) | — |
 | 8 | miss | 0x4B2F06, 0x4B311F, 0x4B3972 | **none** | 0 | — |
 | 9 | dialog | 0x57CC90, 0x5684AA | talk with a hero, heartbeat call-ex | 180 (122) | 52, 1 missing |
-| 10 | first heartbeat | 0x4AD2B2 | AI tick, shown map (`HeartbeatAdmission`) | 23 (6) | 21 (was 21) |
+| 10 | first heartbeat | 0x4AD2B2 | AI tick, shown map (`HeartbeatAdmission`) | 23 (6) | 23 (was 21) |
 | 11 | catching thief | 0x4AEFCD, 0x4C76E5, 0x4C7900 | pick pocket (use set) | 0 | — |
 | 12 | dying | 0x45DA57 | **none** | 167 (61) | — |
 | 13 | enter combat | 0x4AAE29 | **none** | 9 (8) | — |
@@ -82,7 +82,7 @@ from line 0, static.
 | 16 | end combat | 0x4A8688, 0x4B7681 | **none** | 0 | — |
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
 | 18 | resurrect | 0x4B5A46 | **none** | 8 (8) | — |
-| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 33 (was 32) |
+| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 81 (was 32) |
 | 20 | leader killing | 0x45DB95 | **none** | 0 | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |
@@ -125,19 +125,21 @@ only; the guard's crime notice 0x4AEFCD is not hosted).
 
 The interpreter dispatches conditions 0..52 through the table at 0x44714C and actions 1..141 by type − 1 through 0x44ADBC (type 0
 and anything above 141 fall to the default: next line). Every action type has its own case except call in and call at (54, 55),
-which share one (TG7). Steamwoven's interpreter runs at most set **S17**: 52 action types and 14 condition types.
+which share one (TG7). Steamwoven's interpreter runs at most set **S19** (ARC-SCRIPT-050; S18 of ARC-SCRIPT-049 plus float line and get area): 56 action
+types and 16 condition types.
 
 | Host (set) | Point(s) | Actions admitted | Conditions | Focus kinds |
 | --- | --- | --- | --- | --- |
 | Talk with a hero (`AreaScriptHost.SkillAdmission`) | 9, deferred calls | 0–6, 8–14, 16, 42–43, 47, 49–50, 54, 64–65, 72–73, 82–83, 87, 100–101, 114, 125, 129, 139 (34) | 0, 3–5, 18, 39, 43 | 0, 1, 12, 21 |
+| Talk with the shown map's queries (`AreaScriptHost.SkillTalkAdmission`, ARC-SCRIPT-050) | 9, deferred calls | the talk set plus 23, 37, 84 (37) | 0, 3–6, 17–18, 20–22, 27, 33, 39, 43 | as talk |
 | Use click, item use, catching thief (`AreaUseScriptHost.Admission`) | 1, 11 | 0–3, 5–16, 18–19, 24, 34, 37, 42–44, 49–50, 52, 54, 64–65, 72–73, 82–83, 87, 100–102, 114, 125 (40) | 0, 3–6, 17–18, 20–21, 33, 39, 43 | 0, 1, 10–12, 15, 21 |
 | Tile and sector (`PlacedAdmission`) | tile, sector | the use set plus 4 (41) | as use | as use |
-| Heartbeat (`HeartbeatAdmission`, this task) | 10, 19 | 0–6, 8–14, 18–19, 34, 42–43, 56, 58, 81, 100–101 (24) | 0, 3–5, 43 | 0, 1, 8–10, 12, 21 |
+| Heartbeat (`HeartbeatAdmission`, this task and ARC-SCRIPT-049) | 10, 19 | 0–6, 8–14, 18–19, 34, 42–43, 54, 56, 58, 71, 81, 100–101, 134 (27) | 0, 3–5, 18, 20, 22, 27, 33, 43 | 0, 1, 8–10, 12, 21 |
 | Item scripts (`SessionItemScripts.Admission`) | 4, 5, 21, 24, 25, 28, 32 | 0–3, 5–6, 8–14, 24, 77–78, 81–82, 91, 100–101, 120 (22) | 0, 3–5, 18, 39, 43, 47, 50 | 0, 1, 12, 21 |
 
-No host admits actions 17, 20–23, 25–33, 35–36, 38–41, 45–46, 48, 51, 53, 55, 57, 59–63, 66–71, 74–76, 79–80, 84–86, 88–90,
-92–99, 103–113, 115–119, 121–124, 126–128, 130–138, 140–141 (91 types) or conditions 1–2, 7–16, 19, 22–32, 34–38, 40–42, 44–46,
-48–49, 51–52 (39 types). The census names the ones the installed attachments reach first (section 5).
+No host admits actions 17, 20–22, 25–33, 35–36, 38–41, 45–46, 48, 51, 53, 55, 57, 59–63, 66–70, 74–76, 79–80, 85–86, 88–90,
+92–99, 103–113, 115–119, 121–124, 126–128, 130–133, 135–138, 140–141 (87 types) or conditions 1–2, 7–16, 19, 23–26, 28–32, 34–38,
+40–42, 44–46, 48–49, 51–52 (37 types). The census names the ones the installed attachments reach first (section 5).
 
 ## 5. Census of the installed attachments
 
@@ -154,19 +156,24 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
     script (focus 8) 5, change art (59) 4, then one each of unfog town map, grant fate point, eye candy, destroy item named, damage;
   - dialog (9), 127 of 180 refused, 1 missing: float line (23) 45, critter disband (22) 17, obj is wielding (condition 21) 14, get
     area (84) 10, random (37) 8, obj is dead (condition 22) 6, get reaction (29) 5, PC quest state (condition 6) 4, hours since
-    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S18) 69 of 180 refused, 1 missing; the largest:
-    critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11, obj is dead (condition 22) 6,
-    obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, goto beyond the end 2, give gold (33) and adjust money
-    (36) 2 each;
+    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S19, with ARC-SCRIPT-049's obj is dead) 64 of 180
+    refused, 1 missing; the largest: critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11,
+    obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, adjust money (36) 3, goto beyond the end 2, give gold
+    (33) and daytime (condition 1) 2 each;
   - heartbeat (19), 108 of 141 refused: obj is switched off (condition 27) 51, obj is named (condition 20) 26, set faction (134),
     damage (60) and distance between (71) 4 each, obj is dead and has reputation (conditions 22, 33) 3 each, call script in (54) and
-    destroy (68) 2 each; first heartbeat (10): 21 of 23 admitted, 2 refused by condition 27;
+    destroy (68) 2 each; first heartbeat (10): 21 of 23 admitted, 2 refused by condition 27. After ARC-SCRIPT-049 (slice 1, recount of the
+    same day): heartbeat 81 of 141 admitted, first heartbeat 23 of 23; the heartbeat's first refusals are create object (52) 13, critter
+    follow (21) 10, attack (36) 7, the scenery vicinity in a heartbeat (focus 15) 5, damage (60) 4, call script (7) 4, set day standpoint
+    (45) 3, destroy (68), PC quest state (condition 6) and a global variable operand (value kind 1) 2 each;
   - item scripts: insert item (21) 25 of 28 refused (toggle state 16, loop for 5), wield on (24) 6 of 98 (call script in 4), wield
     off (25) 1 of 92, transfer (32) 3 of 6.
 - **Opening heartbeats.** Nine installed heartbeats call their NPC's own dialog point as 1100 does: the Crash Site's 1100 (Virgil)
   and 1717 (the Molochean agent there, after a story flag), Wheel Clan 2700, the Void 1130 and 3081 (Arronax's interior), the Panarii
-  temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. The heartbeat set admits 1100 only; 1717 stops
-  first on obj is switched off (condition 27); the others each stop on a command outside the set (slice 1 counts them).
+  temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. ARC-SCRIPT-047 admitted 1100 only; since
+  ARC-SCRIPT-049 the set admits 1100, 2700, 1130, 3081 and 2106. The other four still stop on a command outside the set: 1717 on set day
+  standpoint (45), then set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then
+  obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1).
 - **Tile scripts** (not object slots): 684 of 3,012 run, 2,198 refused (ARC-SCRIPT-046's census, unchanged).
 
 ## 6. Fix slices (prioritised)
@@ -175,8 +182,8 @@ Each slice is its own task and thread; codes come from the coordinator. "Reach" 
 
 | # | Slice | Covers | Reach |
 | ---: | --- | --- | --- |
-| 1 | Heartbeat conditions and world queries | conditions obj is switched off (27), obj is named (20), obj is dead (22), has reputation (33); actions distance between (71), call script in (54), set faction (134), damage (60), destroy (68) in the heartbeat set | most of the 108 refused heartbeats, the 2 refused first heartbeats, the eight other opening talks (1717 at the Crash Site first) |
-| 2 | Dialog-point commands | float line (23), critter disband (22), obj is wielding (21), get area (84), random (37), obj is dead (22), get reaction (29), loop for (18) in the talk set | most of the 127 refused dialog scripts (talks that now run default). **Done in part** by ARC-SCRIPT-050 (S18: float line, get area, random and the S4 guard conditions in the talk set; 58 more rows admitted). Left: obj is dead (22, with ARC-SCRIPT-049); critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); get reaction (29) with set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 |
+| 1 | Heartbeat conditions and world queries (ARC-SCRIPT-049: done but damage and destroy, which go to their own slice) | conditions obj is switched off (27), obj is named (20), obj is dead (22), has reputation (33); actions distance between (71), call script in (54), set faction (134), damage (60), destroy (68) in the heartbeat set | most of the 108 refused heartbeats, the 2 refused first heartbeats, the eight other opening talks (1717 at the Crash Site first) |
+| 2 | Dialog-point commands | float line (23), critter disband (22), obj is wielding (21), get area (84), random (37), obj is dead (22), get reaction (29), loop for (18) in the talk set | most of the 127 refused dialog scripts (talks that now run default). **Done in part** by ARC-SCRIPT-050 (S19: float line, get area, random, the S4 guard conditions and ARC-SCRIPT-049's obj is dead and obj is switched off in the talk set; 63 more rows admitted). Left: critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); get reaction (29) with set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 |
 | 3 | Tile scripts for every moved critter | the location change of TG2 for AI movers, visitors, a jump or teleport arrival, a created or placed critter, and the path walk 0x455350 | traps, guards and story tiles NPCs step on |
 | 4 | Dying and destroy | points 12 and 2 (0x45DA57, 0x43CD0E), from the session's death and destroy; a heartbeat's kill then runs the dying script | 167 + 26 attachments |
 | 5 | Combat points | enter, exit, start, end combat (13–16), hit, miss, critter hits, critical hit and miss, taking damage (7, 8, 26, 34, 35, 23) from the combat hosts | 62 attachments (Virgil's 1997 at enter combat) |

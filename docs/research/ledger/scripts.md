@@ -233,10 +233,24 @@ addresses (method step 6); the readers agree on every row both read, so those ro
 | TG7 | condition evaluator (0x4451B0, table 0x44714C), action executor (0x447220, table 0x44ADBC) | Conditions 0..52 are indexed directly; actions 1..141 by type − 1. Actions 54 and 55 share one handler (0x44867B); no other entries share one, and there is no default entry inside the range. These are the counts the audit's admission matrix uses. | Original |
 | TG8 | dialog resume (0x568480, call at 0x5684AA) | A conversation's "return to script" runs the speaker's dialog point (9) again, triggerer the PC, at the line the reply names or the conversation's held line + 1. So a talk opened from a dialog-point script resumes that same slot; a conversation opened by another point (use, heartbeat call-ex to a non-dialog point) is resumed at the dialog point too. | Original |
 
+## Heartbeat world questions (ARC-SCRIPT-049)
+
+Source: the [script trigger audit](../script-trigger-audit.md) (slice 1) and the [dispatcher contract](../../scripting/scr-dispatcher-runtime.md#heartbeat-world-questions-arc-script-049-set-s18).
+Question: what the conditions and actions the installed heartbeats reach first do. Read on 2026-10-29 by this task with `llvm-objdump`
+in the retail 1.0.7.4 `Arcanum.exe` (SHA-256 as the method records), at the entries of the condition table 0x44714C (22, 27) and the
+action table 0x44ADBC (71, 134), and their callees; read by this task only (F1).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| HW1 | script condition (0x4451B0) case 22 (0x445E90), critter is dead (0x45D8D0) | Obj is dead: the object list of operand 0 (0x44B4E0); each object counts when 0x45D8D0 holds: a null handle is dead, else its current hit points (0x43D600) are 0 or less. The list is released (0x44B8F0), then the SG6 rule: none counted (an empty list included) false, all counted true, some only for the "any" kinds 3, 5, 7, 9, 14, 16, 18, 20, 23. | Original |
+| HW2 | script condition case 27 (0x4461B3) | Obj is switched off: the same list; each object counts when its object flags (0x406CA0, field 0x13) have bit 0x2 (off); then the SG6 rule. | Original |
+| HW3 | script action (0x447220) case 71 (0x448E25), object distance (0x441AE0), tile distance (0x4B96F0) | Distance between: the first object of operand 0 and of operand 1 (0x44B960), each one's location field (0x406DA0, field 2) without a null test, the tile distance of the two locations (the larger of the absolute X and Y differences, 64-bit), stored into operand 2 (0x44BB50) as its low 32 bits. The run goes on. | Original |
+| HW4 | script action case 134 (0x44A973), set faction (0x45D0C0) | Set faction: the first object of operand 0 and the value of operand 1; 0x45D0C0 returns at a null handle and for an object whose type (field 0x14F) is not an NPC (16), else writes the NPC's faction field 0x124. The run goes on. | Original |
+
 ## Talk commands (ARC-SCRIPT-050)
 
 Source: slice 2 of the [script trigger audit](../script-trigger-audit.md#6-fix-slices-prioritised) and the
-[dispatcher runtime](../../scripting/scr-dispatcher-runtime.md#talk-set-arc-script-050). Question: what float line (23) and get area (84)
+[dispatcher runtime](../../scripting/scr-dispatcher-runtime.md#talk-set-arc-script-050-set-s19). Question: what float line (23) and get area (84)
 do, the two actions that kept most installed dialog scripts from running. Read on 2026-10-29 by this task only with `llvm-objdump` (F1).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
