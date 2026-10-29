@@ -1775,8 +1775,8 @@ and layout (below), the other windows the project's.
   software art renderer: a font without flags 0x80 and 0x100 mixes its colour into the screen by the glyph pixel's red level (smooth
   glyph edges), flag 0x100 (the menu labels' brown pass) adds glyph × colour, flag 0x80 writes it opaque. A canvas is made ready by
   `AreaArtTextDraw.Prepare` (premultiplied alpha; its other draws must be opaque or fully transparent with black transparent pixels,
-  as decoded art is) and keeps the order of its draws; the message panel, hover window, floaters and dialog window are to use it
-  next (triage slices A2, A3, B1). The menu stage checks it after the art (`ARC-UI-070 native-smoke menu text blend PASS`: the main
+  as decoded art is) and keeps the order of its draws; the message panel and hover window (art 27/229), the floaters (art 229) and
+  the conversation window in the bottom panel are planned to use it next. The menu stage checks it after the art (`ARC-UI-070 native-smoke menu text blend PASS`: the main
   window's labels, read back, within two levels a channel of the background with the three passes rendered by `AreaArtTextRules`, and
   the font holding partly covering edge pixels).
 
