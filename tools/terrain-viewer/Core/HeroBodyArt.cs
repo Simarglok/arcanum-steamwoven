@@ -131,8 +131,15 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     {
         var animation = (int)((selector >> 6) & 31); var weapon = (int)(selector & 15); var shield = (selector >> 19) & 1;
         if (animation > 24 || weapon >= WeaponCodes.Length) throw new ArgumentOutOfRangeException(nameof(selector), "no critter ART names this animation or weapon");
-        if (shield != 0 && weapon == TwoHandedSword) weapon = Sword;
-        return $"art/critter/{Label}/{Label}{ArmorCodes[Armor]}{(shield != 0 ? 'S' : 'X')}{WeaponCodes[weapon]}{(char)('a' + animation)}.art";
+        return $"art/critter/{Label}/{Label}{ArmorCodes[Armor]}{(shield != 0 ? 'S' : 'X')}{WeaponCode(weapon, (int)shield)}{(char)('a' + animation)}.art";
+    }
+
+    /// <summary>The weapon letter of a critter, monster or unique NPC ART name for a weapon part 0..14 (MA3; ARC-RENDER-038 shares it
+    /// with the NPCs' armed ARTs): a two-handed sword with a shield is written as the sword.</summary>
+    public static char WeaponCode(int weapon, int shield)
+    {
+        if (weapon < 0 || weapon >= WeaponCodes.Length) throw new ArgumentOutOfRangeException(nameof(weapon));
+        return WeaponCodes[shield != 0 && weapon == TwoHandedSword ? Sword : weapon];
     }
 
     private const int Sword = 3, TwoHandedSword = 7;

@@ -175,6 +175,80 @@ public sealed class AreaBodyMoveTests
         Assert.IsFalse(movers.Of("npc")!.Running, "a walked step");
     }
 
+    // ARC-RENDER-038: an NPC's armed ARTs (its combat stand and attacks) are named as the original resolves them (MA2, MA3) and repaired
+    // (MA1), then fall back as the hero's do (WA8 not ready).
+    [TestMethod]
+    public void AnArmedArtIsNamedByShieldWeaponAndAnimationAndRepaired()
+    {
+        WithArchive([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 6, 2)), ("art/critter/hmm/hmmuwsdu.art", Art(7, 12, 6, 2, action: 4)),
+            ("art/critter/hmm/hmmuwxao.art", Art(5, 9, 6, 2, action: 3)), ("art/critter/hmm/hmmuwxbu.art", Art(9, 15, 6, 2, action: 6)),
+            ("art/critter/hmm/hmmuwsda.art", Art(1, 10, 6, 2)), ("art/critter/hmm/hmmuwxju.art", Art(9, 15, 6, 2, action: 6))], (path, identity) =>
+        {
+            var visual = Visual(identity(0));
+            var low = AreaBodyMoveArt.LoadArmed(visual, path, 21, 3, 1);
+            Assert.AreEqual(AreaBodyMoveStatus.Ready, low.Status, low.Detail);
+            Assert.AreEqual("art/critter/hmm/hmmuwsdu.art", low.Art!.Name, "a missing low attack is the attack (MA1)");
+            Assert.AreEqual((20, 3, 1, 7, 4, 12), (low.Animation, low.Weapon, low.Shield, low.Art.FramesPerGroup, low.Art.ActionFrame, low.Art.FramesPerSecond));
+            var twoHanded = AreaBodyMoveArt.LoadArmed(visual, path, 20, 7, 1);
+            Assert.AreEqual(("art/critter/hmm/hmmuwsdu.art", 7, 1), (twoHanded.Art!.Name, twoHanded.Weapon, twoHanded.Shield),
+                "a two-handed sword with a shield is written as the sword (MA3)");
+            var thrown = AreaBodyMoveArt.LoadArmed(visual, path, 14, 5, 1);
+            Assert.AreEqual(("art/critter/hmm/hmmuwxao.art", 14, 0, 0), (thrown.Art!.Name, thrown.Animation, thrown.Weapon, thrown.Shield),
+                "the throw clears weapon and shield (MA2)");
+            var bare = AreaBodyMoveArt.LoadArmed(visual, path, 20, 4, 1);
+            Assert.AreEqual(("art/critter/hmm/hmmuwxbu.art", 20, 1, 0), (bare.Art!.Name, bare.Animation, bare.Weapon, bare.Shield),
+                "an axe and shield without their ARTs attack bare-handed");
+            var unrepaired = AreaBodyMoveArt.LoadArmed(visual, path, 21, 9, 0);
+            Assert.AreEqual(("art/critter/hmm/hmmuwxbu.art", 20, 1), (unrepaired.Art!.Name, unrepaired.Animation, unrepaired.Weapon),
+                "weapon 9's low attack is not repaired to its attack (WA10): bare hands attack");
+            var stand = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 3, 1);
+            Assert.AreEqual(("art/critter/hmm/hmmuwsda.art", 0), (stand.Art!.Name, stand.Animation), "the combat stand keeps weapon and shield");
+            var missing = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 2, 0);
+            Assert.AreEqual(AreaBodyMoveStatus.WalkMissing, missing.Status);
+            Assert.IsNull(missing.Art);
+            Assert.AreEqual(AreaBodyMoveStatus.SourceUnavailable, AreaBodyMoveArt.LoadArmed(visual, null, 20, 1, 0).Status);
+            Assert.AreEqual(AreaBodyMoveStatus.NotACritterArt, AreaBodyMoveArt.LoadArmed(visual with { RawArt = 0x40000000 }, path, 20, 1, 0).Status);
+            Assert.AreEqual(AreaBodyMoveStatus.EntryMismatch, AreaBodyMoveArt.LoadArmed(visual with { Entry = visual.Entry with { Offset = 9 } }, path, 20, 1, 0).Status);
+            Assert.IsNull(AreaBodyMoveArt.LoadArmed(visual, path, 20, 15, 0).Art, "no ART names weapon part 15");
+
+            // The attack frame is placed as a move frame is.
+            var body = AreaCombatTests.Body();
+            var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+            var (posed, pose) = AreaBodyMoveArt.Pose(command, body, visual, low.Art, 5, 3)!.Value;
+            Assert.AreEqual((3, 5, "art/critter/hmm/hmmuwsdu.art"), (pose.Key.Frame, pose.Key.Group, low.Art.Name));
+            Assert.AreEqual((command.Destination.X + visual.HotX - 2, pose.Key), (posed.Destination.X, posed.Frame));
+            Assert.IsNull(AreaBodyMoveArt.Pose(command with { Visual = visual.Key with { SourceIndex = 99 } }, body, visual, low.Art, 5, 0));
+        });
+    }
+
+    // ARC-RENDER-038: the weapon and animation an NPC's attack wants (WA1, WA4), its rate and the frame its play shows.
+    [TestMethod]
+    public void AnNpcAttackWantsItsWeaponAndAnimationAndPlaysItsFrames()
+    {
+        const uint dagger = (6u << 28) | (2u << 6), critter = 2u << 28;
+        Assert.AreEqual(new AreaAiAttackArtRequest(20, 1, 0), AreaAiAttackArtRules.Request(null, 0, null, 0, 0, critter), "bare hands");
+        Assert.AreEqual(new AreaAiAttackArtRequest(20, 2, 1), AreaAiAttackArtRules.Request(dagger, 0, 7, 0, 0, critter), "a dagger and a shield");
+        Assert.AreEqual(0, AreaAiAttackArtRules.Request(dagger, 0, 5, 0, 0, critter).Shield, "only an armour item shows as a shield");
+        Assert.AreEqual(14, AreaAiAttackArtRules.Request(dagger, 0x40, null, 0, 0, critter).Animation, "a returning weapon is thrown");
+        Assert.AreEqual(21, AreaAiAttackArtRules.Request(dagger, 0, null, 0, AreaAiAttackArtRules.LyingAnimation, critter).Animation, "a lying target");
+        Assert.AreEqual(21, AreaAiAttackArtRules.Request(null, 0, null, 0x80, 0, critter).Animation, "a shrunk target");
+        Assert.AreEqual(21, AreaAiAttackArtRules.Request(null, 0, null, 0, 0, 12u << 28).Animation, "a short monster (species 0)");
+
+        Assert.AreEqual(10, AreaAiAttackArtRules.FramesPerSecond(new(20, 2, 0, 9, 6, 15), 20, 8), "the dagger's attack rate");
+        Assert.AreEqual(13, AreaAiAttackArtRules.FramesPerSecond(new(21, 1, 0, 9, 6, 15), 21, 8), "the bare hands' low attack rate");
+        Assert.AreEqual(14, AreaAiAttackArtRules.FramesPerSecond(new(20, 3, 0, 9, 6, 15), 21, 8), "a low attack drawn with the attack's file keeps the low-attack rate");
+        Assert.AreEqual(9, AreaAiAttackArtRules.FramesPerSecond(new(14, 0, 0, 9, 6, 9), 14, 8), "the throw plays at its ART's own rate");
+        Assert.AreEqual(Arcanum.Simulation.Combat.AttackArtWeapon.NoWeapon, AreaAiAttackArtRules.ClipWeapon(new(14, 0, 0, 9, 6, 9)));
+
+        var moments = Arcanum.Simulation.Combat.RealTimeCombatRules.Schedule(new(4, 2, 100, Arcanum.Simulation.Combat.AttackArtWeapon.Dagger));
+        var play = new AreaAiAttackPlay("npc", 1000, new(20, 2, 0), new(20, 2, 0, 4, 2, 10), moments);
+        Assert.IsNull(play.Frame(999));
+        Assert.AreEqual(moments[0].Frame, play.Frame(1000 + moments[0].AtMs), "frame 1 shows at the first update");
+        Assert.AreEqual(moments[1].Frame, play.Frame(1000 + moments[1].AtMs));
+        Assert.AreEqual(3, play.Frame(play.EndMs - 1), "the last frame shows until the play ends");
+        Assert.IsNull(play.Frame(play.EndMs));
+    }
+
     private static AreaVisualRecord Visual(AreaEntryIdentity entry) =>
         AreaCombatTests.Visual(AreaCombatTests.Body(), entry, width: 6, height: 2, hotX: 2, hotY: 1);
 
@@ -198,7 +272,7 @@ public sealed class AreaBodyMoveTests
 
     // A minimal 8-bit ART: `groups` (8, or 1 with the one-rotation flag) groups of `frames` width×height frames with hotspot
     // (hotX, height − 1), palette 0 white.
-    private static byte[] Art(int frames, int fps, int width, int hotX, int groups = 8)
+    private static byte[] Art(int frames, int fps, int width, int hotX, int groups = 8, int action = 0)
     {
         const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28, height = 2;
         var total = groups * frames; var size = width * height;
@@ -209,6 +283,7 @@ public sealed class AreaBodyMoveTests
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), fps);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(28), action);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), frames);
         bytes[headerBytes + 4] = 255; bytes[headerBytes + 5] = 255; bytes[headerBytes + 6] = 255; bytes[headerBytes + 7] = 255;
         for (var index = 0; index < total; index++)
