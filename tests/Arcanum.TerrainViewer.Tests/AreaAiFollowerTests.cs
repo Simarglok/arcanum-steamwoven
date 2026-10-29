@@ -177,11 +177,12 @@ public sealed class AreaAiFollowerTests
     }
 
     // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).
-    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true)
+    private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true,
+        Action<CompanionOrderOutcome>? goals = null)
     {
         var consent = new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 3, null, 50, new(-20, 300, 200, 5), 0, 3, 5);
         var facts = new CompanionOrderFacts(scene.Companion, "companion", 1, false, consent, Combat: scene.Host.OrderFacts(scene.Companion));
-        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null);
+        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null, goals);
     }
 
     [TestMethod]
@@ -434,7 +435,6 @@ public sealed class AreaAiFollowerTests
         var notices = Run(host, companion);
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the enemy");
         Assert.AreEqual(1, AiExecutorRules.Distance(walks.Cells[companion], host.Tile(enemy)!.Value), "from the cell next to it, where its own walk stands");
-
     }
 
     [TestMethod]
@@ -446,8 +446,11 @@ public sealed class AreaAiFollowerTests
         host.Perform(companion);
         Assert.AreEqual(enemy, host.RunOf(companion)?.Bottom.Target, "it fights the hero's victim");
 
-        var outcome = Order(scene, CompanionOrderType.Curse).Outcomes.Single();
+        // The order's host part sees the leave first: by its goals (right after the look) the run on the enemy has ended (FO20).
+        var runAtGoals = (AiGoalType?)AiGoalType.Attack;
+        var outcome = Order(scene, CompanionOrderType.Curse, goals: _ => runAtGoals = host.RunOf(companion)?.Bottom.Goal).Outcomes.Single();
         Assert.AreEqual(CompanionOrderEffect.Cursed, outcome.Effect, $"{outcome.Failure}");
+        Assert.IsNull(runAtGoals, "the leave's interrupt ended the run inside the order, before the attack event and the pass");
         Assert.IsFalse(session.QueryCompanion(companion).LedByPc, "the curse's leave (FO2)");
         StringAssert.Contains(AreaCompanionOrders.Describe(outcome), "curse-attack");
         // The hero's attack event on it (loudness 1, no flags): the former follower, no longer the hero's, reacts to it (here a flight

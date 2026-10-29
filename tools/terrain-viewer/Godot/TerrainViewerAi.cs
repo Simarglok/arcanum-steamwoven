@@ -58,8 +58,11 @@ public partial class TerrainViewerApp
         // companions whether they follow or not, so only the joins and leaves of other NPCs rebuild it; a group companion's leave ends
         // its own run in the host (AreaAiHost.ObserveLeaves), the other NPCs' runs go on.
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
+        // A visitor from another home map has no row here: the group's entities count too.
+        var groupEntities = (_areaCompanions?.Companions.Select(c => c.Entity) ?? []).ToHashSet(StringComparer.Ordinal);
         var stamp = (session, CurrentAreaMap, area,
-            string.Join(",", session.QueryParty().Followers.Select(f => f.Entity).Where(f => !map.TryGetRow(f, out var r) || !companions.Contains(r.Key))),
+            string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)
+                .Where(f => !groupEntities.Contains(f) && (!map.TryGetRow(f, out var r) || !companions.Contains(r.Key)))),
             string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
         RetireAiHost();

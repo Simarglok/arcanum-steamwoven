@@ -282,7 +282,7 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   viewer's orders carry the attack target and run the AI pass through the host; since ARC-WORLD-119 free companions are run as any
   leaderless NPC and the curse's attack event runs). Not ready: a curse from the viewer (the typed order text is not read), the
   curse's insult line, a leave outside an order seen only at the host's next pump or perform (an AI pass in between finds the old
-  run), an attack order on a non-critter object (the host's world knows critters only), the
+  run; a leave and a join between two looks, as a second join's leave-first, C5, is not seen at all: the run is kept), an attack order on a non-critter object (the host's world knows critters only), the
   menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
   line), the world-map travel's stop and allow calls, the companion's loyalty step still on its own tick beside
   the AI tick (one tick in the original), a companion's attack pose (its swing is not drawn), the skill animation (the fixed stand-in
@@ -374,7 +374,9 @@ since ARC-WORLD-117, right after the blow, the viewer's back-off order stops the
 as the highlighted object locks the follower on it, its pass starts the attack and the follower strikes again; marker
 `ARC-WORLD-117 native-smoke ai-order PASS`; since ARC-WORLD-119 a curse order then frees the follower, the hero's attack event on it
 runs and asks its reaction before its pass, and the same host runs it on as a free NPC for 200 frames; marker
-`ARC-WORLD-119 native-smoke ai-free PASS`, before the stage's own);
+`ARC-WORLD-119 native-smoke ai-free PASS`, before the stage's own; the stage restores life and combat mode but leaves the session's
+danger records, who-hit-me-last, team and the follower's lowered reaction toward the hero, so a later stage in the same run meets a
+cursed Virgil);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.
