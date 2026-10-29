@@ -513,3 +513,30 @@ right click did not leave combat mode with no enemy near). Read on 2026-10-29 wi
 Anomalies: none. Implemented by ARC-COMBAT-022 for the AREA hero in both rule modes: RR1 (the subturn gate), RR2 (the session's
 active test and the hero's knockdown), RR3 and RR4 (`RealTimeCombatRules.RightRelease`; the viewer's hero is animating while it
 walks, attacks or casts, and never fidgets, TH9). Not modelled: RR5 (the interrupt and the turn toward the pointer).
+
+## Pool of blood (ARC-RENDER-041)
+
+Source: the [pool of blood under a dead critter](../../world/hero-attack-runtime.md#pool-of-blood-arc-render-041) (owner triage of
+2026-10-29, slice E2: no pool of blood under a dead wolf). Read on 2026-10-29 with `llvm-objdump` by two independent readers (F2),
+who agree; every direct branch of the read functions stays inside `.text`. BP4 and BP8 also read installed data (the prototype
+file, `art\scenery\scenery.mes`, the ART header and the critter prototypes; counts only, no original bytes in git).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BP1 | dying goal 31 (table 0x5A93D0), node 7 (0x42FED0) | When the dying goal has played its frames (node 6), node 7 reads the critter's location and calls the creation 0x432D90 only when `tile_is_blocking` (0x4D7110) with flag 0 says the tile does not block; it always continues to node 9 (0x42FF40). The kill 0x45D900 calls the creation directly only when the global 0x5E863C is 1 (an init flag, after setting the dead art's last frame and flags 0x404). | Original |
+| BP2 | pool of blood creation (0x432D90) | In order it returns without a pool: a null critter; the "violence filter" setting (0x5DE6A4, read from the string at 0x5A21D0); critter flags & 0x20000004 (undead or mechanical); critter flags 2 & 0x400 (elemental); spell flags & 0x10000 (stoned); a multiplayer client (0x62AC6C bit 1 without bit 2) unless 0x5DE6D4 is 1. Critter flags 2's "no blood splotches" (0x100) is not tested. | Original |
+| BP3 | the same | It creates basic prototype 4028 (0x4685A0, 0x43CBA0) at the critter's location and copies the critter's x and y offsets (fields 3, 4; 0x43EAF0) to it; a multiplayer host sends the creation to the clients. | Original |
+| BP4 | prototype 4048 (installed) | Description 4028 "Pool Of Blood": a scenery whose art is `art\scenery\blood.ART` (scenery.mes 15000); object flags flat, see-through, shoot-through, no block, click-through and invulnerable (0x400C34); scenery flag "no auto animate" (0x1). The ART has 4 frames at 8 frames a second, one rotation. | Original (data) |
+| BP5 | the same, animate goal 0 (table 0x5A59D0: 0x42CB10, 0x42CC80; end 0x42B090) | Outside the editor (0x5DE6D4 = 0) the pool gets goal 0 with its own art id as a parameter; the start node sets frame 0 and the delay 1000 / the ART's rate (integer division; 100 ms when the art does not read), and the step node runs at once and then once per delay, one frame each time, until the frame is the last: the goal ends there, and its end function changes the art of a PC or NPC only, so the pool keeps its last frame. A goal that cannot be added deletes the pool ("Blood object failed to animate!"); a goal that cannot be set up leaves it unanimated. In the editor the pool takes its last frame at once. | Original |
+| BP6 | the same, decay schedule (0x45EBE0) | After its goal is added, the pool gets the Decay Dead Bodies event (kind 0x18): one game day (86,400,000 ms) for a PC or NPC, two (172,800,000 ms) for any other object; a prototype object gets none. | Original |
+| BP7 | Decay Dead Bodies event (0x45EB50; name table 0x5B2188, entry 24) | When it fires, a non-critter object is deleted (0x43CCA0); a dead PC or NPC first drops its inventory (0x463860, flag 1) and is deleted; a living one is left (an error line). | Original |
+| BP8 | installed critter prototypes (510) | None carries critter flags 2's 0x100; 436 are neither undead, mechanical, elemental nor stoned, so they leave a pool. | Original (data) |
+| BP9 | hit eye candy (0x433020) | The 0x100 flag ("no blood splotches") gates only the hit's blood eye candy from `Rules\AnimEyeCandy.mes` (list 0x5DE670: entries 0..10, normal, poison, electrical, fire, fatigue and critical splotches, undead 6, stoned 7, by damage 8..10), not the pool. | Original |
+
+Anomalies: none (the flag name "no blood splotches" matches the eye candy entries it gates). Implemented by ARC-RENDER-041 in both
+rule modes: BP1 (`BloodPoolRules.Leaves`, the tile from the step evidence), BP2 (`BloodPoolRules.Refusal`; the violence filter is
+never on: Steamwoven has no such setting), BP3 and BP6–BP7 (the session's pools of blood, schema 58: cell, offsets, creation time,
+gone two game days later; `BloodPoolRules.DecayDelay`, `Decayed`), BP4 (the AREA viewer draws prototype 4048's art flat, not
+picked) and BP5 (`BloodPoolRules.Frame`). Not modelled: the hit eye candy (BP9), a dead critter's own decay (one day, BP7), the
+multiplayer and editor cases, and the timing of BP1: the viewer leaves the pool when it sees the death, not when the dying
+animation (ARC-RENDER-040) has played.

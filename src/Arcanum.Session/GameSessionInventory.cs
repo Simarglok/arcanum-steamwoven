@@ -191,8 +191,9 @@ public sealed class SessionInventoryState
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
         SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
         string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null, SessionGeneratedContainer[]? generated = null,
-        SessionNpcWear[]? npcWorn = null)
+        SessionNpcWear[]? npcWorn = null, SessionBloodPool[]? bloodPools = null)
     {
+        BloodPools = Array.AsReadOnly(bloodPools ?? []);
         NpcWorn = Array.AsReadOnly(npcWorn ?? []);
         Generated = Array.AsReadOnly(generated ?? []);
         Grid = Array.AsReadOnly(grid ?? []);
@@ -244,6 +245,9 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-103: the worn items of the NPCs the session dressed (a regeneration's best-items wield, ledger RK15), by NPC entity
     /// in ordinal order; for such an NPC they replace the inventory locations of its map data.</summary>
     public IReadOnlyList<SessionNpcWear> NpcWorn { get; }
+    /// <summary>ARC-RENDER-041: the pools of blood the session left, in the order they were left (a decayed one stays until the next
+    /// pool is left).</summary>
+    public IReadOnlyList<SessionBloodPool> BloodPools { get; }
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -585,7 +589,11 @@ internal sealed class InventoryDomain
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
-        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray());
+        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray(),
+        BloodPools.ToArray());
+
+    /// <summary>ARC-RENDER-041: the pools of blood the session left, in the order they were left.</summary>
+    internal List<SessionBloodPool> BloodPools { get; } = [];
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);

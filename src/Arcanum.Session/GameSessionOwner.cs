@@ -186,6 +186,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportBloodPools(snapshot.Inventory.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);

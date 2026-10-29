@@ -39,12 +39,16 @@ public partial class TerrainViewerApp
         if (found.Status != AreaContentRootStatus.Ready) { _extraArtFailure = $"{found.Status}"; }
         else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
         {
-            _junkPileArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(ContentPrototypes.Open(stack).Read, Arcanum.Simulation.Items.JunkPileRules.Prototype).Fields?.CurrentArt;
+            var prototypes = ContentPrototypes.Open(stack);
+            _junkPileArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(prototypes.Read, Arcanum.Simulation.Items.JunkPileRules.Prototype).Fields?.CurrentArt;
+            // ARC-RENDER-041: the pool of blood's art (prototype 4048).
+            _bloodPoolArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(prototypes.Read, BloodPoolRules.Prototype).Fields?.CurrentArt;
             _extraArt = new(stack);
         }
         else _extraArtFailure = "content stack did not open";
         GD.Print($"ARC-RENDER-033 extra-art {(_extraArt is null ? "unavailable " + _extraArtFailure : "ready")}");
         GD.Print($"ARC-WORLD-063 junk-pile-art {(_junkPileArt is { } pileArt ? $"0x{pileArt:X8}" : "unread")}");
+        GD.Print($"ARC-RENDER-041 blood-pool-art {(_bloodPoolArt is { } poolArt ? $"0x{poolArt:X8}" : "unread")}");
         return _extraArt;
     }
 
@@ -83,7 +87,8 @@ public partial class TerrainViewerApp
             return true;
         }
         // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
-        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data);
+        // ARC-RENDER-041: a pool playing its frames changes its body without a revision.
+        var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp());
         if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
@@ -161,6 +166,7 @@ public partial class TerrainViewerApp
                 only[key] = (pile.Entity, pile.Cell, new AreaObjectRecord(key, 0, ContainerType, Arcanum.Simulation.Items.JunkPileRules.Prototype, "", "", "", "",
                     AreaScope.Core, null, pile.Cell.X, pile.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true));
             }
+        AddBloodPoolBodies(area, bodies, Frame);
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
         if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);

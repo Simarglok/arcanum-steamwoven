@@ -73,9 +73,10 @@ public static partial class GameSessionSnapshotCodec
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
     // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
     // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
-    // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items.
+    // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items; ARC-RENDER-041 (schema 58): the pools of blood.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "bloodPools"];
+    private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
     private static readonly string[] NpcWearFields = ["npc", "worn"];
     private static readonly string[] NpcWornItemFields = ["slot", "item"];
     private static readonly string[] ScriptSlotFields = ["entity", "point", "script", "localFlags", "counters"];
@@ -521,6 +522,23 @@ public static partial class GameSessionSnapshotCodec
                     w.WriteEndObject();
                 }
                 w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-RENDER-041: the pools of blood in the order they were left.
+            w.WriteStartArray("bloodPools");
+            foreach (var pool in snapshot.Inventory.BloodPools)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", pool.Entity);
+                w.WriteString("critter", pool.Critter);
+                w.WriteNumber("deathTimeMs", pool.DeathTimeMs);
+                w.WriteNumber("map", pool.Map.RuntimeMap);
+                w.WriteNumber("x", pool.Cell.X);
+                w.WriteNumber("y", pool.Cell.Y);
+                w.WriteNumber("offsetX", pool.OffsetX);
+                w.WriteNumber("offsetY", pool.OffsetY);
+                w.WriteNumber("createdMs", pool.CreatedMs);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1789,8 +1807,21 @@ public static partial class GameSessionSnapshotCodec
             npcWorn[i] = new(npc, System.Array.AsReadOnly(worn));
             if (i > 0 && string.CompareOrdinal(npcWorn[i - 1].Npc, npc) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".npc");
         }
+        // ARC-RENDER-041: the pools of blood in the order they were left (the owner's restore checks the rest).
+        var poolRows = Array(f["bloodPools"], p + ".bloodPools", SessionBloodPool.MaxPools);
+        var bloodPools = new SessionBloodPool[poolRows.Length];
+        for (var i = 0; i < poolRows.Length; i++)
+        {
+            var path = $"{p}.bloodPools[{i}]";
+            var row = Fields(poolRows[i], path, BloodPoolFields);
+            bloodPools[i] = new(Entity(row["entity"], path + ".entity"), Entity(row["critter"], path + ".critter"),
+                Long(row["deathTimeMs"], path + ".deathTimeMs", 0, long.MaxValue), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)),
+                Int(row["offsetX"], path + ".offsetX", int.MinValue, int.MaxValue), Int(row["offsetY"], path + ".offsetY", int.MinValue, int.MaxValue),
+                Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue));
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn);
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn, bloodPools);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

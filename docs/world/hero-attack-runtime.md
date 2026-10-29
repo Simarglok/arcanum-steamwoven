@@ -478,6 +478,33 @@ requires each throw to play the throw ART.
 Not ready: the NPCs' attack ART (ARC-RENDER-038: the AI host still times NPC attacks with the human stand-in), the wear check's art
 test (WA8), the auto-switch re-wield.
 
+## Pool of blood (ARC-RENDER-041)
+
+A critter that dies leaves a pool of blood, as the original does (read in the executable by two readers, ledger
+[BP1–BP9](../research/ledger/combat.md#pool-of-blood-arc-render-041)):
+
+- **Rules** (`Arcanum.Simulation.Combat.BloodPoolRules`): `Leaves` refuses on a blocking tile (the dying goal's node 0x42FED0),
+  then `Refusal` (the creation 0x432D90) for the violence filter, an undead or mechanical critter (critter flags 0x20000004), an
+  elemental (flags 2, 0x400) and a stoned one (spell flags 0x10000). The flag "no blood splotches" (flags 2, 0x100) does not stop
+  it: it gates only the hit's blood eye candy, and no installed critter prototype has it. `Frame` gives the frame the pool shows:
+  frame 1 at once, one more every 1000 / the ART's rate ms, the last kept. `DecayDelay` and `Decayed`: the Decay Dead Bodies
+  event deletes the pool two game days after its creation.
+- **Session** (`GameSessionOwner.LeaveBloodPool`, `QueryBloodPools`; snapshot schema 58, `inventory.bloodPools`): the host leaves
+  a pool for an NPC with a recorded death or for the dead hero (`pc`), at a map cell with the critter's pixel offsets; one pool
+  per recorded death (a repeated call is NoChange), a refusal is NoChange with its reason. A pool is `pool:n`, keeps the death time
+  and its creation time, and is not returned from two game days on (the session keeps no queued event: a decayed pool is dropped
+  when the next one is left). At most 4096 pools (project bound). A schema 57 save loads with no pools.
+- **Viewer (AREA)**: when a sync sees a recorded death on the shown map that it did not see when the map and session were first
+  shown, it leaves the pool: an NPC at the cell its body is drawn on (a companion's or AI walker's cell with no offset, else its
+  map cell and offsets) with its map data's flags, the hero at its committed cell. The tile blocks when the step evidence settles it
+  as not open. Each pool is drawn flat from prototype 4048's art (`art\scenery\blood.ART`, 4 frames at 8 a second), offset by
+  its critter's pixels, never hovered or picked; a pool this view left plays its frames, any other shows its last frame. The
+  log says `ARC-RENDER-041 blood-pool critter=… disposition=… refusal=…` for each death and `blood-pool-art 0x…` once.
+- **Not ready**: the original leaves the pool when the dying animation has played (ARC-RENDER-040), the view when it sees the
+  death; an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
+  setting); the hit's blood eye candy (`Rules\AnimEyeCandy.mes`); the dead critter's own one-day decay; the multiplayer and
+  editor cases.
+
 ## Not ready
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
@@ -488,7 +515,8 @@ test (WA8), the auto-switch re-wield.
   missed throw's scatter since ARC-COMBAT-018, boomerangs since ARC-COMBAT-019. Still not ready: backstab (needs facing and
   perception), aimed-attack critical bonuses beyond the resolver's, the target's awareness (an NPC always sees the hero) and the
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
-  and dying scripts, blood splotches, the corpse's decay timer, alignment and the kill log.
+  and dying scripts, the hit's blood eye candy (the pool of blood is in since ARC-RENDER-041), the corpse's decay timer, alignment
+  and the kill log.
 - The low attack (21) and the boomerang's throw animation (14): the hero always plays the attack (20; ARC-RENDER-039), the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
   and lies on that fall when dead), the dying animation itself (the body jumps to its last frame), an NPC's get-up animation
   after a knockout (a recovered NPC stands at once), and HD frames of the fallen poses (Legacy per frame).

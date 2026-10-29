@@ -207,7 +207,7 @@ public sealed class HeroStateTests
         "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"lastDiscardedMade\":0," +
         // ARC-UI-019: the kit takes the first grid slots in kit order.
         "\"grid\":[{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}," +
-        "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]}";
+        "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[],\"bloodPools\":[]}";
     internal const string UnharmedHeroLife =
         ",\"life\":{\"hero\":{\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[],\"scars\":0,\"deathTimeMs\":null},\"critters\":[]}";
     internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory).Replace(NoLife, UnharmedHeroLife);
@@ -302,9 +302,9 @@ public sealed class HeroStateTests
         var noHero = HeroGolden.Replace(HeroJson, NoHero).Replace(UnharmedHeroLife, NoLife);
         Refused(noHero, GameSessionFailure.InvalidSnapshot);
         Refused(noHero.Replace("\"gold\":385", "\"gold\":0"), GameSessionFailure.InvalidSnapshot);
-        Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]}"), GameSessionFailure.InvalidSnapshot);
+        Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"bloodPools\":[]}"), GameSessionFailure.InvalidSnapshot);
         Restore(Decode(noHero.Replace(KitInventory, EmptyInventory))).Dispose();
-        Restore(Decode(HeroGolden.Replace(KitInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]}"))).Dispose();
+        Restore(Decode(HeroGolden.Replace(KitInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"junkPiles\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"bloodPools\":[]}"))).Dispose();
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:9\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:0\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"type\":\"Weapon\"", "\"type\":\"Gold\""), GameSessionFailure.InvalidItem);

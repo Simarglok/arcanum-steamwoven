@@ -58,9 +58,9 @@ public partial class TerrainViewerApp
                 Require(_camera.State == view, "CAMERA_MOVED");
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
                 // A body of no plan command is a visiting companion's or (ARC-WORLD-063) a junk pile's or placed item's drawn under its own
-                // key (ARC-RENDER-033), never anything else.
+                // key (ARC-RENDER-033), or (ARC-RENDER-041) a pool of blood's, never anything else.
                 Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)
-                    || _groundOnly.ContainsKey(key)), "UNPLANNED_BODY");
+                    || _groundOnly.ContainsKey(key) || _bloodPoolKeys.Contains(key)), "UNPLANNED_BODY");
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);

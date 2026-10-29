@@ -106,6 +106,8 @@ public partial class TerrainViewerApp
             if (_inventoryHost.Piled(_areaSession, CurrentAreaMap) is { Count: > 0 } piled) _inventoryHidden = _inventoryHidden.Concat(piled).ToHashSet();
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
+        // ARC-RENDER-041: a death seen since the last sync leaves its pool of blood first.
+        LeaveBloodPoolsForNewDeaths();
         // ARC-RENDER-033: an item picked up or dropped leaves or joins the drawn ground at once.
         if (SyncAreaGroundBodies()) _canvas.SetAreaMovingBodies(AreaMovingCommands());
     }
