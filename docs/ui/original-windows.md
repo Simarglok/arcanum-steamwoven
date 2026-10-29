@@ -100,8 +100,9 @@ The round view at the window's top-left (done: ARC-UI-054, rows
 PC at half size with art 233 or 232 over it; a left release in it closes the window. The viewer copies the screen there with a
 shader under the window. ARC-UI-060: the rectangle, its art and the release by the window's mode are one shared table
 (`AreaInventoryHole`): the own window (11, 9) and 233, the barter window (16, 17) and 231, the loot and steal windows (16, 17) and
-232; the barter window has its round view since ARC-UI-064 and the steal window since ARC-UI-065. Left: the own window's map drop and
-throw of a held item released in it (IW18).
+232; the barter window has its round view since ARC-UI-064 and the steal window since ARC-UI-065. ARC-UI-063: in the own window a held item
+released in it goes onto the game cursor and the window closes (IW18); a left press in the game view throws it, and the cursor shows
+the held item's art ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Barter window (done: ARC-UI-064)
 

@@ -152,16 +152,19 @@ public partial class TerrainViewerApp
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
             var boomerangs = session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity) ? await Boomerangs()
                 : "NONE (a critical miss took the lent weapon)";
+            var cursorThrows = session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity) ? await CursorThrows()
+                : "NONE (a critical miss took the lent weapon)";
             ToggleCombatMode();
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs,
+                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs, CursorThrows = cursorThrows,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
             CancelAreaAttack(null);
+            PutBackGameCursorItem("the smoke ended");
             _lentMissileArtForSelfTest = null;
             _lentThrowWeightForSelfTest = null;
             ClearAreaProjectiles("the smoke ended");
@@ -444,6 +447,77 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-COMBAT-019 native-smoke boomerang PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} reattacks={reattacks}"
                 + $" flights={string.Join(",", flights)}");
             return new { Throws = flights.Count, Hit = hit, Reattacks = reattacks, Flights = flights };
+        }
+
+        // ARC-UI-063: the kit weapon, with its own values back, is lifted onto the game cursor: from the inventory window's round view in
+        // its original look (IW18), or straight from the window without the art. A window opened while it is held puts it back (the item
+        // never left the slot). Then it is thrown at the target's tile from the game cursor: it leaves the slot at the throw, flies on the
+        // projectile host and lands where the flight ends; it is picked up and wielded again. Three throws; a hit is reported, not required.
+        async Task<object> CursorThrows()
+        {
+            Require(Wear(wielded.Item), "the kit weapon has its own values back");
+            var throws = new List<string>(); var lifts = new List<string>(); var cursorShown = false; var hit = false;
+            async Task Lift()
+            {
+                OpenInventory();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(InventoryOpen, "the inventory window opened");
+                var area = _inventoryPanel!.GridAreaForSelfTest;
+                if (area.Look is not null && _inventoryPanel.ArtMode)
+                {
+                    area.PressAt(AreaInventoryGridArea.SlotCentre(EquipmentSlot.Weapon));
+                    Require(area.Held?.Entity == wielded.Entity, $"the wielded weapon is held in the window ({area.Held?.Entity})");
+                    var (x, y) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
+                    area.ReleaseAt(new(x + AreaInventoryHole.Side / 2f, y + AreaInventoryHole.Side / 2f));
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    lifts.Add("round-view");
+                }
+                else { LiftToGameCursor(wielded.Entity, "smoke"); lifts.Add("direct"); }
+                Require(GameCursorItemForSelfTest == wielded.Entity && !InventoryOpen,
+                    $"the weapon is on the game cursor and the window closed ({GameCursorItemForSelfTest}, open {InventoryOpen}, {_inventoryStatus})");
+                Require(session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity), "it stays wielded until the throw");
+                SyncCursorArt();
+                if (CursorShownForSelfTest is not null && CursorHeldShownForSelfTest == wielded.Entity) cursorShown = true;
+            }
+            await Lift();
+            OpenInventory();
+            ProcessGameCursorItem();
+            Require(GameCursorItemForSelfTest is null && session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity),
+                $"a window opened puts it back ({HeldThrowNoticeForSelfTest})");
+            EndInventory();
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                Heal();
+                AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+                _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await Lift();
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
+                var result = ThrowGameCursorItem(World(pick.Target.Row));
+                Require(result is { Disposition: GameSessionDisposition.Changed } && GameCursorItemForSelfTest is null
+                    && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
+                    $"the weapon is thrown from the cursor ({result?.Disposition} {result?.Failure}, {HeldThrowNoticeForSelfTest})");
+                for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
+                {
+                    _areaSmokeTime++;
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_projectiles.Count == 0 && _thrownLandingsForSelfTest.Count == 1 && _thrownLandingsForSelfTest[0].Disposition != GameSessionDisposition.Rejected,
+                    $"the flight ended and the weapon landed ({_projectiles.Count} in flight, {_thrownLandingsForSelfTest.Count} landings)");
+                var landing = _thrownLandingsForSelfTest[0];
+                Require(session.QueryPlacedItems().Single(p => p.Entity == wielded.Entity).Cell == landing.Tile && !session.QueryItemInFlight(wielded.Entity)
+                    && session.QueryShotsInFlight().Count == 0, $"it lies where the flight ended ({landing.Tile})");
+                var outcome = result!.Attack?.Resolution?.Outcome;
+                hit |= outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+                throws.Add($"{outcome?.ToString() ?? "unrolled"}:{_projectileEndsForSelfTest.LastOrDefault().Strike}:{landing.Tile.X},{landing.Tile.Y}");
+                Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
+                    && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true,
+                        _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "the weapon is picked up and wielded again");
+            }
+            GD.Print($"ARC-UI-063 native-smoke cursor-throw PASS map={_readyMapName} target={pick.Target.Entity} lifts={string.Join(",", lifts)}"
+                + $" cursor={(cursorShown ? "held-art" : "NONE (no cursor or item art)")} hit={hit} throws={string.Join(",", throws)}");
+            return new { Lifts = lifts, CursorShown = cursorShown, Hit = hit, Throws = throws };
         }
 
         void Heal()
