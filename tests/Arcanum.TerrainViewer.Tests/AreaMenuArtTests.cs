@@ -95,9 +95,9 @@ public sealed class AreaMenuArtTests
     public void The_three_passes_are_shadow_highlight_and_face()
     {
         var passes = AreaMenuArtLayout.Passes;
-        Assert.AreEqual((-1, -1, ((byte)0, (byte)0, (byte)0)), passes[0], "MW5: black first at (−1, −1)");
-        Assert.AreEqual((1, 1, ((byte)97, (byte)61, (byte)42)), passes[1], "brown at (+1, +1)");
-        Assert.AreEqual((0, 0, ((byte)100, (byte)0, (byte)0)), passes[2], "the dark red face last");
+        Assert.AreEqual((-1, -1, ((byte)0, (byte)0, (byte)0), AreaArtTextBlend.Coverage), passes[0], "MW5: black first at (−1, −1)");
+        Assert.AreEqual((1, 1, ((byte)97, (byte)61, (byte)42), AreaArtTextBlend.Additive), passes[1], "brown at (+1, +1), added (MW31)");
+        Assert.AreEqual((0, 0, ((byte)100, (byte)0, (byte)0), AreaArtTextBlend.Coverage), passes[2], "the dark red face last");
         Assert.AreEqual(((byte)240, (byte)15, (byte)15), AreaMenuArtLayout.HoverFace, "MW6");
     }
 

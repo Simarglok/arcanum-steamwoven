@@ -50,9 +50,10 @@ public partial class AreaNewCharacterArtView : Control
         MouseFilter = MouseFilterEnum.Stop;
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
+        AreaArtTextDraw.Prepare(this);
     }
 
-    /// <summary>The art's frames by number and the two fonts with their glyph frames (by frame index).</summary>
+    /// <summary>The art's frames by number and the two fonts.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
@@ -104,8 +105,8 @@ public partial class AreaNewCharacterArtView : Control
         // The redraw 0x5447B0: the name field over the character draw.
         var field = AreaPremadeBrowserArtLayout.Name;
         AreaCharacterArtDraw.Fill(this, field);
-        var (x, text) = AreaNewCharacterArtLayout.NameLine(fonts.Name, view.Character.Name, view.Typing);
-        AreaCharacterArtDraw.Glyphs(this, fonts.NameGlyphs, fonts.Name.Layout(text), x, field.Y, AreaPremadeBrowserArtLayout.Red);
+        var (x, text) = AreaNewCharacterArtLayout.NameLine(fonts.Name.Font, view.Character.Name, view.Typing);
+        AreaArtTextDraw.Text(this, fonts.Name, text, x, field.Y, AreaPremadeBrowserArtLayout.Red);
         foreach (var button in AllButtons)
         {
             var (art, bx, by) = AreaNewCharacterArtLayout.Button(button);

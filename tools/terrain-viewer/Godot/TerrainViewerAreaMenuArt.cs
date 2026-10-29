@@ -18,7 +18,7 @@ public partial class TerrainViewerApp
         _menuArtModule = module;
         var started = Time.GetTicksMsec();
         _menuArtContent = SelfTestBootstrap || module is null ? AreaMenuArtContent.Empty("self-test: no game folder") : AreaMenuArtContent.Load(module);
-        if (_menuArtContent.Font is not { } font)
+        if (_menuArtContent.Font is null)
         {
             GD.Print($"ARC-UI-058 menu art not ready: {_menuArtContent.Detail}");
             return;
@@ -26,17 +26,61 @@ public partial class TerrainViewerApp
         var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt, AreaMenuArtLayout.OptionsArt }
             .ToDictionary(number => number, number => (Texture2D)HotkeyTexture(_menuArtContent.Art[number].Frames[0]));
         var art = _menuArtContent.Art;
-        IReadOnlyDictionary<int, Texture2D> Glyphs(int number) => art[number].Frames.Select((frame, index) => (frame, index))
-            .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
         IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
-        var glyphs = Glyphs(AreaMenuArtLayout.FontArt);
-        panel.SetArt(backgrounds, font, glyphs);
+        // ARC-UI-070: the fonts drawn by the shared art-text draw in the original's blend (MW31).
+        var font = new AreaArtFontFace(art[AreaMenuArtLayout.FontArt].Frames);
+        panel.SetArt(backgrounds, font);
         // ARC-UI-061: the options controls' art (MW9, MW10).
         panel.SetControlArt(new AreaMenuControlArt(
             new[] { AreaMenuArtLayout.SliderArt, AreaMenuArtLayout.ListArt }.ToDictionary(number => number, number => Frames(number)[0]),
             Frames(AreaMenuArtLayout.BarArt)[0], Frames(AreaMenuArtLayout.LessArt), Frames(AreaMenuArtLayout.MoreArt),
-            _menuArtContent.LabelFont!, Glyphs(AreaMenuArtLayout.LabelFontArt), _menuArtContent.ValueFont!, Glyphs(AreaMenuArtLayout.ValueFontArt)));
-        GD.Print($"ARC-UI-058 menu art ready {_menuArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
+            new AreaArtFontFace(art[AreaMenuArtLayout.LabelFontArt].Frames), new AreaArtFontFace(art[AreaMenuArtLayout.ValueFontArt].Frames)));
+        GD.Print($"ARC-UI-058 menu art ready {_menuArtContent.Detail}; glyphs={font.Frames.Count}; ms={Time.GetTicksMsec() - started}");
+    }
+
+    /// <summary>ARC-UI-070: the main window's labels as drawn match the original's text blend (MW31): the background art with each
+    /// label's three passes rendered by <see cref="AreaArtTextRules.Render"/> is compared, pixel by pixel of the 800 × 600 screen round
+    /// the labels, with an in-app readback (within two levels a channel), and the edges must hold partly covered pixels.</summary>
+    private void MenuTextBlendForSmoke(Action<bool, string> require, AreaMenuArtView art)
+    {
+        var face = art.FontForSelfTest ?? throw new InvalidOperationException("ARC-UI-070 smoke: no menu font");
+        var background = _menuArtContent!.Art[AreaMenuArtLayout.MainArt].Frames[0];
+        var (width, height) = (AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight);
+        require(AreaArtTextDraw.Prepared(art) && background.Width == width && background.Height == height,
+            "the menu's canvas draws art text in premultiplied alpha over an 800 × 600 background");
+        var screen = (byte[])background.Rgba.Clone();
+        var (labels, places) = (art.LabelsForSelfTest, art.ButtonsForSelfTest);
+        for (var i = 0; i < labels.Count; i++)
+        {
+            var passes = AreaMenuArtLayout.Passes;
+            for (var pass = 0; pass < passes.Count; pass++)
+            {
+                var (dx, dy, colour, blend) = passes[pass];
+                if (pass == passes.Count - 1 && i == art.HoveredForSelfTest) colour = AreaMenuArtLayout.HoverFace;
+                AreaArtTextRules.Render(screen, width, face.Font, face.Frames, labels[i], places[i].X + dx, places[i].Y + dy, colour, blend);
+            }
+        }
+        using var image = GetViewport().GetTexture().GetImage();
+        var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+        var transform = art.GetGlobalTransformWithCanvas();
+        var (compared, worst, edges) = (0, 0, 0);
+        foreach (var (x, y, w, h) in places)
+            for (var sy = Math.Max(0, y - 2); sy < Math.Min(height, y + h + 2); sy++)
+                for (var sx = Math.Max(0, x - 2); sx < Math.Min(width, x + w + 2); sx++)
+                {
+                    var at = transform * new Vector2(sx + 0.5f, sy + 0.5f) * ratio;
+                    if (at.X < 0 || at.Y < 0 || at.X >= image.GetWidth() || at.Y >= image.GetHeight()) continue;
+                    var drawn = image.GetPixel((int)at.X, (int)at.Y);
+                    var s = (sy * width + sx) * 4;
+                    var difference = new[] { drawn.R8 - screen[s], drawn.G8 - screen[s + 1], drawn.B8 - screen[s + 2] }.Max(Math.Abs);
+                    (compared, worst) = (compared + 1, Math.Max(worst, difference));
+                }
+        foreach (var frame in face.Frames)
+            for (var p = 0; p < frame.Rgba.Length; p += 4)
+                if (frame.Rgba[p + 3] != 0 && frame.Rgba[p] is > 0 and < 255) edges++;
+        require(compared > 0 && worst <= 2, $"ARC-UI-070: the labels match the original's blend: pixels={compared} worst={worst}");
+        require(edges > 0, "ARC-UI-070: the font has partly covering edge pixels: " + edges);
+        GD.Print($"ARC-UI-070 native-smoke menu text blend PASS pixels={compared} worst={worst} edgePixels={edges}");
     }
 
     /// <summary>The menu smoke's art part: the main window in the original's look with its labels at the exe's places (MW2); the pointer
@@ -62,6 +106,7 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.ButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
             "the labels stand centred at (410, 143 + 50 i): " + string.Join(" ", places));
         await Frames(2);
+        MenuTextBlendForSmoke(require, art);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_MENU_CAPTURE") is { Length: > 0 } capture)
         {
             using var image = GetViewport().GetTexture().GetImage();

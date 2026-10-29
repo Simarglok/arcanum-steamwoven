@@ -207,7 +207,7 @@ public partial class TerrainViewerApp
         _saveListArtModule = module;
         var started = Time.GetTicksMsec();
         _saveListArtContent = SelfTestBootstrap || module is null ? AreaSaveListArtContent.Empty("self-test: no game folder") : AreaSaveListArtContent.Load(module);
-        if (_saveListArtContent.Font is not { } font)
+        if (_saveListArtContent.Font is null)
         {
             panel.ClearArt();
             GD.Print($"ARC-UI-062 save window art not ready: {_saveListArtContent.Detail}");
@@ -215,12 +215,11 @@ public partial class TerrainViewerApp
         }
         var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number != AreaSaveListArtLayout.FontArt)
             .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
-        var glyphs = _saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames.Select((frame, index) => (frame, index))
-            .Where(glyph => glyph.frame.Width > 0 && glyph.frame.Height > 0).ToDictionary(glyph => glyph.index, glyph => (Texture2D)HotkeyTexture(glyph.frame));
-        panel.SetArt(art, font, glyphs, _saveListArtContent.NewSaveLabel, _saveListArtContent.Messages,
+        var font = new AreaArtFontFace(_saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames);
+        panel.SetArt(art, font, _saveListArtContent.NewSaveLabel, _saveListArtContent.Messages,
             AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern), _saveListArtContent.StoryTexts);
         panel.PortraitSource = SavePortrait;
-        GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={glyphs.Count}; ms={Time.GetTicksMsec() - started}");
+        GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={font.Frames.Count}; ms={Time.GetTicksMsec() - started}");
     }
 
     /// <summary>The smokes' art part of an open save or load window: the original's look with its rows at the exe's places (MW13),

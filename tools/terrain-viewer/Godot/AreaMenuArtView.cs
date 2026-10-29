@@ -4,10 +4,9 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>ARC-UI-061: the options controls' art: the backgrounds by art number (688, 671), the bar 623, the arrows' frames and the
-/// label and value fonts with their glyph frames by frame index.</summary>
+/// label and value fonts.</summary>
 public sealed record AreaMenuControlArt(IReadOnlyDictionary<int, Texture2D> Backgrounds, Texture2D Bar, IReadOnlyList<Texture2D> Less,
-    IReadOnlyList<Texture2D> More, AreaArtFont LabelFont, IReadOnlyDictionary<int, Texture2D> LabelGlyphs, AreaArtFont ValueFont,
-    IReadOnlyDictionary<int, Texture2D> ValueGlyphs);
+    IReadOnlyList<Texture2D> More, AreaArtFontFace LabelFont, AreaArtFontFace ValueFont);
 
 /// <summary>ARC-UI-061: one shown options control: its label, kind, value of <paramref name="Top"/> (a slider's bar) and value text
 /// (a list's).</summary>
@@ -22,13 +21,12 @@ public readonly record struct AreaMenuControlView(string Label, AreaOptionKind K
 /// controller's or key's focus move. ARC-UI-059: the options window's page buttons at their own points (MW7). ARC-UI-061: the options
 /// page's controls in their own art at their slots (<see cref="AreaOptionsControlLayout"/>, MW8–MW10): an arrow is a push button (the
 /// pointer over it shows its third frame, a press its second and sound 3000, the release over it sound 3001 and the change); PROJECT:
-/// the focused control's label is lit in the page buttons' hover face.
+/// the focused control's label is lit in the page buttons' hover face. ARC-UI-070: the text in the original's blend (MW31).
 /// </summary>
 public partial class AreaMenuArtView : Control
 {
     private Texture2D? _background;
-    private AreaArtFont? _font;
-    private IReadOnlyDictionary<int, Texture2D> _glyphs = new Dictionary<int, Texture2D>();
+    private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
     private IReadOnlyList<(int X, int Y, int Width, int Height)> _buttons = [];
     private AreaMenuWindow? _window;
@@ -48,6 +46,7 @@ public partial class AreaMenuArtView : Control
     public event Action<int, int>? ArrowPressed;
 
     internal int HoveredForSelfTest => _hovered;
+    internal AreaArtFontFace? FontForSelfTest => _font;
     internal IReadOnlyList<string> LabelsForSelfTest => Visible ? _labels : [];
     internal IReadOnlyList<(int X, int Y, int Width, int Height)> ButtonsForSelfTest => Visible ? _buttons : [];
     /// <summary>The window position of a label's centre, or null.</summary>
@@ -75,14 +74,14 @@ public partial class AreaMenuArtView : Control
         MouseFilter = MouseFilterEnum.Stop;
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
+        AreaArtTextDraw.Prepare(this);
     }
 
-    /// <summary>The background art and the glyph frames of the font (by frame index).</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs)
+    /// <summary>The background art and the labels' font.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFontFace font)
     {
         _backgrounds = backgrounds ?? throw new ArgumentNullException(nameof(backgrounds));
         _font = font ?? throw new ArgumentNullException(nameof(font));
-        _glyphs = glyphs ?? throw new ArgumentNullException(nameof(glyphs));
     }
 
     private IReadOnlyDictionary<int, Texture2D> _backgrounds = new Dictionary<int, Texture2D>();
@@ -113,7 +112,7 @@ public partial class AreaMenuArtView : Control
         if (opened) { _hovered = focus; _pointer = -1; _pressed = -1; }
         else if (focus != _focus) _hovered = focus;
         (_window, _focus, _background, _labels) = (window, focus, background, labels);
-        _buttons = [.. labels.Select((label, slot) => AreaMenuArtLayout.Button(window, slot, _font.Measure(label)))];
+        _buttons = [.. labels.Select((label, slot) => AreaMenuArtLayout.Button(window, slot, _font.Font.Measure(label)))];
         if (_hovered >= _buttons.Count) _hovered = -1;
         // ARC-UI-061: a page change or a new window lets a held arrow go (no release reaches it).
         if (opened || controls.Count != _controls.Count) { _arrowHovered = -1; _arrowHeld = -1; }
@@ -153,17 +152,13 @@ public partial class AreaMenuArtView : Control
         for (var i = 0; i < _labels.Count; i++)
         {
             var (x, y, _, _) = _buttons[i];
-            var glyphs = _font.Layout(_labels[i]);
+            var glyphs = _font.Font.Layout(_labels[i]);
             var passes = AreaMenuArtLayout.Passes;
             for (var pass = 0; pass < passes.Count; pass++)
             {
-                var (dx, dy, (r, g, b)) = passes[pass];
-                if (pass == passes.Count - 1 && i == _hovered) (r, g, b) = AreaMenuArtLayout.HoverFace;
-                // PROJECT: a glyph's grey levels scale the pass's colour (the original's blend is not read, F0).
-                var colour = Color.Color8(r, g, b);
-                foreach (var (gx, glyph) in glyphs)
-                    if (_glyphs.TryGetValue(glyph.Frame, out var texture))
-                        DrawTextureRect(texture, new Rect2(x + gx + dx, y + dy, glyph.Width, glyph.Height), false, colour);
+                var (dx, dy, colour, blend) = passes[pass];
+                if (pass == passes.Count - 1 && i == _hovered) colour = AreaMenuArtLayout.HoverFace;
+                AreaArtTextDraw.Glyphs(this, _font, glyphs, x + dx, y + dy, colour, blend);
             }
         }
     }
@@ -185,8 +180,8 @@ public partial class AreaMenuArtView : Control
             var background = art.Backgrounds[AreaOptionsControlLayout.Background(control.Kind)];
             DrawTextureRect(background, new Rect2(point.X, point.Y, background.GetWidth(), background.GetHeight()), false);
             _drawnPlaces.Add(point);
-            var labelWidth = art.LabelFont.Measure(control.Label).Width;
-            DrawText(art.LabelFont, art.LabelGlyphs, control.Label, AreaOptionsControlLayout.Label(point, background.GetWidth(), labelWidth),
+            var labelWidth = art.LabelFont.Font.Measure(control.Label).Width;
+            DrawText(art.LabelFont, control.Label, AreaOptionsControlLayout.Label(point, background.GetWidth(), labelWidth),
                 i == _controlFocus ? AreaMenuArtLayout.HoverFace : AreaOptionsControlLayout.LabelFace);
             var bar = art.Bar;
             if (control.Kind == AreaOptionKind.Slider)
@@ -197,8 +192,8 @@ public partial class AreaMenuArtView : Control
             }
             else
             {
-                var width = art.ValueFont.Measure(control.ValueText).Width;
-                DrawText(art.ValueFont, art.ValueGlyphs, control.ValueText, AreaOptionsControlLayout.Value(point, bar.GetWidth(), width), AreaOptionsControlLayout.ValueFace);
+                var width = art.ValueFont.Font.Measure(control.ValueText).Width;
+                DrawText(art.ValueFont, control.ValueText, AreaOptionsControlLayout.Value(point, bar.GetWidth(), width), AreaOptionsControlLayout.ValueFace);
             }
             foreach (var arrow in new[] { AreaOptionsArrow.Less, AreaOptionsArrow.More })
             {
@@ -210,14 +205,9 @@ public partial class AreaMenuArtView : Control
         }
     }
 
-    /// <summary>A one-pass text (the controls' fonts have no shadow flag, 0x8); PROJECT: a glyph's grey levels scale the colour (MW5).</summary>
-    private void DrawText(AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, string text, (int X, int Y) at, (byte R, byte G, byte B) face)
-    {
-        var colour = Color.Color8(face.R, face.G, face.B);
-        foreach (var (gx, glyph) in font.Layout(text))
-            if (glyphs.TryGetValue(glyph.Frame, out var texture))
-                DrawTextureRect(texture, new Rect2(at.X + gx, at.Y, glyph.Width, glyph.Height), false, colour);
-    }
+    /// <summary>A one-pass text (the controls' fonts have flag 0x10 only: no shadow, 0x8, and the cover blend, MW31).</summary>
+    private void DrawText(AreaArtFontFace font, string text, (int X, int Y) at, (byte R, byte G, byte B) face) =>
+        AreaArtTextDraw.Text(this, font, text, at.X, at.Y, face);
 
     // The pointer leaving the screen's control (into the margin or out of the window) is the original's event 3: the label goes dark.
     public override void _Notification(int what)

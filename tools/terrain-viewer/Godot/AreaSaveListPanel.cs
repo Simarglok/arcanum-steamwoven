@@ -141,12 +141,12 @@ public partial class AreaSaveListPanel : CanvasLayer
         if (list.Mode == AreaSaveListMode.Load) GetViewport().GuiReleaseFocus();
     }
 
-    /// <summary>ARC-UI-062: the save window's art (frames by number), its font and glyphs, and the new-save row's label; ARC-UI-067: the
-    /// info display's texts, the date's order and the story texts.</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFont font, IReadOnlyDictionary<int, Texture2D> glyphs, string newSaveLabel,
-        AreaSaveInfoMessages messages, AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts)
+    /// <summary>ARC-UI-062: the save window's art (frames by number), its font and the new-save row's label; ARC-UI-067: the info
+    /// display's texts, the date's order and the story texts.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, string newSaveLabel, AreaSaveInfoMessages messages,
+        AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts)
     {
-        _art.SetArt(art, font, glyphs, messages, dateOrder);
+        _art.SetArt(art, font, messages, dateOrder);
         _newSaveLabel = newSaveLabel ?? throw new ArgumentNullException(nameof(newSaveLabel));
         _storyTexts = storyTexts ?? throw new ArgumentNullException(nameof(storyTexts));
     }
