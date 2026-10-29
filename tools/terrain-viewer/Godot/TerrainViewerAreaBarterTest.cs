@@ -134,8 +134,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-064 over a synthetic art set (blank arts of the original sizes): the window opens in the original look (mode 1, background
     /// 235, the merchant's name), a resting pointer puts a ware's quote on the quote line, the hero's item dragged onto the merchant's grid is
-    /// sold and the merchant's dragged onto the hero's grid bought (coins and the trade sound as the buttons'), a ware released back on its
-    /// grid changes nothing, the switch shows the diagnostic window and back, and a release on the round view closes the window.</summary>
+    /// sold and the merchant's dragged onto the hero's grid bought (coins and the trade sound as the buttons'), a right release on the hero's
+    /// item sells it (IW36), a ware released back on its grid changes nothing, the switch shows the diagnostic window and back, and a release on the round view closes the window.</summary>
     private async Task<string> AreaBarterArtForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-064 barter art: " + why); }
@@ -189,9 +189,17 @@ public partial class TerrainViewerApp
             Require(owner.QueryGold() == gold - price && panel.ArtView!.Grid.Any(item => item.Entity == "kit:1") && _barterSounds.Count == sounds + 2,
                 $"the sword dragged onto the hero's grid was bought for {price}: {area.BarterFrame!.Quote}");
 
+            // A right release on the hero's sword moves it to the merchant's side: a sale (IW36).
+            gold = owner.QueryGold();
+            var resale = Math.Min(panel.View!.Hero.Single(line => line.Entity == "kit:1").Quote.Price, owner.QueryNpcGold("merchant") ?? 0);
+            area.RightReleaseAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.Single(item => item.Entity == "kit:1").Slot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(resale > 0 && owner.QueryGold() == gold + resale && panel.ArtView!.LootGrid.Any(item => item.Entity == "kit:1") && _barterSounds.Count == sounds + 3,
+                $"the right release sold the sword for {resale}: {area.BarterFrame!.Quote}");
+
             panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(!panel.ArtMode && panel.SellButtonsForSelfTest.Count > 0 && panel.SellButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic window");
+            Require(!panel.ArtMode && panel.BuyButtonsForSelfTest.Count > 0 && panel.BuyButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic window");
             panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(panel.ArtMode, "and the original look again");
@@ -200,7 +208,7 @@ public partial class TerrainViewerApp
             area.ReleaseAt(new(holeX + 10, holeY + 10));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!BarterOpen, "a release on the round view closed the window");
-            return $"original look: quote, sell {paid} and buy {price} by drag, switch, round-view close";
+            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, switch, round-view close";
         }
         finally
         {

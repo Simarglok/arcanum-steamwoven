@@ -2363,8 +2363,8 @@ the restock of the window's container (else the merchant), logged as `ARC-WORLD-
 looted holder's; the event world runs the restock through the viewer's restock host ([barter runtime](../world/barter-runtime.md#restock-in-the-viewer-arc-world-096)). Self-test
 `ARC-UI-050 self-test PASS` (synthetic hero and merchant: modal open with both quotes, keys owned, a sale and a buy through the session
 with the trade sound, `Escape`, a replaced session closes it; ARC-UI-064 over a synthetic art set: the original look in mode 1 with
-background 235, a resting pointer's quote, a sale and a buy by drag with their coins and sounds, a ware released on its own grid changing
-nothing, the switch and back, a release on the round view closing the window); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
+background 235, a resting pointer's quote, a sale and a buy by drag with their coins and sounds, a sale by a right release, a ware
+released on its own grid changing nothing, the switch and back, a release on the round view closing the window); native smoke `ARC-UI-050 native-smoke barter PASS` (stage `barter` of
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
 its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
 restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
