@@ -538,5 +538,31 @@ rule modes: BP1 (`BloodPoolRules.Leaves`, the tile from the step evidence), BP2 
 never on: Steamwoven has no such setting), BP3 and BP6–BP7 (the session's pools of blood, schema 58: cell, offsets, creation time,
 gone two game days later; `BloodPoolRules.DecayDelay`, `Decayed`), BP4 (the AREA viewer draws prototype 4048's art flat, not
 picked) and BP5 (`BloodPoolRules.Frame`). Not modelled: the hit eye candy (BP9), a dead critter's own decay (one day, BP7), the
-multiplayer and editor cases, and the timing of BP1: the viewer leaves the pool when it sees the death, not when the dying
-animation (ARC-RENDER-040) has played.
+multiplayer and editor cases. The timing of BP1 is in since ARC-RENDER-040: the viewer leaves the pool when the dying animation
+has played ([DA4](#dying-animation-arc-render-040)).
+
+## Dying animation (ARC-RENDER-040)
+
+Source: the [dying animation](../../world/hero-attack-runtime.md#dying-animation-arc-render-040) (owner triage of 2026-10-29,
+slice E1: a killed NPC jumped to the last frame of its dying animation). Read on 2026-10-29 with `llvm-objdump` by two
+independent readers (F2), who agree on every row; every direct branch of 0x42D570, 0x42D6F0, 0x42E4B0 and 0x42FFE0 stays inside
+its function in `.text`. The goal blocks are reached through the pointer table 0x5B03D0 (goal 31 at 0x5A93D0, goal 62 at
+0x5AD1D0): 32-byte slots, slot 0 a header, each later slot a node (function, parameter selectors, next node and delay for a false
+and for a true result), slot 15 the goal's finish function.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DA1 | goal runner (0x423560) | A next value without the high bits is a slot number. 0x10000000 sets the node index to 0 and ends the run, so the next run starts again at slot 1; 0x90000000 ends the goal (its finish function runs, then the goal is retired). A delay of -2 takes the delay the goal stored (+0xCFC); another non-zero delay ends the run and queues the goal again after it; a delay of 0 runs the next node at once in the same run (at most 100 nodes a run). | Original |
+| DA2 | dying goal 31: slots 1–9 | Slot 1 (0x42CA90) is true while the goal's animating flag (0x10) is clear: false goes to the frame step (slot 2), true to slot 3. Slot 3 (0x426F10 → 0x45D730) is true for a PC or NPC, neither destroyed nor off, whose art shows the fall-down animation 7 at any frame: it goes to slot 7 at once, so a critter in its fall (knocked out) keeps it. Slot 4 (0x426E80) goes to slot 5 either way. Slot 5 (0x42BC10) sets the critter's art to the kill's dying animation at frame 0 (7 under the violence filter; animation 18 when the chosen art does not exist; neither: the goal goes to slot 7 with the art unchanged) and keeps it as the start's parameter; then slot 6 (0x42D570). Slot 7 is the pool node (BP1), slot 9 the end (0x42FF40, PD1). | Original |
+| DA3 | dying start (0x42D570) | Returns false with the art unchanged for no object, an object that is no PC or NPC, or a critter whose art shows 7 or 17..19 past frame 0 (in the goal slot 5 has just set frame 0, so this test does not refuse there). Otherwise it plays the critter's dying sound (kind 1 for animation 7, else gruesome dying 2), sets the art the parameter names (the current art at frame 0 without one), stores the delay 1000 / the ART's frame rate (unsigned integer division; 100 ms when the ART's header does not read; a rate of 0 would divide by zero), sets the animating flag and returns true: the runner goes on at once (delay 0) to slot 1 and so to the frame step. | Original |
+| DA4 | dying frame step (0x42D6F0) | Without the art's header it clears the animating flag and returns false. At the last frame it clears the flag and returns false: the goal goes to slot 7 (the pool) in the same run. Otherwise it sets goal flag 0x4 at the action frame − 1, steps one frame and returns true: the runner starts again at slot 1 after the stored delay. So frame 1 shows at once, frame n from (n − 1) delays, the last stays, and the pool node and the end run (frames − 1) delays after the start (at once for a one-frame animation). | Original |
+| DA5 | knockdown goal 62 (0x5AD1D0), start 0x42E4B0 | Slot 1 as in DA2; slot 3 (0x42E4B0) sets the critter's art to the fall-down animation 7 at frame 0 (no sound), stores the same delay (100 ms fallback) and the animating flag; slot 2 is the animate step 0x42CC80 (BP5) with the stored delay: the same frame stepping and timing as DA4 (its extra guards: stoned objects, stunned or paralysed critters outside the lying animations, animation 14). Slot 4 (0x42E460) follows the last frame. | Original |
+| DA6 | dying goal's finish (slot 15, 0x42FFE0) | When the goal is retired (for example interrupted) and neither goal flag 0x8000 nor 0x410060 stops it, it sets the art's last frame at once, then destroys the critter when its tile blocks (0x4D7110). | Original |
+
+Anomalies: none. Implemented by ARC-RENDER-040 in both rule modes (`DyingAnimationRules`, Simulation): DA2's fall test
+(`LiesFallen`), DA3 (`Start`, `Delay`), DA4 and DA5 (`Frame`, `EndMs`), so the AREA viewer plays an NPC's dying animation and its
+knockdown fall and leaves the pool of blood when the dying goal ends. A body lying when the map and session are first shown holds
+its last frame (the kill's own last-frame path for a loaded game, BP1). Not modelled: the dying sounds (DA3), the action-frame flag,
+the missing-art choice of slot 5 (the viewer's pose read keeps the fall for a missing bloody death, MA1), the finish's tile test
+(DA6), and the delay's queue unit (0x423C80, not read; the delay is taken in milliseconds, as BP5). The hero still falls (7) instead
+of playing the kill's dying animation (ARC-COMBAT-021).

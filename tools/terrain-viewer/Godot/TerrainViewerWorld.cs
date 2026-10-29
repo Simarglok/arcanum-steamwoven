@@ -501,6 +501,8 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-018: spell missiles fly after the casting goal's release frame.
         ProcessSpellMissiles();
         ProcessAreaEyeCandy();
+        // ARC-RENDER-040: the NPCs' dying and fall animations step their frames.
+        ProcessLyingAnimations();
         // ARC-RENDER-035: animated scenery steps its frames.
         ProcessAreaSceneryAnimation();
         // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.

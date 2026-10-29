@@ -197,6 +197,12 @@ public sealed class AreaCombatTests
                 "the last frame of the body's group");
             Assert.AreEqual(1, fall.Pose.Key.Entry.Ordinal);
             Assert.AreEqual(AreaFallenPoses.Policy, fall.Pose.Key.Policy);
+            // ARC-RENDER-040: every frame of the facing, frame 0 first, the pose the last, and the ART's rate.
+            CollectionAssert.AreEqual(new[] { 0, 1, 2 }, fall.Frames.Select(f => f.Key.Frame).ToArray());
+            Assert.IsTrue(fall.Frames.All(f => f.Key.Group == 5 && f.Animation == 7 && f.Key.Entry == fall.Pose.Key.Entry));
+            Assert.AreSame(fall.Pose, fall.Frames[^1]);
+            Assert.AreEqual(10, fall.FramesPerSecond);
+            Assert.AreEqual(2, AreaFallenPoses.Load(visual, path, AreaFallenPoses.Decapitation).Frames.Count);
             Assert.AreEqual((17, 1), (AreaFallenPoses.Load(visual, path, AreaFallenPoses.Decapitation).Pose!.Animation,
                 AreaFallenPoses.Load(visual, path, AreaFallenPoses.Decapitation).Pose!.Key.Frame));
             Assert.AreEqual(7, AreaFallenPoses.Load(visual, path, AreaFallenPoses.SeveredLeg).Pose!.Animation, "a missing bloody death falls");

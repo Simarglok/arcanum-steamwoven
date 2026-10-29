@@ -207,6 +207,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="hero-knockdown-arc-combat-021"></a>[Hero knockdown (ARC-COMBAT-021)](ledger/combat.md#hero-knockdown-arc-combat-021) | [Combat](ledger/combat.md) | UC1–UC5 |
 | <a id="right-release-arc-combat-022"></a>[Right release (ARC-COMBAT-022)](ledger/combat.md#right-release-arc-combat-022) | [Combat](ledger/combat.md) | RR1–RR5 |
 | <a id="pool-of-blood-arc-render-041"></a>[Pool of blood (ARC-RENDER-041)](ledger/combat.md#pool-of-blood-arc-render-041) | [Combat](ledger/combat.md) | BP1–BP9 |
+| <a id="dying-animation-arc-render-040"></a>[Dying animation (ARC-RENDER-040)](ledger/combat.md#dying-animation-arc-render-040) | [Combat](ledger/combat.md) | DA1–DA6 |
 | <a id="inventory-window-arc-ui-015"></a>[Inventory window (ARC-UI-015)](ledger/ui-audio.md#inventory-window-arc-ui-015) | [Interface windows and audio](ledger/ui-audio.md) | IW1–IW9 |
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |

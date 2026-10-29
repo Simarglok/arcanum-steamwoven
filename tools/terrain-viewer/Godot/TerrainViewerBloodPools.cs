@@ -26,13 +26,19 @@ public partial class TerrainViewerApp
     /// an NPC of the map's seed lies at the cell its body is drawn on (a companion's or an AI walker's cell, with no pixel offset; else its
     /// map cell and offsets), the hero at its committed cell. The deaths recorded when the map and session were first seen leave none
     /// (they were before this view, or a save that predates pools). The NPC's flags come from its map data (an NPC the session stoned is
-    /// not seen as stoned: Not ready); the hero's flags are none. The original leaves the pool when the dying animation has played; the
-    /// view leaves it when it sees the death (the dying animation is ARC-RENDER-040's). A refusal or failure is said once.
+    /// not seen as stoned: Not ready); the hero's flags are none. As the original (0x42FED0 runs when the dying goal has played its
+    /// frames), a death leaves its pool when its dying animation has played (ARC-RENDER-040, <see cref="DyingPending"/>; the hero's is
+    /// its fall). A refusal or failure is said once.
     /// </summary>
     private void LeaveBloodPoolsForNewDeaths()
     {
         if (_readyArea is not { } area || _areaSession is not { } session || _inventoryHost is null || !AttackMapActive) return;
-        var stamp = (area, session, session.Version.Revision, CurrentAreaMap);
+        // ARC-RENDER-040: a death the fallen bodies have not seen yet starts its dying animation first.
+        var fallenBefore = _fallenBodies;
+        SyncAreaCombatBodies();
+        if (!ReferenceEquals(fallenBefore, _fallenBodies)) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
+        var now = WorldMilliseconds();
+        var stamp = (area, session, session.Version.Revision, CurrentAreaMap, DyingPendingStamp(CurrentAreaMap, now));
         if (Equals(stamp, _bloodPoolDeathStamp)) return;
         _bloodPoolDeathStamp = stamp;
         var deaths = new List<(string Critter, long DeathMs, Func<(CellCoord Cell, int OffsetX, int OffsetY, BloodPoolFacts Facts)?> Where)>();
@@ -52,7 +58,8 @@ public partial class TerrainViewerApp
         }
         foreach (var (critter, deathMs, where) in deaths)
         {
-            if (!_bloodPoolDeaths.Add((critter, deathMs))) continue;
+            if (_bloodPoolDeaths.Contains((critter, deathMs)) || DyingPending(CurrentAreaMap, critter, now)) continue;
+            _bloodPoolDeaths.Add((critter, deathMs));
             if (where() is not var (cell, offsetX, offsetY, facts))
             {
                 GD.Print($"ARC-RENDER-041 blood-pool critter={critter} not left: no cell");
