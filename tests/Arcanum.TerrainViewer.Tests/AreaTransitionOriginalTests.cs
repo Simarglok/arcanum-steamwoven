@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
@@ -69,6 +70,7 @@ public sealed class AreaTransitionOriginalTests
         // Cave: walk to the exit and use it; the way back is the authored reverse record.
         var (exit, exitTrigger) = transitions.Triggers().Single();
         Assert.AreEqual((5000, 1, 92913L, 82598L), (exit.CatalogueDestination, exit.RuntimeDestination, exit.ArrivalX, exit.ArrivalY));
+        AssertReportedCaveApproaches(caveMap, exitTrigger.Key, arguments.ModulePath);
         var exitNear = Walk(caveMap, inbound.ArrivalChartCell, new(exitTrigger.WorldX!.Value, exitTrigger.WorldY!.Value));
         Assert.AreEqual(AreaUseOutcome.Accepted, transitions.RequestUse(exitTrigger.Key, caveMap.Chart.ToWorld(exitNear)).Outcome);
         var outbound = transitions.Process()!;
@@ -79,6 +81,66 @@ public sealed class AreaTransitionOriginalTests
         var back = new AreaGridSession(result.AreaStepSnapshot!, SimulationTime.At(0), StepDuration.Of(1), start: outbound.ArrivalChartCell);
         Assert.AreEqual(outbound.ArrivalChartCell, back.State.CommittedCell, "The return cell is admitted for movement.");
         Console.WriteLine($"cave transition PASS: entrance used from {near} (exterior chart), exit used from {exitNear} (cave chart), session revision {session.Version.Revision}");
+    }
+
+    // ARC-WORLD-121: the six start cells in the 2026-10-31 cave reports, all three lootable objects named Barrel, and the cave exit.
+    // Exercise the production approach selector and follower over the authenticated cave snapshot, then check every runtime step.
+    private static void AssertReportedCaveApproaches(AreaMapRuntime cave, AreaObjectKey exitKey, string modulePath)
+    {
+        var names = AreaHover.LoadNames(modulePath);
+        Assert.AreEqual(AreaNamesStatus.Ready, names.Status, "The module description catalog must load for the Barrel regression.");
+        var built = AreaInventoryMap.Build(cave.Snapshot, cave.Steps);
+        Assert.AreEqual(AreaInventoryMapStatus.Ready, built.Status, "The cave inventory must build for the Barrel regression.");
+        var inventory = built.Map!;
+        var barrels = inventory.Seed.Holders.Where(holder => holder.Kind == SessionHolderKind.Container)
+            .Select(holder => inventory.Row(holder.Entity))
+            .Where(row => string.Equals(AreaHoverIndex.Text(row, names.Catalog), "Barrel", StringComparison.OrdinalIgnoreCase))
+            .Where(row => row.WorldX is not null && row.WorldY is not null)
+            .OrderBy(row => row.WorldY).ThenBy(row => row.WorldX).ToArray();
+        Assert.AreEqual(3, barrels.Length, "The three cave containers reported by the player resolve as Barrel.");
+        var exit = cave.Snapshot.Objects.Single(row => row.Key == exitKey);
+        Assert.IsNotNull(exit.WorldX); Assert.IsNotNull(exit.WorldY);
+
+        var reportStarts = new (long X, long Y)[]
+        {
+            (2082, 2017), (2076, 2015), (2079, 2018), (2065, 2011), (2075, 2018), (2071, 2018),
+        };
+        var targets = barrels.Select((row, index) => (Name: $"Barrel {index + 1}", X: row.WorldX!.Value, Y: row.WorldY!.Value, Range: AreaInventoryHost.Reach))
+            .Append((Name: "Cave exit", X: exit.WorldX!.Value, Y: exit.WorldY!.Value, Range: AreaTransitionCoordinator.UseRange)).ToArray();
+        foreach (var target in targets)
+        foreach (var (x, y) in reportStarts)
+        {
+            var start = cave.Chart.ToChart(new(x, y));
+            Assert.IsTrue(cave.Chart.Contains(start) && cave.Steps.IsAdmitted(cave.Chart.ToWorld(start)), $"reported start {x},{y} is admitted");
+            var session = new AreaGridSession(cave.Steps, SimulationTime.At(0), StepDuration.Of(1), chart: cave.Chart, start: start)
+                { CrittersPass = () => true };
+            var routes = new AreaRouteSource(cave.Steps, cave.Chart, crittersPass: () => true);
+            var center = cave.Chart.ToChart(new(target.X, target.Y));
+            var candidates = AreaRouteApproachPlanner.Candidates(center, start, target.Range)
+                .Where(cell => cave.Chart.Contains(cell) && cave.Steps.IsAdmitted(cave.Chart.ToWorld(cell))).ToArray();
+            var approach = AreaRouteApproachPlanner.Select(routes, start, candidates, allowCorridor: true)
+                ?? throw new AssertFailedException($"No safe route from {x},{y} to {target.Name}.");
+            var follower = new RouteFollower(routes, corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => true, straightRetry: true);
+            Assert.IsTrue(follower.SetTarget(approach.Cell, session.State.Time));
+            var evidence = new List<AreaGridStepEvidence>();
+            var drive = follower.Drive(session.State, SimulationTime.At(5000), (until, batches) =>
+            {
+                var advance = session.Advance(until, batches.ToArray());
+                evidence.AddRange(advance.AreaEvidence);
+                return advance.Movement;
+            });
+            Assert.IsTrue(drive.Completed, $"{target.Name} from {x},{y}: {drive.FailureCode}");
+            Assert.AreEqual(RouteFollowStatus.Arrived, follower.Status, $"{target.Name} from {x},{y}: {follower.StopReason}");
+            Assert.AreEqual(approach.Cell, session.State.CommittedCell, $"{target.Name} from {x},{y}");
+            var unsafeStep = evidence.FirstOrDefault(step => (step.Live?.Coverage ?? step.Assessment.Coverage) != CardinalTraversalCoverage.Supported
+                || (step.Live?.Disposition ?? step.Assessment.Disposition) != CardinalTraversalDisposition.Open);
+            Assert.IsNull(unsafeStep, unsafeStep is null ? "" : $"{target.Name} from {x},{y} step {unsafeStep.Key.From}->{unsafeStep.Key.To}: "
+                + $"T0 {unsafeStep.Assessment.Coverage}/{unsafeStep.Assessment.Disposition}/{unsafeStep.Assessment.ReasonCode}, "
+                + $"live {unsafeStep.Live?.Coverage}/{unsafeStep.Live?.Disposition}/{unsafeStep.Live?.ReasonCode}");
+            var reached = session.Chart.ToWorld(session.State.CommittedCell);
+            Assert.IsTrue(Math.Max(Math.Abs(reached.X - target.X), Math.Abs(reached.Y - target.Y)) <= target.Range,
+                $"{target.Name} from {x},{y} ended within use range {target.Range}");
+        }
     }
 
     // ARC-RENDER-011: at the arrival the wall check fades the corridor's front wall row (y 2022, x 2087..2092) and the

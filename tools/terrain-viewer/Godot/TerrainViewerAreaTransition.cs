@@ -197,38 +197,16 @@ public partial class TerrainViewerApp
         return ApproachCell(session, target.WorldX!.Value, target.WorldY!.Value, AreaTransitionCoordinator.UseRange);
     }
 
-    /// <summary>A standable cell within <paramref name="range"/> of a world cell, nearest the target then the actor
-    /// (shared by walk-to-use and ARC-SCRIPT-005 walk-to-talk).</summary>
-    private static CellCoord? ApproachCell(AreaGridSession session, long worldX, long worldY, int range, Func<CellCoord, bool>? accept = null)
+    /// <summary>A reachable, minimum-cost cell within <paramref name="range"/> of a world cell, shared by walk-to-use,
+    /// pickup/loot and other object approaches.</summary>
+    private CellCoord? ApproachCell(AreaGridSession session, long worldX, long worldY, int range, Func<CellCoord, bool>? accept = null)
     {
         var steps = session.Snapshot; var chart = session.Chart; var actor = session.State.CommittedCell;
         var center = chart.ToChart(new(worldX, worldY));
-        var candidates = new List<CellCoord>();
-        for (var dy = -range; dy <= range; dy++)
-        for (var dx = -range; dx <= range; dx++)
-            if (dx != 0 || dy != 0) candidates.Add(new(center.X + dx, center.Y + dy));
-        foreach (var cell in candidates.OrderBy(c => Math.Max(Math.Abs(c.X - center.X), Math.Abs(c.Y - center.Y)))
-            .ThenBy(c => Math.Max(Math.Abs(c.X - actor.X), Math.Abs(c.Y - actor.Y))))
-        {
-            if (!chart.Contains(cell)) continue;
-            var world = chart.ToWorld(cell);
-            if (!steps.IsAdmitted(world) || accept?.Invoke(cell) == false) continue;
-            foreach (var direction in Enum.GetValues<Arcanum.Data.Traversal.CardinalTraversalDirection>())
-            {
-                var (ox, oy) = direction switch
-                {
-                    Arcanum.Data.Traversal.CardinalTraversalDirection.XMinusYMinus => (1, 1), Arcanum.Data.Traversal.CardinalTraversalDirection.XMinus => (1, 0),
-                    Arcanum.Data.Traversal.CardinalTraversalDirection.XMinusYPlus => (1, -1), Arcanum.Data.Traversal.CardinalTraversalDirection.YPlus => (0, -1),
-                    Arcanum.Data.Traversal.CardinalTraversalDirection.XPlusYPlus => (-1, -1), Arcanum.Data.Traversal.CardinalTraversalDirection.XPlus => (-1, 0),
-                    Arcanum.Data.Traversal.CardinalTraversalDirection.XPlusYMinus => (-1, 1), _ => (0, 1),
-                };
-                var from = new Arcanum.Data.Traversal.AreaStepCell(world.X + ox, world.Y + oy);
-                if (!steps.IsAdmitted(from)) continue;
-                var step = steps.Assess(steps.Request(from, world, direction));
-                if (step.Coverage == Arcanum.Data.Traversal.CardinalTraversalCoverage.Supported && step.Disposition == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open) return cell;
-            }
-        }
-        return null;
+        var candidates = AreaRouteApproachPlanner.Candidates(center, actor, range)
+            .Where(cell => chart.Contains(cell) && steps.IsAdmitted(chart.ToWorld(cell)) && accept?.Invoke(cell) != false);
+        return AreaRouteApproachPlanner.Select(RouteSourceFor(session), actor, candidates,
+            allowCorridor: _areaSession?.Rules.Navigation.FarClickDoesNotMove != true)?.Cell;
     }
 
     private void CancelAreaUseApproach(string why)

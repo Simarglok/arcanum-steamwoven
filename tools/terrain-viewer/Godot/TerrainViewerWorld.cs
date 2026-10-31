@@ -653,14 +653,18 @@ public partial class TerrainViewerApp
             // plan passes living critters in both rule modes (the owner's decision 2026-10-21), and under Original the walk ends before
             // a segment's last step onto one (LR5). The PC's steps pass them too outside combat mode (ARC-WORLD-074); a step refused
             // for another reason (in combat, a door that closed) plans around its cell.
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy, () => area.Portals?.Invoke(), () => !HeroInCombatMode,
-                    AreaCritterDeadNow),
+            _worldRoute = new RouteFollower(RouteSourceFor(area),
                 corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,
                 segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true);
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
     }
+
+    /// <summary>The same live occupancy, portals, critter rule and death state for route planning and object approach selection.</summary>
+    private AreaRouteSource RouteSourceFor(AreaGridSession area) => new(area.Snapshot, area.Chart, area.Occupancy,
+        () => area.Portals?.Invoke(), () => !HeroInCombatMode, AreaCritterDeadNow);
+
     private void StopWorldRoute(string reason)
     {
         if (_exiting || _worldRoute is not { Status: RouteFollowStatus.Following } route
