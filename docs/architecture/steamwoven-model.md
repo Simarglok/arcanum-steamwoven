@@ -7,7 +7,7 @@ changes and no checks run.
 Code read: `origin/main` 384152a4 (after PR #585). Scope: `src/Arcanum.Data`,
 `src/Arcanum.Simulation`, `src/Arcanum.Scripting`, `src/Arcanum.Session` and the AREA
 viewer that the alpha app runs (`tools/terrain-viewer/Core`, 139 files and about 27 k
-lines without tests and smokes, and `tools/terrain-viewer/Godot`, 148 files and about 33 k). Out of scope: `Arcanum.Presentation` and
+lines without tests and smokes, and `tools/terrain-viewer/Godot`, 148 files and about 33 k; about 50 k with tests and smokes, the plan's H6 figure). Out of scope: `Arcanum.Presentation` and
 `Arcanum.Input` (stateless drawing and input mapping), `src/Arcanum.Godot` (the frame
 and HD review app, not the game), launcher settings, render-only caches (textures,
 frames, meshes) except where they hold game state.
@@ -133,7 +133,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 | V1 | `AreaInventoryMap`, `AreaInventoryHost` (`AreaInventoryHost.cs`) | Each covered map's seed, rows by entity, substitute containers, restock seeds | Map, entity | D1 of each covered map | Rebuilt on every map load | H1+ |
 | V2 | `AreaCombatHost` (`AreaCombat.cs`) | Combat field and build caches, worn-set caches | (Map, entity) | D1 of covered maps, D2 fallback; `HomeMap` searches covered maps only | Rebuilt on map change | H1+, H9+ |
 | V3 | `AreaCombatWorld`, `AreaSectorEntries` (`AreaCombatRound.cs`) | Round scan of the shown map's critters | Entity on one runtime map | Shown map | Per map | H7+ |
-| V4 | `AreaAiHost` (`AreaAiHost.cs`) | The NPC goal runs `_runs` (`AiGoalRun`, due time), pass choices, used items, casts, attack plays, traces, its own `_nowMs` | Entity, shown map | `AreaAiScene` from the shown map's seed holders; `Stranger` keeps a visitor out of the rules | Rebuilt when the session, map, loaded area or the non-group follower set changes | H1+, H4+, H5+, H7+, H9+ |
+| V4 | `AreaAiHost` (`AreaAiHost.cs`) | The NPC goal runs `_runs` (`AiGoalRun`, due time), pass choices, used items, casts, attack plays, traces, its own `_nowMs` | Entity, shown map | `AreaAiScene` from the shown map's seed holders; `Stranger` keeps a visitor out of the rules | Rebuilt when the session, map, loaded area, the non-group follower set or the group's companion entities change | H1+, H4+, H5+, H7+, H9+ |
 | V5 | `AreaAiMovers` (`AreaAiMovers.cs`) | Cells of NPCs the AI moved | Entity | — | Run-local: a load or map change stands every NPC on its T0 cell | H7+, H9+ |
 | V6 | `AreaCompanionGroup`, `AreaVisitors` (`AreaCompanions.cs`) | Companions of the shown map, absent ones, walks | Entity, `AreaObjectKey` | Shown map's speakers + bodies (L1) | Per map | H1+ |
 | V7 | `AreaConversationHost`, `AreaConversationState`, `AreaScriptHost` (`AreaConversation.cs`, `AreaScriptHost.cs`) | Speakers, dialog local flags and counters baselines, script output lists | Speaker; state keys on the row's own map (`dialog.*`) | Shown map's speakers; `ForVisitor` builds one over the home map | Per map | H1+, H8+ |
@@ -179,7 +179,7 @@ world-map and menu syncs, death, inventory, hover, cursor and bug-report syncs.
 | --- | --- | --- | --- | --- | --- |
 | L1 | `_travellers` (`Godot/TerrainViewerCompanions.cs`) | A companion's body built from its home map's scene | Entity | Quick load or fresh run when the home map was not loaded (`AreaVisitors.Unbodied`) | H1+, H9+ |
 | L2 | `_companionFacts` (`Godot/TerrainViewerCompanions.cs`) | Companion facts | `AreaObjectKey` | Map change | H1+ |
-| L3 | `_visitorRefused` (`Godot/TerrainViewerConversation.cs`) | Visitors whose dialog was refused | Entity, per owner | Quick load | H9+ |
+| L3 | `_visitorRefused` (`Godot/TerrainViewerConversation.cs`) | Visitors whose dialog was refused | Entity, per owner | Quick load, conversation reset | H9+ |
 | L4 | V5 movers, V4 runs, S25 spell runs, S26 shots, G1–G4 | See above | — | Quick load, map change | H9+ |
 | L5 | Drawing derivations: `_fallenBodies`, `_groundBodies`, `_bodyCycles`, `_portalBodies`, `_projectileBodies`, `_spellMissileBodies`, `_sceneryBodies`, `_eyeCandyBodies`, `_bloodPoolKeys`, `_areaRoofObjects` | Draw commands rebuilt from session state | `AreaObjectKey` | Rebuilt each change | H1+ (positional key) |
 | L6 | `_aiCompanionOccupancy`, `_aiLineOfFire`, `_aiPcOccupancy` (`Godot/TerrainViewerAi.cs`) | Occupancy and line of fire with movers | Frame, version | Each frame or version | — |
