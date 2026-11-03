@@ -58,8 +58,8 @@ rows name the cases. A review of the draft by a fresh reader against the executa
 corrected rows RL2, RL5, RL9, RL11 to RL13, RL16 to RL18, RL21 to RL23, RL26 to RL30 and
 the statements that no AI event survives a map change. The call order of the map open is
 also given by the executable's own log lines (RL27). Multiplayer branches are named where
-they touch the sequence and not followed. A scripted check of the 9,373 direct calls and
-jumps in the 451 functions named in sections 7 to 9 and in the readers' working lists
+they touch the sequence and not followed. A scripted check of the 9,670 direct calls and
+jumps in the 457 functions named in sections 7 to 9 and in the readers' working lists
 found every target inside `.text`, except one in 0x49D590, which is a jump table that the
 disassembler read as code.
 
