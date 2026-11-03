@@ -153,3 +153,20 @@ counts stored entries, so a block with a gap can pick a missing number (GD4's me
 the first entry the count is 0 (what the pick then gives is the greeting slice's row). In the installed files, 2 of the 242 aligned 50-number blocks of each `gd_cls_*`
 file, 1 of 33 in `gd_cls_pc2f` and 10 of 68 in each `gd_npc_*` file have a gap (ARC-DATA-042 census; which real ranges hit one
 is the greeting slice's census).
+
+## Prototype extraction (ARC-RES-085)
+
+Source: [prototype extraction](../prototype-extraction.md#how-the-original-builds-a-prototype), the fresh-install fix
+(owner decision 2026-11-03: build the prototypes from the player's own executable). Question: what does the original run to
+build a missing prototype file, and what does that build read? Read on 2026-11-03 by one reader (F1; for the type defaults and the group fill, the call structure and the census only, not
+the value of each case) and exercised by a local emulated census of all 1,423 builds (the document's census section); the
+rows' detail is in the document.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| PX1 | prototype init 0x4681B0, check 0x468660, type of a number 0x4685D0 | Every missing `proto\NNNNNN - name.pro` of the 20 number groups is built; after any build the object system restarts, then every file is read. | Original; Steamwoven builds the missing files at its first start (E3, E4) |
+| PX2 | build 0x468890 | New object of the number's type, name field, prototype ID, group fill, file write, free. | Original; interpreted (E3) |
+| PX3 | new object 0x405800, type defaults 0x409000 | Pool slot, full value array cleared, type defaults by field-setter calls. | Original; interpreted (E3) |
+| PX4 | group fill 0x468930 | One switch case per number of field-setter calls and small helpers; writes no global. | Original; interpreted (E3) |
+| PX5 | critter files 0x49B340, parser 0x49B5A0 | Three number ranges read `rules\npc.txt`, `rules\unique.txt` or `rules\monster.txt`, keys matched against stat and spell names loaded at start. | Original; the file layer reads the content stack (E3) |
+| PX6 | write 0x468330, record write 0x406590 | The full record through the file layer, named after the object's name text; the unused bytes of its two IDs come from memory and differ from run to run. | Original; comparisons leave the unused ID bytes out (E3) |

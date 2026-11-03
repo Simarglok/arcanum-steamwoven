@@ -126,6 +126,13 @@ differences a reader misses and needs no reading of the code at all.
   then expects it in Steamwoven mode only and no difference in Original mode.
 - Running the game as a whole (for example under CrossOver) is not part of this
   permission; it needs its own work item.
+- One owner-approved extension (2026-11-03, [decisions](../architecture/decisions.md)):
+  on the player's own machine, Steamwoven may interpret the prototype build of the
+  player's verified 1.0.7.4 executable (its SHA-256 checked before every run) to write
+  the prototype files the original writes at its first start
+  ([prototype extraction](prototype-extraction.md)). Nothing of the executable or of
+  the built files is copied into git or translated into Steamwoven code, and any path
+  outside the build's recorded functions and services stops the build.
 
 The tool is [`tools/original-oracle`](../../tools/original-oracle/README.md) (ARC-DEV-007):
 `./arcanum oracle [--function ADDR|--all]` writes at least 10,000 seeded inputs per
