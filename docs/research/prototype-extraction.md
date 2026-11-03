@@ -1,7 +1,7 @@
 # Prototype extraction from the player's executable
 
 Status: **Research**, work item ARC-RES-085 (2026-11-03), slice E1 of the fresh-install
-fix. Docs-only: no code changes and no checks run. It says how the original builds its
+fix. Docs-only: no code changes and no checks run (the census below ran locally, not as a repository check). It says how the original builds its
 prototype files, what a build needs at run time, and how Steamwoven builds the same files
 from the player's own `Arcanum.exe` on any operating system. The slices that implement it
 are E2–E4 ([plan](#slices)).
@@ -34,15 +34,18 @@ original content into git. **Owner decision 2026-11-03: option 1.**
 
 Read on 2026-11-03 in the retail 1.0.7.4 executable (SHA-256 `9bd80511…8d52`) with
 `llvm-objdump`, one reader (F1 for every row), then exercised by the emulated census below.
+For the type defaults of PX3 and the group fill of PX4, F1 covers their call structure and what
+the census showed, not the value each case sets: nobody read the 85,000 instructions case by case,
+and the extractor does not need it, because it runs them.
 Numbers are the code's basic prototype numbers; the file and ID number is the basic number
 plus 20 ([OM3](../architecture/original-object-model.md#1-identity-handles-and-persistent-ids)).
 
 | ID | Function (address) | Original 1.0.7.4 | Level |
 | --- | --- | --- | --- |
-| PX1 | prototype init 0x4681B0, check 0x468660, group of a number 0x4685D0 | The check walks 20 groups, each a range of basic numbers (tables 0x5B37FC and 0x5B384C), and builds every number whose file `proto\<ID number, 6 digits> - <group name>.pro` does not exist (0x52FB80). When it built at least one, the object system is shut down (0x4051F0) and started again (0x405110) before every `proto\*.pro` file is listed and read (0x406600): the game itself always plays from the files. The object type of a number (0x4685D0) is the count of the starts of groups 1–18 at or below it, with 18 read as 16: groups 0–17 are the 18 object types in order, and the last two groups (27309–27393 and 28310–28471) are NPCs too. | F1 |
+| PX1 | prototype init 0x4681B0, check 0x468660, type of a number 0x4685D0 | The check walks 20 groups, each a range of basic numbers (tables 0x5B37FC and 0x5B384C), and builds every number whose file `proto\<ID number, 6 digits> - <group name>.pro` does not exist (0x52FB80). When it built at least one, the object system is shut down (0x4051F0) and started again (0x405110) before every `proto\*.pro` file is listed and read (0x406600): the game itself always plays from the files. The object type of a number (0x4685D0) is the count of the starts of groups 1–18 at or below it, with 18 read as 16: groups 0–17 are the 18 object types in order, and the last two groups (27309–27393 and 28310–28471) are NPCs too. | F1 |
 | PX2 | build 0x468890 | One prototype: a new object of the number's type (0x405800), its name field (22) set to the type's name number (0x468720; 400 for walls, 800 for portals and so on), its ID set to a prototype ID of the number (0x408020), its fields filled by the group fill (0x468930), the file written (0x468330) and the object freed (0x405BF0). | F1 |
-| PX3 | new object 0x405800, type defaults 0x409000 | The object gets a pool slot, a GUID that 0x408020 then replaces, a full value array of its type's field count, every field cleared by the field walk (0x40C880 with 0x40C6B0), and the type's defaults (0x409000, the same field-setter calls as the group fill, with a switch on the type). | F1 |
-| PX4 | group fill 0x468930 (to 0x49A289) | One switch on the number with a case per prototype, about 85,000 instructions, almost all of them argument pushes and calls of the object field setters: the plain setter 0x406D40 (8,931 call sites), the array setters 0x407340 and 0x4074E0, the getters 0x406CA0 and 0x4078A0; the ART id builders (0x5043C0 and its family, small leaf functions); a few rule helpers (critter stats 0x4B0980, light 0x441C70, auto-level scheme 0x4A6DE0, others). It writes no global of the image (census). | F1 |
+| PX3 | new object 0x405800, type defaults 0x409000 | The object gets a pool slot, a GUID that 0x408020 then replaces, a full value array of its type's field count, every field cleared by the field walk (0x40C880 with 0x40C6B0), and the type's defaults (0x409000, the same field-setter calls as the group fill, with a switch on the type). | F1 (structure and census) |
+| PX4 | group fill 0x468930 (to 0x49A289) | One switch on the number with a case per prototype, about 85,000 instructions, almost all of them argument pushes and calls of the object field setters: the plain setter 0x406D40 (8,931 call sites), the array setters 0x407340 and 0x4074E0, the getters 0x406CA0 and 0x4078A0; the ART id builders (0x5043C0 and its family, small leaf functions); a few rule helpers (critter stats 0x4B0980, light 0x441C70, auto-level scheme 0x4A6DE0, others). It writes no global of the image (census). | F1 (structure and census) |
 | PX5 | critter files 0x49B340, line parser 0x49B5A0 | Three number ranges also read a text file of the game's data through the file layer (0x5303A0, line reads 0x530540): basic numbers 17067–17316 `rules\npc.txt`, 27309–27393 `rules\unique.txt`, 28310–28471 `rules\monster.txt`. Their keys are matched against the executable's static name tables and against names that other subsystems load from MES files at start (stat names from `mes\stat.mes`, spell names from `mes\spell.mes`). | F1 |
 | PX6 | write 0x468330, record write 0x406590 (0x4096B0, 0x409980), file write 0x4E7010 → 0x5306A0, name text 0x4071A0 and 0x4E7400 | The writer refuses an object whose ID is not a prototype ID. The file name is `proto\%06d - %s.pro` with the ID number and the text of the object's own name field (22) in `oemes\oname.mes` (handle loaded by 0x4E72B0); the check of PX1 builds its expected name from the group's name number instead, so the two agree only while the fill leaves field 22 alone (81 files of the census carry an object's own name, such as a unique NPC's). The record is the object's full record (version 119), written through the file layer. The bytes of the record's two 24-byte IDs that their kind does not use are copied from memory as they are, so they differ from run to run and from build to build; every comparison of prototype files must leave them out. | F1 |
 
@@ -82,9 +85,11 @@ Results:
 - Compared with the owner's macOS `data/proto` (written by the community reimplementation,
   see below), leaving out the unused ID bytes of PX6: every file has the same name, 1,411 have
   the same length, and **1,311 are equal**. 112 differ in fields: 56 NPCs, 15 portals, 13 PCs
-  (12 of them also in length), 11 generic items, 7 traps, one scenery object and 9 critters named
-  after themselves. Which side is right is
-  not known yet: the macOS files are not the original's.
+  (12 of them also in length), 11 generic items, 7 traps, one scenery object and 9 critters
+  named after themselves (9 of the 81 self-named files of PX6; the groups do not overlap). Which
+  side is right is not known yet: the macOS files are not the original's. They serve as a
+  diagnostic only; no verdict and no implementation detail is taken from them, and E3 is judged
+  against the files the original wrote on Windows.
 - Globals the builds read that none of the start-up functions above sets (zero in the
   harness): the local PC (0x5D1158; no PC exists yet when the original builds its prototypes,
   so zero is the original's value as well), two callbacks set from the start-up information
@@ -115,7 +120,8 @@ owner's Windows installation (2026-10-29).
   need a Steamwoven writer of the record format and an exact model of every rule helper the
   fill calls. Interpreting the whole build, the object system and the record writer
   included, gives the original's bytes by construction; only the service layer of the census
-  is Steamwoven code: memory, the file layer over the content stack, MES loading (or the MES
+  is Steamwoven code: memory, the file layer over the content stack (opened before the first
+  build, since the content stack's own prototype source is what the build fills), MES loading (or the MES
   code itself over the file layer), the clock, the GUID and the log. The builds are
   independent of each other and write no global, so they can run one after another in one
   interpreter after one start-up.
@@ -129,8 +135,9 @@ owner's Windows installation (2026-10-29).
   mounted by the content stack as a base source after `data/`, where the original writes them
   ([PX1](#how-the-original-builds-a-prototype), [content precedence](content-precedence.md)).
   An installation that already has `data/proto` keeps it.
-- **Time.** The Python harness took 11 minutes for all 1,423 builds, almost all of it in the
-  key matching of PX5; a C# interpreter without a per-instruction hook should take seconds.
+- **Time.** The scratch harness took 11 minutes for all 1,423 builds, almost all of it in the
+  key matching of PX5; a C# interpreter without a per-instruction hook should take seconds
+  (estimate, unmeasured).
   The launcher shows the build's progress once and stores the result.
 
 ## Slices

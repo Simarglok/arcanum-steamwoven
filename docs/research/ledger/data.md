@@ -158,8 +158,9 @@ is the greeting slice's census).
 
 Source: [prototype extraction](../prototype-extraction.md#how-the-original-builds-a-prototype), the fresh-install fix
 (owner decision 2026-11-03: build the prototypes from the player's own executable). Question: what does the original run to
-build a missing prototype file, and what does that build read? Read on 2026-11-03 by one reader (F1) and exercised by a local
-emulated census of all 1,423 builds (the document's census section); the rows' detail is in the document.
+build a missing prototype file, and what does that build read? Read on 2026-11-03 by one reader (F1; for the type defaults and the group fill, the call structure and the census only, not
+the value of each case) and exercised by a local emulated census of all 1,423 builds (the document's census section); the
+rows' detail is in the document.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
