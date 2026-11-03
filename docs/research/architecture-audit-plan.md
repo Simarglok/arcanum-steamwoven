@@ -100,7 +100,7 @@ R1 first; R2–R6 may run in parallel after it, as many at once as the owner all
 
 | Slice | Covers | Output |
 | --- | --- | --- |
-| M1 | Every state owner and record source in `src/` and the viewer: what each holds, how it is keyed (entity, map, kind), who reads base rows and how, every clock and goal machine, every run-local cache, what is in the snapshot | `docs/architecture/steamwoven-model.md`, one table row per owner |
+| M1 | Every state owner and record source in `src/` and the viewer: what each holds, how it is keyed (entity, map, kind), who reads base rows and how, every clock and goal machine, every run-local cache, what is in the snapshot | [`docs/architecture/steamwoven-model.md`](../architecture/steamwoven-model.md), one table row per owner (done, ARC-RES-079) |
 
 ### Phase 2: gap register and target model (Mac or cloud)
 
