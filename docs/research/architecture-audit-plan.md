@@ -90,7 +90,7 @@ Codes are not taken; the coordinator hands each one out when its thread starts.
 | R1 | SP1 + SP7: object identity, handles and IDs, field ownership, prototypes at creation and after, run-time object kinds, links between objects | [`docs/architecture/original-object-model.md`](../architecture/original-object-model.md) (reference rows OM1–OM32; done, ARC-RES-078) |
 | R2 | SP2: maps and sectors, create, destroy, move between sectors and maps, what lives off the loaded sectors, map change order | rows in the same document ([RL1–RL31](../architecture/original-object-model.md#7-sectors-what-a-sector-owns-who-is-listed-how-objects-move); done, ARC-RES-080) |
 | R3 | SP3: the save layout, global vs per map state, load order and fix-ups | [`docs/architecture/original-persistence.md`](../architecture/original-persistence.md) (reference rows PS1–PS34; done, ARC-RES-081) |
-| R4 | SP4: one frame's order, the time kinds, pause, turn-based gating, event scope | `docs/architecture/original-time-loop.md` (TL*) |
+| R4 | SP4: one frame's order, the time kinds, pause, turn-based gating, event scope | [`docs/architecture/original-time-loop.md`](../architecture/original-time-loop.md) (reference rows TL1–TL46; done, ARC-RES-082) |
 | R5 | SP5: the goal system for PC and NPCs, slots, priorities, interrupts, how input, AI and scripts start goals | `docs/architecture/original-goals.md` (GS*) |
 | R6 | SP6 + SP8 + SP9: script slots and state on objects, the change path the network layer uses, the interface mode machine | `docs/architecture/original-scripts-authority.md` (SA*) |
 

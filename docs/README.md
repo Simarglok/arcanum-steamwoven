@@ -17,6 +17,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
 - [Original executable check](research/original-executable-check.md): how original behaviour and bugs of the original game are classified, and the function oracle (emulating single functions of the executable)
 - [Original oracle and reconstruction removal (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and removing the source reconstruction
+- [Prototype extraction (ARC-RES-085)](research/prototype-extraction.md): how the original builds its prototype files at its first start, and how Steamwoven builds them from the player's own executable on an installation the original never ran
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 
