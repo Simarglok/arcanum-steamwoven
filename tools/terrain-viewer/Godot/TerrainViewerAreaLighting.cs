@@ -20,7 +20,7 @@ public partial class TerrainViewerApp
     // ARC-WORLD-039: the event world the clock's pump asks; it reads the viewer's current combat and conversation hosts.
     private AreaEventWorld? _areaEventWorld;
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
-    private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, VisitorCallHost,
+    private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, AdmitCallAttachee,
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 

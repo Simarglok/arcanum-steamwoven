@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
     private void TakeScriptReadings()
     {
         if (_readyMode != TerrainViewerMode.CrashSiteArea) { _readingScriptOpen = null; return; }
-        foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray()) QueueScriptReadings(scripts.TakeReadings());
+        if (_conversationHost is { } talk) QueueScriptReadings(talk.Scripts.TakeReadings());
         if (_useScriptHost is { } use) QueueScriptReadings(use.Host.TakeReadings());
         if (_readingScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _readingScriptOpen = null; return; }

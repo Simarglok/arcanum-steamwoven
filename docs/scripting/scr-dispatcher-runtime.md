@@ -602,8 +602,7 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
 - **Hosts.** The AREA viewer's dialog host (`AreaScriptHost`) runs the talk set "S3-area-talk-queries" (with a session hero
   "S3-area-talk-queries-skill"): its earlier set plus the guard conditions of S4 (PC quest state, holds an item named, is named, wields an
   item named, has a reputation), obj is dead and obj is switched off of S18, random (37), float line and get area, while its `QueryHost` gives the shown map's use host
-  (`AreaUseScriptHost`) of the talk's map with the PC on it, built for the shown snapshot only, which answers them as for a use or heartbeat run (map mode wires it; a visitor's host keeps
-  the earlier set). `AreaScriptWorld.MapArea` gives the use host the shown map's map-list area and whether it is the start map.
+  (`AreaUseScriptHost`) of the talk's map with the PC on it, built for the shown snapshot only, which answers them as for a use or heartbeat run (map mode wires it; since ARC-DEV-081 a carried companion talks through the same host, so it gets the same set, and the use host answers "no loaded row" for an object whose row the shown map does not hold). `AreaScriptWorld.MapArea` gives the use host the shown map's map-list area and whether it is the start map.
   The dialog host applies a run's float lines first: a missing or unreadable DLG floats nothing (the original's load fails), a line
   with an action field or generated text leaves the whole run unapplied; the shown texts go to the viewer (`TakeFloats`), which floats
   them over the speaker in the floater field. Over the installed interiors (the opt-in walk of `AreaMapConversationOriginalTests`):

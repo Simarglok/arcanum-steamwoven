@@ -43,7 +43,7 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 and keeps its map-keyed questions with their meaning (the rows of that map), so the consumers move one by one: carried companions in the AI
 (MIG2, done: ARC-DEV-075, the AI host asks only by identity; `AreaCombatHost` gained `WornItems`, `NpcItems`, `HeldItemFields`, `NpcHolder` and
 `NpcItemFields` by identity, the last two over every held map), then spell targets, hover attack, life bars, turn facts, sheet and levels, the event world and the item/armour questions
-(MIG3, done: ARC-DEV-076; below), the body (MIG4, done: ARC-DEV-079; [below](#bodies-and-window-homes-arc-dev-079-mig4)) and one dialog host (MIG5).
+(MIG3, done: ARC-DEV-076; below), the body (MIG4, done: ARC-DEV-079; [below](#bodies-and-window-homes-arc-dev-079-mig4)) and one dialog host (MIG5, done: ARC-DEV-081; [below](#one-dialog-host-arc-dev-081-mig5)).
 
 ### Consumers by identity (ARC-DEV-076, MIG3)
 
@@ -95,8 +95,42 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
 - The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.
-- `ForVisitor` and the dialog host routing (`AreaConversationHost.ForVisitor`, `AreaTalkRouting`, `refuseUncoveredInventory`) go in MIG5; the
+- `ForVisitor`, the dialog host routing and `refuseUncoveredInventory` went in MIG5 (ARC-DEV-081, [below](#one-dialog-host-arc-dev-081-mig5)); the
   home-map fallbacks of the consumers above went in MIG3 (the `HomeMap` question stays on `AreaCombatHost` for the diagnostics). The hero's attack never
   targets a companion (a visiting one included: `IsAreaCompanion`); the attack cursor on a visiting companion in combat mode is the same "no action" as on a
   home companion, not the talk cursor. The existing boundaries of a visiting companion (no blood pool at its death, no seed items in the shown map's
-  inventory window) stay until MIG5.
+  inventory window) stay (the seed items wait for the object directory, MIG6).
+
+## One dialog host (ARC-DEV-081, MIG5)
+
+The viewer has one `AreaConversationHost` per shown map. A companion carried to it (or standing on the main map's other window) is listed by
+`AdmitVisitor` as one more speaker after the map's own and the ones admitted before, so a click, the hover action, the walk-to-talk reach,
+a scripted conversation, a deferred call and the barter all go through that host; `AreaConversationHost.ForVisitor`, `AreaTalkRouting`, the viewer's
+visitor host cache (`_visitorHosts`, `_talkHost`, `VisitorHost`, `VisitorCallHost`, `TalkHosts`) and `refuseUncoveredInventory` are gone.
+
+- **Where the state lives.** The speaker's dialog state (its local flags, script slot, counters and follow consent) stays under its entity on its
+  record's map, `template.Home` (`AreaConversationHost.StateMap(speaker)`, `AreaConversationState.MapOf`), as ARC-WORLD-048 had it, so a talk
+  where it visits and a talk at home read and write the same keys; the map's own speakers keep the shown map's. Everything else about the
+  speaker is the shown map's: its object stands on that map for the scripts (`AreaScriptHost.Object`, `Pc` and the speaker share the map, so the talk's
+  queries (`QueryHost`, the shown map's use host) are admitted as for any speaker; they answer "no loaded row" for an object whose row the shown map
+  does not hold, as that host always did), its reaction and follow standing are the session's by entity, JO, WA, UW and LV go to the session party
+  with the follow facts the template carries. One entity keeps one state until the object directory (MIG6) moves it onto the object.
+- **Admission.** The viewer asks for every companion standing here before it looks for a speaker (click, hover, nearest in reach, the status line,
+  a deferred call's attachee: `AdmitCompanionSpeakers`, `AdmitCallAttachee`); admitting is idempotent, a companion the host lists already (its own
+  speaker) is returned as it is, and an index is never reused. A host that is not party-wired (the exterior and cave without `--area-map`) lists none.
+  A companion whose stored state under its entity cannot be read (a damaged save) is refused with a typed reason, named once on the status line and
+  in the log (`ARC-DEV-081 companion refused`), and refused again silently until the host is rebound over another session.
+- **Quick load.** `Rebind` keeps the map's own speakers only; the companions standing here are admitted again over the new session when asked,
+  their state read then (a damaged state refuses that companion, not the quick load).
+- **Negative `IN`.** The port is the shown map's (`SessionDialogInventoryPort` by entity); the session finds the speaker's seed holder in the maps
+  it holds attached (the resolver's home maps included, MIG1) and refuses an entity it holds none for (`UnknownHolder`, a rejected command), so the host
+  has no refusal rule of its own. A host with no inventory records the item only, for every speaker.
+- **Smoke.** The `transfer` stage's visitor talk (`ARC-WORLD-048 native-smoke visitor-talk`) now runs through the one host and asserts the speaker is
+  listed with its state on the home map.
+
+## Not ready (ARC-DEV-081)
+
+- A deferred call whose attachee is a companion that is not standing here is run by the shown host with that attachee's own map (the session role's), as
+  any object that is not a speaker of the host.
+- The companion's dialog state is not on its object: a quick save of a companion carried here keeps it under its home map's entity keys, as before.
+- The admission order depends on who is asked first, so a speaker's index differs between runs; no state is keyed by it.

@@ -173,9 +173,8 @@ public partial class TerrainViewerApp
                 var reach = hero.Range;
                 return Chebyshev(foe.Row, (actor.X, actor.Y)) <= reach ? AreaHoverAction.Attack : AreaHoverAction.WalkToAttack;
             }
-            // ARC-WORLD-048: a companion visiting from another map talks through its own host.
-            if (!ConversationOpen && TalkMapActive && (_conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit && SpeakerPresent(s)) ?? VisitorSpeaker(hit)) is { } speaker)
-                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
+            if (!ConversationOpen && TalkMapActive && PresentSpeaker(hit) is { } speaker)
+                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost!.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
             if (IsAreaTrigger(hit))
             {
                 var row = _hoverIndex!.Row(hit);

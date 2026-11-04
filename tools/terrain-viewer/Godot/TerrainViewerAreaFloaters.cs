@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
 
     private void TickScriptFloats()
     {
-        foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray())
+        if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
             if (_readyMode != TerrainViewerMode.CrashSiteArea || _readyArea is null) continue;

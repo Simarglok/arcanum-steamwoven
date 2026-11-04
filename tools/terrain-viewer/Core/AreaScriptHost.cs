@@ -199,7 +199,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
-        long? Read(string property) => _session.QueryMapChange(_map, MapChangeKey.ForEntity(attachee.Code, property));
+        // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
+        var stateMap = _state.MapOfEntity(attachee.Code);
+        long? Read(string property) => _session.QueryMapChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
         return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
             Read(AreaConversationState.LocalFlagsProperty) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
@@ -341,7 +343,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
-        MapChangeEdit Edit(string property, long value, long baseline) => new(_map, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
+        var stateMap = _state.MapOfEntity(attachee.Code);
+        MapChangeEdit Edit(string property, long value, long baseline) => new(stateMap, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
         var result = _session.ApplyChanges(_session.Version, null,
         [
             Edit(ScriptProperty, writeback.Slot.Script, loaded.Script),

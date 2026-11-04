@@ -182,7 +182,7 @@ uses the hero's persuasion, charisma, level, alignment and max followers instead
 ## The session hero as the PC side (ARC-WORLD-067)
 
 With a session hero (`--hero`) every party rule reads the hero as the PC side, in every viewer path (the AREA exterior and cave,
-map mode, the visitor hosts of ARC-WORLD-048) and for every NPC: `GameSessionOwner.QueryHeroPartySide` gives its Persuasion
+map mode, the carried companions of ARC-WORLD-048 that the one host lists since ARC-DEV-081) and for every NPC: `GameSessionOwner.QueryHeroPartySide` gives its Persuasion
 training (the hero's skills, ARC-SKILLS-002), its effective charisma (the stat with its effects), its level, its stored alignment
 and the max followers they give (ledger AP4: charisma / 4, +1 from expert Persuasion, then the hero's effects on that stat, clamped
 to 1..7). The session itself uses it in the follow check (join, unwait, the orders' follow, the loyalty step), the leave guard

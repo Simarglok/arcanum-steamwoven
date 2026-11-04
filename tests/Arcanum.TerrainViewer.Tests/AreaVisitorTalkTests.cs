@@ -3,6 +3,7 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -18,30 +19,41 @@ public sealed class AreaVisitorTalkTests
 {
     private static readonly SessionMapId Home = new(1), Visited = new(2);
 
-    internal static AreaCompanionTemplate Template()
+    internal static AreaCompanionTemplate Template() => Load().Template;
+
+    /// <summary>The template and the snapshot it was cut from (the shown map's host is built over the snapshot, on map 2).</summary>
+    internal static (AreaCompanionTemplate Template, AreaSnapshot Area) Load()
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
         var area = source.Owner.LoadStrict();
         var scenery = area.Objects.Single(o => o.WorldX == AreaGridSession.ChartOriginX + 5 && o.WorldY == AreaGridSession.ChartOriginY + 1);
-        // Index 3 on its home map: the visitor host must not depend on the home host's indexes.
+        // Index 3 on its home map: the shown map's host must not depend on the home host's indexes.
         // Its dialog attachment: local flags 0, counters 0, script 1324 (as AreaScriptHostTests builds one).
         var scripts = new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [0, 0, AreaCompanionRoster.Virgil.ScriptId])], null);
         var row = scenery with { PrototypeNumber = AreaCompanionRoster.Virgil.Prototype, EffectiveFields = [.. scenery.EffectiveFields.Where(f => f.Slot != 31), scripts] };
         var speaker = new AreaSpeaker(3, row, AreaCompanionRoster.Virgil.ScriptId,
             scenery.WorldX!.Value, scenery.WorldY!.Value);
-        return AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, Home).Single();
+        return (AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, Home).Single(), area);
     }
+
+    /// <summary>The one host of the visited map 2, party-wired, with no dialog NPC of its own, over <paramref name="session"/>.</summary>
+    internal static AreaConversationHost Shown(AreaSnapshot area, GameSessionOwner session, AreaInventoryHost? inventory = null) =>
+        new(area, Visited, [], null, session, party: true, inventory);
 
     private static DialogParticipantId Npc => AreaConversationState.Npc(0);
 
     [TestMethod]
-    public void A_visitor_talks_with_its_home_maps_dialog_state()
+    public void A_carried_companion_is_one_more_speaker_of_the_shown_host_over_its_home_maps_dialog_state()
     {
-        var template = Template();
+        var (template, area) = Load();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
-        var host = AreaConversationHost.ForVisitor(template, null, session);
-        Assert.AreEqual(Home, host.Map, "the visitor's state lives on its home map");
-        Assert.AreEqual((0, template.Key), (host.Speakers.Single().Index, host.Speakers.Single().Row.Key), "its own host, index 0");
+        var host = Shown(area, session);
+        var speaker = host.AdmitVisitor(template, out var refusal)!;
+        Assert.IsNull(refusal);
+        Assert.AreEqual(Visited, host.Map, "the host is the shown map's: there is no second one");
+        Assert.AreEqual(Home, host.StateMap(speaker), "the companion's dialog state lives on its home map");
+        Assert.AreEqual((0, template.Key), (speaker.Index, speaker.Row.Key), "listed after the map's own speakers");
+        Assert.AreSame(speaker, host.Speakers.Single());
         Assert.IsTrue(host.PartyWired);
 
         // A DLG local flag written where it visits is its home map's key, and a home-map state reads it.
@@ -51,34 +63,95 @@ public sealed class AreaVisitorTalkTests
         var home = new AreaConversationState(session, Home, [template.Entity], 50);
         Assert.IsTrue(home.LocalFlag(0, 2), "the same state at home");
 
-        // The script host's dialog slot is the home map's key too.
-        var obj = host.Scripts.Object(host.Speakers[0]);
-        Assert.AreEqual(Home.RuntimeMap, obj.Map);
+        // The script host's object stands on the shown map; its dialog slot is the home map's key.
+        var obj = host.Scripts.Object(speaker);
+        Assert.AreEqual(Visited.RuntimeMap, obj.Map, "the companion is an object of the map it stands on");
+        Assert.AreEqual(host.Scripts.Pc.Map, obj.Map);
         Assert.AreEqual(AreaCompanionRoster.Virgil.ScriptId, host.Scripts.Slot(obj, ScrPoint.Dialog)?.Script);
         Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, Home,
             MapChangeKey.ForEntity(template.Entity, AreaScriptHost.ScriptProperty), 0).Disposition);
-        Assert.AreEqual(0, host.Scripts.Slot(obj, ScrPoint.Dialog)?.Script ?? -1, "the visitor's dialog slot follows its home map's changes");
+        Assert.AreEqual(0, host.Scripts.Slot(obj, ScrPoint.Dialog)?.Script ?? -1, "the dialog slot follows its home map's changes");
 
-        // Its following is the session party, whichever host asks.
+        // Its following is the session party, whichever way it is asked.
         Assert.IsFalse(host.State.Follows(0));
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, template.Entity).Disposition);
         Assert.IsTrue(host.State.Follows(0));
     }
 
     [TestMethod]
-    public void The_visitors_state_survives_a_save_and_load()
+    public void Admitting_a_companion_is_idempotent_and_follows_the_maps_own_speakers()
     {
-        var template = Template();
+        var (template, area) = Load();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
-        var host = AreaConversationHost.ForVisitor(template, null, session);
+        var own = new AreaSpeaker(0, area.Objects.First(o => o.Key != template.Key), 1, 0, 0);
+        var host = new AreaConversationHost(area, Visited, [own], null, session, party: true);
+        var speaker = host.AdmitVisitor(template, out _)!;
+        Assert.AreEqual(1, speaker.Index, "after the map's own speaker");
+        Assert.AreEqual((Visited, Home), (host.StateMap(own), host.StateMap(speaker)), "only the companion's state is on another map");
+        Assert.AreSame(speaker, host.AdmitVisitor(template, out var again));
+        Assert.IsNull(again);
+        Assert.AreEqual(2, host.Speakers.Count, "listed once");
+        Assert.AreSame(own, host.AdmitVisitor(new AreaCompanionTemplate(own, template.Facts, template.Home, template.HomeOrigin, template.HomeWorld, template.Commands, template.Visuals), out _),
+            "a companion the host already lists as its own is returned as it is");
+        Assert.AreEqual(Visited, host.StateMap(own));
+        // The companion's reactions and following are its entity's, at its index.
+        Assert.AreEqual(DialogCommandResult.Applied, host.State.Execute(new LocalFlagWriteCommand(new DialogId(1324), AreaConversationState.Npc(1), 3, 1)));
+        Assert.AreEqual(8L, session.QueryMapChange(Home, MapChangeKey.ForEntity(template.Entity, AreaConversationState.LocalFlagsProperty)));
+        Assert.IsNull(session.QueryMapChange(Visited, MapChangeKey.ForEntity(AreaConversationState.EntityId(own.Row), AreaConversationState.LocalFlagsProperty)),
+            "the map's own speaker keeps its own state");
+    }
+
+    [TestMethod]
+    public void A_host_without_the_party_lists_no_companion()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var host = new AreaConversationHost(area, Visited, [], null, session, party: false);
+        Assert.IsNull(host.AdmitVisitor(template, out var refusal));
+        Assert.IsNull(refusal);
+        Assert.AreEqual(0, host.Speakers.Count);
+    }
+
+    [TestMethod]
+    public void A_companion_whose_stored_dialog_state_cannot_be_read_is_refused_once_and_listed_after_a_rebind_over_a_readable_session()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var host = Shown(area, session);
+        // A restored session may carry any long under these keys: a follow consent other than 1 is not a state this port reads.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, Home,
+            MapChangeKey.ForEntity(template.Entity, AreaConversationState.FollowProperty), 7).Disposition);
+        Assert.IsNull(host.AdmitVisitor(template, out var refusal));
+        StringAssert.Contains(refusal, "AREA_SESSION_DIALOG_STATE_INVALID");
+        Assert.AreEqual(0, host.Speakers.Count, "nothing is listed, and no index is used");
+        Assert.IsNull(host.AdmitVisitor(template, out var second));
+        Assert.IsNull(second, "the refusal is reported once, then kept");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ClearMapChange(session.Version, Home,
+            MapChangeKey.ForEntity(template.Entity, AreaConversationState.FollowProperty)).Disposition);
+        Assert.IsNull(host.AdmitVisitor(template, out _), "kept until the host is rebound over a session");
+        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
+        Assert.IsNotNull(host.Rebind(loaded).AdmitVisitor(template, out _));
+    }
+
+    [TestMethod]
+    public void The_companions_state_survives_a_save_and_load()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var host = Shown(area, session);
+        host.AdmitVisitor(template, out _);
         Assert.AreEqual(DialogCommandResult.Applied, host.State.Execute(new LocalFlagWriteCommand(new DialogId(1324), Npc, 5, 1)));
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, template.Entity).Disposition);
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
         var rebound = host.Rebind(loaded);
-        Assert.AreEqual(Home, rebound.Map);
-        Assert.IsTrue(rebound.State.LocalFlag(0, 5) && rebound.State.Follows(0));
-        var fresh = AreaConversationHost.ForVisitor(template, null, loaded);
-        Assert.IsTrue(fresh.State.LocalFlag(0, 5) && fresh.State.Follows(0), "a new host after a load reads the same state");
+        Assert.AreEqual(Visited, rebound.Map);
+        Assert.AreEqual(0, rebound.Speakers.Count, "the companions standing here are listed again over the new session, when asked");
+        var speaker = rebound.AdmitVisitor(template, out _)!;
+        Assert.AreEqual(Home, rebound.StateMap(speaker));
+        Assert.IsTrue(rebound.State.LocalFlag(speaker.Index, 5) && rebound.State.Follows(speaker.Index));
+        var fresh = Shown(area, loaded);
+        var again = fresh.AdmitVisitor(template, out _)!;
+        Assert.IsTrue(fresh.State.LocalFlag(again.Index, 5) && fresh.State.Follows(again.Index), "a new host after a load reads the same state");
     }
 
     [TestMethod]
@@ -146,20 +219,24 @@ public sealed class AreaVisitorTalkTests
     }
 
     [TestMethod]
-    public void A_visitors_give_item_is_refused_when_its_home_seed_is_not_attached()
+    public void A_carried_companions_give_item_goes_through_the_session_and_is_refused_by_it_without_a_seed_holder()
     {
-        var template = Template();
+        var (template, area) = Load();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
-        var uncovered = AreaConversationHost.ForVisitor(template, null, session, inventory: new AreaInventoryHost([]));
-        Assert.IsFalse(uncovered.InventoryWired);
-        Assert.AreEqual(DialogCommandResult.Rejected, uncovered.InventoryPort()!.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)),
-            "a typed refusal, not a crash or a silent record");
-        Assert.AreEqual(DialogCommandResult.Rejected, AreaConversationHost.ForVisitor(template, null, session).InventoryPort()!
-            .Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)), "no inventory host at all");
-        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
-        var rebound = uncovered.Rebind(loaded);
-        Assert.AreEqual((Home, false), (rebound.Map, rebound.InventoryWired));
-        Assert.AreEqual(DialogCommandResult.Rejected, rebound.InventoryPort()!.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)),
-            "a rebound visitor host keeps refusing");
+        var shownMap = new AreaInventoryMap(Visited.RuntimeMap, new([], []), new Dictionary<string, AreaObjectRecord>());
+        var inventory = new AreaInventoryHost([shownMap]);
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        var host = Shown(area, session, inventory);
+        host.AdmitVisitor(template, out _);
+        Assert.IsTrue(host.InventoryWired, "the shown map's seed is attached: no second host to ask");
+        // The home map's seed is not attached: the session has no holder for the companion, and says so (no host-side refusal rule).
+        var port = host.InventoryPort()!;
+        Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)));
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, ((SessionDialogInventoryPort)port).LastResult!.Value.Failure);
+        // A host with no inventory records the item only, as the map's own speakers do.
+        var plain = Shown(area, session);
+        plain.AdmitVisitor(template, out _);
+        Assert.IsNull(plain.InventoryPort());
+        Assert.IsFalse(plain.InventoryWired);
     }
 }

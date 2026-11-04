@@ -586,19 +586,21 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
 - **Talking to a visitor** (ARC-WORLD-048). A companion standing on a map it
   is not a speaker of (from another map, or on the main map from another
   window) is talked to where it stands: a click, the hover action and the
-  walk-to-talk reach it as any speaker, and the conversation runs through its
-  own host (`AreaConversationHost.ForVisitor`) over its home map's dialog
-  state (`AreaTalkRouting.HostOf`: a speaker goes only to the host that lists
-  it, since its index means something only there; the viewer self-test routes
-  its stand-in row itself): its dialog slot, local flags and follow keys are its home map's, its
+  walk-to-talk reach it as any speaker, and the conversation runs through the
+  shown map's one host (ARC-DEV-081, MIG5: the host lists the companion as one
+  more speaker, `AreaConversationHost.AdmitVisitor`; a speaker goes only to the
+  host that lists it, since its index means something only there; the viewer
+  self-test routes its stand-in row itself) over its home map's dialog
+  state: its dialog slot, local flags and follow keys are its home map's, its
   party commands (`JO`, `WA`, `UW`, `LV`) go to the session party with its
   facts, so the talk is the same wherever it stands and one identity keeps one
   state, as the original keeps one object
   ([OL31–OL33](../research/companion-orders-loyalty-evidence.md#7-followers-across-maps-q7-companion-o7)).
   After the conversation the companions are recorded, then the group is
-  rebuilt, so it stays where it stands. A negative `IN` moves the item through
-  its home map's inventory seed when the viewer has it attached and is refused
-  (a rejected command) when it has not. Its dialog script runs on its home-map
+  rebuilt, so it stays where it stands. A negative `IN` goes to the session by
+  the companion's entity: it moves the item from its seed holder when the session
+  holds one (the home map's seed attached) and is refused (a rejected command,
+  `UnknownHolder`) when it holds none. Its dialog script runs on its home-map
   slot, its quest awards and script sounds are taken from its host like the
   shown map's, and a deferred call whose attachee it is runs through the same
   host. A home-map dialog state the session cannot read (a damaged save) makes

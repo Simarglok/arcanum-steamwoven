@@ -223,7 +223,7 @@ public partial class TerrainViewerApp
     private void TakeScriptSchematics()
     {
         if (_readyMode != TerrainViewerMode.CrashSiteArea) { _schematicScriptOpen = null; return; }
-        foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray()) QueueScriptSchematics(scripts.TakeSchematics());
+        if (_conversationHost is { } talk) QueueScriptSchematics(talk.Scripts.TakeSchematics());
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }
         if (SchematicsOpen || WorldModal) return;
