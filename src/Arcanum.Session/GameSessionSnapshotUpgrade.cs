@@ -35,6 +35,13 @@ public static partial class GameSessionSnapshotCodec
             if (combat is null) return;
             AddField(combat as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.combat"), "$.combat", "subturnStarts", JsonValue.Create(0L));
         },
+        // MIG6 (ARC-DEV-084, schema 60): the junk and pool high-water marks; 0 means the older load's rule, the highest number held now.
+        [59] = root =>
+        {
+            var inventory = Section(root, "inventory");
+            AddField(inventory, "$.inventory", "lastJunkNumber", JsonValue.Create(0L));
+            AddField(inventory, "$.inventory", "lastPoolNumber", JsonValue.Create(0L));
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

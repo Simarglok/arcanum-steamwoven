@@ -75,7 +75,7 @@ public static partial class GameSessionSnapshotCodec
     // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items; ARC-RENDER-041 (schema 58): the pools of blood.
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "bloodPools"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "bloodPools", "lastJunkNumber", "lastPoolNumber"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
     private static readonly string[] NpcWearFields = ["npc", "worn"];
     private static readonly string[] NpcWornItemFields = ["slot", "item"];
@@ -543,6 +543,9 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // ARC-DEV-084 (schema 60): the high-water marks of the junk and pool numbers.
+            w.WriteNumber("lastJunkNumber", snapshot.Inventory.LastJunkNumber);
+            w.WriteNumber("lastPoolNumber", snapshot.Inventory.LastPoolNumber);
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -1824,7 +1827,8 @@ public static partial class GameSessionSnapshotCodec
                 Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue));
         }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn, bloodPools);
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn, bloodPools,
+            Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue));
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

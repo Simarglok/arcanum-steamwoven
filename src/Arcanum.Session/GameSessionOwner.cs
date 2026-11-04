@@ -188,6 +188,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportBloodPools(snapshot.Inventory.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportObjectMarks(snapshot.Inventory, inventory);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);
@@ -2012,6 +2014,16 @@ public sealed partial class GameSessionOwner : IDisposable
             inventory.Weights[row.Entity] = row.Facts;
         }
         return RestoreJunkPiles(inventory, saved.JunkPiles, destroyed);
+    }
+
+    // ARC-DEV-084 (TM1): the high-water marks of the junk and pool numbers, after the piles and pools are in: a mark never sits below
+    // a number a saved pile or pool holds (the older schema's load had no mark, so its piles and pools set it).
+    private static GameSessionFailure ImportObjectMarks(SessionInventoryState saved, InventoryDomain inventory)
+    {
+        if (saved.LastJunkNumber < 0 || saved.LastPoolNumber < 0) return GameSessionFailure.InvalidSnapshot;
+        inventory.LastJunkNumber = Math.Max(saved.LastJunkNumber, inventory.JunkPiles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max());
+        inventory.LastPoolNumber = Math.Max(saved.LastPoolNumber, inventory.BloodPools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max());
+        return GameSessionFailure.None;
     }
 
     // ARC-WORLD-063: the junk piles within the bounds, each a pile entity (junk:n) once, on a valid map and cell, its items once in all

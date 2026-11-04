@@ -70,7 +70,8 @@ public sealed partial class GameSessionOwner
                 if (placement.Slot >= 0) items.Add(new(entity, placement.Slot, width, height));
                 if (_inventory.JunkPiles.Count >= SessionJunkPile.MaxPiles || _inventory.JunkPileItems + items.Count > SessionJunkPile.MaxItems) return;
                 // The original leaves a new pile that took nothing standing; so does the session (an empty pile).
-                var number = _inventory.JunkPiles.Select(p => SessionJunkPile.Number(p.Entity) ?? 0).DefaultIfEmpty(0).Max() + 1;
+                if (NextObjectNumber(SessionObjectOrigin.JunkPile) == int.MaxValue) return;
+                var number = AllocateObjectNumber(SessionObjectOrigin.JunkPile);
                 _inventory.JunkPiles.Add(new(SessionJunkPile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture), map, cell,
                     Array.AsReadOnly(items.ToArray())));
                 // The swept items keep their decay events: in a junk pile an item still decays, so the pickup's cancel leaves them (ID4).

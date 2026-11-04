@@ -136,6 +136,6 @@ visitor host cache (`_visitorHosts`, `_talkHost`, `VisitorHost`, `VisitorCallHos
 - A deferred call whose attachee is a companion that is not standing here is run by the shown host with that attachee's own map (the session role's), as
   any object that is not a speaker of the host.
 - A carried companion from another map cannot give an item by negative `IN` (see above); the plan's wish that `IN` finds the holder through the resolver needs
-  the session to move an item between a home map's holder and the hero's list, which is MIG6's.
+  the session to move an item between a home map's holder and the hero's list, which is MIG6e ([object directory](../architecture/object-directory.md); MIG6a, ARC-DEV-084, gave only the locator).
 - The companion's dialog state is not on its object: a quick save of a companion carried here keeps it under its home map's entity keys, as before.
 - The admission order depends on who is asked first, so a speaker's index differs between runs; no state is keyed by it.

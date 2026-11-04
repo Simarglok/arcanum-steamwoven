@@ -37,7 +37,7 @@ public sealed partial class GameSessionOwner
     /// most while that pool is kept (a repeated call answers it, NoChange; once it has decayed and been dropped, a call leaves a new
     /// one, so the host asks once per death). The pool lasts two game days (<see cref="BloodPoolRules.Decayed"/>);
     /// a decayed pool is dropped when the next one is left. Beyond <see cref="SessionBloodPool.MaxPools"/> pools the call is refused
-    /// (project bound), as is a live pool numbered at the integer bound. The creation's eye candy, the network message and the editor's case are not modelled.
+    /// (project bound), as is a call once the pool number mark (the highest number ever given, kept in the snapshot) reaches the integer bound. The creation's eye candy, the network message and the editor's case are not modelled.
     /// </summary>
     public SessionBloodPoolResult LeaveBloodPool(GameSessionVersion expected, string critter, SessionMapId map, CellCoord cell,
         int offsetX, int offsetY, BloodPoolFacts facts)
@@ -59,13 +59,11 @@ public sealed partial class GameSessionOwner
         if (live >= SessionBloodPool.MaxPools) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
 
-        // A decayed pool's number may be taken again: nothing refers to a pool but the host's drawing.
-        var highest = _inventory.BloodPools.Where(pool => !BloodPoolRules.Decayed(pool.CreatedMs, now))
-            .Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max();
-        if (highest == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
+        // ARC-DEV-084 (TM1): an id is never reassigned, so a decayed pool's number is not taken again.
+        if (NextObjectNumber(SessionObjectOrigin.BloodPool) == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
 
         _inventory.BloodPools.RemoveAll(pool => BloodPoolRules.Decayed(pool.CreatedMs, now));
-        var number = highest + 1;
+        var number = AllocateObjectNumber(SessionObjectOrigin.BloodPool);
         var pool = new SessionBloodPool(SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             critter, deathMs, map, cell, offsetX, offsetY, now);
         _inventory.BloodPools.Add(pool);

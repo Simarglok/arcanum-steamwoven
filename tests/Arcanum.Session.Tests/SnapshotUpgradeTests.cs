@@ -8,15 +8,15 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":59,\"world\"";
+    private const string Current = "\"schemaVersion\":60,\"world\"";
 
     // The schema 56 text of a schema 59 one without a saved round, whose NPCs were never dressed and that left no pool of blood: the same text without
     // `inventory.npcWorn` and `inventory.bloodPools`.
     private static string Schema56(string text)
     {
         StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"npcWorn\":[],\"bloodPools\":[]}");
-        return text.Replace(Current, "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[],\"bloodPools\":[]}", "}");
+        StringAssert.Contains(text, ",\"npcWorn\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
+        return text.Replace(Current, "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
     }
 
     [TestMethod]
@@ -33,15 +33,23 @@ public sealed class SnapshotUpgradeTests
     private static string Schema57(string text)
     {
         StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"bloodPools\":[]}");
-        return text.Replace(Current, "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[]}", "}");
+        StringAssert.Contains(text, ",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
+        return text.Replace(Current, "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
+    }
+
+    // MIG6 (ARC-DEV-084): the schema 59 text of a schema 60 one: the same text without the junk and pool high-water marks.
+    private static string Schema59(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, ",\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
+        return text.Replace(Current, "\"schemaVersion\":59,\"world\"").Replace(",\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
     }
 
     // GR19 (ARC-DEV-078): the schema 58 text of a schema 59 one: the same text without the saved round's `combat.subturnStarts`.
     private static string Schema58(string text)
     {
         StringAssert.Contains(text, Current);
-        var older = text.Replace(Current, "\"schemaVersion\":58,\"world\"");
+        var older = Schema59(text).Replace("\"schemaVersion\":59,\"world\"", "\"schemaVersion\":58,\"world\"");
         var at = older.IndexOf(",\"subturnStarts\":", StringComparison.Ordinal);
         if (at < 0) return older;
         var end = older.IndexOf('}', at);
@@ -88,6 +96,24 @@ public sealed class SnapshotUpgradeTests
     {
         public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => [new(SessionCombatant.Hero, new(0, 0))];
         public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => null;
+    }
+
+    [TestMethod]
+    public void A_schema_59_save_decodes_as_the_current_schema()
+    {
+        foreach (var current in new[] { GoldenJson, HeroStateTests.HeroGolden })
+        {
+            var older = Decode(Schema59(current));
+            Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, older.SchemaVersion);
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(older), "The upgraded save is the current save it stands for.");
+            using var restored = Restore(older);
+            Assert.AreEqual(0, restored.Capture().Inventory.LastJunkNumber, "The older load's rule: the highest number held now, none here.");
+            Assert.AreEqual(0, restored.Capture().Inventory.LastPoolNumber);
+        }
+        // A schema 59 text that already carries a mark is refused.
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.inventory.lastJunkNumber"),
+            (GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\"")).Failure,
+             GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\"")).Path));
     }
 
     [TestMethod]
@@ -177,6 +203,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":60,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":61,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
