@@ -59,13 +59,11 @@ public sealed partial class GameSessionOwner
         if (live >= SessionBloodPool.MaxPools) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
 
-        // A decayed pool's number may be taken again: nothing refers to a pool but the host's drawing.
-        var highest = _inventory.BloodPools.Where(pool => !BloodPoolRules.Decayed(pool.CreatedMs, now))
-            .Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max();
-        if (highest == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
+        // ARC-DEV-084 (TM1): an id is never reassigned, so a decayed pool's number is not taken again.
+        if (NextObjectNumber(SessionObjectOrigin.BloodPool) == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
 
         _inventory.BloodPools.RemoveAll(pool => BloodPoolRules.Decayed(pool.CreatedMs, now));
-        var number = highest + 1;
+        var number = AllocateObjectNumber(SessionObjectOrigin.BloodPool);
         var pool = new SessionBloodPool(SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             critter, deathMs, map, cell, offsetX, offsetY, now);
         _inventory.BloodPools.Add(pool);

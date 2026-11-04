@@ -121,11 +121,11 @@ public sealed class JunkPileStateTests
 
         // A pile emptied while shown is removed on closing.
         owner.PlaceHeroItem("kit:2", There);
-        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:1", "kit:3", Accept).Failure,
-            "a new pile takes the number after the highest standing one");
-        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:1", "kit:2", Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:2", "kit:3", Accept).Failure,
+            "a new pile takes the number after the highest ever given, a dissolved pile's is not given again (MIG6, TM1)");
+        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:2", "kit:2", Accept).Failure);
         Assert.AreEqual(0, owner.QueryJunkPiles().Single().Items.Count);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseJunkPile(owner.Version, "junk:1").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseJunkPile(owner.Version, "junk:2").Disposition);
         Assert.AreEqual(0, owner.QueryJunkPiles().Count);
         Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.Ground.Count);
     }

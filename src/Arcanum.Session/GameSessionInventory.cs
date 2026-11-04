@@ -191,8 +191,10 @@ public sealed class SessionInventoryState
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
         SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
         string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null, SessionGeneratedContainer[]? generated = null,
-        SessionNpcWear[]? npcWorn = null, SessionBloodPool[]? bloodPools = null)
+        SessionNpcWear[]? npcWorn = null, SessionBloodPool[]? bloodPools = null, int lastJunkNumber = 0, int lastPoolNumber = 0)
     {
+        LastJunkNumber = lastJunkNumber;
+        LastPoolNumber = lastPoolNumber;
         BloodPools = Array.AsReadOnly(bloodPools ?? []);
         NpcWorn = Array.AsReadOnly(npcWorn ?? []);
         Generated = Array.AsReadOnly(generated ?? []);
@@ -239,6 +241,12 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-094: the highest made number of a made item a regeneration discarded without a deleted-item record (0 when
     /// none), so a new made item never takes a discarded one's number.</summary>
     public int LastDiscardedMade { get; }
+    /// <summary>ARC-DEV-084 (MIG6, TM1): the highest junk pile number the session ever gave (0 when none), so a new pile never takes the
+    /// number of one that was dissolved: an object id is never reassigned.</summary>
+    public int LastJunkNumber { get; }
+    /// <summary>ARC-DEV-084 (MIG6, TM1): the highest blood pool number the session ever gave (0 when none), so a new pool never takes the
+    /// number of one that decayed.</summary>
+    public int LastPoolNumber { get; }
     /// <summary>ARC-WORLD-100: the containers with flag 0x200 the session generated once (their source and flag cleared, ledger RK10), by
     /// map and then entity in ordinal order.</summary>
     public IReadOnlyList<SessionGeneratedContainer> Generated { get; }
@@ -443,6 +451,10 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
     internal int LastDiscardedMade { get; set; }
 
+    /// <summary>ARC-DEV-084: the high-water marks of the junk and pool numbers (<see cref="SessionInventoryState.LastJunkNumber"/>).</summary>
+    internal int LastJunkNumber { get; set; }
+    internal int LastPoolNumber { get; set; }
+
     /// <summary>ARC-WORLD-100: the generated-once containers (<see cref="SessionInventoryState.Generated"/>).</summary>
     internal HashSet<SessionGeneratedContainer> Generated { get; } = [];
 
@@ -590,7 +602,7 @@ internal sealed class InventoryDomain
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
         NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray(),
-        BloodPools.ToArray());
+        BloodPools.ToArray(), LastJunkNumber, LastPoolNumber);
 
     /// <summary>ARC-RENDER-041: the pools of blood the session left, in the order they were left.</summary>
     internal List<SessionBloodPool> BloodPools { get; } = [];
