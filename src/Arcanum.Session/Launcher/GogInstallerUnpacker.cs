@@ -51,7 +51,7 @@ public sealed record GogInstallOptions
 /// GOG's Arcanum (game id <see cref="GameFolderLocator.GogProductId"/>), lists the files it will write and checks the free space,
 /// verifies the installer's checksums (<c>--test</c>), unpacks into a folder that is new or empty (the installer's folder is never
 /// written), then checks the result with <see cref="GameFolderLocator.Check"/> and the fingerprint of <c>Arcanum.exe</c> in the root.
-/// It builds no prototypes (that is E3/E4) and never changes the installer. The tool is found on <c>PATH</c> and the usual package
+/// It builds no prototypes (that is E3/E4) and never changes the installer file (it writes only into the target folder, which must be new or empty; a new folder inside the installer's own folder is allowed). The tool is found on <c>PATH</c> and the usual package
 /// folders (<see cref="FindTool"/>); a failure is a typed <see cref="GogInstallResult"/>, not an exception. Godot-independent.
 /// </summary>
 public sealed class GogInstallerUnpacker
@@ -231,7 +231,9 @@ public sealed class GogInstallerUnpacker
     {
         if (!outcome.Started) return new(GogInstallStatus.ToolFailed, Describe(outcome));
         // A multi-part installer (-1.bin next to the .exe) whose parts are not beside it: the tool names the missing slice.
-        if (outcome.Lines.Any(line => line.Contains(".bin", StringComparison.OrdinalIgnoreCase)))
+        // Only error and warning lines count (not the file lines of the listing, which may name any file).
+        if (outcome.Lines.Any(line => !FileLine.IsMatch(line) && line.Contains(".bin", StringComparison.OrdinalIgnoreCase)
+                                      && (line.Contains("error", StringComparison.OrdinalIgnoreCase) || line.Contains("warning", StringComparison.OrdinalIgnoreCase))))
             return new(GogInstallStatus.MissingParts, FirstError(outcome));
         return new(status, FirstError(outcome));
     }

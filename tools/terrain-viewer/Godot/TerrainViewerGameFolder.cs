@@ -200,8 +200,10 @@ public partial class TerrainViewerApp
                 }).CallDeferred();
             }, cancel.Token));
         }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (OperationCanceledException) { result = new(GogInstallStatus.Cancelled); }
+        catch (Exception error)
         {
+            // Whatever escapes must still end the busy state, or Play and the folder buttons stay off for good.
             result = new(GogInstallStatus.ExtractFailed, error.GetType().Name + ": " + error.Message);
         }
         finally { _installCancel = null; }

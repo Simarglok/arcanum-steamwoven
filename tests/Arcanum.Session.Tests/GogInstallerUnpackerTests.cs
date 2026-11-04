@@ -206,6 +206,12 @@ public sealed class GogInstallerUnpackerTests
         var result = await Unpacker(tool).UnpackAsync(_installer, Target());
         Assert.AreEqual(GogInstallStatus.MissingParts, result.Status);
         StringAssert.Contains(result.Detail!, "setup-1.bin");
+
+        // A file line that merely names a .bin file, with an unrelated error, is no missing part.
+        var other = new FakeTool { ExtractExit = 1, FailureLines = [" - \"music/track.bin\"", "Error: disk full"] };
+        var failed = await Unpacker(other).UnpackAsync(_installer, Target("other"));
+        Assert.AreEqual(GogInstallStatus.ExtractFailed, failed.Status);
+        Assert.AreEqual("Error: disk full", failed.Detail);
     }
 
     [TestMethod]
@@ -329,5 +335,8 @@ public sealed class GogInstallerUnpackerTests
         Assert.IsTrue(result.Folder.Identity.GogMarker);
         Assert.IsTrue(File.Exists(Path.Combine(target, "Arcanum.exe")), "the executable is in the root");
         Assert.AreEqual(GogInstallStage.Identifying, reports[^1].Stage);
+        // The tool's quiet mode still prints one line per file, so the counts move (a progress that never moved would pass the rest).
+        Assert.IsTrue(reports.Any(report => report is { Stage: GogInstallStage.Unpacking, FilesDone: > 0 }), "unpacking progress moved");
+        Assert.IsTrue(reports.Any(report => report is { Stage: GogInstallStage.Verifying, FilesDone: > 0 }), "verifying progress moved");
     }
 }

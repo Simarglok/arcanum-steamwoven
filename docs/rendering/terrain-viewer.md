@@ -114,7 +114,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
   `/usr/bin`; `innoextract.exe` on `PATH` on Windows); without it the screen says how to get it (`brew install
   innoextract`) and nothing else happens. Then the system's file dialog picks the installer and the folder dialog a new or
-  empty folder (a folder with anything in it is refused, so the installer's own folder never is a target). `GogInstallerUnpacker`
+  empty folder (a folder with anything in it is refused, so the installer's own folder is never a target; the installer file is never changed). `GogInstallerUnpacker`
   (Godot-free, `src/Arcanum.Session/Launcher`) runs the tool as a child process, arguments as a list and never a shell, off the main
   thread: the installer must name GOG game id 1207658829 (`--gog-game-id`); the listing (`--list --list-sizes --gog
   --exclude-temp`) gives the files and the bytes, and the free space (listed size plus 64 MB) is checked on the target's volume;
