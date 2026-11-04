@@ -394,8 +394,18 @@ public sealed partial class GameSessionOwner : IDisposable
     /// twice), then the version, then the whole result: NoChange when nothing would differ, the budget against the state
     /// after every edit (an update of an existing key never needs room), revision capacity. A refusal applies nothing;
     /// otherwise every edit applies and the revision moves by exactly one.
+    /// <para>
+    /// ARC-DEV-073 (MIG10): with <paramref name="moveList"/> (from <see cref="QueryTransferMoveList"/>) the step is the party side of
+    /// the PC's change of place, in the same revision: the followers it lists to wait are ordered to wait on the map they leave
+    /// (their wait timers park there), FM6's transient links (focus, who hit me last, enemy list, fleeing-from) are cleared for every
+    /// follower that travels, and on another map the travellers' pending events, AI ticks included, move with the PC instead of
+    /// the ticks being dropped (research FM1, FM2, FM6, RL22, RL23, RL28). A list that does not match the party is
+    /// <see cref="GameSessionFailure.InvalidCompanion"/>, a wait timer that does not fit
+    /// <see cref="GameSessionFailure.EventBudgetExceeded"/>; either applies nothing.
+    /// </para>
     /// </summary>
-    public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes)
+    public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes,
+        SessionMoveList? moveList = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(changes);
@@ -409,13 +419,21 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var actorChanged = actor is { } next && next != _actor;
         var effective = EffectiveChanges(changes);
-        if (!actorChanged && effective.Length == 0) return NoChange();
+        TransferPlan? transfer = null;
+        if (moveList is not null && PlanTransfer(moveList, out transfer) is var planned && planned != GameSessionFailure.None) return Reject(planned);
+        if (!actorChanged && effective.Length == 0 && transfer?.Changes != true) return NoChange();
         if (!ChangesFit(effective)) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The last refusal: an atomic move that changes nothing when it fails.
-        if (actorChanged && MoveFollowerEvents(actor!.Value.Map) is var moved && moved != GameSessionFailure.None) return Reject(moved);
+        if (actorChanged && MoveFollowerEvents(actor!.Value.Map, transfer?.Travelling) is var moved && moved != GameSessionFailure.None) return Reject(moved);
 
         // All refusals precede the commit.
+        if (transfer is not null)
+        {
+            CommitTransfer(transfer);
+            // FM6 may leave a traveller's record holding only check bits: the map change's reset covers it too.
+            if (actorChanged && actor!.Value.Map != _actor.Map) DropCheckOnlyDanger();
+        }
         if (actorChanged) _actor = actor!.Value;
         foreach (var change in effective)
         {
@@ -1352,10 +1370,13 @@ public sealed partial class GameSessionOwner : IDisposable
     // The PC moves to another map: the pending timers of its followers go with it. Atomic: a key collision (which the
     // one-map-per-NPC rule leaves no way to reach) is EventConflict, a call from the host's world port during a pass
     // InvalidEventPass, and either moves nothing.
-    private GameSessionFailure MoveFollowerEvents(SessionMapId to)
+    // ARC-DEV-073: with a move list only its travellers go (a follower ordered to wait stays, a follower of a follower goes) and their
+    // AI ticks go with them (RL28: the carry comes before the payload; one tick, not two, as the destination's first AI start
+    // finds it pending); without one every follower's events move and every tick is dropped, as before.
+    private GameSessionFailure MoveFollowerEvents(SessionMapId to, IReadOnlyCollection<string>? travelling = null)
     {
         if (to == _actor.Map) return GameSessionFailure.None;
-        var followers = _party.Order.ToHashSet(StringComparer.Ordinal);
+        var followers = (travelling ?? _party.Order).ToHashSet(StringComparer.Ordinal);
         var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure;
         // ARC-SCRIPT-010: a deferred call's player and follower roles travel one by one (the original keeps their handles
         // across maps), its other roles stay where they were. Both steps refuse only during a pass, which the first one
@@ -1369,9 +1390,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // keeps the danger budget from filling with NPCs woken on earlier maps.
         if (failure == GameEventFailure.None)
         {
-            _events.RemoveAll(SessionEventKinds.AiTick, _ => true);
-            foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
-                _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
+            _events.RemoveAll(SessionEventKinds.AiTick, e => travelling is null || e.ScopeMap != to.RuntimeMap);
+            DropCheckOnlyDanger();
         }
         return failure switch
         {
@@ -1379,6 +1399,13 @@ public sealed partial class GameSessionOwner : IDisposable
             GameEventFailure.PassInProgress => GameSessionFailure.InvalidEventPass,
             _ => GameSessionFailure.EventConflict,
         };
+    }
+
+    // The danger records that hold only the gate's check bits (see MoveFollowerEvents).
+    private void DropCheckOnlyDanger()
+    {
+        foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
+            _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
     }
 
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
