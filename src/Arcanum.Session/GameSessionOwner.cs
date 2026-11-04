@@ -838,8 +838,8 @@ public sealed partial class GameSessionOwner : IDisposable
             return Reject(GameSessionFailure.InventoryMismatch);
         // ARC-WORLD-055: a holder that holds added items is an NPC, or (ARC-WORLD-090) a container a barter window filled, of the same
         // kind as the seed's holder, and its seed items and added items fit one list.
-        if (admitted.Holders.Values.Any(holder => _inventory.Npcs.ContainsKey(holder.Entity) &&
-                (holder.Kind == SessionHolderKind.Container) != _inventory.Containers.Contains(holder.Entity)))
+        if (admitted.Holders.Values.Any(holder => _inventory.Lists.HasList(holder.Entity) &&
+                (holder.Kind == SessionHolderKind.Container) != _inventory.Lists.IsContainer(holder.Entity)))
             return Reject(GameSessionFailure.InventoryMismatch);
         if (admitted.Holders.Values.Any(holder => _inventory.AddedTo(holder.Entity).Count +
                 holder.Items.Count(entity => !_inventory.Taken.Contains(entity)) > SessionMapInventorySeed.MaxListLength))
@@ -1910,7 +1910,6 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             previous = npc.Npc;
             // ARC-WORLD-090: a container's list (a barter window's sales).
-            if (npc.Container) inventory.Containers.Add(npc.Npc);
             foreach (var item in npc.Items)
             {
                 // A gold item is only a made pile with its record.
@@ -1922,7 +1921,7 @@ public sealed partial class GameSessionOwner : IDisposable
                     given && !InventoryDomain.KitAdmitted(item.Kind.Type) && HeroDomain.KitNumber(item.Entity) is not null ||
                     destroyed.Contains(item.Entity) || inventory.Taken.Contains(item.Entity))
                     return GameSessionFailure.InvalidSnapshot;
-                inventory.AddToNpc(npc.Npc, item);
+                if (npc.Container) inventory.AddToContainer(npc.Npc, item); else inventory.AddToNpc(npc.Npc, item);
                 inventory.Taken.Add(item.Entity);
             }
         }
@@ -2027,7 +2026,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var tracked = inventory.Pc.Select(item => (item.Entity, item.Kind)).Concat(inventory.Made.Select(item => (item.Entity, item.Kind)))
             .Concat(inventory.Placed.Select(item => (item.Entity, item.Kind)))
-            .Concat(inventory.Npcs.Values.SelectMany(list => list).Select(item => (item.Entity, item.Kind)));
+            .Concat(inventory.Lists.All.Select(item => (item.Entity, item.Kind)));
         foreach (var (entity, kind) in tracked)
             if ((kind.Type == SessionItemType.Ammo) != inventory.Ammo.ContainsKey(entity)) return GameSessionFailure.InvalidSnapshot;
         // ARC-WORLD-085: the weight rows by entity in ordinal order, each of an object the inventory holds (the hero's, a placed one or

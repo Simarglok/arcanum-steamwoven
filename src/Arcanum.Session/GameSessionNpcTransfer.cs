@@ -311,7 +311,7 @@ public sealed partial class GameSessionOwner
         var known = new SortedDictionary<string, SessionItemKind>(StringComparer.Ordinal);
         foreach (var item in _inventory.Kit) known.TryAdd(item.Entity, item.Kind);
         foreach (var item in _inventory.Placed) if (item.Source == SessionPlacedSource.Kit) known.TryAdd(item.Entity, item.Kind);
-        foreach (var item in _inventory.Npcs.Values.SelectMany(list => list))
+        foreach (var item in _inventory.Lists.All)
             if (_inventory.Given.TryGetValue(item.Entity, out var given) && given.Origin is null) known.TryAdd(item.Entity, item.Kind);
         return Array.AsReadOnly(known.Select(pair => new SessionKitItem(pair.Key, pair.Value)).ToArray());
     }
@@ -414,7 +414,7 @@ public sealed partial class GameSessionOwner
                 foreach (var entity in row.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { Kind.Type: SessionItemType.Gold } facts)
                         yield return (entity, _inventory.Piles.TryGetValue(entity, out var tracked) ? tracked : facts.Quantity ?? 0, facts);
-        if (kind == SessionHolderKind.Npc || _inventory.Containers.Contains(holder))
+        if (kind == SessionHolderKind.Npc || _inventory.Lists.IsContainer(holder))
             foreach (var item in _inventory.AddedTo(holder))
                 if (item.Kind.Type == SessionItemType.Gold) yield return (item.Entity, _inventory.Piles[item.Entity], null);
     }

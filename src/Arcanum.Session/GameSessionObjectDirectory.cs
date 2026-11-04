@@ -80,7 +80,7 @@ public sealed partial class GameSessionOwner
                 .Concat(_inventory.Placed.Where(item => item.Source == SessionPlacedSource.Kit).Select(item => item.Entity))
                 .Concat(_inventory.Given.Keys.Where(entity => HeroDomain.KitNumber(entity) is not null)).Concat(_durability.Destroyed),
             SessionObjectOrigin.Made => _inventory.Made.Select(item => item.Entity)
-                .Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
+                .Concat(_inventory.Lists.All.Select(item => item.Entity))
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed),
             SessionObjectOrigin.JunkPile => _inventory.JunkPiles.Select(pile => pile.Entity),
             SessionObjectOrigin.BloodPool => _inventory.BloodPools.Select(pool => pool.Entity),
@@ -89,6 +89,30 @@ public sealed partial class GameSessionOwner
         };
         return Array.AsReadOnly(candidates.Where(entity => ObjectOriginOf(entity) == origin).Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal).Select(Locate).OfType<SessionObjectEntry>().ToArray());
+    }
+
+    /// <summary>
+    /// ARC-DEV-088 (MIG6d, TM2): the stock of one holder, an NPC's or a container's (a merchant's substitute container included), as the
+    /// directory answers it: the items its map data lists that the hero took, a critical dropped or a script moved nowhere (place
+    /// <see cref="SessionObjectPlace.SeedHolder"/>, in the seed's order), then the items the session added to its list (place
+    /// <see cref="SessionObjectPlace.NpcList"/> or <see cref="SessionObjectPlace.ContainerList"/>, in the order they entered). The
+    /// seed items of a holder whose map has no seed attached are not known. Empty for an entity that holds nothing; a read of the
+    /// current state, in no revision.
+    /// </summary>
+    public IReadOnlyList<SessionObjectEntry> QueryHeldBy(string holder)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(holder)) return [];
+        var held = new List<SessionObjectEntry>();
+        foreach (var (_, seed) in _inventory.Seeds.OrderBy(pair => pair.Key.RuntimeMap))
+        {
+            if (!seed.Holders.TryGetValue(holder, out var seedHolder)) continue;
+            foreach (var entity in seedHolder.Items)
+                if (Locate(entity) is { Place: SessionObjectPlace.SeedHolder } entry && entry.Holder == holder) held.Add(entry);
+        }
+        foreach (var item in _inventory.Lists.Of(holder))
+            if (Locate(item.Entity) is { } entry) held.Add(entry);
+        return Array.AsReadOnly(held.ToArray());
     }
 
     /// <summary>
@@ -137,7 +161,7 @@ public sealed partial class GameSessionOwner
                 : new(entity, origin, SessionObjectPlace.HeroPack);
         if (_inventory.PlacedItem(entity) is { } placed) return OnGround(entity, origin, placed.Map, placed.Cell);
         if (_inventory.NpcOf(entity) is { } holder)
-            return new(entity, origin, _inventory.Containers.Contains(holder) ? SessionObjectPlace.ContainerList : SessionObjectPlace.NpcList, Holder: holder);
+            return new(entity, origin, _inventory.Lists.IsContainer(holder) ? SessionObjectPlace.ContainerList : SessionObjectPlace.NpcList, Holder: holder);
         if (_inventory.Taken.Contains(entity)) return null; // taken, in no list: no move of the session leaves this
         foreach (var (map, seed) in _inventory.Seeds.OrderBy(pair => pair.Key.RuntimeMap))
         {
