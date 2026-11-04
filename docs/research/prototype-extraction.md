@@ -188,8 +188,8 @@ about 2.43 × 10^9 interpreted instructions and 26 s.
      name text): 85 NPCs of the group named "6401 Monster" and 162 of "6402 Unique NPC" (written as "NPC"), and 60 items (such as `Weapon`
      against "5678 Auto Loading Mechanism"). The rebuilt files equal the first build (the same test checks it). The builder's `ExistingFiles` option
      reproduces this.
-  6. *The 112 files that differ from the macOS set.* Against the original's files the macOS set (the community reimplementation's build in
-     `/Applications/Arcanum/data/proto`, 2026-11-04) has 1,373 equal and 50 different files; 62 more differ only in the unset
+  6. *The 112 files that differ from the macOS set.* Against the original's files the macOS set (the community reimplementation's build in the
+     owner's macOS installation, 2026-11-04) has 1,373 equal and 50 different files; 62 more differ only in the unset
      word 0 above. The 50: 15 portals (file numbers 2028 to 2042, two fields: the portal flags, 805319680 against 805319697), one scenery object
      (4042, one field), 11 generic items (15152, 15170 to 15173, 15181 to 15186; one field), one PC (16086, a text), 19 NPCs (28330 to 28333,
      28396 to 28407, 28479, 28484, 28486; the field after the flags, 0 against 4, 8, 16, 32768, …) and 3 NPCs (27331, 27339, 27340; script

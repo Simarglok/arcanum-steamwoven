@@ -40,6 +40,37 @@ public sealed class PrototypeBuilderTests
     }
 
     [TestMethod]
+    public void OptionLimitsAreValidated()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PrototypeBuilder.Build([1], new NoFiles(), new PrototypeBuildOptions { MaxHeapBytes = 0 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PrototypeBuilder.Build([1], new NoFiles(), new PrototypeBuildOptions { MaxHeapBytes = PrototypeBuilder.MaxHeapLimit + 1 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PrototypeBuilder.Build([1], new NoFiles(), new PrototypeBuildOptions { MaxStepsPerCall = 0 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PrototypeBuilder.Build([1], new NoFiles(), new PrototypeBuildOptions { MaxWrittenBytes = -1 }));
+    }
+
+    [TestMethod]
+    public void DirectoryPatternsMatchLikeTheFileSearch()
+    {
+        Assert.IsTrue(PrototypeBuilder.BuildSession.Glob("*.scr", "03000x.SCR"));
+        Assert.IsTrue(PrototypeBuilder.BuildSession.Glob("*.*", "a.b"));
+        Assert.IsTrue(PrototypeBuilder.BuildSession.Glob("*", "anything"));
+        Assert.IsTrue(PrototypeBuilder.BuildSession.Glob("a?c.art", "ABC.art"));
+        Assert.IsFalse(PrototypeBuilder.BuildSession.Glob("*.art", "a.artx"));
+        Assert.IsFalse(PrototypeBuilder.BuildSession.Glob("a?c", "ac"));
+        Assert.IsFalse(PrototypeBuilder.BuildSession.Glob("*.*", "nodot"));
+    }
+
+    [TestMethod]
+    public void TextModeDropsACarriageReturnOnlyBeforeALineFeed()
+    {
+        CollectionAssert.AreEqual(
+            new byte[] { (byte)'a', (byte)'\n', (byte)'b', (byte)'\r', (byte)'c', (byte)'\n', (byte)'d', (byte)'\r' },
+            PrototypeBuilder.BuildSession.StripCarriageReturns([(byte)'a', (byte)'\r', (byte)'\n', (byte)'b', (byte)'\r', (byte)'c', (byte)'\r', (byte)'\n', (byte)'d', (byte)'\r']));
+        var untouched = new byte[] { 1, 2, 3 };
+        Assert.AreSame(untouched, PrototypeBuilder.BuildSession.StripCarriageReturns(untouched));
+    }
+
+    [TestMethod]
     public void TheHeapHandsOutZeroedBlocksAndReusesFreedOnes()
     {
         var memory = new MachineMemory();
@@ -54,6 +85,8 @@ public sealed class PrototypeBuilderTests
         Assert.AreEqual(0u, memory.ReadU32(b));
         Assert.AreEqual(1, heap.LiveBlocks);
         Assert.IsTrue(heap.Free(0), "free(NULL) is accepted");
+        Assert.IsTrue(heap.IsLive(b));
+        Assert.IsFalse(heap.IsLive(b + 4));
         Assert.IsFalse(heap.Free(b + 4), "an address that is not a block start");
         Assert.IsFalse(heap.Free(0x1234_0000), "an unknown address");
     }

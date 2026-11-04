@@ -13,6 +13,9 @@ namespace Arcanum.Executable.Prototypes;
 /// </summary>
 public static class PrototypeBuilder
 {
+    /// <summary>The largest guest heap an option may ask for (the interpreter maps at most 1 GiB in all).</summary>
+    public const uint MaxHeapLimit = 512u << 20;
+
     public const string RetailSha256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52";
 
     /// <summary>
@@ -49,6 +52,8 @@ public static class PrototypeBuilder
         ArgumentNullException.ThrowIfNull(executable);
         ArgumentNullException.ThrowIfNull(files);
         options ??= new PrototypeBuildOptions();
+        if (options.MaxHeapBytes == 0 || options.MaxHeapBytes > MaxHeapLimit) throw new ArgumentOutOfRangeException(nameof(options), $"MaxHeapBytes must be between 1 and {MaxHeapLimit}");
+        if (options.MaxStepsPerCall <= 0 || options.MaxWrittenFiles < 0 || options.MaxWrittenBytes < 0) throw new ArgumentOutOfRangeException(nameof(options), "the step, file and byte limits must be positive");
         var read = PeImage.Read(executable);
         if (read.Image is not { } image)
             return Fail(PrototypeBuildFailureKind.InvalidExecutable, $"{read.Failure!.Kind}: {read.Failure.Detail}");
@@ -63,11 +68,16 @@ public static class PrototypeBuilder
             // The host's own set-up reads or writes an address the image does not map (an image that is not the game's).
             return new([], new PrototypeBuildFailure(PrototypeBuildFailureKind.StartupFault, $"the start-up set-up: {exception.Fault}", exception.Fault), 0);
         }
+        catch (ArgumentException exception)
+        {
+            // The image does not fit the machine's address space beside the host's stack and heap (a section overlaps them).
+            return Fail(PrototypeBuildFailureKind.InvalidExecutable, $"the image cannot be loaded: {exception.Message}");
+        }
     }
 
     private static PrototypeBuildResult Fail(PrototypeBuildFailureKind kind, string detail) => new([], new PrototypeBuildFailure(kind, detail), 0);
 
-    private sealed class BuildSession
+    internal sealed class BuildSession
     {
         private const uint FileHandleTag = 0xF11E_0000;
         private readonly PeImage image;
@@ -139,7 +149,7 @@ public static class PrototypeBuilder
                 var end = (int)machine.Memory.ReadU32(GroupEndTable + 4u * (uint)group);
                 totalBuilds += Math.Max(0, end - start);
             }
-            totalBuilds -= existingProtos.Count;
+            if (existingProtos.Count > 0) totalBuilds = 0;   // which of the names the check asks for is not known in advance
             machine.Hook(BuildFunction, "prototype build", m =>
             {
                 // The previous build must have written exactly one prototype file.
@@ -147,7 +157,7 @@ public static class PrototypeBuilder
                     return Stop(PrototypeBuildFailureKind.BadOutput, $"the build of prototype {currentNumber} wrote {built.Count - builds + 1} proto files");
                 currentNumber = (int)m.Argument(0);
                 builds++;
-                progress?.Invoke(builds, Math.Max(totalBuilds, builds));
+                progress?.Invoke(builds, totalBuilds);
                 return HookResult.Continue();
             });
             var flag = heap.Allocate(16);
@@ -155,7 +165,7 @@ public static class PrototypeBuilder
             steps += check.Steps;
             if (!check.Completed) return Failed(check.Fault!, PrototypeBuildFailureKind.BuildFault, builds == 0 ? "the prototype check" : $"the prototype check (the build of prototype {currentNumber})", builds == 0 ? null : currentNumber, steps);
             if (built.Count != builds)
-                return new(built, new PrototypeBuildFailure(PrototypeBuildFailureKind.BadOutput, $"the build of prototype {currentNumber} wrote {built.Count - builds + 1} proto files", null, currentNumber), steps);
+                return new(built, new PrototypeBuildFailure(PrototypeBuildFailureKind.BadOutput, $"the build of prototype {currentNumber} wrote {built.Count - builds + 1} proto files", null, currentNumber), steps) { MissedFiles = missed, ReadFiles = readFiles, ListedPatterns = listed, CallbackCalls = (viewChangeCalls, redrawCalls) };
             return new(built, null, steps) { MissedFiles = missed, ReadFiles = readFiles, ListedPatterns = listed, CallbackCalls = (viewChangeCalls, redrawCalls) };
         }
 
@@ -219,7 +229,7 @@ public static class PrototypeBuilder
 
         private PrototypeBuildResult Failed(MachineFault fault, PrototypeBuildFailureKind stage, string where, int? number, long steps)
         {
-            var kind = stage;
+            var kind = fault.Kind == MachineFaultKind.InstructionLimit ? PrototypeBuildFailureKind.LimitExceeded : stage;
             var detail = $"{where}: {fault}";
             if (hostFailure is not null)
             {
@@ -239,12 +249,23 @@ public static class PrototypeBuilder
         private void InstallHooks()
         {
             // Memory: the executable's C runtime heap is replaced by the guest heap.
-            machine.Hook(0x58A716, "malloc", m => Return(m, heap.Allocate(m.Argument(0), zero: false)));
-            machine.Hook(0x58A99E, "calloc", m => Return(m, (ulong)m.Argument(0) * m.Argument(1) is var total && total <= uint.MaxValue ? heap.Allocate((uint)total, zero: true) : 0));
-            machine.Hook(0x58A072, "realloc", m => Return(m, heap.Reallocate(m.Argument(0), m.Argument(1))));
+            machine.Hook(0x58A716, "malloc", m => Allocated(m, m.Argument(0), heap.Allocate(m.Argument(0), zero: false)));
+            machine.Hook(0x58A99E, "calloc", m =>
+            {
+                var total = (ulong)m.Argument(0) * m.Argument(1);
+                return Allocated(m, total, total <= uint.MaxValue ? heap.Allocate((uint)total, zero: true) : 0);
+            });
+            machine.Hook(0x58A072, "realloc", m =>
+            {
+                var block = m.Argument(0);
+                var size = m.Argument(1);
+                if (block != 0 && !heap.IsLive(block)) return Stop(PrototypeBuildFailureKind.BadOutput, $"realloc of 0x{block:X8}, which is not a live block");
+                var result = heap.Reallocate(block, size);
+                return size == 0 && block != 0 ? Return(m, 0) : Allocated(m, size, result);
+            });
             machine.Hook(0x58A347, "free", m =>
             {
-                if (!heap.Free(m.Argument(0))) return Stop(PrototypeBuildFailureKind.LimitExceeded, $"free of 0x{m.Argument(0):X8}, which is not a live block");
+                if (!heap.Free(m.Argument(0))) return Stop(PrototypeBuildFailureKind.BadOutput, $"free of 0x{m.Argument(0):X8}, which is not a live block");
                 return HookResult.Return();
             });
 
@@ -315,6 +336,13 @@ public static class PrototypeBuilder
         /// <summary>The clock the builds see (2000-01-01 00:00:00 UTC): the builds write no time into a prototype.</summary>
         private const uint FixedTime = 946_684_800;
 
+        /// <summary>The result of an allocation: a block, or a stop when a non-empty request could not be met (the guest does not get a null pointer to fault on).</summary>
+        private HookResult Allocated(X86Machine m, ulong requested, uint block)
+        {
+            if (block == 0 && requested != 0) return Stop(PrototypeBuildFailureKind.LimitExceeded, $"the guest heap cannot give {requested} bytes");
+            return Return(m, block);
+        }
+
         private static HookResult Return(X86Machine m, uint value)
         {
             m.Eax = value;
@@ -335,7 +363,7 @@ public static class PrototypeBuilder
                 if (path.Length == 0 || path.Contains("..", StringComparison.Ordinal) || path[0] is '\\' or '/' or '.' || path.Contains(':'))
                     return Stop(PrototypeBuildFailureKind.BadOutput, $"the executable opens {path} for writing ({mode})");
                 if (mode.Contains('a') || mode.Contains('+')) return Stop(PrototypeBuildFailureKind.BadOutput, $"the executable opens {path} for appending or updating ({mode})");
-                if (built.Count + overlay.Count >= options.MaxWrittenFiles) return Stop(PrototypeBuildFailureKind.LimitExceeded, "too many files written");
+                if (overlay.Count + streamPaths.Count(entry => streams[entry.Key].CanWrite) >= options.MaxWrittenFiles) return Stop(PrototypeBuildFailureKind.LimitExceeded, "too many files written");
                 stream = new MemoryStream();
             }
             else
@@ -373,7 +401,7 @@ public static class PrototypeBuilder
 
         private static bool TextMode(string mode) => !mode.Contains('b');
 
-        private static byte[] StripCarriageReturns(byte[] bytes)
+        internal static byte[] StripCarriageReturns(byte[] bytes)
         {
             if (Array.IndexOf(bytes, (byte)'\r') < 0) return bytes;
             var result = new List<byte>(bytes.Length);
@@ -436,7 +464,8 @@ public static class PrototypeBuilder
             var directory = split < 0 ? "" : pattern[..split];
             var wild = pattern[(split + 1)..];
             if (!listed.Contains(pattern)) listed.Add(pattern);
-            var names = source.List(directory).Where(name => Glob(wild, name)).Order(StringComparer.OrdinalIgnoreCase).ToList();
+            var found = directory.Equals("proto", StringComparison.OrdinalIgnoreCase) ? existingProtos.Select(path => path["proto\\".Length..]).Concat(overlay.Keys.Where(path => path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase)).Select(path => path["proto\\".Length..])).Distinct(StringComparer.OrdinalIgnoreCase) : source.List(directory);
+            var names = found.Where(name => Glob(wild, name)).Order(StringComparer.OrdinalIgnoreCase).ToList();
             if (names.Any(name => name.Length >= ListNameBytes)) return Stop(PrototypeBuildFailureKind.LimitExceeded, $"a file name in {directory} is too long");
             var entries = names.Count == 0 ? 0 : heap.Allocate((uint)names.Count * ListEntryBytes);
             if (names.Count > 0 && entries == 0) return Stop(PrototypeBuildFailureKind.LimitExceeded, "the guest heap is full");
@@ -447,7 +476,7 @@ public static class PrototypeBuilder
             return HookResult.Return();
         }
 
-        private static bool Glob(string pattern, string name)
+        internal static bool Glob(string pattern, string name)
         {
             int p = 0, n = 0, star = -1, mark = 0;
             while (n < name.Length)
@@ -472,7 +501,7 @@ public static class PrototypeBuilder
             if (size == 0 || count == 0) { m.Eax = 0; return HookResult.Return(); }
             var wanted = (ulong)size * count;
             if (wanted > int.MaxValue) return Stop(PrototypeBuildFailureKind.LimitExceeded, "a read larger than 2 GiB");
-            var bytes = new byte[wanted];
+            var bytes = new byte[Math.Min((long)wanted, stream.Length - stream.Position)];
             var got = stream.Read(bytes, 0, bytes.Length);
             m.Memory.WriteBytes(buffer, bytes.AsSpan(0, got));
             m.Eax = (uint)(got / size);
@@ -488,7 +517,7 @@ public static class PrototypeBuilder
             var handle = m.Argument(3);
             if (!streams.TryGetValue(handle, out var stream) || !stream.CanWrite) return Stop(PrototypeBuildFailureKind.BadOutput, $"write to 0x{handle:X8}, which is not a file open for writing");
             var total = (ulong)size * count;
-            if (writtenBytes + (long)total > options.MaxWrittenBytes) return Stop(PrototypeBuildFailureKind.LimitExceeded, "too many bytes written");
+            if (total > (ulong)(options.MaxWrittenBytes - writtenBytes)) return Stop(PrototypeBuildFailureKind.LimitExceeded, "too many bytes written");
             var bytes = new byte[total];
             m.Memory.ReadBytes(buffer, bytes);
             stream.Write(bytes);

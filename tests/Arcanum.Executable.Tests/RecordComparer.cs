@@ -14,6 +14,9 @@ internal static class RecordComparer
 {
     private static readonly StaticObjectLoaderOptions Limits = new() { MaxPrototypeBytes = 64 * 1024, MaxArrayElements = 4096, MaxStringBytes = 4096 };
 
+    /// <summary>The only values found to depend on uninitialized memory: word 0 of an element of the script array (slot 31).</summary>
+    private static readonly System.Text.RegularExpressions.Regex UninitializedKey = new(@"^s31\.e\d+\.w0$");
+
     public static ObjectWireRecord Read(byte[] bytes) => ObjectWireReader.Read(bytes, Limits, prototype: true, maxRecordBytes: 64 * 1024);
 
     /// <summary>The record as named values; the key says where a value sits ("s31.e9.w0" is word 0 of element 9 of slot 31).</summary>
@@ -23,7 +26,7 @@ internal static class RecordComparer
         var map = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
             ["type"] = record.Type.ToString(),
-            ["parent"] = $"{record.Parent.Kind}",
+            ["parent"] = $"{record.Parent.Kind}/{record.Parent.Entity}",
             ["own"] = $"{record.Own.Entity}",
         };
         foreach (var (slot, value) in record.Fields)
@@ -58,7 +61,7 @@ internal static class RecordComparer
             if (p is not null)
             {
                 p.TryGetValue(key, out var vp);
-                if (vp != va) continue;   // depends on uninitialized memory
+                if (vp != va && UninitializedKey.IsMatch(key)) continue;   // depends on uninitialized memory: only the one kind found is left out
             }
             differences.Add($"{key}: {va ?? "-"} / {vb ?? "-"}");
         }

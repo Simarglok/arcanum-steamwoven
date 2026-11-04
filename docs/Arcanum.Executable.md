@@ -140,17 +140,19 @@ builder writes nothing to the disk.
 - **Services (the only Steamwoven code).** The allocator (`GuestHeap`: hooked `malloc`, `calloc`, `realloc` and `free`; explicit limit,
   zeroed or fill-byte blocks), the file layer (open, close, line and block reads, writes, length, existence and directory
   listing over `IOriginalFileSource`: base sources only, as the original sees them before it mounts the module; text-mode reads drop a
-  CR before an LF; files the executable writes stay in memory and are visible to its later reads; writes outside `proto\` are not
-  kept), the clock (fixed), the GUID (a fixed fill), directory creation (answers 1), the window rectangle, the display's colour
+  CR before an LF and a Ctrl-Z is not an end of file; files the executable writes stay in memory and are visible to its later reads and
+  listings, and only those under `proto\` are returned), the clock (fixed), the GUID (a fixed fill), directory creation (answers 1), the window rectangle, the display's colour
   conversion, the two window callbacks of the start information (counting stubs) and the art library's start-up (the module's tables
   and cache limit are written by the host, the rest is the original's code). Prototype files are never taken from the source:
   `PrototypeBuildOptions.ExistingFiles` says which exist; none (the default) is a fresh installation with 1,423 builds.
 - **Refusals (typed, `PrototypeBuildFailure`).** `InvalidExecutable`, `UnverifiedExecutable`, `MissingSourceFile` (one of the 13 data files
   without which a build is wrong is not in any source; other missing files read as absent, as in the original), `StartupFault` and
   `BuildFault` (the interpreter's fault with its address and the build's number), `BadOutput` (a build that did not write exactly one prototype file, an unexpected file
-  operation, a write outside the allowed names) and `LimitExceeded` (heap, steps per call, files, bytes written).
+  operation, a write outside the allowed names) and `LimitExceeded` (a heap request that cannot be met, steps per call, files, bytes written). Option limits are validated up front
+  (`ArgumentOutOfRangeException`; the heap may not exceed `PrototypeBuilder.MaxHeapLimit`, 512 MiB). The progress callback gets the number of builds so far and the total (1,423 on a
+  fresh installation; 0, unknown, when `ExistingFiles` is given).
 - **Verification.** Synthetic tests (refusals, the heap). Opt-in on the player's executable and data
-  (`TestCategory=OriginalExe`; `ARCANUM_EXE`, `ARCANUM_GAME_ROOT`, and `ARCANUM_ORIGINAL_PROTO` for the comparison): all 1,423 files are
+  (`TestCategory=OriginalExe`; `ARCANUM_EXE` and `ARCANUM_GAME_ROOT`, and `ARCANUM_ORIGINAL_PROTO` for the comparison; each is inconclusive without them): all 1,423 files are
   built, equal field by field to the files the original wrote on a Windows installation, and a second build over other uninitialized memory
   shows the only values that depend on it (word 0 of a script element); a finished installation's check rebuilds 307 files. Results
   and the answers to the open questions: [E3 results](research/prototype-extraction.md#e3-results-arc-dev-068). A fresh

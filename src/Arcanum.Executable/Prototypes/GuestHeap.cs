@@ -64,6 +64,9 @@ internal sealed class GuestHeap
         return address;
     }
 
+    /// <summary>True when <paramref name="address"/> is the start of a block handed out and not freed.</summary>
+    public bool IsLive(uint address) => blockSizes.ContainsKey(address);
+
     /// <summary>Releases a block; false when <paramref name="address"/> is not a live block (0 is accepted and ignored).</summary>
     public bool Free(uint address)
     {

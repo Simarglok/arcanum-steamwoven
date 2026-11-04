@@ -7,8 +7,7 @@ namespace Arcanum.Executable.Tests;
 
 /// <summary>
 /// ARC-DEV-068, opt-in: the prototype builder on the player's own <c>Arcanum.exe</c> and data. Needs <c>ARCANUM_EXE</c> (the retail
-/// 1.0.7.4 executable) and <c>ARCANUM_GAME_ROOT</c> (the installation's game folder, default: the executable's folder); without them the
-/// tests are inconclusive. <c>ARCANUM_ORIGINAL_PROTO</c> (a folder with the 1,423 files the original itself wrote on a finished
+/// 1.0.7.4 executable) and <c>ARCANUM_GAME_ROOT</c> (the installation's game folder); without either the tests are inconclusive. <c>ARCANUM_ORIGINAL_PROTO</c> (a folder with the 1,423 files the original itself wrote on a finished
 /// installation, such as its <c>data\proto</c>) adds the comparison with them; <c>ARCANUM_PROTO_OUT</c> writes the built files there
 /// for a closer look (never inside the repository). Nothing of the executable, the data or the built files is kept.
 /// </summary>
@@ -48,7 +47,8 @@ public sealed class PrototypeBuilderRealDataTests
     {
         var exe = Environment.GetEnvironmentVariable("ARCANUM_EXE");
         if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) Assert.Inconclusive("ARCANUM_EXE is not set");
-        var root = Environment.GetEnvironmentVariable("ARCANUM_GAME_ROOT") ?? Path.GetDirectoryName(exe)!;
+        var root = Environment.GetEnvironmentVariable("ARCANUM_GAME_ROOT");
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) Assert.Inconclusive("ARCANUM_GAME_ROOT is not set");
         var discovery = ContentMountPlan.Discover(root);
         Assert.IsNotNull(discovery.Plan, $"the game folder {root}: {discovery.Status}");
         var opened = ContentStack.Open(discovery.Plan);
@@ -59,6 +59,13 @@ public sealed class PrototypeBuilderRealDataTests
         TestContext.WriteLine($"fill {fill}, {existing?.Count ?? 0} existing: {result.Files.Count} files, {result.Steps} steps, {started.Elapsed.TotalSeconds:F1} s; failure: {result.Failure}");
         Assert.IsNull(result.Failure, result.Failure?.ToString());
         return result;
+    }
+
+    private static bool InsideARepository(string path)
+    {
+        for (var directory = new DirectoryInfo(Path.GetFullPath(path)); directory is not null; directory = directory.Parent)
+            if (Directory.Exists(Path.Combine(directory.FullName, ".git")) || File.Exists(Path.Combine(directory.FullName, ".git"))) return true;
+        return false;
     }
 
     private static string? OriginalFolder()
@@ -92,6 +99,7 @@ public sealed class PrototypeBuilderRealDataTests
         var output = Environment.GetEnvironmentVariable("ARCANUM_PROTO_OUT");
         if (!string.IsNullOrEmpty(output))
         {
+            Assert.IsFalse(InsideARepository(output), "ARCANUM_PROTO_OUT must be outside any git repository: the built files are the player's data, never committed");
             Directory.CreateDirectory(output);
             foreach (var file in first.Files) File.WriteAllBytes(Path.Combine(output, file.Name), file.Bytes);
         }
@@ -105,6 +113,7 @@ public sealed class PrototypeBuilderRealDataTests
         var second = Build(OtherFill);
         var expected = Directory.EnumerateFiles(folder, "*.pro").Select(Path.GetFileName).Order(StringComparer.OrdinalIgnoreCase).ToList();
         CollectionAssert.AreEqual(expected, first.Files.Select(f => f.Name).Order(StringComparer.OrdinalIgnoreCase).ToList(), "the file names");
+        CollectionAssert.AreEqual(first.Files.Select(f => f.Name).ToList(), second.Files.Select(f => f.Name).ToList(), "both builds write the files in the same order");
         var different = new List<string>();
         for (var i = 0; i < first.Files.Count; i++)
         {
