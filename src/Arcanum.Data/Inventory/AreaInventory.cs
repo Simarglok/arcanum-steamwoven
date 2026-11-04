@@ -36,7 +36,8 @@ public enum AreaInventoryFailure
     ParentMismatch,
     /// <summary>A listed item without the inventory object flag.</summary>
     InventoryFlagMismatch,
-    /// <summary>An item with the inventory object flag that no holder lists.</summary>
+    /// <summary>Retired by ARC-DEV-085 (MIG6b): an item with the inventory object flag that no holder lists is no longer a refusal; it is a
+    /// <see cref="AreaInventory.Detached"/> item. The value stays so the numbering of the others does not move.</summary>
     UnlistedInventoryItem,
     /// <summary>A ground (unlisted) item whose parent field names an object.</summary>
     GroundItemParented,
@@ -73,6 +74,15 @@ public sealed record AreaInventoryItem(AreaObjectKey Key, AreaItemType Type, int
     public bool Identified => Complexity <= 0 || (ItemFlags & AreaInventoryReader.IdentifiedItemFlag) != 0;
 }
 
+/// <summary>ARC-DEV-085 (MIG6b): an item that carries the inventory object flag (OF_INVENTORY) but that no holder of the loaded area lists. The
+/// original never lists such an item in a sector and never finds it through a holder's list, so it is held by nothing and stands nowhere
+/// (docs/world/area-inventory-view.md). <see cref="Parent"/> is its parent field (null when the field is null; its
+/// <see cref="AreaInventoryHandle.SourceIndex"/> is set when that object is in the area, and then its list does not hold this item).</summary>
+public sealed record AreaInventoryDetachedItem(AreaObjectKey Key, AreaItemType Type, int Prototype, AreaScope Scope, int InventoryLocation, AreaInventoryHandle? Parent)
+{
+    public int SourceIndex => Key.SourceIndex;
+}
+
 /// <summary>One inventory holder of the area at T0 with its list in serialized order (<see cref="Items"/> are item
 /// source indices). Container fields exist only for containers; gold, leader and substitute-inventory handles
 /// only for critters (leader and substitute for NPCs). Life state is not part of this view.</summary>
@@ -89,11 +99,13 @@ public sealed class AreaInventory
     private readonly IReadOnlyDictionary<int, AreaInventoryItem> _items;
     private readonly IReadOnlyDictionary<int, AreaInventoryHolder> _holders;
 
-    internal AreaInventory(AreaSnapshot snapshot, IEnumerable<AreaInventoryHolder> holders, IEnumerable<AreaInventoryItem> items)
+    internal AreaInventory(AreaSnapshot snapshot, IEnumerable<AreaInventoryHolder> holders, IEnumerable<AreaInventoryItem> items,
+        IEnumerable<AreaInventoryDetachedItem>? detached = null)
     {
         CatalogueMap = snapshot.CatalogueMap; RuntimeMap = snapshot.RuntimeMap; Profile = snapshot.Profile;
         Holders = Array.AsReadOnly(holders.OrderBy(h => h.SourceIndex).ToArray());
         Items = Array.AsReadOnly(items.OrderBy(i => i.SourceIndex).ToArray());
+        Detached = Array.AsReadOnly((detached ?? []).OrderBy(i => i.SourceIndex).ToArray());
         // Source indices are unique: the reader refuses duplicates before construction.
         _holders = new ReadOnlyDictionary<int, AreaInventoryHolder>(Holders.ToDictionary(h => h.SourceIndex));
         _items = new ReadOnlyDictionary<int, AreaInventoryItem>(Items.ToDictionary(i => i.SourceIndex));
@@ -106,6 +118,9 @@ public sealed class AreaInventory
     public IReadOnlyList<AreaInventoryHolder> Holders { get; }
     /// <summary>Every item of the loaded area (core and context), by source index.</summary>
     public IReadOnlyList<AreaInventoryItem> Items { get; }
+    /// <summary>ARC-DEV-085: the items flagged as held that no holder of the loaded area lists, by source index. They are not in <see cref="Items"/>
+    /// (not on the ground, not in a list), so no consumer places or lends them.</summary>
+    public IReadOnlyList<AreaInventoryDetachedItem> Detached { get; }
 
     public bool TryGetItem(int sourceIndex, out AreaInventoryItem item) => _items.TryGetValue(sourceIndex, out item!);
     public bool TryGetHolder(int sourceIndex, out AreaInventoryHolder holder) => _holders.TryGetValue(sourceIndex, out holder!);
@@ -198,6 +213,7 @@ public static class AreaInventoryReader
         }
 
         var items = new List<AreaInventoryItem>(itemRows.Length);
+        var detached = new List<AreaInventoryDetachedItem>();
         foreach (var o in itemRows)
         {
             token.ThrowIfCancellationRequested();
@@ -213,7 +229,14 @@ public static class AreaInventoryReader
             }
             else
             {
-                if (flagged) throw new Refusal(AreaInventoryFailure.UnlistedInventoryItem, o.Key.SourceIndex);
+                if (flagged)
+                {
+                    // ARC-DEV-085 (MIG6b): held by nothing the area lists. The original never lists an OF_INVENTORY item in a sector (RL3) and finds
+                    // a holder's items through its list, so the item is inert; it stays out of the view's items and the seed builds.
+                    detached.Add(new(o.Key, (AreaItemType)o.Type, o.PrototypeNumber, o.Scope, Number(o, ItemLocationSlot),
+                        parent is null ? null : new(parent, byId.TryGetValue(parent, out var parentRow) ? parentRow.Key.SourceIndex : null)));
+                    continue;
+                }
                 if (parent is not null) throw new Refusal(AreaInventoryFailure.GroundItemParented, o.Key.SourceIndex);
                 if (o.WorldX is null || o.WorldY is null) throw new Refusal(AreaInventoryFailure.GroundItemUnlocated, o.Key.SourceIndex);
             }
@@ -251,7 +274,7 @@ public static class AreaInventoryReader
                 container ? (uint)Number(o, ContainerFlagsSlot) : null, container ? Number(o, ContainerKeySlot) : null, gold,
                 o.Type == NpcType ? Resolve(NpcLeaderSlot) : null, o.Type == NpcType ? Resolve(NpcSubstituteSlot) : null));
         }
-        return new AreaInventory(snapshot, holders, items);
+        return new AreaInventory(snapshot, holders, items, detached);
     }
 
     private static AreaFieldValue? Field(AreaObjectRecord o, int slot) => o.EffectiveFields.FirstOrDefault(f => f.Slot == slot);

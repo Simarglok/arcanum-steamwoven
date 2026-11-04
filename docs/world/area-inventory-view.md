@@ -40,7 +40,7 @@ Any of these refuses the whole view with a typed `AreaInventoryFailure` and the 
 a snapshot that is not strictly published; a list that is not dense or whose element is not a six-word
 ID; a declared count that differs from the list length; an element that names no mobile record, or a
 record that is not an item; an item listed twice; a listed item whose parent field names another object
-or that lacks the inventory flag; an inventory-flagged item that no holder lists; a ground item with a
+or that lacks the inventory flag; a ground item with a
 parent or without a location; a critter gold handle that is not a gold item in that critter's own list;
 an item or holder from a sector file (not admitted); a key ring with keys (not modelled); a missing
 mandatory field; duplicate mobile IDs or source indices; more than 2,048 items or holders or 512 list elements.
@@ -50,6 +50,22 @@ refusals were added by ARC-DATA-012 and are observed to hold on the exterior and
 items unparented and located, gold handles inside the holder's own list, no sector-file items or holders,
 no filled key ring. A context holder whose item lies outside the loaded area would also refuse the view
 (`ListedObjectUnresolved`); that does not occur in either profile.
+
+## Detached items (ARC-DEV-085, MIG6b)
+
+An item that carries the inventory object flag (`OF_INVENTORY`, 0x1000) but that no holder of the loaded area lists is **not** a refusal any more
+(`UnlistedInventoryItem` stays in the enum, unused). It goes to `AreaInventory.Detached` (`AreaInventoryDetachedItem`: key, type, prototype, scope,
+inventory location, parent handle with its source index when the parent is in the area) and stays out of `Items`, so a consumer neither places it on the
+ground nor lends it to a holder. The seed of the area builds; the viewer's `inventory-seed` line adds `N held but unlisted (detached)`.
+
+Why: the town window of the main map (sector 1409,1314, runtime map 1) holds one such item, a weapon (prototype 6049, inventory location 1004) whose parent
+is an NPC of the same window whose list (7 of 7) does not name it. The refusal made the whole seed unavailable (bug B02: no inventory, no loot, the hero's
+worn set not shown, until the hero went back into the temple map whose own seed is ready). The first plan guessed a holder outside the window; the reading of the
+real data showed the holder inside it. The original never lists an `OF_INVENTORY` item in a sector (insert refuses it, [RL3](../architecture/original-object-model.md))
+and its fold and queries skip a held item (RL10), and a holder's items are found through its list, so an unlisted held item is reachable by nobody: it is
+inert, as it is here (F2 for the sector part, F1 for the list walk of the inventory functions, which was not read one by one).
+
+Every other reconciliation rule is unchanged: a listed item still needs its parent and flag, a ground item still no parent and a location.
 
 ## Original data (opt-in `RealData` tests)
 

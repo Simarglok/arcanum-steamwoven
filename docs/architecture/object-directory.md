@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6)
 
-Status: **slice MIG6a implemented** (ARC-DEV-084, 2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084) and MIG6b (ARC-DEV-085) implemented** (2026-11-04). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -14,7 +14,7 @@ are woven through about thirty session files, so MIG6 is cut into slices that ea
 | Slice | Result | State |
 | --- | --- | --- |
 | **MIG6a** (ARC-DEV-084) | The directory as a read model over the stores: one answer to "where is object X"; the origin of an id read from the id; junk and pool ids never reused (saved high-water marks, schema 60). | **Done** |
-| MIG6b | The seed refusal of the town window (B02, `AreaInventory.Build` `UnlistedInventoryItem`): an item flagged as held whose holder is outside the loaded window; the seed stays buildable and the item is held by an unloaded holder. | Planned |
+| **MIG6b** (ARC-DEV-085) | The seed refusal of the town window (B02, `AreaInventory.Build` `UnlistedInventoryItem`): an item flagged as held that no holder lists no longer refuses the seed; it is a detached item, out of the items ([view](../world/area-inventory-view.md#detached-items-arc-dev-085-mig6b)). | **Done** |
 | MIG6c | One create and one destroy path: the creators of `made:n` items, piles and pools call `Create`; every deletion goes through one `Destroy` that also dissolves a pile left with one item or none (today `Delete` does not, and only the decay step dissolves). | Planned |
 | MIG6d | The stores become entries: the directory holds the entry (origin, location) and the stores keep only what they alone know (kind facts, ammunition units, pile slots); snapshot sections move with a schema step each. | Planned |
 | MIG6e | Cross-map holders: an item moves between a holder of another map (read through the [record resolver](../world/record-resolver.md)) and the hero's list; the negative `IN` of a carried companion whose holder is on its home map stops being `UnknownHolder` (the [MIG5 limit](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)). | Planned |
@@ -39,6 +39,15 @@ limit MIG6b, MIG6d and MIG6e remove).
 
 Places: `Destroyed`, `HeroPack`, `HeroWorn`, `NpcList`, `ContainerList`, `Ground`, `JunkPile` (an item lying in a pile; the entry names the pile and its cell),
 `SeedHolder` (still in the list its map data names, neither taken nor dropped). A pool or a pile is itself `Ground`; a decayed pool is `Destroyed`.
+
+## MIG6b: what is built
+
+The cause of B02 was not the one this table first named (a holder outside the window): in the town window the weapon 2345 (inventory location 1004, held flag set)
+names as its parent an NPC of the same window whose list does not hold it, so the holder is loaded and the data is inconsistent. The original finds a holder's
+items through its list and never lists a held item in a sector (RL3, RL10), so the item is inert there. `AreaInventoryReader` now keeps such an item in
+`AreaInventory.Detached` and out of `Items`; `AreaInventoryMap.Detached` carries the entities and the seed builds (`Ready`, the viewer's detail names the count).
+Nothing is created for it: `QueryObject` of a detached entity answers null (a map object the session never moved and that no seed row names), which is the existing
+limit MIG6d removes. Only this one window is known to hold such an item; the rule is general, so another window or map with one builds too.
 
 ## Not ready
 

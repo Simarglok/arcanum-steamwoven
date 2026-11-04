@@ -66,6 +66,9 @@ public sealed class AreaInventoryMap
     public int DeadNpcs { get; }
     /// <summary>NPC holders on an admitted cell whose step evidence names no life fact (counted as alive).</summary>
     public int NpcsWithoutEvidence { get; }
+    /// <summary>ARC-DEV-085 (MIG6b): the entities of the area's items flagged as held that no holder of the area lists. They are in no seed list and
+    /// have no row; the original finds them through nothing (RL3), so the session neither places nor lends them.</summary>
+    public IReadOnlyList<string> Detached { get; init; } = [];
     public AreaObjectRecord Row(string entity) => _rows[entity];
     /// <summary>ARC-WORLD-090: the NPC's substitute container, or null.</summary>
     public AreaSubstituteContainer? Substitute(string npc) => _substitutes.GetValueOrDefault(npc);
@@ -132,8 +135,10 @@ public sealed class AreaInventoryMap
         var restock = inventory.Holders.Where(holder => holder.InventorySource != 0 || holder.ContainerFlags is > 0)
             .ToDictionary(holder => Id(holder.Key), holder => new AreaRestockSeed(holder.InventorySource, holder.ContainerFlags ?? 0), StringComparer.Ordinal);
         var persistent = inventory.Items.Where(item => RestockRules.Keeps(item.ItemFlags)).Select(item => Id(item.Key));
-        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes, restock, persistent),
-            $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence");
+        var detached = inventory.Detached.Select(item => Id(item.Key)).ToArray();
+        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes, restock, persistent) { Detached = detached },
+            $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence" +
+            (detached.Length > 0 ? $", {detached.Length} held but unlisted (detached)" : ""));
     }
 
     /// <summary>Life from the step rules: the NPC's own evidence as the destination of a step into its cell. True for
