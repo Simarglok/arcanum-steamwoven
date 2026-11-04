@@ -222,7 +222,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-WORLD-048: on the destination the carried companion is a visitor: it talks through its own host over its home map's
+    /// ARC-WORLD-048: on the destination the carried companion is a visitor: it talks through the one host (ARC-DEV-081) over its home map's
     /// dialog state, its follow standing stays the session party's, and after the conversation it stands where it stood.
     /// </summary>
     private void TalkToAreaMapVisitor(AreaCompanion companion)
@@ -234,12 +234,12 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_MAP_VISITOR_TALK_FAILED");
         }
         var cell = companion.Grid.State.CommittedCell;
-        Require(_conversationHost is not null && !_conversationHost.Speakers.Any(s => s.Row.Key == companion.Key), "the shown map's host does not hold the visitor");
-        var speaker = VisitorSpeaker(companion.Key);
+        Require(_conversationHost is not null, "the shown map has its conversation host");
+        var speaker = PresentSpeaker(companion.Key);
         Require(speaker is not null && SpeakerPresent(speaker), "the visitor is a speaker here");
         BeginConversation(speaker!);
-        Require(ConversationOpen && _talkHost is { } host && host.Map == companion.Template.Home && host.Speakers.Contains(speaker!),
-            $"the talk opened through its home-map host: open {ConversationOpen}, host map {_talkHost?.Map.RuntimeMap}, notice {_conversationNotice}");
+        Require(ConversationOpen && _conversationHost is { } host && host.Speakers.Contains(speaker!) && host.StateMap(speaker!) == companion.Template.Home,
+            $"the talk opened through the one host over its home-map state: open {ConversationOpen}, state map {_conversationHost?.StateMap(speaker!).RuntimeMap}, notice {_conversationNotice}");
         var started = _voiceStart?.Status;
         var detail = _voiceStart?.Detail;
         // The dialog script ran on its home-map slot: content, file or I/O failures are not a talk.

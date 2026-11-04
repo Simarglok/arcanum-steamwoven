@@ -22,7 +22,7 @@ public sealed class AreaCompanionLoyaltyTests
 {
     private const CompanionLoyalty ReactionMarks = CompanionLoyalty.CheckLeader | CompanionLoyalty.TestReaction;
 
-    private sealed record Fixture(AreaStepSnapshot Steps, AreaCompanionTemplate Template);
+    private sealed record Fixture(AreaStepSnapshot Steps, AreaCompanionTemplate Template, AreaSnapshot Area);
 
     private static Fixture Load()
     {
@@ -30,12 +30,12 @@ public sealed class AreaCompanionLoyaltyTests
         var area = source.Owner.LoadStrict();
         var steps = AreaOwnerFixture.Steps(area, source.Streams[new(AreaSourceRole.Module)].Bytes, 7);
         var scenery = area.Objects.Single(o => o.WorldX == AreaGridSession.ChartOriginX + 5 && o.WorldY == AreaGridSession.ChartOriginY + 1);
-        // Its dialog attachment, so a visitor host can be built over it (as AreaVisitorTalkTests does).
+        // Its dialog attachment, so the shown host can list it as a carried companion (as AreaVisitorTalkTests does).
         var scripts = new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null,
             [new AreaSparseElement(ScrPoint.Dialog, [0, 0, AreaCompanionRoster.Virgil.ScriptId])], null);
         var row = scenery with { PrototypeNumber = AreaCompanionRoster.Virgil.Prototype, EffectiveFields = [.. scenery.EffectiveFields.Where(f => f.Slot != 31), scripts] };
         var speaker = new AreaSpeaker(0, row, AreaCompanionRoster.Virgil.ScriptId, scenery.WorldX!.Value, scenery.WorldY!.Value);
-        return new(steps, AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, new(1)).Single());
+        return new(steps, AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, new(1)).Single(), area);
     }
 
     private static PartyConsentFacts? Facts(AreaCompanion companion) => AreaCompanionRoster.Facts(companion.Facts, 0, 50);
@@ -147,7 +147,8 @@ public sealed class AreaCompanionLoyaltyTests
         var f = Load();
         using var session = ConversationSessionFixture.Create();
         var entity = f.Template.Entity;
-        var host = AreaConversationHost.ForVisitor(f.Template, null, session);
+        var host = AreaVisitorTalkTests.Shown(f.Area, session);
+        host.AdmitVisitor(f.Template, out _);
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
         // Virgil's own wait index 6 has no timer; an index of 1 waits 15 minutes.
         Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, entity, AreaCompanionRoster.WaitFacts(AreaCompanionRoster.Virgil)).Disposition);

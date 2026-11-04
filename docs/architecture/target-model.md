@@ -123,7 +123,7 @@ the target elements its domain stands on.
 | MIG2 | Carried companions in the AI: the `Stranger` skip goes; the companion fights and is fought | TM3 | MIG1 | V2 |
 | MIG3 | Spell targets, hover attack, life bars, turn facts, sheet and levels through the resolver; home-map fallbacks removed | TM3 | MIG1 | V3 |
 | MIG4 | The companion's body from the resolver; `_travellers` and `AreaVisitors.Unbodied` go | TM3 | MIG1 | V4 |
-| MIG5 | One dialog host; `ForVisitor`, visitor routing and `refuseUncoveredInventory` go | TM3 | MIG1, MIG4 | V4b |
+| MIG5 | One dialog host; `ForVisitor`, visitor routing and `refuseUncoveredInventory` go | TM3 | MIG1, MIG4 | V4b; **done: ARC-DEV-081** ([contract](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)) |
 | MIG6 | Object directory, one id space, one create and one destroy path; the per-kind stores become directory queries (concept first: K13) | TM1, TM2, TM4 | GQ1, MIG1 | — |
 | MIG7 | Object state on the entry: entity-scoped map change keys and NPC positions move into the directory; statics' changes per sector | TM2, TM10 | MIG6 | — |
 | MIG8 | Script attachments on the object, inherited until first written; global and PC variables admitted | TM9 | MIG6 | — |
@@ -136,7 +136,7 @@ the target elements its domain stands on.
 | MIG15 | The remaining hosts of `tools/terrain-viewer/Core` move into the world runtime; the viewer keeps drawing and input | TM11 | GQ6; runs alongside MIG1–MIG14, closes after MIG14 | — |
 | MIG16 | Interface mode stack (concept first: K16) | TM13 | — (independent) | — |
 
-**Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)), MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)), MIG3 (ARC-DEV-076, spell targets, hover attack, life bars, turn facts, sheet and levels, event facts by identity) and MIG4 (ARC-DEV-079, the companion's body from its home map by identity; `_travellers` and `AreaVisitors.Unbodied` gone; a window home read around the stored cell `npc.home`) are done; MIG5 and MIG10 run beside them.
+**Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)), MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)), MIG3 (ARC-DEV-076, spell targets, hover attack, life bars, turn facts, sheet and levels, event facts by identity), MIG4 (ARC-DEV-079, the companion's body from its home map by identity; `_travellers` and `AreaVisitors.Unbodied` gone; a window home read around the stored cell `npc.home`) and MIG5 (ARC-DEV-081, one dialog host: a carried companion is one more speaker of the shown map's host, its state stays on its record's map; `ForVisitor`, `AreaTalkRouting`, the visitor host cache and `refuseUncoveredInventory` gone) and MIG10 (ARC-DEV-073, transfer parity) are done.
 The open player bugs, the slices expected to change them and the smoke re-checks to run after each slice are in the
 [open bugs and smoke plan](../research/open-bugs-migration-smoke-plan.md) (ARC-RES-089).
 

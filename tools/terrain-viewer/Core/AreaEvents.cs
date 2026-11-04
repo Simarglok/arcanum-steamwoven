@@ -200,15 +200,15 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     private readonly Func<ISessionAiWorld?>? _ai;
     private readonly Func<ISessionCombatWorld?>? _round;
 
-    /// <param name="callHost">ARC-WORLD-048: the host of a call's attachee when it is not the map's own (a companion visiting the
-    /// shown map talks and runs its calls through its own host); null or a null answer: <paramref name="talk"/>.</param>
+    /// <param name="prepareCall">ARC-DEV-081 (MIG5): runs before a deferred call does, so the host lists the call's attachee when it is a
+    /// companion carried to the shown map (<see cref="AreaConversationHost.AdmitVisitor"/>); the call runs through <paramref name="talk"/>.</param>
     /// <param name="lootShowsContainer">ARC-WORLD-063: whether the viewer's loot window shows a container (a junk pile); an item's
     /// decay then waits a minute (ledger ID3, ID6). Null: never.</param>
     /// <param name="ai">ARC-WORLD-092: the shown map's AI host, which an AI tick of the pass runs through; null or a null answer: no AI
     /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
     /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
     /// <param name="restock">ARC-WORLD-096: the restock host of the pass's session; null or a null answer: a restock event waits.</param>
-    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Func<SessionScriptCall, AreaConversationHost?>? callHost = null,
+    public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Action<SessionScriptCall>? prepareCall = null,
         Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null,
         Func<AreaRestockHost?>? restock = null)
     {
@@ -217,7 +217,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         _round = round;
         _combat = combat ?? throw new ArgumentNullException(nameof(combat));
         _talk = talk ?? throw new ArgumentNullException(nameof(talk));
-        _callHost = callHost;
+        _prepareCall = prepareCall;
         _lootShowsContainer = lootShowsContainer;
     }
 
@@ -241,7 +241,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
     public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(npc));
 
-    private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
+    private readonly Action<SessionScriptCall>? _prepareCall;
 
     /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
     public string? LastCallRefusal { get; private set; }
@@ -263,7 +263,8 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public bool RunScriptCall(SessionScriptCall call)
     {
         ArgumentNullException.ThrowIfNull(call);
-        if ((_callHost?.Invoke(call) ?? _talk()) is not { } host) { Refuse("no script host on this map"); return false; }
+        _prepareCall?.Invoke(call);
+        if (_talk() is not { } host) { Refuse("no script host on this map"); return false; }
         var ran = host.RunCall(call, out var detail);
         if (!ran) Refuse(detail);
         return ran;
