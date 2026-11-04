@@ -155,6 +155,7 @@ when the cost is at most its action points left or its current fatigue is above
 | attack, no sound (0x434AE0) | through 0x434B00 | as above | used by a PC victim's attack back (0x4A9AD0) |
 | flee (0x434980) | 25 [ag_flee] | 0 | the source stored; then run flag 0x400 (0x436CB0) |
 | back off from (0x434A30) | 85 [ag_back_off_from] | 0 | no caller and no pointer in the executable: dead (EX13) |
+| skill conceal (0x436370) | 35 | — | a second dead starter ([GS32](../architecture/original-goals.md#6-who-starts-goals), added by ARC-RES-086) |
 | throw (0x434F80) | 37 [ag_throw_item] | 0 | the item and the target's tile stored |
 | follow (0x4346A0) | 24 [ag_follow] | 0 | [section 5](#5-following) |
 

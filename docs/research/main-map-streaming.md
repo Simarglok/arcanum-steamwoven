@@ -86,7 +86,7 @@ cache needs the room.
 
 | Data | When | Scope |
 | --- | --- | --- |
-| Mobile objects (critters, items, portals, containers…) | map open, from the map's mobile file and the save ([MP1](ledger/data.md#map-patch-arc-data-028)) | whole map; a sector only lists those standing in it (SS7) |
+| Mobile objects (critters, items, containers…; portals are static unless dynamic, [PS20, PS24](../architecture/original-persistence.md#3-per-map-state-the-files-of-a-map), corrected by ARC-RES-086) | map open, from the map's mobile file and the save ([MP1](ledger/data.md#map-patch-arc-data-028)) | whole map; a sector only lists those standing in it (SS7) |
 | `Rules\map.patch` | map open, after the mobiles ([MP1](ledger/data.md#map-patch-arc-data-028)) | whole map, mobile objects only |
 | Sector lights, light scheme word | sector load | per sector, moved for templates |
 | Map default light scheme | map open (`mapinfo.txt`, [area lighting](../rendering/area-lighting.md)) | whole map |
