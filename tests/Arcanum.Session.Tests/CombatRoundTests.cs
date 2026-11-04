@@ -612,6 +612,22 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
+    public void GR19AnOriginalRebuildThatReadsAsTheSavedRoundStillTakesARevision()
+    {
+        // Saved at the first subturn of round 1, the same square at the load: only the started subturn differs.
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        using var loaded = Loaded(GameSessionSnapshotCodec.Encode(owner.Capture()), RuleMode.Original);
+        Round(loaded, 1, Wolf, 7, Wolf, Bandit, Hero);
+        var revision = loaded.Version.Revision;
+        var resumed = Ok(loaded.ResumeLoadedCombatRound(loaded.Version, world), loaded);
+        CollectionAssert.AreEqual(new[] { Began(1), Started(Wolf, 7) }, resumed.Events.ToArray());
+        Round(loaded, 1, Wolf, 7, Wolf, Bandit, Hero);
+        Assert.AreEqual((revision + 1, 2L), (loaded.Version.Revision, loaded.QueryCombatSubturnStarts()), "the saved subturn starts moved");
+    }
+
+    [TestMethod]
     public void GR19SteamwovenResumesALoadedRoundExactly()
     {
         var text = SavedRoundTwo();

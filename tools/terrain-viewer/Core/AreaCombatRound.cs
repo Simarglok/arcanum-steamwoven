@@ -279,6 +279,12 @@ public static class AreaTurnBased
         ArgumentNullException.ThrowIfNull(world);
         events = [];
         if (owner.QueryCombatRound() is null || owner.QueryHero() is null) return AreaHeroCharge.Free;
+        // GR19 (ARC-DEV-078): a loaded round takes its load rule before the charge can commit (and so keep it as loaded).
+        var resumed = owner.ResumeLoadedCombatRound(owner.Version, world);
+        if (resumed.Disposition == GameSessionDisposition.Rejected) return AreaHeroCharge.Failed;
+        var before = resumed.Events;
+        events = before;
+        if (owner.QueryCombatRound() is null) return AreaHeroCharge.Free;
         switch (owner.QueryCombatActionGate(SessionCombatant.Hero, cost))
         {
             case SessionCombatGate.NotTheirTurn: return AreaHeroCharge.NotTheirTurn;
@@ -286,7 +292,7 @@ public static class AreaTurnBased
         }
         var result = owner.ConsumeActionPoints(owner.Version, SessionCombatant.Hero, cost, world);
         if (result.Disposition == GameSessionDisposition.Rejected) return AreaHeroCharge.Failed;
-        events = result.Events;
+        events = [.. before, .. result.Events];
         return result.Charge switch
         {
             SessionActionPointUse.Paid => AreaHeroCharge.Paid,

@@ -128,12 +128,16 @@ ended the mode again. By the owner's answer "GR19 A" (2026-11-04, [gap review](.
 - **Original** (`RoundRebuiltOnLoad`): a new round 1 over the scan (no merge with the saved list, no clock step), then the
   saved actor's subturn with its saved action points when the rebuilt order holds it. Events: `RoundBegan` 1 and one
   `SubturnStarted` for the participant whose subturn runs (the head's start the saved actor replaces is not reported: the
-  original's load runs no turn-set hook for it).
+  original's load runs no turn-set hook for it). The started subturn takes a revision even when the rebuilt round reads as
+  the saved one (its subturn starts moved).
 - **Both settings load where the original's load fails** (a technical bug, owner rule 2026-10-28): a rebuilt order without
-  the saved actor goes on from its head, that participant's subturn with its own action points; a rebuild in which nobody
-  can act and the hero is inactive ends the round (`RoundEnded`).
-- The viewer's round frame (`AreaTurnBased.Step`) calls it first; a resume that reports events ends the frame, as a new
-  round does.
+  the saved actor goes on from its head, the first participant that may act (else the active hero), with its own action
+  points, as a new round begins; a rebuild in which nobody can act and the hero is inactive ends the round (`RoundEnded`).
+- The viewer applies it before it hands the round's world to any other session call: every frame before the world steps
+  (`ResumeLoadedRound`, which also interrupts the hero's walk for a rebuilt round), before the E key, a healing item, a
+  pickpocket, a lock pick and a cast start, in every hero charge (`AreaTurnBased.ChargeHero`, whose events then start with
+  the rebuild's) and first in the round frame (`AreaTurnBased.Step`, where a resume that reports events ends the frame, as
+  a new round does).
 
 ## Tests
 
@@ -149,7 +153,7 @@ ended the mode again. By the owner's answer "GR19 A" (2026-11-04, [gap review](.
   Original rebuild with the saved actor, Steamwoven's exact resume, the mode read at the resume, a missing saved actor, a
   rebuild in which nobody can act, a round call or a refused resume before it.
 - `Arcanum.Session.Tests/SnapshotUpgradeTests`: a schema 58 round upgraded with no subturn starts.
-- `Arcanum.TerrainViewer.Tests/AreaCombatRoundTests`: a loaded round's first frame in both settings.
+- `Arcanum.TerrainViewer.Tests/AreaCombatRoundTests`: a loaded round's first frame and a hero charge before it, in both settings.
 
 ## Viewer host (ARC-COMBAT-020)
 

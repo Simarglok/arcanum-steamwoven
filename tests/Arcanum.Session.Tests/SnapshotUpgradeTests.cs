@@ -65,6 +65,10 @@ public sealed class SnapshotUpgradeTests
         var upgraded = Decode(older);
         Assert.AreEqual(0, upgraded.Combat!.SubturnStarts);
         Assert.AreEqual(text.Replace(",\"subturnStarts\":1}", ",\"subturnStarts\":0}"), GameSessionSnapshotCodec.Encode(upgraded));
+        // A schema 56 save with a round goes through every step to the same round.
+        StringAssert.Contains(older, ",\"npcWorn\":[],\"bloodPools\":[]}");
+        var oldest = older.Replace("\"schemaVersion\":58,\"world\"", "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[],\"bloodPools\":[]}", "}");
+        Assert.AreEqual(GameSessionSnapshotCodec.Encode(upgraded), GameSessionSnapshotCodec.Encode(Decode(oldest)));
         using var restored = Restore(upgraded);
         Assert.AreEqual((hero, 9, 0L), (restored.QueryCombatRound()!.Actor, restored.QueryCombatRound()!.ActionPoints, restored.QueryCombatSubturnStarts()));
         // A schema 58 round that already carries the field is refused.

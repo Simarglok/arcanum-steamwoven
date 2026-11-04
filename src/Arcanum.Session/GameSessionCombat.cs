@@ -198,7 +198,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-WORLD-095: how many subturns started in this session (each <see cref="SessionCombatEventKind.SubturnStarted"/> a committed
     /// step listed, so A9's repeated start counts twice). A host compares it with the count it last saw to learn that a new subturn
-    /// began, whichever call began it. Not saved: a restored session counts from 0.
+    /// began, whichever call began it. Saved with a round (GR19, ARC-DEV-078, schema 59); a session restored without a round counts from 0.
     /// </summary>
     public long QueryCombatSubturnStarts() { ThrowIfDisposed(); return _combat.SubturnStarts; }
 
@@ -284,7 +284,8 @@ public sealed partial class GameSessionOwner
     /// subturn starts (NoChange). The Original setting restarts as the original's load does (PS13, TL35): a new round 1 over the
     /// square around the hero, the order rebuilt from the scan (the saved order is not used), and the saved actor's subturn
     /// with its saved action points when the rebuilt order holds it. Where the original's load fails, both settings load: a
-    /// rebuilt order without the saved actor goes on from its head (that participant's subturn with its own action points), and
+    /// rebuilt order without the saved actor goes on from its head, the first participant that may act (else the active hero),
+    /// with its own action points, as a new round begins, and
     /// a rebuild in which nobody can act and the hero is inactive ends the round. The events are the round's begin and the
     /// one subturn that runs (the head's start the saved actor replaces is not reported: the original's load runs no
     /// turn-set hook for it). NoChange without a loaded round; a refused call keeps it pending.
@@ -443,6 +444,7 @@ public sealed partial class GameSessionOwner
         var actor = round.Actor;
         round.Participants = [.. TurnBasedRules.Order([.. round.Participants, combatant], InPcParty)];
         round.Current = round.Participants.IndexOf(actor);
+        _combat.LoadedRoundPending = false;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, [], Version);
     }
@@ -491,7 +493,10 @@ public sealed partial class GameSessionOwner
     // All refusals precede this; the clock was checked, so the advance cannot fail.
     private SessionCombatResult CommitCombat(CombatPlan plan, bool revisionTaken)
     {
-        var changed = !(plan.Round is null ? _combat.Round is null : plan.Round.SameAs(_combat.Round));
+        // A started subturn changes the saved subturn starts even when the round itself reads the same (GR19: an Original rebuild
+        // of a round saved at its head's fresh subturn).
+        var starts = plan.Events.Count(e => e.Kind == SessionCombatEventKind.SubturnStarted);
+        var changed = starts > 0 || !(plan.Round is null ? _combat.Round is null : plan.Round.SameAs(_combat.Round));
         if (changed && !revisionTaken && _revision == long.MaxValue) return RejectCombat(GameSessionFailure.RevisionExhausted);
         if (plan.AdvancesClock)
         {
@@ -501,7 +506,7 @@ public sealed partial class GameSessionOwner
         _combat.Round = plan.Round;
         _combat.Stall = plan.Stall;
         _combat.LoadedRoundPending = false;
-        _combat.SubturnStarts += plan.Events.Count(e => e.Kind == SessionCombatEventKind.SubturnStarted);
+        _combat.SubturnStarts += starts;
         if (changed && !revisionTaken) Revise();
         var disposition = changed || revisionTaken || plan.AdvancesClock ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange;
         return new(disposition, GameSessionFailure.None, plan.Events.ToArray(), Version);
