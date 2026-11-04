@@ -154,6 +154,44 @@ public sealed class AreaInventoryTests
     }
     private static List<AreaObjectRecord> With(int position, AreaObjectRecord row) { var world = World(); world[position] = row; return world; }
 
+    // ARC-DEV-085 (MIG6b): an item flagged as held that no holder of the area lists is no longer a refusal (B02, the town window): it is a
+    // detached item, out of the view's items, and the view stays buildable.
+    [TestMethod]
+    public void A_held_item_no_holder_lists_is_detached_not_refused()
+    {
+        var world = World();
+        // Parent null, a parent in the area whose list does not hold it, a parent outside the area, and a key ring (its contents are not read).
+        world[5] = Item(30, 5, Food, null, 3608, flags: Inventory, location: 1004);
+        world.Add(Item(31, 21, Armor, 1, 2805, flags: Inventory, location: 1004));
+        world.Add(Item(32, 22, Generic, 77, 2806, flags: Inventory));
+        world.Add(Item(33, 23, KeyRing, 1, 2807, flags: Inventory, extra: [new AreaFieldValue(60, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(0, Words(2))], null)]));
+        var inventory = Read(world);
+
+        CollectionAssert.AreEqual(new[] { 11, 12, 13 }, inventory.Items.Select(i => i.SourceIndex).ToArray(), "the detached items are neither listed nor on the ground");
+        CollectionAssert.AreEqual(new[] { 30, 31, 32, 33 }, inventory.Detached.Select(i => i.SourceIndex).ToArray());
+        Assert.IsFalse(inventory.TryGetItem(31, out _));
+        Assert.AreEqual((AreaItemType.Food, 9030, 1004), (inventory.Detached[0].Type, inventory.Detached[0].Prototype, inventory.Detached[0].InventoryLocation));
+        Assert.IsNull(inventory.Detached[0].Parent);
+        Assert.AreEqual(new AreaInventoryHandle(Id(1), 10), inventory.Detached[1].Parent, "its parent is in the area, and its list does not hold it");
+        Assert.AreEqual(new AreaInventoryHandle(Id(77), null), inventory.Detached[2].Parent, "a parent outside the area keeps its identity without an index");
+        Assert.AreEqual(Id(23), inventory.Detached[3].Key.ObjectIdSha256);
+        CollectionAssert.AreEqual(new[] { 11, 13, 12 }, inventory.ListOf(10).Select(i => i.SourceIndex).ToArray(), "the parent's own list is unchanged");
+    }
+
+    [TestMethod]
+    public void A_detached_item_still_needs_its_inventory_location_field()
+    {
+        var world = World();
+        world.Add(Item(31, 21, Armor, 1, 2805, flags: Inventory, extra: [Null(43)]));
+        Refused(AreaInventoryFailure.FieldUnresolved, 31, world);
+    }
+
+    [TestMethod]
+    public void A_clean_area_has_no_detached_items()
+    {
+        Assert.AreEqual(0, Read(World()).Detached.Count);
+    }
+
     [TestMethod]
     public void List_graph_violations_are_typed_refusals()
     {
@@ -166,7 +204,6 @@ public sealed class AreaInventoryTests
         Refused(AreaInventoryFailure.ParentMismatch, 11, With(1, Item(11, 2, Armor, 9, 2804)));
         Refused(AreaInventoryFailure.ParentMismatch, 11, With(1, Item(11, 2, Armor, null, 2804, flags: Inventory)));
         Refused(AreaInventoryFailure.InventoryFlagMismatch, 11, With(1, Item(11, 2, Armor, 1, 2804, flags: 0)));
-        Refused(AreaInventoryFailure.UnlistedInventoryItem, 30, With(5, Item(30, 5, Food, null, 3608, flags: Inventory)));
         Refused(AreaInventoryFailure.GroundItemParented, 30, With(5, Item(30, 5, Food, 1, 3608, flags: 0)));
         Refused(AreaInventoryFailure.GroundItemUnlocated, 30, With(5, Item(30, 5, Food, null, 3608, x: null)));
         // A list element padding byte differs: a different raw ID, so it names no record. The control
