@@ -34,10 +34,14 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 - **Steamwoven side:** `origin/main` cee56c3 (after #596), read in the code and the component
   contracts; each "why" names the work item that built or left the part.
 - **Rule for the recommendations:** the owner's rule on bugs of the original (2026-10-28,
-  [rule modes](../world/rule-modes.md#what-is-a-mode-difference)): a technical bug (a lost state, a
-  leak, a crash, a value read and overwritten) is fixed in both modes with no switch; a gameplay
-  bug or an owner-recorded improvement keeps the original behind the Original setting and changes
-  Steamwoven; an original rule that is neither follows the original in both modes.
+  [rule modes](../world/rule-modes.md#what-is-a-mode-difference)) in its own words: "a technical bug
+  of the original, a leaked slot, a dead hotkey, a crash, a hang and the like, which a player cannot
+  read as a rule of the game, is fixed in both modes without a switch"; "a gameplay bug, behaviour
+  that raises logical questions or assumptions for a player, keeps the original behaviour behind an
+  Original switch and is fixed in Steamwoven". An owner-recorded improvement is treated as a gameplay
+  change (the registry's row for OQ2); an original rule that is neither follows the original in both
+  modes. Each recommendation below names the test it passes: whether a player can read the behaviour
+  as a rule.
 - **Already decided:** where a row has a migration slice (MIG) or an owner decision (GQ), the
   recommendation keeps it unless the audit contradicts it, and the options say what changing it
   would mean.
@@ -46,19 +50,24 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 
 - **The register holds for 21 of 25 rows.** Four rows describe Steamwoven wrongly or incompletely
   and are corrected in place in this PR: GR12 (companions already run tile scripts, ARC-SCRIPT-046;
-  wading comes from the map data for every critter, the hero included), GR13 (the heartbeat points
+  wading is drawn from a map body's T0 flag and the hero never wades), GR13 (the heartbeat points
   10 and 19 run since ARC-WORLD-114; the far branch is in the rules, only "sector not loaded" is
   never answered), GR30 (a busted container already spills like the original; the gap is the
   generic destroy) and GR31 (the merchant's substitute container is modelled as a viewer lookup).
-- **Two intended differences need an owner word they do not have.** GI6 (the saved random
-  generator) is visible to a player, since a reload no longer rerolls, and has neither an owner
-  decision nor an Original switch, unlike GI4, its sibling. GI4 (saved AI ticks) meets the fold's
-  first tick of GQ2 A at a load, which no document reconciles yet; MIG9 has to.
-- **One new intended difference is proposed:** GR19's turn-based round resumed as saved (the
-  original's restart reads the saved round counter and overwrites it, a technical slip).
+- **One intended difference needs an owner word it does not have, one needs reconciling.** GI6 (the
+  saved random generator) is visible to a player, since a reload no longer rerolls, and has neither
+  an owner decision nor an Original switch, unlike GI4, its sibling. GI4 (saved AI ticks, OQ2) meets
+  the fold's first tick of GQ2 A at a load, which also runs the first heartbeat and the waypoint
+  return; no document reconciles the two yet, and K1 (MIG9) has to.
+- **GR19 is split:** the original's load that fails when the rebuilt round order lacks the current
+  turn is a technical bug (both modes fixed); the rebuilt order and the round shown as 1 are
+  visible, so they stay behind the Original switch and Steamwoven resumes the saved round.
 - **No GQ decision is contradicted by the audit.** Two get a condition: GQ8 B builds an Original
   branch on an inferred consequence (PS34), which D9 must confirm before it is built; GQ7 A keeps a
   link the original forgets, with one small visible case (below).
+- **Sources outside the repository:** task codes in work or reserved (ARC-DEV-068, ARC-DEV-073,
+  ARC-SCRIPT-051) and the alpha items N12 and N16 (the alpha gap list approved on 2026-10-27) come
+  from the coordinator's project notes, not from git.
 - **The answer list** is at the [end](#answer-list): one line per row, the recommendation first.
 
 ## 1. Narrow gaps
@@ -67,18 +76,19 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 
 - **Steamwoven, why:** the hero's tile and sector scripts run since ARC-SCRIPT-017 (ledger TS2),
   a main-map window's template sectors since ARC-WORLD-081 (PG9); a following companion of the
-  shown map runs the tile scripts of the tiles it steps into since ARC-SCRIPT-046 (ledger TR3,
-  `TerrainViewerCompanions.RunCompanionTileScripts`). NPCs moved by the AI host's movers, visitors
+  shown map runs the tile scripts of the tiles it steps into since ARC-SCRIPT-046 (the tile-script row TR3 of the
+  [world ledger](../research/ledger/world.md), `TerrainViewerCompanions.RunCompanionTileScripts`). NPCs moved by the AI host's movers, visitors
   from another map, jumps, teleport arrivals and created critters run none: that is slice 3 of the
   [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised), not started;
   point 27 (new sector) for followers is its slice 9 (Virgil's 1568), not started. Wading
-  (OF_WADING) is drawn from the flag as the map data holds it (`AreaScenePlan`, ARC-RENDER-018); no
-  relocation recomputes it, for the hero either.
+  (OF_WADING) is drawn from a map body's T0 flag (`AreaScenePlan`, ARC-RENDER-018: NPCs, scenery and
+  containers); the hero is drawn as its marker and never wades; no relocation sets the flag.
 - **Original:** every relocation in modes 1 and 2 runs the wading test (which loads an absent
   sector), a PC or NPC runs the tile's scripts, the local PC's sector change runs the sector script
   and point 27 for each follower (RL5, RL6, RL18).
 - **Record:** corrected (companions, wading).
-- **Recommendation:** an original rule, not a bug: follow it in both modes. Build the notification
+- **Recommendation:** an original rule a player reads (an NPC steps on a trap or a story tile), not a
+  bug: follow it in both modes. Build the notification
   once as TM5's relocation hook in MIG9, so every mover (AI host, follower, teleport, create)
   passes it; slices 3 and 9 of the script audit then only widen the admitted commands.
 - **Options:** **A (recommended)** in MIG9 as TM5's hook, both modes. **B** script audit slice 3
@@ -143,13 +153,15 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
   is read, then overwritten), restores the action points, and fails the whole load when the
   current turn object is not in the rebuilt order (PS13, F2 for the reset, F1 for the failures).
 - **Record:** accurate.
-- **Recommendation:** the restart is a consequence of not saving the order, and its visible results
-  (round 1 again, a load that fails) are technical slips: resume the saved round in both modes, save
-  the subturn count too, and record it as an intended difference GI9 (technical bug rule). The order
-  rebuild is not a rule a player relies on.
-- **Options:** **A (recommended)** exact resume in both modes, new GI9, the subturn saved. **B** a
-  switch: Original rebuilds the order and shows round 1, Steamwoven resumes. **C** the original's
-  rebuild in both modes.
+- **Recommendation:** split by the rule's test. A load that fails because the rebuilt order lacks the
+  current turn object is a crash-like failure no player reads as a rule: technical, both modes load
+  (Original keeps the rebuilt order and goes on from its head). The rebuilt order (who acts next can
+  change after a reload) and the counter shown as 1 again are visible: a gameplay difference, so the
+  Original setting rebuilds and Steamwoven resumes the saved round, with the subturn count saved too
+  (a switch, as for owner improvements).
+- **Options:** **A (recommended)** a switch: Original rebuilds and shows round 1, Steamwoven resumes;
+  the load failure fixed in both. **B** exact resume in both modes (a new intended difference GI9).
+  **C** the original's rebuild in both modes, the load failure fixed.
 
 ### GR23 Sleep and random encounters
 
@@ -189,8 +201,10 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
   guard, so a nested run on the same slot survives only when the outer run changed nothing; the
   dialog action commits flags and counters mid-run (SA8–SA11).
 - **Record:** accurate.
-- **Recommendation:** the lost inner write is a lost state, a technical bug: in both modes the outer
-  run writes back only what it changed, so the inner run's changes survive. The mid-run commit of the dialog action is a rule a talk can depend on: follow it in both
+- **Recommendation:** the lost inner write is a lost value inside one script's own flags, which no
+  player can read as a rule (the outcome depends only on whether the outer run wrote anything): a
+  technical bug, so in both modes the outer run writes back only what it changed and the inner run's
+  changes survive. The mid-run commit of the dialog action is a rule a talk can depend on: follow it in both
   modes. D8 first counts whether any installed script nests on its own slot; if none, today's
   semantics are equal and only the commit is built.
 - **Options:** **A (recommended)** D8: count, keep both writes in both modes, follow the mid-run
@@ -213,9 +227,11 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 
 ### GR30 Destroy: a holder's items and links to the destroyed
 
-- **Steamwoven, why:** a container broken by an attack spills every item onto its cell through the
+- **Steamwoven, why:** a container broken by an attack spills its items onto its cell through the
   drop path with junk piles and decay (ARC-COMBAT-008, ARC-WORLD-063), as the original's bust branch
-  does (ledger OD13): that part is exact. The generic destroy (a script's destroy, 68, since
+  does (ledger OD13), except one open row of the [object damage](../world/object-damage-runtime.md)
+  contract: a never-opened container spills its T0 items, where the original first generates its
+  inventory from its inventory source (the session holds no sources). The generic destroy (a script's destroy, 68, since
   ARC-SCRIPT-052) records `obj.destroyed` for an NPC of the shown map and has no item step; each store
   removes its own records; no shared destroy path (H2).
 - **Original:** destroy (0x43CCA0) runs point 2 first (it may refuse); a destroyed container or critter
@@ -223,10 +239,11 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
   stays in the destroyed holder's list (what becomes of it at the save is an inference, OM18, F1);
   links from elsewhere stay valid handles to a flagged object until the map is cleared, and consumers
   test the flag (OM17, OM18, OM29).
-- **Record:** corrected (the bust path is exact; the gap is the generic destroy).
+- **Record:** corrected (the bust path is exact but for the generation; the gap is the generic destroy).
 - **Recommendation:** dropping invulnerable items is an original rule that keeps quest items alive:
   both modes. The other items vanish with their holder in both modes, written as gone rather than kept
-  in a dead list (the original's leftover list is a technical leak). Links: identities stay and
+  in a dead list. This part rests on OM18 at F1 and on an inference (what the save does with the
+  leftover list was not read); the destroy sweep reads it before building it. Links: identities stay and
   consumers test "destroyed", as the original's handles do. All of it is TM4's destroy (MIG6).
 - **Options:** **A (recommended)** in TM4's destroy (MIG6), both modes. **B** add the invulnerable drop
   now to the script destroy (narrow, D3), moved by MIG6. **C** leave it.
@@ -264,11 +281,11 @@ All five were answered on 2026-11-04 ("Везде по рекомендации"
 
 | Row | Decision | Why Steamwoven is as it is | Check after the audit | Options |
 | --- | --- | --- | --- | --- |
-| GR6 No prototype fallback at read time | GQ1 A (hybrid directory; GR6 stays open) | Map rows are immutable copies and created objects store their record (D1, D2) | R6 found no script that changes a prototype in play, so the fallback is invisible; holds | **A (recommended)** keep GQ1 A. **B** GQ1 B, the full field table (MIG6 and MIG7 become one larger slice) |
+| GR6 No prototype fallback at read time | GQ1 A (hybrid directory; GR6 stays open) | Map rows are immutable copies and created objects store their record (D1, D2) | R6 found no script that changes a prototype in play, so the fallback is invisible; holds | **A (recommended)** keep GQ1 A. **B** GQ1 B, the full field table (MIG6 and MIG7 become one larger slice). **C** GQ1 C, only the record resolver (GR3–GR7 stay open) |
 | GR22 Pause with any modal window | GQ3 B (Original pauses with the Esc menu only; Steamwoven with every modal window) | The session clock stands while a dialog, the palette or the inventory is open (`WorldModal`, [event queue](../world/game-event-queue-runtime.md)) | TL23: the Esc menu is the one raiser of the pause counter; the comfort pause is an improvement, so a switch fits the rule; holds | **A (recommended)** keep GQ3 B. **B** GQ3 A, the original in both modes. **C** GQ3 C, every window pauses in both |
 | GR34 No named command boundary | GQ5 A (a thin typed request boundary) | Viewer hosts call the session owner directly (SA31) | Not a difference a player sees; holds | **A (recommended)** keep GQ5 A. **B** GQ5 B, direct calls until the network lane |
-| GR36 A link to an object on another map | GQ7 A (identity kept in both modes) | Domain references are identities and survive moves (ARC-RES-076) | The one visible case: an NPC that stays keeps a companion who left in its enemy list or as its last hitter and can resume the fight on return, where the original forgets it (the move itself clears the mover's own links, FM6, in both). Reactions, which drive most hostility, are separate state. Small; holds | **A (recommended)** keep GQ7 A. **B** GQ7 B, a switch (Original nulls) |
-| GR37 The turn-based setting in a save | GQ8 B (Original loads in the saved mode; Steamwoven keeps the player's setting) | Settings live outside saves (FR-LIFECYCLE-004; `AreaGameOptions.TurnBased`) | The Original branch rests on an inferred consequence (PS34: the load writes the cached copy back "consequence inferred"); D9 confirms it in the oracle or the executable before building it | **A (recommended)** keep GQ8 B, with D9's confirmation first. **B** GQ8 C, never from the save (no Original branch) |
+| GR36 A link to an object on another map | GQ7 A (identity kept in both modes) | Domain references are identities and survive moves (ARC-RES-076) | The one visible case: an NPC that stays keeps a companion who left in its enemy list or as its last hitter and can resume the fight on return, where the original forgets it (the move itself clears the mover's own links, FM6, in both). Reactions, which drive most hostility, are separate state. Small; holds | **A (recommended)** keep GQ7 A. **B** GQ7 B, a switch (Original nulls). **C** GQ7 C, null in both modes |
+| GR37 The turn-based setting in a save | GQ8 B (Original loads in the saved mode; Steamwoven keeps the player's setting) | Settings live outside saves (FR-LIFECYCLE-004; `AreaGameOptions.TurnBased`) | The Original branch rests on an inferred consequence (PS34: the load writes the cached copy back "consequence inferred"); D9 confirms it in the oracle or the executable before building it | **A (recommended)** keep GQ8 B, with D9's confirmation first. **B** GQ8 A, from the save in both modes. **C** GQ8 C, never from the save (no Original branch) |
 
 ## 3. Intended differences
 
@@ -277,19 +294,19 @@ All five were answered on 2026-11-04 ("Везде по рекомендации"
 | GI1 One atomic JSON snapshot | By requirement (FR-LIFECYCLE-002, 003); write, read back, compare, replace; schema steps (ARC-UI-037) | A save folder of module blobs; a load refuses a `data.sav` version other than 25 (PS1–PS4) | Representation only; the content rules of TM8 follow the original; holds | Keep, both modes | **A (recommended)** keep. **B** keep and add a later task to import the original's saves (not planned anywhere) |
 | GI2 One event queue with a scope per event | Owner decision OQ3 | Per-map files written only around a hero's teleport (PS26, RL28) | Same carry and parking results; R3 Q5 (an NPC group sent without the hero) stays with MIG11 and K5; holds | Keep, both modes | **A (recommended)** keep. **B** per-map event files as the original (no behaviour gained) |
 | GI3 Ties fire first scheduled first | Owner decision OQ1 | Newest first outside a ping, merge order inside: a list-insert artefact (TE3) | Technical; holds | Keep, both modes, no switch | **A (recommended)** keep. **B** an Original switch for the newest-first order |
-| GI4 AI ticks are saved | Owner decision OQ2 (seeded replays); `RebuildOnLoad` gives the Original rule | Not saved; at each sector load the fold gives every living NPC an immediate tick with the "returning" flag (PS31, FM11) | **Needs reconciling:** under GQ2 A the fold gives first ticks and the 3 s re-placement at a load too; with saved ticks Steamwoven must say whether a load folds (and re-places NPCs) or restores ticks only. The same question meets MIG10's carried tick (GR14) | Keep the switch; MIG9 (K1) writes the rule. Proposal: Original rebuilds the ticks by the fold; Steamwoven restores the saved ticks and the fold gives no new ones; the fold's waypoint re-placement follows the original's history test in both modes, since it is a world rule, not a timing | **A (recommended)** as stated, written in K1. **B** drop the saved ticks and rebuild by the fold in both modes (simpler, loses exact timing after a load) |
+| GI4 AI ticks are saved | Owner decision OQ2 (seeded replays); `RebuildOnLoad` gives the Original rule | Not saved; at each sector load the fold gives every living NPC an immediate tick with the "returning" flag (PS31, FM11) | **Needs reconciling:** under GQ2 A the fold gives first ticks and the 3 s re-placement at a load too; with saved ticks Steamwoven must say whether a load folds (and re-places NPCs) or restores ticks only. The same question meets MIG10's carried tick (GR14) | Keep the switch; K1 (MIG9) writes the rule. Proposal: Original rebuilds the ticks by the fold. Steamwoven keeps each saved tick's time but the fold marks it as the NPC's first tick with the original's "returning" test, so what only the fold's first tick starts still happens at a load: the first heartbeat (point 10, run since ARC-WORLD-114) and the forced waypoint or standpoint return (RL16–RL18); only the timing is the saved one | **A (recommended)** as stated, written in K1. **B** drop the saved ticks and rebuild by the fold in both modes (simpler, loses exact timing after a load and OQ2's seeded replays across a load) |
 | GI5 Events at their own deadlines | By requirement FR-RUNTIME-001 (ARC-WORLD-039): the pump steps to each deadline, at most 64 steps a frame; a wait stays one jump, so timers fire once, late, as the original's | One ping per frame, a late event fires once and repeaters re-arm from "now" (TL20–TL22) | Only frame-level lateness differs; jumps behave as the original; holds | Keep, both modes (technical) | **A (recommended)** keep. **B** an Original switch for per-ping lateness |
-| GI6 The random generator is saved | Design of session randomness (ARC-WORLD-019), no owner decision, no switch | Not saved, seeded once from the clock; only the skill module's one pre-rolled value is saved, so the next skill roll repeats after a reload and everything else rerolls (PS14, PS32) | **Visible to a player:** after a reload the same actions give the same results in Steamwoven; in the original a reload rerolls hits, damage and every other draw, though not the next skill roll. An improvement without the owner's word and without the switch the rule asks for | Record it as an owner decision and add the Original switch: reseed at a load and keep only a saved next-skill roll | **A (recommended)** Steamwoven saves the generator, Original reseeds at load and keeps the next skill roll. **B** saved in both modes, recorded as your decision. **C** reseed in both modes (as the original) |
-| GI7 A failed transfer leaves the session on its map | Owner rule on technical bugs; FR-WORLD-016 | The payload may stop half way; effects already applied stay, the fade-in never runs (RL30) | Technical; holds | Keep, both modes | **A (recommended)** keep. **B** none sensible: the original's half move is a broken state |
+| GI6 The random generator is saved | Design of session randomness (ARC-WORLD-019), no owner decision, no switch | Not saved, seeded once from the clock; only the skill module's one pre-rolled value is saved, so the next skill roll repeats after a reload and everything else rerolls (PS14, PS32) | **Visible to a player:** after a reload the same actions give the same results in Steamwoven; in the original a reload rerolls hits, damage and every other draw, though not the next skill roll. An improvement without the owner's word and without the switch the rule asks for | Record it as an owner decision and add the Original switch: reseed at a load and keep only a saved next-skill roll | **A (recommended)** Steamwoven saves the generator, Original reseeds at load and keeps the next skill roll. **B** saved in both modes, recorded as your decision. **C** reseed in both modes (as the original; it removes what OQ2's seeded replays rely on, so OQ2 would need revisiting) |
+| GI7 A failed transfer leaves the session on its map | Owner rule on technical bugs; FR-WORLD-016 | The payload may stop half way; effects already applied stay, the fade-in never runs (RL30) | Technical; holds | Keep, both modes | **A (recommended)** keep. **B** the original's half move behind an Original switch (not advised: a broken state, a technical bug by the rule) |
 | GI8 Prototypes from the player's executable | Owner decision 2026-11-03 (ARC-RES-085; the ARC-DEV-066 line: ARC-DEV-067 done, ARC-DEV-068 in work, ARC-DEV-069 next) | The game writes the 1,423 missing prototype files on its first run (OM12) | Same result without running the original; holds | Keep | **A (recommended)** keep the DEV-066 line. **B** ask the player to run the original once (the fallback only) |
 
 ## 4. Corrections made in the register
 
 | Row | Correction |
 | --- | --- |
-| GR12 | Companions run tile scripts (ARC-SCRIPT-046); wading is read from the map data for every critter; the open part is the AI host's movers, visitors, jumps, teleports and created critters, and point 27 |
-| GR13 | Points 10 and 19 run from the AI tick (ARC-WORLD-114, ARC-SCRIPT-047, ARC-SCRIPT-049); the far branch is in the rules and never ends a heartbeat because the host answers every sector as loaded |
-| GR30 | A busted container spills as the original (ARC-COMBAT-008, OD13); the gap is the generic destroy |
+| GR12 | Companions run tile scripts (ARC-SCRIPT-046); wading is drawn from a map body's T0 flag and the hero never wades; the open part is the AI host's movers, visitors, jumps, teleports and created critters, and point 27 |
+| GR13 | Points 10 and 19 run from the AI tick (ARC-WORLD-114, ARC-SCRIPT-047, ARC-SCRIPT-049); the far branch is in the rules and never ends a heartbeat because the host answers every sector as loaded; the same correction in RL16's Steamwoven column ([object model](original-object-model.md)) |
+| GR30 | A busted container spills as the original (ARC-COMBAT-008, OD13) but for the never-opened container's generation; the gap is the generic destroy |
 | GR31 | A merchant's substitute container is a viewer lookup (ARC-WORLD-090), not a link |
 
 ## Answer list
@@ -303,7 +320,7 @@ an existing MIG step or GQ decision change nothing when answered A.
 | GR13 | Routine, generators, the heartbeat's end | MIG9, then K3 and K4 | B routine now (N12) |
 | GR14 | Transfer parity | MIG10 as running | B narrower MIG10 |
 | GR15 | Former followers go home | MIG11 | B earlier slice at map open |
-| GR19 | Turn-based round at a load | Resume in both modes, new GI9 | B switch; C original in both |
+| GR19 | Turn-based round at a load | Switch: Original rebuilds, Steamwoven resumes; load failure fixed in both | B resume in both (GI9); C original in both |
 | GR23 | Sleep and encounters | K7, K4 after MIG12 | B rest now (N16); C after alpha |
 | GR27 | Scripts start goals | D8 after MIG13 | B ARC-SCRIPT-051 now |
 | GR28 | Nested writeback | Keep both writes, follow the mid-run commit | B original overwrite; C switch |
@@ -311,18 +328,18 @@ an existing MIG step or GQ decision change nothing when answered A.
 | GR30 | Destroy of a holder | TM4 in MIG6, invulnerable items dropped | B narrow now; C leave |
 | GR31 | Summoner and other links | TM10 in MIG7, K5 | B substitute stays a lookup |
 | GR35 | Interface mode stack | MIG16 | B after alpha |
-| GR6 | Prototype fallback | Keep GQ1 A | B GQ1 B |
+| GR6 | Prototype fallback | Keep GQ1 A | B GQ1 B; C GQ1 C |
 | GR22 | Pause with windows | Keep GQ3 B | B GQ3 A; C GQ3 C |
 | GR34 | Request boundary | Keep GQ5 A | B GQ5 B |
-| GR36 | Link to an object on another map | Keep GQ7 A | B switch |
-| GR37 | Turn-based setting in a save | Keep GQ8 B, D9 confirms first | B GQ8 C |
+| GR36 | Link to an object on another map | Keep GQ7 A | B switch; C null in both |
+| GR37 | Turn-based setting in a save | Keep GQ8 B, D9 confirms first | B GQ8 A; C GQ8 C |
 | GI1 | One JSON snapshot | Keep | B add original save import later |
 | GI2 | Scoped event queue | Keep | B per-map files |
 | GI3 | FIFO ties | Keep, no switch | B Original switch |
-| GI4 | Saved AI ticks and the fold | Keep switch; K1 writes the load rule | B rebuild in both |
+| GI4 | Saved AI ticks and the fold | Keep switch; saved timing, fold's first-tick effects still run; K1 writes it | B rebuild in both |
 | GI5 | Deadline stepping | Keep | B Original switch |
 | GI6 | Saved random generator | Original reseeds at load, Steamwoven saves | B saved in both; C reseed in both |
-| GI7 | Safe failed transfer | Keep | — |
+| GI7 | Safe failed transfer | Keep | B Original switch (not advised) |
 | GI8 | Prototypes from the executable | Keep the DEV-066 line | B run the original once |
 
 ## Owner answers
