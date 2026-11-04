@@ -136,7 +136,7 @@ the target elements its domain stands on.
 | MIG15 | The remaining hosts of `tools/terrain-viewer/Core` move into the world runtime; the viewer keeps drawing and input | TM11 | GQ6; runs alongside MIG1–MIG14, closes after MIG14 | — |
 | MIG16 | Interface mode stack (concept first: K16) | TM13 | — (independent) | — |
 
-**Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)) and MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)) are done; MIG3–MIG5 and MIG10 run beside them.
+**Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)), MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)) and MIG3 (ARC-DEV-076, spell targets, hover attack, life bars, turn facts, sheet and levels, event facts by identity) are done; MIG4–MIG5 and MIG10 run beside them.
 The open player bugs, the slices expected to change them and the smoke re-checks to run after each slice are in the
 [open bugs and smoke plan](../research/open-bugs-migration-smoke-plan.md) (ARC-RES-089).
 

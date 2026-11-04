@@ -252,7 +252,7 @@ public partial class TerrainViewerApp
         if (!HeroInCombatMode) ToggleCombatMode();
         if (!HeroInCombatMode || owner.QueryCombatRound() is not null || !_gameSettings.AutoAttack || _attack is not null
             || IsAreaCompanion(projectile.Target.Key)) return;
-        AttackGoal? goal = _combatHost!.Target(owner, CurrentAreaMap, projectile.Target.Key) is { Dead: false, Build.Combat: { } combat } npc
+        AttackGoal? goal = _combatHost!.Target(owner, projectile.Target.Key) is { Dead: false, Build.Combat: { } combat } npc
             ? new(npc, combat, null)
             : projectile.Object is not null && ObjectTargets()?.Target(owner, projectile.Target.Key, AreaTrapped) is { Refusal: null } obj ? new(obj, null) : null;
         GD.Print($"ARC-COMBAT-019 boomerang-back shot={projectile.Shot.Id} reattack={goal?.Entity ?? "none"}");

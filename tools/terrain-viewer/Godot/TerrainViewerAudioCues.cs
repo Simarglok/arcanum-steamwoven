@@ -215,7 +215,7 @@ public partial class TerrainViewerApp
         } : null;
         if (outcome is not { } kind) return;
         var weapon = HeroWeaponSounds();
-        var armorRow = _areaSession is { } armorSession ? _combatHost?.WornArmor(armorSession, CurrentAreaMap, targetEntity) : null;
+        var armorRow = _areaSession is { } armorSession ? _combatHost?.WornArmor(armorSession, targetEntity) : null;
         var armor = armorRow is null ? null : ObjectSoundReader.Read(armorRow).Fields;
         var local = SessionSoundCues.LocalPc(HeroSounds());
         foreach (var placed in SoundCueRules.AttackResult(kind, weapon is null ? null : SessionSoundCues.Item(weapon), SessionSoundCues.Critter(target),

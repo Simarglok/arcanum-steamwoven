@@ -99,10 +99,10 @@ public partial class TerrainViewerApp
         CancelSpellCast("the map changed");
         ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
-            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds);
+            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
-            id => HeroItemSpells(id) ?? _combatHost!.NpcItemSpells(owner, runtimeMap, id));
+            id => HeroItemSpells(id) ?? _combatHost!.NpcItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
@@ -143,6 +143,13 @@ public partial class TerrainViewerApp
         foreach (var companion in group.Companions) placed[companion.Key] = group.WorldCell(companion.Speaker);
         return placed;
     }
+
+    // ARC-DEV-076 (MIG3): the companions carried here from another map: spell targets and party members through their home map's record.
+    private IReadOnlyList<(string Entity, AreaObjectRecord Row)> SpellVisitingCompanions() =>
+        _areaCompanions is { } group && _readyArea is { } area && group.Map.RuntimeMap == area.Snapshot.RuntimeMap
+            ? group.Companions.Where(companion => companion.Template.Home.RuntimeMap != area.Snapshot.RuntimeMap)
+                .Select(companion => (companion.Entity, companion.Speaker.Row)).ToArray()
+            : [];
 
     /// <summary>The cast host for the event pump: the shown map's, built as soon as the session holds a run (its ticks and end need
     /// the map's magic world); without runs the host already built, or none (plain passes).</summary>

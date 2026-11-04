@@ -145,12 +145,12 @@ public partial class TerrainViewerApp
     /// </summary>
     private SessionTransferFacts TransferFacts()
     {
-        var session = _areaSession; var host = _combatHost; var map = CurrentAreaMap;
+        var session = _areaSession; var host = _combatHost;
         return new SessionTransferFacts
         {
-            NoFatigue = entity => session is not null && host is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
-                && (AreaLife.Unconscious(session, host, map, entity) ?? (companion.Template.Home.RuntimeMap != map
-                    ? AreaLife.Unconscious(session, host, companion.Template.Home.RuntimeMap, entity) : null)) == true,
+            // ARC-DEV-076 (MIG3): by identity, wherever the companion stands (no home-map fallback).
+            NoFatigue = entity => session is not null && host is not null && _areaCompanions?.Companions.Any(c => c.Entity == entity) == true
+                && AreaLife.Unconscious(session, host, entity) == true,
             WaitFacts = entity => session is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
                 ? AreaCompanionRoster.WaitFacts(companion.Facts, session.QueryHeroPartySide()) : null,
         };

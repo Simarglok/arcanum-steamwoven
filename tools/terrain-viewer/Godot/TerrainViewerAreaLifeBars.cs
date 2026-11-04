@@ -29,13 +29,9 @@ public partial class TerrainViewerApp
         _heroGauges.Show(_areaSession!.QueryHeroLife() is { } life ? AreaLife.From(life) : null, inBars ? _gameBarPanel : null);
     }
 
-    /// <summary>A companion's life: its combat values on the shown map, else on its home map, or null when the host has none.</summary>
-    private AreaLife? CompanionLife(AreaCompanion companion)
-    {
-        if (_areaSession is not { } session || _combatHost is not { } host) return null;
-        return AreaLife.Of(session, host, CurrentAreaMap, companion.Entity)
-            ?? (companion.Template.Home.RuntimeMap != CurrentAreaMap ? AreaLife.Of(session, host, companion.Template.Home.RuntimeMap, companion.Entity) : null);
-    }
+    /// <summary>A companion's life by identity (ARC-DEV-076, MIG3): its combat values wherever it stands, or null when the host has none.</summary>
+    private AreaLife? CompanionLife(AreaCompanion companion) =>
+        _areaSession is { } session && _combatHost is { } host ? AreaLife.Of(session, host, companion.Entity) : null;
 
     /// <summary>The hovered object's bars: a companion's or an NPC's life with whether it follows the PC (CH8's
     /// "current/maximum"), or null for anything else (no combat values, not a critter).</summary>
@@ -44,7 +40,7 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || _combatHost is not { } host || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (_areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == key) is { } companion)
             return CompanionLife(companion) is { } life ? (life, session.QueryCompanion(companion.Entity).LedByPc) : null;
-        return host.Target(session, CurrentAreaMap, key) is { Build.Combat: not null } target && AreaLife.Of(session, host, CurrentAreaMap, target.Entity) is { } npc
+        return host.Target(session, key) is { Build.Combat: not null } target && AreaLife.Of(session, host, target.Entity) is { } npc
             ? (npc, target.Follower) : null;
     }
 

@@ -348,7 +348,7 @@ public partial class TerrainViewerApp
         {
             var speakers = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray();
             var homed = speakers.Count(entity => _combatHost?.HomeMap(entity) is not null);
-            var fielded = speakers.Count(entity => _combatHost?.HomeMap(entity) is { } home && _combatHost.Fields(home, entity) is not null);
+            var fielded = speakers.Count(entity => _combatHost?.Fields(entity) is not null);
             GD.Print($"ARC-TECHNOLOGY-006 native-smoke npc crafter SKIP (no living speaker with home-map data: speakers {speakers.Length}, " +
                 $"on a covered map {homed}, with fields {fielded}, effect rules {(_areaEffectRules is null ? "absent" : "present")})");
             return;
