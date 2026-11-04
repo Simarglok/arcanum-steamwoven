@@ -11,7 +11,7 @@ public partial class TerrainViewerApp
     // (the kill's dying animation or the fall, and the death they belong to); Load the pose drawn (the fall kept when the dying start refused to replay); StartMs the world time its
     // frames started (null: its last frame held, as for a body already lying when the map and session were first shown); EndsAtMs the
     // world time its dying goal ends and leaves its pool (null for a fall or a held body).
-    private sealed record LyingShow(int Wanted, bool Dead, long? DeathMs, AreaFallenLoad Load, long? StartMs, int DelayMs, long? EndsAtMs)
+    private sealed record LyingShow(int Wanted, bool Dead, long? DeathMs, AreaFallenLoad Load, long? StartMs, int DelayMs, long? EndsAtMs, bool FallKept = false)
     {
         public int Frames => Load.Frames.Count;
         // A clock set back before the start (a self-test restoring its time) shows the last frame, not the animation again.
@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
         if (firstSight) next = new(wanted, dead, deathMs, load, null, 0, null);
         else if (dead && shown is { Dead: false } && DyingAnimationRules.LiesFallen(shown.Load.Pose!.Animation))
         {
-            next = shown with { Wanted = wanted, Dead = true, DeathMs = deathMs, EndsAtMs = now };
+            next = shown with { Wanted = wanted, Dead = true, DeathMs = deathMs, EndsAtMs = now, FallKept = true };
             _deathAnimations[key] = AreaFallenPoses.FallDown;
         }
         else
@@ -106,10 +106,14 @@ public partial class TerrainViewerApp
         }
         Require(_lyingShows.TryGetValue((runtimeMap, npc), out var show) && show.StartMs is not null && show.EndsAtMs is not null,
             "the death started its dying animation: " + show);
+        // A death of an NPC the attacks had already knocked out (the staff's stun can do that before the killing blow) is not played (0x45D730):
+        // it keeps its fall and its dying goal ends at once (FallKept), so there are no dying frames to see; the rule is what is checked then
+        // (the goal ended, no pool before it, and the fall's last frame is kept once the fall has played, below).
+        var fallKept = show!.FallKept;
         var frames = new SortedSet<int>();
         var poolBeforeEnd = false;
         var steps = 0;
-        for (; steps < 400 && DyingPending(runtimeMap, npc, WorldMilliseconds()); steps++)
+        for (; steps < 400 && (DyingPending(runtimeMap, npc, WorldMilliseconds()) || (fallKept && show.Playing(WorldMilliseconds()))); steps++)
         {
             frames.Add(_fallenBodies[key].Frame.Frame);
             _areaSmokeTime++;
@@ -126,8 +130,9 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-RENDER-040 smoke dying npc={npc} animation={show.Load.Pose!.Animation} frames={show.Frames} delay={show.DelayMs} drawn={string.Join(",", frames)} steps={steps}");
         Require(!DyingPending(runtimeMap, npc, WorldMilliseconds()), $"the dying goal ended within {steps} world frames");
         Require(!poolBeforeEnd, "no pool of blood before the dying animation has played");
+        if (fallKept) GD.Print($"ARC-RENDER-040 smoke dying npc={npc} fall-kept (the target lay knocked out when it was killed)");
         // The killing attack's own last frames already moved the clock on: the frames drawn here are the rest of the animation.
-        Require(show.Frames <= 4 || frames.Count > 1, $"the dying animation's frames were drawn: {string.Join(",", frames)}");
+        Require(fallKept || show.Frames <= 4 || frames.Count > 1, $"the dying animation's frames were drawn: {string.Join(",", frames)}");
         Require(frames.Max == show.Frames - 1 && _fallenBodies[key].Frame.Frame == show.Frames - 1, "the last frame is kept");
     }
 }

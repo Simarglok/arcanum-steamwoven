@@ -61,15 +61,26 @@ public partial class TerrainViewerApp
             }
             foreach (var kind in new[] { AreaHoverWindowKind.Item, AreaHoverWindowKind.Container, AreaHoverWindowKind.Portal, AreaHoverWindowKind.Scenery })
             {
-                List<Vector2> points = []; AreaDrawCommand? body = null;
+                List<Vector2> points = []; AreaDrawCommand? body = null; var last = false;
+                // A body a roof covers (or that is hidden) is picked but not drawn, so it has no highlight to observe; and a body with only a few
+                // picked pixels (a thin or small one) may leave them all already full, so the candidate with the most pixels of the first six
+                // is taken (the first with at least MinPoints stops the search).
+                const int MinPoints = 16;
                 foreach (var candidate in index.Bodies.Where(c => c.Identity is { } id && index.Row(id) is var row && AreaHoverWindow.Kind(row.Type) == kind
-                    && AreaHoverWindow.Highlighted(row) && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c)).Take(6))
+                    && AreaHoverWindow.Highlighted(row) && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c) && !canvas.AreaHiddenOf(c))
+                    // An animated scenery changes frame between the two readbacks, so the still bodies come first.
+                    .OrderBy(c => _sceneryBodies.ContainsKey(c.Identity!.Value)).Take(6))
                 {
                     HoverAtForSelfTest(null);
-                    points = await PickPoints(candidate);
-                    if (points.Count > 0) { body = candidate; break; }
+                    var found = await PickPoints(candidate);
+                    last = found.Count > points.Count;
+                    if (last) { body = candidate; points = found; }
+                    if (points.Count >= MinPoints) break;
                 }
                 if (body is null) { seen.Add($"{kind}=none"); continue; }
+                // The camera is on the last candidate framed: frame the chosen one again when it is not that one.
+                if (!last) points = await PickPoints(body);
+                Require(points.Count > 0, $"{kind}: the chosen body is picked again after framing it");
                 var at = points[points.Count / 2];
                 var key = body.Identity!.Value; var row = index.Row(key);
                 // Under the pointer without the highlight first (the pointer off the window), then hovered.
@@ -79,8 +90,10 @@ public partial class TerrainViewerApp
                 HoverAtForSelfTest(at);
                 Require(HoverKeyForSelfTest == key, $"{kind}: the body is the pick");
                 using var after = await Frame();
+                // The body's frame: the index's, or for an animated scenery (ARC-RENDER-035) the frame its animation shows now.
                 Require(canvas.AreaHighlightDrawnForSelfTest is { Additive: true, Unlit: true, Alpha: 255, Multiply: false, WadeRows: 0 } drawn
-                    && drawn.Identity == key && drawn.Frame == body.Frame, $"{kind}: the highlight is the body's frame drawn additive: {canvas.AreaHighlightDrawnForSelfTest}");
+                    && drawn.Identity == key && drawn.Frame == (_sceneryBodies.TryGetValue(key, out var animated) ? animated.Frame : body.Frame),
+                    $"{kind}: the highlight is the body's frame drawn additive: {canvas.AreaHighlightDrawnForSelfTest} (body frame {body.Frame.Frame}, animated frame {(_sceneryBodies.TryGetValue(key, out var animatedShown) ? animatedShown.Frame.Frame : null)})");
                 // Additive: no pixel of the body gets darker and some get brighter (an opaque black source pixel adds nothing).
                 const float Step = 1.5f / 255;
                 var pairs = points.Select(p => (Before: before.GetPixel((int)p.X, (int)p.Y), After: after.GetPixel((int)p.X, (int)p.Y))).ToArray();
@@ -103,6 +116,10 @@ public partial class TerrainViewerApp
                     $"{kind}: leaving takes the highlight and the window away");
                 seen.Add($"{kind}={row.PrototypeNumber}:{brighter}/{pairs.Length}");
             }
+            // A window with no hoverable body of any kind (the generated wilderness has none) has nothing to observe: NONE, not a failure.
+            if (seen.All(s => s.EndsWith("=none", StringComparison.Ordinal)) && !index.Bodies.Any(c => c.Identity is { } id && AreaHoverWindow.Highlighted(index.Row(id))
+                && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c) && !canvas.AreaHiddenOf(c)))
+            { GD.Print($"ARC-UI-057 native-smoke hover-window NONE map={_readyMapName} (no hoverable object body in the window)"); return; }
             Require(seen.Any(s => !s.EndsWith("=none", StringComparison.Ordinal)), "at least one kind of object is hovered: " + string.Join(" ", seen));
             // A click-through body (OF_CLICK_THROUGH) is never the pick, so it is neither highlighted nor described (OH1).
             var through = area.Plan.Commands.FirstOrDefault(c => c.Identity is { } id && index.Contains(id) && AreaHoverIndex.ClickThrough(index.Row(id)));

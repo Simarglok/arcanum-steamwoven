@@ -206,6 +206,10 @@ public partial class TerrainViewerApp
             CheckGauges("in the bars");
             // ARC-UI-024, ARC-UI-057: hovering the follower with the bars drawn puts its portrait, name and bars in the message window's
             // object window (PA6, CH8, OH6, OH7); the floating tooltip is not shown.
+            // The other NPC's hover framed that NPC (HoverPointAsync moves the camera to its body, possibly far from the PC): the camera goes
+            // back on the PC, where the follower stands within a few cells, before the follower is looked for.
+            PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var barsPoint = ScreenPoint(companion.Speaker.Row.Key);
             Require(barsPoint is not null, "the follower is drawn on screen with the bars");
             HoverAtForSelfTest(barsPoint);

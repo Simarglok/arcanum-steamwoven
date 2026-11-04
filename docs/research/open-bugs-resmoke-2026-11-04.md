@@ -144,5 +144,10 @@ The scripting layer (`src/Arcanum.Scripting`, `ScrAdmission.cs`, `ScrInterpreter
 ## Follow-ups this result points to (not started)
 
 - **The four red smoke stages** (`life`, `hover` on town and wild, `dying` on ruins) belong to a fix task of their own; the daily full chain cannot pass until they do.
+  Result (ARC-DEV-083): all four were bugs of the smoke checks, red since the stages were added (also on cee56c3e, before the migrations): `life`
+  left the camera on another NPC, `hover` picked a body a roof covers, one with too few pixels, or an animated scenery, and counted a window
+  with no bodies (the wilderness) as a failure, `dying` assumed a target that was not knocked out first. They also hid one real regression:
+  the `town` step's carry check fails (`AREA_MAP_CARRY_FAILED`) because the companion body from home (MIG4) meets B02 on the town window; B02's fix
+  (#614) removes that failure, after which the town step meets the combat stages whose fixtures are written for the Crash Site (ARC-DEV-089).
 - **The 13 unverified rows** need the executable reading the plan already names (B08, B17, B21, B44, B45), a stage the plan already describes (SM07 for B07, SM23 for B31, B32, B36 and B41, SM19 for B46), the reporter's save and hero (B36, B40) or the prototype read (B37). B33, B34 and B35 are Present, but whether the original behaves differently is also unverified and waits for the executable.
 - **B02** is the one reproducible migration-relevant failure left in the object-model group; MIG6 is its planned slice, and the same seed refusal blocks the report's path of B01.
