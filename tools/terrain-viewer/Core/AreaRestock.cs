@@ -4,6 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using GamepadLab.Core;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

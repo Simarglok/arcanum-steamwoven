@@ -8,6 +8,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

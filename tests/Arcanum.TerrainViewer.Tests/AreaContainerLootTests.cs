@@ -10,6 +10,7 @@ using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Traps;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

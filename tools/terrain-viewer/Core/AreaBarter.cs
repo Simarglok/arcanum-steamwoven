@@ -7,6 +7,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

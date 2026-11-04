@@ -329,6 +329,21 @@ public sealed partial class GameSessionOwner : IDisposable
         return Array.AsReadOnly(_maps.TryGetValue(map, out var changes) ? Sorted(changes) : []);
     }
 
+    /// <summary>
+    /// ARC-DEV-072 (MIG1): every map that holds a change of the entity's property (the entity-scoped key), with its value, in map
+    /// order; empty when no map does. A read only: it answers "on which map was this entity's record changed" by identity, for
+    /// example the home map that names where a travelling NPC stands now.
+    /// </summary>
+    public IReadOnlyList<(SessionMapId Map, long Value)> QueryEntityChanges(string entity, string property)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(property);
+        var key = MapChangeKey.ForEntity(entity, property);
+        return Array.AsReadOnly(_maps.Where(pair => pair.Value.ContainsKey(key)).OrderBy(pair => pair.Key.RuntimeMap)
+            .Select(pair => (pair.Key, pair.Value[key])).ToArray());
+    }
+
     public GameSessionMutationResult SetMapChange(GameSessionVersion expected, SessionMapId map, MapChangeKey key, long value)
     {
         ThrowIfDisposed();

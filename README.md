@@ -23,7 +23,7 @@ percentage of the game).
   quick save and the save list. Every key: [Hotkeys](#hotkeys).
 - **Testing aids**: the [debug mode](docs/player/alpha-build.md#7-debug-mode) (teleport to any area), the in-game bug
   report (Ctrl+B) and the diagnostic palette.
-- **Headless rules** (Godot-free `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting`, `Arcanum.Session`): the
+- **Headless rules** (Godot-free `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting`, `Arcanum.Session`, `Arcanum.World`): the
   original data formats, the game session and its save snapshot, character rules, combat, magic, technology, skills,
   NPC reaction and AI, and the SCR script dispatcher. `Arcanum.Executable` interprets the player's own `Arcanum.exe`
   (an integer x86 subset), the base of building the prototypes a fresh installation lacks.

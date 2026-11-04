@@ -85,7 +85,7 @@ public static class AreaCompanionPlacement
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 
     /// <summary>ARC-WORLD-017: on the NPC's home map, the runtime map it stands on while it is elsewhere (absent = home).</summary>
-    public const string MapProperty = "npc.map";
+    public const string MapProperty = Arcanum.World.EntityHomes.AwayProperty;
 
     public static MapChangeKey MapKey(string entity) => MapChangeKey.ForEntity(entity, MapProperty);
 

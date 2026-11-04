@@ -4,6 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
 using Godot;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer;
 
