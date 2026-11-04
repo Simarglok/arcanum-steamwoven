@@ -460,9 +460,10 @@ public sealed class GameSessionSnapshot
     /// player name and portrait to <see cref="Hero"/> (ARC-UI-033); schema 57 adds the worn items of the NPCs the session dressed to
     /// <see cref="Inventory"/> (ARC-WORLD-103); schema 58 adds the pools of blood the session left to <see cref="Inventory"/>
     /// (ARC-RENDER-041); schema 59 adds the session's subturn starts to a saved <see cref="Combat"/> round (GR19, ARC-DEV-078); schema 60 adds the junk and pool
-    /// number high-water marks to <see cref="Inventory"/> (MIG6, ARC-DEV-084). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 59 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 60;
+    /// number high-water marks to <see cref="Inventory"/> (MIG6, ARC-DEV-084); schema 61 moves the junk piles, the pools of blood and the two marks out of
+    /// <see cref="Inventory"/> into the section <see cref="Objects"/> (MIG6d-3, ARC-DEV-091). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 60 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 61;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -470,12 +471,13 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
         Hero = hero; Inventory = inventory; Equipment = equipment; Durability = durability; Schematics = schematics; Effects = effects; Experience = experience; Advancement = advancement; Random = random; Life = life; Reactions = reactions; Combat = combat; CombatMode = combatMode; Concealment = concealment; Danger = danger; Events = events; Lighting = lighting; Sound = sound;
         Hotkeys = hotkeys ?? SessionHotkeyState.Empty;
+        Objects = objects ?? SessionObjectRecords.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -490,6 +492,8 @@ public sealed class GameSessionSnapshot
     /// <summary>The player character, or null for a session started without one.</summary>
     public SessionHeroState? Hero { get; }
     public SessionInventoryState Inventory { get; }
+    /// <summary>The junk piles and pools of blood the object directory records, with the high-water marks of their numbers (ARC-DEV-091, schema 61).</summary>
+    public SessionObjectRecords Objects { get; }
     /// <summary>The hero's worn items (ARC-WORLD-028).</summary>
     public SessionEquipmentState Equipment { get; }
     /// <summary>The conditions of the items the session damaged, broke or repaired, and the items it deleted (ARC-WORLD-053).</summary>

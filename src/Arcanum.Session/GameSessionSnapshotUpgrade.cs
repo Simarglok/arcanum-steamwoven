@@ -42,6 +42,21 @@ public static partial class GameSessionSnapshotCodec
             AddField(inventory, "$.inventory", "lastJunkNumber", JsonValue.Create(0L));
             AddField(inventory, "$.inventory", "lastPoolNumber", JsonValue.Create(0L));
         },
+        // MIG6d-3 (ARC-DEV-091, schema 61): the junk piles, the pools of blood and the two number marks move out of the inventory section into
+        // the new objects section, as they were saved, in the same order. A schema 60 inventory that lacks one of the four is damaged.
+        [60] = root =>
+        {
+            var inventory = Section(root, "inventory");
+            if (root.ContainsKey("objects")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.objects");
+            var objects = new JsonObject();
+            foreach (var name in new[] { "junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber" })
+            {
+                if (!inventory.TryGetPropertyValue(name, out var value)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.inventory." + name);
+                inventory.Remove(name);
+                objects.Add(name, value);
+            }
+            root.Add("objects", objects);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

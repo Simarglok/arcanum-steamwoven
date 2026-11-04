@@ -108,7 +108,7 @@ public sealed class ObjectDirectoryTests
         using var owner = Owner();
         owner.PlaceHeroItem("kit:2", There);
         owner.PlaceHeroItem("apple", There);
-        Assert.AreEqual(1, owner.Capture().Inventory.LastJunkNumber);
+        Assert.AreEqual(1, owner.Capture().Objects.LastJunkNumber);
         Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, "junk:1", "apple", Accept).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseJunkPile(owner.Version, "junk:1").Disposition);
         Assert.AreEqual(0, owner.QueryJunkPiles().Count);
@@ -117,13 +117,13 @@ public sealed class ObjectDirectoryTests
         owner.PlaceHeroItem("kit:3", Beside);
         owner.PlaceHeroItem("apple", Beside);
         Assert.AreEqual("junk:2", owner.QueryJunkPiles().Single().Entity, "the dissolved pile's number is not reused");
-        Assert.AreEqual(2, owner.Capture().Inventory.LastJunkNumber);
+        Assert.AreEqual(2, owner.Capture().Objects.LastJunkNumber);
 
         // The mark survives a save and a load.
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"lastJunkNumber\":2,\"lastPoolNumber\":0}");
         using var restored = Restore(Decode(text));
-        Assert.AreEqual(2, restored.Capture().Inventory.LastJunkNumber);
+        Assert.AreEqual(2, restored.Capture().Objects.LastJunkNumber);
     }
 
     [TestMethod]
@@ -135,11 +135,11 @@ public sealed class ObjectDirectoryTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture()).Replace(",\"lastJunkNumber\":1,", ",\"lastJunkNumber\":0,");
         StringAssert.Contains(text, ",\"lastJunkNumber\":0,");
         using var restored = Restore(Decode(text));
-        Assert.AreEqual(1, restored.Capture().Inventory.LastJunkNumber, "the older load's rule: the highest number held now");
+        Assert.AreEqual(1, restored.Capture().Objects.LastJunkNumber, "the older load's rule: the highest number held now");
         // A negative mark is no save.
         var negative = GameSessionSnapshotCodec.TryDecode(text.Replace(",\"lastJunkNumber\":0,", ",\"lastJunkNumber\":-1,"));
         Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, negative.Failure);
-        Assert.AreEqual("$.inventory.lastJunkNumber", negative.Path);
+        Assert.AreEqual("$.objects.lastJunkNumber", negative.Path);
     }
 
     // ARC-DEV-088 (MIG6d): the lists of added items are directory entries; a holder's stock is one query.

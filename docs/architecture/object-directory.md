@@ -16,7 +16,7 @@ are woven through about thirty session files, so MIG6 is cut into slices that ea
 | **MIG6a** (ARC-DEV-084) | The directory as a read model over the stores: one answer to "where is object X"; the origin of an id read from the id; junk and pool ids never reused (saved high-water marks, schema 60). | **Done** |
 | **MIG6b** (ARC-DEV-085) | The seed refusal of the town window (B02, `AreaInventory.Build` `UnlistedInventoryItem`): an item flagged as held that no holder lists no longer refuses the seed; it is a detached item, out of the items ([view](../world/area-inventory-view.md#detached-items-arc-dev-085-mig6b)). | **Done** |
 | **MIG6c** (ARC-DEV-086) | One create and one destroy path inside `Arcanum.Session`: the creators of `made:n` items, junk piles and pools of blood call `CreateMadeItem`, `CreateJunkPile` and `CreateBloodPool`; every deletion calls `DestroyObject`, which also dissolves a pile an item left (as the decay step did alone before). | **Done** |
-| MIG6d | The stores become entries: the directory holds the entry (origin, location) and the stores keep only what they alone know (kind facts, ammunition units, pile slots); snapshot sections move with a schema step each. Cut into three: **MIG6d-1** (ARC-DEV-088) the holder lists of NPCs and containers (a merchant's stock added by the session); **MIG6d-2** (ARC-DEV-090) the hero's lists, the placed items and the given records; **MIG6d-3** the junk piles and pools of blood, and the one snapshot section of entries with its schema step. | **MIG6d-1, MIG6d-2 done**; MIG6d-3 planned |
+| MIG6d | The stores become entries: the directory holds the entry (origin, location) and the stores keep only what they alone know (kind facts, ammunition units, pile slots); snapshot sections move with a schema step each. Cut into three: **MIG6d-1** (ARC-DEV-088) the holder lists of NPCs and containers (a merchant's stock added by the session); **MIG6d-2** (ARC-DEV-090) the hero's lists, the placed items and the given records; **MIG6d-3** (ARC-DEV-091) the junk piles and pools of blood as records found by entity, and the one snapshot section `objects` built from them with schema step 60 → 61. | **MIG6d-1, MIG6d-2, MIG6d-3 done** |
 | **MIG6e** (ARC-DEV-087) | Cross-map holders: an item moves from a holder of another attached map (a carried companion, whose seed is its home map's) to the hero's list; the negative `IN` of a companion carried here stops being `UnknownHolder` (the [MIG5 limit](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)). | **Done** |
 
 ## MIG6a: what is built
@@ -134,16 +134,31 @@ call sites). They are now one `HeroLists` (`GameSessionHeroLists.cs`), the only 
 - **Not done here.** The junk piles, the pools of blood, the ammunition units, the weight facts and the taken mark are still their own stores (MIG6d-3 and later), and the created items of an NPC list and the placed items still differ from map items
   in how they are saved (GR4, GR17 stay open).
 
+## MIG6d-3: what is built
+
+The junk piles and the pools of blood were two lists of `InventoryDomain` (`JunkPiles`, `BloodPools`) with two number marks, and "which pile holds this item" scanned every pile. They are now one `ObjectRecords`
+(`GameSessionObjectRecords.cs`, `InventoryDomain.Objects`), the only owner: pile and pool records found by entity, an item index so `PileOf(item)` answers in one step, the made order kept, the two high-water marks
+beside them. Changes go through `AddPile`, `ReplacePile`, `RemovePile`, `LeaveItem`, `AddPool` and `RemovePool` only, so the item index cannot drift (a pile entity or an item recorded twice is a broken invariant,
+`JUNK_PILE_TWICE`, `ITEM_PILED_TWICE`, `BLOOD_POOL_TWICE`). `CreateJunkPile`/`CreateBloodPool` (MIG6c) and `DestroyObject` are the callers; `QueryObject`, `QueryObjects` and the drop, loot and seed checks read the same records.
+
+- **Snapshot, schema 61.** One new root section `objects` (`SessionObjectRecords`, `GameSessionSnapshot.Objects`) holds `junkPiles`, `bloodPools`, `lastJunkNumber` and `lastPoolNumber`, written from `ObjectRecords.Capture()`;
+  the four fields leave the `inventory` section. The upgrade step `[60]` (`GameSessionSnapshotUpgrade.cs`) moves them as saved, in order, so every schema 56 to 60 save still loads (a save missing one of the four is
+  `MissingField $.inventory.<name>`, a schema 60 text that already has `objects` is `UnknownField $.objects`). The restore checks are unchanged: `RestoreJunkPiles` runs right after the inventory, `ImportBloodPools` and
+  `ImportObjectMarks` as before, from the new section.
+- **Tests.** `ObjectRecordsTests` (index, order, invariants), `SnapshotUpgradeTests.A_schema_60_save_decodes_as_the_current_schema` (a schema 60 text written by hand with a pile, a pool and marks above the held
+  numbers, and each damaged variant), the older schemas upgrade through 60, and the whole session suite runs on schema 61 fixtures.
+- **GR4, GR17.** GR4 is closed for the kinds the session has: items, junk piles and pools of blood have one create path, one destroy path and records found by entity. GR17 is closed for the piles and pools only, saved as one
+  section of records. **Not closed:** the made and placed items are still in the `inventory` section and the other TM4 kinds (NPCs, projectiles, summons, traps) have no store; the section of whole objects per map (TM8) is later work.
+
 ## Not ready
 
 - With the town seed `Ready` the combat and inventory stages of the map smoke run in the town window for the first time (before, the refused seed left no combat host and they
   skipped silently). Their fixtures were written for the Crash Site and failed there; ARC-DEV-089 adapted the smoke checks (no game change): the `town` step of the full chain
   passes, see [the open-bugs re-smoke](../research/open-bugs-resmoke-2026-11-04.md#follow-ups-this-result-points-to-not-started).
-- Except the lists of NPCs and containers (MIG6d-1) and the hero's lists, placed items and given records (MIG6d-2), the stores are still per kind and the directory is derived from them on each query: a consumer that wants "where is X" can ask now, but nothing else is moved
-  (MIG6d-3). A holder whose map has no seed attached (a map the run never read, or one the session refused) is still unknown; the loot of a dead NPC and a container
+- Except the lists of NPCs and containers (MIG6d-1), the hero's lists, placed items and given records (MIG6d-2) and the junk piles and pools (MIG6d-3), the stores are still per kind (the ammunition units, the weight facts and the taken mark) and the directory is derived from them on each query: a consumer that wants "where is X" can ask now, but nothing else is moved. A holder whose map has no seed attached (a map the run never read, or one the session refused) is still unknown; the loot of a dead NPC and a container
   of another map, and the barter with them, still look at the actor's map only (MIG6e moved the negative `IN` and the steal of an NPC list). Both paths are internal to the session; the public per-kind methods (`PlaceHeroItem`, `LeaveBloodPool`, `AddItemToNpc`, ...) keep their signatures and results.
 - The destroy script of point 2 (which may refuse), an NPC's leave of its leader, the drop of an invulnerable item of a destroyed holder and the spell runs that name the object
-  are not part of `DestroyObject`: it destroys items, piles and pools only (TM4's NPC, projectile, summon and trap kinds have no store in the session yet). Created items and map items still use different stores, so GR4 and GR17 stay open.
+  are not part of `DestroyObject`: it destroys items, piles and pools only (TM4's NPC, projectile, summon and trap kinds have no store in the session yet). Created items and map items still use different stores, so GR4 and GR17 are closed only for the kinds the session has (see MIG6d-3).
 - An NPC's worn items (`NpcWorn`) and an item's slot inside a holder are not part of an entry; a given kit or taken item is `NpcList` with its
   entity unchanged.
 - A queried item of a map that is not attached, and not taken or placed by the session, answers null (it is not a destroyed object); so does an item marked taken that no list holds, which no move of the session leaves.

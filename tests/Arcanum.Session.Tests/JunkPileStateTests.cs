@@ -177,7 +177,7 @@ public sealed class JunkPileStateTests
         owner.PlaceHeroItem("kit:2", There);
         owner.PlaceHeroItem("apple", There);
         var text = Text(owner);
-        const string Pile = ",\"junkPiles\":[{\"entity\":\"junk:1\",\"map\":79,\"x\":120,\"y\":210,\"items\":[{\"entity\":\"kit:2\",\"slot\":0,\"width\":1,\"height\":1},"
+        const string Pile = "\"junkPiles\":[{\"entity\":\"junk:1\",\"map\":79,\"x\":120,\"y\":210,\"items\":[{\"entity\":\"kit:2\",\"slot\":0,\"width\":1,\"height\":1},"
             + "{\"entity\":\"apple\",\"slot\":1,\"width\":2,\"height\":1}]}]";
         StringAssert.Contains(text, Pile);
         using var restored = Restore(Decode(text));
@@ -190,10 +190,10 @@ public sealed class JunkPileStateTests
             var decoded = GameSessionSnapshotCodec.TryDecode(changed);
             Assert.AreEqual((failure, path), (decoded.Failure, decoded.Path));
         }
-        Fails(text.Replace(Pile, Pile.Replace("\"width\":2", "\"width\":11")), SnapshotDecodeFailure.OutOfRange, "$.inventory.junkPiles[0].items[1].width");
-        Fails(text.Replace(Pile, Pile.Replace("\"slot\":1", "\"slot\":960")), SnapshotDecodeFailure.OutOfRange, "$.inventory.junkPiles[0].items[1].slot");
-        Fails(text.Replace(Pile, Pile.Replace("\"map\":79", "\"map\":0")), SnapshotDecodeFailure.OutOfRange, "$.inventory.junkPiles[0].map");
-        Fails(text.Replace(Pile, Pile.Replace(",\"height\":1}]", "}]")), SnapshotDecodeFailure.MissingField, "$.inventory.junkPiles[0].items[1].height");
+        Fails(text.Replace(Pile, Pile.Replace("\"width\":2", "\"width\":11")), SnapshotDecodeFailure.OutOfRange, "$.objects.junkPiles[0].items[1].width");
+        Fails(text.Replace(Pile, Pile.Replace("\"slot\":1", "\"slot\":960")), SnapshotDecodeFailure.OutOfRange, "$.objects.junkPiles[0].items[1].slot");
+        Fails(text.Replace(Pile, Pile.Replace("\"map\":79", "\"map\":0")), SnapshotDecodeFailure.OutOfRange, "$.objects.junkPiles[0].map");
+        Fails(text.Replace(Pile, Pile.Replace(",\"height\":1}]", "}]")), SnapshotDecodeFailure.MissingField, "$.objects.junkPiles[0].items[1].height");
 
         void Refused(string changed, GameSessionFailure failure) =>
             Assert.AreEqual(failure, GameSessionOwner.Restore(Decode(changed), RestoreOptions()).Failure);
@@ -202,7 +202,7 @@ public sealed class JunkPileStateTests
         Refused(text.Replace(Pile, Pile.Replace("\"slot\":1", "\"slot\":0")), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace(Pile, Pile.Replace("\"slot\":1", "\"slot\":9")), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace(Pile, Pile.Replace("junk:1", "junk:x")), GameSessionFailure.InvalidSnapshot);
-        var second = Pile[",\"junkPiles\":[".Length..^1];
+        var second = Pile["\"junkPiles\":[".Length..^1];
         Refused(text.Replace(Pile, Pile[..^1] + "," + second.Replace("kit:2", "kit:9").Replace("apple", "pear") + "]"), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace(Pile, Pile[..^1] + "," + second.Replace("junk:1", "junk:2").Replace("\"apple\",\"slot\":1", "\"pear\",\"slot\":1") + "]"), GameSessionFailure.InvalidSnapshot);
         Refused(text.Replace(Pile, Pile.Replace("\"x\":120", "\"x\":121")), GameSessionFailure.InvalidSnapshot);
