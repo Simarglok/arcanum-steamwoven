@@ -77,9 +77,36 @@ public partial class TerrainViewerApp
         if (!AttackPlaying) CancelAreaAttack("a turn-based round began");
     }
 
+    /// <summary>
+    /// GR19 (ARC-DEV-078): a round a load brought takes its load rule (Original rebuilds it as round 1, Steamwoven resumes it)
+    /// before the viewer hands the round's world to any other session call, so no commit keeps it as loaded: every frame before
+    /// the world steps, and before each input action that may charge or end a subturn (the hero's charges do it in
+    /// <see cref="AreaTurnBased.ChargeHero(GameSessionOwner, int, ISessionCombatWorld, out IReadOnlyList{SessionCombatEvent})"/>).
+    /// A rebuilt round interrupts the hero's walk and approaches as a round's start does. NoChange once the rule ran.
+    /// </summary>
+    private void ResumeLoadedRound()
+    {
+        if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession || _areaSession is not { } session) return;
+        PlaceHeroForRound();
+        var result = session.ResumeLoadedCombatRound(session.Version, AreaCombatWorldNow());
+        LogRound(result.Events);
+        if (result.Disposition == GameSessionDisposition.Rejected)
+        {
+            _turnBasedNotice = "loaded round refused: " + result.Failure;
+            GD.Print($"ARC-DEV-078 loaded-round failure={result.Failure}");
+            RefreshAreaStatus();
+            return;
+        }
+        if (result.Events.Count == 0) return;
+        GD.Print($"ARC-DEV-078 loaded-round rules={session.Rules.Name} round={session.QueryCombatRound()?.Turn} actor={session.QueryCombatRound()?.Actor}");
+        if (session.QueryCombatRound() is not null) InterruptForRound();
+        RefreshAreaStatus();
+    }
+
     /// <summary>E: the hero's own subturn ends when it runs no action (the original's E with the PC idle, ledger CT5).</summary>
     private void EndHeroSubturn()
     {
+        ResumeLoadedRound();
         var session = _areaSession!;
         if (session.QueryCombatRound() is not { } round) { _turnBasedNotice = "E: no turn-based round"; RefreshAreaStatus(); return; }
         if (!round.Actor.IsHero) { _turnBasedNotice = "E: not the hero's turn"; RefreshAreaStatus(); return; }

@@ -112,6 +112,73 @@ public sealed class AreaCombatRoundTests
     }
 
     [TestMethod]
+    public void A_loaded_round_takes_its_load_rule_in_the_first_frame()
+    {
+        // GR19 (ARC-DEV-078): a fight saved in round 2 on the wolf's subturn, after it spent 3 of its 7 action points.
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Owner();
+            var world = Fight(owner);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.StartCombatRound(owner.Version, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.EndCombatTurn(owner.Version, Wolf, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.EndCombatTurn(owner.Version, SessionCombatant.Hero, world).Disposition);
+            Assert.AreEqual((2, Wolf), (owner.QueryCombatRound()!.Turn, owner.QueryCombatRound()!.Actor));
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ConsumeActionPoints(owner.Version, Wolf, 3, world).Disposition);
+            using var loaded = Load(owner, mode);
+            var loadedWorld = Fight(loaded);
+            var step = AreaTurnBased.Step(loaded, loadedWorld, heroIdle: true);
+            var round = loaded.QueryCombatRound()!;
+            if (mode == RuleMode.Original)
+            {
+                // The rebuild is the frame: round 1, the wolf's subturn with its saved points (not a new grant); the next frame plays it.
+                Assert.AreEqual(1, step.Calls);
+                CollectionAssert.AreEqual(new[] { SessionCombatEventKind.RoundBegan, SessionCombatEventKind.SubturnStarted }, step.Events.Select(e => e.Kind).ToArray());
+                Assert.AreEqual((1, Wolf, 4), (round.Turn, round.Actor, round.ActionPoints));
+            }
+            else
+            {
+                // Resumed as saved: the wolf's subturn of round 2 passes on to the hero in the same frame.
+                CollectionAssert.AreEqual(new[] { SessionCombatEventKind.SubturnEnded, SessionCombatEventKind.SubturnStarted }, step.Events.Select(e => e.Kind).ToArray());
+                Assert.AreEqual((2, true), (round.Turn, round.Actor.IsHero));
+            }
+        }
+    }
+
+    private static GameSessionOwner Load(GameSessionOwner owner, RuleMode mode)
+    {
+        var snapshot = owner.Capture();
+        var restored = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, owner.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()),
+            owner.Limits, mode, owner.Experience, owner.Difficulty, owner.AutoLevel, null, owner.Reputations));
+        Assert.AreEqual(GameSessionFailure.None, restored.Failure);
+        return restored.Owner!;
+    }
+
+    [TestMethod]
+    public void A_hero_charge_on_a_loaded_round_takes_the_load_rule_first()
+    {
+        // GR19 (ARC-DEV-078): a charge before the round's first frame cannot keep the round as loaded.
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Owner();
+            var world = Fight(owner);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.StartCombatRound(owner.Version, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.EndCombatTurn(owner.Version, Wolf, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.EndCombatTurn(owner.Version, SessionCombatant.Hero, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.EndCombatTurn(owner.Version, Wolf, world).Disposition);
+            Assert.AreEqual((2, true), (owner.QueryCombatRound()!.Turn, owner.QueryCombatRound()!.Actor.IsHero));
+            var points = owner.QueryCombatRound()!.ActionPoints;
+            using var loaded = Load(owner, mode);
+            var charge = AreaTurnBased.ChargeHero(loaded, 2, Fight(loaded), out var events);
+            Assert.AreEqual(AreaHeroCharge.Paid, charge);
+            var round = loaded.QueryCombatRound()!;
+            Assert.AreEqual((mode == RuleMode.Original ? 1 : 2, true, points - 2), (round.Turn, round.Actor.IsHero, round.ActionPoints), mode.ToString());
+            CollectionAssert.AreEqual(mode == RuleMode.Original ? new[] { SessionCombatEventKind.RoundBegan, SessionCombatEventKind.SubturnStarted } : [],
+                events.Select(e => e.Kind).ToArray(), mode.ToString());
+            Assert.AreEqual(GameSessionDisposition.NoChange, loaded.ResumeLoadedCombatRound(loaded.Version, Fight(loaded)).Disposition, "the rule ran once");
+        }
+    }
+
+    [TestMethod]
     public void A_frame_passes_the_npcs_subturn_and_stops_at_the_heros_held_subturn()
     {
         using var owner = Owner();

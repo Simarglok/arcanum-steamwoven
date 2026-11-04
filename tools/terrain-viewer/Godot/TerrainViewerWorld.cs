@@ -503,6 +503,8 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         if (ProcessAreaTransition()) return;
+        // GR19 (ARC-DEV-078): a loaded round's load rule before anything this frame can charge or end a subturn.
+        ResumeLoadedRound();
         ProcessTalkAfterRoute();
         ProcessInventoryAfterRoute();
         ProcessPickPocketAfterRoute();

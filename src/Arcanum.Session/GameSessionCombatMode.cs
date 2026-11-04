@@ -317,7 +317,7 @@ public sealed partial class GameSessionOwner
             if (_combat.Critters.Remove(target.Entity!)) UnlockOnCombatModeExit(target.Entity!);
             return;
         }
-        if (_combat.HeroCombatMode && _combat.Round is not null) { _combat.Round = null; _combat.Stall = default; }
+        if (_combat.HeroCombatMode && _combat.Round is not null) { _combat.Round = null; _combat.Stall = default; _combat.LoadedRoundPending = false; }
         if (_combat.HeroCombatMode) _sound.StopCombatMusic(_soundSchemes);
         _combat.HeroCombatMode = false;
     }

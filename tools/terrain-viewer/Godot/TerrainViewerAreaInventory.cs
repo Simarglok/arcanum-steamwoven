@@ -304,6 +304,7 @@ public partial class TerrainViewerApp
         if (healing is null) message = "not used: not a healing item the hero holds";
         else
         {
+            ResumeLoadedRound();
             var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, charged ? null : CombatWorldOrNull());
             var life = _areaSession.QueryHeroLife()?.Record.State;
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"

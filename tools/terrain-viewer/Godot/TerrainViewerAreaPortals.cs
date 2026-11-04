@@ -145,6 +145,7 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var lockpick = _inventoryHost?.Lockpick(session, item, _areaKitLockpicks);
         if (lockpick is null) { _portalNotice = $"{PortalName(portal)}: the lockpicks are gone"; RefreshAreaStatus(); return; }
+        ResumeLoadedRound();
         var result = _areaPortals!.Pick(session, portal, lockpick, world: CombatWorldOrNull());
         _portalNotice = result.Disposition == Arcanum.Session.GameSessionDisposition.Rejected ? $"{PortalName(portal)}: pick refused ({result.Failure})"
             : $"{PortalName(portal)}: {result.Outcome!.Value.Result switch
