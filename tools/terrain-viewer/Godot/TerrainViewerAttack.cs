@@ -744,9 +744,8 @@ public partial class TerrainViewerApp
     {
         // ARC-UI-046: level-up entries queued while the texts were still loading.
         FlushLevelUps(TimeSpan.Zero);
-        // ARC-WORLD-048: a visitor's talk queues its awards on its own host.
-        foreach (var host in TalkHosts().ToArray())
-        foreach (var award in host.State.TakeAwards()) LevelAreaFollowers(award);
+        if (_conversationHost is { } talk)
+            foreach (var award in talk.State.TakeAwards()) LevelAreaFollowers(award);
     }
 
     private void LevelAreaFollowers(SessionExperienceAward? award)

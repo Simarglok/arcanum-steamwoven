@@ -15,8 +15,7 @@ public partial class TerrainViewerApp
 
     private void TickScriptSounds()
     {
-        // ARC-WORLD-048: a visitor's dialog script plays its sounds through its own host.
-        foreach (var scripts in TalkHosts().Select(h => h.Scripts).ToArray())
+        if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var sound in scripts.TakeSounds()) PlayScriptSound(sound, scripts);
     }
 

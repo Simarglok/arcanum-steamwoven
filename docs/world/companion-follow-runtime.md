@@ -149,7 +149,7 @@ moved (the stores are identity-keyed). On a map load the list and the followers'
   (`AreaCompanionGroup.Light`: the original's object colour (F0) at its current cell over the map's tile classes and stationary
   lights); moved companion bodies on the exterior are lit at their current cell the same way. The hover index names and
   picks it where it is drawn, and a click talks to it through the exterior conversation host (its dialog state stays
-  on the exterior map). In map mode a companion that the shown map's host does not hold talks through its own host over
+  on the exterior map). In map mode a companion that the shown map's host does not hold is listed by that host as one more speaker (ARC-DEV-081, MIG5) and talks over
   its home map's state (ARC-WORLD-048, [map mode](../rendering/area-map-mode.md#companions-arc-world-037)); the rule is
   the same: one identity, one dialog state, wherever it stands.
 

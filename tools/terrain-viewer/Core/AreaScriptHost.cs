@@ -73,11 +73,18 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         (false, false) => SkillTalkAdmission,
     };
 
+    /// <summary>ARC-DEV-081 (MIG5): the set a run on <paramref name="attachee"/> uses: <see cref="RunAdmission"/>, except for a companion carried here
+    /// (<see cref="AreaConversationHost.AdmitVisitor"/>), which keeps the narrower set the visitor host of ARC-WORLD-048 ran with
+    /// (<see cref="SkillAdmission"/> with a hero, else <see cref="Admission"/>): the shown map's use host holds no row and no seed holder of an
+    /// object of another map, so a query about it would be answered wrongly instead of being refused.</summary>
+    public ScrAdmissionSet AdmissionFor(ScrObjectRef? attachee) =>
+        attachee is { } obj && _state.IsCarried(obj.Code) ? (_session.QueryHero() is null ? Admission : SkillAdmission) : RunAdmission;
+
     /// <summary>
     /// ARC-SCRIPT-050: the shown map's use host (<see cref="AreaUseScriptHost"/>), which answers this host's object, world and area
     /// questions as it answers a use or heartbeat run's: the objects' items, names and reputations, the session's random draws labelled
     /// <see cref="AreaUseScriptHost.RandomLabel"/>, the critters around an object at their live cells, and the shown map's area. It is used
-    /// only while its shown map and the PC's map are this host's map (a visitor's host, ARC-WORLD-048, keeps the narrower set). Null: none.
+    /// only while its shown map and the PC's map are this host's map, and not for a run on a carried companion (<see cref="AdmissionFor"/>). Null: none.
     /// </summary>
     public Func<AreaUseScriptHost?>? QueryHost { get; set; }
 
@@ -199,7 +206,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
         if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
-        long? Read(string property) => _session.QueryMapChange(_map, MapChangeKey.ForEntity(attachee.Code, property));
+        // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
+        var stateMap = _state.MapOfEntity(attachee.Code);
+        long? Read(string property) => _session.QueryMapChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
         return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
             Read(AreaConversationState.LocalFlagsProperty) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
@@ -341,7 +350,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
-        MapChangeEdit Edit(string property, long value, long baseline) => new(_map, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
+        var stateMap = _state.MapOfEntity(attachee.Code);
+        MapChangeEdit Edit(string property, long value, long baseline) => new(stateMap, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
         var result = _session.ApplyChanges(_session.Version, null,
         [
             Edit(ScriptProperty, writeback.Slot.Script, loaded.Script),
