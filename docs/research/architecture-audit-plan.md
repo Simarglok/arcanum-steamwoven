@@ -106,7 +106,7 @@ R1 first; R2–R6 may run in parallel after it, as many at once as the owner all
 
 | Slice | Covers | Output |
 | --- | --- | --- |
-| G1 | R1–R6 against M1: confirm or drop H1–H9, find new ones, class each; a target model (for example one identity-based object directory with mutable fields and residency) and a migration order; the follower slices V1–V6 of ARC-RES-076 fold in here | [`docs/architecture/gap-register.md`](../architecture/gap-register.md) (GR1–GR35) and [`docs/architecture/target-model.md`](../architecture/target-model.md) (TM1–TM14, migration MIG1–MIG16, V1–V6 as MIG1–MIG5, MIG10, MIG11); owner questions GQ1–GQ6 as decision cards (ARC-RES-086) |
+| G1 | R1–R6 against M1: confirm or drop H1–H9, find new ones, class each; a target model (for example one identity-based object directory with mutable fields and residency) and a migration order; the follower slices V1–V6 of ARC-RES-076 fold in here | [`docs/architecture/gap-register.md`](../architecture/gap-register.md) (GR1–GR37) and [`docs/architecture/target-model.md`](../architecture/target-model.md) (TM1–TM14, migration MIG1–MIG16, V1–V6 as MIG1–MIG5, MIG10, MIG11); owner questions GQ1–GQ8 as decision cards (ARC-RES-086) |
 
 The owner's decisions on G1 settle the model the rest of the audit and every
 concept document builds on.

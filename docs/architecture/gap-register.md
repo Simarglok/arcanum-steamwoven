@@ -132,7 +132,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | GR17 | Created objects are saved in one store per kind, not as one section of whole objects per map | Systemic (H2) | `mobile.mdy`: every dynamic object that is not destroyed, whole, the hero and carried followers and items among them (PS20, PS27) | S10, S11 per kind | Each new kind is a new snapshot section and schema step | TM4, TM8 | MIG6 |
 | GR18 | Actions in flight are lost on a load: NPC goal runs, the hero's route and action, spell runs, shots, missiles | Systemic (H9) | The Anim module saves every run with its goal stack; MagicTech saves spell runs and maintained marks (PS11, PS15, PS16) | S25–S27, V4, G1–G5 run-local | A maintained spell ends at a quick load; NPCs restart decisions; a save mid-fight is not the fight | TM8 | Decision GQ4; MIG14 |
 | GR19 | The turn-based round is saved as is; the original restarts the order and the round number at load | Narrow | Combat blob: order rebuilt, round number restarts at 1 (PS13) | S19: round saved, subturns not | A load in a round resumes where the original restarts; visible in round-numbered rules only | TM8 | D4 |
-| GR37 | The turn-based setting is never in a save | Decision | The Combat blob keeps the module's cached copy of the turn-based setting, and a load writes it back, so a loaded game plays in the mode it was saved in until the option changes (PS34, consequence inferred) | Preferences only, never in a save (FR-LIFECYCLE-004, PS34's Steamwoven column) | A save made in turn-based mode loads in the player's current mode | TM8 | Decision GQ8; D9 |
+| GR37 | The turn-based setting is never in a save | Decision | The Combat blob keeps the module's cached copy of the turn-based setting, and a load writes it back, so a loaded game plays in the mode it was saved in until the option changes (PS34, consequence inferred) | A preference only: `AreaGameOptions.TurnBased` (`tools/terrain-viewer/Core/AreaGameOptions.cs`) is stored with the game settings, and the snapshot's root fields (`GameSessionSnapshotCodec`) have no turn-based field; a round running at the save is in the snapshot (S19) | A save made in turn-based mode outside a round loads in the player's current mode | TM8 | Decision GQ8; D9 |
 
 ### SP4 Time and the frame
 
@@ -193,7 +193,7 @@ target model keeps them.
 | GI3 | Ties fire first scheduled first | TE3 | Persisted sequence | Owner decision OQ1 |
 | GI4 | AI ticks are saved; the Original rule rebuilds them on load | PS31 | `ai.tick` persisted | Owner decision OQ2 |
 | GI5 | Events fire at their own deadlines and repeaters do not drift | TL20–TL22 | Pump steps to each deadline, up to 64 steps a frame | By requirement: FR-RUNTIME-001, ARC-WORLD-039 |
-| GI6 | The random generator is saved | PS32 | Seed and draws (S21) | Session randomness ARC-WORLD-019, seeded replays (OQ2) |
+| GI6 | The random generator is saved | PS32 | Seed and draws (S21) | By design of session randomness, ARC-WORLD-019 (the seeded replays of the AI plan rely on it, as OQ2's reason says); no separate owner decision |
 | GI7 | A failed transfer leaves the session on its map | RL30 (no map, nothing rolled back) | Nothing half moved | Owner rule on technical bugs; FR-WORLD-016 |
 | GI8 | Prototypes on a fresh installation are built from the player's executable | OM12 (the game writes the missing files on its first run) | ARC-RES-085 | Owner decision 2026-11-03 |
 
