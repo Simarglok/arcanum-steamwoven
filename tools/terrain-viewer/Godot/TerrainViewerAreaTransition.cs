@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
-        BindAreaInventory(arguments, result);
+        BindAreaInventory(arguments, result, keepLeft: carried is not null);
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
         AttachAreaItemArtSizes();
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its

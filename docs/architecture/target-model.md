@@ -130,7 +130,7 @@ the target elements its domain stands on.
 | MIG15 | The remaining hosts of `tools/terrain-viewer/Core` move into the world runtime; the viewer keeps drawing and input | TM11 | GQ6; runs alongside MIG1–MIG14, closes after MIG14 | — |
 | MIG16 | Interface mode stack (concept first: K16) | TM13 | — (independent) | — |
 
-**Status.** MIG1 is done (ARC-DEV-072, [record resolver](../world/record-resolver.md)); MIG2–MIG5 and MIG10 run beside it.
+**Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)) and MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)) are done; MIG3–MIG5 and MIG10 run beside them.
 
 The order follows the cost of the gaps: the follower fix (MIG1–MIG5) is the visible problem
 the audit started from and needs only the resolver; identity and creation (MIG6–MIG8) are the

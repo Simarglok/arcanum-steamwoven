@@ -35,8 +35,9 @@ public sealed record AreaAiScene
     public required AreaCombatHost Combat { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
-    /// <summary>The companions' T0 records and the world cells they hold now (their live overlay).</summary>
-    public Func<IReadOnlyList<(AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
+    /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
+    /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
+    public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
     /// <summary>The shown map's line of fire now (walls, doors, objects, the companions on their cells), or null.</summary>
@@ -161,11 +162,13 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// attack event tells the attacker's and the victim's followers (the follower rule, <see cref="TellFollowers"/>).
 /// ARC-WORLD-119: free companions are run as any leaderless NPC; a leave ends the leaver's run (<see cref="ObserveLeaves"/>), and an
 /// order's attack event (the curse's) runs through <see cref="OrderAttack"/>.
-/// ARC-DEV-065: a companion standing here that this host's world does not know (<see cref="Stranger"/>: a visitor from another home
-/// map has no combat fields on the shown map) never reaches the rules: it is not told of attacks, stands in no scan's or noise's
-/// square and is not in the hero's party a flee test counts (<see cref="Followers"/>, nor is a follower on another map), so a rule
-/// never meets an object the world cannot describe; its walk still follows the hero through the group.
-/// NOT READY (later slices): a visiting companion's combat facts (its home map's fields), so it neither fights nor is fought here;
+/// ARC-DEV-075 (MIG2, TM3): a companion carried here from another home map is run like any other: the host asks its combat values, worn
+/// and held items, AI parameter row and sheet by identity (<see cref="AreaCombatHost.Fields(string)"/> and the other identity overloads, the
+/// record resolver of MIG1 reading its home map's rows), so it is told of attacks, stands in scans' and noises' squares, counts in a flee
+/// test's party, attacks and is attacked (the ARC-DEV-065 skip of every visitor is gone). A follower left on
+/// another map is still not here (<see cref="Followers"/>). A companion whose home map cannot be read (the main map's window is not read
+/// on demand: the resolver's NOT READY, MIG9) has no record, so it is not found and stays out of the rules as before (<see cref="Unresolved"/>).
+/// NOT READY (later slices): the visitor's faction change of a script (the shown map's change), the main-map window as a home;
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
@@ -518,7 +521,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     {
         if (leader != Pc || Find(other) is null) return;
         var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following && _followers.ContainsKey(f.Entity))
-            .Select(f => f.Entity).Where(f => !Stranger(f)).ToArray();
+            .Select(f => f.Entity).Where(f => !Unresolved(f)).ToArray();
         if (followers.Length == 0) return;
         foreach (var outcome in FollowerRules.TellFollowers(this, leader, other, followers, side, accidental: false, _session.Rules.Combat))
         {
@@ -1081,7 +1084,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     // The use art and weapon flags of the item in the NPC's weapon slot and the type of the item in its shield slot.
     private (uint? UseArt, uint Flags, int? ShieldType) Wielded(string id)
     {
-        var worn = _scene.Combat.Worn(_session, _scene.RuntimeMap, id);
+        var worn = _scene.Combat.Worn(_session, id);
         var weapon = worn?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon);
         var shield = worn?.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield);
         return (weapon is { Entity: not null } w ? w.Fields.Item?.UseArtFragment : null,
@@ -1099,8 +1102,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         {
             Target = targetBuild,
             Distance = Tile(id) is { } a && Tile(target) is { } b ? AiExecutorRules.Distance(a, b) : 1,
-            AttackerWorn = _scene.Combat.WornItems(_session, _scene.RuntimeMap, id),
-            TargetWorn = target == Pc ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, _scene.RuntimeMap, target),
+            AttackerWorn = _scene.Combat.WornItems(_session, id),
+            TargetWorn = target == Pc ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             AttackerCell = Tile(id),
             TargetCell = target == Pc ? null : Tile(target),
             DropMap = _scene.DropMap?.Invoke(),
@@ -1301,7 +1304,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (Build(id) is not { } healer || _scene.NpcSheet?.Invoke(id) is not { } sheet) { refusal = "no sheet"; return null; }
         var life = target == Pc ? SessionLifeTarget.Hero : Build(target)?.Target;
         if (life is null) { refusal = "no target"; return null; }
-        if (item is null || _scene.Combat.HeldItemFields(_session, _scene.RuntimeMap, id, item) is not { } fields
+        if (item is null || _scene.Combat.HeldItemFields(_session, id, item) is not { } fields
             || AreaHealingItems.From(item, fields) is not { } healing)
         {
             refusal = "no healing item (impossible)";
@@ -1336,7 +1339,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
         if (!Walks(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
-        if (_scene.Combat.HeldItemFields(_session, _scene.RuntimeMap, id, item) is not { Item: { } stored } fields)
+        if (_scene.Combat.HeldItemFields(_session, id, item) is not { Item: { } stored } fields)
         {
             Trace(id).Throw = $"throw {item}: not held";
             return false;
@@ -1361,8 +1364,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             StruckHero = hero,
             StruckCell = struck?.Cell,
             LineOfFire = struck is { } s && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, s.Cell, s.Key, map) : null,
-            ThrowerWorn = _scene.Combat.WornItems(_session, _scene.RuntimeMap, id),
-            StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, _scene.RuntimeMap, target),
+            ThrowerWorn = _scene.Combat.WornItems(_session, id),
+            StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
         };
         var result = _session.ThrowByNpc(_session.Version, request);
@@ -1382,13 +1385,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private (string Who, CellCoord Cell, AreaObjectKey? Key)? StruckAt(string id, CellCoord from, CellCoord tile)
     {
         if (_scene.LineOfFire?.Invoke() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, _session.Rules.Combat).Blocker is { } row)
-            return _scene.Combat.Entity(_scene.RuntimeMap, row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
+            return EntityOf(row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
                 && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
         if (Tile(Pc) == tile && !DeadCritter(Pc)) return (Pc, tile, null);
         foreach (var npc in _scene.Npcs)
             if (npc.Entity != id && Tile(npc.Entity) == tile && !DeadCritter(npc.Entity)) return (npc.Entity, tile, npc.Row.Key);
-        foreach (var (key, cell) in _scene.Companions?.Invoke() ?? [])
-            if (cell == tile && _scene.Combat.Entity(_scene.RuntimeMap, key) is { } companion && companion != id && !DeadCritter(companion))
+        foreach (var (companion, key, cell) in _scene.Companions?.Invoke() ?? [])
+            if (cell == tile && companion != id && !DeadCritter(companion))
                 return (companion, tile, key);
         return null;
     }
@@ -1403,7 +1406,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     public void PickUp(string id, string item) { }
     /// <summary>ARC-WORLD-108: the NPC of the shown map that holds the item now (0x4612A0), or null (the hero's items are not the AI's).</summary>
-    public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, _scene.RuntimeMap, item);
+    public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, item);
 
     // ---- ARC-WORLD-108: an NPC's item use (0x462CC0: goal 39's last node and the chooser's use at once) ----
 
@@ -1571,7 +1574,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// holds) is answered as not throwable, so the NPC attacks with it instead of starting a throw that always fails.</summary>
     public string? ThrowableWeapon(string npc)
     {
-        if (!Walks(npc) || _scene.Combat.Worn(_session, _scene.RuntimeMap, npc) is not { } worn) return null;
+        if (!Walks(npc) || _scene.Combat.Worn(_session, npc) is not { } worn) return null;
         foreach (var item in worn)
             if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop
                 && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity))
@@ -1667,13 +1670,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// <summary>ARC-WORLD-108: the NPC's wielded weapon (slot 1004, as the session shows what it wears) when it has item flag 0x40
     /// (hexed); null for the hero (the lists are an NPC's own) and without one.</summary>
     public string? HexedWeapon(string critter) =>
-        critter != Pc && _scene.Combat.Worn(_session, _scene.RuntimeMap, critter)?.FirstOrDefault(w => w.Slot == EquipmentSlot.Weapon) is { Entity: { } weapon } worn
+        critter != Pc && _scene.Combat.Worn(_session, critter)?.FirstOrDefault(w => w.Slot == EquipmentSlot.Weapon) is { Entity: { } weapon } worn
             && worn.Fields.Item is { } item && (item.Flags & HexedItem) != 0 ? weapon : null;
 
     /// <summary>ARC-WORLD-108: the NPC's items, listed or worn, in its list's order as the session shows them (the combat host's
     /// <see cref="AreaCombatHost.NpcItems"/>); none for the hero.</summary>
     public IReadOnlyList<string> Inventory(string critter) =>
-        critter == Pc ? [] : [.. _scene.Combat.NpcItems(_session, _scene.RuntimeMap, critter).Select(item => item.Entity)];
+        critter == Pc ? [] : [.. _scene.Combat.NpcItems(_session, critter).Select(item => item.Entity)];
 
     /// <summary>
     /// ARC-WORLD-108: an item as the list build and the chooser read it: the spell charges (field 0x69, as the cast host's item lookup
@@ -1707,7 +1710,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// leader (0x45F650), which the host does not read; it applies only without a leader, so never to a companion.
     /// </summary>
     public string? HealingItem(string npc) =>
-        npc == Pc ? null : _scene.Combat.NpcItems(_session, _scene.RuntimeMap, npc).Where(item => HealingTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
+        npc == Pc ? null : _scene.Combat.NpcItems(_session, npc).Where(item => HealingTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
 
     /// <summary>
     /// ARC-WORLD-116: the heal skill check (0x4AE570, skill 10, ledger SP3 as corrected by HI2): the item must be a generic item with the
@@ -1725,7 +1728,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & SessionHealingItem.HealingFlag) != 0;
 
     // The fields of an item an NPC of the shown map holds now, or null.
-    private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, _scene.RuntimeMap, item);
+    private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, item);
 
     public bool Knows(string critter, int spell) => _scene.Spells?.Invoke()?.AiKnows(critter, spell) ?? false;
     public AiSpellFacts Spell(int spell) => _scene.Spells?.Invoke()?.AiSpell(spell) ?? default;
@@ -1742,7 +1745,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (Line(critter, target, out var targetRow) is not { } line) return new(0, null);
         var blocker = line.Blocker is not { } row ? null
             : ReferenceEquals(row, targetRow) ? target
-            : _scene.Combat.Entity(_scene.RuntimeMap, row.Key) ?? row.Key.ToString();
+            : EntityOf(row.Key) ?? row.Key.ToString();
         return new(line.Cost, blocker);
     }
 
@@ -1820,8 +1823,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     public MoraleParameters MoraleParameters(string npc) => Row(npc) is { } row
         ? new(row.FleeHpPercent, row.FleeOutnumbered, row.FleeOutlevelled, row.StandWhileTargetWeakPercent, row.CombatDistance) : default;
 
-    // ARC-DEV-065: the party's followers this world knows (the interface's contract): a visitor from another home map or a follower left
-    // on another map has no combat fields here, so a flee test's party count leaves it out (NOT READY: visiting companions' facts).
+    // The party's followers this world knows (the interface's contract): a follower left on another map, or a companion here with no record
+    // (ARC-DEV-075: only a home the resolver cannot read), is not in a flee test's party count.
     public IReadOnlyList<string> Followers(string id) =>
         id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
 
@@ -1875,7 +1878,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var critters = new List<AreaScanCritter>();
         if (Tile(Pc) is { } hero && Inside(hero)) critters.Add(new(SessionCombatant.Hero, hero, 0, null));
         foreach (var other in _scene.Npcs.Concat(_followers.Values))
-            if (Tile(other.Entity) is { } cell && Inside(cell) && !Stranger(other.Entity)) critters.Add(new(SessionCombatant.Critter(other.Entity), cell, 0, other.Row.Key));
+            if (Tile(other.Entity) is { } cell && Inside(cell) && !Unresolved(other.Entity)) critters.Add(new(SessionCombatant.Critter(other.Entity), cell, 0, other.Row.Key));
         return AreaCombatScan.Order(critters).Select(c => Id(c.Combatant)).ToArray();
     }
 
@@ -1902,12 +1905,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private SessionCombatant? Combatant(string id) => id == Pc ? SessionCombatant.Hero : SessionCombatant.Critter(id);
 
+    // The session entity of a map row: a row of the shown map, or the T0 row of a companion standing here (ARC-DEV-075: a visitor's is a
+    // row of its home map, which the shown map's entity index does not hold).
+    private string? EntityOf(AreaObjectKey key) =>
+        _scene.Combat.Entity(_scene.RuntimeMap, key) ?? _scene.Companions?.Invoke().FirstOrDefault(c => c.Key == key).Entity;
+
     private AreaObjectKey? Key(string id) => TryNpc(id, out var npc) ? npc.Row.Key : null;
 
     // ARC-WORLD-115: an NPC the host walks: one of the map's or a companion the host runs.
-    // ARC-DEV-065: a companion run here that the world does not know (Find gives null: a visitor from another home map has no combat
-    // fields on the shown map). The rules' Get refuses an unknown object, so such a follower is kept out of them.
-    private bool Stranger(string id) => _followers.ContainsKey(id) && Find(id) is null;
+    // ARC-DEV-075: the one case left of ARC-DEV-065's skip: a companion run here whose record no reachable map gives (Find is null: its home
+    // is the main map's window, which the resolver does not read on demand, MIG1's NOT READY, MIG9). The rules' Get refuses an object the
+    // world cannot describe, so such a follower stays out of them; any companion with a record is run like an NPC of the shown map.
+    private bool Unresolved(string id) => _followers.ContainsKey(id) && Find(id) is null;
     private bool TryNpc(string id, out AreaAiNpc npc) => _npcs.TryGetValue(id, out npc!) || _followers.TryGetValue(id, out npc!);
     private bool Walks(string id) => _npcs.ContainsKey(id) || _followers.ContainsKey(id);
 
@@ -1918,13 +1927,13 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         else Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there);
     }
 
-    private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(_scene.RuntimeMap, id);
+    private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(id);
 
     // ARC-SCRIPT-049: an NPC's faction now: a script's set faction (AreaUseScriptHost.FactionProperty), else its fields'.
     private int? Faction(string id) => Fields(id)?.Npc?.Faction is not { } loaded ? null
         : _session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), MapChangeKey.ForEntity(id, AreaUseScriptHost.FactionProperty)) is { } set ? unchecked((int)set) : loaded;
 
-    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, _scene.RuntimeMap, id).Combat;
+    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, id).Combat;
 
     private LifeState? LifeState(string id) => Build(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 
@@ -1937,7 +1946,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private SessionNpcAttackValues? Values(string id)
     {
         if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return null;
-        try { return build.AttackValues(status, state, _session.Rules.Combat, _scene.Combat.WornItems(_session, _scene.RuntimeMap, id)?.Keys); }
+        try { return build.AttackValues(status, state, _session.Rules.Combat, _scene.Combat.WornItems(_session, id)?.Keys); }
         catch (ArgumentException) { return null; }
     }
 
@@ -1975,8 +1984,8 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
 
     private CellCoord? CompanionCell(string id)
     {
-        foreach (var (key, cell) in _scene.Companions?.Invoke() ?? [])
-            if (_scene.Combat.Entity(_scene.RuntimeMap, key) == id) return cell;
+        foreach (var (entity, _, cell) in _scene.Companions?.Invoke() ?? [])
+            if (entity == id) return cell;
         return null;
     }
 
@@ -1986,7 +1995,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (mover != Pc && Tile(Pc) == cell && !(Status(Pc)?.IsDead ?? true)) return true;
         foreach (var npc in _scene.Npcs)
             if (npc.Entity != mover && Tile(npc.Entity) == cell && !(Status(npc.Entity)?.IsDead ?? true)) return true;
-        return _scene.Companions?.Invoke().Any(c => c.Cell == cell && _scene.Combat.Entity(_scene.RuntimeMap, c.Key) != mover) == true;
+        return _scene.Companions?.Invoke().Any(c => c.Cell == cell && c.Entity != mover) == true;
     }
 
     // The planner's overlay for the mover: every moved T0 record, and the live cells of the hero, the companions and the other movers
@@ -1998,10 +2007,10 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         if (mover != Pc && target != Pc && Tile(Pc) is { } hero) held.Add(ToChart(hero));
         foreach (var other in Movers.All)
             if (other.Entity != mover && other.Entity != target) held.AddRange(new[] { other.Cell }.Concat(other.From is { } f ? [f] : []).Select(ToChart));
-        foreach (var (key, cell) in _scene.Companions?.Invoke() ?? [])
+        foreach (var (entity, key, cell) in _scene.Companions?.Invoke() ?? [])
         {
             moved.Add(key);
-            if (_scene.Combat.Entity(_scene.RuntimeMap, key) is not { } entity || (entity != mover && entity != target)) held.Add(ToChart(cell));
+            if (entity != mover && entity != target) held.Add(ToChart(cell));
         }
         if (target is not null && Key(target) is { } targetKey) moved.Add(targetKey);
         var occupancy = new AreaOccupancy(moved, held);

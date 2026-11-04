@@ -142,6 +142,36 @@ public sealed class AreaCombatRecordTests
     }
 
     [TestMethod]
+    public void Maps_the_run_left_behind_answer_first_and_the_item_questions_by_identity_follow_the_holder_to_its_home_map()
+    {
+        // ARC-DEV-075 (MIG2): the main map's window nothing reads on demand was left by a map change of this run; its rows still answer.
+        var inner = new Source();
+        var remembered = new AreaRememberedRecords([Home()], inner);
+        Assert.AreEqual(1, remembered.Load(1, default).Map!.RuntimeMap);
+        Assert.AreEqual(0, inner.Asked.Count, "a left map is not asked from the game folder");
+        Assert.IsNull(remembered.Load(7, default).Map);
+        CollectionAssert.AreEqual(new[] { 7 }, inner.Asked);
+        Assert.IsNull(new AreaRememberedRecords([], null).Load(1, default).Map, "no left map and no reader: a typed failure");
+
+        var inventory = new AreaInventoryHost([Shown()], records: remembered);
+        var session = Session(inventory);
+        var combat = new AreaCombatHost(inventory, session: () => session);
+        var virgil = Entity(1, 0);
+        var item = Entity(1, 2);
+        Assert.AreEqual(1, combat.HomeMap(virgil), "his home is the left map");
+
+        // The item questions by identity: the holder's seed is the home map's, whichever map the NPC stands on.
+        CollectionAssert.AreEqual(new[] { item }, combat.NpcItems(session, virgil).Select(held => held.Entity).ToArray());
+        Assert.AreEqual(virgil, combat.NpcHolder(session, item));
+        Assert.IsNotNull(combat.NpcItemFields(session, item));
+        Assert.IsNotNull(combat.HeldItemFields(session, virgil, item));
+        Assert.IsNull(combat.HeldItemFields(session, Entity(1, 1), item), "another NPC does not hold it");
+        Assert.IsNull(combat.NpcHolder(session, Entity(1, 1)), "an NPC is not an item");
+        Assert.AreEqual(0, combat.WornItems(session, virgil)!.Count);
+        Assert.IsEmpty(combat.NpcItems(session, "oid:" + new string('f', 64)), "an unknown holder holds nothing");
+    }
+
+    [TestMethod]
     public void The_map_keyed_questions_keep_their_meaning_and_the_identity_ones_do_not_depend_on_the_map()
     {
         var inventory = new AreaInventoryHost([Home(), Shown()]);

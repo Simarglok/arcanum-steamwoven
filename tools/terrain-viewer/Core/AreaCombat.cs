@@ -353,6 +353,50 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return Record(entity) is { } found ? Worn(session, found.HomeMap, entity) : null;
     }
 
+    /// <summary>ARC-DEV-075 (MIG2): <see cref="WornItems(GameSessionOwner, int, string)"/> by identity: the durability values of the items the
+    /// NPC wears now, whichever map it stands on.</summary>
+    public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornItems(GameSessionOwner session, string entity) =>
+        Worn(session, entity)?.ToDictionary(item => item.Slot, item => item.Wear);
+
+    /// <summary>ARC-DEV-075 (MIG2): <see cref="NpcItems(GameSessionOwner, int, string)"/> by identity: the items the NPC holds now, listed or
+    /// worn, whichever map it stands on (its holder entry is the home map's).</summary>
+    public IReadOnlyList<(string Entity, CombatFields Fields)> NpcItems(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(entity) is { } found ? NpcItems(session, found.HomeMap, entity) : [];
+    }
+
+    /// <summary>ARC-DEV-075 (MIG2): <see cref="HeldItemFields(GameSessionOwner, int, string, string)"/> by identity of the holder.</summary>
+    public CombatFields? HeldItemFields(GameSessionOwner session, string holder, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(holder) is { } found ? HeldItemFields(session, found.HomeMap, holder, item) : null;
+    }
+
+    /// <summary>ARC-DEV-075 (MIG2): the NPC that holds the item now (0x4612A0 for an NPC's item), found among every map this host holds
+    /// (a visiting companion's holder entry lies on its home map), or null.</summary>
+    public string? NpcHolder(GameSessionOwner session, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (session.IsItemDestroyed(item)) return null;
+        foreach (var map in _resolver.Maps)
+            if (HolderIndex(session, map.RuntimeMap).NpcItems.TryGetValue(item, out var holder)) return holder;
+        return null;
+    }
+
+    /// <summary>ARC-DEV-075 (MIG2): <see cref="NpcItemFields(GameSessionOwner, int, string)"/> by identity of the item: the fields of an item an
+    /// NPC of any map this host holds has now, or null.</summary>
+    public CombatFields? NpcItemFields(GameSessionOwner session, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (session.IsItemDestroyed(item)) return null;
+        foreach (var map in _resolver.Maps)
+            if (HolderIndex(session, map.RuntimeMap).NpcItems.ContainsKey(item)) return NpcItemFields(session, map.RuntimeMap, item);
+        return null;
+    }
+
     /// <summary>The NPC's combat values with its map data's worn items (the items its seed lists in a wear slot by their stored
     /// location), read once per entity and map: for the values that do not depend on what it wears (<see cref="Critter(int, string)"/>).</summary>
     public SessionCritterCombatBuild Build(int runtimeMap, string entity) => Held(runtimeMap, out var map)
