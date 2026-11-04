@@ -189,20 +189,16 @@ public sealed class SessionInventoryState
 {
     internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc, SessionMadeItem[] made, SessionNpcInventory[] npcs,
         SessionPlacedItem[] placed, SessionAmmoRecord[]? ammo = null, SessionGivenItem[]? given = null, SessionGoldRecord[]? piles = null,
-        SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null, SessionJunkPile[]? junkPiles = null,
+        SessionItemScriptSlot[]? scriptSlots = null, SessionItemWeightRecord[]? weights = null,
         string[]? identified = null, int lastDiscardedMade = 0, SessionHeroGridItem[]? grid = null, SessionGeneratedContainer[]? generated = null,
-        SessionNpcWear[]? npcWorn = null, SessionBloodPool[]? bloodPools = null, int lastJunkNumber = 0, int lastPoolNumber = 0)
+        SessionNpcWear[]? npcWorn = null)
     {
-        LastJunkNumber = lastJunkNumber;
-        LastPoolNumber = lastPoolNumber;
-        BloodPools = Array.AsReadOnly(bloodPools ?? []);
         NpcWorn = Array.AsReadOnly(npcWorn ?? []);
         Generated = Array.AsReadOnly(generated ?? []);
         Grid = Array.AsReadOnly(grid ?? []);
         Identified = Array.AsReadOnly(identified ?? []);
         LastDiscardedMade = lastDiscardedMade;
         ScriptSlots = Array.AsReadOnly(scriptSlots ?? []);
-        JunkPiles = Array.AsReadOnly(junkPiles ?? []);
         Ammo = Array.AsReadOnly(ammo ?? []);
         Weights = Array.AsReadOnly(weights ?? []);
         Given = Array.AsReadOnly(given ?? []);
@@ -231,8 +227,6 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-085: the weight facts of the objects the session tracks, by entity in ordinal order (rows with a non-zero
     /// weight or adjustment only).</summary>
     public IReadOnlyList<SessionItemWeightRecord> Weights { get; }
-    /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made.</summary>
-    public IReadOnlyList<SessionJunkPile> JunkPiles { get; }
     /// <summary>ARC-UI-019: the slots of the hero's items in its inventory grid, in slot order.</summary>
     public IReadOnlyList<SessionHeroGridItem> Grid { get; }
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1, a barter window's open and sale), by entity in
@@ -241,21 +235,12 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-094: the highest made number of a made item a regeneration discarded without a deleted-item record (0 when
     /// none), so a new made item never takes a discarded one's number.</summary>
     public int LastDiscardedMade { get; }
-    /// <summary>ARC-DEV-084 (MIG6, TM1): the highest junk pile number the session ever gave (0 when none), so a new pile never takes the
-    /// number of one that was dissolved: an object id is never reassigned.</summary>
-    public int LastJunkNumber { get; }
-    /// <summary>ARC-DEV-084 (MIG6, TM1): the highest blood pool number the session ever gave (0 when none), so a new pool never takes the
-    /// number of one that decayed.</summary>
-    public int LastPoolNumber { get; }
     /// <summary>ARC-WORLD-100: the containers with flag 0x200 the session generated once (their source and flag cleared, ledger RK10), by
     /// map and then entity in ordinal order.</summary>
     public IReadOnlyList<SessionGeneratedContainer> Generated { get; }
     /// <summary>ARC-WORLD-103: the worn items of the NPCs the session dressed (a regeneration's best-items wield, ledger RK15), by NPC entity
     /// in ordinal order; for such an NPC they replace the inventory locations of its map data.</summary>
     public IReadOnlyList<SessionNpcWear> NpcWorn { get; }
-    /// <summary>ARC-RENDER-041: the pools of blood the session left, in the order they were left (a decayed one stays until the next
-    /// pool is left).</summary>
-    public IReadOnlyList<SessionBloodPool> BloodPools { get; }
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -451,9 +436,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
     internal int LastDiscardedMade { get; set; }
 
-    /// <summary>ARC-DEV-084: the high-water marks of the junk and pool numbers (<see cref="SessionInventoryState.LastJunkNumber"/>).</summary>
-    internal int LastJunkNumber { get; set; }
-    internal int LastPoolNumber { get; set; }
+    /// <summary>ARC-DEV-091 (MIG6d-3): the junk piles and pools of blood, as directory records found by entity (<see cref="ObjectRecords"/>);
+    /// the only owner of those records and of their number marks.</summary>
+    internal ObjectRecords Objects { get; } = new();
 
     /// <summary>ARC-WORLD-100: the generated-once containers (<see cref="SessionInventoryState.Generated"/>).</summary>
     internal HashSet<SessionGeneratedContainer> Generated { get; } = [];
@@ -582,39 +567,13 @@ internal sealed class InventoryDomain
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Lists.Capture(),
         Placed.ToArray(), Ammo.Values.ToArray(), Hero.GivenAll.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
-        CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
+        CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
-        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray(),
-        BloodPools.ToArray(), LastJunkNumber, LastPoolNumber);
-
-    /// <summary>ARC-RENDER-041: the pools of blood the session left, in the order they were left.</summary>
-    internal List<SessionBloodPool> BloodPools { get; } = [];
+        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray());
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>ARC-WORLD-063: the junk piles the session made, in the order they were made (a pile's record is replaced on each change).</summary>
-    internal List<SessionJunkPile> JunkPiles { get; } = [];
-
-    /// <summary>The junk pile that holds the item, or null.</summary>
-    internal SessionJunkPile? JunkPileOf(string entity) => JunkPiles.Find(pile => pile.Items.Any(item => item.Entity == entity));
-
-    /// <summary>The junk pile with this entity, or null.</summary>
-    internal SessionJunkPile? JunkPile(string entity) => JunkPiles.Find(pile => pile.Entity == entity);
-
-    /// <summary>The items the junk piles hold (the bound of <see cref="SessionJunkPile.MaxItems"/>).</summary>
-    internal int JunkPileItems => JunkPiles.Sum(pile => pile.Items.Count);
-
-    /// <summary>Takes the item out of its junk pile; returns the pile as it is now, or null when no pile held it.</summary>
-    internal SessionJunkPile? LeaveJunkPile(string entity)
-    {
-        var at = JunkPiles.FindIndex(pile => pile.Items.Any(item => item.Entity == entity));
-        if (at < 0) return null;
-        var left = JunkPiles[at] with { Items = Array.AsReadOnly(JunkPiles[at].Items.Where(item => item.Entity != entity).ToArray()) };
-        JunkPiles[at] = left;
-        return left;
-    }
 
     /// <summary>The facts of a made item: its kind, no weight, location (-1, in the bag) or scripts; the host knows the prototype's
     /// weight. ARC-WORLD-083: the complexity the session keeps for it (0 when it keeps none).</summary>
@@ -651,11 +610,11 @@ internal sealed class InventoryDomain
         Func<string, CellCoord?> dropped)
     {
         // ARC-WORLD-063: an item in a junk pile lies in the pile, not on the ground.
-        var inPile = JunkPiles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        var inPile = Objects.Piles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
         var inventory = WithPiled(map, seed, killed, spilled, dropped);
         var ground = inventory.Ground.ToDictionary(item => item.Item.Entity, StringComparer.Ordinal);
         return new(map, inventory.Ground.Where(item => !inPile.Contains(item.Item.Entity)).ToArray(), inventory.Holders.ToArray(),
-            JunkPiles.Where(pile => pile.Map == map).Select(pile => new SessionJunkPileInventory(pile.Entity, pile.Cell,
+            Objects.Piles.Where(pile => pile.Map == map).Select(pile => new SessionJunkPileInventory(pile.Entity, pile.Cell,
                 Array.AsReadOnly(pile.Items.Where(item => ground.TryGetValue(item.Entity, out var lying) && lying.Cell == pile.Cell)
                     .Select(item => ground[item.Entity].Item).ToArray()))).ToArray());
     }

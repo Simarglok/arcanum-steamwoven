@@ -47,9 +47,9 @@ public sealed partial class GameSessionOwner
     [Arcanum.Simulation.OriginalFunction(0x466E50, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     internal void SettleDrop(string entity, SessionMapId map, CellCoord cell, IReadOnlySet<string>? notYetDropped = null)
     {
-        if (_inventory.JunkPileOf(entity) is not null || Scripted(entity, SessionScriptPoint.InsertItem)) return;
+        if (_inventory.Objects.PileOf(entity) is not null || Scripted(entity, SessionScriptPoint.InsertItem)) return;
         var (width, height) = GridSize(entity);
-        var piles = _inventory.JunkPiles.Where(pile => pile.Map == map && pile.Cell == cell).ToArray();
+        var piles = _inventory.Objects.Piles.Where(pile => pile.Map == map && pile.Cell == cell).ToArray();
         var loose = LooseAt(map, cell).Where(item => item != entity && notYetDropped?.Contains(item) != true).ToArray();
         var placement = JunkPileRules.Place(
             piles.Select(pile => (IReadOnlyList<bool>)InventoryGridRules.Occupied(pile.Items.Select(item => item.Grid), InventoryGridRules.ContainerRows)).ToArray(),
@@ -58,10 +58,9 @@ public sealed partial class GameSessionOwner
         switch (placement.Kind)
         {
             case JunkPilePlacementKind.JoinPile:
-                if (_inventory.JunkPileItems >= SessionJunkPile.MaxItems) return;
+                if (_inventory.Objects.PileItems >= SessionJunkPile.MaxItems) return;
                 var pile = piles[placement.Pile];
-                var at = _inventory.JunkPiles.IndexOf(pile);
-                _inventory.JunkPiles[at] = pile with { Items = Array.AsReadOnly([.. pile.Items, new(entity, placement.Slot, width, height)]) };
+                _inventory.Objects.ReplacePile(pile with { Items = Array.AsReadOnly([.. pile.Items, new(entity, placement.Slot, width, height)]) });
                 break;
             case JunkPilePlacementKind.NewPile:
                 var items = new List<SessionJunkPileItem>();
@@ -84,7 +83,7 @@ public sealed partial class GameSessionOwner
     {
         var step = JunkPileRules.Dissolve(pile.Items.Count);
         if (step == JunkPileDissolve.Keep) return;
-        if (_inventory.JunkPile(pile.Entity) is null) throw new InvalidOperationException("JUNK_PILE_GONE");
+        if (_inventory.Objects.Pile(pile.Entity) is null) throw new InvalidOperationException("JUNK_PILE_GONE");
         DestroyObject(pile.Entity);
         if (step == JunkPileDissolve.Release)
         {
@@ -94,7 +93,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-WORLD-063: the junk piles the session made, on every map, in the order they were made.</summary>
-    public IReadOnlyList<SessionJunkPile> QueryJunkPiles() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.JunkPiles.ToArray()); }
+    public IReadOnlyList<SessionJunkPile> QueryJunkPiles() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Objects.Piles.ToArray()); }
 
     /// <summary>
     /// ARC-WORLD-063: the host's loot window closes on a junk pile of the actor's map (0x573440 → 0x4ED6C0 → 0x463540, ledger JP4,
@@ -107,7 +106,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(pile)) return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (_inventory.JunkPile(pile) is not { } found || found.Map != _actor.Map) return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
+        if (_inventory.Objects.Pile(pile) is not { } found || found.Map != _actor.Map) return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
         if (JunkPileRules.Dissolve(found.Items.Count) == JunkPileDissolve.Keep) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         DissolveJunkPile(found);
@@ -149,7 +148,7 @@ public sealed partial class GameSessionOwner
         if (result.Disposition == GameSessionDisposition.Changed && result.Item is not null)
         {
             // An ammunition stack that merged was deleted, which already took it out of its pile.
-            _inventory.LeaveJunkPile(item);
+            _inventory.Objects.LeaveItem(item);
             CancelDecay(item);
         }
         return result;
@@ -164,7 +163,7 @@ public sealed partial class GameSessionOwner
             ? _inventory.WithPiled(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)).Ground
             : _inventory.Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, InventoryDomain.MadeFacts(item.Kind)), item.Cell));
         // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2), which the tile's object list skips.
-        return ground.Where(item => item.Cell == cell && _inventory.JunkPileOf(item.Item.Entity) is null && !ItemInFlight(item.Item.Entity))
+        return ground.Where(item => item.Cell == cell && _inventory.Objects.PileOf(item.Item.Entity) is null && !ItemInFlight(item.Item.Entity))
             .Select(item => item.Item.Entity).ToArray();
     }
 

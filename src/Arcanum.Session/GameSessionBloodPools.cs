@@ -49,20 +49,20 @@ public sealed partial class GameSessionOwner
             : SessionValidation.Entity(critter) && _life.Critters.TryGetValue(critter, out var record) ? record.DeathTimeMs : null;
         if (death is not { } deathMs) return Reject(GameSessionFailure.InvalidLifeTarget);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        if (_inventory.BloodPools.Find(pool => pool.Critter == critter && pool.DeathTimeMs == deathMs) is { } left)
+        if (_inventory.Objects.Pools.FirstOrDefault(pool => pool.Critter == critter && pool.DeathTimeMs == deathMs) is { } left)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, left, BloodPoolRefusal.None, new(_identity, _revision));
         var refusal = BloodPoolRules.Leaves(facts);
         if (refusal != BloodPoolRefusal.None)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, refusal, new(_identity, _revision));
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        var live = _inventory.BloodPools.Count(pool => !BloodPoolRules.Decayed(pool.CreatedMs, now));
+        var live = _inventory.Objects.Pools.Count(pool => !BloodPoolRules.Decayed(pool.CreatedMs, now));
         if (live >= SessionBloodPool.MaxPools) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
 
         // ARC-DEV-084 (TM1): an id is never reassigned, so a decayed pool's number is not taken again.
         if (NextObjectNumber(SessionObjectOrigin.BloodPool) == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
 
-        foreach (var decayed in _inventory.BloodPools.Where(pool => BloodPoolRules.Decayed(pool.CreatedMs, now)).Select(pool => pool.Entity).ToArray()) DestroyObject(decayed);
+        foreach (var decayed in _inventory.Objects.Pools.Where(pool => BloodPoolRules.Decayed(pool.CreatedMs, now)).Select(pool => pool.Entity).ToArray()) DestroyObject(decayed);
         var pool = CreateBloodPool(critter, deathMs, map, cell, offsetX, offsetY, now);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, pool, BloodPoolRefusal.None, new(_identity, _revision));
@@ -82,7 +82,7 @@ public sealed partial class GameSessionOwner
                 !deaths.Add((pool.Critter, pool.DeathTimeMs)) || !SessionValidation.Map(pool.Map) || pool.Cell.X < 0 || pool.Cell.Y < 0 ||
                 pool.DeathTimeMs < 0 || pool.CreatedMs < pool.DeathTimeMs || pool.CreatedMs > clockMs)
                 return GameSessionFailure.InvalidSnapshot;
-            inventory.BloodPools.Add(pool);
+            inventory.Objects.AddPool(pool);
         }
         return GameSessionFailure.None;
     }
@@ -92,6 +92,6 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        return Array.AsReadOnly(_inventory.BloodPools.Where(pool => pool.Map == map && !BloodPoolRules.Decayed(pool.CreatedMs, now)).ToArray());
+        return Array.AsReadOnly(_inventory.Objects.Pools.Where(pool => pool.Map == map && !BloodPoolRules.Decayed(pool.CreatedMs, now)).ToArray());
     }
 }

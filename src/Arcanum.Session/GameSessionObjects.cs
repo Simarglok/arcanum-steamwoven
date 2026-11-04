@@ -608,7 +608,7 @@ public sealed partial class GameSessionOwner
     private static long SpillValue(CellCoord cell) => (((long)cell.Y << 24 | (uint)cell.X) + 1) << 8;
 
     // ARC-WORLD-063: an item in a junk pile lies in the pile, out of an attack's reach.
-    private bool OnGround(string item) => _inventory.JunkPileOf(item) is null &&
+    private bool OnGround(string item) => _inventory.Objects.PileOf(item) is null &&
         _inventory.Seeds.Any(pair => !_inventory.Taken.Contains(item) && LooseCell(pair.Key, pair.Value, item) is not null);
 
     private static bool ValidObject(SessionObjectTarget target) =>

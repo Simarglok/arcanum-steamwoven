@@ -174,6 +174,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportInventory(snapshot.Inventory, hero is not null, limits, durability.Destroyed, out var inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = RestoreJunkPiles(inventory, snapshot.Objects.JunkPiles, durability.Destroyed);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEquipment(snapshot.Equipment, inventory, hero is not null, out var equipment);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportWornConditions(equipment, durability);
@@ -186,9 +188,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportBloodPools(snapshot.Inventory.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
+        failure = ImportBloodPools(snapshot.Objects.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportObjectMarks(snapshot.Inventory, inventory);
+        failure = ImportObjectMarks(snapshot.Objects, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -849,7 +851,7 @@ public sealed partial class GameSessionOwner : IDisposable
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
         // ARC-WORLD-063: an item in a junk pile on this map that is no placed item is an item of this seed; no seed of another map lists
         // it. (Where it lies is the seed's and the map changes' answer: an item no longer on the pile's cell is not shown in the pile.)
-        foreach (var pile in _inventory.JunkPiles)
+        foreach (var pile in _inventory.Objects.Piles)
             foreach (var entry in pile.Items.Where(entry => _inventory.PlacedItem(entry.Entity) is null))
                 if (pile.Map == map ? !admitted.Items.ContainsKey(entry.Entity) && !admitted.Source.Window : admitted.Items.ContainsKey(entry.Entity))
                     return Reject(GameSessionFailure.InventoryMismatch);
@@ -858,7 +860,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // they join neither its ground nor a holder's list).
         if (admitted.Source.Window && _inventory.Seeds.TryGetValue(map, out var previous))
         {
-            var piled = _inventory.JunkPiles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(entry => entry.Entity).ToHashSet(StringComparer.Ordinal);
+            var piled = _inventory.Objects.Piles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(entry => entry.Entity).ToHashSet(StringComparer.Ordinal);
             foreach (var (entity, kept) in previous.Items)
                 if ((_inventory.Taken.Contains(entity) || piled.Contains(entity)) && !admitted.Items.ContainsKey(entity)) admitted.Items.Add(entity, kept);
         }
@@ -911,7 +913,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands.
         if (ItemInFlight(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-063: an item in a junk pile is taken from the pile (LootItem), not from the ground.
-        if (_inventory.JunkPileOf(item) is not null) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        if (_inventory.Objects.PileOf(item) is not null) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-059: one of the hero's items the session placed on this map goes back to its list.
         if (_inventory.PlacedItem(item) is { } placed && placed.Map == _actor.Map) return Picked(item, TakePlaced(placed, insertCheck));
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
@@ -945,7 +947,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(holder) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-WORLD-063: a junk pile the session made on the actor's map is looted as the container it is.
-        if (_inventory.JunkPile(holder) is { } pile && pile.Map == _actor.Map) return LootJunkPile(pile, item, insertCheck, scripts);
+        if (_inventory.Objects.Pile(holder) is { } pile && pile.Map == _actor.Map) return LootJunkPile(pile, item, insertCheck, scripts);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
         // ARC-WORLD-101: a container that did not spill is looted as its window shows it (0x572370 admits it in loot mode 2).
@@ -1462,7 +1464,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.Capture(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys());
+            QueryHotkeys(), _inventory.Objects.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2041,16 +2043,16 @@ public sealed partial class GameSessionOwner : IDisposable
             lastWeight = row.Entity;
             inventory.Weights[row.Entity] = row.Facts;
         }
-        return RestoreJunkPiles(inventory, saved.JunkPiles, destroyed);
+        return GameSessionFailure.None;
     }
 
     // ARC-DEV-084 (TM1): the high-water marks of the junk and pool numbers, after the piles and pools are in: a mark never sits below
     // a number a saved pile or pool holds (the older schema's load had no mark, so its piles and pools set it).
-    private static GameSessionFailure ImportObjectMarks(SessionInventoryState saved, InventoryDomain inventory)
+    private static GameSessionFailure ImportObjectMarks(SessionObjectRecords saved, InventoryDomain inventory)
     {
         if (saved.LastJunkNumber < 0 || saved.LastPoolNumber < 0) return GameSessionFailure.InvalidSnapshot;
-        inventory.LastJunkNumber = Math.Max(saved.LastJunkNumber, inventory.JunkPiles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max());
-        inventory.LastPoolNumber = Math.Max(saved.LastPoolNumber, inventory.BloodPools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max());
+        inventory.Objects.LastJunkNumber = Math.Max(saved.LastJunkNumber, inventory.Objects.Piles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max());
+        inventory.Objects.LastPoolNumber = Math.Max(saved.LastPoolNumber, inventory.Objects.Pools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max());
         return GameSessionFailure.None;
     }
 
@@ -2079,7 +2081,7 @@ public sealed partial class GameSessionOwner : IDisposable
             if (pile.Items.Sum(item => (long)item.Width * item.Height) !=
                 InventoryGridRules.Occupied(pile.Items.Select(item => item.Grid), InventoryGridRules.ContainerRows).Count(cell => cell))
                 return GameSessionFailure.InvalidSnapshot;
-            inventory.JunkPiles.Add(pile with { Items = Array.AsReadOnly(pile.Items.ToArray()) });
+            inventory.Objects.AddPile(pile with { Items = Array.AsReadOnly(pile.Items.ToArray()) });
         }
         return GameSessionFailure.None;
     }

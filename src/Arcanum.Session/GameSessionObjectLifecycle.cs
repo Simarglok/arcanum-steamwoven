@@ -88,12 +88,12 @@ public sealed partial class GameSessionOwner
     /// </summary>
     internal SessionJunkPile? CreateJunkPile(SessionMapId map, CellCoord cell, IReadOnlyList<SessionJunkPileItem> items)
     {
-        if (_inventory.JunkPiles.Count >= SessionJunkPile.MaxPiles || _inventory.JunkPileItems + items.Count > SessionJunkPile.MaxItems) return null;
+        if (_inventory.Objects.Piles.Count >= SessionJunkPile.MaxPiles || _inventory.Objects.PileItems + items.Count > SessionJunkPile.MaxItems) return null;
         if (NextObjectEntity(SessionObjectOrigin.JunkPile) is null) return null;
         var number = AllocateObjectNumber(SessionObjectOrigin.JunkPile);
         var pile = new SessionJunkPile(SessionJunkPile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture), map, cell,
             Array.AsReadOnly(items.ToArray()));
-        _inventory.JunkPiles.Add(pile);
+        _inventory.Objects.AddPile(pile);
         return pile;
     }
 
@@ -106,7 +106,7 @@ public sealed partial class GameSessionOwner
         var number = AllocateObjectNumber(SessionObjectOrigin.BloodPool);
         var pool = new SessionBloodPool(SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             critter, deathTimeMs, map, cell, offsetX, offsetY, createdMs);
-        _inventory.BloodPools.Add(pool);
+        _inventory.Objects.AddPool(pool);
         return pool;
     }
 
@@ -138,10 +138,10 @@ public sealed partial class GameSessionOwner
         switch (ObjectOriginOf(entity))
         {
             case SessionObjectOrigin.JunkPile:
-                _inventory.JunkPiles.RemoveAll(pile => pile.Entity == entity);
+                _inventory.Objects.RemovePile(entity);
                 return;
             case SessionObjectOrigin.BloodPool:
-                _inventory.BloodPools.RemoveAll(pool => pool.Entity == entity);
+                _inventory.Objects.RemovePool(entity);
                 return;
         }
         DestroyItem(entity, windowShowsContainer);
@@ -149,10 +149,10 @@ public sealed partial class GameSessionOwner
 
     private void DestroyItem(string entity, bool windowShowsContainer)
     {
-        var pile = _inventory.JunkPileOf(entity);
+        var pile = _inventory.Objects.PileOf(entity);
         RemoveItemRecords(entity);
         // ARC-WORLD-063 (JP5, JP7): the pile the item left is checked unless a container window is open (the counter 0x5E8800).
-        if (pile is not null && _lootedPile != pile.Entity && !windowShowsContainer && !LootWindowShowsContainer() && _inventory.JunkPile(pile.Entity) is { } left)
+        if (pile is not null && _lootedPile != pile.Entity && !windowShowsContainer && !LootWindowShowsContainer() && _inventory.Objects.Pile(pile.Entity) is { } left)
             DissolveJunkPile(left);
     }
 
@@ -182,7 +182,7 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-085: its weight facts go with it.
         _inventory.Weights.Remove(entity);
         // ARC-WORLD-063: a deleted item leaves its junk pile.
-        _inventory.LeaveJunkPile(entity);
+        _inventory.Objects.LeaveItem(entity);
         // Taken hides an item from every seed view and from pickup and loot.
         _inventory.Taken.Add(entity);
         _durability.Records.Remove(entity);

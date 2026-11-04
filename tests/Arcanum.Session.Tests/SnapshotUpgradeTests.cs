@@ -8,16 +8,26 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":60,\"world\"";
+    private const string Current = "\"schemaVersion\":61,\"world\"";
+    private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
+
+    // MIG6d-3 (ARC-DEV-091): the schema 60 text of a schema 61 one with no junk pile and no pool: the junk piles, the pools and the two marks
+    // inside the inventory section, written the way the schema 60 build wrote them (a hand-made inverse of the upgrade step, so the step
+    // is checked against the older layout and not against itself).
+    internal static string Schema60(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, ObjectsSection);
+        StringAssert.Contains(text, ",\"identified\":[");
+        return text.Replace(Current, "\"schemaVersion\":60,\"world\"")
+            .Replace(",\"identified\":[", ",\"junkPiles\":[],\"identified\":[")
+            .Replace(ObjectsSection, ",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
+    }
 
     // The schema 56 text of a schema 59 one without a saved round, whose NPCs were never dressed and that left no pool of blood: the same text without
     // `inventory.npcWorn` and `inventory.bloodPools`.
-    private static string Schema56(string text)
-    {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"npcWorn\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
-        return text.Replace(Current, "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
-    }
+    private static string Schema56(string text) =>
+        Schema57(text).Replace("\"schemaVersion\":57,\"world\"", "\"schemaVersion\":56,\"world\"").Replace(",\"npcWorn\":[]}", "}");
 
     [TestMethod]
     public void Every_older_readable_schema_has_a_step_to_the_next()
@@ -30,20 +40,12 @@ public sealed class SnapshotUpgradeTests
     }
 
     // ARC-RENDER-041: the schema 57 text of a schema 59 one without a saved round that left no pool of blood: the same text without `inventory.bloodPools`.
-    private static string Schema57(string text)
-    {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
-        return text.Replace(Current, "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
-    }
+    private static string Schema57(string text) =>
+        Schema59(text).Replace("\"schemaVersion\":59,\"world\"", "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[]}", "}");
 
     // MIG6 (ARC-DEV-084): the schema 59 text of a schema 60 one: the same text without the junk and pool high-water marks.
-    private static string Schema59(string text)
-    {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ",\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
-        return text.Replace(Current, "\"schemaVersion\":59,\"world\"").Replace(",\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
-    }
+    private static string Schema59(string text) =>
+        Schema60(text).Replace("\"schemaVersion\":60,\"world\"", "\"schemaVersion\":59,\"world\"").Replace(",\"lastJunkNumber\":0,\"lastPoolNumber\":0}", "}");
 
     // GR19 (ARC-DEV-078): the schema 58 text of a schema 59 one: the same text without the saved round's `combat.subturnStarts`.
     private static string Schema58(string text)
@@ -107,13 +109,71 @@ public sealed class SnapshotUpgradeTests
             Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, older.SchemaVersion);
             Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(older), "The upgraded save is the current save it stands for.");
             using var restored = Restore(older);
-            Assert.AreEqual(0, restored.Capture().Inventory.LastJunkNumber, "The older load's rule: the highest number held now, none here.");
-            Assert.AreEqual(0, restored.Capture().Inventory.LastPoolNumber);
+            Assert.AreEqual(0, restored.Capture().Objects.LastJunkNumber, "The older load's rule: the highest number held now, none here.");
+            Assert.AreEqual(0, restored.Capture().Objects.LastPoolNumber);
         }
         // A schema 59 text that already carries a mark is refused.
+        var withMark = Schema59(GoldenJson).Replace(",\"bloodPools\":[]}", ",\"bloodPools\":[],\"lastJunkNumber\":0}");
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.inventory.lastJunkNumber"),
-            (GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\"")).Failure,
-             GameSessionSnapshotCodec.TryDecode(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\"")).Path));
+            (GameSessionSnapshotCodec.TryDecode(withMark).Failure, GameSessionSnapshotCodec.TryDecode(withMark).Path));
+    }
+
+    // MIG6d-3 (ARC-DEV-091): a schema 60 save keeps its junk piles, pools and marks in the inventory section; the step moves them to the
+    // objects section as they were, in order, and the saved numbers stay.
+    [TestMethod]
+    public void A_schema_60_save_decodes_as_the_current_schema()
+    {
+        foreach (var current in new[] { GoldenJson, HeroStateTests.HeroGolden })
+        {
+            var older = Schema60(current);
+            StringAssert.Contains(older, "\"schemaVersion\":60");
+            var upgraded = Decode(older);
+            Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded), "The upgraded save is the current save it stands for.");
+            using var restored = Restore(upgraded);
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        }
+        // A save with rows in all four fields, written as the schema 60 build wrote it (a literal, not made by the code under test): the
+        // junk pile, the pool of blood and the marks (a higher mark than the held numbers) reach the objects section unchanged.
+        const string Pile = "{\"entity\":\"junk:2\",\"map\":79,\"x\":120,\"y\":210,\"items\":[{\"entity\":\"kit:2\",\"slot\":0,\"width\":1,\"height\":1}," +
+            "{\"entity\":\"apple\",\"slot\":1,\"width\":2,\"height\":1}]}";
+        const string Pool = "{\"entity\":\"pool:3\",\"critter\":\"oid:wolf\",\"deathTimeMs\":10,\"map\":79,\"x\":105,\"y\":200,\"offsetX\":12,\"offsetY\":-7,\"createdMs\":20}";
+        var populated = Schema60(GoldenJson)
+            .Replace(",\"junkPiles\":[]", ",\"junkPiles\":[" + Pile + "]")
+            .Replace(",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}", ",\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7}");
+        var snapshot = Decode(populated);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, snapshot.SchemaVersion);
+        CollectionAssert.AreEqual(new[] { "junk:2" }, snapshot.Objects.JunkPiles.Select(pile => pile.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { ("kit:2", 0, 1, 1), ("apple", 1, 2, 1) }, snapshot.Objects.JunkPiles[0].Items.Select(item => (item.Entity, item.Slot, item.Width, item.Height)).ToArray());
+        CollectionAssert.AreEqual(new[] { "pool:3" }, snapshot.Objects.BloodPools.Select(pool => pool.Entity).ToArray());
+        Assert.AreEqual((5, 7), (snapshot.Objects.LastJunkNumber, snapshot.Objects.LastPoolNumber));
+        var text = GameSessionSnapshotCodec.Encode(snapshot);
+        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7}");
+        Assert.AreEqual(-1, text.IndexOf("\"junkPiles\"", text.IndexOf("\"inventory\"", StringComparison.Ordinal), text.IndexOf("\"objects\"", StringComparison.Ordinal) - text.IndexOf("\"inventory\"", StringComparison.Ordinal), StringComparison.Ordinal),
+            "the inventory section no longer carries them");
+        // The loaded session holds the records and never gives a number at or below the saved marks.
+        using (var loaded = Restore(snapshot))
+        {
+            CollectionAssert.AreEqual(new[] { "junk:2" }, loaded.QueryJunkPiles().Select(pile => pile.Entity).ToArray());
+            Assert.AreEqual("junk:6", loaded.NextObjectEntity(SessionObjectOrigin.JunkPile));
+            Assert.AreEqual("pool:8", loaded.NextObjectEntity(SessionObjectOrigin.BloodPool));
+        }
+        // Damaged older saves: each of the four fields the step moves must be there, and the objects section cannot exist yet.
+        var golden60 = Schema60(GoldenJson);
+        foreach (var (name, from, to) in new[]
+        {
+            ("junkPiles", ",\"junkPiles\":[],\"identified\"", ",\"identified\""),
+            ("bloodPools", ",\"bloodPools\":[],\"lastJunkNumber\"", ",\"lastJunkNumber\""),
+            ("lastJunkNumber", ",\"lastJunkNumber\":0,\"lastPoolNumber\"", ",\"lastPoolNumber\""),
+            ("lastPoolNumber", ",\"lastPoolNumber\":0}", "}"),
+        })
+        {
+            StringAssert.Contains(golden60, from);
+            var result = GameSessionSnapshotCodec.TryDecode(golden60.Replace(from, to));
+            Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.inventory." + name), (result.Failure, result.Path), name);
+        }
+        var both = Schema60(GoldenJson).Replace(",\"lighting\":{", ",\"objects\":{},\"lighting\":{");
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.objects"), (GameSessionSnapshotCodec.TryDecode(both).Failure, GameSessionSnapshotCodec.TryDecode(both).Path));
     }
 
     [TestMethod]
@@ -125,7 +185,7 @@ public sealed class SnapshotUpgradeTests
             Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, older.SchemaVersion);
             Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(older), "The upgraded save is the current save it stands for.");
             using var restored = Restore(older);
-            Assert.AreEqual(0, restored.Capture().Inventory.BloodPools.Count, "No death of a schema 57 session left a pool of blood.");
+            Assert.AreEqual(0, restored.Capture().Objects.BloodPools.Count, "No death of a schema 57 session left a pool of blood.");
         }
         var text = Schema57(GoldenJson);
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"npcWorn\":[]}", ",\"npcWorn\":[],\"bloodPools\":[]}")).Failure);
@@ -203,6 +263,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":61,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":62,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

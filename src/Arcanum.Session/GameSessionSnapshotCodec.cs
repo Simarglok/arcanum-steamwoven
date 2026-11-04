@@ -43,7 +43,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -74,8 +74,9 @@ public static partial class GameSessionSnapshotCodec
     // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
     // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items; ARC-RENDER-041 (schema 58): the pools of blood.
-    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights", "junkPiles",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "bloodPools", "lastJunkNumber", "lastPoolNumber"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
+    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
     private static readonly string[] NpcWearFields = ["npc", "worn"];
     private static readonly string[] NpcWornItemFields = ["slot", "item"];
@@ -458,28 +459,6 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
-            w.WriteStartArray("junkPiles");
-            foreach (var pile in snapshot.Inventory.JunkPiles)
-            {
-                w.WriteStartObject();
-                w.WriteString("entity", pile.Entity);
-                w.WriteNumber("map", pile.Map.RuntimeMap);
-                w.WriteNumber("x", pile.Cell.X);
-                w.WriteNumber("y", pile.Cell.Y);
-                w.WriteStartArray("items");
-                foreach (var item in pile.Items)
-                {
-                    w.WriteStartObject();
-                    w.WriteString("entity", item.Entity);
-                    w.WriteNumber("slot", item.Slot);
-                    w.WriteNumber("width", item.Width);
-                    w.WriteNumber("height", item.Height);
-                    w.WriteEndObject();
-                }
-                w.WriteEndArray();
-                w.WriteEndObject();
-            }
-            w.WriteEndArray();
             // ARC-WORLD-090: by entity in ordinal order.
             w.WriteStartArray("identified");
             foreach (var entity in snapshot.Inventory.Identified) w.WriteStringValue(entity);
@@ -526,9 +505,35 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            w.WriteEndObject();
+
+            // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records: junk piles and pools of blood with their number marks.
+            w.WriteStartObject("objects");
+            w.WriteStartArray("junkPiles");
+            foreach (var pile in snapshot.Objects.JunkPiles)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", pile.Entity);
+                w.WriteNumber("map", pile.Map.RuntimeMap);
+                w.WriteNumber("x", pile.Cell.X);
+                w.WriteNumber("y", pile.Cell.Y);
+                w.WriteStartArray("items");
+                foreach (var item in pile.Items)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("entity", item.Entity);
+                    w.WriteNumber("slot", item.Slot);
+                    w.WriteNumber("width", item.Width);
+                    w.WriteNumber("height", item.Height);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             // ARC-RENDER-041: the pools of blood in the order they were left.
             w.WriteStartArray("bloodPools");
-            foreach (var pool in snapshot.Inventory.BloodPools)
+            foreach (var pool in snapshot.Objects.BloodPools)
             {
                 w.WriteStartObject();
                 w.WriteString("entity", pool.Entity);
@@ -543,9 +548,9 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
-            // ARC-DEV-084 (schema 60): the high-water marks of the junk and pool numbers.
-            w.WriteNumber("lastJunkNumber", snapshot.Inventory.LastJunkNumber);
-            w.WriteNumber("lastPoolNumber", snapshot.Inventory.LastPoolNumber);
+            // ARC-DEV-084 (schema 60, section moved in schema 61): the high-water marks of the junk and pool numbers.
+            w.WriteNumber("lastJunkNumber", snapshot.Objects.LastJunkNumber);
+            w.WriteNumber("lastPoolNumber", snapshot.Objects.LastPoolNumber);
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -981,7 +986,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1738,28 +1743,6 @@ public static partial class GameSessionSnapshotCodec
                 Int(row["magicWeight"], path + ".magicWeight", -Arcanum.Simulation.Items.CarryLimits.MaxWeight, Arcanum.Simulation.Items.CarryLimits.MaxWeight),
                 Complexity(row, path)));
         }
-        // ARC-WORLD-063: the junk piles, in the order they were made; the grid's bounds and overlaps are checked on restore.
-        var junkRows = Array(f["junkPiles"], p + ".junkPiles", SessionJunkPile.MaxPiles);
-        var junkPiles = new SessionJunkPile[junkRows.Length];
-        var junkItems = 0;
-        for (var i = 0; i < junkRows.Length; i++)
-        {
-            var path = $"{p}.junkPiles[{i}]";
-            var row = Fields(junkRows[i], path, JunkPileFields);
-            var itemRows = Array(row["items"], path + ".items", SessionJunkPile.MaxItems);
-            if ((junkItems += itemRows.Length) > SessionJunkPile.MaxItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, path + ".items");
-            var pileItems = new SessionJunkPileItem[itemRows.Length];
-            for (var j = 0; j < itemRows.Length; j++)
-            {
-                var itemPath = $"{path}.items[{j}]";
-                var item = Fields(itemRows[j], itemPath, JunkPileItemFields);
-                pileItems[j] = new(Entity(item["entity"], itemPath + ".entity"), Int(item["slot"], itemPath + ".slot", 0, MaxJunkSlot),
-                    Int(item["width"], itemPath + ".width", 1, Arcanum.Simulation.Items.InventoryGridRules.Columns),
-                    Int(item["height"], itemPath + ".height", 1, Arcanum.Simulation.Items.InventoryGridRules.ContainerRows));
-            }
-            junkPiles[i] = new(Entity(row["entity"], path + ".entity"), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
-                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)), System.Array.AsReadOnly(pileItems));
-        }
         // ARC-WORLD-090: the identified items by entity in strictly ascending ordinal order.
         var identifiedRows = Array(f["identified"], p + ".identified", SessionInventoryState.MaxIdentified);
         var identified = new string[identifiedRows.Length];
@@ -1813,6 +1796,37 @@ public static partial class GameSessionSnapshotCodec
             npcWorn[i] = new(npc, System.Array.AsReadOnly(worn));
             if (i > 0 && string.CompareOrdinal(npcWorn[i - 1].Npc, npc) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".npc");
         }
+        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, identified,
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn);
+    }
+
+    // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records, in the order they were made; the owner's restore checks the rest.
+    private static SessionObjectRecords Objects(JsonElement element)
+    {
+        const string p = "$.objects";
+        var f = Fields(element, p, ObjectsFields);
+        // ARC-WORLD-063: the junk piles, in the order they were made; the grid's bounds and overlaps are checked on restore.
+        var junkRows = Array(f["junkPiles"], p + ".junkPiles", SessionJunkPile.MaxPiles);
+        var junkPiles = new SessionJunkPile[junkRows.Length];
+        var junkItems = 0;
+        for (var i = 0; i < junkRows.Length; i++)
+        {
+            var path = $"{p}.junkPiles[{i}]";
+            var row = Fields(junkRows[i], path, JunkPileFields);
+            var itemRows = Array(row["items"], path + ".items", SessionJunkPile.MaxItems);
+            if ((junkItems += itemRows.Length) > SessionJunkPile.MaxItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, path + ".items");
+            var pileItems = new SessionJunkPileItem[itemRows.Length];
+            for (var j = 0; j < itemRows.Length; j++)
+            {
+                var itemPath = $"{path}.items[{j}]";
+                var item = Fields(itemRows[j], itemPath, JunkPileItemFields);
+                pileItems[j] = new(Entity(item["entity"], itemPath + ".entity"), Int(item["slot"], itemPath + ".slot", 0, MaxJunkSlot),
+                    Int(item["width"], itemPath + ".width", 1, Arcanum.Simulation.Items.InventoryGridRules.Columns),
+                    Int(item["height"], itemPath + ".height", 1, Arcanum.Simulation.Items.InventoryGridRules.ContainerRows));
+            }
+            junkPiles[i] = new(Entity(row["entity"], path + ".entity"), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)), System.Array.AsReadOnly(pileItems));
+        }
         // ARC-RENDER-041: the pools of blood in the order they were left (the owner's restore checks the rest).
         var poolRows = Array(f["bloodPools"], p + ".bloodPools", SessionBloodPool.MaxPools);
         var bloodPools = new SessionBloodPool[poolRows.Length];
@@ -1826,9 +1840,7 @@ public static partial class GameSessionSnapshotCodec
                 Int(row["offsetX"], path + ".offsetX", int.MinValue, int.MaxValue), Int(row["offsetY"], path + ".offsetY", int.MinValue, int.MaxValue),
                 Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue));
         }
-        return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, junkPiles, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn, bloodPools,
-            Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue));
+        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue));
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

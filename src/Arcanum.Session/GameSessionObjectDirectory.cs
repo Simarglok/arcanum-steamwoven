@@ -82,8 +82,8 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.Made => _inventory.Made.Select(item => item.Entity)
                 .Concat(_inventory.Lists.All.Select(item => item.Entity))
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed),
-            SessionObjectOrigin.JunkPile => _inventory.JunkPiles.Select(pile => pile.Entity),
-            SessionObjectOrigin.BloodPool => _inventory.BloodPools.Select(pool => pool.Entity),
+            SessionObjectOrigin.JunkPile => _inventory.Objects.Piles.Select(pile => pile.Entity),
+            SessionObjectOrigin.BloodPool => _inventory.Objects.Pools.Select(pool => pool.Entity),
             _ => _inventory.Pc.Select(item => item.Entity).Concat(_inventory.Taken).Concat(_durability.Destroyed)
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_inventory.Hero.GivenAll.Select(given => given.Entity)),
         };
@@ -123,10 +123,10 @@ public sealed partial class GameSessionOwner
     internal int NextObjectNumber(SessionObjectOrigin origin) => origin switch
     {
         SessionObjectOrigin.Made => (int)Math.Min(int.MaxValue, NextMadeNumber()),
-        SessionObjectOrigin.JunkPile => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.LastJunkNumber,
-            _inventory.JunkPiles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max())),
-        SessionObjectOrigin.BloodPool => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.LastPoolNumber,
-            _inventory.BloodPools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max())),
+        SessionObjectOrigin.JunkPile => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.Objects.LastJunkNumber,
+            _inventory.Objects.Piles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max())),
+        SessionObjectOrigin.BloodPool => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.Objects.LastPoolNumber,
+            _inventory.Objects.Pools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max())),
         _ => throw new ArgumentOutOfRangeException(nameof(origin)),
     };
 
@@ -135,8 +135,8 @@ public sealed partial class GameSessionOwner
     internal int AllocateObjectNumber(SessionObjectOrigin origin)
     {
         var number = NextObjectNumber(origin);
-        if (origin == SessionObjectOrigin.JunkPile) _inventory.LastJunkNumber = number;
-        else if (origin == SessionObjectOrigin.BloodPool) _inventory.LastPoolNumber = number;
+        if (origin == SessionObjectOrigin.JunkPile) _inventory.Objects.LastJunkNumber = number;
+        else if (origin == SessionObjectOrigin.BloodPool) _inventory.Objects.LastPoolNumber = number;
         return number;
     }
 
@@ -144,10 +144,10 @@ public sealed partial class GameSessionOwner
     {
         var origin = ObjectOriginOf(entity);
         if (origin == SessionObjectOrigin.JunkPile)
-            return _inventory.JunkPile(entity) is { } pile ? new(entity, origin, SessionObjectPlace.Ground, pile.Map, pile.Cell) : null;
+            return _inventory.Objects.Pile(entity) is { } pile ? new(entity, origin, SessionObjectPlace.Ground, pile.Map, pile.Cell) : null;
         if (origin == SessionObjectOrigin.BloodPool)
         {
-            if (_inventory.BloodPools.Find(pool => pool.Entity == entity) is not { } pool) return null;
+            if (_inventory.Objects.Pool(entity) is not { } pool) return null;
             var decayed = BloodPoolRules.Decayed(pool.CreatedMs, _clock.QueryClockSnapshot().GameTimestampMs);
             return decayed ? new(entity, origin, SessionObjectPlace.Destroyed) : new(entity, origin, SessionObjectPlace.Ground, pool.Map, pool.Cell);
         }
@@ -172,7 +172,7 @@ public sealed partial class GameSessionOwner
     }
 
     private SessionObjectEntry OnGround(string entity, SessionObjectOrigin origin, SessionMapId map, CellCoord cell) =>
-        _inventory.JunkPileOf(entity) is { } pile
+        _inventory.Objects.PileOf(entity) is { } pile
             ? new(entity, origin, SessionObjectPlace.JunkPile, pile.Map, pile.Cell, Pile: pile.Entity)
             : new(entity, origin, SessionObjectPlace.Ground, map, cell);
 }

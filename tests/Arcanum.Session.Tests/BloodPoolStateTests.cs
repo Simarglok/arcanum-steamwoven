@@ -106,14 +106,14 @@ public sealed class BloodPoolStateTests
         Advance(owner, 1);
         Assert.AreEqual(0, owner.QueryBloodPools(Map).Count);
         Assert.AreEqual(SessionObjectPlace.Destroyed, owner.QueryObject("pool:1")!.Place, "a decayed pool is gone");
-        Assert.AreEqual(1, owner.Capture().Inventory.BloodPools.Count, "kept until the next pool is left");
+        Assert.AreEqual(1, owner.Capture().Objects.BloodPools.Count, "kept until the next pool is left");
         Kill(owner, "oid:bear");
         var next = Leave(owner, "oid:bear");
         Assert.AreEqual("pool:2", next.Pool!.Entity, "the decayed pool is dropped, its number is not given again (MIG6, TM1: an id is never reassigned)");
-        Assert.AreEqual(2, owner.Capture().Inventory.LastPoolNumber);
+        Assert.AreEqual(2, owner.Capture().Objects.LastPoolNumber);
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.AreEqual(2, restored.Capture().Inventory.LastPoolNumber, "the mark survives a save and a load");
-        CollectionAssert.AreEqual(new[] { next.Pool }, owner.Capture().Inventory.BloodPools.ToArray());
+        Assert.AreEqual(2, restored.Capture().Objects.LastPoolNumber, "the mark survives a save and a load");
+        CollectionAssert.AreEqual(new[] { next.Pool }, owner.Capture().Objects.BloodPools.ToArray());
     }
 
     [TestMethod]
