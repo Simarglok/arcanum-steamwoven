@@ -475,7 +475,7 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
-    public void TheSubturnStartsAreCountedWhicheverCallBeganThemAndAreNotSaved()
+    public void TheSubturnStartsAreCountedWhicheverCallBeganThemAndSavedWithTheRound()
     {
         foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
         {
@@ -498,8 +498,10 @@ public sealed class CombatRoundTests
             // Past the end through the skip loop A9 starts the wolf's subturn twice in the Original setting: both starts count.
             Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
             Assert.AreEqual(mode == RuleMode.Original ? 5 : 4, owner.QueryCombatSubturnStarts(), mode.ToString());
-            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions());
-            Assert.AreEqual(0, restored.QueryCombatSubturnStarts(), "not saved");
+            // GR19 (ARC-DEV-078): saved with the round, so the count goes on after a load.
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions() with { Rules = mode });
+            Assert.AreEqual(owner.QueryCombatSubturnStarts(), restored.QueryCombatSubturnStarts(), mode.ToString());
+            Assert.AreEqual(owner.QueryCombatSubturnStarts(), restored.QueryCombatRound()!.SubturnStarts);
         }
     }
 
@@ -514,9 +516,12 @@ public sealed class CombatRoundTests
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"reactions\":{\"records\":[]},\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:bandit\",null]," +
-            "\"current\":0,\"actionPoints\":3},\"combatMode\":{\"hero\":false,\"critters\":[]},\"concealment\":{\"hero\":false,\"npcs\":[]},\"danger\":{\"records\":[]},\"sound\":");
+            "\"current\":0,\"actionPoints\":3,\"subturnStarts\":1},\"combatMode\":{\"hero\":false,\"critters\":[]},\"concealment\":{\"hero\":false,\"npcs\":[]},\"danger\":{\"records\":[]},\"sound\":");
         using var restored = Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Round(restored, 1, Wolf, 3, Wolf, Bandit, Hero);
+        // Steamwoven resumes the loaded round as it was saved (GR19).
+        Assert.AreEqual(GameSessionDisposition.NoChange, restored.ResumeLoadedCombatRound(restored.Version, world).Disposition);
         Round(restored, 1, Wolf, 3, Wolf, Bandit, Hero);
         // The stalled-actor check is not saved: after the restore the wolf's next check is a first one again.
         Assert.AreEqual(GameSessionDisposition.NoChange, restored.CompleteCombatActions(restored.Version, world).Disposition);
@@ -529,7 +534,7 @@ public sealed class CombatRoundTests
         using var owner = Owner();
         Ok(owner.StartCombatRound(owner.Version, Fight()), owner);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string saved = "\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:bandit\",null],\"current\":0,\"actionPoints\":7}";
+        const string saved = "\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:bandit\",null],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}";
         StringAssert.Contains(text, saved);
 
         void RestoreFails(string replacement, GameSessionFailure failure)
@@ -537,13 +542,13 @@ public sealed class CombatRoundTests
             var result = GameSessionOwner.Restore(Decode(text.Replace(saved, replacement)), RestoreOptions());
             Assert.AreEqual((null, failure), (result.Owner, result.Failure), replacement);
         }
-        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:wolf\",null],\"current\":0,\"actionPoints\":7}", GameSessionFailure.InvalidCombatRound);
-        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",null,null],\"current\":0,\"actionPoints\":7}", GameSessionFailure.InvalidCombatRound);
-        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\"],\"current\":0,\"actionPoints\":7}", GameSessionFailure.InvalidCombatRound);
-        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",null],\"current\":2,\"actionPoints\":7}", GameSessionFailure.InvalidCombatRound);
-        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[],\"current\":0,\"actionPoints\":7}", GameSessionFailure.InvalidCombatRound);
+        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:wolf\",null],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", GameSessionFailure.InvalidCombatRound);
+        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",null,null],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", GameSessionFailure.InvalidCombatRound);
+        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\"],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", GameSessionFailure.InvalidCombatRound);
+        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",null],\"current\":2,\"actionPoints\":7,\"subturnStarts\":1}", GameSessionFailure.InvalidCombatRound);
+        RestoreFails("\"combat\":{\"turn\":1,\"participants\":[],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", GameSessionFailure.InvalidCombatRound);
         using var golden = GoldenSession();
-        var heroless = GameSessionSnapshotCodec.Encode(golden.Capture()).Replace(NoCombat, ",\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":5}");
+        var heroless = GameSessionSnapshotCodec.Encode(golden.Capture()).Replace(NoCombat, ",\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":5,\"subturnStarts\":0}");
         var noHero = GameSessionOwner.Restore(Decode(heroless), RestoreOptions());
         Assert.AreEqual((null, GameSessionFailure.InvalidCombatRound), (noHero.Owner, noHero.Failure));
 
@@ -552,12 +557,139 @@ public sealed class CombatRoundTests
             var result = GameSessionSnapshotCodec.TryDecode(text.Replace(saved, replacement));
             Assert.AreEqual((failure, path), (result.Failure, result.Path), replacement);
         }
-        DecodeFails("\"combat\":{\"turn\":0,\"participants\":[null],\"current\":0,\"actionPoints\":7}", SnapshotDecodeFailure.OutOfRange, "$.combat.turn");
-        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":1001}", SnapshotDecodeFailure.OutOfRange, "$.combat.actionPoints");
-        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":-1,\"actionPoints\":7}", SnapshotDecodeFailure.OutOfRange, "$.combat.current");
-        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[\"oid wolf\"],\"current\":0,\"actionPoints\":7}", SnapshotDecodeFailure.OutOfRange, "$.combat.participants[0]");
-        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[3],\"current\":0,\"actionPoints\":7}", SnapshotDecodeFailure.WrongType, "$.combat.participants[0]");
+        DecodeFails("\"combat\":{\"turn\":0,\"participants\":[null],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", SnapshotDecodeFailure.OutOfRange, "$.combat.turn");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":1001,\"subturnStarts\":0}", SnapshotDecodeFailure.OutOfRange, "$.combat.actionPoints");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":-1,\"actionPoints\":7,\"subturnStarts\":1}", SnapshotDecodeFailure.OutOfRange, "$.combat.current");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[\"oid wolf\"],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", SnapshotDecodeFailure.OutOfRange, "$.combat.participants[0]");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[3],\"current\":0,\"actionPoints\":7,\"subturnStarts\":1}", SnapshotDecodeFailure.WrongType, "$.combat.participants[0]");
         DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0}", SnapshotDecodeFailure.MissingField, "$.combat.actionPoints");
         DecodeFails("\"combat\":[]", SnapshotDecodeFailure.WrongType, "$.combat");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":7}", SnapshotDecodeFailure.MissingField, "$.combat.subturnStarts");
+        DecodeFails("\"combat\":{\"turn\":1,\"participants\":[null],\"current\":0,\"actionPoints\":7,\"subturnStarts\":-1}", SnapshotDecodeFailure.OutOfRange, "$.combat.subturnStarts");
+    }
+
+    // GR19 (ARC-DEV-078): a fight saved in round 2 on the bandit's subturn with 5 action points left; 5 subturn starts.
+    private static string SavedRoundTwo()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.ConsumeActionPoints(owner.Version, Bandit, 3, world), owner);
+        Round(owner, 2, Bandit, 5, Wolf, Bandit, Hero);
+        Assert.AreEqual(5, owner.QueryCombatSubturnStarts());
+        return GameSessionSnapshotCodec.Encode(owner.Capture());
+    }
+
+    private static GameSessionOwner Loaded(string text, RuleMode rules) => Restore(Decode(text), RestoreOptions() with { Rules = rules });
+
+    // The square after the load: a dog came in front of the bandit, the wolf now stands after it.
+    private static World AfterLoad() => new World().With(Hero, 0, 0, null).With(Dog, 100, 205, Npc(5)).With(Bandit, 95, 195, Npc(8))
+        .With(Wolf, 105, 200, Npc(7));
+
+    [TestMethod]
+    public void GR19TheOriginalRebuildsALoadedRoundAsRoundOneWithTheSavedActor()
+    {
+        var text = SavedRoundTwo();
+        using var owner = Loaded(text, RuleMode.Original);
+        Round(owner, 2, Bandit, 5, Wolf, Bandit, Hero);
+        var revision = owner.Version.Revision;
+        var clock = Now(owner);
+        var world = AfterLoad();
+        var resumed = Ok(owner.ResumeLoadedCombatRound(owner.Version, world), owner);
+        CollectionAssert.AreEqual(new[] { Began(1), Started(Bandit, 5) }, resumed.Events.ToArray());
+        Round(owner, 1, Bandit, 5, Dog, Bandit, Wolf, Hero);
+        Assert.AreEqual((revision + 1, clock, 6L), (owner.Version.Revision, Now(owner), owner.QueryCombatSubturnStarts()), "no clock step");
+        Assert.AreEqual(1, world.Scans);
+        // Once only: the round is no longer the loaded one.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ResumeLoadedCombatRound(owner.Version, world).Disposition);
+        Assert.AreEqual(1, world.Scans);
+        // The rebuilt round plays on: the bandit's subturn ends, the wolf's starts.
+        CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Wolf, 7) }, Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner).Events.ToArray());
+    }
+
+    [TestMethod]
+    public void GR19SteamwovenResumesALoadedRoundExactly()
+    {
+        var text = SavedRoundTwo();
+        using var owner = Loaded(text, RuleMode.Steamwoven);
+        var world = AfterLoad();
+        var revision = owner.Version.Revision;
+        var resumed = owner.ResumeLoadedCombatRound(owner.Version, world);
+        Assert.AreEqual((GameSessionDisposition.NoChange, 0), (resumed.Disposition, resumed.Events.Count));
+        Round(owner, 2, Bandit, 5, Wolf, Bandit, Hero);
+        Assert.AreEqual((revision, 5L, 0), (owner.Version.Revision, owner.QueryCombatSubturnStarts(), world.Scans));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(owner.Capture()), "the save it was loaded from");
+        // A later switch to the Original setting does not rebuild it: the load rule ran at the first call.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SelectRules(RuleMode.Original));
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ResumeLoadedCombatRound(owner.Version, world).Disposition);
+        Round(owner, 2, Bandit, 5, Wolf, Bandit, Hero);
+    }
+
+    [TestMethod]
+    public void GR19TheLoadRuleIsTheModeActiveAtTheResume()
+    {
+        var text = SavedRoundTwo();
+        using var owner = Loaded(text, RuleMode.Steamwoven);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SelectRules(RuleMode.Original));
+        Ok(owner.ResumeLoadedCombatRound(owner.Version, AfterLoad()), owner);
+        Round(owner, 1, Bandit, 5, Dog, Bandit, Wolf, Hero);
+        using var other = Loaded(text, RuleMode.Original);
+        Assert.AreEqual(GameSessionDisposition.Changed, other.SelectRules(RuleMode.Steamwoven));
+        Assert.AreEqual(GameSessionDisposition.NoChange, other.ResumeLoadedCombatRound(other.Version, AfterLoad()).Disposition);
+        Round(other, 2, Bandit, 5, Wolf, Bandit, Hero);
+    }
+
+    [TestMethod]
+    public void GR19AMissingSavedActorLoadsInTheOriginalFromTheHeadOfTheRebuiltOrder()
+    {
+        using var owner = Loaded(SavedRoundTwo(), RuleMode.Original);
+        // The bandit is gone from the square: the original's load fails here; it goes on from the dog, with the dog's own points.
+        var world = new World().With(Hero, 0, 0, null).With(Dog, 100, 205, Npc(5)).With(Wolf, 105, 200, Npc(7));
+        var resumed = Ok(owner.ResumeLoadedCombatRound(owner.Version, world), owner);
+        CollectionAssert.AreEqual(new[] { Began(1), Started(Dog, 5) }, resumed.Events.ToArray());
+        Round(owner, 1, Dog, 5, Dog, Wolf, Hero);
+    }
+
+    [TestMethod]
+    public void GR19ARebuildInWhichNobodyCanActEndsTheRoundInsteadOfFailingTheLoad()
+    {
+        using var owner = Loaded(SavedRoundTwo(), RuleMode.Original);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { Fatigue = 28 }).Disposition);
+        var world = new World().With(Hero, 0, 0, null).With(Wolf, 105, 200, Npc(7, new LifeState(0, 30, 0, LifeConditions.None, 0)));
+        var resumed = Ok(owner.ResumeLoadedCombatRound(owner.Version, world), owner);
+        CollectionAssert.AreEqual(new[] { new SessionCombatEvent(SessionCombatEventKind.RoundEnded, null, 0) }, resumed.Events.ToArray());
+        Assert.IsNull(owner.QueryCombatRound());
+    }
+
+    [TestMethod]
+    public void GR19ARoundCallBeforeTheResumeOrARefusedResumeKeepTheRoundAsLoaded()
+    {
+        var text = SavedRoundTwo();
+        using (var owner = Loaded(text, RuleMode.Original))
+        {
+            var revision = owner.Version.Revision;
+            Refused(owner.ResumeLoadedCombatRound(new GameSessionVersion(owner.Identity, revision + 7), AfterLoad()), owner,
+                GameSessionFailure.StaleVersion, revision);
+            Refused(owner.ResumeLoadedCombatRound(owner.Version, new World().With(Bandit, 95, 195, Npc(8))), owner,
+                GameSessionFailure.InvalidCombatFacts, revision);
+            Round(owner, 2, Bandit, 5, Wolf, Bandit, Hero);
+            // Still pending after the refusals.
+            Ok(owner.ResumeLoadedCombatRound(owner.Version, AfterLoad()), owner);
+            Round(owner, 1, Bandit, 5, Dog, Bandit, Wolf, Hero);
+        }
+        using (var owner = Loaded(text, RuleMode.Original))
+        {
+            var world = AfterLoad();
+            Ok(owner.ConsumeActionPoints(owner.Version, Bandit, 1, world), owner);
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.ResumeLoadedCombatRound(owner.Version, world).Disposition);
+            Round(owner, 2, Bandit, 4, Wolf, Bandit, Hero);
+        }
+        using (var plain = Owner(RuleMode.Original))
+            Assert.AreEqual(GameSessionDisposition.NoChange, plain.ResumeLoadedCombatRound(plain.Version, Fight()).Disposition);
     }
 }

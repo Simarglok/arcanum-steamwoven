@@ -453,8 +453,9 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-097); schema 55 adds the generated-once containers to <see cref="Inventory"/> (ARC-WORLD-100); schema 56 adds the hero's
     /// player name and portrait to <see cref="Hero"/> (ARC-UI-033); schema 57 adds the worn items of the NPCs the session dressed to
     /// <see cref="Inventory"/> (ARC-WORLD-103); schema 58 adds the pools of blood the session left to <see cref="Inventory"/>
-    /// (ARC-RENDER-041). Schemas 1..55 are refused, not migrated; schemas 56 and 57 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 58;
+    /// (ARC-RENDER-041); schema 59 adds the session's subturn starts to a saved <see cref="Combat"/> round (GR19, ARC-DEV-078). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 58 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 59;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

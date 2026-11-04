@@ -129,7 +129,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] ReactionsFields = ["records"];
     private static readonly string[] ReactionFields = ["entity", "remembered", "conversation"];
     private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
-    private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints"];
+    // GR19 (ARC-DEV-078, schema 59): the session's subturn starts are saved with the round.
+    private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints", "subturnStarts"];
     private static readonly string[] CombatModeFields = ["hero", "critters"];
     private static readonly string[] ConcealmentFields = ["hero", "npcs"];
     private static readonly string[] DangerFields = ["records"];
@@ -747,6 +748,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndArray();
                 w.WriteNumber("current", combat.Current);
                 w.WriteNumber("actionPoints", combat.ActionPoints);
+                w.WriteNumber("subturnStarts", combat.SubturnStarts);
                 w.WriteEndObject();
             }
             else w.WriteNull("combat");
@@ -1079,7 +1081,8 @@ public static partial class GameSessionSnapshotCodec
                 : SessionCombatant.Critter(Entity(items[i], $"{p}.participants[{i}]"));
         return new(Int(f["turn"], p + ".turn", 1, int.MaxValue), participants,
             Int(f["current"], p + ".current", 0, SessionCombatLimits.MaxParticipants - 1),
-            Int(f["actionPoints"], p + ".actionPoints", 0, TurnBasedRules.MaxActionPoints));
+            Int(f["actionPoints"], p + ".actionPoints", 0, TurnBasedRules.MaxActionPoints),
+            Long(f["subturnStarts"], p + ".subturnStarts", 0, long.MaxValue));
     }
 
     // Shapes and ordinal order; the hero's presence is Restore's.

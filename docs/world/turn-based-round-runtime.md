@@ -92,26 +92,48 @@ keeps the bug of the original game ([rule modes](rule-modes.md#registry)):
 | `FirstSubturnStartedTwice` | A9 | when the skip loop of the next subturn runs past the end, the new round's first subturn starts twice (two `SubturnStarted` events: heartbeat and AI twice) | once |
 | `StallCheckKeepsPreviousActionPoints` | A11 | when the actor changes, the stalled-actor check keeps the previous actor's action points (0 at a round start) as the reference, so a new actor's second check may force it to stop although it spent | the new actor's own action points |
 | `OverexertionKnockoutClearsNextActionPoints` | A12 | when the overexertion's fatigue damage knocks the PC out, the turn passes on inside the damage step and the overexertion then zeroes the action points of the participant that just started | that participant keeps its action points |
+| `RoundRebuiltOnLoad` | GR19 | a load restarts the saved round: round 1, the order rebuilt from the scan, the saved actor's subturn with its saved action points ([below](#a-round-at-a-load-gr19-arc-dev-078)) | the saved round resumes exactly |
 
 ## Snapshot schema 11
 
 `GameSessionSnapshot.Combat` (`SessionCombatRound?`): null without a round. JSON, between `reactions` and `events`:
 
 ```json
-"combat":{"turn":1,"participants":["oid:wolf","oid:bandit",null],"current":0,"actionPoints":3}
+"combat":{"turn":1,"participants":["oid:wolf","oid:bandit",null],"current":0,"actionPoints":3,"subturnStarts":1}
 ```
 
 `null` in `participants` is the hero. The codec checks shapes and ranges (turn ≥ 1, current 0..1023, action points
-0..1000, at most 1024 participants, entity ids); `Restore` refuses (`InvalidCombatRound`) a round without a session
+0..1000, at most 1024 participants, entity ids, subturn starts ≥ 0; `subturnStarts` since schema 59, an older round upgraded
+with 0); `Restore` refuses (`InvalidCombatRound`) a round without a session
 hero, without the hero or with it twice, with a repeated participant, an empty list or an index outside it.
 **Migration decision: none.** Schema 10 and older are refused; a quick save of schema 10 loads as "written by an
 incompatible version". The stalled-actor check is not saved and starts empty after a restore, as after the source's load.
 
-Deliberate difference from the original's load: the original restarts the round on load, so it rescans (participants
-merged over earlier rounds and their order are lost; the load fails when the saved actor is not found again), and the
-turn counter restarts at 1. The session keeps the saved participants, order and turn number instead: a restore has no
-world to scan, and nothing in the original reads the turn counter (its turn counter getter, 0x4B80D0, has no caller). The
-saved required action points (reset on load) and the unused second actor handle are not kept.
+The saved required action points (reset on load) and the unused second actor handle are not kept.
+
+### A round at a load (GR19, ARC-DEV-078)
+
+The original restarts a saved round at a load (PS13, TL35 of the [persistence study](../architecture/original-persistence.md)):
+it rescans the square around the hero, so participants merged over earlier rounds and their order are lost, the round
+counter is read and overwritten (the reloaded fight shows round 1), the action points are restored and the saved current
+participant is looked up in the new list; the whole load fails when it is not there, or when the restart's first round step
+ended the mode again. By the owner's answer "GR19 A" (2026-11-04, [gap review](../architecture/gap-review.md#gr19-the-turn-based-round-at-a-load)):
+
+- A restore keeps the saved round (it has no world to scan) and marks it loaded (not saved, no mode in it).
+  `ResumeLoadedCombatRound(expected, world)` applies the load rule of the mode active at that call; the host calls it once
+  the round's world can be scanned and before any other round call. A round call that commits first, or the round's end,
+  keeps the round as loaded; a refused resume keeps it pending.
+- **Steamwoven** resumes exactly: round number, participants, order, actor, action points and the subturn starts saved
+  with the round (NoChange, no scan). The stalled-actor check still starts empty.
+- **Original** (`RoundRebuiltOnLoad`): a new round 1 over the scan (no merge with the saved list, no clock step), then the
+  saved actor's subturn with its saved action points when the rebuilt order holds it. Events: `RoundBegan` 1 and one
+  `SubturnStarted` for the participant whose subturn runs (the head's start the saved actor replaces is not reported: the
+  original's load runs no turn-set hook for it).
+- **Both settings load where the original's load fails** (a technical bug, owner rule 2026-10-28): a rebuilt order without
+  the saved actor goes on from its head, that participant's subturn with its own action points; a rebuild in which nobody
+  can act and the hero is inactive ends the round (`RoundEnded`).
+- The viewer's round frame (`AreaTurnBased.Step`) calls it first; a resume that reports events ends the frame, as a new
+  round does.
 
 ## Tests
 
@@ -123,7 +145,11 @@ saved required action points (reset on load) and the unused second actor handle 
   of a later scan, newcomers in front, A9/A11/A12 in both modes, overexertion with its timer and revision, a round
   ended by an overexertion knockout, a knockout and a stun by a life step, a hero killed on its subturn, the stall reset
   at every round, the gate and the preview, a joining NPC, stopped game time, a world that calls back, the canonical
-  text and restore, and the restore and decode refusals.
+  text and restore, and the restore and decode refusals; GR19 (ARC-DEV-078): the subturn starts saved with the round, the
+  Original rebuild with the saved actor, Steamwoven's exact resume, the mode read at the resume, a missing saved actor, a
+  rebuild in which nobody can act, a round call or a refused resume before it.
+- `Arcanum.Session.Tests/SnapshotUpgradeTests`: a schema 58 round upgraded with no subturn starts.
+- `Arcanum.TerrainViewer.Tests/AreaCombatRoundTests`: a loaded round's first frame in both settings.
 
 ## Viewer host (ARC-COMBAT-020)
 

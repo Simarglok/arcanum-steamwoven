@@ -28,6 +28,13 @@ public static partial class GameSessionSnapshotCodec
         [56] = root => AddField(Section(root, "inventory"), "$.inventory", "npcWorn", new JsonArray()),
         // ARC-RENDER-041 (schema 58): no death left a pool of blood.
         [57] = root => AddField(Section(root, "inventory"), "$.inventory", "bloodPools", new JsonArray()),
+        // GR19 (ARC-DEV-078, schema 59): a saved round gets the subturn starts the older load restored, none.
+        [58] = root =>
+        {
+            if (!root.TryGetPropertyValue("combat", out var combat)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.combat");
+            if (combat is null) return;
+            AddField(combat as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.combat"), "$.combat", "subturnStarts", JsonValue.Create(0L));
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

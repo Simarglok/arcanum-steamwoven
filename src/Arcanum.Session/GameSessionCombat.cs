@@ -70,22 +70,26 @@ public interface ISessionCombatWorld
 
 /// <summary>
 /// The active turn-based round: the round number (1 for the first), the participants in round order, the index of the
-/// participant whose subturn it is and the action points it has left.
+/// participant whose subturn it is, the action points it has left and the session's subturn starts (GR19, ARC-DEV-078: saved
+/// with the round since schema 59, so a load resumes the count).
 /// </summary>
 public sealed class SessionCombatRound
 {
-    internal SessionCombatRound(int turn, SessionCombatant[] participants, int current, int actionPoints)
+    internal SessionCombatRound(int turn, SessionCombatant[] participants, int current, int actionPoints, long subturnStarts = 0)
     {
         Turn = turn;
         Participants = Array.AsReadOnly(participants);
         Current = current;
         ActionPoints = actionPoints;
+        SubturnStarts = subturnStarts;
     }
 
     public int Turn { get; }
     public IReadOnlyList<SessionCombatant> Participants { get; }
     public int Current { get; }
     public int ActionPoints { get; }
+    /// <summary>The subturns started in the session when this round was read (<see cref="GameSessionOwner.QueryCombatSubturnStarts"/>).</summary>
+    public long SubturnStarts { get; }
     public SessionCombatant Actor => Participants[Current];
 }
 
@@ -157,8 +161,12 @@ internal sealed class CombatDomain
     internal CombatRound? Round { get; set; }
     internal TurnBasedStall<SessionCombatant> Stall { get; set; }
     internal bool HeroCombatMode { get; set; }
-    // ARC-WORLD-095: the subturns started since the session began (not saved), so a host sees each subturn start whoever began it.
+    // ARC-WORLD-095: the subturns started, so a host sees each subturn start whoever began it; GR19 (ARC-DEV-078): saved with the
+    // round, so a load resumes the count.
     internal long SubturnStarts { get; set; }
+    // GR19 (ARC-DEV-078): the round is the one a restore brought and no round call has moved it yet (not saved, no mode in it):
+    // ResumeLoadedCombatRound then applies the load rule of the mode active at that call.
+    internal bool LoadedRoundPending { get; set; }
     internal SortedSet<string> Critters { get; } = new(StringComparer.Ordinal);
     // ARC-SKILLS-008: the concealment flags (the source's critter flags 0x1 and 0x2, set and cleared together) of the hero and of
     // its followers.
@@ -179,13 +187,13 @@ internal sealed class CombatRound(int turn, List<SessionCombatant> participants,
     internal bool SameAs(CombatRound? other) => other is not null && other.Turn == Turn && other.Current == Current &&
         other.ActionPoints == ActionPoints && other.Participants.SequenceEqual(Participants);
 
-    internal SessionCombatRound Capture() => new(Turn, [.. Participants], Current, ActionPoints);
+    internal SessionCombatRound Capture(long subturnStarts) => new(Turn, [.. Participants], Current, ActionPoints, subturnStarts);
 }
 
 public sealed partial class GameSessionOwner
 {
     /// <summary>The active round, or null when none is active.</summary>
-    public SessionCombatRound? QueryCombatRound() { ThrowIfDisposed(); return _combat.Round?.Capture(); }
+    public SessionCombatRound? QueryCombatRound() { ThrowIfDisposed(); return _combat.Round?.Capture(_combat.SubturnStarts); }
 
     /// <summary>
     /// ARC-WORLD-095: how many subturns started in this session (each <see cref="SessionCombatEventKind.SubturnStarted"/> a committed
@@ -264,8 +272,48 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectCombat(GameSessionFailure.RevisionExhausted);
         _combat.Round = null;
         _combat.Stall = default;
+        _combat.LoadedRoundPending = false;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, [], Version);
+    }
+
+    /// <summary>
+    /// GR19 (ARC-DEV-078, owner's answer "GR19 A"): the load rule of a round a restore brought, applied by the host once the
+    /// round's world can be scanned and before any other round call (a round call that commits first, or the round's end,
+    /// keeps the round as loaded). Steamwoven resumes the saved round exactly: round number, order, actor, action points and
+    /// subturn starts (NoChange). The Original setting restarts as the original's load does (PS13, TL35): a new round 1 over the
+    /// square around the hero, the order rebuilt from the scan (the saved order is not used), and the saved actor's subturn
+    /// with its saved action points when the rebuilt order holds it. Where the original's load fails, both settings load: a
+    /// rebuilt order without the saved actor goes on from its head (that participant's subturn with its own action points), and
+    /// a rebuild in which nobody can act and the hero is inactive ends the round. The events are the round's begin and the
+    /// one subturn that runs (the head's start the saved actor replaces is not reported: the original's load runs no
+    /// turn-set hook for it). NoChange without a loaded round; a refused call keeps it pending.
+    /// </summary>
+    public SessionCombatResult ResumeLoadedCombatRound(GameSessionVersion expected, ISessionCombatWorld world)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(world);
+        if (!IsCurrent(expected)) return RejectCombat(GameSessionFailure.StaleVersion);
+        if (!_combat.LoadedRoundPending || _combat.Round is not { } loaded) return NoCombatChange();
+        if (!_rules.Combat.RoundRebuiltOnLoad)
+        {
+            _combat.LoadedRoundPending = false;
+            return NoCombatChange();
+        }
+        var saved = loaded.Actor;
+        var points = loaded.ActionPoints;
+        return RunCombat(expected, world, plan =>
+        {
+            plan.Round = null;
+            if (!BeginRound(plan, 1)) return;
+            var round = plan.Round!;
+            var index = round.Participants.IndexOf(saved);
+            if (index < 0) return;
+            plan.Events.RemoveAt(plan.Events.Count - 1);
+            round.Current = index;
+            round.ActionPoints = points;
+            plan.Events.Add(new(SessionCombatEventKind.SubturnStarted, saved, points));
+        });
     }
 
     /// <summary>
@@ -452,6 +500,7 @@ public sealed partial class GameSessionOwner
         }
         _combat.Round = plan.Round;
         _combat.Stall = plan.Stall;
+        _combat.LoadedRoundPending = false;
         _combat.SubturnStarts += plan.Events.Count(e => e.Kind == SessionCombatEventKind.SubturnStarted);
         if (changed && !revisionTaken) Revise();
         var disposition = changed || revisionTaken || plan.AdvancesClock ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange;
@@ -620,8 +669,9 @@ public sealed partial class GameSessionOwner
     private SessionCombatResult RejectCombat(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, [], new(_identity, _revision));
 
-    // A saved round needs the hero, which takes part exactly once; participants are unique and valid, the index and action
-    // points in range. The stalled-actor check starts empty, as after the source's load.
+    // A saved round needs the hero, which takes part exactly once; participants are unique and valid, the index, action points
+    // and subturn starts in range. The stalled-actor check starts empty, as after the source's load; the round waits for
+    // ResumeLoadedCombatRound (GR19).
     private static GameSessionFailure ImportCombat(SessionCombatRound? saved, bool hero, out CombatDomain combat)
     {
         combat = new();
@@ -633,8 +683,10 @@ public sealed partial class GameSessionOwner
             participants.Distinct().Count() != participants.Count || participants.Count(p => p.IsHero) != 1)
             return GameSessionFailure.InvalidCombatRound;
         if (saved.Turn < 1 || saved.Current < 0 || saved.Current >= participants.Count ||
-            saved.ActionPoints is < 0 or > TurnBasedRules.MaxActionPoints) return GameSessionFailure.InvalidCombatRound;
+            saved.ActionPoints is < 0 or > TurnBasedRules.MaxActionPoints || saved.SubturnStarts < 0) return GameSessionFailure.InvalidCombatRound;
         combat.Round = new(saved.Turn, [.. participants], saved.Current, saved.ActionPoints);
+        combat.SubturnStarts = saved.SubturnStarts;
+        combat.LoadedRoundPending = true;
         return GameSessionFailure.None;
     }
 }

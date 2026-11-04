@@ -8,9 +8,9 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":58,\"world\"";
+    private const string Current = "\"schemaVersion\":59,\"world\"";
 
-    // The schema 56 text of a schema 58 one whose NPCs were never dressed and that left no pool of blood: the same text without
+    // The schema 56 text of a schema 59 one without a saved round, whose NPCs were never dressed and that left no pool of blood: the same text without
     // `inventory.npcWorn` and `inventory.bloodPools`.
     private static string Schema56(string text)
     {
@@ -29,12 +29,61 @@ public sealed class SnapshotUpgradeTests
             "A schema bump adds the step from the previous schema (GameSessionSnapshotUpgrade.cs), so the saves of older builds keep loading.");
     }
 
-    // ARC-RENDER-041: the schema 57 text of a schema 58 one that left no pool of blood: the same text without `inventory.bloodPools`.
+    // ARC-RENDER-041: the schema 57 text of a schema 59 one without a saved round that left no pool of blood: the same text without `inventory.bloodPools`.
     private static string Schema57(string text)
     {
         StringAssert.Contains(text, Current);
         StringAssert.Contains(text, ",\"bloodPools\":[]}");
         return text.Replace(Current, "\"schemaVersion\":57,\"world\"").Replace(",\"bloodPools\":[]}", "}");
+    }
+
+    // GR19 (ARC-DEV-078): the schema 58 text of a schema 59 one: the same text without the saved round's `combat.subturnStarts`.
+    private static string Schema58(string text)
+    {
+        StringAssert.Contains(text, Current);
+        var older = text.Replace(Current, "\"schemaVersion\":58,\"world\"");
+        var at = older.IndexOf(",\"subturnStarts\":", StringComparison.Ordinal);
+        if (at < 0) return older;
+        var end = older.IndexOf('}', at);
+        return older.Remove(at, end - at);
+    }
+
+    [TestMethod]
+    public void A_schema_58_save_decodes_as_the_current_schema()
+    {
+        foreach (var current in new[] { GoldenJson, HeroStateTests.HeroGolden })
+            Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(Decode(Schema58(current))), "no round: only the schema differs");
+        // A saved round gets no subturn starts, as the older load restored none.
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() });
+        using var owner = result.Owner!;
+        var hero = SessionCombatant.Hero;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.StartCombatRound(owner.Version, new OneHeroWorld()).Disposition);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, ",\"actionPoints\":9,\"subturnStarts\":1}");
+        var older = Schema58(text);
+        StringAssert.Contains(older, ",\"actionPoints\":9},");
+        var upgraded = Decode(older);
+        Assert.AreEqual(0, upgraded.Combat!.SubturnStarts);
+        Assert.AreEqual(text.Replace(",\"subturnStarts\":1}", ",\"subturnStarts\":0}"), GameSessionSnapshotCodec.Encode(upgraded));
+        using var restored = Restore(upgraded);
+        Assert.AreEqual((hero, 9, 0L), (restored.QueryCombatRound()!.Actor, restored.QueryCombatRound()!.ActionPoints, restored.QueryCombatSubturnStarts()));
+        // A schema 58 round that already carries the field is refused.
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.combat.subturnStarts"),
+            (GameSessionSnapshotCodec.TryDecode(text.Replace(Current, "\"schemaVersion\":58,\"world\"")).Failure,
+             GameSessionSnapshotCodec.TryDecode(text.Replace(Current, "\"schemaVersion\":58,\"world\"")).Path));
+        // The step needs the combat section the older schema always had.
+        var missing = older.Replace(",\"combat\":{", ",\"combatX\":{");
+        Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.combat"), (GameSessionSnapshotCodec.TryDecode(missing).Failure, GameSessionSnapshotCodec.TryDecode(missing).Path));
+        var wrong = Schema58(GoldenJson).Replace(",\"combat\":null", ",\"combat\":[]");
+        StringAssert.Contains(wrong, ",\"combat\":[]");
+        Assert.AreEqual((SnapshotDecodeFailure.WrongType, "$.combat"), (GameSessionSnapshotCodec.TryDecode(wrong).Failure, GameSessionSnapshotCodec.TryDecode(wrong).Path));
+    }
+
+    // The hero alone in the square.
+    private sealed class OneHeroWorld : ISessionCombatWorld
+    {
+        public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => [new(SessionCombatant.Hero, new(0, 0))];
+        public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => null;
     }
 
     [TestMethod]
@@ -124,6 +173,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":59,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":60,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
