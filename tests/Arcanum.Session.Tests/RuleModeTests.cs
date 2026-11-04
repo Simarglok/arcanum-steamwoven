@@ -102,6 +102,9 @@ public sealed class RuleModeTests
         // ARC-UI-028: the death window is a Steamwoven addition; Original resets to the main menu (PD8).
         Assert.IsTrue(GameRules.Original.Lifecycle.DeathResetsToMainMenu);
         Assert.IsFalse(GameRules.Steamwoven.Lifecycle.DeathResetsToMainMenu);
+        // ARC-DEV-077: GI6, Steamwoven restores the saved generator; Original goes on with the running one (PS32).
+        Assert.IsTrue(GameRules.Original.Lifecycle.LoadKeepsRunningRandom);
+        Assert.IsFalse(GameRules.Steamwoven.Lifecycle.LoadKeepsRunningRandom);
         // ARC-UI-056: CUA1 is a Steamwoven fix with an Original switch.
         Assert.IsTrue(GameRules.Original.Interface.CalledShotCursorsSwapped);
         Assert.IsFalse(GameRules.Steamwoven.Interface.CalledShotCursorsSwapped);

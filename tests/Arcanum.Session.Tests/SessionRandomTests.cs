@@ -177,6 +177,63 @@ public sealed class SessionRandomTests
     }
 
     [TestMethod]
+    public void SteamwovenLoadKeepsTheSavedGeneratorAndIgnoresTheRunningOne()
+    {
+        // GI6 (ARC-DEV-077): Steamwoven restores the saved seed and position, so a reload repeats the same rolls.
+        using var owner = Seeded();
+        for (var i = 0; i < 3; i++) Rolled(owner.Roll("warmup", 1, 100));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var expected = Enumerable.Range(0, 5).Select(_ => Rolled(owner.Roll("after", 1, 100)).Value).ToArray();
+        using var restored = Restore(Decode(text), RestoreOptions() with { LoadRandom = new(0xFEEDUL, 9) });
+        Assert.AreEqual(new SessionRandomState(Seed, 3), restored.QueryRandom());
+        CollectionAssert.AreEqual(expected, Enumerable.Range(0, 5).Select(_ => Rolled(restored.Roll("after", 1, 100)).Value).ToArray());
+    }
+
+    [TestMethod]
+    public void OriginalLoadGoesOnWithTheRunningGenerator()
+    {
+        // GI6 (ARC-DEV-077, PS32): the original saves no generator, so a load continues the running one and every later
+        // roll differs from the save's own continuation; the saved seed and position are still checked and encoded.
+        using var owner = Seeded();
+        for (var i = 0; i < 3; i++) Rolled(owner.Roll("warmup", 1, 100));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var saved = Enumerable.Range(0, 5).Select(_ => Rolled(owner.Roll("after", 1, 100)).Value).ToArray();
+        var running = owner.QueryRandom();
+
+        using var restored = Restore(Decode(text), RestoreOptions() with { Rules = RuleMode.Original, LoadRandom = running });
+        Assert.AreEqual(running, restored.QueryRandom());
+        using var reference = Seeded();
+        for (var i = 0; i < 8; i++) Rolled(reference.Roll("skip", 1, 100));
+        var expected = Enumerable.Range(0, 5).Select(_ => Rolled(reference.Roll("after", 1, 100)).Value).ToArray();
+        var rolled = Enumerable.Range(0, 5).Select(_ => Rolled(restored.Roll("after", 1, 100)).Value).ToArray();
+        CollectionAssert.AreEqual(expected, rolled);
+        CollectionAssert.AreNotEqual(saved, rolled);
+        // The next save holds the generator the session went on with, not the loaded one.
+        StringAssert.Contains(GameSessionSnapshotCodec.Encode(restored.Capture()), ",\"random\":{\"seed\":\"0123456789abcdef\",\"draws\":13}");
+
+        // Without a running generator the Original load starts the default seed 0 at draw 0, as a new session without a seed.
+        using var fresh = Restore(Decode(text), RestoreOptions() with { Rules = RuleMode.Original });
+        Assert.AreEqual(new SessionRandomState(0, 0), fresh.QueryRandom());
+    }
+
+    [TestMethod]
+    public void RestoreRefusesANegativeRunningPositionInBothModes()
+    {
+        using var owner = Seeded();
+        var saved = owner.Capture();
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            var result = GameSessionOwner.Restore(saved, RestoreOptions() with { Rules = mode, LoadRandom = new(Seed, -1) });
+            Assert.AreEqual((null, GameSessionFailure.InvalidDescriptor), (result.Owner, result.Failure), mode.ToString());
+        }
+        // A damaged saved position is refused under Original too, though that mode does not use it.
+        var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
+            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement, new(Seed, -1), saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, saved.Danger, saved.Events, saved.Lighting, saved.Sound);
+        var original = GameSessionOwner.Restore(snapshot, RestoreOptions() with { Rules = RuleMode.Original, LoadRandom = new(Seed, 0) });
+        Assert.AreEqual((null, GameSessionFailure.InvalidSnapshot), (original.Owner, original.Failure));
+    }
+
+    [TestMethod]
     public void ADisposedSessionNoLongerRolls()
     {
         var owner = Seeded();
