@@ -266,14 +266,18 @@ object through the object system (0x4E6BC0 → 0x406600), writes it to the aggre
 - **Timing and size** (Release, Apple silicon): 81 files, 4.5 × 10^8 interpreted instructions, 6.5 s; the whole first start with the prototypes is 33 s, the second 0.23 s.
 
 **In the launcher.** `PrototypeProvisioner.Provision` checks the map folders of the module after the prototypes: an installation whose module already has every `maps/<name>`
-aggregate (the original ran there) is left alone; otherwise it reads the module archive's GUID, verifies the cache (executable, module archive and patch length and tail
-hash, every file's length and SHA-256, no extra file), or builds the aggregates over the installation's data plus the prototype cache of the same start and stores them
+aggregate (the original ran there) is left alone; otherwise it reads the module archive's GUID, verifies the cache (executable; every archive and patch of the installation by length and the hash of its last 64 KiB, where an archive keeps its
+directory with the entry sizes; the names and lengths of the loose files under `maps` of the module folder and of `data/`; every file's length and SHA-256; no extra file), or builds the aggregates over the installation's data plus the prototype cache of the same start and stores them
 beside the prototypes (`prototypes-<exe>/files/maps/`, manifest `aggregates.json`, written last). The same mount (`PrototypeCacheMount`) holds both, below the module's own
 files, so a file the installation has still wins. A new prototype cache replaces the folder and drops the aggregates (they are built over the new files). Progress is
-the stage `BuildingMaps` (`Preparing the maps from your game files (first start only)… n/81`); the executable must be the verified one also when only the maps are missing.
+the stage `BuildingMaps` (`Preparing the maps from your game files (first start only)… n/81`); the executable must be the verified one also when only the maps are missing. A failed map stage is **not fatal for an installation that has its own prototypes** (it
+started before the maps were built, so it starts as it did, `status=Present` with the reason in the detail and nothing mounted); on a fresh installation the maps are needed
+and the start is refused with the reason (the prototype cache of that start stays stored, so the next start only builds the maps). Each built file must carry the name the
+catalogue's rule gives its map (else the build is refused), a prototype copy left in the cache is dropped when the installation has its own, and the build's step limit per call is 2 × 10^9
+(a map takes a few million).
 
 **Fresh installation** (`innoextract --gog` of the GOG 1.0.7.4 installer into an empty folder, stored in a `launcher_v1.json`): the first start printed
 `ARC-DEV-069 prototypes status=Built files=1423 mapFiles=81`, the map plan passed and `ARC-UI-011 native-smoke main menu PASS` ended the run.
 
-**Not covered.** Windows and Linux machines; a module other than `Arcanum` (the code is by the module's plan, the Vormantown module was not run); an installation whose aggregate
+**Not covered.** Windows and Linux machines; a module other than `Arcanum` (the code is by the module's plan, the Vormantown module was not run); a same-length change inside an archive outside its last 64 KiB (the cache would be kept); an installation whose aggregate
 exists with another GUID or is damaged (the original rebuilds it; here a file in `modules/<module>/maps` is the installation's own and wins); the display modules' own state.

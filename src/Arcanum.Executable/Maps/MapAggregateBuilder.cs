@@ -35,8 +35,8 @@ public sealed record MapAggregateBuildOptions
 
     public uint MaxHeapBytes { get; init; } = 256u << 20;
 
-    /// <summary>Interpreter steps of each call into the executable (the start-up and one map's aggregate each take a call).</summary>
-    public long MaxStepsPerCall { get; init; } = 20_000_000_000;
+    /// <summary>Interpreter steps of each call into the executable (the start-up and one map's aggregate each take a call; a map takes a few million, the whole run well under a billion).</summary>
+    public long MaxStepsPerCall { get; init; } = 2_000_000_000;
 
     public int MaxWrittenFiles { get; init; } = 512;
     public long MaxWrittenBytes { get; init; } = 256L << 20;

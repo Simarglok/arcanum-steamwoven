@@ -320,6 +320,7 @@ public sealed class PrototypeProvisionerTests
         public string[] SeenFolders = [];
         public PrototypeBuildFailure? Failure { get; init; }
         public Func<IOriginalFileSource, bool>? Check { get; init; }
+        public bool Rename { get; init; }
 
         public MapAggregateRunResult Run(byte[] exe, IOriginalFileSource files, byte[] guid, Action<int, int>? progress)
         {
@@ -332,7 +333,7 @@ public sealed class PrototypeProvisionerTests
             for (var i = 0; i < SeenFolders.Length; i++)
             {
                 progress?.Invoke(i, SeenFolders.Length);
-                built.Add(new(SeenFolders[i], WorldCatalog.AggregateName(SeenFolders[i]), [.. guid, .. Encoding.ASCII.GetBytes(SeenFolders[i])]));
+                built.Add(new(SeenFolders[i], Rename ? "wrong" : WorldCatalog.AggregateName(SeenFolders[i]), [.. guid, .. Encoding.ASCII.GetBytes(SeenFolders[i])]));
             }
             progress?.Invoke(SeenFolders.Length, SeenFolders.Length);
             return new(built, Failure, 7);
@@ -463,17 +464,70 @@ public sealed class PrototypeProvisionerTests
     }
 
     [TestMethod]
-    public void The_map_build_needs_the_verified_executable_and_a_module_archive_it_can_read()
+    public void The_map_build_needs_the_verified_executable_even_when_the_installation_has_its_own_prototypes()
     {
         Maps("One");
         for (var i = 1; i <= 3; i++) Write($"data/proto/00100{i} - Wall.pro", Bytes(i));
         var maps = new FakeMaps();
         var wrong = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), maps) with { ExpectedExeSha256 = new string('a', 64) });
         Assert.AreEqual(PrototypeProvisionStatus.UnverifiedExecutable, wrong.Status, "own prototypes do not make the executable unnecessary: the maps are built from it");
-        File.WriteAllBytes(Path.Combine(_game, "modules", "Arcanum.dat"), [.. EmptyDat(), .. new byte[8]]);
-        var unreadable = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), maps));
-        Assert.AreEqual(PrototypeProvisionStatus.SourceFailed, unreadable.Status, unreadable.Detail);
         Assert.AreEqual(0, maps.Calls);
+    }
+
+    [TestMethod]
+    public void A_failed_map_build_of_an_installation_with_prototypes_is_named_and_a_misnamed_file_is_refused()
+    {
+        Maps("One");
+        for (var i = 1; i <= 3; i++) Write($"data/proto/00100{i} - Wall.pro", Bytes(i));
+        var failed = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), new FakeMaps { Failure = new(PrototypeBuildFailureKind.BuildFault, "at 0x4102F0") }));
+        Assert.AreEqual(PrototypeProvisionStatus.Present, failed.Status, failed.Detail);
+        Assert.AreEqual(3, failed.Files);
+        StringAssert.Contains(failed.Detail, "0x4102F0");
+
+        var misnamed = PrototypeProvisioner.Provision(Folder(), Path.Combine(_root, "settings", "misnamed"), options: MapOptions(new FakeBuild(), new FakeMaps { Rename = true }));
+        Assert.AreEqual(PrototypeProvisionStatus.Present, misnamed.Status, "own prototypes: not fatal");
+        StringAssert.Contains(misnamed.Detail, "another name");
+        var fresh = PrototypeProvisioner.Provision(Folder(), Path.Combine(_root, "settings", "misnamed2"), options: MapOptions(new FakeBuild(), new FakeMaps { Rename = true }) with { InstalledFileCount = 99 });
+        Assert.AreEqual(PrototypeProvisionStatus.BuildFailed, fresh.Status, "a fresh installation is refused");
+        StringAssert.Contains(fresh.Detail, "another name");
+    }
+
+    [TestMethod]
+    public void A_prototype_copy_in_the_cache_is_dropped_once_the_installation_has_its_own_and_loose_map_files_change_the_identity()
+    {
+        Maps("One");
+        var build = new FakeBuild(); var maps = new FakeMaps();
+        var first = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Built, first.Status, first.Detail);
+        Assert.IsTrue(Directory.Exists(Path.Combine(first.MountFolder!, "proto")));
+
+        for (var i = 1; i <= 3; i++) Write($"data/proto/00100{i} - Wall.pro", Bytes(i));
+        var own = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, own.Status, own.Detail);
+        Assert.IsFalse(Directory.Exists(Path.Combine(own.MountFolder!, "proto")), "an older copy would shadow the installation's own files");
+
+        Write("modules/Arcanum/maps/One/extra.mob", new byte[4]);
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "a loose map file the build read changed");
+        Write("data/maps/One/loose.mob", new byte[4]);
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "a loose map file under data/");
+    }
+
+    [TestMethod]
+    public void Aggregate_names_that_are_windows_device_names_are_refused_and_dead_map_temporaries_are_removed()
+    {
+        Assert.IsTrue(PrototypeCacheStore.ValidAggregateName("Abc"));
+        foreach (var bad in new[] { "CON", "nul", "Aux.txt", "COM1", "lpt9.x", "", ".x", "a/b" }) Assert.IsFalse(PrototypeCacheStore.ValidAggregateName(bad), bad);
+        Assert.IsTrue(PrototypeCacheStore.ValidAggregateName("COMX"));
+
+        Maps("One");
+        var first = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), new FakeMaps()));
+        var folder = Path.GetDirectoryName(first.MountFolder!)!;
+        var deadMaps = Path.Combine(folder, "maps.tmp-dead"); var deadManifest = Path.Combine(folder, "aggregates.json.tmp-dead");
+        Directory.CreateDirectory(deadMaps); File.WriteAllBytes(deadManifest, [1]);
+        var old = DateTime.UtcNow - PrototypeCacheStore.LeftoverAge - TimeSpan.FromHours(1);
+        Directory.SetLastWriteTimeUtc(deadMaps, old); File.SetLastWriteTimeUtc(deadManifest, old);
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), new FakeMaps())).Status);
+        Assert.IsFalse(Directory.Exists(deadMaps)); Assert.IsFalse(File.Exists(deadManifest));
     }
 
     /// <summary>Opt-in (<c>ARCANUM_GAME_ROOT</c>, an installation the original ran; <c>ARCANUM_EXE</c> is not needed: its own <c>Arcanum.exe</c> is read):

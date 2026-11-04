@@ -1,3 +1,4 @@
+using System.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Arcanum.Data.Content;
@@ -144,17 +145,37 @@ internal sealed class PrototypeCacheStore
         }
     }
 
-    /// <summary>The identity of the module's archives and patches for <see cref="VerifyAggregates"/> (their length and the SHA-256 of their last bytes); an unreadable one is left out, so the cache does not match.</summary>
+    /// <summary>
+    /// The identity of what the aggregates are built from for <see cref="VerifyAggregates"/>: every archive and patch of the installation (its length and the
+    /// SHA-256 of its last bytes, where an archive keeps its directory with the entry sizes) and, for each loose folder that can hold map files (the module
+    /// folder and <c>data/</c>), the names and lengths of the files under its <c>maps</c> folder. An unreadable source makes the cache not match.
+    /// </summary>
     internal static AggregateIdentity ModuleIdentity(ContentMountPlan plan)
     {
         var entries = new List<ModuleEntry>();
-        foreach (var source in plan.SearchOrder.Where(source => source.Role is ContentSourceRole.ModuleArchive or ContentSourceRole.ModulePatch))
+        foreach (var source in plan.SearchOrder)
         {
-            using var file = File.OpenRead(source.Path);
-            var tail = new byte[(int)Math.Min(file.Length, ModuleTailBytes)];
-            file.Seek(file.Length - tail.Length, SeekOrigin.Begin);
-            file.ReadExactly(tail);
-            entries.Add(new(Path.GetFileName(source.Path), file.Length, Hash(tail)!));
+            if (source.Role is ContentSourceRole.ModuleArchive or ContentSourceRole.ModulePatch or ContentSourceRole.BaseArchive)
+            {
+                using var file = File.OpenRead(source.Path);
+                var tail = new byte[(int)Math.Min(file.Length, ModuleTailBytes)];
+                file.Seek(file.Length - tail.Length, SeekOrigin.Begin);
+                file.ReadExactly(tail);
+                entries.Add(new(Path.GetFileName(source.Path), file.Length, Hash(tail)!));
+            }
+            else if (source.Role is ContentSourceRole.ModuleDirectory or ContentSourceRole.DataDirectory)
+            {
+                var listing = new StringBuilder();
+                var count = 0;
+                var maps = Path.Combine(source.Path, "maps");
+                if (Directory.Exists(maps))
+                    foreach (var path in Directory.EnumerateFiles(maps, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+                    {
+                        listing.Append(Path.GetRelativePath(maps, path).Replace('\\', '/')).Append('|').Append(new FileInfo(path).Length).Append('\n');
+                        count++;
+                    }
+                entries.Add(new(source.Role + ":maps", count, Hash(Encoding.UTF8.GetBytes(listing.ToString()))!));
+            }
         }
         return new(plan.ModuleName, [.. entries]);
     }
@@ -204,10 +225,11 @@ internal sealed class PrototypeCacheStore
         var manifest = new AggregateManifest(AggregateSchema, ExeSha256, identity.Module, identity.Sources,
             build.Files.Select(file => new FileEntry(file.FileName, file.Bytes.Length, Hash(file.Bytes)!)).ToArray());
         var files = Path.Combine(Folder, "files");
-        var temporary = Path.Combine(files, MapsFolderName + ".tmp-" + Guid.NewGuid().ToString("N"));
+        var temporary = Path.Combine(Folder, MapsFolderName + ".tmp-" + Guid.NewGuid().ToString("N")); // beside files/, so a dead start leaves no extra entry in the mounted folder
         try
         {
             Directory.CreateDirectory(temporary);
+            Directory.CreateDirectory(files);
             foreach (var file in build.Files) File.WriteAllBytes(Path.Combine(temporary, file.FileName), file.Bytes);
             // The manifest goes first away (a cache without it is no cache), the files are put in place, the manifest is written last.
             File.Delete(Path.Combine(Folder, AggregateManifestName));
@@ -232,7 +254,21 @@ internal sealed class PrototypeCacheStore
         if (name is null || name.Length is 0 or > 200 || name[0] == '.' || name[^1] is ' ' or '.') return false;
         foreach (var c in name)
             if (c is < ' ' or > '~' or '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*') return false;
-        return true;
+        // A Windows device name (with or without an extension) cannot be a file there.
+        var stem = name.Split('.')[0].TrimEnd(' ').ToUpperInvariant();
+        return !(stem is "CON" or "PRN" or "AUX" or "NUL" || (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.Ordinal) || stem.StartsWith("LPT", StringComparison.Ordinal)) && stem[3] is >= '0' and <= '9'));
+    }
+
+    /// <summary>Drops the prototype copy of this cache (the folder is then mounted for its map files alone), for an installation that has its own prototypes.</summary>
+    public void DropPrototypes()
+    {
+        try
+        {
+            var proto = Path.Combine(MountFolder, "proto");
+            if (Directory.Exists(proto)) Retry(() => Directory.Delete(proto, recursive: true));
+            File.Delete(Path.Combine(Folder, ManifestName));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
     }
 
     /// <summary>Removes the temporary and replaced folders of earlier starts that died (older than <see cref="LeftoverAge"/>).</summary>
@@ -244,8 +280,18 @@ internal sealed class PrototypeCacheStore
             foreach (var path in Directory.EnumerateDirectories(Root, FolderPrefix + "*"))
             {
                 var name = Path.GetFileName(path);
-                if ((name.Contains(".tmp-", StringComparison.Ordinal) || name.Contains(".old-", StringComparison.Ordinal))
-                    && DateTime.UtcNow - Directory.GetLastWriteTimeUtc(path) > LeftoverAge) TryDelete(path);
+                if (name.Contains(".tmp-", StringComparison.Ordinal) || name.Contains(".old-", StringComparison.Ordinal))
+                {
+                    if (DateTime.UtcNow - Directory.GetLastWriteTimeUtc(path) > LeftoverAge) TryDelete(path);
+                    continue;
+                }
+                // The map files' temporaries inside a cache folder (a start that died while storing them).
+                foreach (var inside in Directory.EnumerateFileSystemEntries(path, "*.tmp-*"))
+                {
+                    var leftover = Path.GetFileName(inside);
+                    if ((leftover.StartsWith(MapsFolderName + ".tmp-", StringComparison.Ordinal) || leftover.StartsWith(AggregateManifestName + ".tmp-", StringComparison.Ordinal))
+                        && DateTime.UtcNow - File.GetLastWriteTimeUtc(inside) > LeftoverAge) TryDelete(inside);
+                }
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
@@ -282,7 +328,7 @@ internal sealed class PrototypeCacheStore
 
     private static void TryDelete(string path)
     {
-        try { Directory.Delete(path, recursive: true); }
+        try { if (File.Exists(path)) File.Delete(path); else Directory.Delete(path, recursive: true); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 }

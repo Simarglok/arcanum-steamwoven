@@ -116,11 +116,19 @@ public static class PrototypeProvisioner
                 files = provided.Files;
             }
 
+            else store.DropPrototypes(); // the cache is mounted for its map files only; an older prototype copy there would shadow the installation's own
             var maps = 0;
             if (missingMaps > 0)
             {
                 var provided = ProvideMaps(own, hasPrototypes ? null : store.MountFolder, store, exe, exeSha, options, progress, cancel);
-                if (!provided.Succeeded) return provided;
+                if (!provided.Succeeded)
+                {
+                    // An installation that has its own prototypes started before the map aggregates were built: a failure of the map stage there
+                    // leaves it as it was (the cache is not mounted, the result says why); a fresh installation needs them and is refused.
+                    if (hasPrototypes && provided.Status != PrototypeProvisionStatus.Cancelled)
+                        return new(PrototypeProvisionStatus.Present, Files: files, Detail: "the map files could not be made: " + provided.Detail);
+                    return provided;
+                }
                 maps = provided.MapFiles;
                 if (provided.Status == PrototypeProvisionStatus.Built || status == PrototypeProvisionStatus.Present) status = provided.Status;
             }
@@ -215,6 +223,9 @@ public static class PrototypeProvisioner
             return failure.Kind is PrototypeBuildFailureKind.MissingSourceFile or PrototypeBuildFailureKind.UnverifiedExecutable
                 ? new(PrototypeProvisionStatus.SourceFailed, Detail: "map files: " + failure.Detail)
                 : new(PrototypeProvisionStatus.BuildFailed, Detail: $"map files: {failure.Kind}: {failure.Detail}");
+        // The game looks a map's aggregate up by the name rule of the catalogue: a file under any other name would never be found.
+        if (build.Files.FirstOrDefault(map => map.FileName != WorldCatalog.AggregateName(map.MapName)) is { } misnamed)
+            return new(PrototypeProvisionStatus.BuildFailed, Detail: $"map files: the aggregate of map {misnamed.MapName} was written under another name than the game looks up");
         cancel.ThrowIfCancellationRequested();
         progress?.Invoke(new(PrototypeProvisionStage.Storing, build.Files.Count, build.Files.Count));
         if (store.StoreAggregates(build, identity) is { } storeFailure) return new(PrototypeProvisionStatus.CacheWriteFailed, Detail: storeFailure);
