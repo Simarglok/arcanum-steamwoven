@@ -225,7 +225,7 @@ public sealed partial class GameSessionOwner
 
     // A world item of the hero's whose attached origin seed shows a drop script (the original runs it and it may refuse).
     private bool HeroItemDropScript(string item) =>
-        _inventory.Pc.Find(pc => pc.Entity == item) is { Entity: not null } taken && _inventory.Seeds.TryGetValue(taken.Origin, out var origin) &&
+        _inventory.Hero.PcItem(item) is { } taken && _inventory.Seeds.TryGetValue(taken.Origin, out var origin) &&
         origin.Items.TryGetValue(item, out var listed) && listed.Facts.HasScript(SessionScriptPoint.Drop);
 
     // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3; ARC-COMBAT-013, ledger

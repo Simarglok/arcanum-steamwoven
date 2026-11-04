@@ -201,12 +201,11 @@ public sealed partial class GameSessionOwner
         entries = [.. SessionHotkeyState.Empty.Entries];
         recent = [.. SessionHotkeyState.Empty.Recent];
         if (saved.Entries.Count != HotkeyRules.Entries || saved.Recent.Count != HotkeyRules.RecentActions) return GameSessionFailure.InvalidHotkey;
-        var held = inventory.Kit.Select(item => item.Entity).Concat(inventory.Pc.Select(item => item.Entity)).Concat(inventory.Made.Select(item => item.Entity))
+        var held = inventory.Hero.PackKinds.Select(item => item.Entity)
             .ToHashSet(StringComparer.Ordinal);
         var onEntries = new HashSet<string>(StringComparer.Ordinal);
         var prototypes = new HashSet<int>();
-        var kinds = inventory.Kit.Select(item => (item.Entity, item.Kind)).Concat(inventory.Pc.Select(item => (item.Entity, item.Kind)))
-            .Concat(inventory.Made.Select(item => (item.Entity, item.Kind))).ToDictionary(pair => pair.Entity, pair => pair.Kind, StringComparer.Ordinal);
+        var kinds = inventory.Hero.PackKinds.ToDictionary(pair => pair.Entity, pair => pair.Kind, StringComparer.Ordinal);
         foreach (var entry in saved.Entries)
         {
             if (entry is null || !entry.IsEmpty && (!hasHero || !ValidHotkey(entry))) return GameSessionFailure.InvalidHotkey;

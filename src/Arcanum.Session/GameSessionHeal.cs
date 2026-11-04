@@ -78,8 +78,7 @@ public sealed partial class GameSessionOwner
             return RejectHeal(GameSessionFailure.InvalidHealingItem);
         if (item.ScriptPoints.Contains(SessionHealingItem.UseScript) || item.ScriptPoints.Contains(SessionHealingItem.DestroyScript))
             return RejectHeal(GameSessionFailure.ItemScriptUnsupported);
-        if (_durability.Destroyed.Contains(item.Entity) || !_inventory.Kit.Any(kit => kit.Entity == item.Entity) && !_inventory.Pc.Any(pc => pc.Entity == item.Entity) &&
-            !_inventory.Made.Any(made => made.Entity == item.Entity))
+        if (_durability.Destroyed.Contains(item.Entity) || !_inventory.Hero.InPack(item.Entity))
             return RejectHeal(GameSessionFailure.ItemNotAvailable);
         var resolved = Resolve(target, out _, out _, out _);
         if (resolved != GameSessionFailure.None) return RejectHeal(resolved);
@@ -145,8 +144,7 @@ public sealed partial class GameSessionOwner
             return RejectHeal(GameSessionFailure.InvalidHealingItem);
         if (item.ScriptPoints.Contains(SessionHealingItem.UseScript) || item.ScriptPoints.Contains(SessionHealingItem.DestroyScript))
             return RejectHeal(GameSessionFailure.ItemScriptUnsupported);
-        if (_durability.Destroyed.Contains(item.Entity) || _inventory.Kit.Any(kit => kit.Entity == item.Entity) || _inventory.Pc.Any(pc => pc.Entity == item.Entity) ||
-            _inventory.Made.Any(made => made.Entity == item.Entity))
+        if (_durability.Destroyed.Contains(item.Entity) || _inventory.Hero.InPack(item.Entity))
             return RejectHeal(GameSessionFailure.ItemNotAvailable);
         var resolved = Resolve(heal.Target, out var record, out var facts, out var recorded);
         if (resolved != GameSessionFailure.None) return RejectHeal(resolved);

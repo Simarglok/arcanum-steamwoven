@@ -170,8 +170,7 @@ public sealed partial class GameSessionOwner
                 // A critical dropped it (ARC-COMBAT-009): it lies on the ground.
                 if (!hero && Dropped(item.Entity)) return false;
                 // An NPC never wears an item of the hero's.
-                if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Kit.Any(held => held.Entity == item.Entity) ||
-                        _inventory.Pc.Any(held => held.Entity == item.Entity) || _inventory.Made.Any(held => held.Entity == item.Entity) ||
+                if (!hero && (_equipment.SlotOf(item.Entity) is not null || _inventory.Hero.InPack(item.Entity) ||
                         _inventory.PlacedItem(item.Entity) is not null)) return false;
             }
             if (hero && (_hero is null || worn.Count != _equipment.Worn.Count ||

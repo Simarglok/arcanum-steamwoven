@@ -434,9 +434,12 @@ internal sealed class InventoryDomain
     /// see that the seeds it read are still the same.</summary>
     internal long SeedGeneration { get; set; }
     internal int Gold { get; set; }
-    internal List<SessionKitItem> Kit { get; } = [];
-    internal List<SessionPcItem> Pc { get; } = [];
-    internal List<SessionMadeItem> Made { get; } = [];
+    /// <summary>ARC-DEV-090 (MIG6d-2): the hero's kit, taken, made and placed items and the given records, as directory entries found by
+    /// entity (<see cref="HeroLists"/>); the only owner of those lists.</summary>
+    internal HeroLists Hero { get; } = new();
+    internal IReadOnlyList<SessionKitItem> Kit => Hero.Kit;
+    internal IReadOnlyList<SessionPcItem> Pc => Hero.Pc;
+    internal IReadOnlyList<SessionMadeItem> Made => Hero.Made;
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
     /// <summary>ARC-WORLD-055: the made items added to each NPC, by NPC entity; a list is never empty. ARC-WORLD-090: and to each
     /// container a barter window filled. ARC-DEV-088 (MIG6d): the lists are directory entries, an item's holder found by its entity.</summary>
@@ -498,32 +501,31 @@ internal sealed class InventoryDomain
 
     /// <summary>ARC-WORLD-059: the hero's items the session placed on the ground, in the order they were placed; each is also in
     /// <see cref="Taken"/>.</summary>
-    internal List<SessionPlacedItem> Placed { get; } = [];
+    internal IReadOnlyList<SessionPlacedItem> Placed => Hero.Placed;
 
     /// <summary>Items the PC owns: the kit, the taken and the made items, and (ARC-WORLD-059) those it placed on the ground, which
     /// can come back (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
-    internal int Held => Kit.Count + Pc.Count + Made.Count + Placed.Count(item => item.Source != SessionPlacedSource.Created);
+    internal int Held => Hero.Held;
 
     /// <summary>ARC-WORLD-081: the items scripts created on the ground that lie there still.</summary>
-    internal int Created => Placed.Count(item => item.Source == SessionPlacedSource.Created);
+    internal int Created => Hero.Created;
 
     /// <summary>The placed item with this entity, or null.</summary>
-    internal SessionPlacedItem? PlacedItem(string entity) => Placed.Find(item => item.Entity == entity);
+    internal SessionPlacedItem? PlacedItem(string entity) => Hero.PlacedItem(entity);
 
     /// <summary>Puts a placed item back into the list it came from: a kit item at its kit number's place (the kit stays in number
     /// order), a taken or made item at the end of its list.</summary>
     internal void Return(SessionPlacedItem item)
     {
-        Placed.Remove(item);
+        Hero.Remove(item.Entity);
         switch (item.Source)
         {
             case SessionPlacedSource.Kit:
-                var number = HeroDomain.KitNumber(item.Entity) ?? throw new InvalidOperationException("PLACED_KIT_ENTITY");
-                var at = Kit.FindIndex(kit => HeroDomain.KitNumber(kit.Entity) > number);
-                Kit.Insert(at < 0 ? Kit.Count : at, new(item.Entity, item.Kind));
+                if (HeroDomain.KitNumber(item.Entity) is null) throw new InvalidOperationException("PLACED_KIT_ENTITY");
+                Hero.InsertKit(new(item.Entity, item.Kind));
                 break;
-            case SessionPlacedSource.Pc: Pc.Add(new(item.Entity, item.Origin!.Value, item.Kind)); break;
-            default: Made.Add(new(item.Entity, item.Kind, item.Complexity)); break;
+            case SessionPlacedSource.Pc: Hero.AddPc(new(item.Entity, item.Origin!.Value, item.Kind)); break;
+            default: Hero.AddMade(new(item.Entity, item.Kind, item.Complexity)); break;
         }
     }
 
@@ -532,40 +534,36 @@ internal sealed class InventoryDomain
     internal void ReturnGiven(string entity, SessionItemKind kind, int complexity)
     {
         Unwear(entity);
-        if (!Given.Remove(entity, out var given)) { Add(new SessionMadeItem(entity, kind, complexity)); return; }
-        if (given.Origin is { } origin) { Pc.Add(new(entity, origin, kind)); return; }
-        var number = HeroDomain.KitNumber(entity) ?? throw new InvalidOperationException("GIVEN_KIT_ENTITY");
-        var at = Kit.FindIndex(kit => HeroDomain.KitNumber(kit.Entity) > number);
-        Kit.Insert(at < 0 ? Kit.Count : at, new(entity, kind));
+        if (Hero.TakeGiven(entity) is not { } given) { Add(new SessionMadeItem(entity, kind, complexity)); return; }
+        if (given.Origin is { } origin) { Hero.AddPc(new(entity, origin, kind)); return; }
+        if (HeroDomain.KitNumber(entity) is null) throw new InvalidOperationException("GIVEN_KIT_ENTITY");
+        Hero.InsertKit(new(entity, kind));
     }
 
     /// <summary>A made item is also recorded as taken, so no seed can list it.</summary>
     internal void Add(SessionMadeItem item)
     {
         Unwear(item.Entity);
-        Made.Add(item);
+        Hero.AddMade(item);
         Taken.Add(item.Entity);
     }
 
     internal void Add(SessionPcItem item)
     {
         Unwear(item.Entity);
-        Pc.Add(item);
+        Hero.AddPc(item);
         Taken.Add(item.Entity);
     }
 
     /// <summary>A kit entity is also recorded as taken, so no seed can list it.</summary>
     internal void Add(SessionKitItem item)
     {
-        Kit.Add(item);
+        Hero.AddKit(item);
         Taken.Add(item.Entity);
     }
 
     /// <summary>ARC-WORLD-066: the ammunition stacks the session tracks, by entity.</summary>
     internal SortedDictionary<string, SessionAmmoRecord> Ammo { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs (their entries are in <see cref="Lists"/>), by entity.</summary>
-    internal SortedDictionary<string, SessionGivenItem> Given { get; } = new(StringComparer.Ordinal);
 
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity.</summary>
     internal SortedDictionary<string, int> Piles { get; } = new(StringComparer.Ordinal);
@@ -583,7 +581,7 @@ internal sealed class InventoryDomain
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
         Lists.Capture(),
-        Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
+        Placed.ToArray(), Ammo.Values.ToArray(), Hero.GivenAll.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
@@ -625,7 +623,7 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-083: an item's complexity in an NPC's added list: a given taken item's from its origin seed (0 while that seed
     /// is not attached), any other its own.</summary>
     internal int AddedComplexity(SessionMadeItem item) =>
-        Given.TryGetValue(item.Entity, out var given) && given.Origin is { } origin ? SeedComplexity(origin, item.Entity) : item.Complexity;
+        Hero.GivenOf(item.Entity) is { Origin: { } origin } ? SeedComplexity(origin, item.Entity) : item.Complexity;
 
     /// <summary>ARC-WORLD-083: a placed item's complexity: a taken item's from its origin seed (0 while that seed is not attached), a
     /// made item's its own, a kit item's 0.</summary>

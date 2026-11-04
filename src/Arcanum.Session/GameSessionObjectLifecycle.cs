@@ -71,7 +71,7 @@ public sealed partial class GameSessionOwner
                 _inventory.Taken.Add(creation.Entity);
                 break;
             case SessionCreatePlace.Ground:
-                _inventory.Placed.Add(new(creation.Entity, creation.Kind, creation.Source, null, creation.Map, creation.Cell, creation.Complexity));
+                _inventory.Hero.AddPlaced(new(creation.Entity, creation.Kind, creation.Source, null, creation.Map, creation.Cell, creation.Complexity));
                 _inventory.Taken.Add(creation.Entity);
                 break;
             default:
@@ -166,10 +166,7 @@ public sealed partial class GameSessionOwner
     private void RemoveItemRecords(string entity)
     {
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
-        _inventory.Kit.RemoveAll(item => item.Entity == entity);
-        _inventory.Pc.RemoveAll(item => item.Entity == entity);
-        _inventory.Made.RemoveAll(item => item.Entity == entity);
-        _inventory.Placed.RemoveAll(item => item.Entity == entity);
+        _inventory.Hero.Remove(entity);
         _inventory.RemoveFromNpc(entity);
         // ARC-WORLD-103: a deleted item an NPC wore is worn no more.
         _inventory.Unwear(entity);
@@ -177,7 +174,7 @@ public sealed partial class GameSessionOwner
         // its origin.
         _inventory.Ammo.Remove(entity);
         _inventory.Piles.Remove(entity);
-        _inventory.Given.Remove(entity);
+        _inventory.Hero.TakeGiven(entity);
         // ARC-WORLD-090: and its identified flag.
         _inventory.Identified.Remove(entity);
         // ARC-SCRIPT-042: its kept script slots go with it.

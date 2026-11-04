@@ -81,8 +81,7 @@ public sealed partial class GameSessionOwner
                 !ItemDurabilityRules.IsValid(lockpick.Condition) || lockpick.ScriptPoints is null)
                 return RejectPickLock(GameSessionFailure.InvalidLockpick);
             if (lockpick.ScriptPoints.Contains(SessionLockpick.UseScript)) return RejectPickLock(GameSessionFailure.ItemScriptUnsupported);
-            if (_durability.Destroyed.Contains(lockpick.Entity) || !_inventory.Kit.Any(kit => kit.Entity == lockpick.Entity) &&
-                !_inventory.Pc.Any(pc => pc.Entity == lockpick.Entity) && !_inventory.Made.Any(made => made.Entity == lockpick.Entity))
+            if (_durability.Destroyed.Contains(lockpick.Entity) || !_inventory.Hero.InPack(lockpick.Entity))
                 return RejectPickLock(GameSessionFailure.ItemNotAvailable);
         }
         if (!IsCurrent(expected)) return RejectPickLock(GameSessionFailure.StaleVersion);

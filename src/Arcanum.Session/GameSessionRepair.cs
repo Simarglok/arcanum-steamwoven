@@ -34,8 +34,7 @@ public sealed partial class GameSessionOwner
         if (_hero is null || HeroDead() || _life.Hero is { } life && LifeRules.IsUnconscious(life.State, HeroLifeFacts(life.State)))
             return RejectRepair(GameSessionFailure.RepairUnavailable);
         if (!SessionValidation.Entity(entity) || !ItemDurabilityRules.IsValid(baseline)) return RejectRepair(GameSessionFailure.InvalidItem);
-        if (_durability.Destroyed.Contains(entity) || !_inventory.Kit.Any(kit => kit.Entity == entity) && !_inventory.Pc.Any(pc => pc.Entity == entity) &&
-            !_inventory.Made.Any(made => made.Entity == entity))
+        if (_durability.Destroyed.Contains(entity) || !_inventory.Hero.InPack(entity))
             return RejectRepair(GameSessionFailure.ItemNotAvailable);
         if (!IsCurrent(expected)) return RejectRepair(GameSessionFailure.StaleVersion);
 
