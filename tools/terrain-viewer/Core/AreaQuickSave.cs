@@ -86,7 +86,7 @@ public static class AreaQuickSave
         var options = new GameSessionRestoreOptions(new(snapshot.Identity.World, current.Flags.Binding.Identity.Module),
             current.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), current.Limits, current.Rules.Mode,
             current.Experience ?? HeroTable(snapshot, heroTables)?.Experience, current.Difficulty, current.AutoLevel ?? HeroTable(snapshot, heroTables)?.AutoLevel,
-            mapSound?.Invoke(snapshot.Actor), current.Reputations);
+            mapSound?.Invoke(snapshot.Actor), current.Reputations, current.QueryRandom());
         var restored = GameSessionOwner.Restore(snapshot, options);
         if (restored.Owner is null)
             return new(null, read, restored.Failure, "quick load REFUSED: " + Describe(restored.Failure));
