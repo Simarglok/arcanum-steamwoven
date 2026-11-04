@@ -18,7 +18,7 @@ public sealed class AreaVisitorTalkTests
 {
     private static readonly SessionMapId Home = new(1), Visited = new(2);
 
-    private static AreaCompanionTemplate Template()
+    internal static AreaCompanionTemplate Template()
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
         var area = source.Owner.LoadStrict();
@@ -82,7 +82,25 @@ public sealed class AreaVisitorTalkTests
     }
 
     [TestMethod]
-    public void A_visitor_without_a_kept_body_is_reported_not_guessed()
+    public void A_visitor_without_a_body_in_the_shown_scene_is_found_with_its_home_and_stored_cell()
+    {
+        var template = Template();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        // What the transfer writes when the companion arrives on map 2 (placement, home change, stored cell).
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            AreaCompanionGroup.Arrive(template, Home, Visited, new(10, 20), Arcanum.Simulation.Movement.NeighborDirection.XPlus)).Disposition);
+        var found = AreaVisitors.Here(session, Visited, []);
+        Assert.AreEqual(1, found.Count);
+        Assert.AreEqual(new AreaVisitor(template.Entity, Home.RuntimeMap, template.HomeWorld), found[0], "its home map and the cell its stored object lies on");
+        Assert.AreEqual(0, AreaVisitors.Here(session, Visited, [template]).Count, "a body the shown scene draws is not a visitor");
+        Assert.AreEqual(0, AreaVisitors.Here(session, Home, []).Count, "its home map records only where it went");
+        Assert.AreEqual(0, AreaVisitors.Here(session, Visited, [], cell => cell.X > 100).Count,
+            "a cell the viewer has not loaded (the main map's other windows) is not here");
+        Assert.AreEqual(1, AreaVisitors.Here(session, Visited, [], cell => cell == new Arcanum.Simulation.Movement.CellCoord(10, 20)).Count);
+    }
+
+    [TestMethod]
+    public void A_visitor_recorded_before_the_stored_cell_was_kept_has_a_home_but_no_cell()
     {
         var template = Template();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
@@ -92,12 +110,29 @@ public sealed class AreaVisitorTalkTests
             new MapChangeEdit(Home, AreaCompanionPlacement.MapKey(template.Entity), Visited.RuntimeMap),
             new MapChangeEdit(Visited, AreaCompanionPlacement.Key(template.Entity), cell),
         ]).Disposition);
-        CollectionAssert.AreEqual(new[] { template.Entity }, AreaVisitors.Unbodied(session, Visited, []).ToArray(), "no template: not talkable here");
-        Assert.AreEqual(0, AreaVisitors.Unbodied(session, Visited, [template]).Count, "with its kept body it is talkable");
-        Assert.AreEqual(0, AreaVisitors.Unbodied(session, Home, []).Count, "its home map records only where it went");
-        Assert.AreEqual(0, AreaVisitors.Unbodied(session, Visited, [], cell => cell.X > 100).Count,
-            "a cell the viewer has not loaded (the main map's other windows) is not here");
-        Assert.AreEqual(1, AreaVisitors.Unbodied(session, Visited, [], cell => cell == new Arcanum.Simulation.Movement.CellCoord(10, 20)).Count);
+        Assert.AreEqual(new AreaVisitor(template.Entity, Home.RuntimeMap, null), AreaVisitors.Here(session, Visited, []).Single());
+    }
+
+    [TestMethod]
+    public void The_stored_cell_is_recorded_with_every_placement_away_from_it_and_cleared_with_the_one_on_it()
+    {
+        var template = Template();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var facing = Arcanum.Simulation.Movement.NeighborDirection.XPlus;
+        // Away on another map: the stored cell is kept on the home map, the placement on the visited one.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, AreaCompanionGroup.Arrive(template, Home, Visited, new(10, 20), facing)).Disposition);
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, Home, template.Entity));
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCells(session, Home)[template.Entity]);
+        Assert.AreEqual(template.HomeWorld, AreaVisitors.HomeWindow(session, Home.RuntimeMap));
+        Assert.IsNull(AreaVisitors.HomeWindow(session, Visited.RuntimeMap), "nothing is recorded for a map that holds no NPC away");
+        // Back on the home map, off its stored cell: the placement and the stored cell stay (the body is not where its object lies).
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, AreaCompanionGroup.Arrive(template, Visited, Home, new(10, 20), facing)).Disposition);
+        Assert.IsNull(session.QueryMapChange(Home, AreaCompanionPlacement.MapKey(template.Entity)));
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, Home, template.Entity));
+        // On its stored cell facing the default: both are cleared, as the placement always was.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, AreaCompanionPlacement.Edits(template, Home, template.HomeWorld, facing)).Disposition);
+        Assert.IsNull(session.QueryMapChange(Home, AreaCompanionPlacement.Key(template.Entity)));
+        Assert.IsNull(AreaCompanionPlacement.HomeCell(session, Home, template.Entity));
     }
 
     [TestMethod]

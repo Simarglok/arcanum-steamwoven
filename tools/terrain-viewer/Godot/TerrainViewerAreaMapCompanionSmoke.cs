@@ -122,7 +122,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-037 native-smoke carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap,
             At = $"{cell.X},{cell.Y}", Drawn = drawn }));
-        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); }
+        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); ReadAreaMapVisitorBody(companion); }
     }
 
     /// <summary>
@@ -252,5 +252,44 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-048 native-smoke visitor-talk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = CurrentAreaMap, Home = companion.Template.Home.RuntimeMap, Script = companion.Speaker.ScriptId, Status = started?.ToString(), Detail = detail,
             At = $"{cell.X},{cell.Y}" }));
+    }
+
+    /// <summary>
+    /// ARC-DEV-079 (MIG4): what a quick load or a fresh run on this foreign map leaves is no body kept and no map remembered. The home maps'
+    /// directory is made anew and the companions are rebound from the session: the visiting companion's body and frames are read from its home
+    /// map (a window of the main map around the stored cell the transfer recorded, or a whole map), it is drawn and still follows, and a
+    /// fresh record resolver finds its base record there too (the case the AI kept it out of the rules for until now).
+    /// </summary>
+    private void ReadAreaMapVisitorBody(AreaCompanion companion)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-DEV-079 visitor-body smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_VISITOR_BODY_FAILED");
+        }
+        if (_areaSession is not { } session || _arguments is not { } arguments || _inventoryHost is not { } inventory)
+        { GD.Print($"ARC-DEV-079 native-smoke visitor-body NONE map={CurrentAreaMap} (no session or inventory)"); return; }
+        var home = companion.Template.Home;
+        var stored = AreaCompanionPlacement.HomeCell(session, home, companion.Entity);
+        Require(stored is not null, $"the transfer recorded the stored cell of its object on map {home.RuntimeMap}");
+        Require(RecordAreaCompanions("visitor-body smoke"), "the companions' cells were recorded");
+        var started = System.Environment.TickCount64;
+        _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
+        _visitorFrames.Clear();
+        BindAreaCompanions();
+        var again = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == companion.Entity);
+        var frames = again is null ? 0 : again.Template.Commands.Select(c => c.Frame).Distinct().Count(key => _visitorFrames.TryGetValue(again.Entity, out var kept) && kept.ContainsKey(key));
+        Require(again is not null && _unreadVisitors.Count == 0 && again.Template.Key == companion.Key && again.Standing == CompanionStanding.Following,
+            $"its body was read from map {home.RuntimeMap} and it still follows: {string.Join("; ", _unreadVisitors)} {_areaCompanions?.Status()}");
+        Require(frames == again!.Template.Commands.Select(c => c.Frame).Distinct().Count() && frames > 0, $"the frames its body draws were read ({frames})");
+        // A fresh resolver (nothing remembered, as after a quick load) finds the record through the same directory.
+        var resolver = new Arcanum.World.RecordResolver(inventory.Resolver.Maps.Where(map => map.RuntimeMap == CurrentAreaMap),
+            new AreaMapRecords(arguments, _homes, map => AreaVisitors.HomeWindow(session, map)));
+        var lookup = resolver.Resolve(companion.Entity, home.RuntimeMap);
+        Require(lookup.Status == Arcanum.World.RecordStatus.Found, $"a fresh resolver finds its record on map {home.RuntimeMap}: {lookup.Status} {lookup.Detail}");
+        GD.Print("ARC-DEV-079 native-smoke visitor-body PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Map = CurrentAreaMap, Home = home.RuntimeMap, Stored = $"{stored!.Value.X},{stored.Value.Y}", Script = again.Speaker.ScriptId, Frames = frames,
+            Reads = _homes.Reads.Select(read => new { read.Map, Window = read.CoreSectors is not null }).ToArray(), Ms = System.Environment.TickCount64 - started }));
     }
 }

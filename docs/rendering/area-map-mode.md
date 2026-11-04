@@ -611,10 +611,14 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   talk: the AI host keeps the visitor out of its rules
   (`ARC-DEV-065 native-smoke visitor-fight PASS`, [AI host](../world/ai-host.md)).
 
-Not covered: after a quick load, a companion whose home map was not loaded in
-this run, or loaded without the party ever touching it, has no body and is
-skipped: when it is recorded on a loaded cell of the shown map, the HUD names it
-as not talkable here (`AreaVisitors.Unbodied`), nothing is guessed; a follower that is not a companion of
+Since ARC-DEV-079 (MIG4) a companion's body is read from its home map's own data by identity ([bodies and window
+homes](../world/record-resolver.md#bodies-and-window-homes-arc-dev-079-mig4)): after a quick load or a fresh run on a
+foreign map, a companion recorded on a loaded cell of the shown map is drawn, picked and talked to there, and follows;
+its body and frames are read from the home map (a window of the main map around the stored cell the transfer recorded
+as `npc.home`), and the viewer keeps no body of its own. A body that cannot be read (a companion that left before the
+stored cell was recorded, with a window home; an unreadable map) is named on the HUD with the reason, never guessed
+(`ARC-DEV-079 native-smoke visitor-body PASS` rebuilds the directory after the carry and checks body, frames, following
+and a fresh resolver's record). Not covered: a follower that is not a companion of
 the shown map (no body, or its cell not admitted) is not carried and stays
 recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,

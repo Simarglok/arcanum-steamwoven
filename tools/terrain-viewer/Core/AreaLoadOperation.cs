@@ -245,6 +245,35 @@ internal static class AreaLoadOperation
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64, Environment.TickCount64 - started) { Walls = walls };
     }
 
+    /// <summary>
+    /// ARC-DEV-079 (MIG4): the decoded frames of just <paramref name="keys"/> (a companion body's frames, read from its home map without
+    /// copying the map's whole repository), through one strict owner frame batch with the map repository's caps. A key the snapshot
+    /// has no descriptor for is <c>AREA_FRAME_DESCRIPTOR_REQUIRED</c>.
+    /// </summary>
+    internal static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> CopyFramesOf(AreaDataOwner owner, AreaSnapshot snapshot,
+        IReadOnlyCollection<AreaFrameKey> keys, CancellationToken token)
+    {
+        if (keys.Count == 0) return new Dictionary<AreaFrameKey, DecodedAreaFrame>();
+        token.ThrowIfCancellationRequested();
+        var needed = keys.ToHashSet();
+        var selected = snapshot.Visuals.GroupBy(AreaFrameKey.From).Where(group => needed.Contains(group.Key)).ToDictionary(group => group.Key, group => group.First());
+        if (!needed.SetEquals(selected.Keys)) throw new InvalidOperationException("AREA_FRAME_DESCRIPTOR_REQUIRED");
+        if (selected.Count > AreaRepositoryPolicy.MaxMapFrames) throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); long retained = 0;
+        using var batch = owner.BeginFrameBatch(snapshot, token);
+        foreach (var pair in selected)
+        {
+            token.ThrowIfCancellationRequested();
+            retained = checked(retained + (long)pair.Value.Width * pair.Value.Height * 4);
+            if (retained > AreaRepositoryPolicy.MaxMapCpuBytes) throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+            var rgba = batch.CopySelectedFrame(pair.Value.Key, token);
+            if (rgba.Length != checked(pair.Value.Width * pair.Value.Height * 4)) throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame));
+            frames.Add(pair.Key, new(pair.Value.Width, pair.Value.Height, rgba));
+        }
+        batch.Complete(token);
+        return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
+    }
+
     // Internal production stage shared with structural owner-path tests. Tests
     // may lower limits or observe a copied frame, never substitute parsing,
     // strict publication, selected-frame acquisition or copying.

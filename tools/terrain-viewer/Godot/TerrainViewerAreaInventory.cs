@@ -68,7 +68,15 @@ public partial class TerrainViewerApp
         // carried from the main map into the cave has its home record there.
         var left = keepLeft ? _recordMapsLeft : [];
         _recordMapsLeft = [];
-        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left, new AreaMapRecords(arguments))));
+        // ARC-DEV-079 (MIG4): the home maps' data (rows, bodies, frames) the viewer has read or loaded, kept for the next scene of the same run
+        // (a quick load or a fresh run reads again); the map just loaded is remembered, so a companion carried from it needs no read. A map the
+        // resolver reads on demand is read through it too (a window of the main map around a stored cell the session recorded).
+        var kept = keepLeft ? _homes?.Reads ?? [] : [];
+        _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
+        foreach (var read in kept) _homes.Remember(read);
+        if (arguments.AreaMapName is not null && maps.Count == 1) _homes.Remember(AreaHomeRead.Of(maps[0], _ownCompanionTemplates, area.Frames, area.Snapshot));
+        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
+            new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null))));
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are

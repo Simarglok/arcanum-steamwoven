@@ -517,9 +517,12 @@ public sealed class AreaCompanionTests
         Assert.IsNull(session.QueryMapChange(second, AreaCompanionPlacement.Key(entity)), "the map it left forgets it");
         Assert.AreEqual(1, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, third, SimulationTime.At(0)).Companions.Count);
         Assert.AreEqual(0, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, second, SimulationTime.At(0)).Companions.Count);
-        Assert.AreEqual(1, AreaCompanionGroup.Arrive(template, third, third, At(4), NeighborDirection.XPlus).Count, "on the same map only the cell");
+        Assert.AreEqual(2, AreaCompanionGroup.Arrive(template, third, third, At(4), NeighborDirection.XPlus).Count, "on the same map only the cell (and its home map's stored cell, ARC-DEV-079)");
+        // ARC-DEV-079 (MIG4): the home map keeps the cell its stored object lies on for as long as the companion is not on it.
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, home, entity));
         Go(third, home, At(1));
         Assert.IsNull(session.QueryMapChange(home, AreaCompanionPlacement.MapKey(entity)), "home again: no away map");
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, home, entity), "off its stored cell: still recorded");
         Assert.AreEqual(new AreaCompanionWhere(home, (At(1), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
     }
 }
