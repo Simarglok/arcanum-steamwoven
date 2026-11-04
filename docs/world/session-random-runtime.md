@@ -127,4 +127,9 @@ before this schema, so nothing is lost.
   the owner wants rolls of one kind not to shift those of another).
 - A legacy LCG profile, if the owner wants the original's 15-bit modulo distribution.
 - A trace of recent rolls kept by the session (callers keep their own, like the resolver's `CombatRollLog`).
+- **Original load after a relaunch (GI6, NOT READY):** the viewer seeds every new session, the main menu's placeholder
+  included, with 0, so under Original a save loaded right after a start of the viewer goes on with seed 0 at draw 0
+  every time, and a relaunch repeats the same rolls; the retail game seeds from the clock at start-up. A quick load
+  inside a running game rerolls as the original does. Seeding new sessions from the time is a host change of the viewer
+  (it may read the clock; the owner does not) for its own task, since smokes and tests that roll may rely on seed 0.
 

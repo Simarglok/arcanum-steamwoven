@@ -235,7 +235,8 @@ public partial class TerrainViewerApp
 
             var saved = session.Capture();
             var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
-                session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty);
+                session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty,
+                LoadRandom: session.QueryRandom());
             using var copy = GameSessionOwner.Restore(saved, options).Owner ?? throw new InvalidOperationException("ARC-UI-008 logbook smoke: copy");
             // The texts the logbook reads for this PC: the hero's intelligence, the normal texts without a hero.
             var intelligence = copy.QueryHeroDialogFacts()?.Intelligence ?? AreaLogbook.NoHeroIntelligence;

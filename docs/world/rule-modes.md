@@ -205,6 +205,9 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   when a map plan is made: the viewer's map loads and main-map window moves pass the `Rules.Data` of the session the
   load carries (the default rules for a load that starts a new session).
 - The experience domain (ARC-WORLD-033) reads `Rules.Experience` in `GameSessionOwner.QueryHeroExperience`.
+- The session generator (ARC-DEV-077, GI6) reads `Rules.Lifecycle.LoadKeepsRunningRandom` when a session is restored:
+  the saved seed and position under Steamwoven, the host's running generator under Original
+  ([session randomness](session-random-runtime.md)).
 - The sound domain (ARC-WORLD-040) reads `Rules.Sound` when a session is restored (a load of a save made during combat
   music); the viewer's scheme player (ARC-UI-041) reads it when a map opens or a quick load replaces the session.
 - Domains other than combat, the event queue, scripts, NPC reaction, game data, experience and sound have no profile yet;
