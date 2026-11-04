@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Arcanum.Data.Content;
+using Arcanum.Executable.Maps;
 using Arcanum.Executable.Prototypes;
 
 namespace Arcanum.Session.Launcher;
@@ -12,12 +14,21 @@ namespace Arcanum.Session.Launcher;
 /// message files, the art headers; an absent file counts as absent) and the length and SHA-256 of every prototype file, so a changed
 /// executable, changed data or a damaged or edited file is noticed at every start and the files are built again. The manifest is written
 /// last, into a temporary folder that then replaces the cache by a rename: a start that died half-way leaves no cache.
+/// ARC-DEV-082: the same folder holds the map aggregates too (<c>.../files/maps/&lt;name&gt;</c>, the files the original writes to
+/// <c>modules/&lt;module&gt;/maps</c>) with their own manifest <c>aggregates.json</c>, written after the files; it names the executable and the
+/// module archives (length and tail) they were built from and the length and SHA-256 of every file. Replacing the prototype cache drops them.
 /// </summary>
 internal sealed class PrototypeCacheStore
 {
     public const int Schema = 2;
     public const string FolderPrefix = "prototypes-";
     public const string ManifestName = "manifest.json";
+    public const string AggregateManifestName = "aggregates.json";
+    public const string MapsFolderName = "maps";
+    public const int AggregateSchema = 1;
+    public const int MaxAggregates = 4096;
+    /// <summary>The bytes at the end of a module archive that identify it with its length: the index and the footer with the GUID.</summary>
+    public const int ModuleTailBytes = 64 * 1024;
     public const int MaxManifestBytes = 16 << 20;
     public const int MaxDataFiles = 200_000;
     public const int MaxFiles = 4096;
@@ -47,6 +58,12 @@ internal sealed class PrototypeCacheStore
     private sealed record ListingEntry(string Directory, string Sha256);
     private sealed record FileEntry(string Name, long Bytes, string Sha256);
     private sealed record Manifest(int Schema, string Exe, DataEntry[] Data, ListingEntry[] Listings, FileEntry[] Files);
+    /// <summary>One module archive or patch the aggregates were built from: its file name, length and the SHA-256 of its last <see cref="ModuleTailBytes"/> bytes.</summary>
+    internal sealed record ModuleEntry(string Name, long Bytes, string TailSha256);
+    private sealed record AggregateManifest(int Schema, string Exe, string Module, ModuleEntry[] Sources, FileEntry[] Files);
+
+    /// <summary>What the aggregates of the module depend on that the executable does not name: the module archive and its patches (the original keys its own files on the archive's GUID).</summary>
+    internal sealed record AggregateIdentity(string Module, ModuleEntry[] Sources);
 
     /// <summary>The number of files when the folder holds a cache that matches this executable and the data <paramref name="source"/> holds now
     /// and every file is intact; otherwise null (nothing is repaired: the caller builds again).</summary>
@@ -68,7 +85,7 @@ internal sealed class PrototypeCacheStore
                 if (listing is null || listing.Directory is null || ListingHash(source, listing.Directory) != listing.Sha256) return null;
             var proto = Path.Combine(MountFolder, "proto");
             // Exactly the listed files: an extra .pro file would be mounted too. A name the system adds (.DS_Store, ._x) is not a file of the cache.
-            if (Visible(MountFolder).Count() != 1 || !Directory.Exists(proto)) return null;
+            if (Visible(MountFolder).Count(path => !string.Equals(Path.GetFileName(path), MapsFolderName, StringComparison.Ordinal)) != 1 || !Directory.Exists(proto)) return null;
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in manifest.Files)
             {
@@ -125,6 +142,97 @@ internal sealed class PrototypeCacheStore
             TryDelete(temporary);
             return $"the prototype files could not be stored ({error.GetType().Name}: {error.Message})";
         }
+    }
+
+    /// <summary>The identity of the module's archives and patches for <see cref="VerifyAggregates"/> (their length and the SHA-256 of their last bytes); an unreadable one is left out, so the cache does not match.</summary>
+    internal static AggregateIdentity ModuleIdentity(ContentMountPlan plan)
+    {
+        var entries = new List<ModuleEntry>();
+        foreach (var source in plan.SearchOrder.Where(source => source.Role is ContentSourceRole.ModuleArchive or ContentSourceRole.ModulePatch))
+        {
+            using var file = File.OpenRead(source.Path);
+            var tail = new byte[(int)Math.Min(file.Length, ModuleTailBytes)];
+            file.Seek(file.Length - tail.Length, SeekOrigin.Begin);
+            file.ReadExactly(tail);
+            entries.Add(new(Path.GetFileName(source.Path), file.Length, Hash(tail)!));
+        }
+        return new(plan.ModuleName, [.. entries]);
+    }
+
+    /// <summary>The number of aggregate files when the folder holds map files built from this executable and these module archives and every file is intact; otherwise null.</summary>
+    public int? VerifyAggregates(AggregateIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        try
+        {
+            var manifestFile = new FileInfo(Path.Combine(Folder, AggregateManifestName));
+            if (!manifestFile.Exists || manifestFile.Length > MaxManifestBytes) return null;
+            var manifest = JsonSerializer.Deserialize<AggregateManifest>(File.ReadAllBytes(manifestFile.FullName), Json);
+            if (manifest is not { Sources: not null, Files: not null, Exe: not null, Module: not null } || manifest.Schema != AggregateSchema
+                || !string.Equals(manifest.Exe, ExeSha256, StringComparison.Ordinal) || !string.Equals(manifest.Module, identity.Module, StringComparison.Ordinal)
+                || manifest.Files.Length is 0 or > MaxAggregates || manifest.Sources.Length != identity.Sources.Length) return null;
+            for (var i = 0; i < identity.Sources.Length; i++) if (manifest.Sources[i] != identity.Sources[i]) return null;
+            var maps = Path.Combine(MountFolder, MapsFolderName);
+            if (!Directory.Exists(maps)) return null;
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in manifest.Files)
+            {
+                if (entry is null || !ValidAggregateName(entry.Name) || !names.Add(entry.Name)) return null;
+                var info = new FileInfo(Path.Combine(maps, entry.Name));
+                if (!info.Exists || info.Length != entry.Bytes || info.LinkTarget is not null) return null;
+                if (Hash(File.ReadAllBytes(info.FullName)) != entry.Sha256) return null;
+            }
+            // Exactly the listed files: an extra file would be mounted too.
+            if (Visible(maps).Count() != manifest.Files.Length) return null;
+            return manifest.Files.Length;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or NotSupportedException or System.Security.SecurityException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Stores the map aggregates beside the prototypes (replacing earlier ones); null on success, else the reason in words.</summary>
+    public string? StoreAggregates(MapAggregateRunResult build, AggregateIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        ArgumentNullException.ThrowIfNull(identity);
+        if (build.Failure is not null || build.Files.Count is 0 or > MaxAggregates) return "the build did not give a complete set of map files";
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in build.Files)
+            if (!ValidAggregateName(file.FileName) || !names.Add(file.FileName)) return "the build named a map file the cache cannot hold";
+        var manifest = new AggregateManifest(AggregateSchema, ExeSha256, identity.Module, identity.Sources,
+            build.Files.Select(file => new FileEntry(file.FileName, file.Bytes.Length, Hash(file.Bytes)!)).ToArray());
+        var files = Path.Combine(Folder, "files");
+        var temporary = Path.Combine(files, MapsFolderName + ".tmp-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temporary);
+            foreach (var file in build.Files) File.WriteAllBytes(Path.Combine(temporary, file.FileName), file.Bytes);
+            // The manifest goes first away (a cache without it is no cache), the files are put in place, the manifest is written last.
+            File.Delete(Path.Combine(Folder, AggregateManifestName));
+            var maps = Path.Combine(files, MapsFolderName);
+            if (Directory.Exists(maps)) Retry(() => Directory.Delete(maps, recursive: true));
+            Retry(() => Directory.Move(temporary, maps));
+            var manifestTemporary = Path.Combine(Folder, AggregateManifestName + ".tmp-" + Guid.NewGuid().ToString("N"));
+            File.WriteAllBytes(manifestTemporary, JsonSerializer.SerializeToUtf8Bytes(manifest, Json));
+            Retry(() => File.Move(manifestTemporary, Path.Combine(Folder, AggregateManifestName), overwrite: true));
+            return null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
+        {
+            TryDelete(temporary);
+            return $"the map files could not be stored ({error.GetType().Name}: {error.Message})";
+        }
+    }
+
+    /// <summary>The name of a map aggregate file: the map's name rotated and reversed (printable ASCII, spaces, quotes and the like; no path or reserved character, no leading dot, at most 200 characters).</summary>
+    internal static bool ValidAggregateName(string? name)
+    {
+        if (name is null || name.Length is 0 or > 200 || name[0] == '.' || name[^1] is ' ' or '.') return false;
+        foreach (var c in name)
+            if (c is < ' ' or > '~' or '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*') return false;
+        return true;
     }
 
     /// <summary>Removes the temporary and replaced folders of earlier starts that died (older than <see cref="LeftoverAge"/>).</summary>

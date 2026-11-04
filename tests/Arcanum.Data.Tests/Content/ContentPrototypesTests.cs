@@ -152,6 +152,19 @@ public sealed class ContentPrototypesTests
         Assert.IsFalse(ContentMountPlan.Discover(_root, "Mod").Plan!.SearchOrder.Any(source => source.Role == ContentSourceRole.PrototypeCache), "nothing mounted by default");
     }
 
+    [TestMethod]
+    public void Folders_keep_the_spelling_of_the_source_that_holds_the_first_file()
+    {
+        File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Dat(("maps\\Shop Map\\a.mob", [1]), ("maps\\Zed\\b.mob", [2])));
+        Write("data/maps/Shop Map/c.mob", [3]);
+        Write("data/maps/Only Data/d.mob", [4]);
+        Write("modules/Mod/maps/Module Only/e.mob", [5]);
+        using var stack = Stack();
+
+        CollectionAssert.AreEqual(new[] { "Only Data", "Shop Map", "Zed" }, ContentPhase.Folders(stack, "maps", ContentLoadPhase.GameStart).OrderBy(n => n, StringComparer.Ordinal).ToArray());
+        CollectionAssert.Contains(ContentPhase.Folders(stack, "maps", ContentLoadPhase.ModuleLoaded).ToArray(), "Module Only");
+    }
+
     private ContentStack Stack()
     {
         var discovery = ContentMountPlan.Discover(_root, "Mod");

@@ -168,3 +168,27 @@ builder writes nothing to the disk.
   executable aligns sections to the page), and makes a writable section readable, as Windows does.
 - Hooks fire on control transfers only, not when execution falls through into the hooked address.
 - The census mode costs time (a dictionary update per instruction); production runs leave it off.
+
+## The map aggregate builder
+
+`Arcanum.Executable.Maps.MapAggregateBuilder.Build(executable, files, moduleGuid, options?, progress?)` (ARC-DEV-082, E5) makes the per-map mobile aggregates
+the original writes at its first module start (`modules/<module>/maps/<name through 0x411830>`, 81 files for `Arcanum`): it runs the original's own functions in the same
+interpreter and file layer as the prototype builder (one `BuildSession`, so the services are the same), calls the module's per-map function 0x4102F0 once for every map
+folder the source lists and returns `BuiltMapAggregate(MapName, FileName, Bytes)` in the order of the folders; it writes nothing to the disk.
+
+- **Input.** An `IOriginalFileSource` that holds the module (its map folders, their `.mob` files and the data the object modules read) and the prototype files, with
+  `ListDirectories("maps")` answering the folders with their letter case (`ContentPhase.Folders`, since the aggregate's name depends on it); the module's 16-byte GUID
+  (`ModuleGuidFromArchiveFooter`: from the last 28 bytes of the module's `.dat`, the rule of 0x53BC50, whose first 12 bytes belong to the GUID and the last four are the tag
+  `1TAD`); the verified executable (as for the prototypes).
+- **Start-up** (read from the executable's tables): the game modules 0 to 16 and the 17 object modules of the Map module's table (0x59F068), one by one, with the prototype
+  files found in the source so that the prototype module reads them and builds nothing. `Light`, `Tile`, `Roof`, `TB` and `TF` are not started (DirectDraw surfaces; no object
+  read or write uses them); the colour conversion tables the `Object` module reads are written by the host (16-bit 5-6-5). Hooks added for this build: the log (0x4FEB70, kept in
+  `Log`), making a folder (0x52DFE0), listing folders (the 0x20 mark), reading the prototype files from the source, and writing `maps\<flat name>` (any other write is
+  `BadOutput`; the prototype files the module rewrites stay in memory).
+- **Refusals** are those of the prototype builder (`PrototypeBuildFailure`): `InvalidExecutable`, `UnverifiedExecutable`, `StartupFault`, `BuildFault` (the aggregate of a named map),
+  `BadOutput` (the function returned 0, or wrote other than one file; the executable's log text is in the detail), `LimitExceeded`, `MissingSourceFile`; option limits are validated
+  up front (`ArgumentOutOfRangeException`, a GUID that is not 16 bytes is an `ArgumentException`).
+- **Verification.** Synthetic tests (refusals, the GUID rule, the file rules). Opt-in (`TestCategory=OriginalExe`, `ARCANUM_EXE`, `ARCANUM_GAME_ROOT` = an installation with the module
+  and the prototype files, `ARCANUM_ORIGINAL_MAPS` = the aggregates the original wrote, such as its `modules/Arcanum/maps`; `ARCANUM_AGGREGATE_OUT` writes the built files for a
+  look): all 81 equal to the original's by name (ordinal), length and every record field, and the only differing bytes are 18,399 runs of one 16-bit word with one constant offset in
+  the unused bytes of IDs. Results: [E5 results](research/prototype-extraction.md#e5-results-arc-dev-082).

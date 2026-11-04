@@ -148,7 +148,8 @@ owner's Windows installation (2026-10-29).
 | E1 | ARC-RES-085 | This document | Merged |
 | E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
 | E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the original's own check and build loop, the captured files; the open inputs of the census settled by reading | **Done:** all 1,423 files equal to the files the original wrote on the owner's Windows installation (an opt-in real-data test; the Windows files stay local); the macOS differences listed ([results](#e3-results-arc-dev-068)) |
-| E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, a typed refusal for an unverified executable | **Done for the prototype files** ([results](#e4-results-arc-dev-069)): a fresh installation (no `data/proto`) gets its prototypes on the first Play and reaches the map plan; the map itself then needs the first-start map aggregates, which are not built yet ([open](#what-a-fresh-installation-still-lacks)) |
+| E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, a typed refusal for an unverified executable | **Done for the prototype files** ([results](#e4-results-arc-dev-069)): a fresh installation (no `data/proto`) gets its prototypes on the first Play and reaches the map plan; the map itself then needed the first-start map aggregates, built by E5 |
+| E5 | ARC-DEV-082 | The per-map mobile aggregates (`modules/Arcanum/maps`, 81 files) the original writes at its first module start: its own function 0x4102F0 in the interpreter over the module's editor `.mob` files, the module GUID from the end of `Arcanum.dat`, the cache beside the prototypes | **Done** ([results](#e5-results-arc-dev-082)): all 81 equal to the files the original wrote (names, lengths, every record field); a fresh GOG installation passes the main-menu native smoke |
 
 ## E3 results (ARC-DEV-068)
 
@@ -227,11 +228,52 @@ freshly unpacked by `innoextract` from the GOG installer printed `ARC-DEV-069 pr
 and the map plan passed (the earlier `AREA_MAP_PLAN_MISSINGSOURCE "prototype N"` is gone). Not run here: a Windows machine (the code is
 portable: .NET file APIs, no shell).
 
-### What a fresh installation still lacks
+### What a fresh installation still lacked (closed by E5)
 
-The same run showed that `data/proto` is not the only thing the original writes at its first start: the loaded map then stops with
+The same run showed that `data/proto` is not the only thing the original writes at its first start: the loaded map then stopped with
 `AreaIncompleteException` (`InputIdentityMismatch` at the correspondence stage, the editor `.mob` files against the game-generated mobile
 aggregate), because a fresh installation has none of the **81 per-map aggregate files** the original writes to `modules/Arcanum/maps` (their
 names are the map names through the function at 0x411830, `WorldCatalog.AggregateName`). Checked: the same folder with the 81 files copied from
-the CrossOver installation, on the cache this task built, passes the main-menu smoke; the original's own `data/proto` in a fresh folder fails
-the same way, so the cause is not the built prototypes. Building the aggregates from the executable is the next slice (not part of E4).
+the CrossOver installation, on the cache this task built, passed the main-menu smoke; the original's own `data/proto` in a fresh folder failed
+the same way, so the cause was not the built prototypes. E5 builds the aggregates from the executable.
+
+## E5 results (ARC-DEV-082)
+
+**What the original does** (executable 1.0.7.4, read with `llvm-objdump`; behaviour only): the module load (0x402A50) mounts the module, takes its
+GUID (below), lists `maps\*.*` and calls the per-map function 0x4102F0 with the name of every **folder** (the list marks a folder with 0x20 in the byte
+after the 260-byte name). That function composes `maps\<name through 0x411830>`; when the file exists and its first 16 bytes equal the module's GUID
+(and are not all zero) it is done; otherwise it creates the file (`wb`), writes the 16-byte GUID, lists `maps\<name>\*.mob`, and for each file reads the
+object through the object system (0x4E6BC0 → 0x406600), writes it to the aggregate (0x406590, the same record writer as the prototypes) and frees it
+(0x405BF0). So an aggregate is *the module's GUID, then the v119 records of the map's `.mob` files in directory-listing order*.
+
+- **The module GUID** (0x53BC50, the archive loader): the dword 12 bytes before the end of the module's `.dat` is the tag `1TAD`; the GUID is then the 16 bytes
+  that start 24 bytes before the end, so its last four bytes are the tag itself (the original reads the footer a dword late; a `.dat` tagged ` DAT` has a zero
+  GUID). `MapAggregateBuilder.ModuleGuidFromArchiveFooter` is that rule; the 81 files of the owner's installation start with exactly these bytes.
+- **The runtime the build needs.** The interpreter runs, in the original's order, the game modules 0 to 16 and the 17 object modules of the Map module's table
+  (0x40EA90 runs them in this order; the host calls them one by one) with the prototype files in the source (the prototype module's check then reads them and, for
+  a finished set, builds nothing: the host answers its existence check for a number the source holds, which saves the 307 rewrites of E3's finding 5). The five
+  object modules that make screen resources (`Light`, `Tile`, `Roof`, `TB`, `TF`: lights, tiles, roofs and tile blocks call DirectDraw, and `Light`'s own init needs
+  floating point and a window) are not started; no object read or write uses them. The colour conversion tables the `Object` module reads at start (0x739E98 …,
+  built by 0x52C070 with floating point) are written by the host for a 16-bit 5-6-5 screen. The file layer lists folders too (the flag above), reads `.mob`
+  files from the module's sources, and writes only `maps\<flat name>` (and, in memory, the rewritten prototype files); any other write stops the build.
+- **Folder names keep their case.** The aggregate's name depends on the letter case of the folder (`Arcanum1-024…`), which the content stack's lower-case keys do
+  not keep; `ContentPhase.Folders` takes it from the entry's own name (an archive's raw name, a file's path).
+- **Compared with the original's files** (the owner's Windows installation through CrossOver, read only, 2026-11-04): all 81 names equal (ordinal), all 81 lengths
+  equal, all 81 files equal **record by record and field by field** through the repository's own v119 reader. 8 files are byte-equal; in the other 73 the
+  bytes that differ are exactly 18,399 runs of one 16-bit word, in the bytes of an ID that its kind does not use (the same class as PX6), and the original's
+  word is the build's plus one constant (9,530) in every file. The word moves with the interpreter's state, not with an address (another fill byte, stack and heap
+  leave it), so it is the same kind of leftover as in E3; the cause of the constant is not identified. It is no data an aggregate holds: the reader leaves it out.
+- **Timing and size** (Release, Apple silicon): 81 files, 4.5 × 10^8 interpreted instructions, 6.5 s; the whole first start with the prototypes is 33 s, the second 0.23 s.
+
+**In the launcher.** `PrototypeProvisioner.Provision` checks the map folders of the module after the prototypes: an installation whose module already has every `maps/<name>`
+aggregate (the original ran there) is left alone; otherwise it reads the module archive's GUID, verifies the cache (executable, module archive and patch length and tail
+hash, every file's length and SHA-256, no extra file), or builds the aggregates over the installation's data plus the prototype cache of the same start and stores them
+beside the prototypes (`prototypes-<exe>/files/maps/`, manifest `aggregates.json`, written last). The same mount (`PrototypeCacheMount`) holds both, below the module's own
+files, so a file the installation has still wins. A new prototype cache replaces the folder and drops the aggregates (they are built over the new files). Progress is
+the stage `BuildingMaps` (`Preparing the maps from your game files (first start only)… n/81`); the executable must be the verified one also when only the maps are missing.
+
+**Fresh installation** (`innoextract --gog` of the GOG 1.0.7.4 installer into an empty folder, stored in a `launcher_v1.json`): the first start printed
+`ARC-DEV-069 prototypes status=Built files=1423 mapFiles=81`, the map plan passed and `ARC-UI-011 native-smoke main menu PASS` ended the run.
+
+**Not covered.** Windows and Linux machines; a module other than `Arcanum` (the code is by the module's plan, the Vormantown module was not run); an installation whose aggregate
+exists with another GUID or is damaged (the original rebuilds it; here a file in `modules/<module>/maps` is the installation's own and wins); the display modules' own state.

@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data.Content;
+using Arcanum.Data.Maps;
+using Arcanum.Executable.Maps;
 using Arcanum.Executable.Prototypes;
 using Arcanum.Session.Launcher;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -308,6 +310,172 @@ public sealed class PrototypeProvisionerTests
         Assert.IsFalse(ContentMountPlan.Discover(_game).Plan!.SearchOrder.Any(source => source.Role == ContentSourceRole.PrototypeCache), "a folder that does not exist is not mounted");
     }
 
+    // --- ARC-DEV-082: the map aggregates ---------------------------------------------------------------------------------------
+
+    /// <summary>A stand-in for the aggregate build: one file per map folder the source lists, named by the original's rule and holding the map's name.</summary>
+    private sealed class FakeMaps
+    {
+        public int Calls;
+        public byte[]? SeenGuid, SeenExe;
+        public string[] SeenFolders = [];
+        public PrototypeBuildFailure? Failure { get; init; }
+        public Func<IOriginalFileSource, bool>? Check { get; init; }
+
+        public MapAggregateRunResult Run(byte[] exe, IOriginalFileSource files, byte[] guid, Action<int, int>? progress)
+        {
+            Calls++;
+            SeenExe = exe;
+            SeenGuid = guid;
+            SeenFolders = [.. files.ListDirectories("maps")];
+            if (Check is not null) Assert.IsTrue(Check(files));
+            var built = new List<BuiltMapAggregate>();
+            for (var i = 0; i < SeenFolders.Length; i++)
+            {
+                progress?.Invoke(i, SeenFolders.Length);
+                built.Add(new(SeenFolders[i], WorldCatalog.AggregateName(SeenFolders[i]), [.. guid, .. Encoding.ASCII.GetBytes(SeenFolders[i])]));
+            }
+            progress?.Invoke(SeenFolders.Length, SeenFolders.Length);
+            return new(built, Failure, 7);
+        }
+    }
+
+    private PrototypeProvisionOptions MapOptions(FakeBuild build, FakeMaps maps) => Options(build) with { BuildMaps = maps.Run };
+
+    private void Maps(params string[] names)
+    {
+        foreach (var name in names) Write($"modules/Arcanum/maps/{name}/map.prp", new byte[24]);
+    }
+
+    [TestMethod]
+    public void A_fresh_installation_gets_its_map_aggregates_built_stored_beside_the_prototypes_and_reused()
+    {
+        Maps("Arcanum1-024", "Shop Map");
+        var build = new FakeBuild(); var maps = new FakeMaps();
+        var reports = new List<PrototypeProvisionProgress>();
+        var first = PrototypeProvisioner.Provision(Folder(), _cache, reports.Add, options: MapOptions(build, maps));
+
+        Assert.AreEqual(PrototypeProvisionStatus.Built, first.Status, first.Detail);
+        Assert.AreEqual(3, first.Files);
+        Assert.AreEqual(2, first.MapFiles);
+        Assert.AreEqual(1, build.Calls); Assert.AreEqual(1, maps.Calls);
+        CollectionAssert.AreEqual(ExeBytes, maps.SeenExe);
+        CollectionAssert.AreEqual(new byte[12].Concat("1TAD"u8.ToArray()).ToArray(), maps.SeenGuid, "the 16 bytes the original reads from 24 bytes before the module archive's end (the last four are the tag)");
+        CollectionAssert.AreEqual(new[] { "Arcanum1-024", "Shop Map" }, maps.SeenFolders, "the folders with the case their files spell");
+        Assert.IsTrue(reports.Any(r => r.Stage == PrototypeProvisionStage.BuildingMaps && r.Done == 2 && r.Total == 2));
+        var mapsFolder = Path.Combine(first.MountFolder!, "maps");
+        CollectionAssert.AreEquivalent(new[] { WorldCatalog.AggregateName("Arcanum1-024"), WorldCatalog.AggregateName("Shop Map") }, Directory.EnumerateFiles(mapsFolder).Select(Path.GetFileName).ToArray());
+        Assert.IsTrue(Directory.Exists(Path.Combine(first.MountFolder!, "proto")), "the prototypes are in the same cache");
+        Assert.IsFalse(File.Exists(Path.Combine(_game, "modules", "Arcanum", "maps", WorldCatalog.AggregateName("Shop Map"))), "the game folder is only read");
+
+        var again = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, again.Status, again.Detail);
+        Assert.AreEqual(2, again.MapFiles);
+        Assert.AreEqual(1, build.Calls); Assert.AreEqual(1, maps.Calls, "a later start builds neither");
+
+        // The stored aggregates are found by the world catalogue's own name rule once the cache is mounted: the stack sees them.
+        PrototypeCacheMount.Use(again.MountFolder);
+        var opened = ContentStack.Open(ContentMountPlan.Discover(_game).Plan!);
+        using var stack = opened.Stack!;
+        Assert.AreEqual(0, PrototypeProvisioner.MissingAggregates(stack), "with the cache mounted no aggregate is missing");
+        Assert.IsNotNull(ContentPhase.Candidate(stack, "maps/" + WorldCatalog.AggregateName("Shop Map"), ContentLoadPhase.ModuleLoaded));
+    }
+
+    [TestMethod]
+    public void An_installation_whose_aggregates_exist_builds_none_and_one_with_its_own_prototypes_builds_only_the_maps()
+    {
+        Maps("One", "Two");
+        Write("modules/Arcanum/maps/" + WorldCatalog.AggregateName("One"), [1]);
+        Write("modules/Arcanum/maps/" + WorldCatalog.AggregateName("Two"), [2]);
+        for (var i = 1; i <= 3; i++) Write($"data/proto/00100{i} - Wall.pro", Bytes(i));
+        var build = new FakeBuild(); var maps = new FakeMaps();
+        var present = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Present, present.Status);
+        Assert.IsNull(present.MountFolder);
+        Assert.AreEqual(0, maps.Calls);
+        Assert.IsFalse(Directory.Exists(_cache), "nothing is written");
+
+        File.Delete(Path.Combine(_game, "modules", "Arcanum", "maps", WorldCatalog.AggregateName("Two")));
+        var part = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Built, part.Status, part.Detail);
+        Assert.AreEqual(0, build.Calls, "the installation's prototypes are used");
+        Assert.AreEqual(1, maps.Calls);
+        Assert.AreEqual(2, part.MapFiles, "every map is built; the installation's own file still wins where there is one");
+        Assert.IsFalse(Directory.Exists(Path.Combine(part.MountFolder!, "proto")));
+        var again = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, again.Status, again.Detail);
+        Assert.AreEqual(1, maps.Calls);
+    }
+
+    [TestMethod]
+    public void The_map_build_sees_the_prototypes_of_the_cache_the_same_start_made_and_a_changed_module_or_a_damaged_file_builds_again()
+    {
+        Maps("One");
+        var build = new FakeBuild();
+        var maps = new FakeMaps { Check = files => files.Read("proto\\001001 - Wall.pro") is not null && files.List("proto").Count == 3 };
+        var first = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Built, first.Status, first.Detail);
+        Assert.AreEqual(1, maps.Calls);
+
+        var file = Path.Combine(first.MountFolder!, "maps", WorldCatalog.AggregateName("One"));
+        File.WriteAllBytes(file, [9, 9]);
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "a damaged file");
+        Assert.AreEqual(2, maps.Calls); Assert.AreEqual(1, build.Calls, "the prototypes verified");
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status);
+
+        File.WriteAllBytes(Path.Combine(first.MountFolder!, "maps", "extra"), [1]);
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "an extra file would be mounted too");
+        File.WriteAllBytes(Path.Combine(first.MountFolder!, "maps", ".DS_Store"), [1]);
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "a system file is not one");
+        Assert.AreEqual(3, maps.Calls);
+
+        // Another module archive (here a longer file) is another module: its aggregates are built again.
+        File.WriteAllBytes(Path.Combine(_game, "modules", "Arcanum.dat"), [.. EmptyDat(), .. new byte[8]]);
+        Assert.IsNull(PrototypeProvisioner.ModuleGuid(Folder().Plan!), "an archive that does not end with the footer is not read");
+        File.WriteAllBytes(Path.Combine(_game, "modules", "Arcanum.dat"), EmptyDat());
+        File.WriteAllBytes(Path.Combine(_game, "modules", "Arcanum.PATCH0"), EmptyDat());
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status, "a patch archive appeared");
+        Assert.AreEqual(4, maps.Calls);
+    }
+
+    [TestMethod]
+    public void A_replaced_prototype_cache_drops_the_aggregates_and_a_failed_map_build_is_named_and_stores_nothing()
+    {
+        Maps("One");
+        var build = new FakeBuild(); var maps = new FakeMaps();
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps)).Status);
+        Write("data/rules/npc.txt", Encoding.ASCII.GetBytes("rules v2"));
+        var second = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(build, maps));
+        Assert.AreEqual(PrototypeProvisionStatus.Built, second.Status, second.Detail);
+        Assert.AreEqual(2, build.Calls); Assert.AreEqual(2, maps.Calls, "new prototypes: the maps are built over them again");
+
+        var failed = PrototypeProvisioner.Provision(Folder(), Path.Combine(_root, "settings", "failed"), options: MapOptions(new FakeBuild(), new FakeMaps { Failure = new(PrototypeBuildFailureKind.BuildFault, "at 0x4102F0") }));
+        Assert.AreEqual(PrototypeProvisionStatus.BuildFailed, failed.Status);
+        StringAssert.Contains(failed.Detail, "0x4102F0");
+        StringAssert.Contains(failed.Detail, "map files");
+        var missing = PrototypeProvisioner.Provision(Folder(), Path.Combine(_root, "settings", "failed2"), options: MapOptions(new FakeBuild(), new FakeMaps { Failure = new(PrototypeBuildFailureKind.MissingSourceFile, "mes\\x.mes") }));
+        Assert.AreEqual(PrototypeProvisionStatus.SourceFailed, missing.Status);
+        Assert.IsFalse(Directory.Exists(Path.Combine(_root, "settings", "failed", "prototypes-" + ExeSha[..16], "files", "maps")), "a failed build stores no map files");
+
+        using var cancel = new CancellationTokenSource();
+        var cancelled = PrototypeProvisioner.Provision(Folder(), Path.Combine(_root, "settings", "cancel"), progress => { if (progress.Stage == PrototypeProvisionStage.BuildingMaps) cancel.Cancel(); },
+            cancel.Token, MapOptions(new FakeBuild(), new FakeMaps()));
+        Assert.AreEqual(PrototypeProvisionStatus.Cancelled, cancelled.Status);
+    }
+
+    [TestMethod]
+    public void The_map_build_needs_the_verified_executable_and_a_module_archive_it_can_read()
+    {
+        Maps("One");
+        for (var i = 1; i <= 3; i++) Write($"data/proto/00100{i} - Wall.pro", Bytes(i));
+        var maps = new FakeMaps();
+        var wrong = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), maps) with { ExpectedExeSha256 = new string('a', 64) });
+        Assert.AreEqual(PrototypeProvisionStatus.UnverifiedExecutable, wrong.Status, "own prototypes do not make the executable unnecessary: the maps are built from it");
+        File.WriteAllBytes(Path.Combine(_game, "modules", "Arcanum.dat"), [.. EmptyDat(), .. new byte[8]]);
+        var unreadable = PrototypeProvisioner.Provision(Folder(), _cache, options: MapOptions(new FakeBuild(), maps));
+        Assert.AreEqual(PrototypeProvisionStatus.SourceFailed, unreadable.Status, unreadable.Detail);
+        Assert.AreEqual(0, maps.Calls);
+    }
+
     /// <summary>Opt-in (<c>ARCANUM_GAME_ROOT</c>, an installation the original ran; <c>ARCANUM_EXE</c> is not needed: its own <c>Arcanum.exe</c> is read):
     /// a copy of the installation made of links, without <c>data/proto</c>, is a fresh one: the provision builds the 1,423 files into a cache in a
     /// temporary settings folder, a second one verifies and reuses them, and the cache equals the installation's own files by name and length.
@@ -326,19 +494,45 @@ public sealed class PrototypeProvisionerTests
         if (Directory.Exists(realData))
             foreach (var entry in Directory.EnumerateFileSystemEntries(realData))
                 if (!string.Equals(Path.GetFileName(entry), "proto", StringComparison.OrdinalIgnoreCase)) Directory.CreateSymbolicLink(Path.Combine(farm, "data", Path.GetFileName(entry)), entry);
+        // The module folder without its maps: the aggregates are made at the first start too.
+        var realModules = Path.Combine(real, "modules");
+        var farmModules = Path.Combine(farm, "modules");
+        Directory.Delete(farmModules); // a link to the whole folder, replaced by a folder of links
+        Directory.CreateDirectory(farmModules);
+        foreach (var entry in Directory.EnumerateFileSystemEntries(realModules))
+        {
+            var name = Path.GetFileName(entry);
+            if (name.StartsWith('.')) continue;
+            if (!Directory.Exists(entry) || !string.Equals(name, "Arcanum", StringComparison.OrdinalIgnoreCase)) { Directory.CreateSymbolicLink(Path.Combine(farmModules, name), entry); continue; }
+            Directory.CreateDirectory(Path.Combine(farmModules, name));
+            foreach (var inner in Directory.EnumerateFileSystemEntries(entry))
+                if (!string.Equals(Path.GetFileName(inner), "maps", StringComparison.OrdinalIgnoreCase) && !Path.GetFileName(inner).StartsWith('.'))
+                    Directory.CreateSymbolicLink(Path.Combine(farmModules, name, Path.GetFileName(inner)), inner);
+        }
         var check = GameFolderLocator.Check(farm);
         Assert.IsTrue(check.Ready, check.Status + " " + check.Detail);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var last = (PrototypeProvisionProgress?)null; var stages = new List<PrototypeProvisionStage>();
         var built = PrototypeProvisioner.Provision(check, _cache, report => { last = report; if (stages.Count == 0 || stages[^1] != report.Stage) stages.Add(report.Stage); });
-        Console.WriteLine($"provision: {built.Status} {built.Files} files in {clock.Elapsed.TotalSeconds:F1} s, stages {string.Join(">", stages)}, last {last}");
+        Console.WriteLine($"provision: {built.Status} {built.Files} files and {built.MapFiles} map files in {clock.Elapsed.TotalSeconds:F1} s, stages {string.Join(">", stages)}, last {last}");
         Assert.AreEqual(PrototypeProvisionStatus.Built, built.Status, built.Detail);
         Assert.AreEqual(PrototypeProvisioner.InstalledFileCount, built.Files);
+        Assert.IsTrue(built.MapFiles > 0, "the module's map aggregates are built too");
         clock.Restart();
         var cached = PrototypeProvisioner.Provision(check, _cache);
         Console.WriteLine($"second start: {cached.Status} in {clock.Elapsed.TotalSeconds:F2} s");
         Assert.AreEqual(PrototypeProvisionStatus.Cached, cached.Status, cached.Detail);
+
+        var realMaps = Path.Combine(realModules, "Arcanum", "maps");
+        if (Directory.Exists(realMaps))
+        {
+            var theirMaps = Directory.EnumerateFiles(realMaps).Where(path => !Path.GetFileName(path).StartsWith('.')).ToDictionary(path => Path.GetFileName(path), path => new FileInfo(path).Length, StringComparer.Ordinal);
+            var ourMaps = Directory.EnumerateFiles(Path.Combine(built.MountFolder!, "maps")).ToDictionary(path => Path.GetFileName(path), path => new FileInfo(path).Length, StringComparer.Ordinal);
+            CollectionAssert.AreEquivalent(theirMaps.Keys.ToArray(), ourMaps.Keys.ToArray(), "the same map file names as the original wrote");
+            Assert.AreEqual(0, theirMaps.Count(pair => ourMaps[pair.Key] != pair.Value), "the same map file lengths");
+            Assert.AreEqual(theirMaps.Count, built.MapFiles);
+        }
 
         var original = Path.Combine(realData, "proto");
         if (!Directory.Exists(original)) return;

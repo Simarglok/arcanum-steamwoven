@@ -137,7 +137,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   (`PrototypeCacheMount`, a base source above the archives and under `data/`) and starts the game; a failure (an executable that is not
   the 1.0.7.4 one, no `Arcanum.exe`, a build fault, a settings folder that cannot be written, a cancel) is named in words, leaves
   the screen open (opened for a stored folder) and keeps Play offered. The screen never tells the player to run the original. Log lines:
-  `ARC-DEV-069 prototypes stage=… / status=… files=… cache=… detail=…`.
+  `ARC-DEV-069 prototypes stage=… / status=… files=… mapFiles=… cache=… detail=…`. ARC-DEV-082: an installation whose module has no aggregate files (`modules/<module>/maps/<name>`, which the original writes at its first start) also gets them built the same way (stage `BuildingMaps`, line `Preparing the maps from your game files (first start only)… n/81`, kept in the same cache under `maps/`; [E5 results](../research/prototype-extraction.md#e5-results-arc-dev-082)).
 - **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
   detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode, "show
   at start" and the debug mode (`debugMode`, which turns the run's debug mode on, as `--debug-mode` does), then starts map mode on the main map with the main menu from that folder, as a start without the screen

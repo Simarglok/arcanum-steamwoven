@@ -17,6 +17,12 @@ public interface IOriginalFileSource
     /// no trailing separator) over every mounted source, each name once. An empty list when the directory holds none.
     /// </summary>
     IReadOnlyList<string> List(string directory);
+
+    /// <summary>
+    /// The names of the folders directly inside <paramref name="directory"/> (the map folders under <c>maps</c>), each name once, over every
+    /// mounted source. Only the map aggregate build asks; a source without folders answers an empty list.
+    /// </summary>
+    IReadOnlyList<string> ListDirectories(string directory) => [];
 }
 
 /// <summary>One prototype file the executable wrote: the code's basic number (the file's ID number is that plus 20), its name under <c>proto\</c> and its bytes.</summary>
@@ -76,6 +82,9 @@ public sealed record PrototypeBuildOptions
     /// exactly the output values that depend on uninitialized memory or on an address.
     /// </summary>
     internal byte UninitializedFill { get; init; }
+
+    /// <summary>The map aggregate build (ARC-DEV-082) runs a session of this kind instead of the prototype build.</summary>
+    internal AggregateSettings? Aggregate { get; init; }
 }
 
 /// <summary>The files built (in the original's order) or the failure, with what the run read, searched and called.</summary>

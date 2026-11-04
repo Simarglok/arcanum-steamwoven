@@ -39,6 +39,39 @@ public static class ContentPhase
         };
     }
 
+    /// <summary>
+    /// ARC-DEV-082: the folders directly under <paramref name="directory"/> (such as <c>maps</c>) that hold a file read in <paramref name="phase"/>, each name once,
+    /// spelled as the source that holds the folder's first file spells it (an archive entry's name, a file's path): the original names a map's aggregate
+    /// after the folder's name with its letter case, which the stack's keys (lower-case) do not keep. In key order.
+    /// </summary>
+    public static IReadOnlyList<string> Folders(ContentStack stack, string directory, ContentLoadPhase phase)
+    {
+        ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(directory);
+        var prefix = directory.Length == 0 ? "" : directory.Replace('\\', '/').ToLowerInvariant().TrimEnd('/') + "/";
+        var found = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var key in stack.Keys(prefix))
+        {
+            var rest = key[prefix.Length..];
+            var slash = rest.IndexOf('/');
+            if (slash <= 0 || found.ContainsKey(rest[..slash])) continue;
+            if (Candidate(stack, key, phase) is not { } candidate) continue;
+            found[rest[..slash]] = SpelledFolder(candidate, key, prefix.Count(c => c == '/'), rest[..slash]);
+        }
+        return found.Values.ToList();
+    }
+
+    /// <summary>The folder segment (index <paramref name="depth"/> of the key's segments) as the candidate's own path spells it: the last segments of that path are the key's.</summary>
+    private static string SpelledFolder(ContentCandidate candidate, string key, int depth, string lower)
+    {
+        string[]? parts = null;
+        if (candidate.Entry is { } entry) parts = System.Text.Encoding.Latin1.GetString([.. entry.RawNameBytes]).TrimEnd('\0').Split('\\', '/');
+        else if (candidate.FilePath is { } path) parts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (parts is null) return lower;
+        var keyParts = key.Split('/');
+        var index = parts.Length - keyParts.Length + depth;
+        return index >= 0 && index < parts.Length && string.Equals(parts[index], lower, StringComparison.OrdinalIgnoreCase) ? parts[index] : lower;
+    }
+
     /// <summary>The module archive, a module patch or the module folder: sources mounted after game start.</summary>
     public static bool IsModule(ContentSourceRole role) =>
         role is ContentSourceRole.ModuleArchive or ContentSourceRole.ModulePatch or ContentSourceRole.ModuleDirectory;
