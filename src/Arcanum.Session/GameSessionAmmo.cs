@@ -146,8 +146,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The hero's held items in list order: kit, taken, made.</summary>
     private IEnumerable<(string Entity, SessionItemKind Kind)> HeroHeld() =>
-        _inventory.Kit.Select(item => (item.Entity, item.Kind)).Concat(_inventory.Pc.Select(item => (item.Entity, item.Kind)))
-            .Concat(_inventory.Made.Select(item => (item.Entity, item.Kind)));
+        _inventory.Hero.PackKinds;
 
     /// <summary>The hero's first held stack of an ammunition type, or null (the original reads the one stack its critter field names,
     /// which a removal can clear while another stack of the type stays: ledger AM5, AMA4).</summary>

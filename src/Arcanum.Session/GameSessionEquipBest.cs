@@ -168,8 +168,7 @@ public sealed partial class GameSessionOwner
         /// <summary>The hero's held items with the host's facts.</summary>
         internal void Collect(SessionWearableLookup lookup)
         {
-            var kinds = owner._inventory.Kit.Select(kit => (kit.Entity, kit.Kind)).Concat(owner._inventory.Pc.Select(pc => (pc.Entity, pc.Kind)))
-                .Concat(owner._inventory.Made.Select(made => (made.Entity, made.Kind)));
+            var kinds = owner._inventory.Hero.PackKinds;
             foreach (var (entity, kind) in kinds)
             {
                 var facts = lookup(entity);

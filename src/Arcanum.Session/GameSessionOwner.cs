@@ -822,7 +822,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-071: a taken item the hero gave an NPC keeps its origin map, with the kind its NPC entry holds.
         foreach (var item in _inventory.Pc.Select(pc => (pc.Entity, pc.Origin, pc.Kind))
                      .Concat(_inventory.Placed.Where(p => p.Origin is not null).Select(p => (p.Entity, Origin: p.Origin!.Value, p.Kind)))
-                     .Concat(_inventory.Given.Values.Where(g => g.Origin is not null)
+                     .Concat(_inventory.Hero.GivenAll.Where(g => g.Origin is not null)
                          .Select(g => (g.Entity, Origin: g.Origin!.Value, _inventory.AddedTo(_inventory.NpcOf(g.Entity)!).First(e => e.Entity == g.Entity).Kind))))
         {
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
@@ -831,7 +831,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // Kit and made items came from no map, so no seed may list them; the made: prefix is the session's own.
         if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity)) ||
             _inventory.Placed.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
-            _inventory.Given.Values.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
+            _inventory.Hero.GivenAll.Any(item => item.Origin is null && admitted.Items.ContainsKey(item.Entity)) ||
             // ARC-WORLD-071: a tracked pile the seed lists is a gold pile.
             _inventory.Piles.Keys.Any(entity => admitted.Items.TryGetValue(entity, out var listed) && listed.Facts.Kind.Type != SessionItemType.Gold) ||
             admitted.Items.Keys.Any(entity => entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)))
@@ -1666,24 +1666,24 @@ public sealed partial class GameSessionOwner : IDisposable
     internal void PlaceHeroItem(string entity, Arcanum.Simulation.Movement.CellCoord cell, bool decays = true)
     {
         SessionPlacedItem placed;
-        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit)
+        if (_inventory.Hero.KitItem(entity) is { } kit)
         {
-            _inventory.Kit.Remove(kit);
+            _inventory.Hero.Remove(entity);
             placed = new(entity, kit.Kind, SessionPlacedSource.Kit, null, _actor.Map, cell);
         }
-        else if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc)
+        else if (_inventory.Hero.PcItem(entity) is { } pc)
         {
-            _inventory.Pc.Remove(pc);
+            _inventory.Hero.Remove(entity);
             placed = new(entity, pc.Kind, SessionPlacedSource.Pc, pc.Origin, _actor.Map, cell);
         }
-        else if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made)
+        else if (_inventory.Hero.MadeItem(entity) is { } made)
         {
-            _inventory.Made.Remove(made);
+            _inventory.Hero.Remove(entity);
             placed = new(entity, made.Kind, SessionPlacedSource.Made, null, _actor.Map, cell, made.Complexity);
         }
         else throw new InvalidOperationException("PLACED_ITEM_NOT_HELD");
         if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
-        _inventory.Placed.Add(placed);
+        _inventory.Hero.AddPlaced(placed);
         // ARC-WORLD-063: the drop's placement may put it into a junk pile; ARC-WORLD-062: every drop on the ground then schedules the
         // item's decay (ledger ID4). A thrown item's plain placement does neither.
         if (decays)
@@ -1887,7 +1887,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 ? SessionValidation.Map(origin) && HeroDomain.KitNumber(item.Entity) is null && !item.Entity.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal)
                 : hero && HeroDomain.KitNumber(item.Entity) is not null;
             if (!fits) return GameSessionFailure.InvalidSnapshot;
-            inventory.Given[item.Entity] = item;
+            inventory.Hero.SetGiven(item);
         }
         string? lastPile = null;
         foreach (var pile in saved.Piles)
@@ -1915,7 +1915,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 // A gold item is only a made pile with its record.
                 var pile = item.Kind.Type == SessionItemType.Gold && inventory.Piles.ContainsKey(item.Entity);
                 if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type) && !pile) return GameSessionFailure.InvalidItem;
-                var given = inventory.Given.ContainsKey(item.Entity);
+                var given = inventory.Hero.IsGiven(item.Entity);
                 // ARC-WORLD-083: only a made item keeps a complexity of its own (a given item's seed answers; a pile has none).
                 if ((SessionMadeItem.Number(item.Entity) is null) != given || pile && given || (given || pile) && item.Complexity != 0 ||
                     given && !InventoryDomain.KitAdmitted(item.Kind.Type) && HeroDomain.KitNumber(item.Entity) is not null ||
@@ -1945,15 +1945,15 @@ public sealed partial class GameSessionOwner : IDisposable
             };
             if (!sourceFits || !SessionValidation.Map(item.Map) || !DropCellFits(item.Cell) || destroyed.Contains(item.Entity) ||
                 inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
-            inventory.Placed.Add(item);
+            inventory.Hero.AddPlaced(item);
             inventory.Taken.Add(item.Entity);
         }
         // ARC-WORLD-071: every given item is in an NPC's list, and a given kit item lies within the kit's numbers; a pile record names no
         // item of the hero's (a seed pile, or a made pile in an NPC's list).
-        foreach (var item in inventory.Given.Values)
+        foreach (var item in inventory.Hero.GivenAll)
             if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
         foreach (var entity in inventory.Piles.Keys)
-            if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Kit.Exists(item => item.Entity == entity) || inventory.Pc.Exists(item => item.Entity == entity) || inventory.Made.Exists(item => item.Entity == entity) ||
+            if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Hero.InPack(entity) ||
                 inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
                 return GameSessionFailure.InvalidSnapshot;
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
@@ -2035,8 +2035,7 @@ public sealed partial class GameSessionOwner : IDisposable
         foreach (var row in saved.Weights)
         {
             if (!SessionValidation.Entity(row.Entity) || lastWeight is not null && string.CompareOrdinal(lastWeight, row.Entity) >= 0 || !row.Facts.IsValid ||
-                row.Facts.Weight == 0 && row.Facts.MagicWeight == 0 || destroyed.Contains(row.Entity) || !inventory.Kit.Exists(item => item.Entity == row.Entity) &&
-                !inventory.Pc.Exists(item => item.Entity == row.Entity) && !inventory.Made.Exists(item => item.Entity == row.Entity) &&
+                row.Facts.Weight == 0 && row.Facts.MagicWeight == 0 || destroyed.Contains(row.Entity) || !inventory.Hero.InPack(row.Entity) &&
                 inventory.PlacedItem(row.Entity) is null && inventory.NpcOf(row.Entity) is null)
                 return GameSessionFailure.InvalidSnapshot;
             lastWeight = row.Entity;

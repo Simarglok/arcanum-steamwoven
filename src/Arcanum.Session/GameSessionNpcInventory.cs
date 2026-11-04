@@ -18,7 +18,7 @@ public sealed partial class GameSessionOwner
         if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
         if (_inventory.Lists.IsContainer(npc)) return [];
         // ARC-WORLD-071: the kit and taken items the hero gave the NPC are its list's too, but not made items (QueryGivenItems).
-        return Array.AsReadOnly(_inventory.AddedTo(npc).Where(item => !_inventory.Given.ContainsKey(item.Entity)).ToArray());
+        return Array.AsReadOnly(_inventory.AddedTo(npc).Where(item => !_inventory.Hero.IsGiven(item.Entity)).ToArray());
     }
 
     /// <summary>

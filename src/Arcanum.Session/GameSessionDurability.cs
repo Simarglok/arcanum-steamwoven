@@ -220,8 +220,7 @@ public sealed partial class GameSessionOwner
     /// <summary>An item of the hero's kit, one the PC took or made, a made item added to an NPC (ARC-WORLD-055), or one an attached seed
     /// lists, and not deleted.</summary>
     private bool TracksItem(string entity) =>
-        !_durability.Destroyed.Contains(entity) && (_inventory.Kit.Any(item => item.Entity == entity) || _inventory.Pc.Any(item => item.Entity == entity) ||
-            _inventory.Made.Any(item => item.Entity == entity) || _inventory.PlacedItem(entity) is not null || _inventory.NpcOf(entity) is not null ||
+        !_durability.Destroyed.Contains(entity) && (_inventory.Hero.InPack(entity) || _inventory.PlacedItem(entity) is not null || _inventory.NpcOf(entity) is not null ||
             _inventory.Seeds.Values.Any(seed => seed.Items.ContainsKey(entity)));
 
     private ItemDurabilityResult RejectDurability(GameSessionFailure failure) =>

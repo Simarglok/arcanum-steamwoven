@@ -78,14 +78,14 @@ public sealed partial class GameSessionOwner
         {
             SessionObjectOrigin.Kit => _inventory.Kit.Select(item => item.Entity)
                 .Concat(_inventory.Placed.Where(item => item.Source == SessionPlacedSource.Kit).Select(item => item.Entity))
-                .Concat(_inventory.Given.Keys.Where(entity => HeroDomain.KitNumber(entity) is not null)).Concat(_durability.Destroyed),
+                .Concat(_inventory.Hero.GivenAll.Select(given => given.Entity).Where(entity => HeroDomain.KitNumber(entity) is not null)).Concat(_durability.Destroyed),
             SessionObjectOrigin.Made => _inventory.Made.Select(item => item.Entity)
                 .Concat(_inventory.Lists.All.Select(item => item.Entity))
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed),
             SessionObjectOrigin.JunkPile => _inventory.JunkPiles.Select(pile => pile.Entity),
             SessionObjectOrigin.BloodPool => _inventory.BloodPools.Select(pool => pool.Entity),
             _ => _inventory.Pc.Select(item => item.Entity).Concat(_inventory.Taken).Concat(_durability.Destroyed)
-                .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_inventory.Given.Keys),
+                .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_inventory.Hero.GivenAll.Select(given => given.Entity)),
         };
         return Array.AsReadOnly(candidates.Where(entity => ObjectOriginOf(entity) == origin).Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal).Select(Locate).OfType<SessionObjectEntry>().ToArray());
@@ -154,8 +154,7 @@ public sealed partial class GameSessionOwner
 
         // An item. The deleted record wins: a deleted item is in no list any more.
         if (_durability.Destroyed.Contains(entity)) return new(entity, origin, SessionObjectPlace.Destroyed);
-        if (_inventory.Kit.Exists(item => item.Entity == entity) || _inventory.Pc.Exists(item => item.Entity == entity) ||
-            _inventory.Made.Exists(item => item.Entity == entity))
+        if (_inventory.Hero.InPack(entity))
             return _equipment.SlotOf(entity) is { } slot
                 ? new(entity, origin, SessionObjectPlace.HeroWorn, Slot: slot)
                 : new(entity, origin, SessionObjectPlace.HeroPack);

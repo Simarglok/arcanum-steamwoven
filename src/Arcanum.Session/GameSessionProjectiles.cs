@@ -140,9 +140,8 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _shots.Remove(shot);
-        var index = _inventory.Placed.FindIndex(placed => placed.Entity == thrown.Item);
-        if (index < 0 || _inventory.Placed[index].Cell == cell) return NoChange();
-        _inventory.Placed[index] = _inventory.Placed[index] with { Cell = cell };
+        if (_inventory.PlacedItem(thrown.Item) is not { } placed || placed.Cell == cell) return NoChange();
+        _inventory.Hero.ReplacePlaced(placed with { Cell = cell });
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }

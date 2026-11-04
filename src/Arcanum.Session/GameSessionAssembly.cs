@@ -237,8 +237,7 @@ public sealed partial class GameSessionOwner
     /// <summary>The hero's own items as the gate sees them: kit, taken and made items in that order, worn ones at their slot.</summary>
     private IReadOnlyList<CraftItem> CraftInventory(SessionCraftLookup items)
     {
-        var held = _inventory.Kit.Select(item => (item.Entity, item.Kind)).Concat(_inventory.Pc.Select(item => (item.Entity, item.Kind)))
-            .Concat(_inventory.Made.Select(item => (item.Entity, item.Kind))).ToArray();
+        var held = _inventory.Hero.PackKinds.ToArray();
         var result = new List<CraftItem>(held.Length);
         foreach (var (entity, kind) in held)
         {

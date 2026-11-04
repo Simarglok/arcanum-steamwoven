@@ -245,7 +245,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportHeroGrid(IReadOnlyList<SessionHeroGridItem> saved, InventoryDomain inventory, EquipmentDomain equipment,
         IReadOnlyList<HotkeyEntry> hotkeys)
     {
-        var held = inventory.Kit.Select(item => item.Entity).Concat(inventory.Pc.Select(item => item.Entity)).Concat(inventory.Made.Select(item => item.Entity))
+        var held = inventory.Hero.PackKinds.Select(item => item.Entity)
             .Where(entity => equipment.SlotOf(entity) is null && !hotkeys.Any(entry => entry.Kind == HotkeyKind.Item && entry.Item == entity))
             .ToHashSet(StringComparer.Ordinal);
         var occupied = new bool[SessionHeroGrid.Slots];

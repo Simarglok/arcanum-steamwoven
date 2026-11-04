@@ -198,13 +198,11 @@ public sealed partial class GameSessionOwner
         else
         {
             if (_equipment.SlotOf(item) is { } slot) _equipment.Worn.Remove(slot);
-            _inventory.Kit.RemoveAll(entry => entry.Entity == item);
-            _inventory.Pc.RemoveAll(entry => entry.Entity == item);
-            _inventory.Made.RemoveAll(entry => entry.Entity == item);
+            _inventory.Hero.Remove(item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
             if (kind == SessionHolderKind.Container) _inventory.AddToContainer(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
             else _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
-            if (held.Source != SessionPlacedSource.Made) _inventory.Given[item] = new(item, held.Origin);
+            if (held.Source != SessionPlacedSource.Made) _inventory.Hero.SetGiven(new(item, held.Origin));
             if (identify) _inventory.Identified.Add(item);
         }
         Revise();
@@ -297,7 +295,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs and that are still in an NPC's list, by entity in ordinal order.</summary>
-    public IReadOnlyList<SessionGivenItem> QueryGivenItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Given.Values.ToArray()); }
+    public IReadOnlyList<SessionGivenItem> QueryGivenItems() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Hero.GivenAll.ToArray()); }
 
     /// <summary>
     /// ARC-UI-036: every starting-kit item the session still knows, wherever it is: held by the hero (<see cref="QueryHeroKit"/>), placed
@@ -312,7 +310,7 @@ public sealed partial class GameSessionOwner
         foreach (var item in _inventory.Kit) known.TryAdd(item.Entity, item.Kind);
         foreach (var item in _inventory.Placed) if (item.Source == SessionPlacedSource.Kit) known.TryAdd(item.Entity, item.Kind);
         foreach (var item in _inventory.Lists.All)
-            if (_inventory.Given.TryGetValue(item.Entity, out var given) && given.Origin is null) known.TryAdd(item.Entity, item.Kind);
+            if (_inventory.Hero.GivenOf(item.Entity) is { Origin: null }) known.TryAdd(item.Entity, item.Kind);
         return Array.AsReadOnly(known.Select(pair => new SessionKitItem(pair.Key, pair.Value)).ToArray());
     }
 
@@ -429,9 +427,9 @@ public sealed partial class GameSessionOwner
     // One of the hero's held items (not placed) with its list, for a taken item its origin map, and for a made item its complexity.
     private (SessionItemKind Kind, SessionPlacedSource Source, SessionMapId? Origin, int Complexity)? HeroListed(string entity)
     {
-        if (_inventory.Kit.Find(item => item.Entity == entity) is { Entity: not null } kit) return (kit.Kind, SessionPlacedSource.Kit, null, 0);
-        if (_inventory.Pc.Find(item => item.Entity == entity) is { Entity: not null } pc) return (pc.Kind, SessionPlacedSource.Pc, pc.Origin, 0);
-        if (_inventory.Made.Find(item => item.Entity == entity) is { Entity: not null } made) return (made.Kind, SessionPlacedSource.Made, null, made.Complexity);
+        if (_inventory.Hero.KitItem(entity) is { } kit) return (kit.Kind, SessionPlacedSource.Kit, null, 0);
+        if (_inventory.Hero.PcItem(entity) is { } pc) return (pc.Kind, SessionPlacedSource.Pc, pc.Origin, 0);
+        if (_inventory.Hero.MadeItem(entity) is { } made) return (made.Kind, SessionPlacedSource.Made, null, made.Complexity);
         return null;
     }
 }
