@@ -19,6 +19,11 @@ public static partial class GameSessionSnapshotCodec
     /// <summary>The oldest schema this build loads: 56, the schema of the first packaged build (ARC-DEV-047).</summary>
     public const int OldestReadableSchemaVersion = 56;
 
+    // The canonical order of the object state rows: entity, then property (both ordinal), then map.
+    private static int CompareFields(string entityX, string propertyX, long mapX, string entityY, string propertyY, long mapY) =>
+        string.CompareOrdinal(entityX, entityY) is var order and not 0 ? order :
+        string.CompareOrdinal(propertyX, propertyY) is var byProperty and not 0 ? byProperty : mapX.CompareTo(mapY);
+
     // The vocabularies of the schemas the steps below were written for, frozen here: a later build that adds a field to the current vocabulary
     // must not change what an older save's step moves.
     private static readonly IReadOnlySet<string> Schema62MobileFields = new HashSet<string>(StringComparer.Ordinal)
@@ -144,22 +149,27 @@ public static partial class GameSessionSnapshotCodec
                     i++;
                 }
             }
-            if (moved.Count == 0) return;
-            // The existing rows (mobile objects, already in canonical order) and the moved ones, merged by entity, property and map. A row the step
-            // cannot read keeps its place for the strict decode to refuse.
+            // The existing rows are the mobile objects' (schema 62 holds no static object there), already in canonical order: a row the step cannot
+            // read, a `sector:` row or a row out of order is damage, found here whether or not anything moves, so a save is not repaired by the move.
             var rows = new List<(string Entity, string Property, long Map, JsonNode Row)>();
             foreach (var node in state)
             {
-                if (node is JsonObject row && row["entity"] is JsonValue e && e.TryGetValue<string>(out var rowEntity) &&
-                    row["property"] is JsonValue p && p.TryGetValue<string>(out var rowProperty) &&
+                var path = $"$.objects.state[{rows.Count}]";
+                if (node is JsonObject row && row["entity"] is JsonValue e && e.TryGetValue<string>(out var rowEntity) && rowEntity is not null &&
+                    row["property"] is JsonValue p && p.TryGetValue<string>(out var rowProperty) && rowProperty is not null &&
                     row["map"] is JsonValue m && m.TryGetValue<long>(out var rowMap))
+                {
+                    if (rowEntity.StartsWith("sector:", StringComparison.Ordinal)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+                    if (rows.Count > 0 && CompareFields(rows[^1].Entity, rows[^1].Property, rows[^1].Map, rowEntity, rowProperty, rowMap) >= 0)
+                        throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
                     rows.Add((rowEntity, rowProperty, rowMap, row.DeepClone()));
-                else throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+                }
+                else throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
             }
+            if (moved.Count == 0) return;
             foreach (var (entity, property, map, value) in moved)
                 rows.Add((entity, property, map, new JsonObject { ["entity"] = entity, ["property"] = property, ["map"] = map, ["value"] = value }));
-            rows.Sort((x, y) => string.CompareOrdinal(x.Entity, y.Entity) is var order and not 0 ? order :
-                string.CompareOrdinal(x.Property, y.Property) is var byProperty and not 0 ? byProperty : x.Map.CompareTo(y.Map));
+            rows.Sort((x, y) => CompareFields(x.Entity, x.Property, x.Map, y.Entity, y.Property, y.Map));
             var merged = new JsonArray();
             foreach (var row in rows) merged.Add(row.Row);
             objects["state"] = merged;

@@ -236,6 +236,15 @@ public sealed class ObjectStateTests
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(twice).Snapshot, RestoreOptions()).Failure);
         // A step that cannot read a change leaves it for the strict decode: a change with no value is damage, not a guess.
         Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(older.Replace(",\"value\":9}", "}")).Failure);
+        // The step does not repair a damaged state: a `sector:` row or rows out of order in a schema 62 save are refused, whether or not a change moves.
+        var staticRow = "{\"entity\":\"sector:1:1\",\"property\":\"obj.off\",\"map\":79,\"value\":1}";
+        var withStaticRow = older.Replace("\"state\":[{", "\"state\":[" + staticRow + ",{");
+        Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[0]"), (GameSessionSnapshotCodec.TryDecode(withStaticRow).Failure, GameSessionSnapshotCodec.TryDecode(withStaticRow).Path));
+        var twoRows = text.Replace(EmptyState, "\"lastPoolNumber\":0,\"state\":[{\"entity\":\"oid:b\",\"property\":\"npc.cell\",\"map\":79,\"value\":1},{\"entity\":\"oid:a\",\"property\":\"npc.cell\",\"map\":79,\"value\":1}]}")
+            .Replace("\"schemaVersion\":63,\"world\"", "\"schemaVersion\":62,\"world\"");
+        Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[1]"), (GameSessionSnapshotCodec.TryDecode(twoRows).Failure, GameSessionSnapshotCodec.TryDecode(twoRows).Path));
+        var moving = twoRows.Replace("\"maps\":[]", "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}]}]");
+        Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(moving).Failure);
         // The step needs the state of schema 62.
         var noState = GameSessionSnapshotCodec.TryDecode(older.Replace(",\"state\":[{", ",\"stateX\":[{"));
         Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.objects.state"), (noState.Failure, noState.Path));
@@ -258,6 +267,12 @@ public sealed class ObjectStateTests
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(swapped).Failure);
         var same = text.Replace("\"map\":80,\"value\":9", "\"map\":79,\"value\":9");
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(same).Failure);
+        // A crafted save with more static rows on one map than the map budget allows is refused by the restore, not decoded away.
+        using var crowded = Create();
+        Changed(crowded.ApplyChanges(crowded.Version, null, [new(Exterior, StaticLock, 3), new(Exterior, StaticOff, 1)]), crowded, 1);
+        var budget = Decode(GameSessionSnapshotCodec.Encode(crowded.Capture()));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(budget, RestoreOptions(new GameSessionLimits(maxChangesPerMap: 1))).Failure);
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(budget, RestoreOptions(new GameSessionLimits(maxChangesPerMap: 2))).Failure);
         // A mobile object with two records is still the owner's refusal (one record whatever map it names).
         using var mobile = Create();
         Changed(mobile.SetMapChange(mobile.Version, Exterior, Cell, 7), mobile, 1);

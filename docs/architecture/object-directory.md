@@ -190,7 +190,7 @@ under their map on purpose; MIG7b keeps them in the same store as the fields of 
 - **Snapshot (schema 63).** The rows of `objects.state` are sorted by entity, property, then map, so a static's records on different maps are distinct rows (a repeated map, entity and property is `NotCanonical`); a restore refuses a static
   field left in the maps section (`InvalidSnapshot`), a `sector:` row whose property is not a static field (`InvalidChangeKey`), a second record of one map, entity and property (`InvalidSnapshot`) and an over-budget load (`BudgetExceeded`).
   The step from 62 moves every such change out of the maps with the map it was under, merges it into the rows already there in canonical order, and drops a map left empty; a second record of one map, entity and property is not moved and the
-  restore refuses it. The 61 to 62 step now reads a frozen copy of the schema 62 vocabulary, so it still moves mobile objects only.
+  restore refuses it. The step does not repair damage: a state row that is unreadable, a `sector:` row or rows out of order in the schema 62 text are `NotCanonical` (or `WrongType`), whether or not anything moves. The 61 to 62 step now reads a frozen copy of the schema 62 vocabulary, so it still moves mobile objects only.
 - **Not done here.** The viewer's consumers still read through `QueryMapChange` with the map they always used (the static's own map, which now is also its identity); NPC positions (MIG7c), links as `ObjectId` fields and the GQ7 B switch (MIG7d)
   and the script attachments (MIG8) are other slices. GR5 stays open for NPC positions and the attachments.
 
