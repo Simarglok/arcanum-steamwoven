@@ -70,7 +70,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030, ARC-UI-033 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
-| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
+| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014, ARC-DEV-074 |
 | Debug mode | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-050 |
 | Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018, ARC-UI-023 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
