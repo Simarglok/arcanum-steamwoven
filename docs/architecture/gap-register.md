@@ -73,7 +73,8 @@ FR-SOCIAL ([004](../requirements/story-social-ai.md#fr-social-004),
   decisions, requirements or technical-bug fixes: one atomic JSON save, a saved random
   generator, persisted AI ticks, FIFO ties, events at their own deadlines, a safe failed
   transfer and prototypes built from the player's executable.
-- **Eight choices are the owner's** (GQ1–GQ8 in the [target model](target-model.md#owner-decisions)):
+- **Eight choices were the owner's** (GQ1–GQ8 in the [target model](target-model.md#owner-decisions),
+  all decided on 2026-11-04 by the recommendation):
   the object state shape, what lives on the open map, pause with windows open, saving actions in
   flight, the change path, where the world logic lives, links to an object on another map, and
   the turn-based option in a save.
