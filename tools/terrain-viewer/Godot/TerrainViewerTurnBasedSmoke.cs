@@ -46,7 +46,19 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting; var concealed = HeroConcealed;
         _worldFocusSimulationForSelfTest = true;
-        var target = candidates[0];
+        // ARC-DEV-089: the first NPC (weakest first) the hero can stand three cells from and next to, and see from there.
+        var target = candidates[0]; var found = false;
+        foreach (var candidate in candidates.Take(24))
+        {
+            var candidateCell = map.Chart.ToChart(new(candidate.Row.WorldX!.Value, candidate.Row.WorldY!.Value));
+            if (await AreaSmokeFightableStartAsync(map, commands[candidate.Row.Key], candidateCell, 3, 2, true) is null) continue;
+            target = candidate; found = true; break;
+        }
+        if (!found)
+        {
+            GD.Print($"ARC-COMBAT-020 native-smoke turn-based NO-TARGET map={map.RuntimeMap} (no NPC the hero can stand near, next to and see)");
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
+        }
         var npc = target.Build.Combat!.Target;
         var npcBefore = session.QueryLife(npc).View!.Status.HitPoints;
         var fatigueBefore = session.QueryHeroLife()!.Record.State.FatigueDamage;
@@ -58,17 +70,8 @@ public partial class TerrainViewerApp
             if (HeroInCombatMode) ToggleCombatMode();
             _turnBasedSetting = false; _chargeLog.Clear(); _roundLog.Clear();
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            CellCoord? Near(int range)
-            {
-                foreach (var (dx, dy) in new[] { (range, 0), (-range, 0), (0, range), (0, -range) })
-                {
-                    var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
-                    if (!map.Chart.Contains(near)) continue;
-                    try { return AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { }
-                }
-                return null;
-            }
-            var start = Near(3) ?? AreaSmokeStandable(map, targetCell, 2);
+            CellCoord? Near(int range) => AreaSmokeNearTarget(map, targetCell, range);
+            var start = AreaSmokeNearTarget(map, targetCell, 3, 2) ?? AreaSmokeStandable(map, targetCell, 2);
             AreaSmokePlace(map, start);
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             PublishWorldSelection();

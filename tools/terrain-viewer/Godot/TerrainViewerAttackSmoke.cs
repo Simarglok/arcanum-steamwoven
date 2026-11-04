@@ -45,7 +45,15 @@ public partial class TerrainViewerApp
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
-            var target = candidates[0];
+            // ARC-DEV-089: the first NPC (weakest first) the hero can stand 2..3 cells from and see from there.
+            var target = candidates[0]; var found = false;
+            foreach (var candidate in candidates.Take(24))
+            {
+                var candidateCell = map.Chart.ToChart(new(candidate.Row.WorldX!.Value, candidate.Row.WorldY!.Value));
+                if (await AreaSmokeFightableStartAsync(map, commands[candidate.Row.Key], candidateCell, 3, 2, false) is null) continue;
+                target = candidate; found = true; break;
+            }
+            if (!found) { GD.Print($"ARC-COMBAT-005 native-smoke attack NO-TARGET map={map.RuntimeMap} (no NPC the hero can stand near and see)"); return; }
             var key = target.Row.Key;
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
             // A standable cell 2..4 cells from the target, so the click walks within reach first.

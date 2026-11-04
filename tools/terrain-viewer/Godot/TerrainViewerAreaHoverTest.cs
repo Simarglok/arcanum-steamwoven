@@ -184,13 +184,59 @@ public partial class TerrainViewerApp
         _camera!.ResetWorld(new Vec2(body.Destination.X + body.Destination.Width / 2d, body.Destination.Y + body.Destination.Height / 2d), WorldViewport, 1);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         var size = GetViewport().GetVisibleRect().Size; var hud = _hud!.Rect;
-        for (var y = 0; y < (int)size.Y; y += 2)
-        for (var x = 0; x < (int)size.X; x += 2)
+        // ARC-DEV-089: only the body's own pixels can be its pick (the pick tests the body's alpha), so the scan covers the screen rectangle
+        // of its destination, on the same two-pixel grid and in the same order as the whole viewport would, which gives the same first
+        // point. A whole-viewport scan of a body that is not visible took over a minute.
+        // The pick tests the body where it is drawn now (a walked, fallen or moved body is its moving command, not its T0 one), so the
+        // rectangle is the union of the command given and the moving command of the same identity.
+        var transform = AreaDrawItem.RasterTransform(GetViewport());
+        var rects = new List<AreaDrawCommand> { body };
+        if (AreaMovingCommands()?.FirstOrDefault(c => c.Identity == body.Identity) is { } drawn) rects.Add(drawn);
+        var left = Math.Max(0, (int)Math.Floor(rects.Min(c => transform.Origin.X + transform.X.X * c.Destination.X)) - 2) & ~1;
+        var top = Math.Max(0, (int)Math.Floor(rects.Min(c => transform.Origin.Y + transform.Y.Y * c.Destination.Y)) - 2) & ~1;
+        var right = Math.Min((int)size.X, (int)Math.Ceiling(rects.Max(c => transform.Origin.X + transform.X.X * (c.Destination.X + c.Destination.Width))) + 2);
+        var bottom = Math.Min((int)size.Y, (int)Math.Ceiling(rects.Max(c => transform.Origin.Y + transform.Y.Y * (c.Destination.Y + c.Destination.Height))) + 2);
+        for (var y = top; y < bottom; y += 2)
+        for (var x = left; x < right; x += 2)
         {
             var p = new Vector2(x + .5f, y + .5f);
             if (!hud.HasPoint(p) && AreaObjectAtScreen(p) == body.Identity) return p;
         }
         return null;
+    }
+
+    /// <summary>
+    /// ARC-DEV-089: a standable cell next to <paramref name="targetCell"/> (orthogonally <paramref name="range"/> cells off, standable within
+    /// one more) that is at least <paramref name="minDistance"/> cells from it and is not its own cell; null when none is.
+    /// </summary>
+    private CellCoord? AreaSmokeNearTarget(AreaMapRuntime map, CellCoord targetCell, int range, int minDistance = 1)
+    {
+        foreach (var (dx, dy) in new[] { (range, 0), (-range, 0), (0, range), (0, -range), (range, range), (-range, -range) })
+        {
+            var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
+            if (!map.Chart.Contains(near)) continue;
+            CellCoord cell;
+            try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
+            if (Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y)) >= minDistance) return cell;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// ARC-DEV-089: whether a combat smoke can fight the body in this window. The stages first took the weakest NPC of the map, which
+    /// on the Crash Site stands in the open; in a town it may be under a roof, walled in or off the screen. A body is usable when
+    /// the hero can stand <paramref name="range"/> cells from it (and next to it when <paramref name="alsoAdjacent"/>), and, with the
+    /// hero placed there, a pixel of it is the frontmost pick. The hero is left on that cell, the camera framed on it.
+    /// </summary>
+    private async Task<CellCoord?> AreaSmokeFightableStartAsync(AreaMapRuntime map, AreaDrawCommand body, CellCoord targetCell, int range, int minDistance, bool alsoAdjacent)
+    {
+        if (alsoAdjacent && AreaSmokeNearTarget(map, targetCell, 1) is null) return null;
+        var start = AreaSmokeNearTarget(map, targetCell, range, minDistance);
+        if (start is null) return null;
+        AreaSmokePlace(map, start.Value);
+        _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+        PublishWorldSelection();
+        return await HoverPointAsync(this, body) is null ? null : start;
     }
 
     /// <summary>A point of the cell's diamond with no pickable object over it, outside the HUD.</summary>
