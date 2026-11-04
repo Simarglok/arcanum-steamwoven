@@ -1,6 +1,6 @@
 # Open bugs: root-cause groups, migration map and smoke plan
 
-Status: **Research / test plan**, work item ARC-RES-089 (2026-11-04). Docs-only: no code changes and no checks run (docs-only, no checks run).
+Status: **Research / test plan**, work item ARC-RES-089 (2026-11-04). Docs-only: no code changes, no checks run.
 It collects every open player bug, groups it by root cause, maps each bug to the gaps
 (GR) and migration slices (MIG1-MIG16) of the [gap register](../architecture/gap-register.md) and
 [target model](../architecture/target-model.md) that are likely to touch it, and plans the smoke re-checks that run
@@ -18,21 +18,21 @@ Requirements (reference only, no coverage row changes): the groups of the gap re
 
 ## Answer
 
-- **46 open bugs** in eight root-cause groups. They come from 43 player reports in `artifacts/packages/macos/reports/`
+- **46 open bugs** in eight root-cause groups. They come from 44 player reports in `artifacts/packages/macos/reports/`
   that are not in `reports/archive/` (36 distinct bugs after merging repeats, for example five barrel reports are one bug),
   from the pending triage items (3 that no report covers; two more are the other half of B17 and B18) and
   from 7 bugs that only the repo docs and merged-PR notes record.
 - **Expected to disappear with the migrations: 7** (B01, B02, B04, B05, B09, B10, B15; four of them, B01, B02, B04 and B05, come from player reports, B09, B10 and B15 are recorded in the register only). **Re-verify, probably fixed already: 1** (B43, addressed by #585 after the reports).
-  **Expected to change, may disappear or leave a residual fix: 11** (B03, B06, B07, B08, B11, B12, B13, B14, B16, B24, B25). **Stay and need their own fix: 27.**
-- The migrations touch the object model (G1), residency (G2), goals (G3) and change-of-place (G4) groups and nothing else:
-  scripts (G5), interface (G6), hosts (G7) and pathing and render (G8) are own tasks whichever way the migrations go.
-- **Smoke plan:** 30 entries (SM01-S30): 5 reuse or extend an existing stage and 25 are new ALONE stages;
+  **Expected to change, may disappear or leave a residual fix: 10** (B03, B06, B07, B08, B11, B12, B13, B14, B16, B25). **Stay and need their own fix: 28.**
+- The migrations act on the object model (G1), residency (G2), goals (G3) and change-of-place (G4) groups. Scripts (G5), interface (G6),
+  hosts (G7) and pathing and render (G8) are own tasks whichever way the migrations go, except B25 (NPC tile scripts, with MIG9) and the re-check B43.
+- **Smoke plan:** 30 entries (SM01-SM30): 5 entries extend an existing stage and 25 are new stages (6 distinct existing stages are extended: `junk`, `cast`, `container`, `floaters`, `hover`, `altar`);
   a schedule says which run after which MIG step. SM07 and SM17 are read-only and give the state before the migrations.
-- **Read the executable first** ([original executable check](original-executable-check.md)) before a fix is planned for: B03, B08, B17, B21, B33, B34, B35, B44.
+- **Read the executable first** ([original executable check](original-executable-check.md)) before a fix is planned for: B03, B08, B11, B14, B17, B21, B33, B34, B35, B40, B44, B45.
 
 ## Sources and method
 
-- **Reports.** All 43 report folders in `artifacts/packages/macos/reports/` outside `archive/` (2026-10-29 17:16 to
+- **Reports.** All 44 report folders in `artifacts/packages/macos/reports/` outside `archive/` (2026-10-29 17:16 to
   2026-10-31 13:03), read as the player's text, the game-state table and the last lines of `log.txt`. The folders hold original
   game content and are not committed; here a report is named by its folder (`10-29_21-07-37` is `2026-10-29_21-07-37`), and log lines are quoted only as ids and outcomes.
 - **Builds.** The reports are from `main` 3d22813594, 717dc1aa45, cce1629223 and a156e1435c (all 2026-10-29). Since a156e1435c the
@@ -56,11 +56,11 @@ Requirements (reference only, no coverage row changes): the groups of the gap re
 | G2 | Residency and NPC state: only the shown window lives | GR8-GR10, GR12, GR13, GR15 | 6 | 3 | 3 | 0 | 0 |
 | G3 | Goals, clocks and projectiles: two goal machines, viewer-owned hero actions | GR20, GR24-GR27 | 5 | 1 | 4 | 0 | 0 |
 | G4 | Change of place: no single request, no loading presentation | GR16 | 1 | 0 | 1 | 0 | 0 |
-| G5 | Script surface and story conditions (script audit slices) | GR7, GR27-GR29 (partly); script-trigger-audit slices 2-9 | 10 | 0 | 2 | 8 | 0 |
+| G5 | Script surface and story conditions (script audit slices) | GR7, GR27-GR29 (partly); script-trigger-audit slices 2-9 | 10 | 0 | 1 | 9 | 0 |
 | G6 | Interface, messages and art fonts not built or not yet in the original's look | GR35 only for modes (MIG16); otherwise outside the register | 9 | 0 | 0 | 9 | 0 |
 | G7 | Hosts not wired or unverified: combat, items, audio, magic | outside the register | 7 | 0 | 0 | 7 | 0 |
 | G8 | Pathing, passability and render order | GR8/TM5 only for mobile-object blocking; otherwise outside the register | 4 | 0 | 0 | 3 | 1 |
-| | **Total** | | **46** | **7** | **11** | **27** | **1** |
+| | **Total** | | **46** | **7** | **10** | **28** | **1** |
 
 - **G1.** Items and bodies are found through the shown window's rows and per-kind keys, not as objects with one identity; seeds are rebuilt for the loaded window only.
 - **G2.** Only the shown window has hosts and positions; NPC cells and runs are not state; no waypoint, standpoint or far-path step; no homecoming.
@@ -83,19 +83,19 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 | ID | Bug (source) | Evidence | Gap / migration | Expected | Own fix | Smoke |
 | --- | --- | --- | --- | --- | --- | --- |
-| B01 | Items taken from the Crash Site corpses (passport, matches) turn into spider models, a ring turns into another ring after the hero moves to the town and into the temple (`10-29_21-09-10, 10-29_21-10-07`) | Log: wear and drop lines carry the created-item key `made:21`. Docs: the seed is rebuilt after each window change (GR11) and keys are per kind (GR3). Inference: a per-kind index is reread against another store; not confirmed in code. | GR3, GR11, GR2; MIG1 (done), MIG5, MIG6 | Gone | No, if MIG6 gives one id space; a regression test for the id after a window move | SM02 |
-| B02 | After the move to the town the inventory is unavailable and the hero is naked; the clothes come back inside the temple (`10-29_21-07-06, 10-29_21-08-25`) | Inference from the same play session: its later reports 10-29_21-13-22 and 10-29_21-17-14 log `inventory-seed map=1 status=InventoryRefused detail=UnlistedInventoryItem` on the town window. The seed lists the loaded window's items only (GR11); the worn set would come back when the temple map has its own seed. The first report itself shows no such line. | GR11, GR1; MIG1 (done), MIG5, MIG6 | Gone | No | SM02 |
+| B01 | Items taken from the Crash Site corpses (passport, matches) turn into spider models, a ring turns into another ring, after the hero left the Crash Site window (`10-29_21-09-10, 10-29_21-10-07`) | Log: wear and drop lines carry the created-item key `made:21`. Docs: the seed is rebuilt after each window change (GR11) and keys are per kind (GR3). Both reports were taken inside the temple map; that the move to the town started it is a session inference, and that a per-kind index is reread against another store is an inference too; neither is confirmed in code. | GR3, GR11, GR2; MIG1 (done), MIG5, MIG6 | Gone | No, if MIG6 gives one id space; a regression test for the id after a window move | SM02 |
+| B02 | After the move to the town the inventory is unavailable and the hero is naked; the clothes come back inside the temple (`10-29_21-07-06, 10-29_21-08-25`) | Log of both reports (and of 10-29_21-13-22 and 10-29_21-17-14): `inventory-seed map=1 status=InventoryRefused detail=UnlistedInventoryItem` on the town window. Docs: the seed lists the loaded window's items only (GR11). That the worn set returns inside the temple because that map has its own seed is an inference. | GR11, GR1; MIG1 (done), MIG5, MIG6 | Gone | No | SM02 |
 | B03 | Kite Shaman has no dagger in his inventory; Take all does not move his items to the hero (`10-31_12-45-24`) | Log: `loot-all-item disposition=Rejected failure=WornItemUnsupported` (docs: looting a worn item is not supported, equipment-runtime). Part is a missing rule (worn loot), part is the holder's base items by record (GR1). | GR1, GR4; MIG1, MIG6 (items as objects with a parent) | Change | Yes: worn-item looting rule and the NPC row check; the worn/bag tabs are B30 | SM03 |
-| B04 | A pile of items on the ground stays after it is searched empty (`10-29_21-47-12`) | Log: `loot-all taken=3`, then repeated `taken=0` on the same holder; the pile is a created object with a per-kind store (rows SM10 and SM11 of the model map). | GR4, GR17; MIG6 (one destroy path, OM17-OM19) | Gone | No; extend the `junk` stage | SM04 |
+| B04 | A pile of items on the ground stays after it is searched empty (`10-29_21-47-12`) | Log: `loot-all taken=3`, then repeated `taken=0` on the same holder; the pile is a created object with a per-kind store (rows S10 and S11 of the [Steamwoven model](../architecture/steamwoven-model.md)). | GR4, GR17; MIG6 (one destroy path, OM17-OM19) | Gone | No; extend the `junk` stage | SM04 |
 
 ### G2. Residency and NPC state: only the shown window lives
 
 | ID | Bug (source) | Evidence | Gap / migration | Expected | Own fix | Smoke |
 | --- | --- | --- | --- | --- | --- | --- |
-| B05 | After a quick load in the town, Virgil is not in the party and not near (`10-29_21-13-22`) | Log: `transfer arrived Kind=QuickLoad From=1 To=1 Session=NoChange` and the seed refusal above. The companion stood in the Crash Site window; a window of the town does not hold him (GR8) and nothing brings a follower to the leader (far path, GR13). | GR8, GR9, GR13, GR10; MIG2-MIG4, MIG9 (MIG1 and MIG10 done: resolver and transfer parity only) | Gone | No | SM01 |
+| B05 | After a quick load in the town, Virgil is not in the party and not near (`10-29_21-13-22`) | Log: `transfer arrived Kind=QuickLoad From=1 To=1 Session=NoChange`, the seed refusal of B02, `visitor not talkable ... no body kept this run` and `companions bound []` after the load: the GR2 symptom is seen. Inference: the companion stood in the Crash Site window, which a town window does not hold (GR8), and nothing brings a follower to the leader (far path, GR13). | GR2, GR8, GR9, GR13, GR10; MIG4, MIG5 (the seed refusal is `refuseUncoveredInventory`), MIG9 (MIG1 and MIG10 done: resolver and transfer parity only) | Gone | No | SM01 |
 | B06 | Town NPCs stand in place, guards do not patrol (`10-29_21-07-37 (first part)`) | Docs: the heartbeat is wired for the shown map only, with no waypoint or standpoint step (GR13); positions are reset at every window change (GR10). The dialog half of the same report is B19. | GR9, GR10, GR13; MIG7, MIG9 | Change | Maybe: the waypoint data needs a check once MIG9 lands | SM05 |
 | B07 | The boar that stands near the wolf in the original is missing; elsewhere three Lesser Boars stand together while one belongs on the other side (`10-31_12-48-49, 10-31_12-51-38`) | No log evidence of a cause. Hypotheses: placed NPCs moved by their runs before the report (no state, GR10), or a placement or generator difference. Unverified; needs a census of placed NPCs against the map rows (SM07) and the original's positions. | GR10, GR9 possible; MIG7, MIG9 possible | Change | Yes if the census shows a data or placement difference | SM07 |
-| B08 | After a ranged spell from far away the NPC does not attack the hero and stands still (`10-31_12-40-53`) | Log: casts of the same spell with `Refusal = None`; no AI reaction line. The heartbeat takes the near/far branch by distance (RL16) and Steamwoven runs one branch for the shown map. Unverified which reaction the original has to a spell hit. | GR13, GR25; MIG9, MIG13 | Change | Verify in the executable first (reaction to a spell hit from outside the near radius) | SM06 |
+| B08 | After a ranged spell from far away the NPC does not attack the hero and stands still (`10-31_12-40-53`) | Log: casts of the same spell with `Refusal = None`; no AI reaction line for the target that was hit by spells only (another target that was also meleed does log `ai-hit`). The heartbeat takes the near/far branch by distance (RL16) and Steamwoven runs one branch for the shown map. Unverified which reaction the original has to a spell hit. | GR13, GR25; MIG9, MIG13 | Change | Verify in the executable first (reaction to a spell hit from outside the near radius) | SM06 |
 | B09 | A dismissed or lost companion never goes home (recorded, no player report) (`docs: GR15`) | Gap register GR15: no teleport-map field, no forced waypoint pass. | GR15; MIG11 (V6) | Gone | No | SM29 |
 | B10 | A quick load or a window move puts every NPC back on its first cell and a maintained spell ends (recorded, no player report) (`docs: GR10, GR18`) | Gap register GR10 (positions are not state) and GR18 (runs lost on load). | GR10, GR18; MIG7, MIG9, MIG14 | Gone | No | SM30 |
 
@@ -104,7 +104,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | ID | Bug (source) | Evidence | Gap / migration | Expected | Own fix | Smoke |
 | --- | --- | --- | --- | --- | --- | --- |
 | B11 | A spell that holds the hero in place does not stop him from running (`10-29_17-44-57`) | Docs: the hero's actions are viewer hosts beside the NPC executor, so a stun, knock-down or hold cannot interrupt them (GR24). Which spell: not named in the report. | GR24, GR25; MIG13 | Change | Maybe: the effect itself (hold flag) needs a check once the hero is in the goal table | SM09 |
-| B12 | The spell animation plays on the first of two to four enemies only; and on the point where the enemy stood at the start of the fight, not where it is when it takes damage (`10-29_21-43-18, 10-29_21-46-22`) | Docs: spell missiles and eye candy are not runs of the goal table (GR26); NPC positions are run-local (GR10). The second symptom reads a stale cell. | GR26, GR10, GR20; MIG7, MIG13, MIG14 | Change | Yes if the multi-target path still draws one effect after MIG13 | SM08 |
+| B12 | The spell animation plays on the first of two to four enemies only; and on the point where the enemy stood at the start of the fight, not where it is when it takes damage (`10-29_21-43-18, 10-29_21-46-22`) | Docs: spell missiles and eye candy are not runs of the goal table (GR26); NPC positions are run-local (GR10). The second symptom reads a stale cell. | GR26, GR10, GR20; MIG7, MIG12, MIG13, MIG14 | Change | Yes if the multi-target path still draws one effect after MIG13 | SM08 |
 | B13 | After a spell kill the wolf's body "flies" toward the hero and lies on the cell where it would have started its melee attack; the pool of blood stays halfway (`10-31_12-49-43`) | Log: `blood-pool ... cell=92941,82559` (the pool is on the session cell). Inference: the body is drawn at the mover's pixel position; dying is not a run (GR26). | GR26, GR10; MIG7, MIG13 | Change | Maybe | SM11 |
 | B14 | Thrown grenades land on the ground and do not explode; they can be picked up again (`10-29_21-49-38`) | Docs: projectiles are viewer objects, not runs or created objects (GR4, GR26). The explode-on-land effect of a thrown item is not a recorded row. Unverified. | GR4, GR26; MIG6, MIG13 | Change | Yes: the item trigger on landing is a rule to read in the executable | SM12 |
 | B15 | Doors never close by themselves (recorded, no player report) (`docs: GR26, FR-SCENE-014`) | Gap register GR26: no door run (open, wait, close). | GR26; MIG13 | Gone | No | SM10 |
@@ -119,14 +119,14 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 | ID | Bug (source) | Evidence | Gap / migration | Expected | Own fix | Smoke |
 | --- | --- | --- | --- | --- | --- | --- |
-| B17 | The dialog at the plane wreck is incomplete (possibly because of the hero's low intelligence); one turn, then it closes (`10-29_17-16-19, 10-29_17-19-14; triage: low-INT reply of DLG 1696`) | Log: the conversation of script 1696 ends `end=ClosedByHost turns=1 effects=0`; the earlier one (script 1324) ends `ReturnToScript turns=7`. Whether the original shows a low-intelligence variant or other replies is unverified. | GR7 (dialog state), SA rows; none of MIG1-MIG16 directly | Stay | Yes: read DLG 1696's reply conditions in the executable, then the dialog host | SM16 |
+| B17 | The dialog at the plane wreck is incomplete (possibly because of the hero's low intelligence); one turn, then it closes (`10-29_17-16-19, 10-29_17-19-14; triage: low-INT reply of DLG 1696`) | Log: the conversation of script 1696 ends `end=ClosedByHost turns=1 effects=0`; the earlier one (script 1324) ends `ReturnToScript turns=7`. Whether the original shows a low-intelligence variant or other replies is unverified. | none of MIG1-MIG16 (MIG8 only if the reply condition reads dialog state, GR7) | Stay | Yes: read DLG 1696's reply conditions in the executable, then the dialog host | SM16 |
 | B18 | The object description at the plane differs from the original (`10-29_17-16-19; triage: examine G2`) | Docs: the examine script (point 0) is slice 9 of the script audit and not done; the report does not say which line differs. | script-trigger-audit slice 9; none of MIG | Stay | Yes (slice 9) | SM16 |
-| B19 | Town NPC dialogs do not work (`10-29_21-07-37 (second part), 10-29_21-17-14`) | Log: `conversation status=EntryNotAdmitted detail=script 1934: NotModelled (get area on the start map, GA3)` and `script 1817 ... ActionNotAdmitted type 29`. GA3 (the town map of the location's sector) is not modelled. | script slice 2 (get area, get reaction); MIG8 for attachments only | Stay | Yes | SM16 |
-| B20 | The ghost of Brego in the cave gives no dialog (`10-29_21-48-14`) | Log: `enter TileEntry Outcome=ScriptRefused script 2768 SCR line 6: FocusKindNotAdmitted type 18`. | script slices 8 and 11 (focus kinds in tile scripts); MIG9 only for the NPC-entered case | Stay | Yes | SM16 |
+| B19 | Town NPC dialogs do not work (`10-29_21-07-37 (second part); log of 10-29_21-17-14`) | Log: `conversation status=EntryNotAdmitted detail=script 1934: NotModelled (get area on the start map, GA3)` and `script 1817 ... ActionNotAdmitted type 29`. GA3 (the town map of the location's sector) is not modelled. | script slice 2 (get area, get reaction); MIG8 for attachments only | Stay | Yes | SM16 |
+| B20 | The ghost of Brego in the cave gives no dialog (`10-29_21-48-14`) | Log: `enter TileEntry Outcome=ScriptRefused script 2768 SCR line 6: FocusKindNotAdmitted type 18`. | script slice 8 (tile commands); focus kind 18 is in no listed slice; MIG9 only for the NPC-entered case | Stay | Yes | SM16 |
 | B21 | The entrance to the elves' town does not react to a click (`10-29_21-26-10`) | Log: `use ScriptEnded ... script 1643 ReturnSkipDefault at SCR line 2: no teleport`. The script refuses by a condition the reporter suspects is a story condition (the guard's talk not done). Probably the original's behaviour; unverified. | none | Stay | Verify first (condition of script 1643 in the executable); likely not a bug | SM16 |
-| B22 | The sector script 3036 (town-map unfog) is refused at every entry of the wreck sector (`PR #551 note (ARC-SCRIPT-046); log of 10-31_12-49-43`) | Log: `enter SectorEntry ... script 3036 ... ActionNotAdmitted type 113` (unfog town map; needs a town-map knowledge state and a schema step). The archive index of reports names it as an own slice that was not done. | script slice (unfog); MIG9 sector entry (RL6) | Stay | Yes | SM16 |
-| B23 | Searching trash cans in the town gives no reaction (`10-29_21-16-23`) | Log: `enter TileEntry ... script 30286 SCR line 2: ActionNotAdmitted type 33` near the cells; unverified that this tile is the trash can's. No use line for the click. | script slice 8 (get stat 33) or a use-set refusal; none of MIG | Stay | Yes, after the click is traced | SM16 |
-| B24 | The "summon the spirit of the dead" spell on a corpse gives no spirit dialog or lines (`10-29_18-04-32`) | No log checked. The spell creates a created object (summon relation, GR31) and the talk would need script attachments on it. | GR31, GR7; MIG6, MIG8 (summons through the create path) | Change | Yes: the spirit's talk | SM26 |
+| B22 | The sector script 3036 (town-map unfog) is refused at every entry of the wreck sector (`PR #551 note (ARC-SCRIPT-046); log of 10-31_12-49-43`) | Log: `enter SectorEntry ... script 3036 ... ActionNotAdmitted type 113` (unfog town map; needs a town-map knowledge state and a schema step). The PR #551 note records it as an own slice that was not done. | script slice (unfog); MIG9 sector entry (RL6) | Stay | Yes | SM16 |
+| B23 | Searching trash cans in the town gives no reaction (`10-29_21-16-23`) | Log: `enter TileEntry ... script 30286 SCR line 2: ActionNotAdmitted type 33` (action 33 is give gold in the audit census) near the cells; unverified that this tile is the trash can's. The click left `portal use ... result=Locked` lines and no container use line. | a use-set or tile-command refusal (script slices 7, 8); none of MIG | Stay | Yes, after the click is traced | SM16 |
+| B24 | The "summon the spirit of the dead" spell on a corpse gives no spirit dialog or lines (`10-29_18-04-32`) | Log: the cast (spell 56) starts; nothing after it. Unverified what the spell creates; summons are not modelled (GR31, whose slices are K5 and D3, not a MIG slice). | GR31 (K5, D3); not a MIG slice | Stay | Yes: read the spell, then the spirit's talk | SM26 |
 | B25 | Tile scripts of NPC movers never fire (the assassin's agent at the altar; recorded in the audit) (`PR #581 note (ARC-SCRIPT-052) C1; audit slice 3`) | PR #581 note: the agent's heartbeat needs ARC-SCRIPT-051 (C1) and his tile script needs NPC-mover tile scripts (slice 3 of the script audit); location notification is hero-only (GR12). | GR12, GR13; MIG9 plus script slices 3 and C1 | Change | Yes | SM28 |
 | B26 | The dialog `XP` action is not wired (recorded) (`docs: experience-runtime "Not ready"`) | Docs only. | none | Stay | Yes | SM16 |
 
@@ -140,7 +140,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | B30 | The inventory has no sort buttons and, for a searched NPC, no worn/bag switch (`10-29_21-36-31`) | Log: nothing. Docs: loot window layout is partial; worn tab needs B03. | none (MIG16 changes only the mode stack) | Stay | Yes | SM23 |
 | B31 | Items cannot be moved from the inventory to the quick bar (`10-29_21-48-45`) | Log: only `drop kind=PutBack` lines; no hot-key line. Hot-key bar rules exist (ARC-UI-022). | MIG16 only touches the target modes | Stay | Yes | SM23 |
 | B32 | A written note cannot be read from the inventory (`10-29_21-50-47`) | Log: only a `drop kind=Wear item=made:21` line. Reading window exists (ARC-UI-049); the inventory use path to it is not shown. | MIG16 target modes | Stay | Yes | SM23 |
-| B33 | The context menu of a companion opens on the left button, not the right as in the original (`10-31_12-42-01`) | No log. Needs the executable: companion click handling (companion orders, SA rows). | MIG13 (hero input through requests) rebuilds the click, GS25-GS27 | Stay | Verify in the executable first | SM24 |
+| B33 | The context menu of a companion opens on the left button, not the right as in the original (`10-31_12-42-01`) | No log. Needs the executable: companion click handling (companion orders, SA rows). | MIG13 rebuilds the click path (GS25-GS27) but does not decide the button mapping | Stay | Verify in the executable first | SM24 |
 | B34 | No message at a successful save (`10-31_12-53-43`) | Log: `quick-save Saved=true`; no message line follows. Whether the original posts a message is unverified. | none | Stay | Verify first, then yes | SM14 |
 | B35 | No message at a successful load (`10-31_12-54-07`) | As B34. | none | Stay | Verify first, then yes | SM14 |
 
@@ -171,11 +171,11 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 - Runs go through `./arcanum smoke pr --stages STAGE[,STAGE...] [--map NAME] [--hero H] [--sector X,Y]` and `./arcanum smoke full`
   ([smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061), [smoke scope](../workflow/tasks.md#smoke-scope)).
-  Each stage runs ALONE (a stage in `ALONE_STAGES` gets its own viewer run), prints one `PASS` marker line and fails the
+  A new stage that cannot run together with `map` is added to `ALONE_STAGES` (it then runs on its own when `map` is also requested); every stage prints one `PASS` marker line and fails the
   smoke when it is skipped (ARC-DEV-063).
 - A **new** stage needs: its name in the viewer's `MapSmokeStageNames`, its marker in `STAGE_PASS` of `tools/local_dev/smoke.py`
-  (and in `ALONE_STAGES` and `HERO_STAGES`), the literal marker in the C# source (the test checks it), and a line in the
-  viewer docs. A marker reads `ARC-<task> native-smoke <stage> PASS`. The stages here take no marker from this plan; the PR
+  (and in `ALONE_STAGES`, `HERO_STAGES` and, for a stage that debug-travels such as SM01, SM02 and SM05, `DEBUG_STAGES`, which is what starts the viewer with `--debug-mode`), the literal marker in the C# source (the test checks it), and a line in the
+  viewer docs. A marker usually reads `ARC-<task> native-smoke <stage> PASS` (the existing ones vary, for example `wreck smoke PASS`). The stages here take no marker from this plan; the PR
   that builds one names it.
 - Smokes use pre-made heroes (`--hero`); a bug that depends on a custom hero (B40, the hero's name in a roll) is also an
   **owner re-check by hand** on a save of that hero.
@@ -191,8 +191,8 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Bugs:** B05. **Kind:** new, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages follower-far` (starts the viewer with `--debug-mode` for the travel step).
 - **Steps:** 1. Let Virgil join (the `transfer` stage's setup). 2. Debug-travel the hero to the town window (sector 1409,1314). 3. Quick save, quick load. 4. Run 10 s of game time.
-- **Pass:** Virgil is in the party list, has a drawn body, stands within 6 cells of the hero, and the log has no `Unbodied`, `Stranger` or `InventoryRefused` line.
-- **Run after:** MIG2-MIG5 (carried case; the existing `transfer` and `ai-follower` first), final after MIG9.
+- **Pass:** Virgil is in the party list, has a drawn body, stands within 6 cells of the hero, and the log has no `visitor not talkable ... no body kept this run` line, no `InventoryRefused` line and `companions bound` lists him.
+- **Run after:** MIG9 (the existing `transfer` and `ai-follower` cover the carried case after MIG2-MIG5).
 
 #### SM02 `inv-carry`
 
@@ -214,7 +214,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 - **Bugs:** B04. **Kind:** extend, existing, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages junk`.
-- **Steps:** Add: empty a ground pile by Take all, leave the sector and return.
+- **Steps:** Add: empty a ground pile by Take all, leave the sector and return. The chain runs `junk` on `elven ruins` with `elf-female` because a pile could not be broken at the Crash Site with the other heroes; use that map unless a breakable pile exists at the Crash Site.
 - **Pass:** The emptied pile is gone from the directory and from the draw; no empty pile after the return.
 - **Run after:** MIG6.
 
@@ -236,7 +236,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 #### SM07 `placement-census`
 
-- **Bugs:** B07. **Kind:** new, ALONE, no hero (reads data). **Hero:** none.
+- **Bugs:** B07. **Kind:** new, ALONE, hero stage (a quick load needs a session). **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1452,1289`. **Command:** `--stages placement-census`.
 - **Steps:** 1. List the map rows of placed NPCs within 10 sectors by prototype and cell with the Data reader. 2. List the AI host's NPCs after the map opens and after a quick load.
 - **Pass:** Every row appears in the host once, on its row cell, before any run moved it; the boar rows near the wreck are present. Differences are printed as a table.
@@ -404,7 +404,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 #### SM28 `altar` (extend)
 
-- **Bugs:** B25. **Kind:** extend, existing, ALONE, hero stage. **Hero:** `human-male`.
+- **Bugs:** B25. **Kind:** extend, existing, ALONE (not a hero stage). **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1452,1291`. **Command:** `--stages altar`.
 - **Steps:** Add: the agent's heartbeat runs him to the altar tile; he steps on it.
 - **Pass:** The tile script fires for the NPC; the agent is destroyed at the tile (the original chain).
@@ -436,23 +436,23 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | After MIG6 | SM02 (final), SM03, SM04, SM26 | One id space, one create and destroy path. |
 | After MIG7 | SM05 (save part), SM25, SM30 (first half), SM11 (cells as state) | Positions and object state on the entry. |
 | After MIG8 | SM16 again, SM26 | Script attachments on the object, global and PC variables. |
-| After MIG9 | SM01, SM05, SM06, SM07, SM17, SM28 | Residency, heartbeat everywhere, location notification. |
+| After MIG9 | SM01, SM05, SM06, SM07, SM16 (again), SM17, SM28 | Residency, heartbeat everywhere, location notification. |
 | After MIG10 (done, ARC-DEV-073) | existing `transfer`, `ai-follower` | No new bug maps to MIG10 alone; keep its existing stages. |
 | After MIG11 | SM29, SM13 | Change-of-place request and homecoming. |
-| After MIG12 | SM10 (pause part) | Clocks and the pause. |
-| After MIG13 | SM08, SM09, SM10, SM11, SM12, SM24, SM06 | Goal table, hero input through requests. |
+| After MIG12 | none of the bug stages | Clocks and the pause; the pause part of SM10 waits for the door runs of MIG13. |
+| After MIG13 | SM06, SM08, SM09, SM10 (with the pause part), SM11, SM12, SM17 (again), SM24 | Goal table, hero input through requests. |
 | After MIG14 | SM08, SM30 (second half) | Saved runs, spell runs and missiles. |
-| After MIG15 | `./arcanum smoke full` | Hosts move; the daily chain is the regression. |
-| After MIG16 | SM23, SM24 | Interface mode stack. |
+| After MIG15 | SM01, SM05, SM17 and the stages of the groups whose hosts moved | Hosts move. The daily chain (`./arcanum daily`) runs the full map battery but none of the new stages, so they are named explicitly. |
+| After MIG16 | SM23 | Interface mode stack. |
 
 Each migration PR also runs the stages of the slice it touches by the smoke-scope rule, and the daily package build
 runs the full chain; the plan adds the bug stages to those, not instead of them.
 
 ## What is not covered
 
-- **Unverified causes.** B01, B07, B08, B11, B12, B14, B24, B36, B37, B39, B40, B41 and B43 have a hypothesis, not a finding.
+- **Unverified causes.** B01, B07, B08, B11, B12, B13, B14, B21, B24, B36, B37, B38, B39, B40, B41 and B43 have a hypothesis, not a finding.
   Their "Expected" column is therefore the plan's best reading and may move after the first reproduction.
-- **Needs the executable first:** B03, B08, B17, B21, B33, B34, B35, B44. No fix and no final smoke pass rule is set for them here.
+- **Needs the executable first:** B03, B08, B11, B14, B17, B21, B33, B34, B35, B40, B44, B45. No fix and no final smoke pass rule is set for them here.
 - **Custom-hero bugs** (B40) cannot be reproduced by a pre-made-hero smoke alone.
 - **The triage file** was not available (see Sources); A2, A3 and B1 are as the project notes describe them.
-- **No bugs from the archived reports** are listed again, except B22, which the archive index marks as an own slice that was not done.
+- **No bug from the archived reports** is listed again, except B22, which the PR #551 note records as an own slice that was not done.
