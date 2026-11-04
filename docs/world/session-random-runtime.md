@@ -42,7 +42,18 @@ The session keeps a **project generator**, not the original LCG (decision of thi
 - **The host seeds it**: `GameSessionDescriptor.RandomSeed` (default 0). The owner never reads a clock or OS entropy;
   a host that wants a new sequence per new game passes a new seed (for example from the time).
 - **Saved with the session**: a restored session continues exactly where the saved one stood, so a load does not
-  re-roll (FR-CONTENT-007 acceptance: with a given seed and command sequence, the rolls are the same).
+  re-roll (FR-CONTENT-007 acceptance: with a given seed and command sequence, the rolls are the same). This is the
+  Steamwoven setting and an owner decision (gap review GI6, 2026-11-04): a reload repeats the same results, so
+  save-scumming does not help.
+- **Original setting at a load** (ARC-DEV-077, switch `LifecycleRuleProfile.LoadKeepsRunningRandom`): as the original
+  keeps its process generator across a load (PS32), the restored session goes on with the generator the host is
+  running, `GameSessionRestoreOptions.LoadRandom` (the viewer's quick load passes the current session's
+  `QueryRandom()`, the main menu's placeholder session included), and every later roll differs from the save's own
+  continuation. Without one it starts the default seed 0 at draw 0, as a new session without a seed; the owner still
+  reads no clock. The saved `random` section is decoded and checked in both modes, and the next capture writes the
+  generator the session went on with. The original's one saved roll, the skill module's pre-rolled gambling value
+  (PS14, the `GamblingRoll` of a skill check), is a separate datum that no session domain holds yet: the slice that
+  brings gambling into the session saves it and restores it in both modes, outside this switch.
 
 `Arcanum.Simulation.Randomness.SeededRandom` is the generator itself (Godot-free, no session types), so a component
 that needs its own replayable sequence can use it without a session.
@@ -54,6 +65,7 @@ that needs its own replayable sequence can use it without a session.
 | `GameSessionDescriptor.RandomSeed` | 64-bit seed of a new session; its generator starts at draw 0. |
 | `GameSessionOwner.Roll(label, min, max)` | One uniform integer in `min..max` inclusive. Returns `SessionRollResult` with a `SessionRoll(Label, Min, Max, Value, Position)`, where `Position` is the draws made after this roll. The label is 1..64 ASCII letters, digits and `. _ : -` (for example `combat.AttackCheck`, `loot:gold`). A bad label or `min > max` is `InvalidRoll`; a generator at its last draw (2^63 − 1) is `RandomExhausted`; a refused roll draws nothing. |
 | `GameSessionOwner.QueryRandom()` | `SessionRandomState(Seed, Draws)`. |
+| `GameSessionRestoreOptions.LoadRandom` | The host's running generator (ARC-DEV-077). Under the Original setting the restored session takes it in place of the saved seed and position (null: seed 0 at draw 0); Steamwoven ignores it. A negative position is `InvalidDescriptor` in both modes. |
 | `GameSessionOwner.CombatRolls` | The session generator as the attack resolver's `ICombatRollSource`; each roll is labelled `combat.` and the `CombatRollPurpose` name. The source interface has no refusal channel: `min > max` throws `ArgumentOutOfRangeException` (the interface's precondition, as in `CombatRollLog`), and an exhausted generator throws `InvalidOperationException`. The label is checked but not recorded: the resolver's `CombatRollLog` keeps the trace by purpose. |
 | `GameSessionOwner.SpellRolls` | The session generator as the magic rules' `ISpellRollSource` (ARC-MAGIC-005); each roll is labelled `magic.` and the `SpellRollPurpose` name (`ResistanceD100`, `SaveD20`, `FailChanceD20`; `InvocationAptitudeD100` from ARC-MAGIC-006); refusals throw as for `CombatRolls`. |
 | `SeededRandom(seed, draws)` / `TryNext(min, max, out value)` / `Output(seed, index)` | The generator: position, one range roll (false when exhausted, with no draw), and draw `index` (1-based) of a seed. |
@@ -92,7 +104,12 @@ before this schema, so nothing is lost.
 - [`SessionRandomTests`](../../tests/Arcanum.Session.Tests/SessionRandomTests.cs): labelled rolls without a revision
   move, the label not changing values, refused labels and ranges with no draw, the same rolls after encode, decode and
   restore, four attacks resolved through `CombatRolls` replayed exactly from a save, combat labels and ranges, an
-  exhausted generator, decode failures of the `random` section, a hand-built negative position, disposal.
+  exhausted generator, decode failures of the `random` section, a hand-built negative position, disposal; the GI6
+  switch (ARC-DEV-077): Steamwoven keeps the saved generator and ignores a running one, Original goes on with the
+  running one (or seed 0) and saves it next, a negative running position refused in both modes and a damaged saved one
+  under Original too.
+- [`AreaQuickSaveTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaQuickSaveTests.cs)
+  `QuickLoadTakesTheGeneratorTheRuleModeSays`: the viewer's quick load under each setting.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj --no-build --filter "FullyQualifiedName~Randomness"

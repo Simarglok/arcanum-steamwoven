@@ -140,6 +140,25 @@ public sealed class AreaQuickSaveTests
         Assert.AreSame(Arcanum.Session.GameRules.Original, owner.Rules, "The rule mode is a setting, not part of the save.");
     }
 
+    // ARC-DEV-077 (GI6): a quick load keeps the saved generator under Steamwoven and goes on with the running session's under
+    // Original, as the original keeps its process generator across a load.
+    [TestMethod]
+    public void QuickLoadTakesTheGeneratorTheRuleModeSays()
+    {
+        using var first = Session();
+        Assert.IsNotNull(first.Roll("test.before", 1, 100).Roll);
+        Assert.IsTrue(AreaQuickSave.Save(first, Outside, Slot()).Saved);
+        var saved = first.QueryRandom();
+        using var running = Session();
+        for (var i = 0; i < 4; i++) Assert.IsNotNull(running.Roll("test.running", 1, 100).Roll);
+        using (var steamwoven = AreaQuickSave.Load(Slot(), running, _ => null).Owner ?? throw new AssertFailedException("load"))
+            Assert.AreEqual(saved, steamwoven.QueryRandom());
+        Assert.AreEqual(GameSessionDisposition.Changed, running.SelectRules(Arcanum.Session.RuleMode.Original));
+        using var original = AreaQuickSave.Load(Slot(), running, _ => null).Owner ?? throw new AssertFailedException("load");
+        Assert.AreEqual(running.QueryRandom(), original.QueryRandom());
+        Assert.AreNotEqual(saved, original.QueryRandom());
+    }
+
     [TestMethod]
     public void LoadFailuresLeaveNoOwnerAndSayWhy()
     {
