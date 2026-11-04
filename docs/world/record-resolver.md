@@ -43,7 +43,7 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 and keeps its map-keyed questions with their meaning (the rows of that map), so the consumers move one by one: carried companions in the AI
 (MIG2, done: ARC-DEV-075, the AI host asks only by identity; `AreaCombatHost` gained `WornItems`, `NpcItems`, `HeldItemFields`, `NpcHolder` and
 `NpcItemFields` by identity, the last two over every held map), then spell targets, hover attack, life bars, turn facts, sheet and levels, the event world and the item/armour questions
-(MIG3, done: ARC-DEV-076; below), the body (MIG4) and one dialog host (MIG5).
+(MIG3, done: ARC-DEV-076; below), the body (MIG4, done: ARC-DEV-079; [below](#bodies-and-window-homes-arc-dev-079-mig4)) and one dialog host (MIG5).
 
 ### Consumers by identity (ARC-DEV-076, MIG3)
 
@@ -61,21 +61,42 @@ and keeps its map-keyed questions with their meaning (the rows of that map), so 
 the identity questions reach any entity. The map-keyed questions stay for code that asks about one map's own rows (smokes, the shop, the loot
 windows).
 
+### Bodies and window homes (ARC-DEV-079, MIG4)
+
+The companion's body (its T0 draw commands, visuals and frames: `AreaCompanionTemplate`) comes from its home map's data by identity, as its
+record does. The viewer's run-local cache of bodies (`_travellers`) and the HUD's "no body kept this run" path (`AreaVisitors.Unbodied`) are
+gone: a quick load or a fresh run on a foreign map finds the companion's body the same way a map change in one run does.
+
+| Part | Role |
+| --- | --- |
+| `AreaHomeRead` | One read of a home map: the resolver's rows (`AreaInventoryMap`), the bodies of the speakers with follow facts and the frames those bodies draw; a window read lists its core sectors. Derived data, never saved. |
+| `IAreaHomeSource` / `AreaMapHomes` | Reads a home from the game folder's module content stack: the whole map, or (a map with more sector files than a whole-map plan admits: the main world map) a 3×3 window of core sectors around a stored cell; strict publication, step evidence, scene plan, and only the frames of those bodies. A map the list does not name, a window with no stored cell to centre on or a map that does not read is a typed failure. |
+| `AreaHomeDirectory` | Holds the reads (default 4, least recently used out first), answers `Body(entity, homeMap, storedCell)` from a held read that lists the entity or reads the home once, and remembers a failed read. The viewer `Remember`s the map it has just loaded (its own scene and rows), so a companion carried from it needs no read. |
+| `AreaMapRecords` | The resolver's record source (behind `AreaRememberedRecords`, the rows of the map the run has just left, MIG2), now through the same directory: a map read for a body is not read again for its record; a window map is read around `AreaVisitors.HomeWindow(session, map)`. |
+| `npc.home` (`AreaCompanionPlacement.HomeProperty`) | The one new session fact: on the home map, the world cell the NPC's stored object lies on. It is written by every recorded placement (`Edits`: `Arrive`, `Carry`, `Record`) and cleared by the one that clears the placement (its stored cell facing the default), so it exists while the placement is recorded (a body off its stored cell, or on it facing other than the default). Without it a window home cannot be read (the T0 cell is not a change, and the NPC has left), so it is the "which sector" the model lacked. It is an ordinary entity change of the home map (no schema change), saved and restored with the session. |
+| `AreaVisitors.Here` | The companions recorded on the shown map (`npc.cell`, on a loaded cell) that the shown scene does not draw, each with its home map (`npc.map`, else the map itself: another window of it) and stored cell. |
+
+The viewer asks for the bodies of the visitors of the shown map whenever it rebinds its companions (`RefreshVisitorBodies`: a map load, a
+quick load, a reset), adds their frames to the shown frame repository and lists a body that could not be read on the HUD with the reason
+(`ARC-DEV-079 visitor body unread ...` in the log); nothing is guessed. The Virgil case (his home is a window of the main map) is covered: after a
+quick load or a fresh run on a foreign map his window is read around the cell recorded when he left, his body is drawn and follows, and the
+resolver finds his record there, so the AI no longer keeps him out of its rules (`AreaAiHost.Unresolved` stays for a record that cannot be read).
+
 ## Not ready
 
-- A map that opens only as a window (the main world map, more sector files than a whole-map plan admits) is not read on demand
-  (`HomeUnread` with the plan status); its NPCs resolve while the viewer holds that map. Since ARC-DEV-075 (MIG2) the viewer also keeps the
-  maps it left at a map change of the same run (`AreaRememberedRecords`, a record source that answers from them before the game folder's
-  reader), so Virgil carried from the main map into the Crash Site cave resolves there. A quick load to another map or a fresh run starts with
-  none: Virgil's home (a main-map window) is then unresolved, and the AI keeps him out of its rules (`AreaAiHost.Unresolved`) until MIG9
-  reads such a window on demand (the F7 in the cave, a fresh run, F8 case). The Crash Site's own NPCs are held because the
-  viewer gives the resolver the launch maps.
-- The read happens on the caller's thread (once per map, then cached, failures too); a frame that asks for a never-held home map pays for
-  it. MIG9 (residency) owns moving reads off the frame.
-- `ForVisitor`, `_travellers` and the other visitor routing (the body, the dialog host) go in MIG4 and MIG5; the home-map fallbacks of the
-  consumers above went in MIG3 (the `HomeMap` question stays on `AreaCombatHost` for the diagnostics). The hero's attack never targets a
-  companion (a visiting one included: `IsAreaCompanion`); the attack cursor on a visiting companion in combat mode is now the same "no
-  action" as on a home companion, not the talk cursor. The existing boundaries of a visiting companion (no blood pool at its death, no seed items in the shown map's
-  inventory window) stay until MIG4/MIG5. The
-  `Stranger` skip went in MIG2 but for one case: a companion with no record (a home on the main map's window) is kept out of the AI rules by
-  `AreaAiHost.Unresolved`, until MIG9 reads such a window on demand.
+- A companion that left its home before this slice recorded `npc.home` (a save from an earlier build, with the companion already away) has no
+  stored cell: a whole-map home still reads, a window home does not (typed failure, named on the HUD, no body and kept out of the AI rules). Nothing
+  repairs it later: without a body it is not in the group that writes the cell, and it stays on the map it was left on. A new quick save with the
+  companion carried by this build writes it; such an old save needs the companion fetched home again (a migration is not planned).
+- The resolver holds one window per map, read around `AreaVisitors.HomeWindow` (the lowest-entity NPC that is away from that map, else the lowest
+  with a recorded cell): a second companion away from another window of the same map is not resolved (kept out of the rules); its body is, since the
+  directory keeps a read per window. A failure the resolver meets (no stored cell yet) is kept by it for the scene. MIG9 (residency) reads such windows
+  through the sector model.
+- The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
+- A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
+  off the frame. A map change is where it normally happens.
+- `ForVisitor` and the dialog host routing (`AreaConversationHost.ForVisitor`, `AreaTalkRouting`, `refuseUncoveredInventory`) go in MIG5; the
+  home-map fallbacks of the consumers above went in MIG3 (the `HomeMap` question stays on `AreaCombatHost` for the diagnostics). The hero's attack never
+  targets a companion (a visiting one included: `IsAreaCompanion`); the attack cursor on a visiting companion in combat mode is the same "no action" as on a
+  home companion, not the talk cursor. The existing boundaries of a visiting companion (no blood pool at its death, no seed items in the shown map's
+  inventory window) stay until MIG5.

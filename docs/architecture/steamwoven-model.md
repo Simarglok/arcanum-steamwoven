@@ -177,7 +177,7 @@ world-map and menu syncs, death, inventory, hover, cursor and bug-report syncs.
 
 | # | Cache (file) | Holds | Keyed by | Lost on | Hyp. |
 | --- | --- | --- | --- | --- | --- |
-| L1 | `_travellers` (`Godot/TerrainViewerCompanions.cs`) | A companion's body built from its home map's scene | Entity | Quick load or fresh run when the home map was not loaded (`AreaVisitors.Unbodied`) | H1+, H9+ |
+| L1 | ~~`_travellers`~~ (removed by ARC-DEV-079, MIG4: the body is read from the home map by `AreaHomeDirectory`, derived data that a quick load or a fresh run reads again; `npc.home` keeps the stored cell a window home is read around) | A companion's body built from its home map's scene | Entity | — | closed |
 | L2 | `_companionFacts` (`Godot/TerrainViewerCompanions.cs`) | Companion facts | `AreaObjectKey` | Map change | H1+ |
 | L3 | `_visitorRefused` (`Godot/TerrainViewerConversation.cs`) | Visitors whose dialog was refused | Entity, per owner | Quick load, conversation reset | H9+ |
 | L4 | V5 movers, V4 runs, S25 spell runs, S26 shots, G1–G4 | See above | — | Quick load, map change | H9+ |
