@@ -524,7 +524,8 @@ ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040))
   recovered or raised NPC stands at once. The pool of blood comes when the dying goal ends ([above](#pool-of-blood-arc-render-041)).
   The log says `ARC-RENDER-040 lying entity=… wanted=… shows=… frames=… delay=… plays|held|kept ends-in=…` once per change.
 - **Smoke** (stage `attack`): the killed NPC's dying animation draws its frames on the world clock, no pool lies before its dying
-  goal ends, the last frame stays (`ARC-RENDER-040 smoke dying npc=… drawn=…`); the knockout plays the fall.
+  goal ends, the last frame stays (`ARC-RENDER-040 smoke dying npc=… drawn=…`); the knockout plays the fall. When the stage's attacks knock the target out
+  before the killing blow, the death is not played (it keeps the fall, above), so the stage checks that rule instead (`FallKept` of the lying show): the dying goal ends, no pool lies before, and the fall's last frame stays (`ARC-RENDER-040 smoke dying npc=… fall-kept`, ARC-DEV-083).
 - **Not ready**: the dying sounds (DA3), the hero's own dying animation (it falls, ARC-COMBAT-021), the dying goal's finish when
   interrupted (DA6: the viewer holds the last frame after a map change or load), an NPC's get-up animation, and HD frames of the poses.
 

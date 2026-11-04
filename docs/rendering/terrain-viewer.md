@@ -782,8 +782,11 @@ Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and 
 its show and leave), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
 portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
-hovers each found one: the highlight is the body's frame drawn additive, none of its picked pixels gets darker and some
-get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
+hovers each found one (a body a roof covers or that is hidden is not a candidate, since it is picked but not drawn; of the first six
+candidates the one with the most picked pixels, or the first with 16, is taken; a window with no hoverable body, as the generated
+wilderness, prints `ARC-UI-057 native-smoke hover-window NONE` instead of failing, so a map battery passes while `--stages hover` alone reports the stage as not run; ARC-DEV-083): the highlight is the body's frame
+(an animated scenery shows the frame its animation shows now, not its index command's; still bodies are tried first) drawn additive, none of its picked pixels
+gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
