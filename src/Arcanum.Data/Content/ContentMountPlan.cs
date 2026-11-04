@@ -27,7 +27,8 @@ public sealed class ContentMountPlan
     public IReadOnlyList<ContentSource> SearchOrder { get; }
 
     /// <summary>Mirrors the pinned start-up sequence: <c>tig.dat</c>, the game folder,
-    /// every <c>arcanum*.dat</c> in case-insensitive name order, <c>data</c>, then the module's
+    /// every <c>arcanum*.dat</c> in case-insensitive name order, the host's prototype cache when it has one
+    /// (<see cref="PrototypeCacheMount"/>), <c>data</c>, then the module's
     /// <c>.dat</c>, its <c>.patch0</c>..<c>.patch9</c> (only when the <c>.dat</c> exists) and its
     /// folder. Each later mount sits above the earlier ones. Names resolve ASCII
     /// case-insensitively; two names differing only in case are refused as ambiguous.</summary>
@@ -60,6 +61,9 @@ public sealed class ContentMountPlan
             }
             bases.Sort((a, b) => string.CompareOrdinal(AsciiLower(Path.GetFileName(a)), AsciiLower(Path.GetFileName(b))));
             mounted.AddRange(bases.Select((path, index) => new ContentSource(ContentSourceRole.BaseArchive, index, path)));
+
+            // ARC-DEV-069: the prototype files built from the player's executable (when the host has any), under data/ so a real one wins.
+            if (PrototypeCacheMount.Folder is { } cache && Directory.Exists(cache)) mounted.Add(new(ContentSourceRole.PrototypeCache, 0, Path.GetFullPath(cache)));
 
             var data = Child(root, "data");
             if (data.Status == ChildStatus.Ambiguous) return Fail(data, ContentMountStatus.AmbiguousName, "data");

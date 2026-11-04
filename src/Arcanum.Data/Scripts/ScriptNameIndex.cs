@@ -69,7 +69,8 @@ public sealed class ScriptNameIndex
 
     /// <summary>Sources the original mounts before the game-start listing (docs/research/content-precedence.md).</summary>
     public static bool IsBase(ContentSourceRole role) =>
-        role is ContentSourceRole.Tig or ContentSourceRole.GameRoot or ContentSourceRole.BaseArchive or ContentSourceRole.DataDirectory;
+        role is ContentSourceRole.Tig or ContentSourceRole.GameRoot or ContentSourceRole.BaseArchive or ContentSourceRole.DataDirectory
+            or ContentSourceRole.PrototypeCache;
 
     /// <summary>
     /// C <c>atoi</c> over a file name: leading spaces, an optional sign, then decimal digits up to the first other

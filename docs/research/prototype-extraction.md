@@ -4,8 +4,8 @@ Status: **Research**, work item ARC-RES-085 (2026-11-03), slice E1 of the fresh-
 fix. Docs-only: no code changes and no checks run (the census below ran locally, not as a repository check). It says how the original builds its
 prototype files, what a build needs at run time, and how Steamwoven builds the same files
 from the player's own `Arcanum.exe` on any operating system. The slices that implement it
-are E2–E4 ([plan](#slices)); E2 (the interpreter) and E3 (the builder, with the answers to the open questions) are done
-([E3 results](#e3-results-arc-dev-068)).
+are E2–E4 ([plan](#slices)); E2 (the interpreter), E3 (the builder, with the answers to the open questions) and E4 (the
+cache and the launcher's first-start build) are done ([E3 results](#e3-results-arc-dev-068), [E4 results](#e4-results-arc-dev-069)).
 
 Requirements (reference only, no coverage row changes):
 [FR-CONTENT-001](../requirements/content-product.md#fr-content-001),
@@ -148,7 +148,7 @@ owner's Windows installation (2026-10-29).
 | E1 | ARC-RES-085 | This document | Merged |
 | E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
 | E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the original's own check and build loop, the captured files; the open inputs of the census settled by reading | **Done:** all 1,423 files equal to the files the original wrote on the owner's Windows installation (an opt-in real-data test; the Windows files stay local); the macOS differences listed ([results](#e3-results-arc-dev-068)) |
-| E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, the ARC-DEV-066 detection as the fallback for an unverified executable | A fresh installation (no `data/proto`) starts the game on macOS and Windows |
+| E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, a typed refusal for an unverified executable | **Done for the prototype files** ([results](#e4-results-arc-dev-069)): a fresh installation (no `data/proto`) gets its prototypes on the first Play and reaches the map plan; the map itself then needs the first-start map aggregates, which are not built yet ([open](#what-a-fresh-installation-still-lacks)) |
 
 ## E3 results (ARC-DEV-068)
 
@@ -198,3 +198,40 @@ about 2.43 × 10^9 interpreted instructions and 26 s.
 
 Not done in E3: the cache, the content-stack source for the built files and the launcher's first-start build and progress (E4),
 and the use of the builder outside tests.
+
+## E4 results (ARC-DEV-069)
+
+On the first Play (and on every start from a stored folder) the launcher makes sure the game folder has prototype files before the
+map readers run. `PrototypeProvisioner.Provision` (Godot-free, `src/Arcanum.Session/Launcher`, off the main thread):
+
+1. opens the installation's own sources (the cache of an earlier start is left out) and counts the prototype files they hold; an
+   installation with all 1,423 (the original ran there) is left alone (`Present`, nothing mounted, nothing written);
+2. otherwise reads `Arcanum.exe` from the folder once (read-only) and refuses any other than the verified 1.0.7.4 one by its SHA-256
+   (`UnverifiedExecutable`; the one honest fallback, in words that never tell the player to run the original);
+3. looks for a cache keyed by that SHA-256 in Steamwoven's settings folder (`prototypes/prototypes-<16 hex>/`, beside
+   `launcher_v1.json`; never in the game folder). The manifest lists the SHA-256 of every data file the executable read or looked for
+   (`rules\*.txt`, the MES files, the art headers; an absent file counts as absent) and the length and SHA-256 of every prototype file; the
+   cache is used (`Cached`) only when the executable, all of that data and every file still match and no other file is there;
+4. otherwise builds the 1,423 files with the E3 builder (`Built`; progress to the launcher; Cancel stops it) and stores them in a temporary
+   folder that replaces the cache by a rename, the manifest written last, so a start that died leaves no cache.
+
+The host mounts the result for every reader by `PrototypeCacheMount.Use(folder)`: `ContentMountPlan.Discover` adds it as the base source
+`PrototypeCache` **above the base archives and below `data/`** (so a real `data/proto` file always wins, as in the original, where `data\proto`
+is the folder the files are written to), and `ContentPhase` treats it as a base source (read at game start, never a module source). One
+holder for the process, because the viewer's loaders each discover the game folder themselves.
+
+Measured on the owner's Mac (Release, Apple silicon): a copy of the CrossOver installation made of links, without `data/proto`, builds all
+1,423 files in 27 s through the launcher's code path, with the same names and lengths as the files the original wrote (field equality is E3's
+result); the second start verifies and reuses the cache in 0.2 s. The viewer's native smoke (`--native-smoke`, a stored folder) on a folder
+freshly unpacked by `innoextract` from the GOG installer printed `ARC-DEV-069 prototypes status=Built files=1423`, the next start `status=Cached`,
+and the map plan passed (the earlier `AREA_MAP_PLAN_MISSINGSOURCE "prototype N"` is gone). Not run here: a Windows machine (the code is
+portable: .NET file APIs, no shell).
+
+### What a fresh installation still lacks
+
+The same run showed that `data/proto` is not the only thing the original writes at its first start: the loaded map then stops with
+`AreaIncompleteException` (`InputIdentityMismatch` at the correspondence stage, the editor `.mob` files against the game-generated mobile
+aggregate), because a fresh installation has none of the **81 per-map aggregate files** the original writes to `modules/Arcanum/maps` (their
+names are the map names through the function at 0x411830, `WorldCatalog.AggregateName`). Checked: the same folder with the 81 files copied from
+the CrossOver installation, on the cache this task built, passes the main-menu smoke; the original's own `data/proto` in a fresh folder fails
+the same way, so the cause is not the built prototypes. Building the aggregates from the executable is the next slice (not part of E4).

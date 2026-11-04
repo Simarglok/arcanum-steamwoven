@@ -154,6 +154,58 @@ public sealed class LauncherScreenTests
         Assert.IsTrue(screen.CanPlay);
     }
 
+    /// <summary>ARC-DEV-069: the game data (prototype files) being prepared on the first Play: the screen is busy like during an unpack, shows the
+    /// progress, and a failure is named in words that never tell the player to run Arcanum.exe.</summary>
+    [TestMethod]
+    public void While_the_game_data_is_prepared_the_folder_and_Play_are_off_and_the_progress_and_failures_are_named()
+    {
+        var detected = Game(Path.Combine(_root, "Applications", "Arcanum"));
+        var screen = new LauncherScreen(Read(LauncherSettings.Defaults), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()), LauncherShowReason.FirstRun);
+        Assert.AreEqual("Cancel unpacking", screen.CancelText);
+        Assert.IsTrue(screen.BeginPrototypes());
+        Assert.IsFalse(screen.BeginPrototypes(), "one preparation at a time");
+        Assert.IsFalse(screen.BeginInstall("setup.exe", "target"), "no unpack while the data is prepared");
+        Assert.IsTrue(screen.Busy && screen.Preparing);
+        Assert.IsFalse(screen.CanPlay);
+        Assert.AreEqual("Cancel", screen.CancelText);
+        Assert.IsNull(screen.Play());
+        Assert.AreEqual("Wait for the game data to be prepared, or cancel it.", screen.Notice);
+        screen.UseFolder(GameFolderLocator.Choose(Game(Path.Combine(_root, "other"))));
+        Assert.AreEqual(detected, screen.Folder!.Path, "the folder does not change while the data is prepared");
+
+        screen.PrototypesProgress(new(PrototypeProvisionStage.Building));
+        StringAssert.StartsWith(screen.Notice!, "Preparing the game data from your Arcanum.exe (first start only");
+        screen.PrototypesProgress(new(PrototypeProvisionStage.Building, 312, 1423));
+        StringAssert.EndsWith(screen.Notice!, " 312/1423");
+        screen.PrototypesProgress(new(PrototypeProvisionStage.Storing, 1423, 1423));
+        Assert.AreEqual("Saving the prepared game data…", screen.Notice);
+
+        screen.PrototypesDone(new(PrototypeProvisionStatus.Built, Path.Combine(_root, "cache"), Files: 1423));
+        Assert.IsFalse(screen.Busy || screen.Preparing);
+        Assert.IsNull(screen.Notice, "a success says nothing: the game starts");
+        Assert.IsTrue(screen.CanPlay);
+        screen.InstallProgress(new(GogInstallStage.Unpacking, 1, 2, 1, 2, "x"));
+        Assert.IsNull(screen.Notice, "an unpack's progress does not reach an idle screen");
+
+        // A failure leaves the screen open with Play still offered, in words.
+        screen.BeginPrototypes();
+        screen.PrototypesDone(new(PrototypeProvisionStatus.UnverifiedExecutable));
+        Assert.IsFalse(screen.Busy);
+        Assert.IsTrue(screen.CanPlay);
+        StringAssert.Contains(screen.Notice!, "not the retail 1.0.7.4 one");
+        foreach (var status in Enum.GetValues<PrototypeProvisionStatus>())
+        {
+            var text = LauncherScreen.Describe(new PrototypeProvisionResult(status, Detail: "a detail"));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(text), status.ToString());
+            Assert.IsFalse(text.Contains("run Arcanum.exe", StringComparison.OrdinalIgnoreCase) || text.Contains("start Arcanum.exe", StringComparison.OrdinalIgnoreCase),
+                $"{status}: the player is never told to run the original: {text}");
+            if (status is not (PrototypeProvisionStatus.Present or PrototypeProvisionStatus.Cached or PrototypeProvisionStatus.Built or PrototypeProvisionStatus.Cancelled))
+                StringAssert.Contains(text, "a detail", status.ToString());
+        }
+        foreach (var stage in Enum.GetValues<PrototypeProvisionStage>())
+            Assert.IsFalse(string.IsNullOrWhiteSpace(LauncherScreen.Describe(new PrototypeProvisionProgress(stage))), stage.ToString());
+    }
+
     [TestMethod]
     public void Every_unpack_outcome_has_words_and_a_missing_tool_names_the_way_to_get_it()
     {

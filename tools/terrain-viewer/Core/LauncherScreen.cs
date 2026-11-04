@@ -42,8 +42,13 @@ public sealed class LauncherScreen
     /// <summary>The ready fixed candidates the start found (GOG registry, default folders, CrossOver bottles).</summary>
     public IReadOnlyList<GameFolderCheck> Candidates => _candidates;
     public bool CanPlay => !Busy && Folder is { Ready: true, Identity: not null };
-    /// <summary>ARC-DEV-074: a GOG installer is being unpacked; the folder, Play and Reset are off until it ends (<see cref="InstallDone"/>).</summary>
+    /// <summary>ARC-DEV-074: a GOG installer is being unpacked, or (ARC-DEV-069) the game data is being prepared; the folder, Play and Reset are
+    /// off until it ends (<see cref="InstallDone"/>, <see cref="PrototypesDone"/>).</summary>
     public bool Busy { get; private set; }
+    /// <summary>ARC-DEV-069: the game data (the prototype files) is being prepared for the folder Play opened; the other busy state is the unpack.</summary>
+    public bool Preparing { get; private set; }
+    /// <summary>The text of the Cancel button while <see cref="Busy"/>.</summary>
+    public string CancelText => Preparing ? "Cancel" : "Cancel unpacking";
     /// <summary>The installer being unpacked and its target folder; null when none is.</summary>
     public (string Installer, string Target)? Install { get; private set; }
     public bool FileUsable => FileStatus is LauncherSettingsReadStatus.Missing or LauncherSettingsReadStatus.Read or LauncherSettingsReadStatus.Invalid;
@@ -97,7 +102,7 @@ public sealed class LauncherScreen
     /// null (with the notice) when no ready folder is chosen.</summary>
     public LauncherSettings? Play()
     {
-        if (Busy) { Notice = "Wait for the unpacking to finish, or cancel it."; return null; }
+        if (Busy) { Notice = Preparing ? "Wait for the game data to be prepared, or cancel it." : "Wait for the unpacking to finish, or cancel it."; return null; }
         if (!CanPlay)
         {
             Notice = Folder is null ? "Choose the game folder first." : "Not a game folder the game can open: " + Describe(Folder);
@@ -153,6 +158,32 @@ public sealed class LauncherScreen
             Notice = $"Unpacked the GOG installer into {folder.Path}; the folder is chosen. Press Play to start.";
         }
         else Notice = Describe(result, target);
+    }
+
+    /// <summary>ARC-DEV-069: Play found no prototype files in the folder and the game data starts to be prepared from the player's own
+    /// <c>Arcanum.exe</c> (the first start only); false (and nothing changes) while something else runs.</summary>
+    public bool BeginPrototypes()
+    {
+        if (Busy) return false;
+        Busy = Preparing = true;
+        Notice = Describe(new PrototypeProvisionProgress(PrototypeProvisionStage.Checking));
+        return true;
+    }
+
+    public void PrototypesProgress(PrototypeProvisionProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        if (!Busy || !Preparing) return;
+        Notice = Describe(progress);
+    }
+
+    /// <summary>The preparation ended. A success leaves the notice empty (the host starts the game); anything else is named in words and
+    /// leaves the screen open, with Play still offered to try again.</summary>
+    public void PrototypesDone(PrototypeProvisionResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        Busy = Preparing = false;
+        Notice = result.Succeeded ? null : Describe(result);
     }
 
     public void ResetDone(bool written)
@@ -226,6 +257,37 @@ public sealed class LauncherScreen
             GogInstallStage.Verifying => "Verifying the installer's checksums…" + counts,
             GogInstallStage.Unpacking => "Unpacking the game files…" + counts,
             _ => "Checking the unpacked game folder…",
+        };
+    }
+
+    /// <summary>The preparation of the game data in words: the player is never told to run <c>Arcanum.exe</c>; Steamwoven builds the files itself.</summary>
+    public static string Describe(PrototypeProvisionProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        return progress.Stage switch
+        {
+            PrototypeProvisionStage.Checking => "Checking the game data…",
+            PrototypeProvisionStage.Building => "Preparing the game data from your Arcanum.exe (first start only, about half a minute)…"
+                + (progress.Total > 0 ? $" {progress.Done}/{progress.Total}" : ""),
+            _ => "Saving the prepared game data…",
+        };
+    }
+
+    /// <summary>A failed or refused preparation in words (a name or reason, never bytes).</summary>
+    public static string Describe(PrototypeProvisionResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var detail = result.Detail is { Length: > 0 } text ? $" ({text})" : "";
+        return result.Status switch
+        {
+            PrototypeProvisionStatus.UnverifiedExecutable => "This installation has no prototype files and its Arcanum.exe is not the retail 1.0.7.4 one, the only executable "
+                + "the game data can be prepared from" + detail + ". Use the GOG 1.0.7.4 installation.",
+            PrototypeProvisionStatus.NoExecutable => "The game data is prepared from the folder's Arcanum.exe, which was not found" + detail + ".",
+            PrototypeProvisionStatus.SourceFailed => "The game files could not be read to prepare the game data" + detail + ".",
+            PrototypeProvisionStatus.BuildFailed => "The game data could not be prepared from Arcanum.exe" + detail + ".",
+            PrototypeProvisionStatus.CacheWriteFailed => "The prepared game data could not be saved in the settings folder" + detail + ".",
+            PrototypeProvisionStatus.Cancelled => "Preparing the game data was cancelled. Press Play to start again.",
+            _ => result.Status + detail,
         };
     }
 

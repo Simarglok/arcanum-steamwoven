@@ -134,4 +134,6 @@ verification debt for the executable interpreter.
 - Other GOG installers, other languages, a Polish or Russian build, or Galaxy file parts.
 - Windows and Linux machines (Linux was not run; `innoextract` is a common Linux package, the
   result is expected to be the same).
-- The 81 text-mangled files in the CrossOver installation's `maps` folder.
+- The 81 text-mangled files in the CrossOver installation's `maps` folder. (Examined in ARC-DEV-069: they are the per-map mobile
+  aggregates, named through `WorldCatalog.AggregateName`, and a fresh unpack lacks them too; the map load needs them
+  ([open](prototype-extraction.md#what-a-fresh-installation-still-lacks)).)

@@ -97,7 +97,9 @@ installed elsewhere is found through the registry; if it is not, press **Choose 
   `innoextract --gog -m -d ~/Games/Arcanum setup_arcanum_….exe`, then choose the folder that holds `Arcanum.exe` (for the
   1.0.7.4 installer the files land in the folder root, not in `app`). Tried on 2026-11-04 on the 1.0.7.4 installer
   ([ARC-RES-087](../research/gog-installer-unpack.md)): the files unpack in seconds with `Arcanum.exe` in the folder
-  root, game files byte-identical to a real installation; `data/proto` is still missing until the prototype build lands.
+  root, game files byte-identical to a real installation. Such a folder has no `data/proto` (the original writes it at its own
+  first start, which cannot run on a Mac): the first **Play** builds those files from your own `Arcanum.exe` (about half a minute,
+  see below). The map's other first-start files are not built yet, so the first map may still refuse on such a folder.
 - **Other wrappers** (Whisky, a Wineskin-style `.app`): choose the wrapper or its game folder with **Choose folder…**;
   the launcher looks inside a chosen `.app` for its `drive_c`.
 
@@ -107,7 +109,11 @@ On the first start the **launcher** screen opens before the main menu:
    game folder. A folder that is not a game is refused with the reason in words (for example which file is missing).
 2. Choose the **rules**: *Steamwoven* (the original game with the recorded fixes) or *Original* (the retail 1.0.7.4 rules,
    bugs included). They can be switched later in play under Options.
-3. Press **Play**. The folder and the rules are remembered; the next start goes straight to the main menu.
+3. Press **Play**. The folder and the rules are remembered; the next start goes straight to the main menu. On a folder that
+   the original game never started (for example one unpacked from the GOG installer) the first Play also prepares the game's
+   prototype files from your own `Arcanum.exe`: the screen shows the progress (about half a minute, with a **Cancel** button)
+   and keeps the result in the settings folder below, so later starts are not delayed. This needs the 1.0.7.4 `Arcanum.exe`;
+   with another executable the screen says so. Your game folder is only read.
 
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
 folder and rules.
@@ -119,7 +125,8 @@ The build keeps its own folder, separate from any developer build:
     macOS:    ~/Library/Application Support/Arcanum Steamwoven Game/
     Windows:  %APPDATA%\Arcanum Steamwoven Game\      (C:\Users\<you>\AppData\Roaming\Arcanum Steamwoven Game)
 
-It holds the launcher settings (`launcher_v1.json`), the options, the saves (`saves/`) and Godot's log of the last runs
+It holds the launcher settings (`launcher_v1.json`), the game data prepared from your `Arcanum.exe` (`prototypes/`, built once; it is
+rebuilt by itself when the executable or the game's data change), the options, the saves (`saves/`) and Godot's log of the last runs
 (`logs/godot.log`), and the bug reports that could not be written beside the game (`reports/`, section 9). Deleting the folder starts
 the game as on its first run. The game folder of Arcanum is only read.
 

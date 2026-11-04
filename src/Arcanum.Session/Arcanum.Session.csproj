@@ -6,6 +6,8 @@
   <ItemGroup>
     <ProjectReference Include="../Arcanum.Simulation/Arcanum.Simulation.csproj" />
     <ProjectReference Include="../Arcanum.Scripting/Arcanum.Scripting.csproj" />
+    <!-- ARC-DEV-069: the launcher builds a fresh installation's prototype files from the player's executable. -->
+    <ProjectReference Include="../Arcanum.Executable/Arcanum.Executable.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Arcanum.Session.Tests" />

@@ -307,6 +307,9 @@ public partial class TerrainViewerApp : Node
                     && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                     ? exception.Message : exception.GetType().Name;
                 GD.Print("ARC-RENDER-007 frontier=" + frontier);
+                // An incomplete area names its first issues (codes and stages, never paths or bytes).
+                if (exception is Arcanum.Data.Area.AreaIncompleteException incomplete)
+                    GD.Print($"ARC-RENDER-007 issues={incomplete.Report.Issues.Count} first=[{string.Join(", ", incomplete.Report.Issues.Take(8).Select(issue => $"{issue.Code}/{issue.Stage}#{issue.SourceIndex?.ToString() ?? "-"}"))}]");
             }
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload,

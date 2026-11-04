@@ -119,6 +119,39 @@ public sealed class ContentPrototypesTests
         Assert.AreEqual(CombatFieldFailure.PrototypeMissing, CombatFieldReader.ReadPrototype(prototypes.Read, 6219).Failure);
     }
 
+    [TestMethod]
+    public void A_prototype_cache_mounts_over_the_archives_and_under_data_and_is_a_base_source()
+    {
+        // ARC-DEV-069: files the host built from the player's executable, mounted for an installation that has none of its own.
+        File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Dat(("proto/007001 - a.pro", P(7001, 1))));
+        Write("data/proto/007002 - b.pro", P(7002, 3));
+        var cache = Path.Combine(_root, "elsewhere", "files");
+        Directory.CreateDirectory(Path.Combine(cache, "proto"));
+        File.WriteAllBytes(Path.Combine(cache, "proto", "007001 - a.pro"), P(7001, 5));
+        File.WriteAllBytes(Path.Combine(cache, "proto", "007002 - b.pro"), P(7002, 5));
+        File.WriteAllBytes(Path.Combine(cache, "proto", "007003 - c.pro"), P(7003, 5));
+        try
+        {
+            PrototypeCacheMount.Use(cache);
+            var discovery = ContentMountPlan.Discover(_root, "Mod");
+            var order = discovery.Plan!.SearchOrder.Select(source => source.Role).ToArray();
+            Assert.AreEqual(ContentSourceRole.PrototypeCache, discovery.Plan.SearchOrder.Single(source => source.Role == ContentSourceRole.PrototypeCache).Role);
+            Assert.AreEqual(ContentSourceKind.Directory, discovery.Plan.SearchOrder.Single(source => source.Role == ContentSourceRole.PrototypeCache).Kind);
+            Assert.IsTrue(Array.IndexOf(order, ContentSourceRole.DataDirectory) < Array.IndexOf(order, ContentSourceRole.PrototypeCache), "data/ is searched first");
+            Assert.IsTrue(Array.IndexOf(order, ContentSourceRole.PrototypeCache) < Array.IndexOf(order, ContentSourceRole.BaseArchive), "the archives come after");
+            using var stack = ContentStack.Open(discovery.Plan).Stack!;
+            var prototypes = ContentPrototypes.Open(stack);
+            CollectionAssert.AreEqual(new[] { 7001, 7002, 7003 }, prototypes.Numbers.ToArray());
+            CollectionAssert.AreEqual(P(7001, 5), prototypes.Read(7001).Bytes, "the cache over an archive");
+            CollectionAssert.AreEqual(P(7002, 3), prototypes.Read(7002).Bytes, "data/ over the cache");
+            CollectionAssert.AreEqual(P(7003, 5), prototypes.Read(7003).Bytes, "only the cache holds it");
+            Assert.AreEqual(ContentSourceRole.PrototypeCache, prototypes.Candidate(7003)!.Source.Role);
+            Assert.AreEqual(ContentSourceRole.PrototypeCache, ContentPhase.Candidate(stack, "proto/007003 - c.pro", ContentLoadPhase.GameStart)!.Source.Role, "read at game start");
+        }
+        finally { PrototypeCacheMount.Use(null); }
+        Assert.IsFalse(ContentMountPlan.Discover(_root, "Mod").Plan!.SearchOrder.Any(source => source.Role == ContentSourceRole.PrototypeCache), "nothing mounted by default");
+    }
+
     private ContentStack Stack()
     {
         var discovery = ContentMountPlan.Discover(_root, "Mod");
