@@ -61,9 +61,9 @@ public partial class TerrainViewerApp
     private AreaSchematicsBuild BuildSchematics() => AreaSchematics.Build(_areaSession!, _schematicData?.Data, _schematicTab,
         SchematicPosition.Discipline, SchematicPosition.Page, SchematicItems, AreaHoverIndex.TextProfile, _schematicCrafter);
 
-    /// <summary>ARC-TECHNOLOGY-006: an NPC's crafter facts from its home map's data (sheet, scheme and effect stat changes), or null.</summary>
+    /// <summary>ARC-TECHNOLOGY-006: an NPC's crafter facts by identity (ARC-DEV-076; sheet, scheme and effect stat changes), or null.</summary>
     private SessionNpcCrafter? AreaNpcCrafter(string entity) =>
-        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+        _combatHost is { } host && _areaEffectRules is { } effects && host.Fields(entity) is { } fields
             && AreaAdvancement.Npc(entity, fields, effects) is { } npc ? new SessionNpcCrafter(npc.Loaded, npc.Modifiers) : null;
 
     // The viewer keeps no inventory locations: every held item is in the bag; the session knows the worn and broken ones.

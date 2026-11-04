@@ -325,7 +325,7 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         var result = notice.Result!;
         var hero = notice.Target == AiSchedulerRules.Pc;
-        var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(owner, CurrentAreaMap, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
+        var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(owner, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
@@ -335,7 +335,7 @@ public partial class TerrainViewerApp
         if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned))
         {
             var struck = result.Recipient == DamageRecipient.Target ? notice.Target! : notice.Npc;
-            var target = struck == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : _combatHost?.Build(owner, CurrentAreaMap, struck).Combat?.Target;
+            var target = struck == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : _combatHost?.Build(owner, struck).Combat?.Target;
             if (target is not null) EndStun(owner, target, struck);
         }
         // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).

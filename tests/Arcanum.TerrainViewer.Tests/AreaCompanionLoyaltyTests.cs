@@ -137,9 +137,8 @@ public sealed class AreaCompanionLoyaltyTests
 
     private sealed class Objects(string entity) : IAreaEventObjects
     {
-        public LifeFacts? Facts(int runtimeMap, string id) => null;
-        public bool HasObject(int runtimeMap, string id) => id == entity;
-        public int? HomeMap(string id) => id == entity ? 1 : null;
+        public LifeFacts? Facts(string id) => null;
+        public bool HasObject(string id) => id == entity;
     }
 
     [TestMethod]

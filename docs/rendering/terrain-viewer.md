@@ -831,7 +831,7 @@ maximum truncated toward zero.
 - **Follower portraits** (CH9). In each frame of the [follower portraits](../world/companion-orders-runtime.md#area-viewer)
   (ARC-WORLD-046; the original's frames since ARC-UI-024) a health bar (its poisoned art while poisoned) and a fatigue bar,
   each cropped to the follower's percent (nothing at 0 % or less, capped at 100 %); below 20 % health red is added over
-  the portrait, as the original does. A follower's values are its combat values on the shown map (a visiting companion's on its home map); a follower
+  the portrait, as the original does. A follower's values are its combat values by identity (ARC-DEV-076, MIG3: the record resolver finds them wherever it stands, a visiting companion's too); a follower
   without combat values shows empty bars.
 - **Hovered critter** (CH8). The [tooltip](#hover-tooltip-and-action-cursor-arc-ui-005) of a critter with combat values
   (an NPC of a covered map or a companion) adds its health and fatigue bars under the name, each filled to the

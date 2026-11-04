@@ -172,21 +172,21 @@ public sealed class AreaEventPump
 }
 
 /// <summary>ARC-WORLD-039: the area objects an event world asks about (<see cref="AreaCombatHost"/> in the viewer): an NPC's
-/// life facts and an object's presence on a map's T0 data, and the map whose data holds an entity.</summary>
+/// life facts and an object's presence in the stored objects. ARC-DEV-076 (MIG3): both by identity, wherever the object stands now
+/// (the resolver finds its record); there is no home-map question any more.</summary>
 public interface IAreaEventObjects
 {
-    LifeFacts? Facts(int runtimeMap, string entity);
-    bool HasObject(int runtimeMap, string entity);
-    int? HomeMap(string entity);
-    /// <summary>ARC-WORLD-103: the NPC's combat values from its fields on that map (its wearer and best-items chooser), or null.</summary>
-    SessionCritterCombat? Critter(int runtimeMap, string entity) => null;
+    LifeFacts? Facts(string entity);
+    bool HasObject(string entity);
+    /// <summary>ARC-WORLD-103: the NPC's combat values from its stored fields (its wearer and best-items chooser), or null.</summary>
+    SessionCritterCombat? Critter(string entity) => null;
 }
 
 /// <summary>
 /// ARC-WORLD-039: the AREA viewer's world for event passes. An NPC's life facts come from the area's combat fields
 /// (<see cref="AreaCombatHost"/>, the same reader the hero's attack uses); an object a deferred call names exists when it is
-/// the PC or a row of its map. A follower the session moved to another map (its timers and call roles travel with it) is
-/// answered from the map whose data holds it, so its events are not dropped as missing. A call runs through the shown area's conversation host and its SCR dispatcher
+/// the PC or an object the stored objects of a reachable map hold. A follower the session moved to another map (its timers and call
+/// roles travel with it) is asked by identity (ARC-DEV-076, MIG3: the resolver's record), so its events are not dropped as missing. A call runs through the shown area's conversation host and its SCR dispatcher
 /// (<see cref="AreaConversationHost.RunCall"/>). The providers are read at each question, so the world follows the
 /// viewer's current hosts. ARC-WORLD-045: a wait timeout's reaction change reads the shown area's conversation state (its
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
@@ -239,7 +239,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     // ARC-WORLD-101: a generated-once container's tile x and the hero's player name.
     public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => Restock?.GeneratedOnceFacts(map, container);
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
-    public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(map.RuntimeMap, npc));
+    public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(npc));
 
     private readonly Func<SessionScriptCall, AreaConversationHost?>? _callHost;
 
@@ -249,14 +249,12 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     public LifeFacts? CritterFacts(SessionMapId map, string entity)
     {
-        if (_combat() is not { } objects) return null;
-        if (objects.HasObject(map.RuntimeMap, entity)) return objects.Facts(map.RuntimeMap, entity);
-        return objects.HomeMap(entity) is { } home ? objects.Facts(home, entity) : null;
+        // ARC-DEV-076 (MIG3): by identity, wherever the object stands: a follower the session moved answers as on its home map.
+        return _combat()?.Facts(entity);
     }
 
     public bool ObjectExists(SessionMapId map, string entity) =>
-        entity == SessionEventKinds.PlayerEntity
-        || (_combat() is { } objects && (objects.HasObject(map.RuntimeMap, entity) || objects.HomeMap(entity) is not null));
+        entity == SessionEventKinds.PlayerEntity || _combat()?.HasObject(entity) == true;
 
     public Arcanum.Simulation.Reaction.ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => _talk()?.State.NpcFacts();
 

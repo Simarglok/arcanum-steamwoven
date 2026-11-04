@@ -42,7 +42,24 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 (`Record`, `HomeMap`, `Fields(entity)`, `Build(entity)`, `Build(session, entity)`, `Holder(session, entity)`, `Worn(session, entity)`)
 and keeps its map-keyed questions with their meaning (the rows of that map), so the consumers move one by one: carried companions in the AI
 (MIG2, done: ARC-DEV-075, the AI host asks only by identity; `AreaCombatHost` gained `WornItems`, `NpcItems`, `HeldItemFields`, `NpcHolder` and
-`NpcItemFields` by identity, the last two over every held map), spell targets, hover attack, life bars and panels (MIG3), the body (MIG4) and one dialog host (MIG5).
+`NpcItemFields` by identity, the last two over every held map), then spell targets, hover attack, life bars, turn facts, sheet and levels, the event world and the item/armour questions
+(MIG3, done: ARC-DEV-076; below), the body (MIG4) and one dialog host (MIG5).
+
+### Consumers by identity (ARC-DEV-076, MIG3)
+
+| Consumer | Before | Now |
+| --- | --- | --- |
+| Hover, click and life bar of a drawn NPC | `Target(session, shownMap, key)`: only a row of the shown map | `Target(session, key)`: an object key names its map (`AreaObjectKey.RuntimeMap`), so a visiting companion's key resolves through its home map's rows (a map not held is read on demand once); `Target(session, entity)` by identity |
+| Life bars, follower portraits, transfer's no-fatigue test | the shown map's combat values, else the home map's (a fallback) | `AreaLife.Of` / `AreaLife.Unconscious(session, host, entity)`: no fallback |
+| Turn-based facts (`AreaCombatantFacts`) | `HomeMap(entity) ?? shown map` | `Build(entity)` and `Fields(entity)` |
+| Sheet, levels, scheme and crafter of a follower | `HomeMap(entity)` then `Fields(home, entity)` | `Fields(entity)` |
+| Event world (`AreaEventWorld.CritterFacts`, `ObjectExists`, the restock wielder) | the shown map's rows, then `HomeMap` | `IAreaEventObjects.Facts(entity)`, `HasObject(entity)`, `Critter(entity)`: the interface has no home-map question |
+| Spell targets (`AreaSpellCastMap`) | rows of the shown map only; a visiting companion was no target, no party member, no critter | the viewer gives the companions carried here (`visitors`): they are found by `IdOf`, `Object`, `ObjectsAt`, `ObjectsInSquare`, `Party` and `Critter` while the group places them on a cell here; their combat values, worn items and acid resistances come from the resolver (`Build(session, entity)`, `Worn(session, entity)`); item spells from `NpcItemSpells(session, item)` |
+| Hit sound's armour, the stunned/hit notices of the AI, the throw's struck-worn set | `(shown map, entity)` | `WornArmor(session, entity)`, `Build(session, entity)`, `WornItems(session, entity)` |
+
+`AreaCombatHost.Build(map, entity)` no longer throws for an entity the seed does not list as a holder (an item's row): it is `NotAnNpc`, since
+the identity questions reach any entity. The map-keyed questions stay for code that asks about one map's own rows (smokes, the shop, the loot
+windows).
 
 ## Not ready
 
@@ -55,6 +72,10 @@ and keeps its map-keyed questions with their meaning (the rows of that map), so 
   viewer gives the resolver the launch maps.
 - The read happens on the caller's thread (once per map, then cached, failures too); a frame that asks for a never-held home map pays for
   it. MIG9 (residency) owns moving reads off the frame.
-- The consumers listed above still ask by (shown map, entity); `ForVisitor`, `_travellers` and the home-map fallbacks go in MIG3–MIG5. The
+- `ForVisitor`, `_travellers` and the other visitor routing (the body, the dialog host) go in MIG4 and MIG5; the home-map fallbacks of the
+  consumers above went in MIG3 (the `HomeMap` question stays on `AreaCombatHost` for the diagnostics). The hero's attack never targets a
+  companion (a visiting one included: `IsAreaCompanion`); the attack cursor on a visiting companion in combat mode is now the same "no
+  action" as on a home companion, not the talk cursor. The existing boundaries of a visiting companion (no blood pool at its death, no seed items in the shown map's
+  inventory window) stay until MIG4/MIG5. The
   `Stranger` skip went in MIG2 but for one case: a companion with no record (a home on the main map's window) is kept out of the AI rules by
   `AreaAiHost.Unresolved`, until MIG9 reads such a window on demand.

@@ -31,6 +31,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<AreaObjectKey, bool> _gone;
     private readonly Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>> _placed;
     private readonly Func<string, bool> _held;
+    private readonly Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? _visitors;
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
     // The rows by their world cell, and each row's stored fields read once.
     private readonly Dictionary<(long X, long Y), List<string>> _cells = [];
@@ -51,10 +52,16 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// null while on another map), asked at each query (none when null).</param>
     /// <param name="held">ARC-UI-016: whether the hero holds the item a row's id names now (taken from the map, listed or worn); such a
     /// row is no map object, so the cast host's item lookup answers for it as an item in the hero's inventory (none when null).</param>
+    /// <param name="visitors">ARC-DEV-076 (MIG3): the NPCs standing on this map whose rows belong to another map (the companions carried
+    /// from their home map), each with its entity and its row, asked at each query. They are targets, casters' party and critters like
+    /// the map's own NPCs, found by identity through the combat host's resolver; they stand where <paramref name="placed"/> says (none:
+    /// not on the map), never on their home-map cell (none when null).</param>
     public AreaSpellCastMap(GameSessionOwner session, int runtimeMap, AreaStepSnapshot steps, IEnumerable<AreaObjectRecord> rows, AreaCombatHost combat,
         Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
-        Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null)
+        Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null,
+        Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null)
     {
+        _visitors = visitors;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _map = runtimeMap;
         _steps = steps ?? throw new ArgumentNullException(nameof(steps));
@@ -86,12 +93,34 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return _combat.Entity(_map, row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
     }
 
-    /// <summary>ARC-MAGIC-021: the cast's id of a row of this map's cell index by its key, or null (a carried item, a row of another
-    /// map such as a visiting companion's).</summary>
-    public string? IdOf(AreaObjectKey key) => _keys.GetValueOrDefault(key);
+    // ARC-DEV-076 (MIG3): the companions carried here from another map join the rows by their entity (never the cell index: their row's
+    // cell is on their home map; the placed rows say where they stand).
+    private void SyncVisitors()
+    {
+        if (_visitors is null) return;
+        foreach (var (entity, row) in _visitors())
+        {
+            if (_rows.ContainsKey(entity)) continue;
+            _rows[entity] = row;
+            _keys[row.Key] = entity;
+            _npcs.Add(entity);
+        }
+    }
+
+    /// <summary>ARC-MAGIC-021: the cast's id of a row by its key, or null (a carried item). ARC-DEV-076 (MIG3): a visiting companion's
+    /// row, another map's, is found too (by its entity).</summary>
+    public string? IdOf(AreaObjectKey key)
+    {
+        SyncVisitors();
+        return _keys.GetValueOrDefault(key);
+    }
 
     /// <summary>ARC-MAGIC-015: the map row behind a cast's object id, or null (the hero, or no such row).</summary>
-    public AreaObjectRecord? Row(string id) => _rows.GetValueOrDefault(id ?? throw new ArgumentNullException(nameof(id)));
+    public AreaObjectRecord? Row(string id)
+    {
+        SyncVisitors();
+        return _rows.GetValueOrDefault(id ?? throw new ArgumentNullException(nameof(id)));
+    }
 
     /// <summary>The map location of a cell.</summary>
     public static SpellLocation Location(CellCoord cell) => new(checked((uint)cell.X), checked((uint)cell.Y));
@@ -102,6 +131,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(id);
         if (id == SessionSpellCaster.Hero) return HeroObject();
+        SyncVisitors();
         // ARC-UI-031: a carried item (object flag 0x1000) is no map object either: the cast host's item lookup places it at its holder.
         return !_held(id) && _rows.TryGetValue(id, out var row) && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0
             && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
@@ -115,6 +145,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         var found = new List<SpellTargetObject>();
         if (radius < 0) return found;
+        SyncVisitors();
         if ((typeMask & (1 << PcType)) != 0 && HeroObject() is { } hero
             && Math.Max(Math.Abs((long)hero.Location.X - centre.X), Math.Abs((long)hero.Location.Y - centre.Y)) <= radius) found.Add(hero);
         var placed = _placed();
@@ -128,6 +159,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask)
     {
         var found = new List<SpellTargetObject>();
+        SyncVisitors();
         if ((typeMask & (1 << PcType)) != 0 && HeroObject() is { } hero && hero.Location == tile) found.Add(hero);
         var placed = _placed();
         Add(found, tile.X, tile.Y, typeMask, placed);
@@ -177,6 +209,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(source);
         if (source.Id != SessionSpellCaster.Hero) return [];
+        SyncVisitors();
         return _npcs.Where(id => _session.QueryCompanion(id).LedByPc).Select(Object).OfType<SpellTargetObject>().ToArray();
     }
 
@@ -197,10 +230,12 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public SpellCastCritter? Critter(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        SyncVisitors();
         if (entity == SessionSpellCaster.Hero || !_rows.TryGetValue(entity, out var row) || row.Type != NpcType) return null;
         // ARC-MAGIC-021: a companion on another map is not on this one.
         if (Cell(row, _placed()) is null) return null;
-        if (_combat.Build(_session, _map, entity).Combat is not { } combat || Fields(entity, row) is not { } fields) return null;
+        // ARC-DEV-076 (MIG3): by identity (a carried companion's record is its home map's).
+        if (_combat.Build(_session, entity).Combat is not { } combat || Fields(entity, row) is not { } fields) return null;
         var resistances = fields.Object.Resistances;
         return new(combat, resistances.Count > 4 ? resistances[4] : 0, unchecked((int)fields.Object.Flags), unchecked((int)fields.Object.SpellFlags),
             unchecked((int)(fields.Critter?.Flags ?? 0)), unchecked((int)(fields.Critter?.Flags2 ?? 0)))
@@ -216,12 +251,14 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(entity);
         // The hero's kit items carry no stored fields here (their wear facts are the viewer's), so the hero answers none while it
-        // wears any; an NPC's items answer their stored acid resistance.
-        var worn = entity == SessionSpellCaster.Hero ? AreaCombatHost.HeroWorn(_session, null) : _combat.WornItems(_session, _map, entity);
-        if (worn is null) return [];
-        return worn.OrderBy(p => (int)p.Key).Select(p => new SpellAcidItem(p.Value.Entity, (int)p.Key, false,
-            _combat.Fields(_map, p.Value.Entity) is { } fields && fields.Object.Resistances.Count > 0 ? Math.Clamp(fields.Object.Resistances[0], 0, 95) : 0))
-            .ToArray();
+        // wears any; an NPC's items answer their stored acid resistance (ARC-DEV-076, MIG3: by identity, from the worn items' own fields,
+        // so a carried companion's items answer as on its home map).
+        if (entity == SessionSpellCaster.Hero)
+            return AreaCombatHost.HeroWorn(_session, null) is { } heroWorn
+                ? heroWorn.OrderBy(p => (int)p.Key).Select(p => new SpellAcidItem(p.Value.Entity, (int)p.Key, false, 0)).ToArray() : [];
+        if (_combat.Worn(_session, entity) is not { } worn) return [];
+        return worn.OrderBy(item => (int)item.Slot).Select(item => new SpellAcidItem(item.Entity, (int)item.Slot, false,
+            item.Fields.Object.Resistances.Count > 0 ? Math.Clamp(item.Fields.Object.Resistances[0], 0, 95) : 0)).ToArray();
     }
 
     public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;

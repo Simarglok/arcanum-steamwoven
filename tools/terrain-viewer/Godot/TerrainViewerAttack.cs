@@ -119,7 +119,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The NPC under the screen point while the hero is in combat mode (ARC-UI-005 pick), or null.</summary>
     private AreaCombatTarget? CombatTargetAt(Vector2 screen) =>
-        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key ? _combatHost!.Target(_areaSession!, CurrentAreaMap, key) : null;
+        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key ? _combatHost!.Target(_areaSession!, key) : null;
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
     /// (an attack, a refused one, or a corpse clicked without Alt, which does nothing in the original).</summary>
@@ -694,7 +694,7 @@ public partial class TerrainViewerApp
             // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
             LineOfFire = line,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability),
-            TargetWorn = _combatHost!.WornItems(owner, CurrentAreaMap, struck.Entity),
+            TargetWorn = _combatHost!.WornItems(owner, struck.Entity),
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (ARC-WORLD-092: where the AI walked it).
             TargetCell = struck.Row.WorldX is not null && struck.Row.WorldY is not null && LiveWorldCell(struck.Row) is var (x, y)
                 ? new(checked((int)x), checked((int)y)) : null,
@@ -766,9 +766,9 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-047 missed level steps applied entity={applied.Record!.Entity} level={applied.Record.Sheet.Level}");
     }
 
-    // An NPC's loaded sheet and effects from the map whose objects hold it, or null when no covered map does.
+    // An NPC's loaded sheet and effects by identity (ARC-DEV-076, MIG3: the resolver's record, wherever it stands), or null without a record.
     private (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)? AreaFollowerSheet(string entity) =>
-        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+        _combatHost is { } host && _areaEffectRules is { } effects && host.Fields(entity) is { } fields
             ? AreaAdvancement.Npc(entity, fields, effects) : null;
 
     // Where a waiting follower stands: dead by the session (its life record or any map's seed, wherever it waits); among the loaded
@@ -785,7 +785,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-SCRIPT-016: an NPC's advancement as its home map stores it, for a script's scheme change; null without the combat
     /// host or the effect rules (no <c>--hero</c>), or for an object that gives no admissible NPC sheet.</summary>
     private SessionNpcAdvancement? AreaNpcAdvancement(string entity) =>
-        _combatHost is { } host && _areaEffectRules is { } effects && host.HomeMap(entity) is { } home && host.Fields(home, entity) is { } fields
+        _combatHost is { } host && _areaEffectRules is { } effects && host.Fields(entity) is { } fields
             ? AreaAdvancement.Npc(entity, fields, effects)?.Loaded : null;
 
     /// <summary>Stops the attack goal (a new click, the stick, a dialog, the map or the hero's state); <paramref name="why"/>
