@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092) of MIG7** (2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092) and MIG7b (ARC-DEV-093) of MIG7** (2026-11-04). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -173,6 +173,26 @@ not one) and its property is one of `obj.off`, `obj.destroyed`, `npc.cell`, `npc
 - **Not done here.** The viewer's consumers still read through `QueryMapChange` with the map they always used (the home map); moving them to `QueryObjectState` waits for the slices that change
   what they read. `QueryObject` does not carry the fields (the directory's entry shape stays that of MIG6). Statics, NPC positions, links and the script attachments are MIG7b, MIG7c, MIG7d and MIG8.
   GR5 stays open for the static class.
+
+## MIG7b: what is built
+
+The static objects of a map, the doors, containers, traps and scenery that a sector file lists without an id of their own, carry the positional entity `sector:S:I` (the sector and the object's ordinal in it). Two maps can hold the
+same sector coordinates and ordinals, so the entity alone does not name one object; **the identity of a static object is the map and the entity together**, and a static never leaves its map. MIG7a left their changes
+under their map on purpose; MIG7b keeps them in the same store as the fields of mobile objects, by that map-qualified identity.
+
+- **Vocabulary.** `ObjectStateVocabulary` tells the two classes apart: a mobile object (`oid:`) has the 14 fields of MIG7a and one record per entity and property wherever it stands; a static object (`sector:`) has
+  `obj.off`, `obj.destroyed`, `object.damage`, `object.condition`, `lock.flags`, `lock.frame`, `lock.kind` and `trap.state` (`StaticProperties`: a static is no NPC, item or follower), and one record per **map**, entity and property.
+  A static's record is written, read and removed on the map the caller names and never moves (a write on another map is another object's record), so `SetMapChange`'s move rule and the move-aware budget walks apply to the mobile fields only.
+  Every other change of a static, the script attachments `use.*` and the sector-scoped `tile.N.*` keys, stays per map (MIG8 for the attachments).
+- **Reads and writes keep their names.** `QueryMapChange`, `QueryMapChanges`, `SetMapChange`, `ClearMapChange` and `ApplyChanges` answer as before for every caller (the viewer's use scripts, traps, locks and object attacks read and write
+  a static through its map and `sector:S:I`); the budgets count each static record once against its own map and the session. `QueryObjectState(map, entity)` is the new read by the map-qualified identity;
+  `QueryObjectState(entity)` of a `sector:` entity answers the records of every map that holds one (each names its map), and `QueryEntityChanges` lists them in map order.
+- **Snapshot (schema 63).** The rows of `objects.state` are sorted by entity, property, then map, so a static's records on different maps are distinct rows (a repeated map, entity and property is `NotCanonical`); a restore refuses a static
+  field left in the maps section (`InvalidSnapshot`), a `sector:` row whose property is not a static field (`InvalidChangeKey`), a second record of one map, entity and property (`InvalidSnapshot`) and an over-budget load (`BudgetExceeded`).
+  The step from 62 moves every such change out of the maps with the map it was under, merges it into the rows already there in canonical order, and drops a map left empty; a second record of one map, entity and property is not moved and the
+  restore refuses it. The 61 to 62 step now reads a frozen copy of the schema 62 vocabulary, so it still moves mobile objects only.
+- **Not done here.** The viewer's consumers still read through `QueryMapChange` with the map they always used (the static's own map, which now is also its identity); NPC positions (MIG7c), links as `ObjectId` fields and the GQ7 B switch (MIG7d)
+  and the script attachments (MIG8) are other slices. GR5 stays open for NPC positions and the attachments.
 
 ## Not ready
 

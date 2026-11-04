@@ -8,18 +8,28 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":62,\"world\"";
+    private const string Current = "\"schemaVersion\":63,\"world\"";
+    private const string Current62 = "\"schemaVersion\":62,\"world\"";
     private const string Current61 = "\"schemaVersion\":61,\"world\"";
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
+
+    // MIG7b (ARC-DEV-093): the schema 62 text of a schema 63 one with no static object field: the layout is the same (the state rows of schema 62 are the
+    // mobile objects', and a text with no object field is the same text), so the inverse is the schema number alone.
+    internal static string Schema62(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return text.Replace(Current, Current62);
+    }
 
     // MIG7a (ARC-DEV-092): the schema 61 text of a schema 62 one with no object field: the same text without `objects.state` (a hand-made
     // inverse of the upgrade step, so the step is checked against the older layout and not against itself).
     internal static string Schema61(string text)
     {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ObjectsSection);
-        return text.Replace(Current, Current61).Replace(ObjectsSection, ObjectsSection61);
+        var older = Schema62(text);
+        StringAssert.Contains(older, Current62);
+        StringAssert.Contains(older, ObjectsSection);
+        return older.Replace(Current62, Current61).Replace(ObjectsSection, ObjectsSection61);
     }
 
     // MIG6d-3 (ARC-DEV-091): the schema 60 text of a schema 61 one with no junk pile and no pool: the junk piles, the pools and the two marks
@@ -275,6 +285,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":63,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":64,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

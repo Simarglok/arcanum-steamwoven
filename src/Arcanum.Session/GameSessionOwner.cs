@@ -344,7 +344,7 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(property);
         var key = MapChangeKey.ForEntity(entity, property);
-        if (ObjectStateVocabulary.Routed(key)) return _maps.RecordsOf(entity, property);
+        if (ObjectStateVocabulary.Mobile(key)) return _maps.RecordsOf(entity, property);
         return Array.AsReadOnly(_maps.Maps().Select(map => (Map: map, Value: _maps.Get(map, key))).Where(pair => pair.Value is not null)
             .Select(pair => (pair.Map, pair.Value!.Value)).ToArray());
     }
@@ -352,13 +352,28 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// ARC-DEV-092 (MIG7a, TM2, GR5): the recorded fields of one mobile map-data object, by property, wherever the object stands: the state of
     /// its directory entry (the property names of <see cref="ObjectStateVocabulary"/>; the map of a field is the map its record names). A read only;
-    /// empty for an object with no recorded change and for an entity that is not a mobile map object.
+    /// empty for an object with no recorded change and for an entity that is neither a mobile nor a static map object. A static entity
+    /// (<c>sector:S:I</c>) is not one object across maps: this answers the records of every map that holds one, each naming its map; the object
+    /// of one map is <see cref="QueryObjectState(SessionMapId, string)"/>.
     /// </summary>
     public IReadOnlyList<SessionObjectField> QueryObjectState(string entity)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
         return Array.AsReadOnly(_maps.FieldsOf(entity));
+    }
+
+    /// <summary>
+    /// ARC-DEV-093 (MIG7b, TM2, GR5): the recorded fields of the object an entity names on a map, by property: the map-qualified identity. A static
+    /// object (<c>sector:S:I</c>, whose sector and ordinal exist on other maps too) answers the fields recorded on this map only; a mobile object
+    /// has one identity on every map, so it answers as <see cref="QueryObjectState(string)"/> does. A read only; empty for an object with no
+    /// recorded change.
+    /// </summary>
+    public IReadOnlyList<SessionObjectField> QueryObjectState(SessionMapId map, string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return Array.AsReadOnly(_maps.FieldsOf(map, entity));
     }
 
     public GameSessionMutationResult SetMapChange(GameSessionVersion expected, SessionMapId map, MapChangeKey key, long value)
@@ -398,7 +413,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
-    // The changes that differ from the recorded values. A routed key (MIG7a) has one record, so its edits are judged in order against the record
+    // The changes that differ from the recorded values. A mobile object's field (MIG7a) has one record, so its edits are judged in order against the record
     // the earlier edits of the step leave (a write to another map moves it, a removal on a map it is not on is nothing), the way the apply loop and
     // ChangesFit walk them; any other key is judged against the state before the step (each is listed once).
     private MapChangeEdit[] EffectiveChanges(IReadOnlyList<MapChangeEdit> changes)
@@ -407,7 +422,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var effective = new List<MapChangeEdit>();
         foreach (var change in changes)
         {
-            if (!ObjectStateVocabulary.Routed(change.Key))
+            if (!ObjectStateVocabulary.Mobile(change.Key))
             {
                 if (_maps.Get(change.Map, change.Key) != change.Value) effective.Add(change);
                 continue;
@@ -438,12 +453,12 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         var counts = _maps.Counts();
         var total = _maps.Total;
-        // A routed key has one record on one map (MIG7a): a write to another map moves it, a removal on a map it is not on is nothing. The
+        // A mobile object's field has one record on one map (MIG7a): a write to another map moves it, a removal on a map it is not on is nothing. The
         // edits are walked in order against that record.
         var records = new Dictionary<MapChangeKey, SessionMapId?>();
         foreach (var change in effective)
         {
-            var routed = ObjectStateVocabulary.Routed(change.Key);
+            var routed = ObjectStateVocabulary.Mobile(change.Key);
             SessionMapId? held = routed ? (records.TryGetValue(change.Key, out var seen) ? seen : _maps.RecordMap(change.Key)) : _maps.Get(change.Map, change.Key) is null ? null : change.Map;
             if (change.Value is null)
             {
@@ -1521,8 +1536,9 @@ public sealed partial class GameSessionOwner : IDisposable
         _flags.Dispose();
     }
 
-    // ARC-DEV-092 (MIG7a, schema 62): the maps section holds the per-map changes only; the fields of mobile map-data objects are the
-    // objects section's (an older save's step moved them), so a routed key in the maps section is a damaged save. Both count against one budget.
+    // ARC-DEV-092 (MIG7a, schema 62), ARC-DEV-093 (MIG7b, schema 63): the maps section holds the per-map changes only; the fields of mobile and
+    // static map-data objects are the objects section's (an older save's step moved them), so an object field in the maps section is a damaged
+    // save. Both count against one budget.
     private static GameSessionFailure ImportMaps(IReadOnlyList<SessionMapState> saved, IReadOnlyList<SessionObjectField> fields,
         GameSessionLimits limits, out SessionMapChanges maps)
     {
@@ -1547,7 +1563,8 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionValidation.Map(field.Map)) return GameSessionFailure.InvalidMap;
             if (!SessionValidation.Entity(field.Entity) || !ObjectStateVocabulary.Routed(field.Entity, field.Property)) return GameSessionFailure.InvalidChangeKey;
             var key = MapChangeKey.ForEntity(field.Entity, field.Property);
-            if (maps.RecordMap(key) is not null) return GameSessionFailure.InvalidSnapshot;
+            // A mobile object has one record whatever map it names; a static object's record is one per map.
+            if (ObjectStateVocabulary.Static(key) ? maps.Get(field.Map, key) is not null : maps.RecordMap(key) is not null) return GameSessionFailure.InvalidSnapshot;
             if (maps.CountOf(field.Map) >= limits.MaxChangesPerMap || maps.Total >= limits.MaxTotalChanges ||
                 (maps.CountOf(field.Map) == 0 && maps.MapCount >= limits.MaxMaps)) return GameSessionFailure.BudgetExceeded;
             maps.Set(field.Map, key, field.Value);

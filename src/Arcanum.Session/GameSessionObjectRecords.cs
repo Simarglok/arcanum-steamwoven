@@ -32,9 +32,11 @@ public sealed class SessionObjectRecords
     /// <summary>ARC-DEV-084 (MIG6, TM1): the highest blood pool number the session ever gave (0 when none), so a new pool never takes the
     /// number of one that decayed.</summary>
     public int LastPoolNumber { get; }
-    /// <summary>ARC-DEV-092 (MIG7a, TM2, GR5, schema 62): the recorded fields of mobile map-data objects, by entity then property (ordinal): the
-    /// state of the directory entries, kept by the object's identity and not under the map it stands on. Schema 61 saved these as entity changes in
-    /// <see cref="GameSessionSnapshot.Maps"/>; the 61 to 62 upgrade step moves them.</summary>
+    /// <summary>ARC-DEV-092 (MIG7a, TM2, GR5, schema 62), ARC-DEV-093 (MIG7b, schema 63): the recorded fields of map-data objects, by entity, property
+    /// (ordinal) and map: the state of the directory entries. A mobile object (<c>oid:</c>) has one record per property, kept by its identity and not
+    /// under the map it stands on (schema 61 saved these as entity changes in <see cref="GameSessionSnapshot.Maps"/>; the 61 to 62 upgrade step
+    /// moves them); a static object (<c>sector:S:I</c>) has one record per map, entity and property, because its identity is the map and the
+    /// entity together (schema 62 saved these in the maps too; the 62 to 63 step moves them).</summary>
     public IReadOnlyList<SessionObjectField> State { get; }
 
     internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state);
