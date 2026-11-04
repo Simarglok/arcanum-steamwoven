@@ -25,7 +25,8 @@ percentage of the game).
   report (Ctrl+B) and the diagnostic palette.
 - **Headless rules** (Godot-free `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting`, `Arcanum.Session`): the
   original data formats, the game session and its save snapshot, character rules, combat, magic, technology, skills,
-  NPC reaction and AI, and the SCR script dispatcher.
+  NPC reaction and AI, and the SCR script dispatcher. `Arcanum.Executable` interprets the player's own `Arcanum.exe`
+  (an integer x86 subset), the base of building the prototypes a fresh installation lacks.
 
 Not there yet, among others: much of the NPC AI and the full SCR script runtime, traps that are spotted and fire, resting
 (S) and random encounters, the original look of several windows (character sheet, logbook, world map, save and load), and
