@@ -970,6 +970,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
     /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
     /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
+    /// ARC-DEV-087 (MIG6e): the NPC may stand on another attached map's seed (a companion carried here); the item then keeps that map as its origin
+    /// (<see cref="NpcHolderSeed"/>), and an item or holder of that map with a script to run is refused (the script host answers for the shown map).
     /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move.
     /// </summary>
     public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
@@ -981,14 +983,35 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(npc) || name < 1) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-        if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
-        var map = _actor.Map;
+        // ARC-DEV-087 (MIG6e): the holder is the NPC's wherever it stands: a companion carried here lists on its home map's seed.
+        if (!NpcHolderSeed(npc, out var map, out var seed, out var row)) return RejectItem(UnseededHolder());
         if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
-        return Take(seed, found, npc, insertCheck, scripts);
+        return Take(seed, found, npc, insertCheck, scripts, map);
     }
+
+    /// <summary>
+    /// ARC-DEV-087 (MIG6e): the attached seed that lists <paramref name="npc"/> as an NPC holder: the actor's map first, else the other
+    /// attached maps in runtime-map order (the home map of a companion carried here, whose seed the host attached). An object lies on one
+    /// map, so at most one other seed lists it. The item's origin on a move to the hero is this map, not the actor's.
+    /// </summary>
+    private bool NpcHolderSeed(string npc, out SessionMapId map, out InventoryDomain.Seed seed, out SessionSeedHolder row)
+    {
+        map = _actor.Map;
+        if (_inventory.Seeds.TryGetValue(map, out seed!) && seed.Holders.TryGetValue(npc, out row!) && row.Kind == SessionHolderKind.Npc) return true;
+        foreach (var (other, attached) in _inventory.Seeds.OrderBy(pair => pair.Key.RuntimeMap))
+        {
+            if (other == _actor.Map || !attached.Holders.TryGetValue(npc, out row!) || row.Kind != SessionHolderKind.Npc) continue;
+            (map, seed) = (other, attached);
+            return true;
+        }
+        (seed, row) = (null!, null!);
+        return false;
+    }
+
+    // The refusal of NpcHolderSeed: no seed on the actor's map and no other that lists the holder is an unavailable inventory.
+    private GameSessionFailure UnseededHolder() => _inventory.Seeds.ContainsKey(_actor.Map) ? GameSessionFailure.UnknownHolder : GameSessionFailure.InventoryUnavailable;
 
     /// <summary>The generator's seed and position (draws made so far).</summary>
     public SessionRandomState QueryRandom() { ThrowIfDisposed(); return new(_random.Seed, _random.Draws); }
@@ -1681,8 +1704,10 @@ public sealed partial class GameSessionOwner : IDisposable
     // check, the removal's remove-item script (0x467860, the holder as triggerer) and the insert-item script.
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts)
+        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null)
     {
+        // ARC-DEV-087 (MIG6e): the map whose seed lists the item; it is the actor's unless the holder is another map's NPC (a carried companion).
+        var origin = seedMap ?? _actor.Map;
         var parented = holder is not null;
         var facts = item.Facts;
         if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
@@ -1690,6 +1715,11 @@ public sealed partial class GameSessionOwner : IDisposable
         // The item's own points on this path; the session runs them only through a host.
         var own = parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get;
         if (scripts is null && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem))) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-DEV-087 (MIG6e): the script host answers for the shown map's rows (every script object of a run stands on it), so the remove-item,
+        // get and insert-item scripts of an item whose row is another map's seed row are not run: such a move is refused, never moved with a
+        // script skipped. (The gate of a move from a holder is the PC's transfer script, not the holder's, so a holder's own scripts do not matter.)
+        if (origin != _actor.Map && seed.Items.ContainsKey(item.Entity) && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem)))
+            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-066: ammunition merges into the hero's stack of the same prototype (its units added, the item deleted, 0x466640),
         // else enters the list as a new stack. The sum must fit 32 bits (the original wraps: crash class, refused in both settings).
         SessionAmmoRecord? ammo = null, into = null;
@@ -1710,7 +1740,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
         // ARC-WORLD-055: a made item comes from the NPC that holds it (and is in Taken while it does), any other from a seed.
         var npc = _inventory.NpcOf(item.Entity);
-        bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(map, out var current) ||
+        bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(origin, out var current) ||
             !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
 
         var runs = scripts is null ? null : new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item.Entity] = facts.Complexity });
@@ -1765,7 +1795,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         else
         {
-            _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
+            _inventory.Add(new SessionPcItem(item.Entity, origin, facts.Kind));
             // ARC-WORLD-085: the item keeps its seed's weight facts wherever it goes.
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
         }

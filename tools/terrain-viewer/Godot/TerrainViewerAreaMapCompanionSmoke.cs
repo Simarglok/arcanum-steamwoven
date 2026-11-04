@@ -1,3 +1,4 @@
+using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
@@ -122,7 +123,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-037 native-smoke carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap,
             At = $"{cell.X},{cell.Y}", Drawn = drawn }));
-        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); ReadAreaMapVisitorBody(companion); }
+        if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); GiveFromAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); ReadAreaMapVisitorBody(companion); }
     }
 
     /// <summary>
@@ -252,6 +253,51 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-048 native-smoke visitor-talk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = CurrentAreaMap, Home = companion.Template.Home.RuntimeMap, Script = companion.Speaker.ScriptId, Status = started?.ToString(), Detail = detail,
             At = $"{cell.X},{cell.Y}" }));
+    }
+
+    /// <summary>
+    /// ARC-DEV-087 (MIG6e): the negative IN of a dialog takes an item from the carried companion's list, which is on its home map's seed (the
+    /// dialog port attaches the seed a read on demand left out): the first of its items the session moves enters the hero's list with the home
+    /// map as its origin, and the hero gives it back to the companion. A companion with no movable item, or with no session hero, is NONE.
+    /// </summary>
+    private void GiveFromAreaMapVisitor(AreaCompanion companion)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-DEV-087 visitor-give smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_VISITOR_GIVE_FAILED");
+        }
+        var home = companion.Template.Home;
+        if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is not { } inventory)
+        { GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} (no hero or inventory host)"); return; }
+        // The candidates are the names of the companion's items in its home map's seed rows; the session may hold no seed of that map yet (the
+        // dialog port attaches it, which is what this step observes).
+        var homeSeed = inventory.Resolver.Held(home.RuntimeMap)?.Seed;
+        var seedHolder = homeSeed?.Holders.FirstOrDefault(h => h.Entity == companion.Entity);
+        if (homeSeed is null || seedHolder is null)
+        { GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} home={home.RuntimeMap} (the home map's seed lists no such holder)"); return; }
+        var names = seedHolder.Items.Select(entity => homeSeed.Items.First(item => item.Entity == entity).Facts.Kind.Name).ToArray();
+        var (pc, npc) = (AreaConversationState.PcParticipant, new DialogParticipantId(2));
+        var port = inventory.DialogPort(session, id => id == npc ? companion.Entity : null);
+        foreach (var name in names)
+        {
+            var before = session.QueryPcInventory().Count;
+            var applied = port.Execute(new GiveItemCommand(npc, pc, name));
+            var result = port.LastResult;
+            if (result is not { Disposition: GameSessionDisposition.Changed, Item: { } item }) continue;
+            Require(applied == DialogCommandResult.Applied && session.QueryPcInventory().Count == before + 1, "the item entered the hero's list");
+            var taken = session.QueryPcInventory().Single(entry => entry.Entity == item);
+            Require(taken.Origin == new SessionMapId(home.RuntimeMap), $"the item keeps its home map as origin: {taken.Origin.RuntimeMap}");
+            Require(session.QueryMapInventory(new(home.RuntimeMap))!.Holders.Single(h => h.Entity == companion.Entity).Items.All(entry => entry.Entity != item),
+                "the companion's list no longer holds it");
+            var back = session.GiveItemToNpc(session.Version, companion.Entity, item, inventory.InsertCheck);
+            Require(back.Disposition == GameSessionDisposition.Changed, $"the hero gave it back: {back.Disposition} {back.Failure}");
+            GD.Print("ARC-DEV-087 native-smoke visitor-give PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                Map = CurrentAreaMap, Home = home.RuntimeMap, Candidates = names.Length, Name = name }));
+            return;
+        }
+        GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} home={home.RuntimeMap} (none of its {names.Length} items moves: {port.LastResult?.Failure})");
     }
 
     /// <summary>

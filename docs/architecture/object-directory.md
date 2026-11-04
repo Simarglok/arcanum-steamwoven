@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085) and MIG6c (ARC-DEV-086) implemented** (2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086) and MIG6e (ARC-DEV-087) implemented** (2026-11-04). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -17,7 +17,7 @@ are woven through about thirty session files, so MIG6 is cut into slices that ea
 | **MIG6b** (ARC-DEV-085) | The seed refusal of the town window (B02, `AreaInventory.Build` `UnlistedInventoryItem`): an item flagged as held that no holder lists no longer refuses the seed; it is a detached item, out of the items ([view](../world/area-inventory-view.md#detached-items-arc-dev-085-mig6b)). | **Done** |
 | **MIG6c** (ARC-DEV-086) | One create and one destroy path inside `Arcanum.Session`: the creators of `made:n` items, junk piles and pools of blood call `CreateMadeItem`, `CreateJunkPile` and `CreateBloodPool`; every deletion calls `DestroyObject`, which also dissolves a pile an item left (as the decay step did alone before). | **Done** |
 | MIG6d | The stores become entries: the directory holds the entry (origin, location) and the stores keep only what they alone know (kind facts, ammunition units, pile slots); snapshot sections move with a schema step each. | Planned |
-| MIG6e | Cross-map holders: an item moves between a holder of another map (read through the [record resolver](../world/record-resolver.md)) and the hero's list; the negative `IN` of a carried companion whose holder is on its home map stops being `UnknownHolder` (the [MIG5 limit](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)). | Planned |
+| **MIG6e** (ARC-DEV-087) | Cross-map holders: an item moves from a holder of another attached map (a carried companion, whose seed is its home map's) to the hero's list; the negative `IN` of a companion carried here stops being `UnknownHolder` (the [MIG5 limit](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)). | **Done** |
 
 ## MIG6a: what is built
 
@@ -35,7 +35,7 @@ sets a mark below a number a saved pile or pool holds. Schema 60; the step from 
 the deleted items, the hero's lists and worn slots, the items the hero placed or scripts created, the NPC and container lists, junk piles, pools and the attached seeds.
 `QueryObjects(origin)` lists the objects of one origin the session made or moved, in entity order. Both are reads of the current state: no revision, no schema, no
 game data read (a map object of a map whose seed is not attached and that the session never moved is unknown, which is the
-limit MIG6b, MIG6d and MIG6e remove).
+limit MIG6b and MIG6d remove).
 
 Places: `Destroyed`, `HeroPack`, `HeroWorn`, `NpcList`, `ContainerList`, `Ground`, `JunkPile` (an item lying in a pile; the entry names the pile and its cell),
 `SeedHolder` (still in the list its map data names, neither taken nor dropped). A pool or a pile is itself `Ground`; a decayed pool is `Destroyed`.
@@ -48,7 +48,7 @@ items through its list and never lists a held item in a sector (RL3, RL10), so t
 `AreaInventory.Detached` and out of `Items`; `AreaInventoryMap.Detached` carries the entities and the seed builds (`Ready`, the viewer's detail names the count).
 Nothing is created for it: `QueryObject` of a detached entity answers null (a map object the session never moved and that no seed row names), which is the existing
 limit MIG6d removes. Only this window is known to hold such an item (the town window, sector 1409,1314; the Crash Site and cave seeds were already `Ready` without one). The rule is general, so another
-window or map with one builds too; where the parent is outside the window the item is only left out of the view, which MIG6e (cross-map holders) settles.
+window or map with one builds too; where the parent is outside the window the item is only left out of the view, which stays a limit: MIG6e (cross-map holders) moves an item out of an NPC's list on an attached map, it does not read a parent outside a window.
 
 ## MIG6c: what is built
 
@@ -74,13 +74,39 @@ item's last use, the restock's old stacks, a schematic and the merge of an ammun
 only the decay step dissolved). The shown-window state is read from the event world of the pass the destroy runs in (the decay); outside a pass the session knows none and the
 pile is checked at once, which dissolves a pile the original would keep while a container window is open (a limit: the host's window state is not session state; the `windowShowsContainer` argument is for hosts that know it and has no production caller yet). The original's "decay on" flag (0x5E87E4) of JP5 is not modelled.
 
+## MIG6e: what is built
+
+The cause of the MIG5 limit was the session's lookup, not a missing store: the negative `IN` (`GiveItemToPc`) and the steal (`TakeItemFromNpc`) looked for the NPC
+in the seed of the actor's map only, and the item entered the hero's list with the actor's map as its origin. A companion carried here is listed by the seed of its
+home map (attached to the session by the host: the given maps with the host, a map the resolver read on demand when first asked about), so it was unknown.
+
+- **Where the holder is.** `NpcHolderSeed(npc)` answers the attached seed that lists the NPC: the actor's map first, else the other attached maps in runtime-map order
+  (an object lies on one map, so at most one lists it). `GiveItemToPc` and `TakeItemFromNpc` move the item from that seed (its list, its dropped cells and its
+  `HolderOf` are that map's); the unchanged refusals are `InventoryUnavailable` (no seed on the actor's map and none that lists the NPC) and `UnknownHolder`.
+- **Origin.** `Take` keeps the seed's map, not the actor's: the hero's `SessionPcItem` origin is the map whose seed lists the item (`Taken`, the viewer's hidden
+  items and the attach check of a later seed read it), so a save and a re-attach of both maps agree. The stale check follows that seed: a new seed of the item's map
+  during the host's insert check refuses the move with no effect. No new state, no schema step (snapshot schema stays 60).
+- **Scripts.** The script host answers for the shown map's rows (every object of a run stands on that map), so an item that is a row of another map's seed and
+  carries a remove-item or insert-item script refuses the move (`ItemScriptUnsupported`) instead of moving it with a script skipped; no installed item is known to
+  carry one. A holder's own scripts do not matter: the gate of a move out of a holder is the PC's transfer script, which the host answers. With a host the PC's gate
+  still runs with the shown map as the item's map (harmless while the item guard holds).
+- **Host.** `SessionDialogInventoryPort` takes an optional `prepare(entity)` hook; `AreaInventoryHost.DialogPort` passes `AttachHolderMap`, which attaches the seed of the
+  map that lists the speaker when the resolver read it on demand and the session holds none (`AttachReadMap`, the rule `AreaCombatHost` already used for its holder
+  index). Only the dialog port attaches: the steal (`TakeItemFromNpc`) has no such hook in the viewer, so it moves from a read-on-demand home map only after something
+  else (the combat host's holder index) attached its seed. The other direction, the hero giving an item to a companion of another map (`GiveItemToNpc`), already knew every attached seed and keeps the item's
+  origin (`Given`); a companion's item the hero gave back is in its list again.
+- **Smoke.** The `transfer` stage's visitor talk is followed by `visitor-give` (`ARC-DEV-087 native-smoke visitor-give`): on the cave (map 79) the dialog port takes an item
+  from Virgil, whose home is the main map's window (map 1), the hero's list holds it with origin 1, and the hero gives it back. It needs a hero (`--hero human-male`);
+  without one it prints `NONE`. Observed on the original data: PASS (candidates 2, item name 2000).
+
 ## Not ready
 
 - With the town seed `Ready` the combat and inventory stages of the map smoke run in the town window for the first time (before, the refused seed left no combat host and they
   skipped silently). `cast`, `ai`, `turn-based`, `ai-cast`, `ai-follower`, `wreck` and `altar` fail there on fixtures written for the Crash Site (target not visible, no cell next to
   the NPC, the companion template), so the `town` step of the full chain stops at the first of them; `transfer` (follow, carry, visitors) passes. A follow-up task, ARC-DEV-089, adapts them (owner decision, 2026-11-04).
 - The stores are still per kind and the directory is derived from them on each query: a consumer that wants "where is X" can ask now, but nothing is moved
-  (MIG6d, MIG6e). Both paths are internal to the session; the public per-kind methods (`PlaceHeroItem`, `LeaveBloodPool`, `AddItemToNpc`, ...) keep their signatures and results.
+  (MIG6d). A holder whose map has no seed attached (a map the run never read, or one the session refused) is still unknown; the loot of a dead NPC and a container
+  of another map, and the barter with them, still look at the actor's map only (MIG6e moved the negative `IN` and the steal of an NPC list). Both paths are internal to the session; the public per-kind methods (`PlaceHeroItem`, `LeaveBloodPool`, `AddItemToNpc`, ...) keep their signatures and results.
 - The destroy script of point 2 (which may refuse), an NPC's leave of its leader, the drop of an invulnerable item of a destroyed holder and the spell runs that name the object
   are not part of `DestroyObject`: it destroys items, piles and pools only (TM4's NPC, projectile, summon and trap kinds have no store in the session yet). Created items and map items still use different stores, so GR4 and GR17 stay open.
 - An NPC's worn items (`NpcWorn`) and an item's slot inside a holder are not part of an entry; a given kit or taken item is `NpcList` with its

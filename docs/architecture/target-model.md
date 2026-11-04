@@ -124,7 +124,7 @@ the target elements its domain stands on.
 | MIG3 | Spell targets, hover attack, life bars, turn facts, sheet and levels through the resolver; home-map fallbacks removed | TM3 | MIG1 | V3 |
 | MIG4 | The companion's body from the resolver; `_travellers` and `AreaVisitors.Unbodied` go | TM3 | MIG1 | V4 |
 | MIG5 | One dialog host; `ForVisitor`, visitor routing and `refuseUncoveredInventory` go | TM3 | MIG1, MIG4 | V4b; **done: ARC-DEV-081** ([contract](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)) |
-| MIG6 | Object directory, one id space, one create and one destroy path; the per-kind stores become directory queries (concept first: K13) | TM1, TM2, TM4 | GQ1, MIG1 | — ; cut into MIG6a–MIG6e in the [concept](object-directory.md); **MIG6a done: ARC-DEV-084; MIG6b done: ARC-DEV-085; MIG6c done: ARC-DEV-086** |
+| MIG6 | Object directory, one id space, one create and one destroy path; the per-kind stores become directory queries (concept first: K13) | TM1, TM2, TM4 | GQ1, MIG1 | — ; cut into MIG6a–MIG6e in the [concept](object-directory.md); **MIG6a done: ARC-DEV-084; MIG6b done: ARC-DEV-085; MIG6c done: ARC-DEV-086; MIG6e done: ARC-DEV-087** |
 | MIG7 | Object state on the entry: entity-scoped map change keys and NPC positions move into the directory; statics' changes per sector | TM2, TM10 | MIG6 | — |
 | MIG8 | Script attachments on the object, inherited until first written; global and PC variables admitted | TM9 | MIG6 | — |
 | MIG9 | Residency: the whole open map alive, the sector model, fold, waypoint re-placement and heartbeat gating; the viewer window becomes presentation only (concept first: K1) | TM5 | GQ2, MIG7 | — |

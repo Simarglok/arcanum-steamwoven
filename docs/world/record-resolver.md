@@ -99,7 +99,7 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
   home-map fallbacks of the consumers above went in MIG3 (the `HomeMap` question stays on `AreaCombatHost` for the diagnostics). The hero's attack never
   targets a companion (a visiting one included: `IsAreaCompanion`); the attack cursor on a visiting companion in combat mode is the same "no action" as on a
   home companion, not the talk cursor. The existing boundaries of a visiting companion (no blood pool at its death, no seed items in the shown map's
-  inventory window) stay (the seed items wait for the object directory, MIG6).
+  inventory window) stay (the seed items wait for the object directory, MIG6d).
 
 ## One dialog host (ARC-DEV-081, MIG5)
 
@@ -123,11 +123,12 @@ visitor host cache (`_visitorHosts`, `_talkHost`, `VisitorHost`, `VisitorCallHos
   in the log (`ARC-DEV-081 companion refused`), and refused again silently until the host is rebound over another session.
 - **Quick load.** `Rebind` keeps the map's own speakers only; the companions standing here are admitted again over the new session when asked,
   their state read then (a damaged state refuses that companion, not the quick load).
-- **Negative `IN`.** The port is the shown map's (`SessionDialogInventoryPort` by entity); the host has no refusal rule of its own. The session
-  (`GameSessionOwner.GiveItemToPc`) looks for the speaker's holder in the seed of the hero's map only, so a companion whose holder is on the hero's
-  map (the main map's other window, the same map) gives its item, and one whose holder is on its home map, another than the hero's, is refused with
-  `UnknownHolder` (a rejected command): the same outcome as `refuseUncoveredInventory` gave, now the session's, not a host rule. A host with no inventory
-  records the item only, for every speaker. Moving an item out of another map's holder waits for the object directory (MIG6).
+- **Negative `IN`.** The port is the shown map's (`SessionDialogInventoryPort` by entity); the host has no refusal rule of its own. Since ARC-DEV-087
+  (MIG6e) the session (`GameSessionOwner.GiveItemToPc`) finds the speaker's holder in the attached seed that lists it, the hero's map first, then the others, and the
+  item enters the hero's list with that map as its origin: a companion carried here from its home map gives its item like one of the hero's own map
+  ([object directory](../architecture/object-directory.md#mig6e-what-is-built)). The port's `prepare` hook (`AreaInventoryHost.AttachHolderMap`) attaches the home
+  map's seed first when the resolver read it on demand and the session holds none. A speaker whose map has no attached seed (never read, or refused by the
+  session) is still refused with `UnknownHolder` (a rejected command). A host with no inventory records the item only, for every speaker.
 - **Smoke.** The `transfer` stage's visitor talk (`ARC-WORLD-048 native-smoke visitor-talk`) now runs through the one host and asserts the speaker is
   listed with its state on the home map.
 
@@ -135,7 +136,7 @@ visitor host cache (`_visitorHosts`, `_talkHost`, `VisitorHost`, `VisitorCallHos
 
 - A deferred call whose attachee is a companion that is not standing here is run by the shown host with that attachee's own map (the session role's), as
   any object that is not a speaker of the host.
-- A carried companion from another map cannot give an item by negative `IN` (see above); the plan's wish that `IN` finds the holder through the resolver needs
-  the session to move an item between a home map's holder and the hero's list, which is MIG6e ([object directory](../architecture/object-directory.md); MIG6a, ARC-DEV-084, gave only the locator).
+- A carried companion from another map gives an item by negative `IN` since MIG6e (ARC-DEV-087); an item with an insert-item or remove-item script
+  of another map's seed is refused (the script host answers for the shown map's rows), and a companion whose home map's seed is not attached is refused (see above).
 - The companion's dialog state is not on its object: a quick save of a companion carried here keeps it under its home map's entity keys, as before.
 - The admission order depends on who is asked first, so a speaker's index differs between runs; no state is keyed by it.

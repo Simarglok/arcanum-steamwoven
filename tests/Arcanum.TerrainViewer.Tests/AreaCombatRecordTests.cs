@@ -144,6 +144,37 @@ public sealed class AreaCombatRecordTests
     }
 
     [TestMethod]
+    public void The_negative_IN_of_a_companion_carried_from_a_map_this_run_never_loaded_takes_its_item_from_the_home_map()
+    {
+        // ARC-DEV-087 (MIG6e): the dialog port attaches the seed of the map that lists the speaker, which the resolver read on demand, and the
+        // session moves the item from that seed: it enters the hero's list with the home map as its origin.
+        var source = new Source(Home());
+        var inventory = new AreaInventoryHost([Shown()], records: source);
+        var session = Session(inventory);
+        var virgil = Entity(1, 0);
+        var (pc, npc) = (AreaConversationState.PcParticipant, new Arcanum.Scripting.Dialog.DialogParticipantId(2));
+        var port = inventory.DialogPort(session, id => id == npc ? virgil : null);
+        var give = new Arcanum.Scripting.Dialog.GiveItemCommand(npc, pc, Healing.Name);
+
+        // Nothing is read yet: no map lists him, the session knows no holder and the move is refused with the session's own failure.
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Rejected, port.Execute(give));
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, port.LastResult!.Value.Failure);
+        Assert.IsNull(inventory.AttachReadMap(session, 1), "a map nothing read has nothing to attach");
+        Assert.AreEqual(0, session.QueryPcInventory().Count);
+
+        // His home is read through the resolver (as the viewer's record questions do); the port then attaches that map's seed first.
+        Assert.AreEqual(RecordStatus.Found, inventory.Resolver.Resolve(virgil, 1).Status);
+        Assert.IsNull(session.QueryMapInventory(new(1)));
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied, port.Execute(give));
+        var taken = session.QueryPcInventory().Single();
+        Assert.AreEqual((Entity(1, 2), new SessionMapId(1)), (taken.Entity, taken.Origin));
+        Assert.AreEqual(0, session.QueryMapInventory(new(1))!.Holders.Single(holder => holder.Entity == virgil).Items.Count);
+        Assert.IsNull(inventory.AttachReadMap(session, 1), "an attached map is not attached again");
+        Assert.IsNull(inventory.AttachReadMap(session, 2), "a given map is attached with the host");
+        CollectionAssert.AreEqual(new[] { 1 }, source.Asked, "the home map was read once");
+    }
+
+    [TestMethod]
     public void Maps_the_run_left_behind_answer_first_and_the_item_questions_by_identity_follow_the_holder_to_its_home_map()
     {
         // ARC-DEV-075 (MIG2): the main map's window nothing reads on demand was left by a map change of this run; its rows still answer.
