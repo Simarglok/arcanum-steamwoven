@@ -65,8 +65,7 @@ public sealed partial class GameSessionOwner
         // The limit holds a patch at a fixed object; an item created next to a critter (which moves on) is not capped.
         if (owner == DropOwner.Object && CreatedRoom(map, near) == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (_inventory.Created >= _limits.MaxCreatedItems) return RejectItem(GameSessionFailure.BudgetExceeded);
-        var number = NextMadeNumber();
-        if (number > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
         CellCoord cell;
@@ -75,12 +74,9 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision) return RejectItem(GameSessionFailure.StaleVersion);
         if (!DropCellFits(cell)) return RejectItem(GameSessionFailure.InvalidItem);
-        var entity = SessionMadeItem.EntityOf((int)number);
         // ARC-WORLD-085: the new object has its prototype's weight; ARC-WORLD-083: and its complexity (field 0x60, MC1).
         var weight = CreatedWeight(kind.Prototype);
-        _inventory.Placed.Add(new(entity, kind, SessionPlacedSource.Created, null, map, cell, weight.Complexity));
-        _inventory.SetWeight(entity, weight);
-        _inventory.Taken.Add(entity);
+        CreateMadeItem(new(entity, kind, SessionCreatePlace.Ground, weight, weight.Complexity, Map: map, Cell: cell, Source: SessionPlacedSource.Created));
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version);
     }

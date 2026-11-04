@@ -82,7 +82,7 @@ public sealed partial class GameSessionOwner
         if (removed ? !_durability.Records.ContainsKey(found.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
             : !_inventory.Ammo.ContainsKey(found.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectAmmo(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectAmmo(GameSessionFailure.RevisionExhausted);
-        if (removed) Delete(found.Entity);
+        if (removed) DestroyObject(found.Entity);
         else _inventory.Ammo[found.Entity] = found with { Units = left.Units };
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, found.Entity, left.Units, removed, Version);

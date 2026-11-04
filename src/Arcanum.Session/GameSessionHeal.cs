@@ -231,7 +231,7 @@ public sealed partial class GameSessionOwner
         }
         // Only the hero's request arms a fate.
         if (check.Fated) _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, FateKind.Heal).After));
-        if (destroyed) Delete(item.Entity);
+        if (destroyed) DestroyObject(item.Entity);
         else _durability.Uses[item.Entity] = (int)left;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, check, outcome, life, destroyed ? null : (int)left, destroyed,

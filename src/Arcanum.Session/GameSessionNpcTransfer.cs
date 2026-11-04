@@ -60,7 +60,7 @@ public sealed partial class GameSessionOwner
             : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         _inventory.Gold += count;
-        if (emptied) Delete(pile.Entity);
+        if (emptied) DestroyObject(pile.Entity);
         else _inventory.Piles[pile.Entity] = pile.Quantity - count;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
@@ -192,7 +192,7 @@ public sealed partial class GameSessionOwner
         if (into is { } target)
         {
             var units = _inventory.Ammo[item].Units;
-            Delete(item);
+            DestroyObject(item);
             _inventory.Ammo[target.Entity] = target with { Units = target.Units + units };
         }
         else
@@ -341,7 +341,7 @@ public sealed partial class GameSessionOwner
             destination = created.Value.Entity;
             verdict = SessionInsertVerdict.Accepted;
         }
-        if (emptied) Delete(source.Entity);
+        if (emptied) DestroyObject(source.Entity);
         else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, destination, verdict, Version);
@@ -352,19 +352,16 @@ public sealed partial class GameSessionOwner
     private (SessionMadeItem? Created, InventoryMutationResult? Refusal) NewHeroStack(SessionItemKind kind, int ammoType, int units, SessionInsertCheck insertCheck)
     {
         if (_inventory.Held >= _limits.MaxPcItems) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
-        var number = NextMadeNumber();
-        if (number > int.MaxValue) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
-        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return (null, RejectItem(GameSessionFailure.BudgetExceeded));
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
         // ARC-WORLD-085: the new object has its base prototype's weight; the insert check weighs its units.
         var weight = CreatedWeight(kind.Prototype);
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(item.Entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0,
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0,
             new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, units));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return (null, RejectItem(GameSessionFailure.StaleVersion, verdict));
         if (verdict != SessionInsertVerdict.Accepted) return (null, RejectItem(GameSessionFailure.InsertRefused, verdict));
-        _inventory.Add(item);
-        _inventory.SetWeight(item.Entity, weight);
+        var item = CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight));
         _inventory.Ammo[item.Entity] = new(item.Entity, ammoType, units);
         return (item, null);
     }
@@ -391,22 +388,16 @@ public sealed partial class GameSessionOwner
             refusal = RejectItem(GameSessionFailure.BudgetExceeded);
             return null;
         }
-        var number = NextMadeNumber();
-        if (number > int.MaxValue) { refusal = RejectItem(GameSessionFailure.BudgetExceeded); return null; }
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) { refusal = RejectItem(GameSessionFailure.BudgetExceeded); return null; }
         if (_revision == long.MaxValue) { refusal = RejectItem(GameSessionFailure.RevisionExhausted); return null; }
-        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), kind);
         var (revision, seeds) = (_revision, _inventory.SeedGeneration);
         // ARC-WORLD-085: the new object has its prototype's weight (the NPC's own weight is the host's insert check).
         var weight = CreatedWeight(kind.Prototype);
-        var verdict = insertCheck(new SessionInventoryItem(item.Entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
+        var verdict = insertCheck(new SessionInventoryItem(entity, facts with { Weight = weight.Weight, MagicWeight = weight.MagicWeight }));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
         if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
-        if (holder == SessionHolderKind.Container) _inventory.AddToContainer(npc, item);
-        else _inventory.AddToNpc(npc, item);
-        _inventory.SetWeight(item.Entity, weight);
-        _inventory.Taken.Add(item.Entity);
-        return item;
+        return CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
     }
 
     // The NPC's first gold pile in its list order: its seed piles still in its list (in every attached seed that lists it), then the

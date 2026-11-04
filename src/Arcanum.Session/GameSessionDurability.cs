@@ -200,7 +200,7 @@ public sealed partial class GameSessionOwner
         var slot = _equipment.SlotOf(entity);
         if (outcome.Break == ItemBreakStep.Deleted)
         {
-            Delete(entity);
+            DestroyObject(entity);
             Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, ItemBreakStep.Deleted, slot, Version);
         }
@@ -215,40 +215,6 @@ public sealed partial class GameSessionOwner
         }
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome.Condition, outcome.Break, unworn, Version);
-    }
-
-    /// <summary>The deletion of an item: out of its wear slot and the PC's lists, hidden from every seed, its record dropped.</summary>
-    private void Delete(string entity)
-    {
-        if (_equipment.SlotOf(entity) is { } slot) _equipment.Worn.Remove(slot);
-        _inventory.Kit.RemoveAll(item => item.Entity == entity);
-        _inventory.Pc.RemoveAll(item => item.Entity == entity);
-        _inventory.Made.RemoveAll(item => item.Entity == entity);
-        _inventory.Placed.RemoveAll(item => item.Entity == entity);
-        _inventory.RemoveFromNpc(entity);
-        // ARC-WORLD-103: a deleted item an NPC wore is worn no more.
-        _inventory.Unwear(entity);
-        // ARC-WORLD-066: a deleted ammunition stack is gone with its units; ARC-WORLD-071: a gold pile with its coins, a given item with
-        // its origin.
-        _inventory.Ammo.Remove(entity);
-        _inventory.Piles.Remove(entity);
-        _inventory.Given.Remove(entity);
-        // ARC-WORLD-090: and its identified flag.
-        _inventory.Identified.Remove(entity);
-        // ARC-SCRIPT-042: its kept script slots go with it.
-        foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
-        // ARC-WORLD-085: its weight facts go with it.
-        _inventory.Weights.Remove(entity);
-        // ARC-WORLD-063: a deleted item leaves its junk pile (the caller decides whether the pile dissolves).
-        _inventory.LeaveJunkPile(entity);
-        // Taken hides an item from every seed view and from pickup and loot.
-        _inventory.Taken.Add(entity);
-        _durability.Records.Remove(entity);
-        _durability.Uses.Remove(entity);
-        _durability.Charges.Remove(entity);
-        _durability.Destroyed.Add(entity);
-        // ARC-WORLD-062: a deleted item no longer decays.
-        CancelDecay(entity);
     }
 
     /// <summary>An item of the hero's kit, one the PC took or made, a made item added to an NPC (ARC-WORLD-055), or one an attached seed
