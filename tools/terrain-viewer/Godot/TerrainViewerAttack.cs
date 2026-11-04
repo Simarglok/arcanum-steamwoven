@@ -119,7 +119,13 @@ public partial class TerrainViewerApp
 
     /// <summary>The NPC under the screen point while the hero is in combat mode (ARC-UI-005 pick), or null.</summary>
     private AreaCombatTarget? CombatTargetAt(Vector2 screen) =>
-        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key ? _combatHost!.Target(_areaSession!, key) : null;
+        AttackMapActive && HeroInCombatMode && AreaObjectAtScreen(screen) is { } key ? AreaTargetOf(key) : null;
+
+    /// <summary>ARC-DEV-076 (MIG3): the NPC drawn as <paramref name="key"/> by identity: a row of a held map, else a companion carried
+    /// here whose home map is not held (asked by its entity, which reads that map once).</summary>
+    private AreaCombatTarget? AreaTargetOf(AreaObjectKey key) =>
+        _combatHost!.Target(_areaSession!, key)
+        ?? (_areaCompanions?.Companions.FirstOrDefault(c => c.Key == key) is { } visitor ? _combatHost.Target(_areaSession!, visitor.Entity) : null);
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
     /// (an attack, a refused one, or a corpse clicked without Alt, which does nothing in the original).</summary>
@@ -469,7 +475,7 @@ public partial class TerrainViewerApp
         _worldActor.AttackPose = null;
         goal.Player = null;
         // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
-        var target = goal.Combat is null ? null : _combatHost!.Target(owner, CurrentAreaMap, goal.Row.Key);
+        var target = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
         var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
@@ -600,7 +606,7 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = (int)Chebyshev(blocker, (cell.X, cell.Y));
-        if (!IsAreaCompanion(blocker.Key) && _combatHost!.Target(owner, CurrentAreaMap, blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
+        if (!IsAreaCompanion(blocker.Key) && _combatHost!.Target(owner, blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
         {
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = npc.Entity;

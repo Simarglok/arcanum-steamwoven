@@ -193,7 +193,7 @@ public partial class TerrainViewerApp
         (AttackGoal? Goal, bool Companion)? Critter(AreaObjectRecord row)
         {
             if (IsAreaCompanion(row.Key)) return (null, true);
-            return _combatHost!.Target(owner, CurrentAreaMap, row.Key) is { Dead: false, Build.Combat: { } combat } npc ? (new AttackGoal(npc, combat, null), false) : null;
+            return _combatHost!.Target(owner, row.Key) is { Dead: false, Build.Combat: { } combat } npc ? (new AttackGoal(npc, combat, null), false) : null;
         }
         if (from != tile && AreaLineOfFireNow() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, owner.Rules.Combat).Blocker is { } blocker)
             return blocker.Type is 15 or 16 ? Critter(blocker) : null;

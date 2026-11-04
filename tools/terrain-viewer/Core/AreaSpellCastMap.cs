@@ -39,6 +39,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly List<string> _npcs = [];
     // The ids of the rows in the cell index, by their key.
     private readonly Dictionary<AreaObjectKey, string> _keys = [];
+    // ARC-DEV-076: the visiting companions now listed, by their row's key (they stand only where `placed` says, never on a home-map cell).
+    private readonly Dictionary<AreaObjectKey, string> _visitorKeys = [];
 
     /// <param name="session">The session (life, companions, the hero).</param>
     /// <param name="runtimeMap">The runtime map the rows belong to.</param>
@@ -90,7 +92,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public string Id(AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(row);
-        return _combat.Entity(_map, row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
+        return _combat.Entity(_map, row.Key) ?? _visitorKeys.GetValueOrDefault(row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
     }
 
     // ARC-DEV-076 (MIG3): the companions carried here from another map join the rows by their entity (never the cell index: their row's
@@ -98,11 +100,19 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private void SyncVisitors()
     {
         if (_visitors is null) return;
-        foreach (var (entity, row) in _visitors())
+        var now = _visitors();
+        // A companion that is no longer carried here leaves the rows (it would otherwise stand on its home-map cell).
+        foreach (var (key, entity) in _visitorKeys.ToArray())
+            if (!now.Any(visitor => visitor.Entity == entity))
+            {
+                _visitorKeys.Remove(key); _rows.Remove(entity); _keys.Remove(key); _npcs.Remove(entity);
+            }
+        foreach (var (entity, row) in now)
         {
             if (_rows.ContainsKey(entity)) continue;
             _rows[entity] = row;
             _keys[row.Key] = entity;
+            _visitorKeys[row.Key] = entity;
             _npcs.Add(entity);
         }
     }
@@ -138,8 +148,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     }
 
     // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.
-    private static (long X, long Y)? Cell(AreaObjectRecord row, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed) =>
-        placed.TryGetValue(row.Key, out var live) ? live : (row.WorldX!.Value, row.WorldY!.Value);
+    private (long X, long Y)? Cell(AreaObjectRecord row, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed) =>
+        placed.TryGetValue(row.Key, out var live) ? live : _visitorKeys.ContainsKey(row.Key) ? null : (row.WorldX!.Value, row.WorldY!.Value);
 
     public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask)
     {

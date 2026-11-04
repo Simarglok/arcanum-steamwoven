@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -258,7 +259,12 @@ public sealed class AreaCombatRecordTests
         var combat = new AreaCombatHost(inventory, session: () => session);
         var virgil = Entity(1, 0);
 
-        // By the key of his home-map row (what a hover or a click on his drawn body gives): map 1 is read on demand, once.
+        // By the key of his home-map row (what a hover gives) a map this host does not hold answers nothing: the hover reads no map...
+        Assert.IsNull(combat.Target(session, Key(1, 0)));
+        Assert.AreEqual(0, source.Asked.Count, "a key never reads a map");
+        // ...by his entity map 1 is read on demand, once, and then his key resolves too.
+        Assert.IsNotNull(combat.Target(session, virgil));
+        CollectionAssert.AreEqual(new[] { 1 }, source.Asked);
         var byKey = combat.Target(session, Key(1, 0));
         Assert.IsNotNull(byKey);
         Assert.AreEqual((virgil, Key(1, 0), false), (byKey.Entity, byKey.Row.Key, byKey.Dead));
@@ -274,8 +280,8 @@ public sealed class AreaCombatRecordTests
         Assert.IsNull(combat.Target(session, Entity(1, 2)), "an item is no target");
         Assert.IsNull(combat.Target(session, Key(1, 2)));
         Assert.IsNull(combat.Target(session, "oid:" + new string('f', 64)));
-        Assert.IsNull(combat.Target(session, Key(9, 0)), "a map nothing can read");
-        CollectionAssert.AreEqual(new[] { 1, 9 }, source.Asked, "each unheld map was asked once");
+        Assert.IsNull(combat.Target(session, Key(9, 0)), "a map this host does not hold");
+        CollectionAssert.AreEqual(new[] { 1 }, source.Asked, "the home map was read once");
     }
 
     [TestMethod]
@@ -328,16 +334,28 @@ public sealed class AreaCombatRecordTests
         Assert.AreEqual(virgil, map.IdOf(home.Key), "a row of another map has an id by key once it is a visitor here");
         Assert.AreSame(home, map.Row(virgil));
         Assert.IsNotNull(map.Critter(virgil), "his combat values come from the resolver, not the shown map's rows");
-        Assert.AreEqual(new Arcanum.Simulation.Magic.SpellLocation(7, 7), map.Object(virgil)!.Location);
-        Assert.AreEqual(virgil, map.ObjectsAt(new(7, 7), Arcanum.Simulation.Magic.SpellUiRules.PickTileTypes).Single().Id);
-        Assert.AreEqual(0, map.ObjectsAt(new(10, 20), Arcanum.Simulation.Magic.SpellUiRules.PickTileTypes).Count, "not on his home-map cell");
-        var hero = new Arcanum.Simulation.Magic.SpellTargetObject(Arcanum.Session.SessionSpellCaster.Hero, 15, new(14, 20));
+        Assert.AreEqual(new SpellLocation(7, 7), map.Object(virgil)!.Location);
+        Assert.AreEqual(virgil, map.ObjectsAt(new(7, 7), SpellUiRules.PickTileTypes).Single().Id);
+        Assert.AreEqual(0, map.ObjectsAt(new(10, 20), SpellUiRules.PickTileTypes).Count, "not on his home-map cell");
+        var hero = new SpellTargetObject(Arcanum.Session.SessionSpellCaster.Hero, 15, new(14, 20));
         Assert.AreEqual(virgil, map.Party(hero).Single().Id);
         Assert.AreEqual(0, map.WornItems(virgil).Count);
 
         standing = null;
         Assert.IsNull(map.Object(virgil), "not on this map while placed nowhere");
         Assert.IsNull(map.Critter(virgil));
+
+        // A companion no longer carried here leaves the rows, and while listed without a placement it stands nowhere (not on its home cell).
+        var listed = true;
+        var gone = new AreaSpellCastMap(session, 2, steps, [], combat, () => null, () => null,
+            placed: () => new Dictionary<AreaObjectKey, (long X, long Y)?>(), visitors: () => listed ? [(virgil, home)] : []);
+        Assert.IsNull(gone.Object(virgil), "listed but placed nowhere: not on its home-map cell");
+        Assert.AreEqual(0, gone.ObjectsAt(new((uint)home.WorldX!.Value, (uint)home.WorldY!.Value), SpellUiRules.PickTileTypes).Count);
+        Assert.AreEqual(virgil, gone.Id(home), "a visitor blocking a line keeps its entity");
+        listed = false;
+        Assert.IsNull(gone.IdOf(home.Key));
+        Assert.IsNull(gone.Row(virgil));
+        Assert.AreEqual(0, gone.Party(hero).Count);
     }
 }
 

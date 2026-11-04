@@ -49,7 +49,7 @@ and keeps its map-keyed questions with their meaning (the rows of that map), so 
 
 | Consumer | Before | Now |
 | --- | --- | --- |
-| Hover, click and life bar of a drawn NPC | `Target(session, shownMap, key)`: only a row of the shown map | `Target(session, key)`: an object key names its map (`AreaObjectKey.RuntimeMap`), so a visiting companion's key resolves through its home map's rows (a map not held is read on demand once); `Target(session, entity)` by identity |
+| Hover, click and life bar of a drawn NPC | `Target(session, shownMap, key)`: only a row of the shown map | `Target(session, key)`: an object key names its map (`AreaObjectKey.RuntimeMap`), so a visiting companion's key resolves through its home map's rows when this host holds that map (a key reads no map: the hover asks every frame); `Target(session, entity)` by identity reads the home on demand once, and the viewer asks it by entity for a carried companion whose home is not held yet |
 | Life bars, follower portraits, transfer's no-fatigue test | the shown map's combat values, else the home map's (a fallback) | `AreaLife.Of` / `AreaLife.Unconscious(session, host, entity)`: no fallback |
 | Turn-based facts (`AreaCombatantFacts`) | `HomeMap(entity) ?? shown map` | `Build(entity)` and `Fields(entity)` |
 | Sheet, levels, scheme and crafter of a follower | `HomeMap(entity)` then `Fields(home, entity)` | `Fields(entity)` |

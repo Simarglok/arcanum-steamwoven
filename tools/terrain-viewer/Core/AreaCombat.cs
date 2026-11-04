@@ -114,19 +114,26 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entity);
-        if (Record(entity) is not { } found || Holders(session, found.HomeMap).GetValueOrDefault(entity) is not { Kind: SessionHolderKind.Npc } holder) return null;
+        return Record(entity) is { } found ? Target(session, found) : null;
+    }
+
+    private AreaCombatTarget? Target(GameSessionOwner session, ResolvedRecord found)
+    {
+        var entity = found.Entity;
+        if (Holders(session, found.HomeMap).GetValueOrDefault(entity) is not { Kind: SessionHolderKind.Npc } holder) return null;
         return new(entity, found.Row, holder.Dead, session.QueryCompanion(entity).LedByPc, Build(session, found.Map, entity));
     }
 
     /// <summary>ARC-DEV-076 (MIG3): the NPC drawn as <paramref name="key"/>, on whichever map's rows hold it: an object key names its map
     /// (<see cref="AreaObjectKey.RuntimeMap"/>), so a visiting companion's key resolves to the NPC through its home map's rows like a
-    /// shown map object does (<see cref="Target(GameSessionOwner, string)"/>); a map this host does not hold is read on demand once
-    /// (<see cref="RecordResolver.Map"/>, failures remembered); null for a key no readable map lists.</summary>
+    /// shown map object does; only a map this host holds answers (the hover asks every frame, so it reads no map: a visiting companion
+    /// whose home is not held is asked by its entity, <see cref="Target(GameSessionOwner, string)"/>, which reads it once). The record
+    /// is the key's own map's row.</summary>
     public AreaCombatTarget? Target(GameSessionOwner session, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var map = Held(key.RuntimeMap, out var held) ? held : _resolver.Map(key.RuntimeMap).Map;
-        return map is not null && map.TryGetEntity(key, out var entity) ? Target(session, entity) : null;
+        if (!Held(key.RuntimeMap, out var map) || !map.TryGetEntity(key, out var entity)) return null;
+        return Target(session, new ResolvedRecord(entity, map.RuntimeMap, map, map.Row(entity)));
     }
 
     private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap) => HolderIndex(session, runtimeMap).Holders;
