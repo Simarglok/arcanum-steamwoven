@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
     {
         _lastPickPocketStart = null;
         if (_areaSession is not { } session || AreaAiHostNow() is not { } ai || _combatHost is not { } combat) { _inventoryStatus = "pick pocket: not ready"; RefreshAreaStatus(); return; }
-        var start = AreaPickPocket.Start(session, ai, combat.Fields(CurrentAreaMap, npc), npc);
+        var start = AreaPickPocket.Start(session, ai, combat.Fields(npc), npc);
         _lastPickPocketStart = start;
         var name = _inventoryHost!.Name(npc, _hoverNames?.Catalog);
         GD.Print($"ARC-SKILLS-010 pick-pocket start entity={npc} open={start.Open?.ToString() ?? "none"} {start.Detail}");

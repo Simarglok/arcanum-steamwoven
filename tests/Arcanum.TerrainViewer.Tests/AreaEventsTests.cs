@@ -38,10 +38,9 @@ public sealed class AreaEventsTests
 
     private sealed class Objects : IAreaEventObjects
     {
-        // The wolf's T0 row is on map 1; the session may say it stands on another map (a follower moved with the PC).
-        public LifeFacts? Facts(int runtimeMap, string entity) => runtimeMap == 1 && entity == Wolf ? WolfFacts : null;
-        public bool HasObject(int runtimeMap, string entity) => runtimeMap == 1 && entity is Wolf or "oid:chest";
-        public int? HomeMap(string entity) => entity is Wolf or "oid:chest" ? 1 : null;
+        // The wolf's T0 row is on map 1; the session may say it stands on another map (a follower moved with the PC): asked by identity.
+        public LifeFacts? Facts(string entity) => entity == Wolf ? WolfFacts : null;
+        public bool HasObject(string entity) => entity is Wolf or "oid:chest";
     }
 
     [TestMethod]

@@ -75,8 +75,10 @@ Stand-ins, each a later slice's:
 - one sector kind for the whole map (the indoor/outdoor test of an NPC's fallback tile);
 - a path to every admitted tile;
 - NPCs stand on their map cells, except the companions: since ARC-MAGIC-021 a companion's row stands on its committed cell and on
-  none while it is on another map (no target and no critter then; a visitor from another map is not a row of the shown map and is
-  no target); in a square query a companion comes after the rows of the swept cells;
+  none while it is on another map (no target and no critter then); since ARC-DEV-076 (MIG3) a visitor from another map is a target,
+  a party member of the hero and a critter too, found by identity through the record resolver (`AreaSpellCastMap`'s `visitors`: the
+  companions the viewer's group carried here, standing where the group places them, never on their home-map cell; their combat values,
+  worn items and the items' spells come from the resolver); in a square query a companion comes after the rows of the swept cells;
 - an NPC wields no weapon in a spell's context (MG36 only reaches a caster with a weapon);
 - spell damage to objects other than critters is not ready (an acid's worn items take no damage step), and the hero's worn kit
   items carry no stored fields here, so the hero answers no worn items while wearing any.

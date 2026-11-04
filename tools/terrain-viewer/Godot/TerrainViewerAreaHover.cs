@@ -162,7 +162,7 @@ public partial class TerrainViewerApp
         {
             // ARC-COMBAT-005: in combat mode a living NPC is attacked; a corpse is looted only with Alt, a follower attacked only
             // with left Alt (as WorldRouteClick decides).
-            if (AttackMapActive && HeroInCombatMode && _combatHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } foe)
+            if (AttackMapActive && HeroInCombatMode && AreaTargetOf(hit) is { } foe)
             {
                 if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
                     ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot

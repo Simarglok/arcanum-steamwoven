@@ -194,13 +194,12 @@ public partial class TerrainViewerApp
         return AreaCombatScan.Critters(npcs, new(checked((int)hero.X), checked((int)hero.Y)), entity => cells.TryGetValue(entity, out var cell) ? cell : null, _sectorEntries);
     }
 
-    /// <summary>An NPC's round facts from its home map's stored fields, in its session life state; null when it has none or the
-    /// session destroyed or switched it off.</summary>
+    /// <summary>An NPC's round facts from its stored fields by identity (ARC-DEV-076, MIG3: wherever it stands, no home-map fallback), in its
+    /// session life state; null when it has none or the session destroyed or switched it off.</summary>
     private SessionCombatantFacts? AreaCombatantFacts(string entity)
     {
         var owner = _areaSession!; var host = _combatHost!;
-        var home = host.HomeMap(entity) ?? CurrentAreaMap;
-        if (host.Build(home, entity).Combat is not { } combat || host.Fields(home, entity) is not { } fields) return null;
+        if (host.Build(entity).Combat is not { } combat || host.Fields(entity) is not { } fields) return null;
         if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(entity, out var row)
             && AreaRemovedObjects().Contains(row.Key)) return null;
         var state = owner.QueryLife(combat.Target).View?.Record.State ?? combat.Loaded;

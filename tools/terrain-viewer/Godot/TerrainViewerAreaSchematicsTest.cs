@@ -348,7 +348,7 @@ public partial class TerrainViewerApp
         {
             var speakers = _conversationHost.Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray();
             var homed = speakers.Count(entity => _combatHost?.HomeMap(entity) is not null);
-            var fielded = speakers.Count(entity => _combatHost?.HomeMap(entity) is { } home && _combatHost.Fields(home, entity) is not null);
+            var fielded = speakers.Count(entity => _combatHost?.Fields(entity) is not null);
             GD.Print($"ARC-TECHNOLOGY-006 native-smoke npc crafter SKIP (no living speaker with home-map data: speakers {speakers.Length}, " +
                 $"on a covered map {homed}, with fields {fielded}, effect rules {(_areaEffectRules is null ? "absent" : "present")})");
             return;
@@ -367,7 +367,8 @@ public partial class TerrainViewerApp
 
             var saved = session.Capture();
             var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
-                session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty);
+                session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty,
+                LoadRandom: session.QueryRandom());
             using var copy = GameSessionOwner.Restore(saved, options).Owner ?? throw new InvalidOperationException("copy");
             Require(_inventoryHost?.Attach(copy) == GameSessionFailure.None, "seeds attached to the copy");
             var real = AreaNpcCrafter(npc)!;
