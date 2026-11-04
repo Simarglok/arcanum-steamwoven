@@ -9,6 +9,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -78,13 +79,32 @@ public sealed class AreaAiFollowerTests
         public void Face(string entity, CellCoord toward) => Turns++;
     }
 
+    private static readonly List<object> HomeSources = [];
+
+    private sealed class HomeSource(AreaInventoryMap home) : Arcanum.World.IMapRecordSource
+    {
+        public int Reads;
+        public Arcanum.World.MapRecordsLoad Load(int runtimeMap, CancellationToken token)
+        {
+            Reads++;
+            return runtimeMap == home.RuntimeMap ? new(home, string.Empty) : new(null, "unreadable");
+        }
+    }
+
+    private static HomeSource NewSource(AreaInventoryMap home)
+    {
+        var source = new HomeSource(home);
+        HomeSources.Add(source);
+        return source;
+    }
+
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion)
     {
         public AreaCombatHost Combat { get; init; } = null!;
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -93,7 +113,8 @@ public sealed class AreaAiFollowerTests
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var start = companionAt ?? CompanionCell;
         // A healer companion holds a healing item (2) and has heal 5 points.
-        // ARC-DEV-065: a visitor from another home map has no holder or row on this map (so no combat fields here).
+        // ARC-DEV-075: a visitor is a companion of another home map (2): it has no holder or row on this map, its record is its home map's,
+        // given to the resolver (visitor) or read from a source on demand with the session naming the home (onDemand).
         var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) }
             : visitor ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
         SessionSeedHolder[] holders = visitor ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [])]
@@ -102,8 +123,12 @@ public sealed class AreaAiFollowerTests
             new(holders,
                 healer ? [new SessionSeedItem(Entity(2), new(Healing, 1, 0, 0, null, []), null)] : []),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
-        var inventory = new AreaInventoryHost([map]);
+        var home = new AreaInventoryMap(2, new([new SessionSeedHolder(Entity(1), SessionHolderKind.Npc, false, false, [], [])], []),
+            new Dictionary<string, AreaObjectRecord> { [Entity(1)] = Npc(1, new(3, 4)) });
+        var inventory = new AreaInventoryHost(visitor && !onDemand && !homeless ? [map, home] : [map], records: visitor && onDemand ? NewSource(home) : null);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        if (visitor && onDemand)
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(2), AreaCompanionPlacement.MapKey(Entity(1)), 1).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(1)).Disposition);
         if (companionWaits) Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, Entity(1)).Disposition);
         // ARC-WORLD-119: a companion released before the host is built.
@@ -132,9 +157,9 @@ public sealed class AreaAiFollowerTests
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell, critterFlags: enemyFlags), EnemyCell)], Combat = combat,
             HeroCell = () => HeroCell,
-            Companions = () => [(Key(1), walks.Cells[Entity(1)])],
+            Companions = () => [(Entity(1), Key(1), walks.Cells[Entity(1)])],
             Followers = followers ? walks : null,
-            NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
+            NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
@@ -337,21 +362,87 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
-    public void A_visiting_companion_the_world_does_not_know_is_kept_out_of_the_rules()
+    public void A_visiting_companion_is_found_by_identity_and_reaches_the_rules()
     {
-        // ARC-DEV-065: the Crash Site cave's rat bit the hero with Virgil visiting from the main map: the follower rule met an object
-        // the host's world could not describe and the whole game stopped (ActorPlan).
+        // ARC-DEV-075 (MIG2): Virgil, a companion of home map 2 carried to the shown map 1, is described by his home map's record: he is found,
+        // stands in scans' squares and in the flee test's party, as any NPC of the shown map.
+        var (_, host, _, enemy, companion) = Open(visitor: true);
+        var found = host.Find(companion);
+        Assert.IsNotNull(found, "his record is his home map's, by identity");
+        Assert.AreEqual(HostilityKind.Npc, found.Kind);
+        Assert.AreEqual(1, host.RunCompanions.Count);
+        CollectionAssert.Contains(host.Square(enemy, 20).ToList(), companion, "a scan's or noise's square holds him");
+        CollectionAssert.Contains(host.Followers(Pc).ToList(), companion, "the flee test's party counts him");
+        Assert.IsNotNull(host.AiLifeTarget(companion), "his combat values build");
+    }
+
+    [TestMethod]
+    public void A_visiting_companion_joins_the_heros_fight_walks_up_and_strikes()
+    {
+        var (session, host, walks, enemy, companion) = Open(visitor: true);
+        host.HeroAttacked(enemy);
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual((DangerState.CombatFocus, enemy), (danger.State, danger.Source?.Entity),
+            $"the hero's follower is told of the attack: {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Reaction}");
+        StringAssert.StartsWith(host.TraceOf(companion)!.Event, "told Attacker ReactToAttack");
+        Assert.IsTrue(host.Holds(companion), "a fighting companion is held: it follows nothing");
+
+        host.Perform(companion);
+        var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
+        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        var notices = Run(host, companion);
+        Assert.IsTrue(walks.Steps >= 2, $"he walked up through his own walk ({walks.Steps} steps)");
+        var hit = notices.Single(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion).Result ?? throw new AssertFailedException("no hit result");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, hit.Disposition, $"the session's NPC hit step: {hit.Failure}");
+        Assert.AreEqual(AttackRefusal.None, hit.Resolution!.Refusal);
+        Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(companion)), "the attempt-attack goal put him into combat mode");
+    }
+
+    [TestMethod]
+    public void An_npc_striking_the_hero_tells_a_visiting_follower_and_the_npc_can_fight_him()
+    {
         var (session, host, _, enemy, companion) = Open(visitor: true);
-        Assert.IsNull(host.Find(companion), "a visitor has no combat fields on this map");
-        Assert.AreEqual(1, host.RunCompanions.Count, "its walk is still the host's follower walk");
         host.PerformAttack(enemy, Pc);
-        var notices = Run(host, enemy);
-        Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy), "the enemy struck at the hero");
-        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State, "the visitor is not told of the attack");
+        Assert.IsTrue(Run(host, enemy).Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy), "the enemy struck at the hero");
+        var danger = session.QueryDanger(companion);
+        Assert.AreEqual((DangerState.CombatFocus, enemy), (danger.State, danger.Source?.Entity),
+            $"the victim's follower reacts to the attacker: {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Reaction}");
+        StringAssert.StartsWith(host.TraceOf(companion)!.Event, "told Victim ReactToAttack");
+
+        // The shown map's NPC attacks the visitor: the target resolves (his cell is his own walk's, his build is his home map's).
+        host.PerformAttack(enemy, companion);
+        var hit = Run(host, enemy).Last(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy && n.Target == companion).Result
+            ?? throw new AssertFailedException("no hit result");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, hit.Disposition, $"the session's NPC hit step on the visitor: {hit.Failure}");
+        Assert.AreEqual(AttackRefusal.None, hit.Resolution!.Refusal);
+    }
+
+    [TestMethod]
+    public void A_companion_of_a_home_map_this_run_never_loaded_is_run_through_the_resolvers_on_demand_read()
+    {
+        var (session, host, _, enemy, companion) = Open(visitor: true, onDemand: true);
+        Assert.AreEqual(0, ((HomeSource)HomeSources[^1]).Reads, "nothing read the home map before the AI host asked");
+        Assert.IsNotNull(host.Find(companion));
+        Assert.AreEqual(1, ((HomeSource)HomeSources[^1]).Reads, "the AI host's own question read the home map once");
+        host.HeroAttacked(enemy);
+        Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(companion).State, $"{host.TraceOf(companion)?.Event}");
+        CollectionAssert.Contains(host.Square(enemy, 20).ToList(), companion);
+    }
+
+    [TestMethod]
+    public void A_companion_whose_home_cannot_be_read_stays_out_of_the_rules_instead_of_stopping_the_game()
+    {
+        // The ARC-DEV-065 fault (the follower rule met an object the world could not describe) stays closed for the one case left: no record.
+        var (session, host, _, enemy, companion) = Open(visitor: true, homeless: true);
+        Assert.IsNull(host.Find(companion), "no reachable map lists him");
+        Assert.AreEqual(1, host.RunCompanions.Count, "his walk is still the host's follower walk");
+        host.PerformAttack(enemy, Pc);
+        Assert.IsTrue(Run(host, enemy).Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy), "the enemy struck at the hero");
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State, "he is not told of the attack");
         Assert.IsNull(host.TraceOf(companion)?.Event);
         host.HeroAttacked(enemy);
-        CollectionAssert.DoesNotContain(host.Square(enemy, 20).ToList(), companion, "a scan's or noise's square holds only known critters");
-        CollectionAssert.DoesNotContain(host.Followers(Pc).ToList(), companion, "the flee test's party count holds only known followers");
+        CollectionAssert.DoesNotContain(host.Square(enemy, 20).ToList(), companion);
+        CollectionAssert.DoesNotContain(host.Followers(Pc).ToList(), companion);
     }
 
     [TestMethod]

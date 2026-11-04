@@ -106,7 +106,7 @@ R1 first; R2–R6 may run in parallel after it, as many at once as the owner all
 
 | Slice | Covers | Output |
 | --- | --- | --- |
-| G1 | R1–R6 against M1: confirm or drop H1–H9, find new ones, class each; a target model (for example one identity-based object directory with mutable fields and residency) and a migration order; the follower slices V1–V6 of ARC-RES-076 fold in here | `docs/architecture/gap-register.md` and `docs/architecture/target-model.md`; owner questions as decision cards |
+| G1 | R1–R6 against M1: confirm or drop H1–H9, find new ones, class each; a target model (for example one identity-based object directory with mutable fields and residency) and a migration order; the follower slices V1–V6 of ARC-RES-076 fold in here | [`docs/architecture/gap-register.md`](../architecture/gap-register.md) (GR1–GR37) and [`docs/architecture/target-model.md`](../architecture/target-model.md) (TM1–TM14, migration MIG1–MIG16, V1–V6 as MIG1–MIG5, MIG10, MIG11); owner questions GQ1–GQ8 as decision cards (ARC-RES-086) |
 
 The owner's decisions on G1 settle the model the rest of the audit and every
 concept document builds on.
@@ -154,6 +154,10 @@ proposed implementation slices. They live in `docs/architecture/concepts/`.
 | K10 | Newspapers and gambling | FR-SOCIAL-009, FR-ITEM-019 | Proposed for after alpha; listed for completeness |
 | K11 | Network readiness: the change path a future network game needs | FR-NET-001…008, FR-SOCIAL-006 | Owner decision: after alpha ([network](../requirements/network.md)); the single change path is still decided in G1 |
 | K12 | Movies, slides, endings, credits | FR-MEDIA-001, FR-MEDIA-002 | Proposed for after alpha |
+| K13 | Object directory and field store (added by G1) | FR-WORLD-005, FR-WORLD-010, FR-WORLD-013 | The design of MIG6 ([target model](../architecture/target-model.md#migration-order)) |
+| K14 | One goal table for every animated object (added by G1) | FR-RUNTIME-002, FR-RUNTIME-003, FR-AI-003 | The design of MIG13 |
+| K15 | Clocks and the frame step in the session (added by G1) | FR-RUNTIME-001, FR-LIGHT-002, FR-UI-008 | The design of MIG12 |
+| K16 | Interface mode stack (added by G1) | FR-UI-003, FR-UI-008 | The design of MIG16 |
 
 The list is refreshed by G1: a part that the target model changes enough may get a
 concept document even if it is partly built today.
@@ -168,5 +172,6 @@ change code.
 ## Size
 
 Phase 1: 6 Mac slices; phase 1b: 1 cloud slice; phase 2: 1; phase 3: 9, mostly
-cloud; phase 4: up to 12. About 29 PRs, of which about 20 can run in the cloud. An
-order of magnitude, not a promise.
+cloud; phase 4: up to 16 (K13–K16 added by G1). About 33 audit PRs, of which about 24 can
+run in the cloud; G1's migration adds 16 code slices (MIG1–MIG16, the follower slices V1–V6
+among them). An order of magnitude, not a promise.

@@ -90,10 +90,14 @@ installed elsewhere is found through the registry; if it is not, press **Choose 
   `/Applications/Arcanum`. The launcher finds it there (or in `~/Applications/Arcanum`) by itself.
 - **B. CrossOver.** Install GOG Arcanum into a CrossOver bottle. The launcher looks into the bottles
   (`~/Library/Application Support/CrossOver/Bottles/*/drive_c/GOG Games/Arcanum`) by itself.
-- **C. Unpack the GOG offline installer** (`setup_arcanum_….exe` from your GOG library) with
-  [innoextract](https://constexpr.org/innoextract/): `brew install innoextract`, then
-  `innoextract --gog -d ~/Games/Arcanum setup_arcanum_….exe`, and choose the folder that holds `Arcanum.exe` (if the
-  files land in an `app` subfolder, that subfolder). This route has not been tried in the project yet.
+- **C. Unpack the GOG offline installer** (`setup_arcanum_….exe` from your GOG library). The launcher does it for you:
+  install [innoextract](https://constexpr.org/innoextract/) (`brew install innoextract`), press **Install from GOG
+  installer…** on the launcher screen, pick the installer and then a new or empty folder; the launcher checks the installer,
+  unpacks it, checks that `Arcanum.exe` is the 1.0.7.4 one and chooses the folder (Play stores it). By hand, the same is
+  `innoextract --gog -m -d ~/Games/Arcanum setup_arcanum_….exe`, then choose the folder that holds `Arcanum.exe` (for the
+  1.0.7.4 installer the files land in the folder root, not in `app`). Tried on 2026-11-04 on the 1.0.7.4 installer
+  ([ARC-RES-087](../research/gog-installer-unpack.md)): the files unpack in seconds with `Arcanum.exe` in the folder
+  root, game files byte-identical to a real installation; `data/proto` is still missing until the prototype build lands.
 - **Other wrappers** (Whisky, a Wineskin-style `.app`): choose the wrapper or its game folder with **Choose folder…**;
   the launcher looks inside a chosen `.app` for its `drive_c`.
 

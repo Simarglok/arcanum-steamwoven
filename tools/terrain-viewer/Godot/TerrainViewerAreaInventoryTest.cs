@@ -7,6 +7,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Godot;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer;
 

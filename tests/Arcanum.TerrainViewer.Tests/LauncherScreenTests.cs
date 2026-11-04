@@ -118,4 +118,56 @@ public sealed class LauncherScreenTests
         Assert.IsTrue(new LauncherScreen(LauncherSettingsCodec.Deserialize("not json"), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()),
             LauncherShowReason.FirstRun).FileUsable, "a damaged file is replaced by the next save");
     }
+    /// <summary>ARC-DEV-074: the installer unpack's state on the screen.</summary>
+    [TestMethod]
+    public void While_a_GOG_installer_unpacks_the_folder_and_Play_are_off_and_the_result_is_chosen_or_named()
+    {
+        var detected = Game(Path.Combine(_root, "Applications", "Arcanum"));
+        var screen = new LauncherScreen(Read(LauncherSettings.Defaults), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()), LauncherShowReason.FirstRun);
+        Assert.IsTrue(screen.CanPlay);
+        Assert.IsTrue(screen.BeginInstall("setup.exe", "target"));
+        Assert.IsFalse(screen.BeginInstall("again.exe", "other"), "one unpack at a time");
+        Assert.IsTrue(screen.Busy);
+        Assert.IsFalse(screen.CanPlay);
+        Assert.IsNull(screen.Play());
+        Assert.AreEqual("Wait for the unpacking to finish, or cancel it.", screen.Notice);
+        var other = Game(Path.Combine(_root, "other"));
+        screen.UseFolder(GameFolderLocator.Choose(other));
+        Assert.IsFalse(screen.UseCandidate(0));
+        Assert.AreEqual(detected, screen.Folder!.Path, "the folder does not change while unpacking");
+        screen.InstallProgress(new(GogInstallStage.Unpacking, 3, 74, 5 * 1024 * 1024, 100 * 1024 * 1024, "arcanum1.dat"));
+        Assert.AreEqual("Unpacking the game files… 3/74 files, 5/100 MB", screen.Notice);
+
+        var unpacked = Game(Path.Combine(_root, "unpacked"));
+        screen.InstallDone(new(GogInstallStatus.Unpacked, null, GameFolderLocator.Check(unpacked)));
+        Assert.IsFalse(screen.Busy);
+        Assert.IsTrue(screen.CanPlay);
+        Assert.AreEqual(unpacked, screen.Folder!.Path, "the unpacked folder is the folder Play opens");
+        Assert.AreEqual($"Unpacked the GOG installer into {unpacked}; the folder is chosen. Press Play to start.", screen.Notice);
+        Assert.AreEqual(unpacked, screen.Play()!.GameRoot);
+
+        screen.BeginInstall("setup.exe", "target2");
+        screen.InstallDone(new(GogInstallStatus.FingerprintMismatch, "Arcanum.exe is not the verified 1.0.7.4 executable"));
+        Assert.AreEqual(unpacked, screen.Folder!.Path, "a failed unpack leaves the folder as it was");
+        StringAssert.Contains(screen.Notice!, "not the verified 1.0.7.4 executable");
+        StringAssert.Contains(screen.Notice!, "Files may be left in target2");
+        Assert.IsTrue(screen.CanPlay);
+    }
+
+    [TestMethod]
+    public void Every_unpack_outcome_has_words_and_a_missing_tool_names_the_way_to_get_it()
+    {
+        foreach (var status in Enum.GetValues<GogInstallStatus>())
+        {
+            var text = LauncherScreen.Describe(new GogInstallResult(status, "detail"), "target");
+            Assert.IsTrue(text.Length > 8 && !text.StartsWith(status + " ", StringComparison.Ordinal), status + ": " + text);
+        }
+        Assert.AreEqual("Unpacking was cancelled. Files may be left in T; empty it or choose another folder before trying again.",
+            LauncherScreen.Describe(new GogInstallResult(GogInstallStatus.Cancelled), "T"));
+        var screen = new LauncherScreen(Read(LauncherSettings.Defaults), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()), LauncherShowReason.FirstRun);
+        screen.InstallToolMissing();
+        StringAssert.Contains(screen.Notice!, "innoextract");
+        Assert.IsFalse(screen.Busy);
+        Assert.AreEqual("Checking the installer…", LauncherScreen.Describe(new GogInstallProgress(GogInstallStage.Checking, 0, 0, 0, 0, null)));
+    }
 }

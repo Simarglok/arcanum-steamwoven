@@ -31,4 +31,13 @@ public readonly record struct AreaLife(int Health, int MaxHealth, int Fatigue, i
         ArgumentNullException.ThrowIfNull(host);
         return host.Build(session, runtimeMap, entity).Combat is { } combat && session.QueryLife(combat.Target).View is { } view ? From(view) : null;
     }
+
+    /// <summary>ARC-DEV-073: whether the NPC is unconscious (the original's 0x45D800: not undead and no fatigue left) on a map the combat
+    /// host covers; null when the host has no combat values for it there.</summary>
+    public static bool? Unconscious(GameSessionOwner session, AreaCombatHost host, int runtimeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(host);
+        return host.Build(session, runtimeMap, entity).Combat is { } combat && session.QueryLife(combat.Target).View is { } view ? view.Status.IsUnconscious : null;
+    }
 }

@@ -3,6 +3,7 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

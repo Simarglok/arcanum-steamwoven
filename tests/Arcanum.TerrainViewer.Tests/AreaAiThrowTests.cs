@@ -8,6 +8,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

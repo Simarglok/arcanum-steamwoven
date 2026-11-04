@@ -84,6 +84,25 @@ public sealed class SessionOwnerTests
     }
 
     [TestMethod]
+    public void EntityChangesAreFoundByIdentityOnEveryMapThatHoldsThem()
+    {
+        // ARC-DEV-072 (MIG1): "which maps carry a change of this entity's property" is answered without naming a map.
+        using var owner = Create();
+        var away = MapChangeKey.ForEntity("npc-1", "npc.map");
+        Assert.AreEqual(0, owner.QueryEntityChanges("npc-1", "npc.map").Count);
+        Changed(owner.SetMapChange(owner.Version, Cave, away, 1), owner, 1);
+        Changed(owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity("npc-1", "npc.cell"), 7), owner, 2);
+        Changed(owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity("npc-2", "npc.map"), 3), owner, 3);
+        Changed(owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForSector(1, "npc.map"), 4), owner, 4);
+        CollectionAssert.AreEqual(new[] { (Cave, 1L) }, owner.QueryEntityChanges("npc-1", "npc.map").ToArray());
+        CollectionAssert.AreEqual(new[] { (Exterior, 7L) }, owner.QueryEntityChanges("npc-1", "npc.cell").ToArray());
+        Changed(owner.SetMapChange(owner.Version, Exterior, away, 2), owner, 5);
+        CollectionAssert.AreEqual(new[] { (Exterior, 2L), (Cave, 1L) }.OrderBy(pair => pair.Item1.RuntimeMap).ToArray(), owner.QueryEntityChanges("npc-1", "npc.map").ToArray(), "in map order");
+        Assert.AreEqual(0, owner.QueryEntityChanges("npc-3", "npc.map").Count);
+        Assert.ThrowsExactly<ArgumentNullException>(() => owner.QueryEntityChanges(null!, "npc.map"));
+    }
+
+    [TestMethod]
     public void MutationsAreVersionGuardedAndCountEachSemanticChangeOnce()
     {
         using var owner = Create();

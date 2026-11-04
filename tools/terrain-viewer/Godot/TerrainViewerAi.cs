@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
             RuntimeMap = mapNumber, Chart = chart, Steps = grid.Snapshot, Npcs = npcs, Combat = combat,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
             Companions = () => _areaCompanions is { } group
-                ? group.Companions.Select(c => (c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
+                ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             Removed = AreaRemovedObjects,
             LineOfFire = () => AiLineOfFire(host),
             DropMap = AreaDropMapNow,

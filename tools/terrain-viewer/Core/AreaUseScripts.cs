@@ -6,6 +6,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

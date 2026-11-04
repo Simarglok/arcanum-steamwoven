@@ -138,12 +138,40 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>The companions that follow the PC off this map, with their facing (recorded before the PC leaves).</summary>
-    private IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> LeavingCompanions()
+    /// <summary>
+    /// ARC-DEV-073 (MIG10): what the session's move list asks the viewer for. A follower that is unconscious (0x45D800: no fatigue left,
+    /// not undead) is ordered to wait and stays behind, with its wait timer from the roster facts; NPC-led followers of followers are
+    /// not modelled (no source of leaders), so none travel below a follower.
+    /// </summary>
+    private SessionTransferFacts TransferFacts()
     {
-        if (_areaCompanions is not { } group || _areaSession is not { } session) return [];
+        var session = _areaSession; var host = _combatHost; var map = CurrentAreaMap;
+        return new SessionTransferFacts
+        {
+            NoFatigue = entity => session is not null && host is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
+                && (AreaLife.Unconscious(session, host, map, entity) ?? (companion.Template.Home.RuntimeMap != map
+                    ? AreaLife.Unconscious(session, host, companion.Template.Home.RuntimeMap, entity) : null)) == true,
+            WaitFacts = entity => session is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
+                ? AreaCompanionRoster.WaitFacts(companion.Facts, session.QueryHeroPartySide()) : null,
+        };
+    }
+
+    /// <summary>The companions that follow the PC off this map, with their facing (recorded before the PC leaves), and the session's
+    /// move list for the change of place (ARC-DEV-073).</summary>
+    private (IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> Companions, SessionMoveList? MoveList) LeavingCompanions()
+    {
+        if (_areaCompanions is not { } group || _areaSession is not { } session) return ([], null);
         RecordAreaCompanions("leaving the map");
-        return group.Following(session);
+        return group.Leaving(session, TransferFacts());
+    }
+
+    /// <summary>ARC-DEV-073 (FM6, another map only): the followers that travel with the PC leave combat mode, as the source's move does
+    /// (0x4B3F20); the one rule of the toggle applies (a stunned, stoned or paralysed follower stays in it). Run on the map being left.</summary>
+    private void LeaveFollowersCombatMode(SessionMoveList? moveList)
+    {
+        if (moveList is null || _aiHost is not { } host || _areaSession is not { } session) return;
+        foreach (var entity in moveList.Travelling)
+            if (session.QueryCombatMode(SessionCombatant.Critter(entity))) host.LeaveCombatMode(entity);
     }
 
     /// <summary>Writes the companions' cells to the session (quick save, leaving the map). False when the session refused.</summary>

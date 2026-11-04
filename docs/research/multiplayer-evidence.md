@@ -121,16 +121,21 @@ id (0x5E8AD0; slot clear 0x49CB80; object ↔ slot 0x4A2B10, 0x4A2B60).
   when the test answers 1, apply locally; otherwise the host broadcasts the
   change and applies it; otherwise (a client) do nothing and wait for the host.
 - About 350 functions outside the multiplayer range test these flags or send
-  packets. Damage, for example, is applied only on the host (0x4B43A0); a
+  packets. Damage, for example, is applied only on the host (0x4B43A0, inside the damage entry
+  0x4B4390); a
   client runs no NPC AI, which confirms CL3 of the
   [AI core loop](npc-ai-core-loop.md).
-- The dispatcher 0x49D690 is one switch on the packet type, 1..130; types 14,
+- The dispatcher 0x49D690, reached only as a registered callback, is one switch on the packet type, 1..130; types 14,
   15, 45, 47, 55 and 78 are empty, so 124 types are handled. The validator
   0x4A2020 admits types 1..130. A third callback handles network events 0..13
   (0x4A2070): 5 a join request, 8 a client left, 11 the game started.
 - **Requests a client sends, applied on the host only:** player list (1), move
   to a tile (4), a spoken line or broadcast (18), drop, put, give and place an
-  item (26–29), start a spell (57), and types 81 and 127 (role not read).
+  item (26–29), start a spell (57), and types 81 and 127 (role not read). Corrected by
+  ARC-RES-086 from [SA31 to SA33](../architecture/original-scripts-authority.md#4-authority-and-the-change-path):
+  the list is not complete (5, 7, 8, 9, 19, 30, 31, 44/2, 48, 50, 80, 96, 117, 118, 122,
+  125, 126 and 100/12 are sent from rule functions too), and no client sender of 1 or 81
+  was found.
 - **Replication the host sends, applied on clients only:** blessings (42),
   spell runs started, maintained and processed (60–62), object creation and
   item transfer with subtypes (70), the party table (71), item decay (72),
