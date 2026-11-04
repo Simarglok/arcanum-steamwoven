@@ -56,6 +56,7 @@ public partial class LauncherPanel : CanvasLayer
         "Installer: " + (_busy ? "unpacking" : "idle") + (_install.Disabled ? ", install off" : ", install on") + (_cancelInstall.Visible ? ", cancel shown" : ""),
     ];
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
+    internal string CancelTextForSelfTest => _cancelInstall.Text;
     internal void ChooseForSelfTest(string path) => FolderChosen?.Invoke(path);
     internal void RulesForSelfTest(RuleMode mode) => RulesRequested?.Invoke(mode);
     internal void ShowAtStartForSelfTest(bool show) => ShowAtStartRequested?.Invoke(show);
@@ -120,7 +121,8 @@ public partial class LauncherPanel : CanvasLayer
         var hint = Line(new Color(.3f, .3f, .3f));
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. "
                     + "The rules can also be switched in play in Options. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
-                    + "The game folder is only read, never written. "
+                    + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
+                    + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
         foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
@@ -194,6 +196,7 @@ public partial class LauncherPanel : CanvasLayer
             _play.Disabled = !screen.CanPlay;
             _choose.Disabled = _install.Disabled = _reset.Disabled = screen.Busy;
             _cancelInstall.Visible = screen.Busy;
+            _cancelInstall.Text = screen.CancelText;
             foreach (var button in _candidates.GetChildren().OfType<Button>()) button.Disabled = screen.Busy;
             _notice.Text = screen.Notice ?? "";
         }

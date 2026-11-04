@@ -1,8 +1,8 @@
 # Arcanum.Executable
 
 Status: **implemented, bounded** (ARC-DEV-067, slice E2 of the [prototype extraction](research/prototype-extraction.md),
-2026-11-04; the prototype builder over it, E3 / ARC-DEV-068, [below](#the-prototype-builder)). Not wired into the game: the cache
-and the launcher's first-start build are E4 (ARC-DEV-069).
+2026-11-04; the prototype builder over it, E3 / ARC-DEV-068, [below](#the-prototype-builder); the launcher's first-start build and cache over it, E4 / ARC-DEV-069, in
+`Arcanum.Session` ([results](research/prototype-extraction.md#e4-results-arc-dev-069))). The project itself stays free of the game's cache, content stack and launcher.
 
 `Arcanum.Executable` reads the player's own PE32 `Arcanum.exe` in place and interprets the 32-bit integer subset of x86
 that the original's prototype build reaches, so that Steamwoven can later run the original's own prototype code instead

@@ -2,7 +2,10 @@ namespace Arcanum.Data.Content;
 
 /// <summary>Where a mounted source comes from in the original start-up sequence
 /// (see docs/research/content-precedence.md). Directory roles hold loose files.</summary>
-public enum ContentSourceRole { Tig, GameRoot, BaseArchive, DataDirectory, ModuleArchive, ModulePatch, ModuleDirectory }
+/// <summary><see cref="PrototypeCache"/> (ARC-DEV-069) is a base source that holds <c>proto/*.pro</c> files Steamwoven built from the
+/// player's own <c>Arcanum.exe</c> because the installation has none (the original writes them to <c>data/</c> at its first start); it is
+/// mounted over the base archives and under <c>data/</c>, so a real <c>data/proto</c> file always wins.</summary>
+public enum ContentSourceRole { Tig, GameRoot, BaseArchive, DataDirectory, ModuleArchive, ModulePatch, ModuleDirectory, PrototypeCache }
 public enum ContentSourceKind { Archive, Directory }
 
 /// <param name="Number">The mount position among <c>arcanum*.dat</c> base archives (0 = first
@@ -10,7 +13,7 @@ public enum ContentSourceKind { Archive, Directory }
 /// <param name="Path">The full local path of the archive file or directory.</param>
 public sealed record ContentSource(ContentSourceRole Role, int Number, string Path)
 {
-    public ContentSourceKind Kind => Role is ContentSourceRole.GameRoot or ContentSourceRole.DataDirectory or ContentSourceRole.ModuleDirectory
+    public ContentSourceKind Kind => Role is ContentSourceRole.GameRoot or ContentSourceRole.DataDirectory or ContentSourceRole.ModuleDirectory or ContentSourceRole.PrototypeCache
         ? ContentSourceKind.Directory : ContentSourceKind.Archive;
 }
 

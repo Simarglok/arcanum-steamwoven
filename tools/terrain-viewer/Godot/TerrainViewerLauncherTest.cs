@@ -51,6 +51,11 @@ public partial class TerrainViewerApp
         string[] Lines() => [.. _launcherPanel!.LinesForSelfTest];
         LauncherSettings Stored() => LauncherSettingsFile.Load(settingsPath).Settings;
         async Task Start(bool requested) { _launcherRead = null; started = null; await StartFromGameFolderAsync(requested); }
+        // ARC-DEV-069: Play prepares the game data off the main thread before it starts; a synthetic folder holds no archives to build from, so
+        // the preparation is a stand-in (the installation has its own prototype files) except in its own section below.
+        _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.Present);
+        PrototypeCacheMount.Use(null);
+        async Task Play() { _prepareTask = null; _launcherPanel!.PlayForSelfTest(); if (_prepareTask is { } task) await task; }
 
         // First run: no file, no candidate: the screen, without a folder, Play off.
         await Start(false);
@@ -61,7 +66,7 @@ public partial class TerrainViewerApp
         _launcherPanel!.ChooseForSelfTest(empty);
         Require(!_launcherPanel.PlayEnabledForSelfTest && Lines()[5].StartsWith("Not a game folder the game can open: no tig.dat here", StringComparison.Ordinal),
             "a non-game folder is named in words: " + Lines()[5]);
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(started is null, "Play does nothing without a ready folder");
         _launcherPanel.ChooseForSelfTest(game);
         _launcherPanel.RulesForSelfTest(RuleMode.Original);
@@ -72,7 +77,7 @@ public partial class TerrainViewerApp
         var debugBefore = DebugMode;
         Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on"
                 && Lines()[6] == "Debug mode: on", "a game folder, Original, show at start and debug mode: " + string.Join(" | ", Lines()));
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(DebugMode && Stored().DebugMode, "Play stored the debug mode and turned it on");
         DebugMode = debugBefore;
         Require(started?.GameRoot is { } root && System.IO.Path.GetFullPath(root) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen,
@@ -85,7 +90,7 @@ public partial class TerrainViewerApp
         await Start(false);
         Require(_launcher is { Reason: LauncherShowReason.ShowAtStart, CanPlay: true } && Lines()[3] == "Rules: Steamwoven [Original]", "show at start: " + string.Join(" | ", Lines()));
         _launcherPanel.ShowAtStartForSelfTest(false);
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(started is not null && !Stored().ShowAtStart, "Play with show at start off");
         await Start(false);
         Require(started is not null && _launcher is null && !_launcherPanel.IsOpen, "a stored unchanged folder goes straight to the start");
@@ -147,13 +152,13 @@ public partial class TerrainViewerApp
         Require(_launcher is { Busy: true, CanPlay: false } && Lines()[7] == "Installer: unpacking, install off, cancel shown" && !_launcherPanel.PlayEnabledForSelfTest,
             "while unpacking Play and the install button are off: " + string.Join(" | ", Lines()));
         _launcherPanel.ChooseForSelfTest(game);
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(started is null && _launcher!.Folder?.Path == folderBefore, "no folder is chosen and Play does nothing while unpacking");
         await Idle();
         Require(_launcher is { Busy: false, CanPlay: true } && _launcher.Folder?.Path == unpacked
                 && Lines()[5].StartsWith("Unpacked the GOG installer into", StringComparison.Ordinal) && Lines()[7] == "Installer: idle, install on",
             "the unpacked folder is chosen: " + string.Join(" | ", Lines()));
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(started?.GameRoot is { } unpackedRoot && System.IO.Path.GetFullPath(unpackedRoot) == unpacked && Stored().GameRoot == started.GameRoot,
             "Play opens and stores the unpacked folder: " + started?.GameRoot);
         // A folder with files in it is refused in words and nothing changes; a cancel stops the tool.
@@ -170,11 +175,64 @@ public partial class TerrainViewerApp
         Require(Lines()[5].StartsWith("Unpacking was cancelled.", StringComparison.Ordinal) && _launcher!.Folder?.Path != cancelled, "a cancel is named: " + Lines()[5]);
         _launcherUnpackerForSelfTest = null;
 
+        // ARC-DEV-069: an installation without prototype files is prepared on the first Play, off the main thread, with its progress on the screen.
+        await Start(true);
+        _launcherPanel!.ChooseForSelfTest(game);
+        var cache = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(directory, "cache-stand-in")).FullName;
+        var release = new ManualResetEventSlim();
+        _launcherProvisionForSelfTest = (_, progress, cancel) =>
+        {
+            progress(new(PrototypeProvisionStage.Building));
+            progress(new(PrototypeProvisionStage.Building, 312, PrototypeProvisioner.InstalledFileCount));
+            try { release.Wait(cancel); }
+            catch (OperationCanceledException) { return new(PrototypeProvisionStatus.Cancelled); }
+            return new(PrototypeProvisionStatus.Built, cache, Files: PrototypeProvisioner.InstalledFileCount);
+        };
+        started = null; _prepareTask = null;
+        _launcherPanel.PlayForSelfTest();
+        for (var frames = 0; !(_launcher?.Notice?.Contains("312/1423", StringComparison.Ordinal) ?? false); frames++)
+        {
+            Require(frames < 1200, "the preparation's progress did not arrive: " + string.Join(" | ", Lines()));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        Require(_launcher is { Busy: true, Preparing: true, CanPlay: false } && !_launcherPanel.PlayEnabledForSelfTest && started is null && _launcherPanel.IsOpen
+                && Lines()[5].StartsWith("Preparing the game data from your Arcanum.exe (first start only", StringComparison.Ordinal)
+                && Lines()[7] == "Installer: unpacking, install off, cancel shown" && _launcherPanel.CancelTextForSelfTest == "Cancel",
+            "while the game data is prepared the screen is busy with the progress and a Cancel: " + string.Join(" | ", Lines()));
+        Require(!Lines()[5].Contains("run Arcanum.exe", StringComparison.OrdinalIgnoreCase) && !Lines()[5].Contains("start Arcanum.exe", StringComparison.OrdinalIgnoreCase),
+            "the screen never tells the player to run the original");
+        _launcherPanel.CancelInstallForSelfTest();
+        await _prepareTask!;
+        Require(_launcher is { Busy: false, CanPlay: true } && Lines()[5].StartsWith("Preparing the game data was cancelled", StringComparison.Ordinal) && started is null
+                && PrototypeCacheMount.Folder is null, "a cancel is named, the screen stays open and nothing is mounted: " + Lines()[5]);
+        _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.UnverifiedExecutable);
+        await Play();
+        Require(_launcher is { Busy: false, CanPlay: true } && started is null && Lines()[5].Contains("not the retail 1.0.7.4 one", StringComparison.Ordinal)
+                && !Lines()[5].Contains("run Arcanum.exe", StringComparison.OrdinalIgnoreCase), "an executable that cannot be built from is named: " + Lines()[5]);
+        _launcherProvisionForSelfTest = (_, progress, cancel) =>
+        {
+            progress(new(PrototypeProvisionStage.Storing, 1423, 1423));
+            return new(PrototypeProvisionStatus.Cached, cache, Files: PrototypeProvisioner.InstalledFileCount);
+        };
+        await Play();
+        Require(started?.GameRoot is { } preparedRoot && System.IO.Path.GetFullPath(preparedRoot) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen
+                && PrototypeCacheMount.Folder == cache, "a prepared folder starts the game with its cache mounted: " + started?.GameRoot);
+        // A stored folder goes straight on through the same preparation; a failure opens the screen with the reason.
+        _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.NoExecutable);
+        await Start(false);
+        Require(_launcher is { Reason: LauncherShowReason.Requested, Busy: false } && started is null && Lines()[5].Contains("which was not found", StringComparison.Ordinal),
+            "a stored folder that cannot be prepared opens the screen: " + string.Join(" | ", Lines()));
+        _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.Present);
+        await Play();
+        Require(started is not null && PrototypeCacheMount.Folder is null, "an installation with its own files mounts no cache");
+        _launcherProvisionForSelfTest = null;
+
+        _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.Present);
         // Reset replaces even a newer build's file with the defaults.
         System.IO.File.WriteAllText(settingsPath, """{"schema":2,"gameRoot":"/x"}""");
         await Start(true);
         _launcherPanel.ChooseForSelfTest(game);
-        _launcherPanel.PlayForSelfTest();
+        await Play();
         Require(started is not null && System.IO.File.ReadAllText(settingsPath) == """{"schema":2,"gameRoot":"/x"}""", "Play never overwrites a newer build's file");
         await Start(true);
         Require(_launcher!.FileStatus == LauncherSettingsReadStatus.OtherSchema && Lines()[1].Contains("newer build's", StringComparison.Ordinal), "the newer file is named");
@@ -182,9 +240,12 @@ public partial class TerrainViewerApp
         Require(LauncherSettingsFile.Load(settingsPath) is { Status: LauncherSettingsReadStatus.Read } reset && reset.Settings == LauncherSettings.Defaults
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
         _launcher = null; _launcherPanel.CloseView();
+        _launcherProvisionForSelfTest = null;
+        PrototypeCacheMount.Use(null);
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
                + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
-               + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), Reset over a newer build's file";
+               + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), the game data prepared on the first Play (progress, cancel, refusal, "
+               + "cached, a stored folder), Reset over a newer build's file";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the
@@ -210,7 +271,9 @@ public partial class TerrainViewerApp
             panel.ShowAtStartForSelfTest(false);
             var lines = panel.LinesForSelfTest.ToArray();
             Require(panel.PlayEnabledForSelfTest && lines[3] == "Rules: Steamwoven [Original]" && lines[4] == "Show at every start: off", "choices: " + string.Join(" | ", lines));
+            _prepareTask = null;
             panel.PlayForSelfTest();
+            if (_prepareTask is { } preparing) await preparing;
             Require(!panel.IsOpen && _ruleMode == RuleMode.Original && _arguments?.GameRoot is not null, "Play started the main map under Original");
             var path = LauncherSettingsPath();
             if (path is not null)

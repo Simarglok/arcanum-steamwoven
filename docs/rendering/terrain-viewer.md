@@ -125,8 +125,19 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   unpack …`). On success the folder is chosen as if the player had picked it (Play stores it, with the GOG marker in its identity);
   every failure (not Arcanum's installer, missing `.bin` parts, a failed checksum, not enough space, a tool error with its first
   error line, the wrong executable, a cancel) is named in words and leaves the chosen folder as it was; files a failed or cancelled
-  run wrote stay in the target (the player empties it or picks another). It builds no prototypes: `data/proto` comes at the first
-  start (ARC-DEV-068, ARC-DEV-069).
+  run wrote stay in the target (the player empties it or picks another). It builds no prototypes: they come at the first Play
+  (ARC-DEV-069, next bullet).
+- **The game data at Play (ARC-DEV-069, [research](../research/prototype-extraction.md#e4-results-arc-dev-069)).** Before the game
+  starts on a folder (Play, or the start from a stored folder) `PrototypeProvisioner` checks that the folder has its prototype
+  files: an installation the original ran has them (nothing is done); otherwise the files are built once from the player's own
+  verified `Arcanum.exe` by the E3 builder, off the main thread, and kept in `prototypes/` beside `launcher_v1.json`, keyed by the
+  executable and verified against the data they were built from at every start. The screen is busy like during an unpack (the folder,
+  Play and Reset are off, the line shows `Preparing the game data from your Arcanum.exe (first start only, about half a minute)… n/1423`,
+  Cancel and Quit stop it); a stored folder's start shows the same line on the status line. Success mounts the cache for every reader
+  (`PrototypeCacheMount`, a base source above the archives and under `data/`) and starts the game; a failure (an executable that is not
+  the 1.0.7.4 one, no `Arcanum.exe`, a build fault, a settings folder that cannot be written, a cancel) is named in words, leaves
+  the screen open (opened for a stored folder) and keeps Play offered. The screen never tells the player to run the original. Log lines:
+  `ARC-DEV-069 prototypes stage=… / status=… files=… cache=… detail=…`.
 - **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
   detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode, "show
   at start" and the debug mode (`debugMode`, which turns the run's debug mode on, as `--debug-mode` does), then starts map mode on the main map with the main menu from that folder, as a start without the screen
@@ -145,7 +156,9 @@ the start): the first run without a folder and Play off, a non-game folder named
 folder with its identity, Original and "show at start", that setting reopening the screen, a stored folder going
 straight to the start, a request opening it, the Rules line writing the file, Play never overwriting a newer build's
 file and Reset replacing it, and (ARC-DEV-074) the install button over a stand-in tool: no tool named in words, the
-folder and Play off while it runs, the unpacked folder chosen and started by Play, a used folder refused, a cancel named.
+folder and Play off while it runs, the unpacked folder chosen and started by Play, a used folder refused, a cancel named, and (ARC-DEV-069)
+the game data prepared on Play over a stand-in: the progress and Cancel on the screen, a cancel and a refusal named, a prepared folder starting with its
+cache mounted, a stored folder opening the screen on a failure.
 The real tool runs only in the opt-in `The_real_installer_unpacks_into_the_verified_game_folder` test
 ([opt-in data](../workflow/toolchain.md#opt-in-original-data)). Native smoke on the original data: `LAUNCHER_SETTINGS_TEST_PATH=FILE
 ARC_AREA_MAP_SMOKE_ONLY=menu` and `godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke` (a first run

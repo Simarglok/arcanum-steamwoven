@@ -35,6 +35,10 @@ public partial class TerrainViewerApp
     private Func<GogInstallerUnpacker?>? _launcherUnpackerForSelfTest;
     /// <summary>The self-test's stand-in for the start Play begins (a synthetic folder cannot load).</summary>
     private Action<TerrainViewerArguments>? _launcherStartForSelfTest;
+    /// <summary>ARC-DEV-069: the first-start preparation of the game data that Play (or a stored folder's start) is waiting for; the self-test awaits it.</summary>
+    private Task? _prepareTask;
+    /// <summary>The self-test's stand-in for the preparation (a synthetic folder holds no real archives to build from).</summary>
+    private Func<GameFolderCheck, Action<PrototypeProvisionProgress>, CancellationToken, PrototypeProvisionResult>? _launcherProvisionForSelfTest;
     /// <summary>The self-test's platform (synthetic candidate folders) instead of this machine's.</summary>
     private GameFolderPlatform? _launcherPlatformForSelfTest;
 
@@ -85,7 +89,18 @@ public partial class TerrainViewerApp
             var reason = LauncherScreen.Decide(read.Settings, startup, requested);
             if (reason == LauncherShowReason.None && !ViewerAutomatedStorage.Automated && await ShiftDuringStart()) reason = LauncherShowReason.Requested;
             GD.Print($"ARC-UI-014 launcher reason={reason}");
-            if (reason == LauncherShowReason.None) { StartFromLauncher(startup.Folder!); return; }
+            if (reason == LauncherShowReason.None)
+            {
+                // A stored, unchanged folder goes straight on; the game data (prototype files) is checked first and, only when the installation has
+                // none, prepared with the progress on the status line. A failure opens the launcher screen with the reason.
+                await PrepareAndStartAsync(startup.Folder!, null, () =>
+                {
+                    var screen = new LauncherScreen(read, startup, LauncherShowReason.Requested);
+                    OpenLauncher(screen);
+                    return screen;
+                });
+                return;
+            }
             OpenLauncher(new LauncherScreen(read, startup, reason));
             if (_nativeSmoke) await RunLauncherSmokeAsync();
         }
@@ -224,11 +239,83 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-014 launcher play folder={settings.GameRoot} rules={RuleModeNames.Name(settings.Rules)} showAtStart={settings.ShowAtStart} "
                  + $"debugMode={settings.DebugMode} save={saved?.ToString() ?? "skipped (automated run)"}");
         _launcherSettings = settings;
-        var folder = launcher.Folder!;
-        _launcher = null;
-        _launcherPanel?.CloseView();
-        StartFromLauncher(folder);
+        // ARC-DEV-069: the screen stays open (busy) while the game data is checked and, on a first start, prepared; it closes when the game starts.
+        _ = PrepareAndStartAsync(launcher.Folder!, launcher, null);
     }
+
+    /// <summary>ARC-DEV-069: the folder where the prepared game data lives: beside the launcher settings (an automated run without a test path uses
+    /// its isolated folder), never in the game folder.</summary>
+    private string PrototypeCacheRoot()
+    {
+        var settings = LauncherSettingsPath();
+        return System.IO.Path.Combine(settings is null ? ViewerAutomatedStorage.Folder() : System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(settings))!, "prototypes");
+    }
+
+    /// <summary>ARC-DEV-069: before the game starts on <paramref name="folder"/>, makes sure its prototype files exist: the installation's own, a cache
+    /// built from the player's <c>Arcanum.exe</c> on an earlier start, or (the first start only, about half a minute) built now off the main thread
+    /// with its progress on <paramref name="launcher"/> or the status line. Success mounts the cache for every reader and starts the game; a failure
+    /// leaves (or opens, through <paramref name="reopen"/>) the launcher screen with the reason.</summary>
+    private Task PrepareAndStartAsync(GameFolderCheck folder, LauncherScreen? launcher, Func<LauncherScreen>? reopen)
+        => _prepareTask = PrepareAndStartCoreAsync(folder, launcher, reopen);
+
+    private async Task PrepareAndStartCoreAsync(GameFolderCheck folder, LauncherScreen? launcher, Func<LauncherScreen>? reopen)
+    {
+        try
+        {
+            if (launcher is not null) { launcher.BeginPrototypes(); _launcherPanel?.Render(launcher); }
+            else ShowStatus("Diagnostic mode unresolved | loading stage=GameData | " + LauncherScreen.Describe(new PrototypeProvisionProgress(PrototypeProvisionStage.Checking)));
+            using var cancel = _installCancel = new CancellationTokenSource();
+            PrototypeProvisionResult result;
+            try
+            {
+                var stage = (PrototypeProvisionStage?)null;
+                result = await Task.Run(() => ProvidePrototypes(folder, progress =>
+                {
+                    // Progress comes from the build's thread: the screen is updated on the main thread, the log line only at a stage change.
+                    if (stage != progress.Stage) { stage = progress.Stage; GD.Print($"ARC-DEV-069 prototypes stage={progress.Stage}"); }
+                    Callable.From(() =>
+                    {
+                        if (launcher is not null) { if (_launcher != launcher) return; launcher.PrototypesProgress(progress); _launcherPanel?.Render(launcher); }
+                        else ShowStatus("Diagnostic mode unresolved | loading stage=GameData | " + LauncherScreen.Describe(progress));
+                    }).CallDeferred();
+                }, cancel.Token));
+            }
+            catch (OperationCanceledException) { result = new(PrototypeProvisionStatus.Cancelled); }
+            catch (Exception error)
+            {
+                // Whatever escapes must still end the busy state, or Play and the folder buttons stay off for good.
+                result = new(PrototypeProvisionStatus.BuildFailed, Detail: error.GetType().Name + ": " + error.Message);
+            }
+            finally { _installCancel = null; }
+            GD.Print($"ARC-DEV-069 prototypes status={result.Status} files={result.Files} cache={result.MountFolder ?? "none"} detail={result.Detail ?? "none"}");
+            if (launcher is not null && _launcher != launcher) return; // the screen closed (a quit)
+            if (result.Succeeded)
+            {
+                PrototypeCacheMount.Use(result.MountFolder);
+                if (launcher is not null) { _launcher = null; _launcherPanel?.CloseView(); }
+                StartFromLauncher(folder);
+                return;
+            }
+            launcher ??= reopen?.Invoke();
+            if (launcher is null)
+            {
+                ShowFailure($"Diagnostic mode unresolved | failure stage=GameData code={result.Status} | {LauncherScreen.Describe(result)} | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+                if (_nativeSmoke) GetTree().Quit(1);
+                return;
+            }
+            launcher.PrototypesDone(result);
+            _launcherPanel?.Render(launcher);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            GD.PrintErr($"ARC-DEV-069 game data start FAILED: {error.GetType().Name}: {error.Message}");
+            ShowFailure("Diagnostic mode unresolved | failure stage=GameData code=StartFailed | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+            if (_nativeSmoke) GetTree().Quit(1);
+        }
+    }
+
+    private PrototypeProvisionResult ProvidePrototypes(GameFolderCheck folder, Action<PrototypeProvisionProgress> progress, CancellationToken cancel)
+        => _launcherProvisionForSelfTest is { } stand ? stand(folder, progress, cancel) : PrototypeProvisioner.Provision(folder, PrototypeCacheRoot(), progress, cancel);
 
     /// <summary>The map-mode start over a ready folder (the launcher's Play, or a start the screen does not show for).</summary>
     private void StartFromLauncher(GameFolderCheck folder)
