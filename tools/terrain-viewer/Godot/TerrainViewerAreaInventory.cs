@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
     /// <summary>Builds the seeds of the exterior and (when loaded) the cave and attaches them to the new area session.
     /// A refused build leaves the inventory unavailable; the rest of the area runs as before. ARC-SCRIPT-013: the game's
     /// script content (shared with the conversations) runs an item's insert-item script on a transfer.</summary>
-    private void BindAreaInventory(TerrainViewerArguments arguments, TerrainLoadResult result)
+    private void BindAreaInventory(TerrainViewerArguments arguments, TerrainLoadResult result, bool keepLeft = false)
     {
         UnbindAreaInventory();
         if (_areaSession is not { } session || result.Area is not { } area || result.AreaStepSnapshot is not { } steps) return;
@@ -64,7 +64,11 @@ public partial class TerrainViewerApp
         var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
         // ARC-DEV-072 (MIG1): an NPC whose home map this run did not load resolves through the resolver, which reads the home map's rows on
         // demand from the game folder. Only maps a whole-map plan admits are read: a home on the main world map (a window) is not (NOT READY).
-        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaMapRecords(arguments)));
+        // ARC-DEV-075 (MIG2): the maps the run left at its last map change answer first (a window of the main map included), so a companion
+        // carried from the main map into the cave has its home record there.
+        var left = keepLeft ? _recordMapsLeft : [];
+        _recordMapsLeft = [];
+        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left, new AreaMapRecords(arguments))));
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are
@@ -84,8 +88,12 @@ public partial class TerrainViewerApp
         BindAreaCombat(host);
     }
 
+    // ARC-DEV-075: the record maps of the host a map change tore down, for the next scene of the same run (a new run starts with none).
+    private IReadOnlyList<AreaInventoryMap> _recordMapsLeft = [];
+
     private void UnbindAreaInventory()
     {
+        if (_inventoryHost is { } leaving) _recordMapsLeft = leaving.Resolver.Maps;
         EndInventory();
         UnbindAreaCombat();
         _inventoryHost = null; _inventoryAfterRoute = null; _inventoryHiddenStamp = null; _inventoryHidden = null;

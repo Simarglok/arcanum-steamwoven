@@ -41,14 +41,20 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 `AreaInventoryHost(maps, records: new AreaMapRecords(arguments))` makes the resolver; `AreaCombatHost` answers by identity
 (`Record`, `HomeMap`, `Fields(entity)`, `Build(entity)`, `Build(session, entity)`, `Holder(session, entity)`, `Worn(session, entity)`)
 and keeps its map-keyed questions with their meaning (the rows of that map), so the consumers move one by one: carried companions in the AI
-(MIG2), spell targets, hover attack, life bars and panels (MIG3), the body (MIG4) and one dialog host (MIG5).
+(MIG2, done: ARC-DEV-075, the AI host asks only by identity; `AreaCombatHost` gained `WornItems`, `NpcItems`, `HeldItemFields`, `NpcHolder` and
+`NpcItemFields` by identity, the last two over every held map), spell targets, hover attack, life bars and panels (MIG3), the body (MIG4) and one dialog host (MIG5).
 
 ## Not ready
 
 - A map that opens only as a window (the main world map, more sector files than a whole-map plan admits) is not read on demand
-  (`HomeUnread` with the plan status); its NPCs resolve while the viewer holds that map. The Crash Site's own NPCs are held because the
+  (`HomeUnread` with the plan status); its NPCs resolve while the viewer holds that map. Since ARC-DEV-075 (MIG2) the viewer also keeps the
+  maps it left at a map change of the same run (`AreaRememberedRecords`, a record source that answers from them before the game folder's
+  reader), so Virgil carried from the main map into the Crash Site cave resolves there. A quick load to another map or a fresh run starts with
+  none: Virgil's home (a main-map window) is then unresolved, and the AI keeps him out of its rules (`AreaAiHost.Unresolved`) until MIG9
+  reads such a window on demand (the F7 in the cave, a fresh run, F8 case). The Crash Site's own NPCs are held because the
   viewer gives the resolver the launch maps.
 - The read happens on the caller's thread (once per map, then cached, failures too); a frame that asks for a never-held home map pays for
   it. MIG9 (residency) owns moving reads off the frame.
-- The consumers listed above still ask by (shown map, entity); the `Stranger` skip, `ForVisitor`, `_travellers` and the home-map fallbacks
-  go in MIG2–MIG5.
+- The consumers listed above still ask by (shown map, entity); `ForVisitor`, `_travellers` and the home-map fallbacks go in MIG3–MIG5. The
+  `Stranger` skip went in MIG2 but for one case: a companion with no record (a home on the main map's window) is kept out of the AI rules by
+  `AreaAiHost.Unresolved`, until MIG9 reads such a window on demand.
