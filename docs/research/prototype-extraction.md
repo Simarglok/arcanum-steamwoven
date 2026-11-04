@@ -137,7 +137,7 @@ owner's Windows installation (2026-10-29).
   An installation that already has `data/proto` keeps it.
 - **Time.** The scratch harness took 11 minutes for all 1,423 builds, almost all of it in the
   key matching of PX5; a C# interpreter without a per-instruction hook should take seconds
-  (estimate, unmeasured).
+  (estimate; the E2 interpreter runs about 100 million instructions per second, [measured](../Arcanum.Executable.md#verification)).
   The launcher shows the build's progress once and stores the result.
 
 ## Slices
@@ -145,7 +145,7 @@ owner's Windows installation (2026-10-29).
 | Slice | Code | Content | Done when |
 | --- | --- | --- | --- |
 | E1 | ARC-RES-085 | This document | Merged |
-| E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
+| E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
 | E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the build loop, the captured files; the open inputs of the census settled by reading | All 1,423 files equal to the files the original wrote on the owner's Windows installation, leaving out the unused ID bytes (an opt-in real-data test; the owner's zipped `data\proto` stays local); the macOS differences listed |
 | E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, the ARC-DEV-066 detection as the fallback for an unverified executable | A fresh installation (no `data/proto`) starts the game on macOS and Windows |
 

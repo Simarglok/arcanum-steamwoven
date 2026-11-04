@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Executable</AssemblyName>
+    <RootNamespace>Arcanum.Executable</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.Executable.Tests" />
+  </ItemGroup>
+</Project>
