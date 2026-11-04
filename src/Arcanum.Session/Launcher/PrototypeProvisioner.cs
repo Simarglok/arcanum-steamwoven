@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using Arcanum.Data.Content;
+using Arcanum.Data.Maps;
+using Arcanum.Executable.Maps;
 using Arcanum.Executable.Prototypes;
 
 namespace Arcanum.Session.Launcher;
@@ -26,14 +28,15 @@ public enum PrototypeProvisionStatus
     Cancelled,
 }
 
-public enum PrototypeProvisionStage { Checking, Building, Storing }
+public enum PrototypeProvisionStage { Checking, Building, Storing, BuildingMaps }
 
 /// <summary>Where the provision is: the stage and, while building, the files done and the total (0 when not known yet).</summary>
 public sealed record PrototypeProvisionProgress(PrototypeProvisionStage Stage, int Done = 0, int Total = 0);
 
 /// <param name="MountFolder">The folder to hand to <see cref="PrototypeCacheMount.Use"/>; null when the installation has its own files or nothing was built.</param>
 /// <param name="Files">The prototype files in the cache.</param>
-public sealed record PrototypeProvisionResult(PrototypeProvisionStatus Status, string? MountFolder = null, string? Detail = null, int Files = 0)
+/// <param name="MapFiles">The map aggregate files in the cache (ARC-DEV-082).</param>
+public sealed record PrototypeProvisionResult(PrototypeProvisionStatus Status, string? MountFolder = null, string? Detail = null, int Files = 0, int MapFiles = 0)
 {
     public bool Succeeded => Status is PrototypeProvisionStatus.Present or PrototypeProvisionStatus.Cached or PrototypeProvisionStatus.Built;
 }
@@ -49,6 +52,9 @@ public sealed record PrototypeProvisionOptions
 
     /// <summary>The build (tests pass a stand-in; the default is <see cref="PrototypeBuilder.Build"/> with its default options).</summary>
     public Func<byte[], IOriginalFileSource, Action<int, int>?, PrototypeBuildResult>? Build { get; init; }
+
+    /// <summary>The map aggregate build (ARC-DEV-082; tests pass a stand-in; the default is <see cref="MapAggregateBuilder.Build"/> with its default options): the executable, the data, the module's GUID.</summary>
+    public Func<byte[], IOriginalFileSource, byte[], Action<int, int>?, MapAggregateRunResult>? BuildMaps { get; init; }
 }
 
 /// <summary>
@@ -69,7 +75,7 @@ public static class PrototypeProvisioner
     public const long MaxExeBytes = GameFolderLocator.MaxExeBytes;
 
     /// <param name="folder">A ready game folder (<see cref="GameFolderCheck.Ready"/>).</param>
-    /// <param name="cacheRoot">Steamwoven's folder for built prototypes (created when needed), outside the game folder.</param>
+    /// <param name="cacheRoot">Steamwoven's folder for built first-start files (created when needed), outside the game folder.</param>
     /// <param name="progress">Called on the calling thread (the builder's), at most once per file built.</param>
     public static PrototypeProvisionResult Provision(GameFolderCheck folder, string cacheRoot, Action<PrototypeProvisionProgress>? progress = null,
         CancellationToken cancel = default, PrototypeProvisionOptions? options = null)
@@ -88,45 +94,154 @@ public static class PrototypeProvisioner
             if (opened.Status != ContentStackStatus.Ready) return new(PrototypeProvisionStatus.SourceFailed, Detail: $"the game content cannot be opened ({opened.Status})");
             using var stack = opened.Stack!;
             var prototypes = ContentPrototypes.Open(stack);
-            if (prototypes.Numbers.Count >= options.InstalledFileCount) return new(PrototypeProvisionStatus.Present, Files: prototypes.Numbers.Count);
+            var hasPrototypes = prototypes.Numbers.Count >= options.InstalledFileCount;
+            var missingMaps = MissingAggregates(stack);
+            if (hasPrototypes && missingMaps == 0) return new(PrototypeProvisionStatus.Present, Files: prototypes.Numbers.Count);
 
             var exe = ReadExecutable(plan.GameRoot, out var exeFailure);
             if (exe is null) return exeFailure!;
             var exeSha = Convert.ToHexString(SHA256.HashData(exe)).ToLowerInvariant();
             if (!string.Equals(exeSha, options.ExpectedExeSha256, StringComparison.OrdinalIgnoreCase))
-                return new(PrototypeProvisionStatus.UnverifiedExecutable, Detail: "its Arcanum.exe is not the retail 1.0.7.4 one, the only executable the prototype files are built from");
+                return new(PrototypeProvisionStatus.UnverifiedExecutable, Detail: "its Arcanum.exe is not the retail 1.0.7.4 one, the only executable the first-start files are built from");
 
-            var source = new StackOriginalFiles(stack);
             var store = new PrototypeCacheStore(cacheRoot, exeSha);
             store.RemoveLeftovers();
-            if (store.Verify(source) is { } cached)
+            var status = PrototypeProvisionStatus.Present;
+            var files = prototypes.Numbers.Count;
+            if (!hasPrototypes)
             {
-                cancel.ThrowIfCancellationRequested();
-                return new(PrototypeProvisionStatus.Cached, store.MountFolder, Files: cached);
+                var provided = ProvidePrototypes(stack, store, exe, options, progress, cancel);
+                if (!provided.Succeeded) return provided;
+                status = provided.Status;
+                files = provided.Files;
             }
 
-            cancel.ThrowIfCancellationRequested();
-            progress?.Invoke(new(PrototypeProvisionStage.Building));
-            var build = (options.Build ?? ((bytes, files, report) => PrototypeBuilder.Build(bytes, files, null, report)))(exe, source, (done, total) =>
+            else store.DropPrototypes(); // the cache is mounted for its map files only; an older prototype copy there would shadow the installation's own
+            var maps = 0;
+            if (missingMaps > 0)
             {
-                cancel.ThrowIfCancellationRequested();
-                progress?.Invoke(new(PrototypeProvisionStage.Building, done, total));
-            });
-            if (build.Failure is { } failure) return Failed(failure);
-            cancel.ThrowIfCancellationRequested();
-            progress?.Invoke(new(PrototypeProvisionStage.Storing, build.Files.Count, build.Files.Count));
-            if (store.Store(build, source) is { } storeFailure) return new(PrototypeProvisionStatus.CacheWriteFailed, Detail: storeFailure);
-            // What was stored must read back as a cache (the manifest, every file), or the next start would build again without saying why.
-            cancel.ThrowIfCancellationRequested();
-            return store.Verify(source) is { } stored
-                ? new(PrototypeProvisionStatus.Built, store.MountFolder, Files: stored)
-                : new(PrototypeProvisionStatus.CacheWriteFailed, Detail: "the stored prototype files did not read back");
+                var provided = ProvideMaps(own, hasPrototypes ? null : store.MountFolder, store, exe, exeSha, options, progress, cancel);
+                if (!provided.Succeeded)
+                {
+                    // An installation that has its own prototypes started before the map aggregates were built: a failure of the map stage there
+                    // leaves it as it was (the cache is not mounted, the result says why); a fresh installation needs them and is refused.
+                    if (hasPrototypes && provided.Status != PrototypeProvisionStatus.Cancelled)
+                        return new(PrototypeProvisionStatus.Present, Files: files, Detail: "the map files could not be made: " + provided.Detail);
+                    return provided;
+                }
+                maps = provided.MapFiles;
+                if (provided.Status == PrototypeProvisionStatus.Built || status == PrototypeProvisionStatus.Present) status = provided.Status;
+            }
+            return new(status, store.MountFolder, Files: files, MapFiles: maps);
         }
         catch (OperationCanceledException) { return new(PrototypeProvisionStatus.Cancelled); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException or ArgumentException)
         {
             return new(PrototypeProvisionStatus.SourceFailed, Detail: $"{error.GetType().Name}: {error.Message}");
         }
+    }
+
+    /// <summary>The prototype files: from the cache when it verifies, else built now and stored (the E4 path).</summary>
+    private static PrototypeProvisionResult ProvidePrototypes(ContentStack stack, PrototypeCacheStore store, byte[] exe, PrototypeProvisionOptions options,
+        Action<PrototypeProvisionProgress>? progress, CancellationToken cancel)
+    {
+        var source = new StackOriginalFiles(stack);
+        if (store.Verify(source) is { } cached)
+        {
+            cancel.ThrowIfCancellationRequested();
+            return new(PrototypeProvisionStatus.Cached, store.MountFolder, Files: cached);
+        }
+
+        cancel.ThrowIfCancellationRequested();
+        progress?.Invoke(new(PrototypeProvisionStage.Building));
+        var build = (options.Build ?? ((bytes, files, report) => PrototypeBuilder.Build(bytes, files, null, report)))(exe, source, (done, total) =>
+        {
+            cancel.ThrowIfCancellationRequested();
+            progress?.Invoke(new(PrototypeProvisionStage.Building, done, total));
+        });
+        if (build.Failure is { } failure) return Failed(failure);
+        cancel.ThrowIfCancellationRequested();
+        progress?.Invoke(new(PrototypeProvisionStage.Storing, build.Files.Count, build.Files.Count));
+        if (store.Store(build, source) is { } storeFailure) return new(PrototypeProvisionStatus.CacheWriteFailed, Detail: storeFailure);
+        // What was stored must read back as a cache (the manifest, every file), or the next start would build again without saying why.
+        cancel.ThrowIfCancellationRequested();
+        return store.Verify(source) is { } stored
+            ? new(PrototypeProvisionStatus.Built, store.MountFolder, Files: stored)
+            : new(PrototypeProvisionStatus.CacheWriteFailed, Detail: "the stored prototype files did not read back");
+    }
+
+    /// <summary>
+    /// How many map folders of the module have no aggregate file in the installation (ARC-DEV-082). The original writes one per map folder to
+    /// <c>modules/&lt;module&gt;/maps</c> at its first start of the module; an installation it never ran has none of them.
+    /// </summary>
+    internal static int MissingAggregates(ContentStack stack)
+        => ContentPhase.Folders(stack, "maps", ContentLoadPhase.ModuleLoaded)
+            .Count(map => ContentPhase.Candidate(stack, "maps/" + WorldCatalog.AggregateName(map), ContentLoadPhase.ModuleLoaded) is null);
+
+    /// <summary>The module's GUID the way the original reads it (0x53BC50): from the end of the module's <c>.dat</c>; null when the module is not an archive of the kind.</summary>
+    internal static byte[]? ModuleGuid(ContentMountPlan plan)
+    {
+        if (plan.SearchOrder.FirstOrDefault(source => source.Role == ContentSourceRole.ModuleArchive) is not { } module) return null;
+        var footer = new byte[MapAggregateBuilder.ArchiveFooterBytes];
+        using var file = File.OpenRead(module.Path);
+        if (file.Length < footer.Length) return null;
+        file.Seek(-footer.Length, SeekOrigin.End);
+        file.ReadExactly(footer);
+        return MapAggregateBuilder.ModuleGuidFromArchiveFooter(footer);
+    }
+
+    /// <summary>
+    /// The map aggregates (ARC-DEV-082): from the cache when it verifies, else built now from the executable's own code over the module's editor
+    /// files (the prototype files come from the installation, or from the cache <paramref name="prototypeCache"/>) and stored beside the prototypes.
+    /// </summary>
+    private static PrototypeProvisionResult ProvideMaps(ContentMountPlan own, string? prototypeCache, PrototypeCacheStore store, byte[] exe, string exeSha,
+        PrototypeProvisionOptions options, Action<PrototypeProvisionProgress>? progress, CancellationToken cancel)
+    {
+        var guid = ModuleGuid(own);
+        if (guid is null) return new(PrototypeProvisionStatus.SourceFailed, Detail: "the module's archive does not end the way the original reads its GUID");
+        var identity = PrototypeCacheStore.ModuleIdentity(own);
+        if (store.VerifyAggregates(identity) is { } cached)
+        {
+            cancel.ThrowIfCancellationRequested();
+            return new(PrototypeProvisionStatus.Cached, store.MountFolder, MapFiles: cached);
+        }
+
+        cancel.ThrowIfCancellationRequested();
+        progress?.Invoke(new(PrototypeProvisionStage.BuildingMaps));
+        // The build reads the module's data with the prototypes beside it: the installation's own, or the cache this start just made.
+        var plan = prototypeCache is null ? own : WithPrototypeCache(own, prototypeCache);
+        var opened = ContentStack.Open(plan);
+        if (opened.Status != ContentStackStatus.Ready) return new(PrototypeProvisionStatus.SourceFailed, Detail: $"the game content cannot be opened ({opened.Status})");
+        using var stack = opened.Stack!;
+        var source = new StackOriginalFiles(stack, ContentLoadPhase.ModuleLoaded);
+        var build = (options.BuildMaps ?? ((bytes, files, moduleGuid, report) => MapAggregateBuilder.Build(bytes, files, moduleGuid, null, report)))(exe, source, guid, (done, total) =>
+        {
+            cancel.ThrowIfCancellationRequested();
+            progress?.Invoke(new(PrototypeProvisionStage.BuildingMaps, done, total));
+        });
+        if (build.Failure is { } failure)
+            return failure.Kind is PrototypeBuildFailureKind.MissingSourceFile or PrototypeBuildFailureKind.UnverifiedExecutable
+                ? new(PrototypeProvisionStatus.SourceFailed, Detail: "map files: " + failure.Detail)
+                : new(PrototypeProvisionStatus.BuildFailed, Detail: $"map files: {failure.Kind}: {failure.Detail}");
+        // The game looks a map's aggregate up by the name rule of the catalogue: a file under any other name would never be found.
+        if (build.Files.FirstOrDefault(map => map.FileName != WorldCatalog.AggregateName(map.MapName)) is { } misnamed)
+            return new(PrototypeProvisionStatus.BuildFailed, Detail: $"map files: the aggregate of map {misnamed.MapName} was written under another name than the game looks up");
+        cancel.ThrowIfCancellationRequested();
+        progress?.Invoke(new(PrototypeProvisionStage.Storing, build.Files.Count, build.Files.Count));
+        if (store.StoreAggregates(build, identity) is { } storeFailure) return new(PrototypeProvisionStatus.CacheWriteFailed, Detail: storeFailure);
+        cancel.ThrowIfCancellationRequested();
+        return store.VerifyAggregates(identity) is { } stored
+            ? new(PrototypeProvisionStatus.Built, store.MountFolder, MapFiles: stored)
+            : new(PrototypeProvisionStatus.CacheWriteFailed, Detail: "the stored map files did not read back");
+    }
+
+    /// <summary>The plan with the prototype cache mounted where <see cref="ContentMountPlan.Discover"/> puts it: above the base archives, below <c>data/</c> (the search order lists the highest priority first).</summary>
+    private static ContentMountPlan WithPrototypeCache(ContentMountPlan plan, string cacheFolder)
+    {
+        var order = plan.SearchOrder.Where(source => source.Role != ContentSourceRole.PrototypeCache).ToList();
+        var at = order.FindIndex(source => source.Role is ContentSourceRole.BaseArchive or ContentSourceRole.GameRoot or ContentSourceRole.Tig);
+        order.Insert(at < 0 ? order.Count : at, new ContentSource(ContentSourceRole.PrototypeCache, 0, Path.GetFullPath(cacheFolder)));
+        return new ContentMountPlan(plan.GameRoot, plan.ModuleName, order);
     }
 
     private static PrototypeProvisionResult Failed(PrototypeBuildFailure failure) => failure.Kind switch
@@ -148,21 +263,24 @@ public static class PrototypeProvisioner
     }
 }
 
-/// <summary>The data the original sees when it starts, over the installation's base sources only (it builds its prototypes before it mounts
-/// the module): the first base source in search order holds each file.</summary>
-internal sealed class StackOriginalFiles(ContentStack stack) : IOriginalFileSource
+/// <summary>The data the original sees: at game start over the installation's base sources only (it builds its prototypes before it mounts
+/// the module), the first base source in search order holding each file; once the module is loaded (the map aggregates, ARC-DEV-082) the
+/// stack's winner.</summary>
+internal sealed class StackOriginalFiles(ContentStack stack, ContentLoadPhase phase = ContentLoadPhase.GameStart) : IOriginalFileSource
 {
     public IReadOnlyList<string> List(string directory)
     {
         var prefix = directory.Length == 0 ? "" : directory.Replace('\\', '/').ToLowerInvariant() + "/";
         return stack.Keys(prefix)
-            .Where(key => ContentPhase.Candidate(stack, key, ContentLoadPhase.GameStart) is not null)
+            .Where(key => ContentPhase.Candidate(stack, key, phase) is not null)
             .Select(key => key[prefix.Length..]).Where(rest => rest.Length > 0 && !rest.Contains('/')).ToList();
     }
 
+    public IReadOnlyList<string> ListDirectories(string directory) => ContentPhase.Folders(stack, directory, phase);
+
     public byte[]? Read(string path)
     {
-        if (ContentPhase.Candidate(stack, path, ContentLoadPhase.GameStart) is not { } candidate) return null;
+        if (ContentPhase.Candidate(stack, path, phase) is not { } candidate) return null;
         var read = stack.Read(candidate);
         return read.Status == ContentReadStatus.Read ? read.Bytes : null;
     }

@@ -11,7 +11,7 @@ namespace Arcanum.Executable.Prototypes;
 /// message-file reader, the group fill and the record writer are the executable's own. Nothing of the executable or of
 /// the built files is kept here.
 /// </summary>
-public static class PrototypeBuilder
+public static partial class PrototypeBuilder
 {
     /// <summary>The largest guest heap an option may ask for (the interpreter maps at most 1 GiB in all).</summary>
     public const uint MaxHeapLimit = 512u << 20;
@@ -77,7 +77,7 @@ public static class PrototypeBuilder
 
     private static PrototypeBuildResult Fail(PrototypeBuildFailureKind kind, string detail) => new([], new PrototypeBuildFailure(kind, detail), 0);
 
-    internal sealed class BuildSession
+    internal sealed partial class BuildSession
     {
         private const uint FileHandleTag = 0xF11E_0000;
         private readonly PeImage image;
@@ -94,6 +94,10 @@ public static class PrototypeBuilder
         /// <summary>Files the executable wrote itself (caches, the prototypes), visible to its later reads and existence checks, never to the disk.</summary>
         private readonly Dictionary<string, byte[]> overlay = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> existingProtos;
+        /// <summary>Set by the map aggregate build (ARC-DEV-082): the module's GUID; the prototypes are then read from the source and the build writes <c>maps\&lt;name&gt;</c> files.</summary>
+        private readonly AggregateSettings? aggregate;
+        private readonly List<WrittenAggregateFile> aggregateFiles = [];
+        private readonly List<string> logLines = [];
         private const uint ViewChangeStub = 0xF000_0008, RedrawStub = 0xF000_000C;
         private int viewChangeCalls, redrawCalls;
         private int currentNumber = -1;
@@ -109,6 +113,7 @@ public static class PrototypeBuilder
             this.image = image;
             this.source = source;
             this.options = options;
+            aggregate = options.Aggregate;
             existingProtos = new HashSet<string>((options.ExistingFiles ?? new HashSet<string>()).Select(name => "proto\\" + name), StringComparer.OrdinalIgnoreCase);
             // A research fill byte also moves the stack and the heap: pointers the code leaves in unused bytes then differ too.
             var shift = (uint)options.UninitializedFill;
@@ -248,6 +253,7 @@ public static class PrototypeBuilder
 
         private void InstallHooks()
         {
+            if (aggregate is not null) InstallAggregateHooks();
             // Memory: the executable's C runtime heap is replaced by the guest heap.
             machine.Hook(0x58A716, "malloc", m => Allocated(m, m.Argument(0), heap.Allocate(m.Argument(0), zero: false)));
             machine.Hook(0x58A99E, "calloc", m =>
@@ -286,7 +292,7 @@ public static class PrototypeBuilder
             machine.Hook(0x52FB80, "file exists", m =>
             {
                 var path = PathOf(m, m.Argument(0));
-                m.Eax = overlay.ContainsKey(path) || existingProtos.Contains(path) || FromSource(path) is not null ? 1u : 0u;
+                m.Eax = overlay.ContainsKey(path) || existingProtos.Contains(path) || FromSource(path) is not null || HasPrototypeNumber(path) ? 1u : 0u;
                 return HookResult.Return();
             });
 
@@ -363,6 +369,7 @@ public static class PrototypeBuilder
                 if (path.Length == 0 || path.Contains("..", StringComparison.Ordinal) || path[0] is '\\' or '/' or '.' || path.Contains(':'))
                     return Stop(PrototypeBuildFailureKind.BadOutput, $"the executable opens {path} for writing ({mode})");
                 if (mode.Contains('a') || mode.Contains('+')) return Stop(PrototypeBuildFailureKind.BadOutput, $"the executable opens {path} for appending or updating ({mode})");
+                if (aggregate is not null && !IsAggregateFile(path) && !path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase)) return Stop(PrototypeBuildFailureKind.BadOutput, $"the executable opens {path} for writing, which the map aggregate build does not allow");
                 if (overlay.Count + streamPaths.Count(entry => streams[entry.Key].CanWrite) >= options.MaxWrittenFiles) return Stop(PrototypeBuildFailureKind.LimitExceeded, "too many files written");
                 stream = new MemoryStream();
             }
@@ -397,7 +404,16 @@ public static class PrototypeBuilder
         /// (<see cref="PrototypeBuildOptions.ExistingFiles"/> is the explicit way to say which exist), so what the host mounts under
         /// <c>proto\</c> cannot change the result.
         /// </summary>
-        private byte[]? FromSource(string path) => path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase) ? null : source.Read(path);
+        private byte[]? FromSource(string path)
+        {
+            if (path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase)) return aggregate is null ? null : source.Read(path);
+            // The aggregates are the thing the map build writes: an earlier one in the source (a stale cache) is not read.
+            if (aggregate is not null && IsAggregateFile(path)) return null;
+            return source.Read(path);
+        }
+
+        /// <summary>A flat file directly under <c>maps\</c>: the game-generated mobile aggregate of a map (a map's own files are in a folder under it).</summary>
+        internal static bool IsAggregateFile(string path) => path.StartsWith("maps\\", StringComparison.OrdinalIgnoreCase) && path.Length > 5 && path.IndexOf('\\', 5) < 0;
 
         private static bool TextMode(string mode) => !mode.Contains('b');
 
@@ -422,6 +438,7 @@ public static class PrototypeBuilder
                 overlay[path] = bytes;
                 if (path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".pro", StringComparison.OrdinalIgnoreCase))
                     built.Add(new BuiltPrototype(currentNumber, path["proto\\".Length..], bytes));
+                if (aggregate is not null && IsAggregateFile(path)) aggregateFiles.Add(new(path["maps\\".Length..], bytes));
             }
             stream.Dispose();
             heap.Free(handle);
@@ -452,7 +469,7 @@ public static class PrototypeBuilder
             return HookResult.Return();
         }
 
-        private const uint ListEntryBytes = 0x110, ListNameBytes = 0x104;
+        private const uint ListEntryBytes = 0x110, ListNameBytes = 0x104, DirectoryFlag = 0x20;
 
         private HookResult ListFiles(X86Machine m)
         {
@@ -465,11 +482,22 @@ public static class PrototypeBuilder
             var wild = pattern[(split + 1)..];
             if (!listed.Contains(pattern)) listed.Add(pattern);
             var found = directory.Equals("proto", StringComparison.OrdinalIgnoreCase) ? existingProtos.Select(path => path["proto\\".Length..]).Concat(overlay.Keys.Where(path => path.StartsWith("proto\\", StringComparison.OrdinalIgnoreCase)).Select(path => path["proto\\".Length..])).Distinct(StringComparer.OrdinalIgnoreCase) : source.List(directory);
-            var names = found.Where(name => Glob(wild, name)).Order(StringComparer.OrdinalIgnoreCase).ToList();
+            // DOS semantics for the map listing: "*.*" is every name, with or without a dot.
+            if (aggregate is not null && wild == "*.*") wild = "*";
+            var entriesToWrite = found.Where(name => Glob(wild, name)).Select(name => (Name: name, Flags: 0u)).ToList();
+            // The map aggregate build (ARC-DEV-082) lists the folders of a directory too: the original's list marks a folder with 0x20 in the byte after the name.
+            if (aggregate is not null)
+                entriesToWrite.AddRange(source.ListDirectories(directory).Where(name => Glob(wild, name)).Select(name => (Name: name, Flags: DirectoryFlag)));
+            entriesToWrite = [.. entriesToWrite.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)];
+            var names = entriesToWrite.Select(entry => entry.Name).ToList();
             if (names.Any(name => name.Length >= ListNameBytes)) return Stop(PrototypeBuildFailureKind.LimitExceeded, $"a file name in {directory} is too long");
             var entries = names.Count == 0 ? 0 : heap.Allocate((uint)names.Count * ListEntryBytes);
             if (names.Count > 0 && entries == 0) return Stop(PrototypeBuildFailureKind.LimitExceeded, "the guest heap is full");
-            for (var i = 0; i < names.Count; i++) m.Memory.WriteBytes(entries + (uint)i * ListEntryBytes, Encoding.Latin1.GetBytes(names[i] + "\0"));
+            for (var i = 0; i < names.Count; i++)
+            {
+                m.Memory.WriteBytes(entries + (uint)i * ListEntryBytes, Encoding.Latin1.GetBytes(names[i] + "\0"));
+                if (entriesToWrite[i].Flags != 0) m.Memory.WriteU32(entries + (uint)i * ListEntryBytes + ListNameBytes, entriesToWrite[i].Flags);
+            }
             m.Memory.WriteU32(list, (uint)names.Count);
             m.Memory.WriteU32(list + 4, entries);
             m.Eax = 0;

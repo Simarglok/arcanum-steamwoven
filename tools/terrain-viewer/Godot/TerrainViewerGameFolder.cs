@@ -290,7 +290,7 @@ public partial class TerrainViewerApp
                 result = new(PrototypeProvisionStatus.BuildFailed, Detail: error.GetType().Name + ": " + error.Message);
             }
             finally { finished = true; _installCancel = null; }
-            GD.Print($"ARC-DEV-069 prototypes status={result.Status} files={result.Files} cache={result.MountFolder ?? "none"} detail={result.Detail ?? "none"}");
+            GD.Print($"ARC-DEV-069 prototypes status={result.Status} files={result.Files} mapFiles={result.MapFiles} cache={result.MountFolder ?? "none"} detail={result.Detail ?? "none"}");
             if (launcher is not null && _launcher != launcher) return; // the screen closed (a quit)
             if (result.Succeeded)
             {

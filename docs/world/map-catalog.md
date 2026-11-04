@@ -105,7 +105,7 @@ header (1.8 MB for the main map); this costs time, not correctness.
   load, 0x410D10, not checked in the executable, F0); the editor reads the `.mob` files. The catalogue prefers the
   aggregate and falls back to the editor files, reporting `WorldMobileSource`,
   because a module may ship a map without an aggregate (the `Vormantown` shop
-  map does).
+  map does). A fresh installation has none of the module's aggregates; Steamwoven builds them at the first Play with the original's own code (ARC-DEV-082) and mounts them below the module's own files.
 - **Start location.** `startloc.txt` is read as the original reads it, but every
   installed map holds the same pair (477, 178), which is not a tile of most of
   them; arrival tiles come from `rules/maplist.mes` instead

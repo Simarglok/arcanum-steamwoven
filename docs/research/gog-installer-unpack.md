@@ -121,6 +121,7 @@ installer route is not complete on its own; it feeds the existing slices:
 2. **E3 (ARC-DEV-068)** builds the 1,423 prototype files from that `Arcanum.exe` by interpretation.
 3. **E4 (ARC-DEV-069)** adds the cache and the launcher's first-start build and progress; its
    fresh-installation path is the second half of the same player flow.
+4. **E5 (ARC-DEV-082)** builds the 81 per-map mobile aggregates the original also writes at its first start, so the map loads.
 
 Player flow after all three: *pick installer → unpack → fingerprint check → build prototypes
 (once, cached) → start*. The unpack step does not depend on E3; it can be built and tried
@@ -136,4 +137,4 @@ verification debt for the executable interpreter.
   result is expected to be the same).
 - The 81 text-mangled files in the CrossOver installation's `maps` folder. (Examined in ARC-DEV-069: they are the per-map mobile
   aggregates, named through `WorldCatalog.AggregateName`, and a fresh unpack lacks them too; the map load needs them
-  ([open](prototype-extraction.md#what-a-fresh-installation-still-lacks)).)
+  (built by E5, ARC-DEV-082: [results](prototype-extraction.md#e5-results-arc-dev-082)).)

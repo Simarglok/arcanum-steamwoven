@@ -269,6 +269,8 @@ public sealed class LauncherScreen
             PrototypeProvisionStage.Checking => "Checking the game data…",
             PrototypeProvisionStage.Building => "Preparing the game data from your Arcanum.exe (first start only, about half a minute)…"
                 + (progress.Total > 0 ? $" {progress.Done}/{progress.Total}" : ""),
+            PrototypeProvisionStage.BuildingMaps => "Preparing the maps from your game files (first start only)…"
+                + (progress.Total > 0 ? $" {progress.Done}/{progress.Total}" : ""),
             _ => "Saving the prepared game data…",
         };
     }
@@ -280,7 +282,7 @@ public sealed class LauncherScreen
         var detail = result.Detail is { Length: > 0 } text ? $" ({text})" : "";
         return result.Status switch
         {
-            PrototypeProvisionStatus.UnverifiedExecutable => "This installation has no prototype files and its Arcanum.exe is not the retail 1.0.7.4 one, the only executable "
+            PrototypeProvisionStatus.UnverifiedExecutable => "This installation lacks files the original writes at its first start (prototypes, maps) and its Arcanum.exe is not the retail 1.0.7.4 one, the only executable "
                 + "the game data can be prepared from" + detail + ". Use the GOG 1.0.7.4 installation.",
             PrototypeProvisionStatus.NoExecutable => "The game data is prepared from the folder's Arcanum.exe, which was not found" + detail + ".",
             PrototypeProvisionStatus.SourceFailed => "The game files could not be read to prepare the game data" + detail + ".",
