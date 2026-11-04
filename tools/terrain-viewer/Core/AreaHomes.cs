@@ -73,7 +73,7 @@ public interface IAreaHomeSource
 /// </summary>
 public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = AreaHomeDirectory.DefaultMaxReads)
 {
-    public const int DefaultMaxReads = 4;
+    public const int DefaultMaxReads = 8;
 
     private readonly List<(AreaHomeRead Read, long Used)> _reads = [];
     private readonly Dictionary<(int Map, long Sector), string> _failed = [];
@@ -141,8 +141,13 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
     {
         ArgumentNullException.ThrowIfNull(entity);
         // A read already held that lists the entity answers without the cell (a whole map, or the window the viewer shows).
-        foreach (var read in Reads.Where(read => read.Map == home))
-            if (read.Template(entity) is { } template) return (template, read.FramesOf(template), string.Empty);
+        for (var i = 0; i < _reads.Count; i++)
+        {
+            var (read, _) = _reads[i];
+            if (read.Map != home || read.Template(entity) is not { } template) continue;
+            _reads[i] = (read, ++_clock);
+            return (template, read.FramesOf(template), string.Empty);
+        }
         var load = Home(home, near, token);
         if (load.Read is not { } found) return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), load.Detail);
         return found.Template(entity) is { } body ? (body, found.FramesOf(body), string.Empty)
@@ -208,11 +213,22 @@ public sealed class AreaMapHomes(TerrainViewerArguments launch, Func<AreaSpeaker
         var steps = AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 1);
         var build = AreaInventoryMap.Build(snapshot, steps, token);
         if (build.Map is not { } rows) return new(null, $"map {entry.Name} has no records: {build.Status} {build.Detail}");
-        var chart = AreaMapLoadOperation.Chart(snapshot);
-        var scene = AreaScenePlan.Create(snapshot, chart);
-        var templates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(snapshot), scene, snapshot.Visuals, chart, new(snapshot.RuntimeMap), facts);
-        token.ThrowIfCancellationRequested();
-        var frames = AreaLoadOperation.CopyFramesOf(owner, snapshot, templates.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct().ToArray(), token);
-        return new(new(snapshot.RuntimeMap, rows, templates, frames, window ? AreaHomeRead.CoreOf(snapshot) : null), build.Detail);
+        var core = window ? AreaHomeRead.CoreOf(snapshot) : null;
+        // The rows are what the resolver needs; the bodies are a second result: a body or a frame that does not read leaves the rows
+        // (and says so), never fails the whole read.
+        try
+        {
+            var chart = AreaMapLoadOperation.Chart(snapshot);
+            var scene = AreaScenePlan.Create(snapshot, chart);
+            var templates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(snapshot), scene, snapshot.Visuals, chart, new(snapshot.RuntimeMap), facts);
+            token.ThrowIfCancellationRequested();
+            var frames = AreaLoadOperation.CopyFramesOf(owner, snapshot, templates.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct().ToArray(), token);
+            return new(new(snapshot.RuntimeMap, rows, templates, frames, core), build.Detail);
+        }
+        catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return new(new(snapshot.RuntimeMap, rows, [], new Dictionary<AreaFrameKey, DecodedAreaFrame>(), core),
+                $"{build.Detail}; no bodies: {error.GetType().Name} {error.Message}");
+        }
     }
 }

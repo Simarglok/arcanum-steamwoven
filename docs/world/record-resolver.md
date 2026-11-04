@@ -73,7 +73,7 @@ gone: a quick load or a fresh run on a foreign map finds the companion's body th
 | `IAreaHomeSource` / `AreaMapHomes` | Reads a home from the game folder's module content stack: the whole map, or (a map with more sector files than a whole-map plan admits: the main world map) a 3×3 window of core sectors around a stored cell; strict publication, step evidence, scene plan, and only the frames of those bodies. A map the list does not name, a window with no stored cell to centre on or a map that does not read is a typed failure. |
 | `AreaHomeDirectory` | Holds the reads (default 4, least recently used out first), answers `Body(entity, homeMap, storedCell)` from a held read that lists the entity or reads the home once, and remembers a failed read. The viewer `Remember`s the map it has just loaded (its own scene and rows), so a companion carried from it needs no read. |
 | `AreaMapRecords` | The resolver's record source (behind `AreaRememberedRecords`, the rows of the map the run has just left, MIG2), now through the same directory: a map read for a body is not read again for its record; a window map is read around `AreaVisitors.HomeWindow(session, map)`. |
-| `npc.home` (`AreaCompanionPlacement.HomeProperty`) | The one new session fact: on the home map, the world cell the NPC's stored object lies on. It is written by every placement that is not that cell (`Edits`: `Arrive`, `Carry`, `Record`) and cleared by the one that is, so it exists exactly while the body is not where its object lies. Without it a window home cannot be read (the T0 cell is not a change, and the NPC has left), so it is the "which sector" the model lacked. It is an ordinary entity change of the home map (no schema change), saved and restored with the session. |
+| `npc.home` (`AreaCompanionPlacement.HomeProperty`) | The one new session fact: on the home map, the world cell the NPC's stored object lies on. It is written by every recorded placement (`Edits`: `Arrive`, `Carry`, `Record`) and cleared by the one that clears the placement (its stored cell facing the default), so it exists while the placement is recorded (a body off its stored cell, or on it facing other than the default). Without it a window home cannot be read (the T0 cell is not a change, and the NPC has left), so it is the "which sector" the model lacked. It is an ordinary entity change of the home map (no schema change), saved and restored with the session. |
 | `AreaVisitors.Here` | The companions recorded on the shown map (`npc.cell`, on a loaded cell) that the shown scene does not draw, each with its home map (`npc.map`, else the map itself: another window of it) and stored cell. |
 
 The viewer asks for the bodies of the visitors of the shown map whenever it rebinds its companions (`RefreshVisitorBodies`: a map load, a
@@ -85,10 +85,14 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
 ## Not ready
 
 - A companion that left its home before this slice recorded `npc.home` (a save from an earlier build, with the companion already away) has no
-  stored cell: a whole-map home still reads, a window home does not (typed failure, named on the HUD and kept out of the AI rules) until the companion
-  returns home or crosses a map again, which writes it.
-- The resolver holds one window per map: companions from two different windows of the same map are not both resolved (the second is kept out of the
-  rules); their bodies are, since the directory keeps a read per window. MIG9 (residency) reads such windows through the sector model.
+  stored cell: a whole-map home still reads, a window home does not (typed failure, named on the HUD, no body and kept out of the AI rules). Nothing
+  repairs it later: without a body it is not in the group that writes the cell, and it stays on the map it was left on. A new quick save with the
+  companion carried by this build writes it; such an old save needs the companion fetched home again (a migration is not planned).
+- The resolver holds one window per map, read around `AreaVisitors.HomeWindow` (the lowest-entity NPC that is away from that map, else the lowest
+  with a recorded cell): a second companion away from another window of the same map is not resolved (kept out of the rules); its body is, since the
+  directory keeps a read per window. A failure the resolver meets (no stored cell yet) is kept by it for the scene. MIG9 (residency) reads such windows
+  through the sector model.
+- The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.
 - `ForVisitor` and the dialog host routing (`AreaConversationHost.ForVisitor`, `AreaTalkRouting`, `refuseUncoveredInventory`) go in MIG5; the

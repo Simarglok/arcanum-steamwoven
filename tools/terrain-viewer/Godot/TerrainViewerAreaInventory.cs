@@ -50,6 +50,11 @@ public partial class TerrainViewerApp
     private void BindAreaInventory(TerrainViewerArguments arguments, TerrainLoadResult result, bool keepLeft = false)
     {
         UnbindAreaInventory();
+        // ARC-DEV-079 (MIG4): the home maps' data (rows, bodies, frames) the viewer has read or loaded is kept for the next scene of the same
+        // run (a quick load or a fresh run reads again, and forgets a failed read); set before any early return so no scene keeps the last one's.
+        var kept = keepLeft ? _homes?.Reads ?? [] : [];
+        _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
+        foreach (var read in kept) _homes.Remember(read);
         if (_areaSession is not { } session || result.Area is not { } area || result.AreaStepSnapshot is not { } steps) return;
         var sources = new List<(string Name, AreaSnapshot Snapshot, Arcanum.Data.Traversal.AreaStepSnapshot Steps)> { ("exterior", area.Snapshot, steps) };
         if (result.Cave is { } cave) sources.Add(("cave", cave.Area.Snapshot, cave.Steps));
@@ -68,12 +73,8 @@ public partial class TerrainViewerApp
         // carried from the main map into the cave has its home record there.
         var left = keepLeft ? _recordMapsLeft : [];
         _recordMapsLeft = [];
-        // ARC-DEV-079 (MIG4): the home maps' data (rows, bodies, frames) the viewer has read or loaded, kept for the next scene of the same run
-        // (a quick load or a fresh run reads again); the map just loaded is remembered, so a companion carried from it needs no read. A map the
-        // resolver reads on demand is read through it too (a window of the main map around a stored cell the session recorded).
-        var kept = keepLeft ? _homes?.Reads ?? [] : [];
-        _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
-        foreach (var read in kept) _homes.Remember(read);
+        // The map just loaded is remembered, so a companion carried from it needs no read. A map the resolver reads on demand is read through
+        // the same directory (a window of the main map around a stored cell the session recorded).
         if (arguments.AreaMapName is not null && maps.Count == 1) _homes.Remember(AreaHomeRead.Of(maps[0], _ownCompanionTemplates, area.Frames, area.Snapshot));
         AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
             new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null))));

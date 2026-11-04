@@ -63,10 +63,34 @@ public sealed class AreaHomeDirectoryTests
         StringAssert.Contains(without.Detail, "window");
         Assert.AreSame(template, homes.Body(template.Entity, 1, Stored).Template, "the cell a record names reads the window around it");
         Assert.AreEqual(Stored, source.Asked.Last().Near);
-        // The window holds its core sectors only: another cell of the map reads again.
+        Assert.AreEqual(2, source.Asked.Count);
+    }
+
+    [TestMethod]
+    public void Another_window_of_the_same_map_is_read_and_held_next_to_the_first()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        // A source whose window holds the sector of the cell it was asked about.
+        var source = new Source((map, near) => new(Read(map, [template], (near!.Value.X >> 6, near.Value.Y >> 6)), string.Empty));
+        var homes = new AreaHomeDirectory(source);
         var other = new CellCoord(Stored.X + 640, Stored.Y);
-        Assert.IsNull(homes.Home(1, other).Read?.Template("oid:other"), "another window has its own read");
-        Assert.AreEqual(3, source.Asked.Count);
+        Assert.IsNotNull(homes.Home(1, Stored).Read);
+        Assert.IsNotNull(homes.Home(1, other).Read);
+        Assert.AreEqual(2, homes.Reads.Count);
+        Assert.IsNotNull(homes.Home(1, Stored).Read);
+        Assert.IsNotNull(homes.Home(1, other).Read);
+        Assert.AreEqual(2, source.Asked.Count, "each window is read once");
+    }
+
+    [TestMethod]
+    public void A_body_hit_keeps_its_read_from_being_the_least_recently_used()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var homes = new AreaHomeDirectory(null, maxReads: 2);
+        homes.Remember(Read(1, [template])); homes.Remember(Read(2));
+        Assert.AreSame(template, homes.Body(template.Entity, 1, null).Template);   // map 1 is now the most recently used
+        homes.Remember(Read(3));
+        CollectionAssert.AreEquivalent(new[] { 1, 3 }, homes.Reads.Select(read => read.Map).ToArray());
     }
 
     [TestMethod]

@@ -91,7 +91,7 @@ public static class AreaCompanionPlacement
 
     /// <summary>
     /// ARC-DEV-079 (MIG4): on the NPC's home map, the world cell its stored object lies on (the T0 cell the home map's data lists it at),
-    /// written with every placement that differs from that cell and cleared with the one that equals it. The original's object carries
+    /// written with every recorded placement (every placement but the stored cell facing the default) and cleared with the one that equals it. The original's object carries
     /// its own record wherever it stands (FM3); here the record is read from the home map's data, and a home that opens only as a window
     /// (the main world map) needs the sector to read, which nothing else keeps once the NPC has left (the T0 cell is not a change).
     /// </summary>
@@ -191,12 +191,16 @@ public static class AreaVisitors
     }
 
     /// <summary>The stored cell to read <paramref name="map"/>'s window around when the map opens only as a window and the viewer holds
-    /// none of it: the lowest-entity NPC of that map with a recorded stored cell (one window per map is held by the resolver; NOT READY
-    /// for companions from two windows of one map, whose second is kept out of the rules until MIG9).</summary>
+    /// none of it: the lowest-entity NPC of that map that stands on another map now (its away change, <c>npc.map</c>: the companions the
+    /// resolver is asked about), else the lowest-entity NPC with a recorded stored cell (a follower waiting elsewhere on its own map).
+    /// The resolver holds one window per map: NOT READY for companions away from two windows of one map, whose second is kept out of the
+    /// rules until MIG9.</summary>
     public static CellCoord? HomeWindow(GameSessionOwner session, int map)
     {
         ArgumentNullException.ThrowIfNull(session);
         var cells = AreaCompanionPlacement.HomeCells(session, new(map));
+        foreach (var (entity, cell) in cells)
+            if (session.QueryMapChange(new(map), AreaCompanionPlacement.MapKey(entity)) is not null) return cell;
         return cells.Count == 0 ? null : cells.First().Value;
     }
 }

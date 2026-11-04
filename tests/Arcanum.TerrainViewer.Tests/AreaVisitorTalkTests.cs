@@ -125,6 +125,12 @@ public sealed class AreaVisitorTalkTests
         Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCells(session, Home)[template.Entity]);
         Assert.AreEqual(template.HomeWorld, AreaVisitors.HomeWindow(session, Home.RuntimeMap));
         Assert.IsNull(AreaVisitors.HomeWindow(session, Visited.RuntimeMap), "nothing is recorded for a map that holds no NPC away");
+        // A companion waiting elsewhere on its own map records its stored cell too, but the window is the one of the NPC that is away.
+        var waiting = "oid:" + new string((char)48, 64);   // sorts before any entity id
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            [new MapChangeEdit(Home, AreaCompanionPlacement.HomeKey(waiting), AreaCompanionPlacement.Encode(new(1, 2), facing))]).Disposition);
+        Assert.AreEqual(2, AreaCompanionPlacement.HomeCells(session, Home).Count);
+        Assert.AreEqual(template.HomeWorld, AreaVisitors.HomeWindow(session, Home.RuntimeMap), "the NPC away decides the window");
         // Back on the home map, off its stored cell: the placement and the stored cell stay (the body is not where its object lies).
         Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, AreaCompanionGroup.Arrive(template, Visited, Home, new(10, 20), facing)).Disposition);
         Assert.IsNull(session.QueryMapChange(Home, AreaCompanionPlacement.MapKey(template.Entity)));
@@ -133,6 +139,10 @@ public sealed class AreaVisitorTalkTests
         Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, AreaCompanionPlacement.Edits(template, Home, template.HomeWorld, facing)).Disposition);
         Assert.IsNull(session.QueryMapChange(Home, AreaCompanionPlacement.Key(template.Entity)));
         Assert.IsNull(AreaCompanionPlacement.HomeCell(session, Home, template.Entity));
+        // On its stored cell facing another way the placement is recorded, so the stored cell is too.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            AreaCompanionPlacement.Edits(template, Home, template.HomeWorld, Arcanum.Simulation.Movement.NeighborDirection.YPlus)).Disposition);
+        Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, Home, template.Entity));
     }
 
     [TestMethod]

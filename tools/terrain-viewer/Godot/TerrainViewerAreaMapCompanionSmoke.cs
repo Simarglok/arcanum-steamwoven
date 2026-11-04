@@ -275,6 +275,7 @@ public partial class TerrainViewerApp
         Require(stored is not null, $"the transfer recorded the stored cell of its object on map {home.RuntimeMap}");
         Require(RecordAreaCompanions("visitor-body smoke"), "the companions' cells were recorded");
         var started = System.Environment.TickCount64;
+        var production = _homes;
         _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
         _visitorFrames.Clear();
         BindAreaCompanions();
@@ -288,8 +289,11 @@ public partial class TerrainViewerApp
             new AreaMapRecords(arguments, _homes, map => AreaVisitors.HomeWindow(session, map)));
         var lookup = resolver.Resolve(companion.Entity, home.RuntimeMap);
         Require(lookup.Status == Arcanum.World.RecordStatus.Found, $"a fresh resolver finds its record on map {home.RuntimeMap}: {lookup.Status} {lookup.Detail}");
+        var reads = _homes.Reads.Select(read => new { read.Map, Window = read.CoreSectors is not null }).ToArray();
+        // The production wiring (the inventory host's resolver shares this directory) is put back for the stages that follow.
+        _homes = production; BindAreaCompanions();
         GD.Print("ARC-DEV-079 native-smoke visitor-body PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = CurrentAreaMap, Home = home.RuntimeMap, Stored = $"{stored!.Value.X},{stored.Value.Y}", Script = again.Speaker.ScriptId, Frames = frames,
-            Reads = _homes.Reads.Select(read => new { read.Map, Window = read.CoreSectors is not null }).ToArray(), Ms = System.Environment.TickCount64 - started }));
+            Reads = reads, Ms = System.Environment.TickCount64 - started }));
     }
 }
