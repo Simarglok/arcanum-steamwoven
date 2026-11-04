@@ -19,6 +19,24 @@ public static partial class GameSessionSnapshotCodec
     /// <summary>The oldest schema this build loads: 56, the schema of the first packaged build (ARC-DEV-047).</summary>
     public const int OldestReadableSchemaVersion = 56;
 
+    // The canonical order of the object state rows: entity, then property (both ordinal), then map.
+    private static int CompareFields(string entityX, string propertyX, long mapX, string entityY, string propertyY, long mapY) =>
+        string.CompareOrdinal(entityX, entityY) is var order and not 0 ? order :
+        string.CompareOrdinal(propertyX, propertyY) is var byProperty and not 0 ? byProperty : mapX.CompareTo(mapY);
+
+    // The vocabularies of the schemas the steps below were written for, frozen here: a later build that adds a field to the current vocabulary
+    // must not change what an older save's step moves.
+    private static readonly IReadOnlySet<string> Schema62MobileFields = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "obj.off", "obj.destroyed", "npc.cell", "npc.map", "npc.home", "npc.faction", "follow.pc", "item.dropped",
+        "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state",
+    };
+
+    private static readonly IReadOnlySet<string> Schema63StaticFields = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "obj.off", "obj.destroyed", "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state",
+    };
+
     // Each step upgrades a root of schema `key` to schema `key + 1`; the caller then sets its schemaVersion. A step reaches its
     // sections through Section and adds through AddField only, so a damaged older save gets its typed failure and path; the
     // node tree's own exceptions are mapped below as damaged text.
@@ -78,7 +96,7 @@ public static partial class GameSessionSnapshotCodec
                             if (changes[j] is JsonObject change && change["scope"] is JsonValue scope && scope.TryGetValue<string>(out var kind) && kind == "entity" &&
                                 change["entity"] is JsonValue entityValue && entityValue.TryGetValue<string>(out var entity) &&
                                 change["property"] is JsonValue propertyValue && propertyValue.TryGetValue<string>(out var property) &&
-                                ObjectStateVocabulary.Routed(entity, property) && change["value"] is { } value)
+                                entity is not null && entity.StartsWith("oid:", StringComparison.Ordinal) && property is not null && Schema62MobileFields.Contains(property) && change["value"] is { } value)
                             {
                                 moved.TryAdd((entity, property), (mapNumber, value.DeepClone()));
                                 changes.RemoveAt(j);
@@ -94,6 +112,67 @@ public static partial class GameSessionSnapshotCodec
             foreach (var (key, record) in moved)
                 state.Add(new JsonObject { ["entity"] = key.Entity, ["property"] = key.Property, ["map"] = record.Map, ["value"] = record.Value });
             objects.Add("state", state);
+        },
+        // MIG7b (ARC-DEV-093, schema 63): the entity changes of static map-data objects (a `sector:` entity and one of the static fields) move out of
+        // the maps into the objects section's state, each kept with the map it was under (a static's identity is the map and the entity together), and
+        // the state is put in canonical order again (entity, property, map). A map left with no change is dropped. A second record of the same map,
+        // entity and property is not moved: it stays for the strict decode to refuse. Anything a step cannot read stays where it was.
+        [62] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (!objects.TryGetPropertyValue("state", out var stateNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
+            var state = stateNode as JsonArray ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+            var moved = new List<(string Entity, string Property, long Map, JsonNode Value)>();
+            var seen = new HashSet<(string, string, long)>();
+            if (root.TryGetPropertyValue("maps", out var mapsNode) && mapsNode is JsonArray maps)
+            {
+                for (var i = 0; i < maps.Count;)
+                {
+                    if (maps[i] is JsonObject map && map["changes"] is JsonArray changes && map["map"] is JsonValue mapValue && mapValue.TryGetValue<long>(out var mapNumber))
+                    {
+                        var before = changes.Count;
+                        for (var j = 0; j < changes.Count;)
+                        {
+                            if (changes[j] is JsonObject change && change["scope"] is JsonValue scope && scope.TryGetValue<string>(out var kind) && kind == "entity" &&
+                                change["entity"] is JsonValue entityValue && entityValue.TryGetValue<string>(out var entity) &&
+                                change["property"] is JsonValue propertyValue && propertyValue.TryGetValue<string>(out var property) &&
+                                entity is not null && entity.StartsWith("sector:", StringComparison.Ordinal) && property is not null && Schema63StaticFields.Contains(property) && change["value"] is { } value &&
+                                seen.Add((entity, property, mapNumber)))
+                            {
+                                moved.Add((entity, property, mapNumber, value.DeepClone()));
+                                changes.RemoveAt(j);
+                            }
+                            else j++;
+                        }
+                        if (before > 0 && changes.Count == 0) { maps.RemoveAt(i); continue; }
+                    }
+                    i++;
+                }
+            }
+            // The existing rows are the mobile objects' (schema 62 holds no static object there), already in canonical order: a row the step cannot
+            // read, a `sector:` row or a row out of order is damage, found here whether or not anything moves, so a save is not repaired by the move.
+            var rows = new List<(string Entity, string Property, long Map, JsonNode Row)>();
+            foreach (var node in state)
+            {
+                var path = $"$.objects.state[{rows.Count}]";
+                if (node is JsonObject row && row["entity"] is JsonValue e && e.TryGetValue<string>(out var rowEntity) && rowEntity is not null &&
+                    row["property"] is JsonValue p && p.TryGetValue<string>(out var rowProperty) && rowProperty is not null &&
+                    row["map"] is JsonValue m && m.TryGetValue<long>(out var rowMap))
+                {
+                    if (rowEntity.StartsWith("sector:", StringComparison.Ordinal)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+                    if (rows.Count > 0 && CompareFields(rows[^1].Entity, rows[^1].Property, rows[^1].Map, rowEntity, rowProperty, rowMap) >= 0)
+                        throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+                    rows.Add((rowEntity, rowProperty, rowMap, row.DeepClone()));
+                }
+                else throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
+            }
+            if (moved.Count == 0) return;
+            foreach (var (entity, property, map, value) in moved)
+                rows.Add((entity, property, map, new JsonObject { ["entity"] = entity, ["property"] = property, ["map"] = map, ["value"] = value }));
+            rows.Sort((x, y) => CompareFields(x.Entity, x.Property, x.Map, y.Entity, y.Property, y.Map));
+            var merged = new JsonArray();
+            foreach (var row in rows) merged.Add(row.Row);
+            objects["state"] = merged;
         },
     };
 

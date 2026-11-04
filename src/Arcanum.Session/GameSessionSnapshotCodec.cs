@@ -553,7 +553,7 @@ public static partial class GameSessionSnapshotCodec
             // ARC-DEV-084 (schema 60, section moved in schema 61): the high-water marks of the junk and pool numbers.
             w.WriteNumber("lastJunkNumber", snapshot.Objects.LastJunkNumber);
             w.WriteNumber("lastPoolNumber", snapshot.Objects.LastPoolNumber);
-            // ARC-DEV-092 (MIG7a, schema 62): the recorded fields of mobile map-data objects, by entity then property.
+            // ARC-DEV-092 (MIG7a, schema 62), ARC-DEV-093 (MIG7b, schema 63): the recorded fields of mobile and static map-data objects, by entity, property and map.
             w.WriteStartArray("state");
             foreach (var field in snapshot.Objects.State)
             {
@@ -1854,8 +1854,8 @@ public static partial class GameSessionSnapshotCodec
                 Int(row["offsetX"], path + ".offsetX", int.MinValue, int.MaxValue), Int(row["offsetY"], path + ".offsetY", int.MinValue, int.MaxValue),
                 Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue));
         }
-        // ARC-DEV-092 (MIG7a, schema 62): the object fields in canonical order (entity, then property, both ordinal); the owner's restore checks the
-        // keys and the budgets.
+        // ARC-DEV-092 (MIG7a, schema 62), ARC-DEV-093 (MIG7b, schema 63): the object fields in canonical order (entity, then property, both ordinal, then map);
+        // the owner's restore checks the keys and the budgets.
         var stateRows = Array(f["state"], p + ".state", GameSessionLimits.PolicyMaxTotalChanges);
         var state = new SessionObjectField[stateRows.Length];
         for (var i = 0; i < stateRows.Length; i++)
@@ -1866,8 +1866,11 @@ public static partial class GameSessionSnapshotCodec
                 new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)), Long(row["value"], path + ".value", long.MinValue, long.MaxValue));
             if (!SessionValidation.Code(state[i].Entity, SessionValidation.MaxEntityCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".entity");
             if (!SessionValidation.Code(state[i].Property, SessionValidation.MaxPropertyCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".property");
+            // By entity, then property, then map (a static object's records on different maps share both; a mobile object has one record, and a
+            // second one is the owner's restore refusal).
             if (i > 0 && (string.CompareOrdinal(state[i - 1].Entity, state[i].Entity) is var order && (order > 0 ||
-                    order == 0 && string.CompareOrdinal(state[i - 1].Property, state[i].Property) >= 0)))
+                    order == 0 && string.CompareOrdinal(state[i - 1].Property, state[i].Property) is var byProperty && (byProperty > 0 ||
+                    byProperty == 0 && state[i - 1].Map.RuntimeMap >= state[i].Map.RuntimeMap))))
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
         return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state);
