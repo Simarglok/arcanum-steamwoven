@@ -5,7 +5,7 @@ namespace Arcanum.Session;
 /// substitute container a barter window filled), kept as directory entries: the entry of an item is its holder and its place in the
 /// holder's list, found by the item's entity in one step; the list of a holder is the entries that name it, in the order they entered.
 /// What the entry alone does not know stays in its owner's stores (kind and complexity on <see cref="SessionMadeItem"/>, ammunition
-/// units in <see cref="InventoryDomain.Ammo"/>, the given item's origin in <see cref="InventoryDomain.Given"/>). It replaces the two stores
+/// units in <see cref="InventoryDomain.Ammo"/>, the given item's origin in <see cref="HeroLists"/> (the given records)). It replaces the two stores
 /// <c>Npcs</c> (holder to list) and <c>Containers</c> (which of those keys are containers), which found an item's holder by a scan of every list.
 /// An item is held by one holder at a time; a holder with no item has no list, so no entry.
 /// </summary>
