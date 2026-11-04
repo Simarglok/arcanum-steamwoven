@@ -172,5 +172,6 @@ change code.
 ## Size
 
 Phase 1: 6 Mac slices; phase 1b: 1 cloud slice; phase 2: 1; phase 3: 9, mostly
-cloud; phase 4: up to 12. About 29 PRs, of which about 20 can run in the cloud. An
-order of magnitude, not a promise.
+cloud; phase 4: up to 16 (K13–K16 added by G1). About 33 audit PRs, of which about 24 can
+run in the cloud; G1's migration adds 16 code slices (MIG1–MIG16, the follower slices V1–V6
+among them). An order of magnitude, not a promise.

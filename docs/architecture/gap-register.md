@@ -41,21 +41,24 @@ FR-SOCIAL ([004](../requirements/story-social-ai.md#fr-social-004),
   still keeps a carried companion out of its rules (`AreaAiHost.Stranger`).
 - **Classes**, as the plan defines them: **systemic** (a model or addressing difference that
   every consumer of a mechanism inherits), **narrow** (one rule or path), **intended** (a
-  recorded owner decision, requirement or rule-mode switch). A difference whose intent is not
+  recorded owner decision, owner rule or rule-mode switch; this register also counts a requirement
+  of the registry that states the behaviour, marked "by requirement" in §3). A difference whose intent is not
   recorded and that the owner must settle is marked **decision** and points at its question in
   the [target model](target-model.md#owner-decisions). No gap is classed from a reconstruction.
 
 ## Answer
 
-- **All nine hypotheses hold**, two of them in a narrower form than the plan wrote them. H7 is
+- **All nine hypotheses hold**, three of them in a narrower form than the plan wrote them (H3 in
+  part, H6 narrowed, H7 reformulated). H7 is
   not "only the shown map is alive" against "everything is alive": the original keeps every
   object and timer of the open map alive and gates by place exactly the NPC heartbeat, ambient
   lighting, tile data and drawing (RL13–RL20); Steamwoven's gap is that only the shown map or
   window has rows, hosts and positions. H6 holds for the rules, the record lookups, the hero
-  and the frame, not for mutable state, which is already all in the Godot-free session.
-- **35 gaps: 21 systemic, 12 narrow, 2 for the owner to decide.** Four roots carry the systemic ones: (1) Steamwoven has **no object**: identity, base
+  and the frame, and for the run-local state they hold (AI runs, movers, the hero's live position
+  and actions); all *saved* state is already in the Godot-free session.
+- **37 gaps: 20 systemic, 12 narrow, 5 for the owner to decide.** Four roots carry the systemic ones: (1) Steamwoven has **no object**: identity, base
   record, location, flags, scripts, links and created things are spread over map rows, key
-  overlays under the home map and one store per kind (GR1–GR7, GR11, GR17). (2) **Only the shown
+  overlays under the home map and one store per kind (GR1–GR5, GR7, GR11, GR17). (2) **Only the shown
   window lives**, and none of its moving state is saved or moved by one path (GR8–GR10, GR16,
   GR18). (3) **More than one clock and two goal machines**: four time bases, and the hero's
   actions are viewer hosts beside a partial NPC executor (GR20, GR21, GR24–GR26). (4) **The rules
@@ -66,13 +69,14 @@ FR-SOCIAL ([004](../requirements/story-social-ai.md#fr-social-004),
   event queue has the original's scope semantics in one saved queue (owner decision OQ3), the
   admission rule of the clock (TL14) and the deadlines; the snapshot is atomic and validated.
   These are kept by the target model.
-- **Intended differences** (10, list in [§3](#3-intended-differences)) are recorded owner
+- **Intended differences** (8, list in [§3](#3-intended-differences)) are recorded owner
   decisions, requirements or technical-bug fixes: one atomic JSON save, a saved random
   generator, persisted AI ticks, FIFO ties, events at their own deadlines, a safe failed
-  transfer, no lost links across maps, and others.
-- **Six choices are the owner's** (GQ1–GQ6 in the [target model](target-model.md#owner-decisions)):
+  transfer and prototypes built from the player's executable.
+- **Eight choices are the owner's** (GQ1–GQ8 in the [target model](target-model.md#owner-decisions)):
   the object state shape, what lives on the open map, pause with windows open, saving actions in
-  flight, the change path, and where the world logic lives.
+  flight, the change path, where the world logic lives, links to an object on another map, and
+  the turn-based option in a save.
 
 ## 1. Hypotheses H1–H9
 
@@ -83,7 +87,7 @@ FR-SOCIAL ([004](../requirements/story-social-ai.md#fr-social-004),
 | H3 State as a key vocabulary | **Confirmed in part** | Systemic for map-data objects | An instance stores the fields it wrote over its prototype; one difference record per changed object (OM9, OM10, PS21) | `MapChangeKey` properties under the home map for map-data objects (S3); typed entity-keyed domains elsewhere (S5–S23), which are an equivalent shape | GR5, GR6 |
 | H4 Two goal machines | **Confirmed** | Systemic | One run table of 216 runs for the hero, NPCs, doors, projectiles, missiles, eye candy and burning scenery; 87 goal types, one priority rule (GS1–GS32) | Hero walk, attack, cast, throw as viewer hosts (G1–G4); NPCs on `AiExecutorRules` in the AI host (G5), 26 priorities and an interrupt that always succeeds (GS8, GS12) | GR24, GR25 |
 | H5 More than one clock | **Confirmed** | Systemic | Real, game and animation clocks advanced once per ping from one stamp; three event lists (TL13–TL22) | Session game time (C1), viewer `WorldTime` (C2) not paused with C1, movement time (C3), frame delta (C4); the AI host's own `_nowMs` (V4) | GR20, GR21 |
-| H6 Logic in the viewer tool | **Confirmed, narrowed** | Systemic | No split to copy: the rule functions apply changes; the network meets them inside (SA21–SA35) | All mutable state is in `Arcanum.Session`, but the session reads no game data; hosts, record lookup, the hero's position and actions and the frame order are in `tools/terrain-viewer` (§2 D6, R2, S4, S8, V1–V14, §7) | GR32, GR33 |
+| H6 Logic in the viewer tool | **Confirmed, narrowed** | Systemic | No split to copy: the rule functions apply changes; the network meets them inside (SA21–SA35) | All saved state is in `Arcanum.Session`, but the session reads no game data; hosts with their run-local state (V4 runs, V5 movers), record lookup, the hero's position and actions and the frame order are in `tools/terrain-viewer` (§2 D6, R2, S4, S8, V1–V14, §7) | GR32, GR33 |
 | H7 Only the shown map is alive | **Confirmed, reformulated** | Systemic | Every object and timer of the open map is alive; place gates only the heartbeat (30 tiles), ambient lighting, tile data and drawing; other maps wait in files (RL13–RL20, RL28) | Only the shown map or window has rows and hosts; a window move or map change drops AI runs and movers; `EntityMap` events wait off their map, which matches the parking (S24, V3–V5) | GR8, GR9, GR10 |
 | H8 Script state by home map | **Confirmed** | Systemic | Attachments with their local flags and counters are field 32 of the object, inherited from the prototype until first written, then owned and carried (SA1–SA7) | `dialog.*` and `use.*` keys under the record's home map; item slots by item entity (S12) | GR7 |
 | H9 Run-local state | **Confirmed** | Systemic | The save holds goal runs with stacks, spell runs, NPC positions and the event queue; not the generator or AI ticks (PS11, PS15, PS20, PS32) | Goal runs, movers, spell runs, shots, missiles, the hero's route, inventory seeds and companion bodies are lost on a quick load (S8, S25–S27, R1–R3, V4, V5, G1–G5, L1) | GR2, GR10, GR11, GR18 |
@@ -104,22 +108,22 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | GR3 | No common identity space: `oid:` hashes for map objects, one counter per kind for created ones, positional keys for drawing | Systemic (H2) | 24-byte IDs: GUID for every mobile and every run-time object, positional only for static walls, portals, scenery and traps; never reassigned by a move (OM3, OM4, FM4) | §1 keys; `AreaObjectKey` in L5 | Rules that reach map objects through their rows (scripts, spells, AI, picking) cannot reach a created one without a path of its kind; each kind needs its own drawing, picking and saving | TM1 | MIG6 |
 | GR4 | One store and one path per kind of created object; no shared create and destroy | Systemic (H2) | One create tail (dynamic flag, sector listing or find index, NPC heartbeat, inventory generation, location notification) and one destroy (script point 2 may refuse; leaves leader and holder; drops invulnerable items; ends spells; drops events) (OM15–OM19) | S10, S11, S26, viewer `_projectiles` (G4) | Summons, generator copies, encounter creatures, traps and script-created critters (K4–K6) would each need a new store; destroy rules differ per kind | TM4 | MIG6; K4, K5, K6 |
 | GR5 | Mutable state of map-data objects is a project key vocabulary under the home map (`obj.off`, `obj.destroyed`, `npc.cell`, `npc.map`, `npc.faction`, `follow.pc`, `lock.*`, `trap.state`, `item.dropped`, `object.damage`, `object.condition`) | Systemic (H3) | Changed fields of the object itself in one difference record format, destroyed IDs in a list, statics by sector order (OM10, PS20, PS21, PS24) | S3 | An object that leaves its home map keeps its state on the home map's keys; every new field is a new key or domain; the static and mobile classes are not told apart | TM2 | MIG6, MIG7 |
-| GR6 | No prototype fallback at read time: a created object stores its own record; map rows are immutable T0 copies | Systemic (H3), shape | An instance reads every unwritten field through its prototype; creation copies type, prototype, location and ID only (OM9, OM13) | D1, D2, S10, S11 | Equal behaviour as long as no prototype changes in play (for scripts none was found, R6 answer); a cost in created objects and saves, not a visible bug | TM2 | Decision GQ1 |
+| GR6 | No prototype fallback at read time: a created object stores its own record; map rows are immutable T0 copies | Decision (H3; a difference of shape that consumers do not inherit) | An instance reads every unwritten field through its prototype; creation copies type, prototype, location and ID only (OM9, OM13) | D1, D2, S10, S11 | Equal behaviour as long as no prototype changes in play (for scripts none was found, R6 answer); a cost in created objects and saves, not a visible bug; closed only under GQ1 B | TM2 | Decision GQ1 |
 | GR7 | Script attachments (number, 32 local flags, four counters) are keys under the record's home map, not on the object; no inheritance from the prototype; created objects have none | Systemic (H8) | Field 32 of the object, read through the prototype until the first write deep-copies the array; saved, copied and carried with the object by generic code (SA1–SA7, SA17) | `dialog.lf`, `dialog.counters`, `dialog.script`, `use.*` (S3, V7, V8); item slots by entity (S12) | A carried companion's dialog state is found only through `ForVisitor`; a script-created or copied object starts with no attachments where the original inherits its prototype's | TM9 | MIG8; D8 |
 
 ### SP2 Residency and the map change
 
 | ID | Gap | Class | Original | Steamwoven | Consequence | Target | Work |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GR8 | Only the shown map or main-map window has rows, hosts and moving objects | Systemic (H7) | Every non-static object of the open map is in the pool from open to close, loaded sector or not; a global index finds it by sector; queries for mobile objects work on absent sectors (RL1–RL4, RL9) | D1, V3–V5; main map as a 3 × 3 window (FR-WORLD-003) | NPCs out of the window do not exist for the rules; a window move rebuilds hosts and drops runs; a long main-map walk loses every NPC change on the way | TM5 | Decision GQ2; MIG9; K1, K2 |
+| GR8 | Only the shown map or main-map window has rows, hosts and moving objects | Systemic (H7) | Every non-static object of the open map is in the pool from open to close, loaded sector or not; a global index finds it by sector; queries for mobile objects work on absent sectors (RL1–RL4, RL9) | D1, V3–V5; main map as a 3 × 3 window (FR-WORLD-003) | NPCs out of the window do not exist for the rules; a window move rebuilds hosts and drops runs; a long main-map walk loses every NPC position and run on the way (saved map changes survive) | TM5 | Decision GQ2; MIG9; K1, K2 |
 | GR9 | No residency classes, sector cache, fold or eviction history | Systemic (H7) | Statics belong to a sector of a 16-slot cache; mobile objects are listed only while their sector is loaded; the fold lists them, gives each NPC a first tick and, after 3 s away, re-places leaderless NPCs on their waypoint (RL1–RL3, RL7, RL8, RL17, RL20) | No cache; the AI host gives every NPC of the shown map a delayed tick when built and never re-places one (S24, V4) | No waypoint or standpoint return, no first-tick timing, no day-night scenery switch on load (RL19) | TM5 | MIG9; K1, K3 |
 | GR10 | NPC positions are not state: the AI host's movers are run-local and a load, map change or window move stands every NPC on its T0 cell | Systemic (H7, H9) | A position is field 2 of the object, kept in memory for the open map and saved as a difference (RL5, PS20) | V5; companions only through `npc.cell`/`npc.map` (S3) | Quick save and load teleports every moved NPC back; a fled or chasing NPC resets | TM2, TM5 | MIG7 |
 | GR11 | Inventory seeds are not state: rebuilt after every load for the loaded maps only | Systemic (H1, H9) | Items are objects with their holder as parent, in the map's files (OM23, NI rows) | S8, V1 | A rule that needs an NPC's or container's T0 items on an unloaded map has none; negative `IN` needs `refuseUncoveredInventory` | TM3 | MIG1, MIG5 |
-| GR12 | Location notification only for the hero: tile scripts, wading and sector-entry effects | Narrow | Every relocation of a PC or NPC runs the tile's scripts and the wading test; the local PC's sector change runs the sector script and point 27 for each follower; traps spring in the walk step only (RL5, RL6, RL18) | Tile and sector scripts in the transition coordinator for the hero (V12, SA18) | NPC-entered tile scripts never fire; followers miss point 27 | TM5 | D1, D8 |
-| GR13 | The heartbeat is wired for the shown map only: no script points 10 and 19, no waypoint, standpoint or spawner step, far path not used | Narrow (rules exist) | Near branch within 30 tiles runs point 19 and the pass; far branch stops animations and brings a follower to its leader; the heartbeat ends off a loaded sector; encounter creatures are destroyed (RL16, RL17) | `AiSchedulerRules` has the tick, the near test and the catch-up; the host answers "loaded" for every NPC and runs no script point (V4, [AI host](../world/ai-host.md)) | No daily routine, no generators, no follower catch-up on unloaded ground | TM5, TM7 | D7; K3, K4 |
+| GR12 | Location notification only for the hero: tile scripts, wading and sector-entry effects | Narrow | Every relocation of a PC or NPC runs the tile's scripts and the wading test; the local PC's sector change runs the sector script and point 27 for each follower; traps spring in the walk step only (RL5, RL6, RL18) | Tile and sector scripts in the transition coordinator for the hero (V12, SA18) | NPC-entered tile scripts never fire; followers miss point 27 | TM5 | MIG9; D1, D8 |
+| GR13 | The heartbeat is wired for the shown map only: no script points 10 and 19, no waypoint, standpoint or spawner step, far path not used | Narrow (rules exist) | Near branch within 30 tiles runs point 19 and the pass; far branch stops animations and brings a follower to its leader; the heartbeat ends off a loaded sector; encounter creatures are destroyed (RL16, RL17) | `AiSchedulerRules` has the tick, the near test and the catch-up; the host answers "loaded" for every NPC and runs no script point (V4, [AI host](../world/ai-host.md)) | No daily routine, no generators, no follower catch-up on unloaded ground | TM5, TM7 | MIG9; D7; K3, K4 |
 | GR14 | Transfer parity: followers of followers do not travel, unconscious followers are not left waiting, FM6's transient fields are not cleared, a travelling follower's AI tick is dropped | Narrow | Move list walks followers recursively; 0x45D800 (fatigue: unconscious) makes followers wait; focus, last hitter, enemy list, fleeing and substitute inventory are cleared; combat mode left; the carried AI tick is replaced by the fold's first tick (FM1, FM2, FM6, RL22, RL23, RL28) | Session transfer by `npc.cell`/`npc.map`; ARC-WORLD-084 removes every tick | Wrong group on arrival; stale fight links after a move | TM12 | MIG10 (V5) |
 | GR15 | Former followers never go home | Narrow, missing feature | Field 243, the teleport map, set once; a forced waypoint or standpoint pass teleports a leaderless NPC to its teleport map (FM10, FM11, RL17) | No teleport map field | A dismissed companion stays on the foreign map forever | TM5, TM12 | MIG11 (V6); K3 |
-| GR16 | No change-of-place request: each caller moves things itself, at once | Systemic (SP2) | One request slot processed by the teleport ping on the next frame: fades, movies, clock advance, wait orders, move list, payload, flush, close, open, pre-cache, Teleported events; callers are jump points, scripts, teleport spells, NPC waypoints, the world-map landing and the new game (RL21–RL24, RL29) | The transition coordinator from the frame chain (V12); world-map landing and scripts have their own paths | Teleport spells, script teleports, NPC homecoming and transition effects (K5, K8) each need their own path; the order of steps differs per caller | TM12 | MIG10; K5, K8 |
+| GR16 | No change-of-place request: each caller moves things itself, at once | Systemic (SP2) | One request slot processed by the teleport ping on the next frame: fades, movies, clock advance, wait orders, move list, payload, flush, close, open, pre-cache, Teleported events; callers are jump points, scripts, teleport spells, NPC waypoints, the world-map landing and the new game (RL21–RL24, RL29) | The transition coordinator from the frame chain (V12); world-map landing and scripts have their own paths | Teleport spells, script teleports, NPC homecoming and transition effects (K5, K8) each need their own path; the order of steps differs per caller | TM12 | MIG11; K5, K8 |
 
 ### SP3 Persistence
 
@@ -128,6 +132,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | GR17 | Created objects are saved in one store per kind, not as one section of whole objects per map | Systemic (H2) | `mobile.mdy`: every dynamic object that is not destroyed, whole, the hero and carried followers and items among them (PS20, PS27) | S10, S11 per kind | Each new kind is a new snapshot section and schema step | TM4, TM8 | MIG6 |
 | GR18 | Actions in flight are lost on a load: NPC goal runs, the hero's route and action, spell runs, shots, missiles | Systemic (H9) | The Anim module saves every run with its goal stack; MagicTech saves spell runs and maintained marks (PS11, PS15, PS16) | S25–S27, V4, G1–G5 run-local | A maintained spell ends at a quick load; NPCs restart decisions; a save mid-fight is not the fight | TM8 | Decision GQ4; MIG14 |
 | GR19 | The turn-based round is saved as is; the original restarts the order and the round number at load | Narrow | Combat blob: order rebuilt, round number restarts at 1 (PS13) | S19: round saved, subturns not | A load in a round resumes where the original restarts; visible in round-numbered rules only | TM8 | D4 |
+| GR37 | The turn-based setting is never in a save | Decision | The Combat blob keeps the module's cached copy of the turn-based setting, and a load writes it back, so a loaded game plays in the mode it was saved in until the option changes (PS34, consequence inferred) | Preferences only, never in a save (FR-LIFECYCLE-004, PS34's Steamwoven column) | A save made in turn-based mode loads in the player's current mode | TM8 | Decision GQ8; D9 |
 
 ### SP4 Time and the frame
 
@@ -143,7 +148,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | ID | Gap | Class | Original | Steamwoven | Consequence | Target | Work |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GR24 | The hero's actions are viewer hosts beside the NPC executor | Systemic (H4) | Hero walk, attack, talk, use, pickup, throw, skill and cast are goals of the same table with the same nodes, priorities and interrupts; the click builds goals 3, 15, 18, 19, 21, 37, 38, 81 itself; Shift, Alt and Ctrl rules (GS1–GS3, GS25–GS28) | Click route plus "after route" intents, `AttackGoal`, `SpellCastGoal`, held throw (G1–G4) | A stun, knock-down or interrupt cannot stop the hero the way it stops an NPC; talk, use and loot are not interruptible goals; every hero action is a second implementation | TM7 | MIG13; D4, D5, D9 |
-| GR25 | The NPC run model is partial: one run per NPC, 26 priorities, an interrupt that always succeeds, no levels, overlays, alias table or end nodes | Systemic (H4) | 85 of 87 goal types have a priority 1–5; five effective levels; 15 no-interrupt overlay goals; an interrupt ends the whole run with every end node (GS8–GS24) | `AiGoalRun`, `AreaAiHost.Priorities`, `InterruptLowerAnimations` (GS8, GS12, GS16) | A walk can replace an attack; a spell release can be cut; dying can be interrupted | TM7 | MIG13; D7 |
+| GR25 | The NPC run model is partial: one run per NPC, priorities for 26 goal types, an interrupt that always succeeds, no levels, overlays, alias table or end nodes | Systemic (H4) | 85 of 87 goal types have a priority 1–5; five effective levels; 15 no-interrupt overlay goals; an interrupt ends the whole run with every end node (GS8–GS24) | `AiGoalRun`, `AreaAiHost.Priorities`, `InterruptLowerAnimations` (GS8, GS12, GS16) | A walk can replace an attack; a spell release can be cut | TM7 | MIG13; D7 |
 | GR26 | Doors, projectiles, spell missiles, eye candy, burning scenery, dying, stun, knock-down and get-up are not runs | Systemic (H4), narrow effects | Each is a goal run: a door's own run opens, waits 1.5 s in goal 72 and closes (unless portal flag 0x100); damage starts stun 57 or knock-down 62; death starts dying 31 (GS29, GS31) | Viewer objects and animations; portal state without a close timer (GS29, GS31) | Doors never close by themselves (FR-SCENE-014, FR-AI-003); stun, knock-down and dying cannot interrupt a running action through the priority rule | TM7 | MIG13; D2, D4 |
 | GR27 | Scripts start no goals | Narrow | Script actions perform animation, walk to, run to, use item, steal, get up and the casts start goals; stop attacking and become prone stop them (GS30) | Script hosts start no goal runs (V7, V8) | Scripted walks and animations are missing | TM7, TM9 | D8 |
 
@@ -152,7 +157,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | ID | Gap | Class | Original | Steamwoven | Consequence | Target | Work |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GR28 | Writeback semantics differ: explicit writeback records applied by the host, one run per host call | Narrow | A run works on a copy and overwrites all twelve bytes once if anything changed; no nesting guard; the dialog action commits flags and counters mid-run (SA8–SA11) | `ScrDispatcher` returns `ScrWriteback` records (SA8, SA10, SA11) | A nested run on the same slot differs (the original keeps the inner run only if the outer changed nothing) | TM9 | D8 |
-| GR29 | Admission refuses global variables, PC variables and PC flags | Narrow, missing feature | 2000 global variables, 3200 global flags, a story number; PC flags and variables are fields 272 and 273 of the PC (SA13, SA14) | Global flags and story state only (S2, S5; SA13) | Scripts that read or write them are refused (FR-SCRIPT-002) | TM9 | D8 |
+| GR29 | Admission refuses global variables, PC variables and PC flags | Narrow, missing feature | 2000 global variables, 3200 global flags, a story number; PC flags and variables are fields 272 and 273 of the PC (SA13, SA14) | Global flags and story state only (S2, S5; SA13) | Scripts that read or write them are refused (FR-SCRIPT-002) | TM9 | MIG8; D8 |
 
 ### SP7 Relations between objects
 
@@ -160,6 +165,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GR30 | Destroy semantics of links: a destroyed holder drops only invulnerable items, links to a destroyed target stay until the map is cleared, a destroyed follower leaves its leader | Narrow | OM17, OM18, OM29 | Each store removes its own records (OM17's Steamwoven column) | Container destruction and leader death differ per store | TM4, TM10 | D3, D7 |
 | GR31 | Summoner, substitute inventory and the scenery and projectile links have no home | Narrow, not built | The summoned list of the spell run, field 294, fields 70 and 80 (OM25, OM28) | Not modelled | Needed by summons (K5) and pick pocket's substitute inventory | TM10 | K5; D3 |
+| GR36 | A link to an object that left for another map keeps its identity | Decision | A link from an object of map A to one now on map B becomes null when A opens again and is lost at A's next save; the travelling group rebinds because it arrives together (FM7, OM31) | Entity references in the domains survive any move; ARC-RES-076 proposed keeping that ("not planned") without an owner decision | An NPC's last hitter, focus or enemy list naming a companion who left is kept where the original forgets it | TM10 | Decision GQ7; D7 |
 
 ### SP8 Authority and placement of the logic
 
@@ -182,16 +188,14 @@ target model keeps them.
 
 | ID | Difference | Original | Steamwoven | Record |
 | --- | --- | --- | --- | --- |
-| GI1 | One atomic, validated JSON snapshot with stepwise schema upgrades instead of a folder archive and module blobs | PS1–PS4 | Write, read back, compare, replace; typed failures; ARC-UI-037 upgrades | FR-LIFECYCLE-002, FR-LIFECYCLE-003 |
+| GI1 | One atomic, validated JSON snapshot with stepwise schema upgrades instead of a folder archive and module blobs | PS1–PS4 | Write, read back, compare, replace; typed failures; ARC-UI-037 upgrades | By requirement: FR-LIFECYCLE-002, FR-LIFECYCLE-003 |
 | GI2 | Parked and carried events in one queue with a scope per event instead of per-map files | PS26, RL28 | `Global`, `EntityMap`, `ActiveMapOnly` | Owner decision OQ3 ([event queue](../research/game-event-queue.md)) |
 | GI3 | Ties fire first scheduled first | TE3 | Persisted sequence | Owner decision OQ1 |
 | GI4 | AI ticks are saved; the Original rule rebuilds them on load | PS31 | `ai.tick` persisted | Owner decision OQ2 |
-| GI5 | Events fire at their own deadlines and repeaters do not drift | TL20–TL22 | Pump steps to each deadline, up to 64 steps a frame | FR-RUNTIME-001, ARC-WORLD-039 |
+| GI5 | Events fire at their own deadlines and repeaters do not drift | TL20–TL22 | Pump steps to each deadline, up to 64 steps a frame | By requirement: FR-RUNTIME-001, ARC-WORLD-039 |
 | GI6 | The random generator is saved | PS32 | Seed and draws (S21) | Session randomness ARC-WORLD-019, seeded replays (OQ2) |
 | GI7 | A failed transfer leaves the session on its map | RL30 (no map, nothing rolled back) | Nothing half moved | Owner rule on technical bugs; FR-WORLD-016 |
-| GI8 | Identity links survive a move to another map | FM7, OM31 (nulled at the next open of the other map) | Entity references kept | Proposed by ARC-RES-076 ("not planned"); the owner may revisit |
-| GI9 | Settings never in a save, also the turn-based option | PS34 (one cached copy in the Combat blob) | Preferences only | FR-LIFECYCLE-004 |
-| GI10 | Prototypes on a fresh installation are built from the player's executable | OM12 (the game writes the missing files on its first run) | ARC-RES-085 | Owner decision 2026-11-03 |
+| GI8 | Prototypes on a fresh installation are built from the player's executable | OM12 (the game writes the missing files on its first run) | ARC-RES-085 | Owner decision 2026-11-03 |
 
 ## 4. Earlier records corrected in this PR
 
@@ -206,8 +210,8 @@ a pointer to the row that settles it.
 | [Main-map streaming](../research/main-map-streaming.md) "mobile objects" row | Portals are static unless dynamic | PS20, PS24, RL1 |
 | OM10 | The full record is used in the module's `.sec` files and `mobile.mdy`; the game's sector difference files hold difference records | PS24 |
 | FM2 (follower research and [social ledger](../research/ledger/social.md)) | Settled: 0x45D800 reads fatigue, so unconscious followers wait | RL23 |
-| FM7 | The Teleported event runs the whole arrival notification in mode 2 | RL6, RL27 |
-| FM8, P3, P7 ([event queue](../research/game-event-queue.md)) | The carry runs before the payload removes AI events: the follower's tick is carried, then replaced by the fold's first tick; one tick | RL23, RL28 |
+| FM7 (follower research and social ledger) | The Teleported event runs the whole arrival notification in mode 2 | RL6, RL27 |
+| FM8 (follower research and social ledger), P3, P7 ([event queue](../research/game-event-queue.md)) | The carry runs before the payload removes AI events: the follower's tick is carried, then replaced by the fold's first tick; one tick | RL23, RL28 |
 | TL40 | 15 no-interrupt goals, eight of them eye candy; read on the current goal, ignored at level 6 | GS9, GS16 |
 | TL42 | 0x4357B0 starts the stun (goal 57); the knock-down starter is 0x435A90 (goal 62) | GS13 |
 | TL43 | The first frame of a new goal is queued at 5 ms (1 ms into the live list for a non-current owner in a round) | GS7, TL41 |
@@ -218,7 +222,7 @@ a pointer to the row that settles it.
 | [AI execution](../research/npc-ai-execution.md) starters | Second dead starter: skill conceal 0x436370 (goal 35) | GS32 |
 | GS25 | The turn toward the cursor is on the right button's release | SA36, R6 Q8 |
 | E11 ([SCR dispatcher](../research/scr-event-dispatcher.md)) | The dialog action also persists a run's flags and counters, mid-run | SA8 |
-| [Multiplayer](../research/multiplayer-evidence.md) | 0x4B43A0 is inside the damage entry 0x4B4390; the client request list gains 5, 7, 8, 9, 19, 30, 31, 44/2, 48, 50, 80, 96, 117, 118, 122, 125, 126 and 100/12; 1 and 81 were not found as client sends; the dispatcher 0x49D690 is reached only as a registered callback | SA25, SA31–SA33 |
+| [Multiplayer](../research/multiplayer-evidence.md) and NT6 of the [multiplayer ledger](../research/ledger/multiplayer.md) | 0x4B43A0 is inside the damage entry 0x4B4390; the client request list gains 5, 7, 8, 9, 19, 30, 31, 44/2, 48, 50, 80, 96, 117, 118, 122, 125, 126 and 100/12; 1 and 81 were not found as client sends; the dispatcher 0x49D690 is reached only as a registered callback | SA25, SA31–SA33 |
 
 Not edited here: the [function registry](../verification/functions.csv) row of 0x434F80 (the
 equal-goal test walks every run of the object, GS4), because the registry is test data read by
@@ -236,6 +240,7 @@ is implemented).
 | Questions | Topic | Goes to |
 | --- | --- | --- |
 | R1 Q1, R1 Q4 (traps), R1 Q7 | Summoner as follower; trap device creation; mobile-only queries of absent sectors | K5, K6, K1 |
+| R3 Q5 (first half) | Events and runs of an NPC or a group without the hero sent to another map | MIG11, K5 |
 | R1 Q2, R1 Q10, R3 Q7 | Prototype file folder; type-2 map at new game; multiplayer save parts | ARC-RES-085 follow-ups, D9, K11 |
 | R1 Q5, R3 Q3 | Items left in a destroyed holder | D3 |
 | R1 Q6, R1 Q8, R1 Q9, R1 Q11, R1 Q13, R1 Q14, R3 Q1, R3 Q2, R3 Q10 | Sector locks, fold timing, line-of-sight loads, statics in links, failed sector loads | K1 (MIG9 reads what it needs) |
@@ -258,10 +263,10 @@ is implemented).
 | D4 Combat | GR1, GR24, GR25, GR26, GR19 | TM1, TM7 |
 | D5 Magic and technology | GR1, GR18 (spell runs), GR24 (cast) | TM7, TM8 (GQ4) |
 | D6 Character, skills | GR24 (skills as goals), GR29 (PC variables) | TM7, TM9 |
-| D7 NPC AI, followers, reputation | GR1, GR13–GR15, GR25, GR30 | TM3, TM5, TM7 |
+| D7 NPC AI, followers, reputation | GR1, GR13–GR15, GR25, GR30, GR36 | TM3, TM5, TM7, TM10 (GQ7) |
 | D8 Scripts, dialogs, story | GR7, GR12, GR27–GR29 | TM9 |
-| D9 Interface, lifecycle, saves | GR18, GR22, GR35, GR33 | TM8, TM13 (GQ3, GQ4) |
-| K1 Living world beyond the window | GR8–GR10, GR13 | GQ2; MIG9 |
+| D9 Interface, lifecycle, saves | GR18, GR22, GR33, GR35, GR37 | TM8, TM13 (GQ3, GQ4, GQ8) |
+| K1 Living world beyond the window | GR8–GR10, GR13 | GQ2; written as MIG9's design |
 | K2 Generated main-map sectors in play | GR8, GR9 | K1 |
 | K3 Daily routine, standpoints, doors for NPCs | GR9, GR26, GR13, GR15 | TM5, TM7 |
 | K4 Generators, respawn, decay, encounters | GR4, GR17, GR13, GR23 | TM4, TM5 |
