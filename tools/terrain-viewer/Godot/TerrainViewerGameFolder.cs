@@ -143,7 +143,7 @@ public partial class TerrainViewerApp
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
-            _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074 installer unpack cancel requested"); _installCancel?.Cancel(); };
+            _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack or game data)"); _installCancel?.Cancel(); };
             _launcherPanel.PlayRequested += LauncherPlay;
             _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
             _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); _installCancel?.Cancel(); GetTree().Quit(); };
@@ -266,6 +266,8 @@ public partial class TerrainViewerApp
             else ShowStatus("Diagnostic mode unresolved | loading stage=GameData | " + LauncherScreen.Describe(new PrototypeProvisionProgress(PrototypeProvisionStage.Checking)));
             using var cancel = _installCancel = new CancellationTokenSource();
             PrototypeProvisionResult result;
+            // A progress line posted by the build thread can run after the result was handled: it is dropped once the run is over.
+            var finished = false;
             try
             {
                 var stage = (PrototypeProvisionStage?)null;
@@ -275,6 +277,7 @@ public partial class TerrainViewerApp
                     if (stage != progress.Stage) { stage = progress.Stage; GD.Print($"ARC-DEV-069 prototypes stage={progress.Stage}"); }
                     Callable.From(() =>
                     {
+                        if (finished) return;
                         if (launcher is not null) { if (_launcher != launcher) return; launcher.PrototypesProgress(progress); _launcherPanel?.Render(launcher); }
                         else ShowStatus("Diagnostic mode unresolved | loading stage=GameData | " + LauncherScreen.Describe(progress));
                     }).CallDeferred();
@@ -286,7 +289,7 @@ public partial class TerrainViewerApp
                 // Whatever escapes must still end the busy state, or Play and the folder buttons stay off for good.
                 result = new(PrototypeProvisionStatus.BuildFailed, Detail: error.GetType().Name + ": " + error.Message);
             }
-            finally { _installCancel = null; }
+            finally { finished = true; _installCancel = null; }
             GD.Print($"ARC-DEV-069 prototypes status={result.Status} files={result.Files} cache={result.MountFolder ?? "none"} detail={result.Detail ?? "none"}");
             if (launcher is not null && _launcher != launcher) return; // the screen closed (a quit)
             if (result.Succeeded)

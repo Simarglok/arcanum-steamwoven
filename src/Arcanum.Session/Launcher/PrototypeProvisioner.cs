@@ -99,7 +99,11 @@ public static class PrototypeProvisioner
             var source = new StackOriginalFiles(stack);
             var store = new PrototypeCacheStore(cacheRoot, exeSha);
             store.RemoveLeftovers();
-            if (store.Verify(source) is { } cached) return new(PrototypeProvisionStatus.Cached, store.MountFolder, Files: cached);
+            if (store.Verify(source) is { } cached)
+            {
+                cancel.ThrowIfCancellationRequested();
+                return new(PrototypeProvisionStatus.Cached, store.MountFolder, Files: cached);
+            }
 
             cancel.ThrowIfCancellationRequested();
             progress?.Invoke(new(PrototypeProvisionStage.Building));
@@ -113,6 +117,7 @@ public static class PrototypeProvisioner
             progress?.Invoke(new(PrototypeProvisionStage.Storing, build.Files.Count, build.Files.Count));
             if (store.Store(build, source) is { } storeFailure) return new(PrototypeProvisionStatus.CacheWriteFailed, Detail: storeFailure);
             // What was stored must read back as a cache (the manifest, every file), or the next start would build again without saying why.
+            cancel.ThrowIfCancellationRequested();
             return store.Verify(source) is { } stored
                 ? new(PrototypeProvisionStatus.Built, store.MountFolder, Files: stored)
                 : new(PrototypeProvisionStatus.CacheWriteFailed, Detail: "the stored prototype files did not read back");

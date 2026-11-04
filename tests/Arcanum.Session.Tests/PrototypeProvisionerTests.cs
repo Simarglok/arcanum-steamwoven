@@ -85,7 +85,7 @@ public sealed class PrototypeProvisionerTests
                 progress?.Invoke(i + 1, Names.Length);
                 built.Add(new(int.TryParse(Names[i].AsSpan(0, Math.Min(6, Names[i].Length)), out var number) ? number - 20 : 0, Names[i], Bytes(i)));
             }
-            return new(built, Failure, 5) { ReadFiles = ["rules\\npc.txt"], MissedFiles = ["rules\\absent.mes"] };
+            return new(built, Failure, 5) { ReadFiles = ["rules\\npc.txt"], MissedFiles = ["rules\\absent.mes"], ListedPatterns = ["art\\tile\\*.art", "proto\\*.pro"] };
         }
     }
 
@@ -194,6 +194,40 @@ public sealed class PrototypeProvisionerTests
         Assert.AreEqual(PrototypeProvisionStatus.Built, second.Status, second.Detail);
         Assert.AreNotEqual(first.MountFolder, second.MountFolder);
         Assert.IsTrue(Directory.Exists(first.MountFolder), "the earlier executable's cache is kept");
+    }
+
+    [TestMethod]
+    public void A_file_added_to_a_folder_the_executable_searched_or_a_system_file_in_the_cache_is_judged_right()
+    {
+        Write("data/art/tile/a.art", [1]);
+        var build = new FakeBuild();
+        var first = PrototypeProvisioner.Provision(Folder(), _cache, options: Options(build));
+        Assert.AreEqual(PrototypeProvisionStatus.Built, first.Status, first.Detail);
+
+        // A name the system adds (Finder, a copy tool) is no file of the cache.
+        File.WriteAllBytes(Path.Combine(first.MountFolder!, ".DS_Store"), [1]);
+        File.WriteAllBytes(Path.Combine(first.MountFolder!, "proto", "._001001 - Wall.pro"), [1]);
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, PrototypeProvisioner.Provision(Folder(), _cache, options: Options(build)).Status);
+        Assert.AreEqual(1, build.Calls);
+
+        Write("data/art/tile/b.art", [2]);
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: Options(build)).Status, "a new file in a searched folder");
+        Assert.AreEqual(2, build.Calls);
+        Assert.AreEqual(PrototypeProvisionStatus.Cached, PrototypeProvisioner.Provision(Folder(), _cache, options: Options(build)).Status);
+    }
+
+    [TestMethod]
+    public void A_cancel_during_the_check_of_a_stored_cache_or_after_the_build_still_cancels()
+    {
+        var build = new FakeBuild();
+        Assert.AreEqual(PrototypeProvisionStatus.Built, PrototypeProvisioner.Provision(Folder(), _cache, options: Options(build)).Status);
+        using var cancel = new CancellationTokenSource();
+        var cached = PrototypeProvisioner.Provision(Folder(), _cache, progress => { if (progress.Stage == PrototypeProvisionStage.Checking) cancel.Cancel(); }, cancel.Token, Options(build));
+        Assert.AreEqual(PrototypeProvisionStatus.Cancelled, cached.Status, "cancelled before the cache is verified");
+        using var late = new CancellationTokenSource();
+        Write("data/rules/npc.txt", Encoding.ASCII.GetBytes("rules v9"));
+        var stored = PrototypeProvisioner.Provision(Folder(), _cache, progress => { if (progress.Stage == PrototypeProvisionStage.Storing) late.Cancel(); }, late.Token, Options(build));
+        Assert.AreEqual(PrototypeProvisionStatus.Cancelled, stored.Status, "a cancel while saving is not ignored");
     }
 
     [TestMethod]
