@@ -76,7 +76,7 @@ ARC-RES-076; the rest are not checked yet.
 | H6 | Game logic lives in the diagnostic viewer tool, not in Godot-free assemblies | SP8 | `tools/terrain-viewer/Core` (about 27 k lines of hosts) and `Godot` (about 50 k) hold hosts the alpha app runs; against the [simulation boundary](../architecture/decisions.md) direction |
 | H7 | Only the shown map (or window) is alive: objects off it do not simulate, age or fire events as the original's do | SP2, SP4 | Hosts built for the shown map; main map windows |
 | H8 | Script state keyed by the home map record instead of carried on the object | SP6 | Works while identity never changes; breaks for objects the game creates or clones |
-| H9 | Run-local caches hold state the original keeps on the object, so a quick load or a fresh run loses it | SP2, SP3 | `_travellers` bodies (FM14); others to be listed |
+| H9 | Run-local caches hold state the original keeps on the object, so a quick load or a fresh run loses it | SP2, SP3 | `_travellers` bodies (FM14; closed by ARC-DEV-079, MIG4); others to be listed |
 
 ## Slices
 

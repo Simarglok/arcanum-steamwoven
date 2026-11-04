@@ -77,8 +77,9 @@ visitor's row (a row of its home map) is never looked up by the shown map's key.
 is therefore told of attack events, stands in the scan's and noise's squares (`Square`), counts in the hero's party a flee test counts
 (`Followers`, which still leaves out a follower on another map), strikes and is struck. Since ARC-DEV-065 an object the rules cannot
 describe must never reach them (the rules refuse an object `Find` does not know, and the refusal once stopped the whole game with failure
-stage `ActorPlan`): the one case left is a companion with no record at all (its home is the main map's window, which the resolver does not
-read on demand: MIG9) and was not left by a map change of this run (`AreaRememberedRecords`: a quick load to another map or a fresh run), which `Unresolved` keeps out
+stage `ActorPlan`): the one case left is a companion with no record at all (its home is a main-map window and the session recorded no stored cell
+for it, `npc.home`: a companion that left before ARC-DEV-079; since that slice the window is read on demand around the recorded cell, so Virgil after
+a quick load or a fresh run on a foreign map resolves, and a second window of one map is not resolved: MIG9), which `Unresolved` keeps out
 of the rules as before; its walk still follows the hero through the group.
 
 | Part | Original | What it does |

@@ -98,7 +98,7 @@ otherwise.
 | S16 | `_experience`, `_advancement` | NPC experience, NPC advancement sheets, missed level steps | Entity | Schemes from D6 | Saved | H1− |
 | S17 | `_life` `LifeDomain` | Hero and changed NPCs' life | Entity | Life facts passed per call | Saved | H1− |
 | S18 | `_reactions` `ReactionDomain` | NPC reaction toward the PC | Entity | — | Saved | H1− |
-| S19 | `_combat` `CombatDomain` | Turn-based round, combat-mode critters, concealment | Entity | Combatant facts from the round host per call | Saved; the subturn count and stalled check are not | H1−, H9+ |
+| S19 | `_combat` `CombatDomain` | Turn-based round, combat-mode critters, concealment | Entity | Combatant facts from the round host per call | Saved with the subturn count (ARC-DEV-078, GR19: Original rebuilds the round at a load); the stalled check is not | H1−, H9+ |
 | S20 | `_danger` `DangerDomain` | Danger bits, focus, fleeing-from, last hitter, enemy list | Entity | — | Saved | H1− |
 | S21 | `_random` `SeededRandom` | Gameplay generator seed and draws | — | — | Saved | — |
 | S22 | `_sound` `SoundDomain`, `_lighting` | Music and ambient slots, applied lighting | — | Scheme catalogue attached by the host (not saved) | Saved | — |
@@ -154,7 +154,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 | G3 | `SpellCastGoal`, `_spellQueue` (`Godot/TerrainViewerSpellCast.cs`) | PC | C2 | Cast animation and release, queued casts | Run-local; a casting goal is not saved (its run would wait) | H4+, H6+, H9+ |
 | G4 | Held throw (`Core/AreaHeldThrow.cs`, `Godot/TerrainViewerHeldThrow.cs`), viewer `_projectiles` (`Godot/TerrainViewerProjectiles.cs`) | PC | C2 | Throw, flying bodies beside S26 | Run-local | H4+, H9+ |
 | G5 | `AiExecutorRules` (`Simulation/Ai/ExecutorRules.cs`, `ExecutorActionGoals.cs`) run by V4 | NPCs and companions on the shown map | C2 (V4 `_nowMs`) | `AiGoalRun` goal frames with the original's priorities | Run-local; the AI tick (S24) restarts passes | H4+, H5+, H7+, H9+ |
-| G6 | Turn-based round (`CombatDomain`, `Godot/TerrainViewerTurnBased.cs`) | Both | Round order | Round, subturns | Round saved, subturn count not | H4− (one round for both) |
+| G6 | Turn-based round (`CombatDomain`, `Godot/TerrainViewerTurnBased.cs`) | Both | Round order | Round, subturns | Round saved with its subturn count; Original rebuilds it at a load (GR19, ARC-DEV-078) | H4− (one round for both) |
 
 ## 7. Clocks and frame pumps
 
@@ -177,7 +177,7 @@ world-map and menu syncs, death, inventory, hover, cursor and bug-report syncs.
 
 | # | Cache (file) | Holds | Keyed by | Lost on | Hyp. |
 | --- | --- | --- | --- | --- | --- |
-| L1 | `_travellers` (`Godot/TerrainViewerCompanions.cs`) | A companion's body built from its home map's scene | Entity | Quick load or fresh run when the home map was not loaded (`AreaVisitors.Unbodied`) | H1+, H9+ |
+| L1 | ~~`_travellers`~~ (removed by ARC-DEV-079, MIG4: the body is read from the home map by `AreaHomeDirectory`, derived data that a quick load or a fresh run reads again; `npc.home` keeps the stored cell a window home is read around) | A companion's body built from its home map's scene | Entity | — | closed |
 | L2 | `_companionFacts` (`Godot/TerrainViewerCompanions.cs`) | Companion facts | `AreaObjectKey` | Map change | H1+ |
 | L3 | `_visitorRefused` (`Godot/TerrainViewerConversation.cs`) | Visitors whose dialog was refused | Entity, per owner | Quick load, conversation reset | H9+ |
 | L4 | V5 movers, V4 runs, S25 spell runs, S26 shots, G1–G4 | See above | — | Quick load, map change | H9+ |

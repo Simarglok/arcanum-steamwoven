@@ -305,6 +305,7 @@ public partial class TerrainViewerApp
         var next = _spellQueue[0];
         _spellQueue.RemoveAt(0);
         if (!ReferenceEquals(next.Caster, caster)) { DropSpellQueue(caster, "the cast host changed"); return; }
+        ResumeLoadedRound();
         var start = caster.StartGoal(next.Run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
         GD.Print($"ARC-MAGIC-019 queued-start run={next.Run} spell={next.Spell} outcome={start.Outcome} waiting={_spellQueue.Count}");
         if (start.Outcome == SpellCastGoalOutcome.Started)
@@ -546,7 +547,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        // ARC-COMBAT-020: in a turn-based round the casting goal's start charges its 4 action points.
+        // ARC-COMBAT-020: in a turn-based round the casting goal's start charges its 4 action points (GR19: a loaded round's rule first).
+        ResumeLoadedRound();
         var start = caster.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
         if (start.Outcome != SpellCastGoalOutcome.Started)
         {

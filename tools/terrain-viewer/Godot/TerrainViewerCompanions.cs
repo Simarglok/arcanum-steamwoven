@@ -29,13 +29,15 @@ public partial class TerrainViewerApp
     {
         // ARC-WORLD-051: the portals are bound with the same session and grid.
         BindAreaPortals();
-        _areaCompanions = null; _unbodiedVisitors = [];
+        _areaCompanions = null; _unreadVisitors = [];
         CancelPendingOrder("the companions were rebuilt");
         RefreshFollowerPortraits();
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
         // ARC-WORLD-037: in map mode only the NPCs the party has touched move as companions (following, waiting, or recorded
         // elsewhere than their T0 cell); every other speaker stays its T0 body until it joins.
         // ARC-WORLD-049: a dead NPC is a corpse where it lies, never a moving companion.
+        // ARC-DEV-079 (MIG4): a companion standing here whose body the shown scene does not draw is read from its home map's data.
+        if (_readyMapName is not null) RefreshVisitorBodies(session, grid);
         var templates = _readyMapName is null ? _companionTemplates
             : _companionTemplates.Where(t => CompanionIncluded(session, t) && !SpeakerDead(t.Speaker)).ToArray();
         _areaCompanions = AreaCompanionGroup.Create(templates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time,
@@ -48,11 +50,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
         _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
         _areaCompanions.Extra = AiMoversOverlay;
-        if (_readyMapName is not null) AdoptTravellers(_areaCompanions);
-        // ARC-WORLD-048: a companion recorded here without a body kept in this run (after a quick load) cannot be talked to here.
-        if (_readyMapName is not null) _unbodiedVisitors = AreaVisitors.Unbodied(session, new(CurrentAreaMap), _companionTemplates,
-            world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
-        foreach (var entity in _unbodiedVisitors) GD.Print("ARC-WORLD-048 visitor not talkable entity=" + entity + " reason=no body kept this run");
+        if (_readyMapName is not null) AdoptVisitorFrames(_areaCompanions);
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         // ARC-WORLD-047: a waiting follower whose map data this run can read now gets the level steps it missed.
         ApplyMissedAreaLevels();
@@ -64,21 +62,24 @@ public partial class TerrainViewerApp
 
     private void UnbindAreaCompanions()
     {
-        _areaCompanions = null; _companionNotice = null; _unbodiedVisitors = []; _pendingOrder = null;
+        _areaCompanions = null; _companionNotice = null; _unreadVisitors = []; _visitorFrames.Clear(); _pendingOrder = null;
         RefreshFollowerPortraits();
     }
 
-    // ARC-WORLD-048: companions recorded on the shown map that this run kept no body for (AreaVisitors.Unbodied).
-    private IReadOnlyList<string> _unbodiedVisitors = [];
+    // ARC-DEV-079 (MIG4): companions recorded on the shown map whose body their home map could not give (the entity and why), named on the HUD.
+    private IReadOnlyList<string> _unreadVisitors = [];
 
     // ARC-WORLD-037: companions on any map (--area-map). Their follow facts come from the map's own data (AreaCompanionData:
-    // the AI parameter table and the effect tables); a companion that follows the PC to another map goes with it, and its
-    // T0 body (commands, visuals and frames from its home map) is kept for the rest of the run, so it is drawn wherever it
-    // stands. A companion whose home map was not loaded in this run (after a quick load) has no body and is skipped.
+    // the AI parameter table and the effect tables); a companion that follows the PC to another map goes with it. ARC-DEV-079 (MIG4):
+    // its T0 body (commands, visuals and frames) is read from its home map's data (AreaHomeDirectory, by identity: the home map the session's
+    // away change names and the stored cell it recorded), on any map and after a quick load or a fresh run; the viewer keeps no body of its own.
     private (string Module, AreaCompanionData? Data, string Detail)? _companionData;
     private readonly Dictionary<AreaObjectKey, AreaCompanionFacts?> _companionFacts = new();
-    private readonly Dictionary<string, (AreaCompanionTemplate Template, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames)> _travellers =
-        new(StringComparer.Ordinal);
+    // The bodies of the shown map's own speakers (its templates), and the frames of the visitors' bodies this scene adds.
+    private IReadOnlyList<AreaCompanionTemplate> _ownCompanionTemplates = [];
+    private readonly Dictionary<string, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>> _visitorFrames = new(StringComparer.Ordinal);
+    // The home maps' data, read on demand and kept (derived: a fresh run or a quick load reads again).
+    private AreaHomeDirectory? _homes;
 
     private AreaCompanionData? MapCompanionData(string module)
     {
@@ -99,14 +100,14 @@ public partial class TerrainViewerApp
         return facts;
     }
 
-    /// <summary>The map's own companion templates (every drawn speaker with follow facts) and the travellers met earlier.</summary>
+    /// <summary>The map's own companion templates (every drawn speaker with follow facts); the companions visiting it come from their home maps
+    /// (<see cref="RefreshVisitorBodies"/>).</summary>
     private IReadOnlyList<AreaCompanionTemplate> MapCompanionTemplates(TerrainViewerArguments arguments, AreaLoadResult area)
     {
+        _ownCompanionTemplates = [];
         if (MapCompanionData(arguments.ModulePath) is null) return [];
-        var own = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals, area.Plan.Chart,
+        return _ownCompanionTemplates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals, area.Plan.Chart,
             new(area.Snapshot.RuntimeMap), MapCompanionFacts);
-        var entities = own.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal);
-        return [.. own, .. _travellers.Values.Select(t => t.Template).Where(t => !entities.Contains(t.Entity))];
     }
 
     private static bool CompanionIncluded(GameSessionOwner session, AreaCompanionTemplate template)
@@ -116,25 +117,48 @@ public partial class TerrainViewerApp
         return where.Map != template.Home || where.Placement is not null || where.Error is not null;
     }
 
-    /// <summary>Keeps the bodies of the group's companions for later maps, and adds the frames of those visiting from
-    /// another map to the shown map's frame repository.</summary>
-    private void AdoptTravellers(AreaCompanionGroup group)
+    /// <summary>
+    /// ARC-DEV-079 (MIG4): the companions standing on the shown map whose body its own scene does not draw (<see cref="AreaVisitors.Here"/>)
+    /// get their body, and the frames it draws, from their home map's data through <see cref="AreaHomeDirectory.Body"/> (the home map the
+    /// session's away change names, the stored cell it recorded; a map the viewer holds answers from memory, any other is read once). A body
+    /// that cannot be read is named on the HUD and left out, never guessed. The templates the shown map's rules see are its own plus these.
+    /// </summary>
+    private void RefreshVisitorBodies(GameSessionOwner session, AreaGridSession grid)
+    {
+        _visitorFrames.Clear(); _unreadVisitors = [];
+        var visitors = AreaVisitors.Here(session, new(CurrentAreaMap), _ownCompanionTemplates,
+            world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
+        var bodies = new List<AreaCompanionTemplate>(); var unread = new List<string>();
+        foreach (var visitor in visitors)
+        {
+            var (template, frames, detail) = _homes?.Body(visitor.Entity, visitor.HomeMap, visitor.HomeCell)
+                ?? (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), "no home map reader");
+            if (template is null)
+            {
+                unread.Add($"{visitor.Entity} ({detail})");
+                GD.Print($"ARC-DEV-079 visitor body unread entity={visitor.Entity} home={visitor.HomeMap} stored={visitor.HomeCell} reason={detail}");
+                continue;
+            }
+            bodies.Add(template); _visitorFrames[visitor.Entity] = frames;
+            GD.Print($"ARC-DEV-079 visitor body entity={visitor.Entity} home={visitor.HomeMap} script={template.Speaker.ScriptId} frames={frames.Count}");
+        }
+        _unreadVisitors = unread;
+        IReadOnlyList<AreaCompanionTemplate> next = [.. _ownCompanionTemplates, .. bodies];
+        if (next.SequenceEqual(_companionTemplates, ReferenceEqualityComparer.Instance)) return;
+        _companionTemplates = next; _hoverIndex = null; _hoverIndexArea = null;
+    }
+
+    /// <summary>Adds the frames of the visiting companions' bodies (read from their home maps) to the shown map's frame repository.</summary>
+    private void AdoptVisitorFrames(AreaCompanionGroup group)
     {
         var frames = (AreaFrameOverlay)AreaFrames();
         foreach (var companion in group.Companions)
         {
             var template = companion.Template;
-            if (_travellers.TryGetValue(template.Entity, out var known))
-            {
-                foreach (var command in template.Commands)
-                    if (known.Frames.TryGetValue(command.Frame, out var frame)) frames.Add(command.Frame, frame);
-                    else GD.Print($"ARC-WORLD-037 companion script={template.Speaker.ScriptId} frame {command.Frame} not kept; not drawn here");
-                continue;
-            }
-            var own = new Dictionary<AreaFrameKey, DecodedAreaFrame>();
-            foreach (var key in template.Commands.Select(c => c.Frame).Distinct())
-                if (frames.TryGetValue(key, out var frame)) own[key] = frame;
-            _travellers[template.Entity] = (template, own);
+            if (!_visitorFrames.TryGetValue(template.Entity, out var kept)) continue;
+            foreach (var command in template.Commands)
+                if (kept.TryGetValue(command.Frame, out var frame)) frames.Add(command.Frame, frame);
+                else GD.Print($"ARC-WORLD-037 companion script={template.Speaker.ScriptId} frame {command.Frame} not read; not drawn here");
         }
     }
 
@@ -290,7 +314,7 @@ public partial class TerrainViewerApp
     {
         if (_conversationHost is not { PartyWired: true }) return "";
         var text = (_areaCompanions is { } group ? group.Status() : "companions: none") + " | " + PartySideLabel();
-        var unbodied = (_unbodiedVisitors.Count == 0 ? "" : " | not talkable here (no body kept this run): " + string.Join(", ", _unbodiedVisitors))
+        var unbodied = (_unreadVisitors.Count == 0 ? "" : " | companion body not read from its home map: " + string.Join(", ", _unreadVisitors))
             + (_pendingOrder is not { } pending ? "" : pending.Type == CompanionOrderType.Attack
                 ? " | attack order: click an object (any key cancels)" : " | walk order: click a tile (any key cancels)");
         return " | " + text + unbodied + (_companionNotice is { } notice ? " | " + notice : "");

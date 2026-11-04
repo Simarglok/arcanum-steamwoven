@@ -90,6 +90,34 @@ public static class AreaCompanionPlacement
     public static MapChangeKey MapKey(string entity) => MapChangeKey.ForEntity(entity, MapProperty);
 
     /// <summary>
+    /// ARC-DEV-079 (MIG4): on the NPC's home map, the world cell its stored object lies on (the T0 cell the home map's data lists it at),
+    /// written with every recorded placement (every placement but the stored cell facing the default) and cleared with the one that equals it. The original's object carries
+    /// its own record wherever it stands (FM3); here the record is read from the home map's data, and a home that opens only as a window
+    /// (the main world map) needs the sector to read, which nothing else keeps once the NPC has left (the T0 cell is not a change).
+    /// </summary>
+    public const string HomeProperty = "npc.home";
+
+    public static MapChangeKey HomeKey(string entity) => MapChangeKey.ForEntity(entity, HomeProperty);
+
+    /// <summary>The recorded stored cell of <paramref name="entity"/> on its home map, or null (none recorded, or unreadable).</summary>
+    public static CellCoord? HomeCell(GameSessionOwner session, SessionMapId home, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return session.QueryMapChange(home, HomeKey(entity)) is { } value && Decode(value) is { } placed ? placed.World : null;
+    }
+
+    /// <summary>The recorded stored cells of the NPCs of <paramref name="home"/>, by entity (an unreadable value is left out).</summary>
+    public static IReadOnlyDictionary<string, CellCoord> HomeCells(GameSessionOwner session, SessionMapId home)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var cells = new SortedDictionary<string, CellCoord>(StringComparer.Ordinal);
+        foreach (var change in session.QueryMapChanges(home))
+            if (change.Key.Scope == MapChangeScope.Entity && change.Key.Property == HomeProperty && change.Key.Entity is { } entity && Decode(change.Value) is { } placed)
+                cells[entity] = placed.World;
+        return cells;
+    }
+
+    /// <summary>
     /// Where a companion stands (ARC-WORLD-017, project policy): on its home map unless the home map's
     /// <see cref="MapProperty"/> names another runtime map, and there on that map's <see cref="Property"/> (absent on the
     /// home map = its T0 cell; required elsewhere). An unreadable value is an error, never a guess.
@@ -108,6 +136,16 @@ public static class AreaCompanionPlacement
         return Decode(value) is { } placed ? new(map, placed, null) : new(map, null, "placement unreadable");
     }
 
+    /// <summary>The changes that record a companion standing on <paramref name="map"/> at <paramref name="world"/>: the placement
+    /// (<see cref="Edit"/>) and the stored cell of its home map (<see cref="HomeProperty"/>), which is written whenever the placement is
+    /// written and cleared when it is cleared (ARC-DEV-079).</summary>
+    public static IReadOnlyList<MapChangeEdit> Edits(AreaCompanionTemplate template, SessionMapId map, CellCoord world, NeighborDirection facing)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        var edit = Edit(template, map, world, facing);
+        return [edit, new(template.Home, HomeKey(template.Entity), edit.Value is null ? null : Encode(template.HomeWorld, NeighborDirection.XPlus))];
+    }
+
     /// <summary>The change that records a companion standing on <paramref name="map"/> at <paramref name="world"/>: on its
     /// home map, its T0 cell facing the default clears the key; anywhere else the cell is always written.</summary>
     public static MapChangeEdit Edit(AreaCompanionTemplate template, SessionMapId map, CellCoord world, NeighborDirection facing)
@@ -119,17 +157,23 @@ public static class AreaCompanionPlacement
     }
 }
 
+/// <summary>A companion standing on a map whose body the map's own scene does not draw: its identity, the map whose stored data holds
+/// it (<see cref="HomeMap"/>) and the stored cell recorded for it there (<see cref="HomeCell"/>, null for an NPC that left before it
+/// was recorded).</summary>
+public readonly record struct AreaVisitor(string Entity, int HomeMap, CellCoord? HomeCell);
+
 /// <summary>
-/// ARC-WORLD-048: companions that stand on a map but cannot be talked to there, because this run kept no body for them (after a
-/// quick load, a visitor whose home map was not loaded in this run has no template): the entities with a recorded cell
-/// (<see cref="AreaCompanionPlacement.Property"/>) on <paramref name="map"/> and no template among <paramref name="templates"/>.
-/// A cell is recorded on a map other than the home map only while the companion stands there (the transfer clears it on the map
-/// it leaves); <paramref name="shown"/> keeps only cells the viewer has loaded (on the main map, a companion recorded in another
-/// window is not "here", whatever its home).
+/// ARC-DEV-079 (MIG4, TM3): the companions that stand on <c>map</c> (a recorded cell, <see cref="AreaCompanionPlacement.Property"/>) and
+/// have no body among <c>templates</c>, the bodies of the map's own scene (ARC-WORLD-048 named them as not talkable for want of a kept
+/// body; since this slice their body is read from their home map by <see cref="AreaHomeDirectory"/>). A cell is recorded on a map other
+/// than the home map only while the companion stands there (the transfer clears it on the map it leaves); <c>shown</c> keeps only cells the
+/// viewer has loaded (on the main map, a companion recorded in another window is not "here", whatever its home). The home map is the one
+/// that carries the NPC's away change (<see cref="Arcanum.World.EntityHomes"/>), else the map itself (a companion of another window of
+/// it); the stored cell is the one recorded on that map.
 /// </summary>
 public static class AreaVisitors
 {
-    public static IReadOnlyList<string> Unbodied(GameSessionOwner session, SessionMapId map, IEnumerable<AreaCompanionTemplate> templates,
+    public static IReadOnlyList<AreaVisitor> Here(GameSessionOwner session, SessionMapId map, IEnumerable<AreaCompanionTemplate> templates,
         Func<CellCoord, bool>? shown = null)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -138,7 +182,26 @@ public static class AreaVisitors
         return session.QueryMapChanges(map)
             .Where(c => c.Key.Scope == MapChangeScope.Entity && c.Key.Property == AreaCompanionPlacement.Property && c.Key.Entity is { } e && !known.Contains(e)
                 && (shown is null || (AreaCompanionPlacement.Decode(c.Value) is { } placed && shown(placed.World))))
-            .Select(c => c.Key.Entity!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            .Select(c => c.Key.Entity!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)
+            .Select(entity =>
+            {
+                var home = Arcanum.World.EntityHomes.HomeOf(session, entity) ?? map.RuntimeMap;
+                return new AreaVisitor(entity, home, AreaCompanionPlacement.HomeCell(session, new(home), entity));
+            }).ToArray();
+    }
+
+    /// <summary>The stored cell to read <paramref name="map"/>'s window around when the map opens only as a window and the viewer holds
+    /// none of it: the lowest-entity NPC of that map that stands on another map now (its away change, <c>npc.map</c>: the companions the
+    /// resolver is asked about), else the lowest-entity NPC with a recorded stored cell (a follower waiting elsewhere on its own map).
+    /// The resolver holds one window per map: NOT READY for companions away from two windows of one map, whose second is kept out of the
+    /// rules until MIG9.</summary>
+    public static CellCoord? HomeWindow(GameSessionOwner session, int map)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var cells = AreaCompanionPlacement.HomeCells(session, new(map));
+        foreach (var (entity, cell) in cells)
+            if (session.QueryMapChange(new(map), AreaCompanionPlacement.MapKey(entity)) is not null) return cell;
+        return cells.Count == 0 ? null : cells.First().Value;
     }
 }
 
@@ -522,14 +585,14 @@ public sealed class AreaCompanionGroup
     public GameSessionFailure Record(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var result = session.ApplyChanges(session.Version, null, _companions.Select(Stay).ToArray());
+        var result = session.ApplyChanges(session.Version, null, _companions.SelectMany(Stay).ToArray());
         return result.Disposition == GameSessionDisposition.Rejected ? result.Failure : GameSessionFailure.None;
     }
 
-    private MapChangeEdit Stay(AreaCompanion companion)
+    private IReadOnlyList<MapChangeEdit> Stay(AreaCompanion companion)
     {
         var state = companion.Grid.State; var world = _chart.ToWorld(state.CommittedCell);
-        return AreaCompanionPlacement.Edit(companion.Template, _map, new(checked((int)world.X), checked((int)world.Y)), state.Facing);
+        return AreaCompanionPlacement.Edits(companion.Template, _map, new(checked((int)world.X), checked((int)world.Y)), state.Facing);
     }
 
     /// <summary>
@@ -552,7 +615,7 @@ public sealed class AreaCompanionGroup
         var changes = new List<MapChangeEdit>(); var carried = new List<AreaCompanion>();
         foreach (var companion in _companions)
         {
-            if (!travelling.Contains(companion.Entity)) { changes.Add(Stay(companion)); continue; }
+            if (!travelling.Contains(companion.Entity)) { changes.AddRange(Stay(companion)); continue; }
             changes.AddRange(Arrive(companion.Template, _map, destination, arrival, companion.Grid.State.Facing));
             carried.Add(companion);
         }
@@ -569,11 +632,11 @@ public sealed class AreaCompanionGroup
         NeighborDirection facing)
     {
         ArgumentNullException.ThrowIfNull(template);
-        if (from == destination) return [AreaCompanionPlacement.Edit(template, destination, arrival, facing)];
+        if (from == destination) return AreaCompanionPlacement.Edits(template, destination, arrival, facing);
         return
         [
             new(from, AreaCompanionPlacement.Key(template.Entity), null),
-            AreaCompanionPlacement.Edit(template, destination, arrival, facing),
+            .. AreaCompanionPlacement.Edits(template, destination, arrival, facing),
             new(template.Home, AreaCompanionPlacement.MapKey(template.Entity), destination == template.Home ? null : destination.RuntimeMap),
         ];
     }

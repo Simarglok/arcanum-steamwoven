@@ -201,6 +201,18 @@ public static class AreaTurnBased
         var events = new List<SessionCombatEvent>();
         var calls = 0;
         var writeFailure = GameSessionFailure.None;
+        // GR19 (ARC-DEV-078): a round a load brought takes its load rule first (Original rebuilds it as round 1, Steamwoven resumes it);
+        // a rebuilt round's begin ends the frame, as a new round does, so the event pump runs before its first subturn is played.
+        if (owner.QueryCombatRound() is not null)
+        {
+            var resumed = owner.ResumeLoadedCombatRound(owner.Version, world);
+            if (resumed.Disposition == GameSessionDisposition.Rejected) return new(events, 1, resumed.Failure);
+            if (resumed.Events.Count > 0)
+            {
+                events.AddRange(resumed.Events);
+                return new(events, 1, GameSessionFailure.None);
+            }
+        }
         for (var i = 0; i < maxSubturns && owner.QueryCombatRound() is not null; i++)
         {
             ai?.ObserveRound();
@@ -267,6 +279,12 @@ public static class AreaTurnBased
         ArgumentNullException.ThrowIfNull(world);
         events = [];
         if (owner.QueryCombatRound() is null || owner.QueryHero() is null) return AreaHeroCharge.Free;
+        // GR19 (ARC-DEV-078): a loaded round takes its load rule before the charge can commit (and so keep it as loaded).
+        var resumed = owner.ResumeLoadedCombatRound(owner.Version, world);
+        if (resumed.Disposition == GameSessionDisposition.Rejected) return AreaHeroCharge.Failed;
+        var before = resumed.Events;
+        events = before;
+        if (owner.QueryCombatRound() is null) return AreaHeroCharge.Free;
         switch (owner.QueryCombatActionGate(SessionCombatant.Hero, cost))
         {
             case SessionCombatGate.NotTheirTurn: return AreaHeroCharge.NotTheirTurn;
@@ -274,7 +292,7 @@ public static class AreaTurnBased
         }
         var result = owner.ConsumeActionPoints(owner.Version, SessionCombatant.Hero, cost, world);
         if (result.Disposition == GameSessionDisposition.Rejected) return AreaHeroCharge.Failed;
-        events = result.Events;
+        events = [.. before, .. result.Events];
         return result.Charge switch
         {
             SessionActionPointUse.Paid => AreaHeroCharge.Paid,

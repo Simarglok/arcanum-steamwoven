@@ -182,6 +182,15 @@ public sealed record CombatAnomalyProfile
     /// </summary>
     public bool PcThrowCostsNothing { get; init; }
 
+    /// <summary>
+    /// GR19 (ARC-DEV-078, owner's answer "GR19 A" of 2026-11-04): a load restarts a saved turn-based round: round 1 again, the order
+    /// rebuilt from the critters around the hero, the saved actor's subturn with its saved action points (PS13, TL35; read by the
+    /// session's <c>GameSessionOwner.ResumeLoadedCombatRound</c>). Steamwoven resumes the saved round exactly. Not a bug of the
+    /// original but a visible difference behind the same switch; the original's failed load (the saved actor missing from the
+    /// rebuilt order) is fixed in both settings.
+    /// </summary>
+    public bool RoundRebuiltOnLoad { get; init; }
+
     /// <summary>The original with every recorded D2 fix; the default setting.</summary>
     public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -216,6 +225,7 @@ public sealed record CombatAnomalyProfile
         HealFatigueRungForOthers = true,
         RedirectTestsTargetIntelligence = true,
         PcThrowCostsNothing = true,
+        RoundRebuiltOnLoad = true,
     };
 
     /// <summary>Both settings, default first.</summary>
