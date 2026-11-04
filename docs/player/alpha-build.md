@@ -93,7 +93,9 @@ installed elsewhere is found through the registry; if it is not, press **Choose 
 - **C. Unpack the GOG offline installer** (`setup_arcanum_….exe` from your GOG library) with
   [innoextract](https://constexpr.org/innoextract/): `brew install innoextract`, then
   `innoextract --gog -d ~/Games/Arcanum setup_arcanum_….exe`, and choose the folder that holds `Arcanum.exe` (if the
-  files land in an `app` subfolder, that subfolder). This route has not been tried in the project yet.
+  files land in an `app` subfolder, that subfolder). Tried on 2026-11-04 on the 1.0.7.4 installer
+  ([ARC-RES-087](../research/gog-installer-unpack.md)): the files unpack in seconds with `Arcanum.exe` in the folder
+  root, byte-identical to a real installation; `data/proto` is still missing until the prototype build lands.
 - **Other wrappers** (Whisky, a Wineskin-style `.app`): choose the wrapper or its game folder with **Choose folder…**;
   the launcher looks inside a chosen `.app` for its `drive_c`.
 
