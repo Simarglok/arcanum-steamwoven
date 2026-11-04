@@ -54,7 +54,7 @@ window or map with one builds too; where the parent is outside the window the it
 
 - With the town seed `Ready` the combat and inventory stages of the map smoke run in the town window for the first time (before, the refused seed left no combat host and they
   skipped silently). `cast`, `ai`, `turn-based`, `ai-cast`, `ai-follower`, `wreck` and `altar` fail there on fixtures written for the Crash Site (target not visible, no cell next to
-  the NPC, the companion template), so the `town` step of the full chain stops at the first of them; `transfer` (follow, carry, visitors) passes. A follow-up task adapts them (owner decision, 2026-11-04).
+  the NPC, the companion template), so the `town` step of the full chain stops at the first of them; `transfer` (follow, carry, visitors) passes. A follow-up task, ARC-DEV-089, adapts them (owner decision, 2026-11-04).
 - The stores are still per kind and the directory is derived from them on each query: a consumer that wants "where is X" can ask now, but nothing is moved
   (MIG6c–MIG6e). Created items and map items still use different stores, so GR4 and GR17 stay open.
 - An NPC's worn items (`NpcWorn`) and an item's slot inside a holder are not part of an entry; a given kit or taken item is `NpcList` with its
