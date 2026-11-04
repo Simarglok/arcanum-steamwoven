@@ -96,6 +96,37 @@ public sealed class ObjectStateTests
         Assert.AreEqual(Cave, total.QueryObjectState("oid:crate").Single().Map);
     }
 
+    // One routed key listed under two maps in one step is walked in order, so the later edit is not judged against the state before the step.
+    [TestMethod]
+    public void ARoutedKeyUnderTwoMapsInOneStepIsWalkedInOrder()
+    {
+        using var owner = Create();
+        Changed(owner.SetMapChange(owner.Version, Exterior, Cell, 7), owner, 1);
+        // The record moves to the cave and back: it ends where and as it was.
+        Changed(owner.ApplyChanges(owner.Version, null, [new(Cave, Cell, 7), new(Exterior, Cell, 7)]), owner, 2);
+        Assert.AreEqual((7L, (long?)null), (owner.QueryMapChange(Exterior, Cell)!.Value, owner.QueryMapChange(Cave, Cell)));
+        Assert.AreEqual(1, owner.QueryObjectState("oid:npc").Count);
+        // The record moves to the cave and the removal on the map it left is nothing: it stays on the cave.
+        Changed(owner.ApplyChanges(owner.Version, null, [new(Cave, Cell, 5), new(Exterior, Cell, null)]), owner, 3);
+        Assert.AreEqual((Cave, 5L), (owner.QueryObjectState("oid:npc").Single().Map, owner.QueryObjectState("oid:npc").Single().Value));
+        Changed(owner.ClearMapChange(owner.Version, Cave, Cell), owner, 4);
+        Assert.AreEqual(0, owner.Capture().Objects.State.Count);
+        // A removal on a map the record is not on is nothing.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ApplyChanges(owner.Version, null, [new(Cave, Cell, null)]).Disposition);
+    }
+
+    [TestMethod]
+    public void AMoveOfTheOnlyRecordOfAMapFitsTheMapBudgetAsTheStepDoes()
+    {
+        using var owner = Create(new GameSessionLimits(maxMaps: 1));
+        Changed(owner.SetMapChange(owner.Version, Exterior, Cell, 7), owner, 1);
+        Changed(owner.SetMapChange(owner.Version, Cave, Cell, 7), owner, 2);
+        Assert.AreEqual(Cave, owner.QueryObjectState("oid:npc").Single().Map);
+        // A second record on a third map still needs a map of its own.
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameFailureOf(owner.SetMapChange(owner.Version, Exterior, Off, 1)));
+        Changed(owner.ApplyChanges(owner.Version, null, [new(Exterior, Cell, 8)]), owner, 3);
+    }
+
     private static GameSessionFailure GameFailureOf(GameSessionMutationResult result) => result.Failure;
 
     // MIG7a (ARC-DEV-092, schema 62): a schema 61 save keeps the entity changes of mobile objects in the maps section. The step moves them to
@@ -144,7 +175,7 @@ public sealed class ObjectStateTests
         // A routed key in the maps section is a damaged save: the 61 to 62 step moves them, so schema 62 never holds one there.
         var inMaps = text.Replace("\"maps\":[]", "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"value\":7}]}]");
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, RestoreFailure(inMaps));
-        // A property that is not an object field, an entity that is not a mobile object and a map that is not a map.
+        // A property that is not an object field and an entity that is not a mobile object.
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"npc.cell\",\"map\":79", "\"property\":\"dialog.lf\",\"map\":79")));
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"entity\":\"oid:npc\",\"property\":\"npc.cell\"", "\"entity\":\"sector:5:2\",\"property\":\"npc.cell\"")));
         // Decode refuses a row out of order and a row with a bad code.

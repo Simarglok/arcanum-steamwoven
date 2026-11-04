@@ -372,7 +372,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (current is null)
         {
             // A new key needs room in the map and in the session; a routed record that moves here from another map needs room in this map only.
-            if ((_maps.CountOf(map) == 0 && _maps.MapCount >= _limits.MaxMaps) || _maps.CountOf(map) >= _limits.MaxChangesPerMap ||
+            // (A record that is the only change of the map it leaves frees that map, so it does not take a new map's place.)
+            var freesItsMap = _maps.RecordMap(key) is { } from && _maps.CountOf(from) == 1;
+            if ((_maps.CountOf(map) == 0 && _maps.MapCount >= _limits.MaxMaps && !freesItsMap) || _maps.CountOf(map) >= _limits.MaxChangesPerMap ||
                 (_maps.RecordMap(key) is null && _maps.Total >= _limits.MaxTotalChanges))
                 return Reject(GameSessionFailure.BudgetExceeded);
         }
@@ -396,11 +398,40 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
-    // The changes that differ from the recorded values.
-    private MapChangeEdit[] EffectiveChanges(IReadOnlyList<MapChangeEdit> changes) => changes.Where(change =>
+    // The changes that differ from the recorded values. A routed key (MIG7a) has one record, so its edits are judged in order against the record
+    // the earlier edits of the step leave (a write to another map moves it, a removal on a map it is not on is nothing), the way the apply loop and
+    // ChangesFit walk them; any other key is judged against the state before the step (each is listed once).
+    private MapChangeEdit[] EffectiveChanges(IReadOnlyList<MapChangeEdit> changes)
     {
-        return _maps.Get(change.Map, change.Key) != change.Value || (change.Value is not null && _maps.RecordMap(change.Key) is { } held && held != change.Map);
-    }).ToArray();
+        var records = new Dictionary<MapChangeKey, (SessionMapId? Map, long? Value)>();
+        var effective = new List<MapChangeEdit>();
+        foreach (var change in changes)
+        {
+            if (!ObjectStateVocabulary.Routed(change.Key))
+            {
+                if (_maps.Get(change.Map, change.Key) != change.Value) effective.Add(change);
+                continue;
+            }
+            if (!records.TryGetValue(change.Key, out var record))
+            {
+                var held = _maps.RecordMap(change.Key);
+                record = (held, held is { } map ? _maps.Get(map, change.Key) : null);
+            }
+            if (change.Value is null)
+            {
+                if (record.Map != change.Map) continue;
+                record = (null, null);
+            }
+            else
+            {
+                if (record.Map == change.Map && record.Value == change.Value) continue;
+                record = (change.Map, change.Value);
+            }
+            records[change.Key] = record;
+            effective.Add(change);
+        }
+        return effective.ToArray();
+    }
 
     // Whether the map-change budgets hold on the state after the whole step.
     private bool ChangesFit(IReadOnlyList<MapChangeEdit> effective)
@@ -1516,7 +1547,7 @@ public sealed partial class GameSessionOwner : IDisposable
             if (!SessionValidation.Map(field.Map)) return GameSessionFailure.InvalidMap;
             if (!SessionValidation.Entity(field.Entity) || !ObjectStateVocabulary.Routed(field.Entity, field.Property)) return GameSessionFailure.InvalidChangeKey;
             var key = MapChangeKey.ForEntity(field.Entity, field.Property);
-            if (maps.Get(field.Map, key) is not null) return GameSessionFailure.InvalidSnapshot;
+            if (maps.RecordMap(key) is not null) return GameSessionFailure.InvalidSnapshot;
             if (maps.CountOf(field.Map) >= limits.MaxChangesPerMap || maps.Total >= limits.MaxTotalChanges ||
                 (maps.CountOf(field.Map) == 0 && maps.MapCount >= limits.MaxMaps)) return GameSessionFailure.BudgetExceeded;
             maps.Set(field.Map, key, field.Value);
