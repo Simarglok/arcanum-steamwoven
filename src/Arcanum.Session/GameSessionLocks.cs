@@ -145,12 +145,10 @@ public sealed partial class GameSessionOwner
     private (OpenableKind Kind, int Flags, int Frame)? Recorded(SessionOpenable openable) => RecordedIn(_maps, openable);
 
     // An object's recorded state, or null when any of its three values is missing or out of range (a crafted save).
-    private static (OpenableKind Kind, int Flags, int Frame)? RecordedIn(IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps,
-        SessionOpenable openable)
+    private static (OpenableKind Kind, int Flags, int Frame)? RecordedIn(SessionMapChanges maps, SessionOpenable openable)
     {
-        if (!SessionValidation.Map(openable.Map) || !SessionValidation.Entity(openable.Entity) || !maps.TryGetValue(openable.Map, out var changes))
-            return null;
-        long? Read(string property) => changes.TryGetValue(MapChangeKey.ForEntity(openable.Entity, property), out var value) ? value : null;
+        if (!SessionValidation.Map(openable.Map) || !SessionValidation.Entity(openable.Entity)) return null;
+        long? Read(string property) => maps.Get(openable.Map, MapChangeKey.ForEntity(openable.Entity, property));
         return Read(KindProperty) is { } kind and ((long)OpenableKind.Portal or (long)OpenableKind.Container) &&
             Read(FlagsProperty) is { } flags and >= int.MinValue and <= int.MaxValue && Read(FrameProperty) is { } frame and >= 0 and <= MaxFrame
             ? ((OpenableKind)kind, (int)flags, (int)frame) : null;

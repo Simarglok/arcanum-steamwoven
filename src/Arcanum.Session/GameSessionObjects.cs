@@ -588,14 +588,14 @@ public sealed partial class GameSessionOwner
     // The recorded damage and condition of an object (a condition value out of range counts as none); a spilled container's
     // condition word carries its cell above the condition.
     private static (int? Damage, SessionObjectCondition? Condition, CellCoord? Spill)? RecordedObject(
-        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, SessionMapId map, string entity)
+        SessionMapChanges maps, SessionMapId map, string entity)
     {
-        if (!SessionValidation.Map(map) || !SessionValidation.Entity(entity) || !maps.TryGetValue(map, out var changes)) return null;
-        int? damage = changes.TryGetValue(MapChangeKey.ForEntity(entity, ObjectDamageProperty), out var d) && d is >= 0 and <= ItemDurabilityLimits.MaxDamage
+        if (!SessionValidation.Map(map) || !SessionValidation.Entity(entity)) return null;
+        int? damage = maps.Get(map, MapChangeKey.ForEntity(entity, ObjectDamageProperty)) is { } d and >= 0 and <= ItemDurabilityLimits.MaxDamage
             ? (int)d : null;
         SessionObjectCondition? condition = null;
         CellCoord? spill = null;
-        if (changes.TryGetValue(MapChangeKey.ForEntity(entity, ObjectConditionProperty), out var word) && word >= 0)
+        if (maps.Get(map, MapChangeKey.ForEntity(entity, ObjectConditionProperty)) is { } word and >= 0)
         {
             var value = (SessionObjectCondition)(word & 0xFF);
             if (value is SessionObjectCondition.Destroyed or SessionObjectCondition.Busted or SessionObjectCondition.Off) condition = value;

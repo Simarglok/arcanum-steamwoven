@@ -32,7 +32,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly GlobalFlagOwner _flags;
     private readonly SessionFlags _flagView;
     private readonly GameSessionLimits _limits;
-    private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
+    private readonly SessionMapChanges _maps;
     private readonly Story _story;
     private readonly PartyDomain _party;
     private readonly InventoryDomain _inventory;
@@ -68,11 +68,10 @@ public sealed partial class GameSessionOwner : IDisposable
     private GameRules _rules = GameRules.Steamwoven;
     private GameDifficulty _difficulty = GameDifficulty.Normal;
     private long _revision;
-    private int _totalChanges;
     private bool _disposed;
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
-        ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
+        ActorPlacement actor, long revision, SessionMapChanges maps, Story story,
         PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects,
         ExperienceDomain experience, AdvancementDomain advancement, SeededRandom random, LifeDomain life,
         ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
@@ -85,7 +84,6 @@ public sealed partial class GameSessionOwner : IDisposable
         _events = events;
         sink.Owner = this;
         _combatRolls = new(this);
-        _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
     /// <summary>
@@ -134,7 +132,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
-        var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
+        var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, new(), new(), new(), hero, inventory,
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
             new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
         { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
@@ -162,7 +160,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Actor(snapshot.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         if (snapshot.Lighting is { } lighting && !SessionValidation.Lighting(lighting)) return Rejected(GameSessionFailure.InvalidLighting);
         var limits = options.Limits ?? new GameSessionLimits();
-        var failure = ImportMaps(snapshot.Maps, limits, out var maps);
+        var failure = ImportMaps(snapshot.Maps, snapshot.Objects.State, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportStory(snapshot.Story, snapshot.Clock.GameTimestampMs, out var story);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -325,14 +323,14 @@ public sealed partial class GameSessionOwner : IDisposable
     public long? QueryMapChange(SessionMapId map, MapChangeKey key)
     {
         ThrowIfDisposed();
-        return _maps.TryGetValue(map, out var changes) && changes.TryGetValue(key, out var value) ? value : null;
+        return _maps.Get(map, key);
     }
 
     /// <summary>Detached copy of one map's changes in canonical key order; empty for an untouched map.</summary>
     public IReadOnlyList<MapChange> QueryMapChanges(SessionMapId map)
     {
         ThrowIfDisposed();
-        return Array.AsReadOnly(_maps.TryGetValue(map, out var changes) ? Sorted(changes) : []);
+        return Array.AsReadOnly(_maps.ForMap(map));
     }
 
     /// <summary>
@@ -346,8 +344,21 @@ public sealed partial class GameSessionOwner : IDisposable
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(property);
         var key = MapChangeKey.ForEntity(entity, property);
-        return Array.AsReadOnly(_maps.Where(pair => pair.Value.ContainsKey(key)).OrderBy(pair => pair.Key.RuntimeMap)
-            .Select(pair => (pair.Key, pair.Value[key])).ToArray());
+        if (ObjectStateVocabulary.Routed(key)) return _maps.RecordsOf(entity, property);
+        return Array.AsReadOnly(_maps.Maps().Select(map => (Map: map, Value: _maps.Get(map, key))).Where(pair => pair.Value is not null)
+            .Select(pair => (pair.Map, pair.Value!.Value)).ToArray());
+    }
+
+    /// <summary>
+    /// ARC-DEV-092 (MIG7a, TM2, GR5): the recorded fields of one mobile map-data object, by property, wherever the object stands: the state of
+    /// its directory entry (the property names of <see cref="ObjectStateVocabulary"/>; the map of a field is the map its record names). A read only;
+    /// empty for an object with no recorded change and for an entity that is not a mobile map object.
+    /// </summary>
+    public IReadOnlyList<SessionObjectField> QueryObjectState(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return Array.AsReadOnly(_maps.FieldsOf(entity));
     }
 
     public GameSessionMutationResult SetMapChange(GameSessionVersion expected, SessionMapId map, MapChangeKey key, long value)
@@ -356,20 +367,19 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
         if (!SessionValidation.Key(key)) return Reject(GameSessionFailure.InvalidChangeKey);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        var hasMap = _maps.TryGetValue(map, out var changes);
-        if (hasMap && changes!.TryGetValue(key, out var current))
+        var current = _maps.Get(map, key);
+        if (current == value) return NoChange();
+        if (current is null)
         {
-            if (current == value) return NoChange();
+            // A new key needs room in the map and in the session; a routed record that moves here from another map needs room in this map only.
+            if ((_maps.CountOf(map) == 0 && _maps.MapCount >= _limits.MaxMaps) || _maps.CountOf(map) >= _limits.MaxChangesPerMap ||
+                (_maps.RecordMap(key) is null && _maps.Total >= _limits.MaxTotalChanges))
+                return Reject(GameSessionFailure.BudgetExceeded);
         }
-        else if ((!hasMap && _maps.Count >= _limits.MaxMaps) ||
-            (hasMap && changes!.Count >= _limits.MaxChangesPerMap) || _totalChanges >= _limits.MaxTotalChanges)
-            return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
 
-        // All refusals precede the commit; only the dictionary updates and counters follow.
-        if (!hasMap) _maps.Add(map, changes = []);
-        if (changes!.TryAdd(key, value)) _totalChanges++;
-        else changes[key] = value;
+        // All refusals precede the commit; only the stores update.
+        _maps.Set(map, key, value);
         return Changed();
     }
 
@@ -380,31 +390,46 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
         if (!SessionValidation.Key(key)) return Reject(GameSessionFailure.InvalidChangeKey);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        if (!_maps.TryGetValue(map, out var changes) || !changes.ContainsKey(key)) return NoChange();
+        if (_maps.Get(map, key) is null) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-        changes.Remove(key);
-        _totalChanges--;
-        if (changes.Count == 0) _maps.Remove(map);
+        _maps.Remove(map, key);
         return Changed();
     }
 
     // The changes that differ from the recorded values.
     private MapChangeEdit[] EffectiveChanges(IReadOnlyList<MapChangeEdit> changes) => changes.Where(change =>
     {
-        var current = _maps.TryGetValue(change.Map, out var map) && map.TryGetValue(change.Key, out var value) ? value : (long?)null;
-        return current != change.Value;
+        return _maps.Get(change.Map, change.Key) != change.Value || (change.Value is not null && _maps.RecordMap(change.Key) is { } held && held != change.Map);
     }).ToArray();
 
     // Whether the map-change budgets hold on the state after the whole step.
     private bool ChangesFit(IReadOnlyList<MapChangeEdit> effective)
     {
-        var counts = _maps.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
-        var total = _totalChanges;
+        var counts = _maps.Counts();
+        var total = _maps.Total;
+        // A routed key has one record on one map (MIG7a): a write to another map moves it, a removal on a map it is not on is nothing. The
+        // edits are walked in order against that record.
+        var records = new Dictionary<MapChangeKey, SessionMapId?>();
         foreach (var change in effective)
         {
-            var exists = _maps.TryGetValue(change.Map, out var map) && map.ContainsKey(change.Key);
-            var delta = change.Value is null ? (exists ? -1 : 0) : (exists ? 0 : 1);
-            counts[change.Map] = counts.GetValueOrDefault(change.Map) + delta; total += delta;
+            var routed = ObjectStateVocabulary.Routed(change.Key);
+            SessionMapId? held = routed ? (records.TryGetValue(change.Key, out var seen) ? seen : _maps.RecordMap(change.Key)) : _maps.Get(change.Map, change.Key) is null ? null : change.Map;
+            if (change.Value is null)
+            {
+                if (held != change.Map) continue;
+                counts[change.Map] = counts.GetValueOrDefault(change.Map) - 1; total--;
+                if (routed) records[change.Key] = null;
+            }
+            else
+            {
+                if (held is null) { counts[change.Map] = counts.GetValueOrDefault(change.Map) + 1; total++; }
+                else if (held != change.Map)
+                {
+                    counts[held.Value] = counts.GetValueOrDefault(held.Value) - 1;
+                    counts[change.Map] = counts.GetValueOrDefault(change.Map) + 1;
+                }
+                if (routed) records[change.Key] = change.Map;
+            }
         }
         return counts.Count(pair => pair.Value > 0) <= _limits.MaxMaps && counts.Values.All(count => count <= _limits.MaxChangesPerMap) && total <= _limits.MaxTotalChanges;
     }
@@ -458,18 +483,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (actorChanged) _actor = actor!.Value;
         foreach (var change in effective)
         {
-            if (change.Value is { } value)
-            {
-                if (!_maps.TryGetValue(change.Map, out var map)) _maps.Add(change.Map, map = []);
-                if (map.TryAdd(change.Key, value)) _totalChanges++;
-                else map[change.Key] = value;
-            }
-            else
-            {
-                var map = _maps[change.Map];
-                map.Remove(change.Key); _totalChanges--;
-                if (map.Count == 0) _maps.Remove(change.Map);
-            }
+            if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
+            else _maps.Remove(change.Map, change.Key);
         }
         return Changed();
     }
@@ -1458,13 +1473,12 @@ public sealed partial class GameSessionOwner : IDisposable
         ThrowIfDisposed();
         var clock = _clock.QueryClockSnapshot();
         var flags = _flags.CaptureSnapshot();
-        var maps = _maps.OrderBy(pair => pair.Key.RuntimeMap)
-            .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
+        var maps = _maps.CaptureMaps();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.Capture(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()));
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1476,10 +1490,12 @@ public sealed partial class GameSessionOwner : IDisposable
         _flags.Dispose();
     }
 
-    private static GameSessionFailure ImportMaps(IReadOnlyList<SessionMapState> saved, GameSessionLimits limits,
-        out Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps)
+    // ARC-DEV-092 (MIG7a, schema 62): the maps section holds the per-map changes only; the fields of mobile map-data objects are the
+    // objects section's (an older save's step moved them), so a routed key in the maps section is a damaged save. Both count against one budget.
+    private static GameSessionFailure ImportMaps(IReadOnlyList<SessionMapState> saved, IReadOnlyList<SessionObjectField> fields,
+        GameSessionLimits limits, out SessionMapChanges maps)
     {
-        maps = [];
+        maps = new();
         if (saved.Count > limits.MaxMaps) return GameSessionFailure.BudgetExceeded;
         var total = 0;
         foreach (var map in saved)
@@ -1488,13 +1504,22 @@ public sealed partial class GameSessionOwner : IDisposable
             if (map.Changes.Count > limits.MaxChangesPerMap) return GameSessionFailure.BudgetExceeded;
             total += map.Changes.Count;
             if (total > limits.MaxTotalChanges) return GameSessionFailure.BudgetExceeded;
-            var changes = new Dictionary<MapChangeKey, long>();
             foreach (var change in map.Changes)
             {
                 if (!SessionValidation.Key(change.Key)) return GameSessionFailure.InvalidChangeKey;
-                if (!changes.TryAdd(change.Key, change.Value)) return GameSessionFailure.InvalidSnapshot;
+                if (ObjectStateVocabulary.Routed(change.Key) || maps.Get(map.Map, change.Key) is not null) return GameSessionFailure.InvalidSnapshot;
+                maps.Set(map.Map, change.Key, change.Value);
             }
-            if (!maps.TryAdd(map.Map, changes)) return GameSessionFailure.InvalidSnapshot;
+        }
+        foreach (var field in fields)
+        {
+            if (!SessionValidation.Map(field.Map)) return GameSessionFailure.InvalidMap;
+            if (!SessionValidation.Entity(field.Entity) || !ObjectStateVocabulary.Routed(field.Entity, field.Property)) return GameSessionFailure.InvalidChangeKey;
+            var key = MapChangeKey.ForEntity(field.Entity, field.Property);
+            if (maps.Get(field.Map, key) is not null) return GameSessionFailure.InvalidSnapshot;
+            if (maps.CountOf(field.Map) >= limits.MaxChangesPerMap || maps.Total >= limits.MaxTotalChanges ||
+                (maps.CountOf(field.Map) == 0 && maps.MapCount >= limits.MaxMaps)) return GameSessionFailure.BudgetExceeded;
+            maps.Set(field.Map, key, field.Value);
         }
         return GameSessionFailure.None;
     }
@@ -2221,7 +2246,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
     private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, PartyDomain party,
-        IReadOnlyDictionary<SessionMapId, Dictionary<MapChangeKey, long>> mapChanges, long clockMs, int actorMap,
+        SessionMapChanges mapChanges, long clockMs, int actorMap,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
@@ -2392,10 +2417,6 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         return GameSessionFailure.None;
     }
-
-    private static MapChange[] Sorted(Dictionary<MapChangeKey, long> changes) => changes
-        .OrderBy(pair => pair.Key, MapChangeKeyComparer.Instance)
-        .Select(pair => new MapChange(pair.Key, pair.Value)).ToArray();
 
     private bool IsCurrent(GameSessionVersion expected) =>
         ReferenceEquals(expected.Owner, _identity) && expected.Revision == _revision;

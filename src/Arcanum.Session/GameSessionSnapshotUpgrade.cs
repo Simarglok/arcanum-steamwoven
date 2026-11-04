@@ -57,6 +57,44 @@ public static partial class GameSessionSnapshotCodec
             }
             root.Add("objects", objects);
         },
+        // MIG7a (ARC-DEV-092, schema 62): the entity changes of mobile map-data objects (the object fields of ObjectStateVocabulary on an `oid:`
+        // entity) move out of the maps into the objects section's state, by entity then property. An entity that held the same property under
+        // two maps keeps the lowest map's value (the older session kept one value per map; no build wrote one key under two maps). A map left
+        // with no change is dropped. Anything a step cannot read stays where it was for the strict decode to refuse with its path.
+        [61] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (objects.ContainsKey("state")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.objects.state");
+            var moved = new SortedDictionary<(string Entity, string Property), (long Map, JsonNode Value)>(Comparer<(string Entity, string Property)>.Create(
+                (x, y) => string.CompareOrdinal(x.Entity, y.Entity) is var order and not 0 ? order : string.CompareOrdinal(x.Property, y.Property)));
+            if (root.TryGetPropertyValue("maps", out var mapsNode) && mapsNode is JsonArray maps)
+            {
+                for (var i = 0; i < maps.Count;)
+                {
+                    if (maps[i] is JsonObject map && map["changes"] is JsonArray changes && map["map"] is JsonValue mapValue && mapValue.TryGetValue<long>(out var mapNumber))
+                    {
+                        for (var j = 0; j < changes.Count;)
+                        {
+                            if (changes[j] is JsonObject change && change["scope"] is JsonValue scope && scope.TryGetValue<string>(out var kind) && kind == "entity" &&
+                                change["entity"] is JsonValue entityValue && entityValue.TryGetValue<string>(out var entity) &&
+                                change["property"] is JsonValue propertyValue && propertyValue.TryGetValue<string>(out var property) &&
+                                ObjectStateVocabulary.Routed(entity, property) && change["value"] is { } value)
+                            {
+                                moved.TryAdd((entity, property), (mapNumber, value.DeepClone()));
+                                changes.RemoveAt(j);
+                            }
+                            else j++;
+                        }
+                        if (changes.Count == 0) { maps.RemoveAt(i); continue; }
+                    }
+                    i++;
+                }
+            }
+            var state = new JsonArray();
+            foreach (var (key, record) in moved)
+                state.Add(new JsonObject { ["entity"] = key.Entity, ["property"] = key.Property, ["map"] = record.Map, ["value"] = record.Value });
+            objects.Add("state", state);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

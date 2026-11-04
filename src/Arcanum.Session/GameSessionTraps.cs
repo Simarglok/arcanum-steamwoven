@@ -213,8 +213,7 @@ public sealed partial class GameSessionOwner
     // the baseline's no longer counts (the object was armed again), its spotted bit does.
     private long RecordedTrap(SessionTrapped trapped, SessionTrapBaseline baseline)
     {
-        if (!_maps.TryGetValue(trapped.Map, out var changes) ||
-            !changes.TryGetValue(MapChangeKey.ForEntity(trapped.Entity, TrapStateProperty), out var value) || value < 0) return 0;
+        if (_maps.Get(trapped.Map, MapChangeKey.ForEntity(trapped.Entity, TrapStateProperty)) is not { } value || value < 0) return 0;
         var bits = value & ((1L << TrapScriptShift) - 1);
         var script = value >> TrapScriptShift;
         if (bits > (TrapSpottedBit | TrapRemovedBit) || script > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber ||
