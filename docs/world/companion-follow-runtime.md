@@ -119,6 +119,24 @@ refusal (for example the change budget) drops the pending transfer with `LastRef
 why. Building the templates at load throws on a broken invariant (a body without its visual or frame, a conflicting
 frame key), like the other load checks; it is not a runtime failure.
 
+**Parity of the move (ARC-DEV-073, migration step MIG10 of the [target model](../architecture/target-model.md); research
+[FM1, FM2, FM6](../research/follower-map-transfer.md), RL22, RL23, RL28).** The transfer asks the session for a move list
+first (`GameSessionOwner.QueryTransferMoveList(SessionTransferFacts)` over `TransferMoveListRules`): unless the request
+carries the "no wait orders" flag (0x100, teleport spells'; the cave and map exits do not set it), every direct follower for
+which the original's 0x45D800 answers yes (not undead and no fatigue left, so the unconscious, not the dead) is ordered to
+wait, and the others travel, each after its own followers. `Carry`/`Leaving` give the companions that go; an unconscious
+follower stays where it stands, its wait timer (OL23) parked on the map the PC leaves. The list goes into the same
+`ApplyChanges(expected, actor, changes, moveList)`, in the same revision: the wait orders, FM6's clearing of focus, who hit
+me last, the enemy list and fleeing-from for every follower that travels (the danger state bits stay; the substitute
+inventory is a barter store the session does not keep per critter), and, on another map, the travellers' pending events
+including their own AI tick, which move with them instead of the tick being dropped (the destination's first AI start finds a
+pending tick and leaves it, so there is one). The viewer takes the travelling followers out of combat mode on another map
+(the toggle's own refusals apply). A list that does not match the party is `InvalidCompanion`, one whose timers do not fit
+`EventBudgetExceeded`; either applies nothing. **NOT READY:** the session models no NPC leader, so no follower has followers
+of its own and the walk below a follower finds none (the rule is tested with an injected relation); the carried tick keeps
+its old deadline instead of being replaced by the fold's first tick with the wake-up marker (TM5, MIG9); inventories are not
+moved (the stores are identity-keyed).
+
 **On each map** the group is rebuilt from the session (`AreaCompanionGroup.Create(templates, …)`):
 
 - `AreaCompanionTemplate` holds a roster companion's home data: its speaker row, its T0 body commands and their

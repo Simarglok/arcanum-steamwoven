@@ -34,7 +34,7 @@ public partial class TerrainViewerApp
     private sealed record MapTransferHandoff(GameSessionOwner? Session, int FromMap, string To, NeighborDirection Facing,
         TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
         MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null,
-        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null)
+        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null, SessionMoveList? MoveList = null)
     {
         public bool Fallback => Failure is not null;
         /// <summary>The facing the actor arrives with on the map being loaded.</summary>
@@ -76,7 +76,9 @@ public partial class TerrainViewerApp
             var here = new SessionMapId(area.Snapshot.RuntimeMap); var cell = new CellCoord(checked((int)arrival.X), checked((int)arrival.Y));
             var companions = handoff.Fallback || handoff.Companions is not { } leaving ? []
                 : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).ToArray();
-            var placed = session.ApplyChanges(session.Version, new ActorPlacement(here, cell, handoff.ArrivalFacing), companions);
+            // ARC-DEV-073: the move list taken at the request (wait orders, FM6, the travellers' events) goes with the placement.
+            var placed = session.ApplyChanges(session.Version, new ActorPlacement(here, cell, handoff.ArrivalFacing), companions,
+                handoff.Fallback || handoff.Companions is null ? null : handoff.MoveList);
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
@@ -291,8 +293,9 @@ public partial class TerrainViewerApp
             {
                 // ARC-WORLD-037: the companions that follow the PC are moved to the arrival with it.
                 var here = new SessionMapId(map.RuntimeMap); var cell = new CellCoord(checked((int)transfer.Arrival.X), checked((int)transfer.Arrival.Y));
-                var companions = LeavingCompanions().SelectMany(c => AreaCompanionGroup.Arrive(c.Template, here, here, cell, c.Facing)).ToArray();
-                var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(here, cell, session.State.Facing), companions);
+                var leaving = LeavingCompanions();
+                var companions = leaving.Companions.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, here, here, cell, c.Facing)).ToArray();
+                var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(here, cell, session.State.Facing), companions, leaving.MoveList);
                 if (placed.Disposition == GameSessionDisposition.Rejected)
                 {
                     _areaUseStatus = $"transfer refused by the session ({placed.Failure})"; RefreshAreaStatus();
@@ -318,8 +321,10 @@ public partial class TerrainViewerApp
     private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session)
     {
         var origin = _arguments!;
+        var leaving = LeavingCompanions();
+        LeaveFollowersCombatMode(leaving.MoveList);
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
-            Companions: LeavingCompanions());
+            Companions: leaving.Companions, MoveList: leaving.MoveList);
         // The destination opens at the arrival: an opening sector of this map (a window move or --area-map-sector) is not its.
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y), AreaMapSector = null };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
