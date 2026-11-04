@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -23,7 +24,7 @@ public sealed class ObjectDirectoryTests
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         var stone = InventoryStateTests.Facts(SessionItemType.Generic, 3601);
         var seed = new SessionMapInventorySeed(
-            [new SessionSeedHolder("chest", SessionHolderKind.Container, false, false, [], ["bag"])],
+            [new SessionSeedHolder("chest", SessionHolderKind.Container, false, false, [], ["bag"]), new SessionSeedHolder("smith", SessionHolderKind.Npc, false, false, [], [])],
             [new SessionSeedItem("apple", AppleFacts, AppleCell), new SessionSeedItem("stone", stone, StoneCell), new SessionSeedItem("bag", stone, null)]);
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
@@ -65,11 +66,25 @@ public sealed class ObjectDirectoryTests
     }
 
     [TestMethod]
+    public void AWornItemAndAGivenItemHaveTheirPlaces()
+    {
+        using var owner = Owner();
+        var mail = new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium } };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, new(Kit[1].Kind, [], false, mail), (_, _) => true, Accept).Failure);
+        Assert.AreEqual(new SessionObjectEntry("kit:2", SessionObjectOrigin.Kit, SessionObjectPlace.HeroWorn, Slot: EquipmentSlot.Armor), owner.QueryObject("kit:2"));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "kit:1", Accept).Disposition);
+        Assert.AreEqual(new SessionObjectEntry("kit:1", SessionObjectOrigin.Kit, SessionObjectPlace.NpcList, Holder: "smith"), owner.QueryObject("kit:1"),
+            "a given kit item keeps its entity and lies in the NPC's list");
+    }
+
+    [TestMethod]
     public void ADeletedItemIsDestroyed()
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, "kit:3", new ItemCondition(10, 0, 0, false)).Disposition, "deleted");
         Assert.AreEqual(SessionObjectPlace.Destroyed, owner.QueryObject("kit:3")!.Place);
+        CollectionAssert.AreEqual(new[] { SessionObjectPlace.HeroPack, SessionObjectPlace.HeroPack, SessionObjectPlace.Destroyed },
+            owner.QueryObjects(SessionObjectOrigin.Kit).Select(entry => entry.Place).ToArray(), "the per-origin list agrees with the lookup");
     }
 
     [TestMethod]

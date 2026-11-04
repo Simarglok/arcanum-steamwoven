@@ -2016,9 +2016,6 @@ public sealed partial class GameSessionOwner : IDisposable
         return RestoreJunkPiles(inventory, saved.JunkPiles, destroyed);
     }
 
-    // ARC-WORLD-063: the junk piles within the bounds, each a pile entity (junk:n) once, on a valid map and cell, its items once in all
-    // piles with rectangles inside the grid that do not overlap; a placed item in a pile lies on the pile's map and cell, any other
-    // item in a pile is no item of the hero's, of an NPC's added list or deleted (a seed item, checked when its seed attaches).
     // ARC-DEV-084 (TM1): the high-water marks of the junk and pool numbers, after the piles and pools are in: a mark never sits below
     // a number a saved pile or pool holds (the older schema's load had no mark, so its piles and pools set it).
     private static GameSessionFailure ImportObjectMarks(SessionInventoryState saved, InventoryDomain inventory)
@@ -2029,6 +2026,9 @@ public sealed partial class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
+    // ARC-WORLD-063: the junk piles within the bounds, each a pile entity (junk:n) once, on a valid map and cell, its items once in all
+    // piles with rectangles inside the grid that do not overlap; a placed item in a pile lies on the pile's map and cell, any other
+    // item in a pile is no item of the hero's, of an NPC's added list or deleted (a seed item, checked when its seed attaches).
     private static GameSessionFailure RestoreJunkPiles(InventoryDomain inventory, IReadOnlyList<SessionJunkPile> saved, IReadOnlySet<string> destroyed)
     {
         if (saved.Count > SessionJunkPile.MaxPiles || saved.Sum(pile => (long)(pile?.Items?.Count ?? 0)) > SessionJunkPile.MaxItems) return GameSessionFailure.BudgetExceeded;

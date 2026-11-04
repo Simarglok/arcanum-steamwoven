@@ -56,7 +56,8 @@ public sealed partial class GameSessionOwner
     /// ARC-DEV-084 (MIG6, TM1, GR3): where an object is now, by its entity, across every store the session keeps: the deleted items, the
     /// hero's lists and worn slots, the items the hero placed or scripts created, the NPC and container lists, the junk piles, the
     /// pools of blood and (for a map object) the attached seeds. Null when the session knows nothing of it: an entity no store holds, or
-    /// a map object whose map's seed is not attached and that the session never moved (the directory does not read the game's data). A
+    /// a map object whose map's seed is not attached and that the session never moved (the directory does not read the game's data), or an item the
+    /// session marked taken that no list holds (unreachable by the session's own moves). A
     /// read of the current state, in no revision; it never throws for an unknown entity.
     /// </summary>
     public SessionObjectEntry? QueryObject(string entity)
@@ -77,10 +78,10 @@ public sealed partial class GameSessionOwner
         {
             SessionObjectOrigin.Kit => _inventory.Kit.Select(item => item.Entity)
                 .Concat(_inventory.Placed.Where(item => item.Source == SessionPlacedSource.Kit).Select(item => item.Entity))
-                .Concat(_inventory.Given.Keys.Where(entity => HeroDomain.KitNumber(entity) is not null)),
+                .Concat(_inventory.Given.Keys.Where(entity => HeroDomain.KitNumber(entity) is not null)).Concat(_durability.Destroyed),
             SessionObjectOrigin.Made => _inventory.Made.Select(item => item.Entity)
                 .Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
-                .Concat(_inventory.Placed.Select(item => item.Entity)),
+                .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed),
             SessionObjectOrigin.JunkPile => _inventory.JunkPiles.Select(pile => pile.Entity),
             SessionObjectOrigin.BloodPool => _inventory.BloodPools.Select(pool => pool.Entity),
             _ => _inventory.Pc.Select(item => item.Entity).Concat(_inventory.Taken).Concat(_durability.Destroyed)
@@ -97,7 +98,7 @@ public sealed partial class GameSessionOwner
     /// </summary>
     internal int NextObjectNumber(SessionObjectOrigin origin) => origin switch
     {
-        SessionObjectOrigin.Made => checked((int)NextMadeNumber()),
+        SessionObjectOrigin.Made => (int)Math.Min(int.MaxValue, NextMadeNumber()),
         SessionObjectOrigin.JunkPile => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.LastJunkNumber,
             _inventory.JunkPiles.Select(pile => SessionJunkPile.Number(pile.Entity) ?? 0).DefaultIfEmpty(0).Max())),
         SessionObjectOrigin.BloodPool => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.LastPoolNumber,
@@ -124,7 +125,7 @@ public sealed partial class GameSessionOwner
         {
             if (_inventory.BloodPools.Find(pool => pool.Entity == entity) is not { } pool) return null;
             var decayed = BloodPoolRules.Decayed(pool.CreatedMs, _clock.QueryClockSnapshot().GameTimestampMs);
-            return new(entity, origin, decayed ? SessionObjectPlace.Destroyed : SessionObjectPlace.Ground, pool.Map, pool.Cell);
+            return decayed ? new(entity, origin, SessionObjectPlace.Destroyed) : new(entity, origin, SessionObjectPlace.Ground, pool.Map, pool.Cell);
         }
 
         // An item. The deleted record wins: a deleted item is in no list any more.
@@ -137,7 +138,7 @@ public sealed partial class GameSessionOwner
         if (_inventory.PlacedItem(entity) is { } placed) return OnGround(entity, origin, placed.Map, placed.Cell);
         if (_inventory.NpcOf(entity) is { } holder)
             return new(entity, origin, _inventory.Containers.Contains(holder) ? SessionObjectPlace.ContainerList : SessionObjectPlace.NpcList, Holder: holder);
-        if (_inventory.Taken.Contains(entity)) return null;
+        if (_inventory.Taken.Contains(entity)) return null; // taken, in no list: no move of the session leaves this
         foreach (var (map, seed) in _inventory.Seeds.OrderBy(pair => pair.Key.RuntimeMap))
         {
             if (!seed.Items.ContainsKey(entity)) continue;

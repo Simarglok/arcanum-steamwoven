@@ -111,6 +111,8 @@ public sealed class BloodPoolStateTests
         var next = Leave(owner, "oid:bear");
         Assert.AreEqual("pool:2", next.Pool!.Entity, "the decayed pool is dropped, its number is not given again (MIG6, TM1: an id is never reassigned)");
         Assert.AreEqual(2, owner.Capture().Inventory.LastPoolNumber);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(2, restored.Capture().Inventory.LastPoolNumber, "the mark survives a save and a load");
         CollectionAssert.AreEqual(new[] { next.Pool }, owner.Capture().Inventory.BloodPools.ToArray());
     }
 

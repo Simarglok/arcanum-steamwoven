@@ -37,7 +37,7 @@ public sealed partial class GameSessionOwner
     /// most while that pool is kept (a repeated call answers it, NoChange; once it has decayed and been dropped, a call leaves a new
     /// one, so the host asks once per death). The pool lasts two game days (<see cref="BloodPoolRules.Decayed"/>);
     /// a decayed pool is dropped when the next one is left. Beyond <see cref="SessionBloodPool.MaxPools"/> pools the call is refused
-    /// (project bound), as is a live pool numbered at the integer bound. The creation's eye candy, the network message and the editor's case are not modelled.
+    /// (project bound), as is a call once the pool number mark (the highest number ever given, kept in the snapshot) reaches the integer bound. The creation's eye candy, the network message and the editor's case are not modelled.
     /// </summary>
     public SessionBloodPoolResult LeaveBloodPool(GameSessionVersion expected, string critter, SessionMapId map, CellCoord cell,
         int offsetX, int offsetY, BloodPoolFacts facts)
