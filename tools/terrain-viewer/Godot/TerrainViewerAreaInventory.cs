@@ -8,6 +8,7 @@ using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer;
 
@@ -61,7 +62,9 @@ public partial class TerrainViewerApp
             maps.Add(build.Map);
         }
         var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
-        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content));
+        // ARC-DEV-072 (MIG1): an NPC whose home map this run did not load (a companion after a quick load on a foreign map) resolves through
+        // the resolver, which reads the home map's rows on demand from the game folder.
+        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaMapRecords(arguments)));
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are

@@ -2,6 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Locks;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

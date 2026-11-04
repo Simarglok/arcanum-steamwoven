@@ -30,6 +30,14 @@
       "arcanum.simulation": {
         "type": "Project"
       },
+      "arcanum.world": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Session": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )"
+        }
+      },
       "SharpZipLib": {
         "type": "CentralTransitive",
         "requested": "[1.4.2, )",

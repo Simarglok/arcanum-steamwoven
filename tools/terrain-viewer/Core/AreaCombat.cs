@@ -3,6 +3,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -29,7 +30,7 @@ public readonly record struct AreaNpcWornItem(Arcanum.Simulation.Equipment.Equip
 /// </summary>
 public sealed class AreaCombatHost : IAreaEventObjects
 {
-    private readonly Dictionary<int, AreaInventoryMap> _maps;
+    private readonly RecordResolver _resolver;
     private readonly Func<int, CombatFields?>? _prototypes;
     private readonly Func<GameSessionOwner?>? _session;
     private readonly Dictionary<(int Map, string Entity), SessionCritterCombatBuild> _builds = [];
@@ -44,7 +45,9 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private readonly Dictionary<string, CombatFields?> _rowFields = new(StringComparer.Ordinal);
     // The NPC holders of one map as the session last showed them, and the NPC holding each of their items (ARC-UI-031), rebuilt when
     // the session or its revision changes.
-    private (GameSessionOwner Session, long Revision, int Map, Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)? _holders;
+    // ARC-DEV-072: one entry per map (a visiting companion's holder lies on its home map, the shown map's NPCs on the shown one).
+    private (GameSessionOwner Session, long Revision)? _holdersStamp;
+    private readonly Dictionary<int, (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)> _holders = [];
 
     /// <param name="inventory">The maps' seeds and object rows.</param>
     /// <param name="prototypes">ARC-WORLD-106: an item prototype's stored fields (the facts of an item the session made or a regeneration
@@ -54,19 +57,19 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaCombatHost(AreaInventoryHost inventory, Func<int, CombatFields?>? prototypes = null, Func<GameSessionOwner?>? session = null)
     {
         ArgumentNullException.ThrowIfNull(inventory);
-        _maps = inventory.Maps.ToDictionary(map => map.RuntimeMap);
+        _resolver = inventory.Resolver;
         _prototypes = prototypes;
         _session = session;
     }
 
-    public bool Covers(int runtimeMap) => _maps.ContainsKey(runtimeMap);
+    public bool Covers(int runtimeMap) => _resolver.Holds(runtimeMap);
 
     /// <summary>ARC-MAGIC-014: the session entity id of a map object (its inventory seed's), or null.</summary>
     public string? Entity(int runtimeMap, AreaObjectKey key) =>
-        _maps.TryGetValue(runtimeMap, out var map) && map.TryGetEntity(key, out var entity) ? entity : null;
+        Held(runtimeMap, out var map) && map.TryGetEntity(key, out var entity) ? entity : null;
 
     /// <summary>ARC-WORLD-039: whether an object of the map's T0 data has this session entity id (a deferred call's role).</summary>
-    public bool HasObject(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out _);
+    public bool HasObject(int runtimeMap, string entity) => Held(runtimeMap, out var map) && map.TryGetRow(entity, out _);
 
     /// <summary>ARC-WORLD-039: the NPC's life facts from its combat fields on that map, or null. ARC-WORLD-106: with the items the
     /// session's NPC wears (its normal resistance counts its armour) when the host was given the session; the map data's when that build
@@ -82,7 +85,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaCombatTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
+        if (!Held(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
             || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
             return null;
         return new(entity, map.Row(entity), holder.Dead, session.QueryCompanion(entity).LedByPc, Build(session, map, entity));
@@ -92,14 +95,28 @@ public sealed class AreaCombatHost : IAreaEventObjects
 
     private (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems) HolderIndex(GameSessionOwner session, int runtimeMap)
     {
-        if (_holders is { } cached && ReferenceEquals(cached.Session, session) && cached.Revision == session.Version.Revision && cached.Map == runtimeMap)
-            return (cached.Holders, cached.NpcItems);
+        if (_holdersStamp is not { } stamp || !ReferenceEquals(stamp.Session, session) || stamp.Revision != session.Version.Revision)
+        {
+            _holders.Clear();
+            _holdersStamp = (session, session.Version.Revision);
+        }
+        if (_holders.TryGetValue(runtimeMap, out var cached)) return cached;
+        // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
+        // attached with the host, and a restore attaches them again).
+        if (_resolver.IsRead(runtimeMap) && session.QueryMapInventory(new(runtimeMap)) is null && _resolver.Held(runtimeMap) is { } read)
+            session.AttachMapInventory(new(runtimeMap), read.Seed);
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
         var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))
             foreach (var item in holder.Items) npcItems.TryAdd(item.Entity, holder.Entity);
-        _holders = (session, session.Version.Revision, runtimeMap, holders, npcItems);
-        return (holders, npcItems);
+        return _holders[runtimeMap] = (holders, npcItems);
+    }
+
+    // The map this host holds (given or read on demand), without reading one.
+    private bool Held(int runtimeMap, out AreaInventoryMap map)
+    {
+        map = _resolver.Held(runtimeMap)!;
+        return map is not null;
     }
 
     /// <summary>
@@ -114,7 +131,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entity);
-        if (!_maps.TryGetValue(runtimeMap, out var map)) return null;
+        if (!Held(runtimeMap, out var map)) return null;
         var (holders, npcItems) = HolderIndex(session, runtimeMap);
         if (!npcItems.TryGetValue(entity, out var holder) || session.IsItemDestroyed(entity)
             || holders[holder].Items.FirstOrDefault(item => item.Entity == entity) is not { Entity: not null } listed || ItemFields(map, listed) is not { } fields)
@@ -132,7 +149,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entity);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
+        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
             return [];
         var items = new List<(string, CombatFields)>();
         foreach (var item in holder.Items)
@@ -146,7 +163,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(item);
-        if (!_maps.TryGetValue(runtimeMap, out var map)) return null;
+        if (!Held(runtimeMap, out var map)) return null;
         var (holders, npcItems) = HolderIndex(session, runtimeMap);
         return npcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
             && holders[holder].Items.FirstOrDefault(listed => listed.Entity == item) is { Entity: not null } found
@@ -158,13 +175,13 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(item);
-        return _maps.ContainsKey(runtimeMap) && HolderIndex(session, runtimeMap).NpcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
+        return _resolver.Holds(runtimeMap) && HolderIndex(session, runtimeMap).NpcItems.TryGetValue(item, out var holder) && !session.IsItemDestroyed(item)
             ? holder : null;
     }
 
     /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
     public CombatFields? Fields(int runtimeMap, string entity) =>
-        _maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
+        Held(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
 
     /// <summary>ARC-UI-042: the body armour an NPC wears on a map this host covers: since ARC-WORLD-106 the session's (<see cref="Worn"/>,
     /// the armour slot 1006) by its object row, or null (none, or a made armour without a row). A hit on the NPC sounds as a hit on it
@@ -172,11 +189,11 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaObjectRecord? WornArmor(GameSessionOwner session, int runtimeMap, string entity)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || Worn(session, runtimeMap, entity) is not { } worn) return null;
+        if (!Held(runtimeMap, out var map) || Worn(session, runtimeMap, entity) is not { } worn) return null;
         var armor = worn.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
         if (armor.Entity is null) return null;
         if (map.TryGetRow(armor.Entity, out var row)) return row;
-        return _maps.Values.Select(other => other.TryGetRow(armor.Entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
+        return _resolver.Maps.Select(other => other.TryGetRow(armor.Entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
     }
 
     /// <summary>
@@ -205,7 +222,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
             _wornStamp = (session, session.Version.Revision);
         }
         if (_wornNow.TryGetValue((runtimeMap, entity), out var known)) return known;
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder)) return null;
+        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder)) return null;
         var worn = new SortedDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, AreaNpcWornItem>();
         var complete = true;
         IReadOnlyList<AreaNpcWornItem>? Keep(IReadOnlyList<AreaNpcWornItem>? found)
@@ -232,7 +249,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public CombatFields? HeldItemFields(GameSessionOwner session, int runtimeMap, string holder, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(holder, out var inventory)
+        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(holder, out var inventory)
             || inventory.Kind != SessionHolderKind.Npc || session.IsItemDestroyed(item)) return null;
         return inventory.Items.FirstOrDefault(held => held.Entity == item) is { } found && ItemSource(map, found, out var fields) ? fields : null;
     }
@@ -252,7 +269,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private bool ItemSource(AreaInventoryMap map, SessionInventoryItem item, out CombatFields? fields)
     {
         if (RowFields(map, item.Entity, out fields)) return true;
-        foreach (var other in _maps.Values)
+        foreach (var other in _resolver.Maps)
             if (!ReferenceEquals(other, map) && RowFields(other, item.Entity, out fields)) return true;
         fields = _prototypes?.Invoke(item.Facts.Kind.Prototype);
         return fields is not null;
@@ -283,14 +300,59 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return worn;
     }
 
+    /// <summary>
+    /// ARC-DEV-072 (MIG1, TM3, FM3): an object's base record by identity alone: its row in the map whose stored objects hold it, wherever
+    /// it stands now. It is found among the maps this host holds; otherwise the session names the home map of a travelling NPC
+    /// (<see cref="EntityHomes"/>) and the resolver reads that map on demand, so a companion of a map this run never loaded resolves
+    /// too. Null for an entity no reachable map lists, or whose home map cannot be read or passes the resolver's limits.
+    /// </summary>
+    public ResolvedRecord? Record(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_resolver.HeldHome(entity) is not null) return _resolver.Resolve(entity).Record;
+        if (_session?.Invoke() is not { } session || EntityHomes.HomeOf(session, entity) is not { } home) return null;
+        return _resolver.Resolve(entity, home).Record;
+    }
+
     /// <summary>ARC-WORLD-036: the map whose stored objects hold the NPC (its home map, wherever it stands now), or null when
-    /// no covered map does.</summary>
+    /// no reachable map does. Since ARC-DEV-072 it is the resolver's (<see cref="Record"/>): a home map this run never loaded counts.</summary>
     public int? HomeMap(string entity) =>
-        _maps.Values.OrderBy(map => map.RuntimeMap).FirstOrDefault(map => map.TryGetRow(entity, out _))?.RuntimeMap;
+        Record(entity)?.HomeMap;
+
+    /// <summary>ARC-DEV-072: the NPC's stored fields by identity (<see cref="Record"/>), wherever it stands; null without a record.</summary>
+    public CombatFields? Fields(string entity) =>
+        Record(entity) is { } found && RowFields(found.Map, entity, out var fields) ? fields : null;
+
+    /// <summary>ARC-DEV-072: <see cref="Build(int, string)"/> by identity: the NPC's combat values with its home map's worn items.</summary>
+    public SessionCritterCombatBuild Build(string entity) =>
+        Record(entity) is { } found ? Build(found.Map, entity) : new(SessionCritterCombatFailure.NotAnNpc, null);
+
+    /// <summary>ARC-DEV-072: <see cref="Build(GameSessionOwner, int, string)"/> by identity: the NPC's combat values with the items the
+    /// session's NPC wears now, whichever map it stands on.</summary>
+    public SessionCritterCombatBuild Build(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(entity) is { } found ? Build(session, found.Map, entity) : new(SessionCritterCombatFailure.NotAnNpc, null);
+    }
+
+    /// <summary>ARC-DEV-072: the session's holder entry of an NPC or container by identity (its seed is the home map's), or null.</summary>
+    public SessionHolderInventory? Holder(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(entity) is { } found && Holders(session, found.HomeMap).TryGetValue(entity, out var holder) ? holder : null;
+    }
+
+    /// <summary>ARC-DEV-072: <see cref="Worn(GameSessionOwner, int, string)"/> by identity: the items the NPC wears now, whichever map it
+    /// stands on.</summary>
+    public IReadOnlyList<AreaNpcWornItem>? Worn(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(entity) is { } found ? Worn(session, found.HomeMap, entity) : null;
+    }
 
     /// <summary>The NPC's combat values with its map data's worn items (the items its seed lists in a wear slot by their stored
     /// location), read once per entity and map: for the values that do not depend on what it wears (<see cref="Critter(int, string)"/>).</summary>
-    public SessionCritterCombatBuild Build(int runtimeMap, string entity) => _maps.TryGetValue(runtimeMap, out var map)
+    public SessionCritterCombatBuild Build(int runtimeMap, string entity) => Held(runtimeMap, out var map)
         ? Build(map, entity) : new(SessionCritterCombatFailure.NotAnNpc, null);
 
     /// <summary>
@@ -302,7 +364,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public SessionCritterCombatBuild Build(GameSessionOwner session, int runtimeMap, string entity)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return _maps.TryGetValue(runtimeMap, out var map) ? Build(session, map, entity) : new(SessionCritterCombatFailure.NotAnNpc, null);
+        return Held(runtimeMap, out var map) ? Build(session, map, entity) : new(SessionCritterCombatFailure.NotAnNpc, null);
     }
 
     private SessionCritterCombatBuild Build(GameSessionOwner session, AreaInventoryMap map, string entity)

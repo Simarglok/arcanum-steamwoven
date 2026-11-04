@@ -10,5 +10,6 @@
     <ProjectReference Include="../../../src/Arcanum.Simulation/Arcanum.Simulation.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Session/Arcanum.Session.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Scripting/Arcanum.Scripting.csproj" />
+    <ProjectReference Include="../../../src/Arcanum.World/Arcanum.World.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.World</AssemblyName>
+    <RootNamespace>Arcanum.World</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Arcanum.Data/Arcanum.Data.csproj" />
+    <ProjectReference Include="../Arcanum.Simulation/Arcanum.Simulation.csproj" />
+    <ProjectReference Include="../Arcanum.Session/Arcanum.Session.csproj" />
+  </ItemGroup>
+</Project>
