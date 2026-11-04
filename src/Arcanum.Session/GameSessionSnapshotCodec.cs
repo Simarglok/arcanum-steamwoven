@@ -71,9 +71,10 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] InnateCauseNames = ["Race", "Gender"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
     // ARC-SCRIPT-042 (schema 43): the kept item script slots, and a worn item's item event points; ARC-WORLD-085 (schema 44): the weight rows;
-    // ARC-WORLD-063 (schema 46): the junk piles the session made; ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
+    // ARC-WORLD-090 (schema 50): the identified items; ARC-WORLD-094
     // (schema 51): the highest discarded made number; ARC-UI-019 (schema 52): the hero's inventory grid; ARC-WORLD-100 (schema 55): the
-    // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items; ARC-RENDER-041 (schema 58): the pools of blood.
+    // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items. The junk piles (schema 46), the pools of blood (schema 58) and the number marks (schema 60)
+    // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber"];

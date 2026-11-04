@@ -147,8 +147,8 @@ beside them. Changes go through `AddPile`, `ReplacePile`, `RemovePile`, `LeaveIt
   `ImportObjectMarks` as before, from the new section.
 - **Tests.** `ObjectRecordsTests` (index, order, invariants), `SnapshotUpgradeTests.A_schema_60_save_decodes_as_the_current_schema` (a schema 60 text written by hand with a pile, a pool and marks above the held
   numbers, and each damaged variant), the older schemas upgrade through 60, and the whole session suite runs on schema 61 fixtures.
-- **GR4, GR17.** Closed for the kinds the session has: items, junk piles and pools of blood have one create path, one destroy path and records found by entity, and the piles and pools are saved as one section of records. **Not
-  closed:** the made and placed items are still in the `inventory` section and the other TM4 kinds (NPCs, projectiles, summons, traps) have no store; the section of whole objects per map (TM8) is later work.
+- **GR4, GR17.** GR4 is closed for the kinds the session has: items, junk piles and pools of blood have one create path, one destroy path and records found by entity. GR17 is closed for the piles and pools only, saved as one
+  section of records. **Not closed:** the made and placed items are still in the `inventory` section and the other TM4 kinds (NPCs, projectiles, summons, traps) have no store; the section of whole objects per map (TM8) is later work.
 
 ## Not ready
 
