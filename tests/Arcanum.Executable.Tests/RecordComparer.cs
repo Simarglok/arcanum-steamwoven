@@ -17,12 +17,50 @@ internal static class RecordComparer
     /// <summary>The only values found to depend on uninitialized memory: word 0 of an element of the script array (slot 31).</summary>
     private static readonly System.Text.RegularExpressions.Regex UninitializedKey = new(@"^s31\.e\d+\.w0$");
 
+    /// <summary>The records of a map's mobile aggregate (ARC-DEV-082): the 16-byte module GUID, then whole v119 records to the end of the file.</summary>
+    public static (byte[] Guid, List<SortedDictionary<string, string>> Records, int Length) FlattenAggregate(byte[] bytes)
+    {
+        var records = new List<SortedDictionary<string, string>>();
+        var offset = 16;
+        while (offset < bytes.Length)
+        {
+            var record = ObjectWireReader.Read(bytes.AsSpan(offset), Limits, maxRecordBytes: 1 << 20);
+            records.Add(Flatten(record));
+            offset += record.Length;
+        }
+        return (bytes[..16], records, offset);
+    }
+
+    /// <summary>
+    /// The values in which two aggregates differ, field by field through the repository's own v119 reader (an ID's bytes its kind does not use are
+    /// copied from the stack and are not part of what the reader returns), after the GUID, the record count and the total length.
+    /// </summary>
+    public static List<string> AggregateDifferences(byte[] built, byte[] original)
+    {
+        var differences = new List<string>();
+        (byte[] Guid, List<SortedDictionary<string, string>> Records, int Length) a, b;
+        try { a = FlattenAggregate(built); b = FlattenAggregate(original); }
+        catch (StaticObjectException exception) { return [$"unreadable: {exception.Code}"]; }
+        if (!a.Guid.AsSpan().SequenceEqual(b.Guid)) differences.Add("the module GUID differs");
+        if (a.Length != built.Length || b.Length != original.Length) differences.Add("trailing bytes");
+        if (a.Records.Count != b.Records.Count) differences.Add($"{a.Records.Count} records against {b.Records.Count}");
+        for (var i = 0; i < Math.Min(a.Records.Count, b.Records.Count); i++)
+            foreach (var key in a.Records[i].Keys.Union(b.Records[i].Keys))
+            {
+                a.Records[i].TryGetValue(key, out var va);
+                b.Records[i].TryGetValue(key, out var vb);
+                if (va != vb) differences.Add($"record {i} {key}: {va ?? "-"} / {vb ?? "-"}");
+            }
+        return differences;
+    }
+
     public static ObjectWireRecord Read(byte[] bytes) => ObjectWireReader.Read(bytes, Limits, prototype: true, maxRecordBytes: 64 * 1024);
 
     /// <summary>The record as named values; the key says where a value sits ("s31.e9.w0" is word 0 of element 9 of slot 31).</summary>
-    public static SortedDictionary<string, string> Flatten(byte[] bytes)
+    public static SortedDictionary<string, string> Flatten(byte[] bytes) => Flatten(Read(bytes));
+
+    private static SortedDictionary<string, string> Flatten(ObjectWireRecord record)
     {
-        var record = Read(bytes);
         var map = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
             ["type"] = record.Type.ToString(),
