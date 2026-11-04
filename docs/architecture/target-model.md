@@ -131,6 +131,8 @@ the target elements its domain stands on.
 | MIG16 | Interface mode stack (concept first: K16) | TM13 | — (independent) | — |
 
 **Status.** MIG1 is done (ARC-DEV-072, [record resolver](../world/record-resolver.md)); MIG2–MIG5 and MIG10 run beside it.
+The open player bugs, the slices expected to change them and the smoke re-checks to run after each slice are in the
+[open bugs and smoke plan](../research/open-bugs-migration-smoke-plan.md) (ARC-RES-089).
 
 The order follows the cost of the gaps: the follower fix (MIG1–MIG5) is the visible problem
 the audit started from and needs only the resolver; identity and creation (MIG6–MIG8) are the
