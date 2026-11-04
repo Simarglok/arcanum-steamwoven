@@ -120,7 +120,7 @@ among them Effect and Proto, run by Map's own hooks
 | mod_load | module chosen (`-mod:`, main menu, options, multiplayer) | table order | unloads the modules before the failed one, unmounts the module (mod load (0x402A50)) |
 | reset | new game or load | table order | never fails; clears `Save\Current` first (reset (0x402380)) |
 | save | save game | table order | `Save\Current\data.sav`: version 25, then each module blob followed by `0xBEEFCAFE`; a failure while writing it deletes it (save (0x403030)) |
-| load | load game | table order | checks each sentinel; a failure stops without rollback; the version is stored, not checked (load (0x403410)) |
+| load | load game | table order | checks each sentinel; a failure stops without rollback; the `data.sav` version is compared with 25 and another is refused ([PS4](../architecture/original-persistence.md#1-the-slot-folder-archive-files), corrected by ARC-RES-086) (load (0x403410)) |
 | mod_unload, exit | module change, quit | reverse order | none (mod unload (0x402C60)) |
 
 `mod_load` does four things in order (mod load (0x402A50)): unload the

@@ -1,0 +1,144 @@
+# Target model: one object, one world runtime, one clock, one goal table
+
+Status: **Accepted by the owner** (2026-11-04, every question by the recommendation), work item ARC-RES-086 (2026-11-04), slice G1 of the
+[architecture audit](../research/architecture-audit-plan.md). Docs-only: no code changes
+and no checks run. The elements below close the gaps of the [gap register](gap-register.md);
+six of them (TM2, TM5, TM6, TM8, TM10, TM11) depend on eight owner decisions (GQ1–GQ8,
+[below](#owner-decisions)), all answered on 2026-11-04
+by the recommended option. Nothing here is implemented; each element states the original rows it
+follows, what in Steamwoven it replaces (rows of the [model map](steamwoven-model.md), M1)
+and its migration slice.
+
+Requirements (reference only, no coverage row changes): the groups of the
+[gap register](gap-register.md), above all
+[FR-WORLD-003](../requirements/world.md#fr-world-003),
+[FR-WORLD-010](../requirements/world.md#fr-world-010),
+[FR-WORLD-013](../requirements/world.md#fr-world-013),
+[FR-RUNTIME-001](../requirements/world-travel-runtime.md#fr-runtime-001),
+[FR-RUNTIME-002](../requirements/world-travel-runtime.md#fr-runtime-002),
+[FR-LIFECYCLE-003](../requirements/ui-media-lifecycle.md#fr-lifecycle-003),
+[FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002),
+[FR-UI-008](../requirements/ui-media-lifecycle.md#fr-ui-008) and
+[FR-NET-002](../requirements/network.md#fr-net-002). Each migration slice updates the
+coverage rows of the requirements it implements, in its own PR.
+
+## Answer
+
+- **One object per thing.** A session-level object directory keyed by one identity space
+  (TM1) holds, for every object of the open map and for the travelling party, what every
+  mechanism reads: type, prototype, origin, location, flags, script attachments and links.
+  Base values come from the original data by identity through one record resolver (TM3), never
+  through "the row on the shown map". Every object made at run time goes through one create and
+  one destroy path (TM4).
+- **The whole open map lives.** All mobile objects and timers of the open map are alive in the
+  session, whatever the viewer shows; place gates only what the original gates (the NPC
+  heartbeat within 30 tiles, sector data, lights and drawing); other maps wait in their saved
+  section (TM5). The viewer's window is presentation only.
+- **One clock set, one frame step, one goal table.** The session owns the real, game and
+  animation clocks and advances them once per frame from one host stamp (TM6). One run table
+  holds the goal runs of the hero, NPCs, doors, projectiles, missiles and eye candy, with the
+  original's priorities, levels and overlays (TM7), and it is saved (TM8).
+- **The rules leave the tool.** A Godot-free world runtime in `src/` takes over the record
+  access and the hosts of `tools/terrain-viewer/Core`; the session stays the one owner of
+  mutable state and the snapshot; the viewer draws and turns input into typed requests (TM11).
+- **Kept from today:** identity-keyed domain state, one atomic validated snapshot, the event
+  queue's scope model, and the eight intended differences of the
+  [gap register](gap-register.md#3-intended-differences).
+- **Order:** the follower fix first, in its final place (MIG1–MIG5), with transfer parity
+  (MIG10, V5) beside it; then identity and creation (MIG6–MIG8), residency, the change-of-place
+  request and the homecoming of former followers (MIG9, MIG11), clocks, goals and saved runs
+  (MIG12–MIG14), the move of the remaining hosts (MIG15) and the interface stack (MIG16).
+
+## Principles
+
+1. **Behaviour from the executable, representation ours.** What exists, when it changes and
+   what survives a move, a save or a load follow the original's rows; how it is stored may
+   differ where the owner recorded it (one JSON snapshot instead of a folder of files, GI1).
+2. **One owner of mutable state.** `Arcanum.Session` holds all of it and the snapshot captures
+   all of it; nothing that the original saves is run-local unless an intended difference says
+   so.
+3. **Identity first.** Every rule addresses an object by its identity, wherever it stands; a
+   map or a sector is a place, not part of the name.
+4. **Godot-free rules.** Data, Simulation, Scripting, Session and the world runtime do not
+   reference Godot; the viewer reads state and sends requests.
+5. **Rule modes switch rules, not structure.** The Original and Steamwoven settings
+   ([rule modes](../world/rule-modes.md)) choose rule switches inside one model; no element
+   exists in one mode only.
+
+## Elements
+
+| ID | Element | Follows | Replaces (M1) | Closes |
+| --- | --- | --- | --- | --- |
+| TM1 | **Object directory and identity.** One `ObjectId` space: map-data mobile objects keep today's `oid:` identity (the hash of their persistent ID, stable on every map, FM4); static walls, portals, scenery and traps keep a positional identity (location, temporary id and map, as the original's positional IDs are, OM3), matched to their changes by the sector's object order at load (PS24); every object made at run time gets one id from one session counter. An entry holds type, prototype, origin (home map and record key, or the creation cause), location (map and cell, or the holder for a held item), flags (destroyed, off, dynamic) and residency class (static, mobile, held). An id is never reassigned; a move changes only the location (RL5). | OM1–OM6, RL1, RL4, FM4 | §1 keys `kit:`, `made:`, `junk:`, `pool:`; `AreaObjectKey` as a name | GR1, GR3 |
+| TM2 | **Object state.** The directory entry carries the fields every mechanism shares (location, flags, script attachments TM9, links TM10, inventory parent and place); rule-specific state stays in the typed session domains, all keyed by `ObjectId`. A map-data object records only what changed against its base record (the original's difference semantics, OM9, OM10); a created object is recorded whole. The entity-scoped `MapChangeKey` properties (`obj.off`, `obj.destroyed`, `npc.cell`, `npc.map`, `npc.faction`, `follow.pc`, `item.dropped`, `object.damage`, `object.condition`) become entry fields or domain records; sector-scoped ones of static objects (`lock.*`, `trap.state`, statics' `obj.*`) stay per sector, keyed by the static's identity, as the original's `.dif` does. NPC positions are state (GR10). Shape depends on **GQ1** (chosen A). | OM9, OM10, PS20, PS21, PS24 | S3 entity keys, V5 movers | GR5, GR10 (GR6 only under GQ1 B) |
+| TM3 | **Record resolver.** One Godot-free query answers an object's base record by identity: its home map's object row, read on demand from the original data with an explicit limits object (maps held, rows per map), and its prototype. Combat fields, the build, the AI row, seed holders and worn items, spell-target fields and the body template all come through it. The cache is derived data, rebuilt freely, so a quick load or fresh run loses nothing. This is the follower research's recommended design (A), slice V1. | FM3, FM4, OM9 | V1, V2, V4, V6–V10 lookups; L1, L2 | GR1, GR2, GR11 |
+| TM4 | **One create and one destroy path.** `Create(from a prototype or as a copy of an object, at a location or in a holder, cause)` returns an `ObjectId`, marks the object dynamic, registers it, lists it when its sector is loaded, gives an NPC its heartbeat, generates or restocks its inventory and runs the location notification (OM15, OM16). `Destroy(id)` runs script point 2 (which may refuse), takes an NPC out of its leader's followers, takes a held item out of its holder onto the holder's tile, drops only invulnerable items of a destroyed holder (OM18), ends the spell runs that name it, removes its AI events and flags it destroyed; a destroyed created object is not saved, a destroyed map-data object is saved as its id (OM17, OM19, PS20). Every run-time kind uses it: dropped items (a move), junk piles, blood pools, made items, gold and ammunition stacks, projectiles, spell missiles, trap markers, summons, generator copies, encounter creatures, script-created objects, the starting kit and background items (OM20–OM27). The per-kind stores become queries over the directory. | OM15–OM27 | S10, S11, S26, G4 `_projectiles` | GR4, GR17, GR30 |
+| TM5 | **Residency.** At map open every mobile object of the map enters the directory from its base rows, its saved differences and the map's created objects; statics belong to sectors. Which sectors are loaded is a session model, decided by **GQ2** (chosen A: the original's cache of 16 slots, least recently used, fed by the rules' own reads: tile queries, routes, the arrival pre-cache of 3 × 3 and the view rectangle the presentation reports; with the fold on load, the eviction history and the 3 s rule). The fold lists the mobile objects of a loading sector, gives each NPC its first tick and, when the sector was away 3 s or more, puts leaderless NPCs outside combat on their waypoint or standpoint for the hour; day-night scenery and lights follow the fold and the hourly event for loaded sectors (RL8, RL17, RL19). The heartbeat acts within 30 tiles of the hero, takes the far path otherwise and ends when its sector is not loaded (RL16). Every relocation runs the wading test and, for a PC or NPC, the tile's scripts; the hero's sector change runs the sector script and point 27 for each follower (RL6). Other maps exist only as their saved section, their events parked by scope (GI2). | RL1–RL20, RL28 | D1 per shown map, V3–V5, the window rebuild of M1 §9 | GR8, GR9, GR10, GR12, GR13, GR15 |
+| TM6 | **Clocks and the frame step.** The session owns the real, game and animation clocks and advances them once per frame from one host stamp by the original's admission (5 ms floor, 250 ms cut, ×8 for game and animation, TL14); the pause stops game and animation time, a round stops game time only (TL23, TL38). The one event queue uses its three domains: goal steps, projectiles and missiles on animation time; rule timers and the AI tick on game time; sleep and world-map steps, UI timers and the turn-based step on real time (TL19, TL24, TL26). One frame step in the world runtime runs, in order: the change-of-place request (TM12), the map, sound and the time-event lists real → game → animation; the viewer then draws, and input taken during the frame is applied at the next step (TL2, TL13). Nothing in the rules reads Godot time. Which windows pause is **GQ3** (chosen B). Kept: events at their own deadlines (GI5), FIFO ties (GI3). | TL1–TL38, TL46 | C1–C4, V4 `_nowMs`, `AreaAmbientDriver` ownership of C1 | GR20, GR21, GR22, GR23 |
+| TM7 | **One goal table.** One run table in the session holds the runs of every animated object: the hero, NPCs, doors, projectiles, spell missiles, eye candy and burning scenery (GS1–GS3). It has the original's goal types with their priorities 1–5, the effective levels 0–6, the no-interrupt overlay goals beside the main run, the alias and equal-goal tests over all of an object's runs, end nodes on every interrupt and the turn-based gates (GS4–GS24, TL39–TL45). Starters are shared by the hero and NPCs where the original shares them; the hero's object click builds its goal itself (GS26, GS27); scripts start the goals of GS30; the engine starts stun, knock-down, dying, get-up and the door's own open, wait and close (GS29, GS31). `AiExecutorRules` becomes the NPC decision layer that asks this table. | GS1–GS32 | G1–G5, `AiGoalRun`, `AreaAiHost._runs`, hero hosts | GR13, GR24–GR27 |
+| TM8 | **Saved content.** The snapshot stays one atomic JSON file (GI1) and holds: global state (clocks, the event queue, global flags and variables, story state, random generator, schemes, hotkeys, found schematics); per map, the differences of its map-data objects, its destroyed ids, its created objects whole, the differences of its static objects by sector and, under GQ2 A, its eviction history; the current map and the hero's id; and, decided by **GQ4** (chosen A), the run table with every goal stack, the spell runs with their maintained marks and the projectiles and missiles in flight (PS11, PS15, PS16). Whether the turn-based setting travels with a save, as the original's cached copy does (PS34), is **GQ8** (chosen B). A map change writes the map being left into its section and opens the destination from its base data and section, as the original's flush and open do (RL25–RL27); a load builds a new owner from the snapshot and opens the current map the same way. | PS1–PS34, RL25–RL27 | S8 seeds, S10/S11 per-kind sections, S25–S27, G1–G5 run-local | GR11, GR17, GR18, GR19, GR37 |
+| TM9 | **Scripts on the object.** Attachments per object and point: the script number, 32 local flags and four counters, read from the base record or prototype until the first write copies the whole array onto the object; they move, copy and save with the object (SA1–SA7). A run works on a copy and writes the record back once (SA8–SA11; the nesting rule is D8's). Global variables (2000), global flags (3200) and the story number are session state; PC flags and variables are fields of the hero entry (SA13, SA14). Tile and sector scripts belong to their sector (SA18, TM5). Deferred calls stay events (SA20). | SA1–SA20 | `dialog.*`, `use.*` keys, S12, V7, V8 home-map keys, `ForVisitor` | GR7, GR27, GR28, GR29 |
+| TM10 | **Links.** Fields of the holder entry, stored as `ObjectId`: leader and followers, item parent and inventory list, gold and ammunition stacks, combat focus, who hit me last, fleeing from, the enemy list, the substitute inventory, scenery occupant, projectile weapon; the summon relation on the spell run. Destroy, move and load follow OM29–OM32: a move clears focus, last hitter, enemy list, fleeing and substitute inventory (FM6); whether a link to an object now on another map keeps its identity or is nulled as in the original is **GQ7** (chosen A: kept). | OM28–OM32, FM6, FM7 | S6, S11, S20 links | GR30, GR31, GR36 |
+| TM11 | **Placement and the request boundary.** Decided by **GQ6** (chosen A): a Godot-free world runtime in `src/` (working name `Arcanum.World`, referencing Data, Simulation, Scripting and Session) holds the record resolver (TM3), the residency model (TM5), the frame step (TM6), the goal starters and the hosts now in `tools/terrain-viewer/Core`; `Arcanum.Session` keeps every mutable value and the snapshot; the viewer draws, plays audio and turns input into requests. Decided by **GQ5** (chosen A): the world runtime's input API is the request boundary, one typed request per player action, matching the client requests the original sends from its rule functions (goal add 5, move 4, cast 57, dialog 44/2, item moves and uses, combat mode, raising a stat, follower orders, SA31, SA32); single player applies a request at once, with no queue, and the rules inside the simulation change state directly, as the original's single-player branch does (SA34). | SA21–SA35 | Viewer hosts calling the owner (SA31); `tools/terrain-viewer/Core` hosts | GR32, GR33, GR34 |
+| TM12 | **One change-of-place request.** One request slot in the session, processed by the next frame step (RL21): the object, destination map and location, and the flags for movies, fades, sound, blanking, the clock advance and "no wait orders". Every caller uses it: jump points, script teleports, teleport spells, an NPC's homecoming, the world-map landing and the new game (RL29). A cross-map change runs the original's order (RL23): effects and the clock advance on the old map, wait orders for unconscious followers (FM2), the move list with followers of followers and inventories (FM1, RL22), FM6's clearing, the carry of events and runs whose participants all travel and the parking of the rest (RL28), the flush of the old map (TM8), the open of the destination, the pre-cache (TM5), the arrival notification and the fade-in. A same-map change keeps combat mode, events and the sectors, except that a teleport spell and the world-map landing empty the cache first (RL24). An NPC's teleport map is set at its first teleport (FM10). Failure: the destination is validated before anything is written, and a failure leaves the session on its map (GI7). | RL21–RL30, FM1–FM13 | V12 transition coordinator, the session transfer by `npc.cell`/`npc.map` | GR14, GR15, GR16 |
+| TM13 | **Interface mode stack.** A Godot-free stack of the original's 21 modes in the input layer of the world runtime (not saved, as in the original): windows replace the top, pickers are pushed, spell, skill and item-use target modes are pushed over an inventory and pop twice; the cursor follows the top; the game view acts only in modes 0, 1, 2, 3, 16 and 18 and turns a click into a request (TM11) (SA36–SA55). Godot panels open and close from the stack. | SA36–SA55 | `AreaCursorMode`, `WorldModal`, `WorldUiFocus`, per-panel flags | GR35 |
+| TM14 | **The hero is an object.** The hero is a directory entry like any NPC: its location is written at every step, its actions are runs of the goal table, its per-hero lists (quests, known rumors, reputation, kill and injury log) are keyed by its id (PS17). No commit points. | RL5, PS13, PS17, GS25–GS28 | S4 commit points, R1, R2 viewer route and grid actor | GR33 |
+
+## Owner decisions
+
+GQ1–GQ6 asked on 2026-11-04 through the coordinator's decision cards, GQ7 and GQ8 the same day after the review.
+**Owner decision** (Aleksandr, 2026-11-04 09:58, "Везде по рекомендации"): every question by the
+recommendation, so GQ1 A, GQ2 A, GQ3 B, GQ4 A, GQ5 A, GQ6 A, GQ7 A and GQ8 B. The elements above
+are written on these options; migration slices start when the coordinator hands out their codes.
+
+| ID | Question | Options | Recommendation (chosen) |
+| --- | --- | --- | --- |
+| GQ1 | How is the mutable state of objects stored (H2, H3; TM2)? | **A** Hybrid: one identity directory with the shared fields (location, flags, scripts, links, parent), typed domains keyed by `ObjectId`; `MapChangeKey` entity keys and the per-kind stores move into it. **B** The original's full field table: instance fields over the prototype, domains as views over it. **C** As today, plus only the record resolver (V1). | **A**: it closes every systemic gap of SP1 at a medium migration and one snapshot schema step per slice; B adds a saved schema for each of the 337 field descriptors for little behaviour that A misses (GR6 is not visible while prototypes do not change in play); C leaves GR3–GR7 open |
+| GQ2 | What is alive on the open map (H7; TM5, K1)? | **A** As the original: every mobile object and timer of the open map, a session model of the 16-slot sector cache fed by the rules' reads, the fold with its 3 s rule, the 30-tile heartbeat; other maps wait in their section. **B** Everything of the map alive, but "loaded" means the 3 × 3 sectors around the hero, without a cache. **C** As today: only the shown window, NPCs back on their first cells after a window move or a load. | **A**: the fold's re-placement, first ticks, lights and heartbeat ends all depend on which sectors are loaded, and only the cache gives the original's timings; B is simpler but changes when NPCs return to their waypoints; C keeps GR8–GR10 |
+| GQ3 | Do open windows pause the game (TL23, TL46; TM6)? | **A** As the original in both rule modes: only the Esc menu pauses; dialog, inventory, sheet, barter, logbook and world map run in real time. **B** A rule-mode switch: Original pauses only with the Esc menu, Steamwoven pauses with every modal window, as today. **C** Every modal window pauses in both modes. | **B**: the original's behaviour stays exact behind the Original setting, and the comfort the viewer gives today stays in Steamwoven, as the owner did for the turn-order list (CH6) |
+| GQ4 | Are actions in flight saved (H9; TM8)? | **A** As the original: goal runs with their stacks, spell runs with maintained marks, projectiles and missiles are saved and resume after a load. **B** Save only at rest: the save waits or refuses while runs are active; no runs are written. **C** As today: they are lost on a load. | **A**: maintained spells and NPC actions survive a quick load as in the original; B refuses saves the original allows; C keeps GR18 |
+| GQ5 | What is the change path for the player's actions and a future network game (SP8; TM11, K11)? | **A** A thin typed request boundary at the world runtime's input, one request per player action, matching the original's client requests; applied at once in single player; rules inside change state directly. **B** As the original: direct calls into the rules; a network branch later inside each rule function. **C** A full command queue with a journal (replay, undo, network). | **A**: it gives the network lane (FR-NET-002) and replays one seam at the place the original's clients meet the host, at almost no cost in single player; B spreads network code over about 300 rule functions as the original does; C adds a queue and journal that the original's behaviour does not need |
+| GQ6 | Where does the world logic live (H6; TM11)? | **A** A new Godot-free assembly in `src/` (working name `Arcanum.World`): record resolver, residency, frame step, goal starters and the hosts now in `tools/terrain-viewer/Core`; `Arcanum.Session` keeps all mutable state and the snapshot; the viewer only draws and sends requests. **B** Everything in `Arcanum.Session`: the session gets a read port onto the game data and takes in the hosts. **C** The hosts stay in the viewer; only the record resolver is added there (V1 as first written). | **A**: the session keeps its clean role (state and snapshot, no file reads) while the rules leave the tool; B makes the session also the data reader and the host of every rule; C keeps GR32 and GR33 and puts the resolver where it would have to move again |
+| GQ7 | A link to an object that has left for another map (GR36; TM10)? The original nulls it when the map it stands on opens again (an NPC's last hitter, focus or enemy list naming a companion who left), and the null is saved. | **A** Keep the identity in both rule modes (as today; ARC-RES-076 proposed it). **B** A rule-mode switch: Original nulls, Steamwoven keeps. **C** Null in both modes, as the original. | **A**: the null is a side effect of the original's handle rebinding, not a rule a player meets; under the owner's rule on technical bugs it needs no switch, and keeping it costs nothing |
+| GQ8 | Does a save carry the turn-based setting (GR37; TM8)? The original keeps a copy of the setting in the save, so a game saved in turn-based mode loads in it until the option is changed (PS34). | **A** As the original in both modes. **B** A rule-mode switch: Original loads in the saved mode, Steamwoven keeps the player's current setting (FR-LIFECYCLE-004). **C** Never from the save, in both modes. | **B**: the Original setting reproduces what a player of the original sees after a load, and Steamwoven keeps the rule that preferences live outside saves |
+
+## Migration order
+
+Each slice is one PR with its own task code (from the coordinator), keeps the game running,
+cites the rows it implements, updates the coverage rows it changes, and adds one snapshot
+schema step when the saved shape changes. A slice marked "concept first" starts after its
+concept document (K13–K16 of the [gap register](gap-register.md#6-what-each-sweep-and-concept-takes-from-the-register)).
+The domain sweeps D1–D9 can run beside the slices once the decisions are in; each sweep reads
+the target elements its domain stands on.
+
+| Slice | Result | Elements | Depends on | Former name |
+| --- | --- | --- | --- | --- |
+| MIG1 | The record resolver in its final place (the world runtime under GQ6 A); combat fields, build, holders, worn set and home map resolve by identity; synthetic tests for an NPC of map A on map B and for a map never loaded in the run | TM3, TM11 | GQ6 | V1 |
+| MIG2 | Carried companions in the AI: the `Stranger` skip goes; the companion fights and is fought | TM3 | MIG1 | V2 |
+| MIG3 | Spell targets, hover attack, life bars, turn facts, sheet and levels through the resolver; home-map fallbacks removed | TM3 | MIG1 | V3 |
+| MIG4 | The companion's body from the resolver; `_travellers` and `AreaVisitors.Unbodied` go | TM3 | MIG1 | V4 |
+| MIG5 | One dialog host; `ForVisitor`, visitor routing and `refuseUncoveredInventory` go | TM3 | MIG1, MIG4 | V4b |
+| MIG6 | Object directory, one id space, one create and one destroy path; the per-kind stores become directory queries (concept first: K13) | TM1, TM2, TM4 | GQ1, MIG1 | — |
+| MIG7 | Object state on the entry: entity-scoped map change keys and NPC positions move into the directory; statics' changes per sector | TM2, TM10 | MIG6 | — |
+| MIG8 | Script attachments on the object, inherited until first written; global and PC variables admitted | TM9 | MIG6 | — |
+| MIG9 | Residency: the whole open map alive, the sector model, fold, waypoint re-placement and heartbeat gating; the viewer window becomes presentation only (concept first: K1) | TM5 | GQ2, MIG7 | — |
+| MIG10 | Transfer parity on today's transfer: followers of followers travel, unconscious followers wait, FM6's fields are cleared, the follower's own AI tick is carried instead of dropped | TM10, TM12's ordering rules on the current transfer | — (independent, as V5 was) | V5 |
+| MIG11 | One change-of-place request with the original's order for every caller; former followers go home through their teleport map on a forced waypoint pass (later than the follower plan had V6, which depended on V1 and V5 only: its trigger, the map open or a sector's re-fold after 3 s, is TM5's) | TM12, TM5 | MIG7, MIG9, MIG10 | V6 |
+| MIG12 | Three clocks and the frame step in the session; the AI host's own time and `WorldTime` leave the rules; the pause by GQ3 (concept first: K15) | TM6 | GQ3, MIG6 | — |
+| MIG13 | One goal table for the hero, NPCs, doors, projectiles, missiles and eye candy; the hero's input through typed requests; the hero as an object (concept first: K14) | TM7, TM14, TM11 | GQ5, MIG12 | — |
+| MIG14 | Saved runs, spell runs, projectiles and missiles | TM8 | GQ4, MIG13 | — |
+| MIG15 | The remaining hosts of `tools/terrain-viewer/Core` move into the world runtime; the viewer keeps drawing and input | TM11 | GQ6; runs alongside MIG1–MIG14, closes after MIG14 | — |
+| MIG16 | Interface mode stack (concept first: K16) | TM13 | — (independent) | — |
+
+The order follows the cost of the gaps: the follower fix (MIG1–MIG5) is the visible problem
+the audit started from and needs only the resolver; identity and creation (MIG6–MIG8) are the
+base of every later slice; transfer parity (MIG10) needs nothing and can run at once; residency
+and the change-of-place request (MIG9, MIG11) need the directory; time
+and goals (MIG12–MIG14) need the directory and change the most code, so they come after the
+data model is settled. Under GQ6 B or C the resolver of MIG1 moves to the session or stays in
+the viewer, and MIG15 shrinks or disappears; under GQ1 B, MIG6 and MIG7 become one larger
+field-table slice; under GQ2 C, MIG9 is dropped, K1 stays a concept only and MIG11's homecoming runs at map open
+only. Under GQ3 A or C, MIG12 sets the pause rule without a switch; under GQ4 B, MIG14 becomes
+a save gate instead of saved runs, and under GQ4 C it is dropped; under GQ5 B, MIG13 calls the
+rules directly and K11 later adds the network branch to each, and under GQ5 C, MIG13 adds a
+command queue and journal first. GQ7 and GQ8 change one rule each, in MIG7 and D9.
