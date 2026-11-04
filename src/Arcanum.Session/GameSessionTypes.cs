@@ -175,11 +175,17 @@ public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwner
 /// <paramref name="AutoLevel"/> (ARC-WORLD-036) and <paramref name="Reputations"/> (ARC-WORLD-044).
 /// <paramref name="SoundMapDefault"/> (ARC-WORLD-040) is the loaded map's default music and ambient pair (its map info's
 /// <c>SoundScheme</c>, null without one): the original opens the map, which plays it, before it loads the sound state.
+/// <paramref name="LoadRandom"/> (ARC-DEV-077, GI6) is the generator the host is running, usually the current session's
+/// <see cref="GameSessionOwner.QueryRandom"/>: under the Original setting (<see cref="LifecycleRuleProfile.LoadKeepsRunningRandom"/>)
+/// the restored session goes on with it instead of the saved seed and position, as the original keeps its process generator
+/// across a load; null there starts the default seed 0 at draw 0, as a new session without a seed. Steamwoven ignores it.
+/// A negative position is <see cref="GameSessionFailure.InvalidDescriptor"/> in both modes.
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
     ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
     RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal,
-    SessionAutoLevelRules? AutoLevel = null, SessionMapSound? SoundMapDefault = null, ReputationCatalog? Reputations = null);
+    SessionAutoLevelRules? AutoLevel = null, SessionMapSound? SoundMapDefault = null, ReputationCatalog? Reputations = null,
+    SessionRandomState? LoadRandom = null);
 
 public enum GameSessionFailure
 {

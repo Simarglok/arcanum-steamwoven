@@ -151,7 +151,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </summary>
     public static GameSessionCreationResult Restore(GameSessionSnapshot? snapshot, GameSessionRestoreOptions? options)
     {
-        if (options is null || !Enum.IsDefined(options.Rules) || !Enum.IsDefined(options.Difficulty))
+        if (options is null || !Enum.IsDefined(options.Rules) || !Enum.IsDefined(options.Difficulty) || options.LoadRandom is { Draws: < 0 })
             return Rejected(GameSessionFailure.InvalidDescriptor);
         if (snapshot is null) return Rejected(GameSessionFailure.InvalidSnapshot);
         if (snapshot.SchemaVersion != GameSessionSnapshot.CurrentSchemaVersion) return Rejected(GameSessionFailure.UnsupportedSchema);
@@ -230,8 +230,10 @@ public sealed partial class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
+        // GI6 (ARC-DEV-077): the Original setting goes on with the host's running generator, Steamwoven with the saved one.
+        var random = GameRules.For(options.Rules).Lifecycle.LoadKeepsRunningRandom ? options.LoadRandom ?? new(0, 0) : snapshot.Random;
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, equipment, effects, experience, advancement, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
+            hero, inventory, equipment, effects, experience, advancement, new(random.Seed, random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions };
