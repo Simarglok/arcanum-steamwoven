@@ -2,51 +2,33 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
+using Arcanum.Simulation.Movement;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
-/// ARC-DEV-072 (MIG1, TM3): the record source of the viewer: the object rows of any whole map of the game folder's module content
-/// stack, by runtime map number, read on demand for <see cref="RecordResolver"/>. It reads rows only: the strict AREA publication of
-/// the map and its whole-map step evidence (the life evidence of its NPCs), no scene plan, no art, no lighting. A map that opens only
-/// as a window (the main world map: more sector files than a whole-map plan admits) is refused with a reason, since its stored
-/// objects outside the window cannot be listed this way (NOT READY: an NPC whose home is such a map resolves only while the viewer
-/// holds that map's window; the viewer's launch maps are given to the resolver, so the Crash Site's own NPCs are held).
+/// ARC-DEV-072 (MIG1, TM3): the record source of the viewer: the object rows of any map of the game folder's module content stack, by
+/// runtime number, read on demand for <see cref="RecordResolver"/>. It reads rows only as far as the resolver is concerned: the strict AREA
+/// publication of the map and its whole-map step evidence (the life evidence of its NPCs), no art, no lighting.
+/// ARC-DEV-079 (MIG4): the read is <see cref="AreaMapHomes"/>' and is shared through the viewer's <see cref="AreaHomeDirectory"/>, so a map
+/// read for a companion's body is not read again for its record. A map that opens only as a window (the main world map: more sector files than
+/// a whole-map plan admits) is read as a window around <paramref name="near"/>, a stored cell the session recorded for an NPC of that map
+/// (<see cref="AreaVisitors.HomeWindow"/>); without one it is a typed failure (an NPC recorded before that cell was kept resolves only
+/// while the viewer holds the window). The resolver holds one window per map (NOT READY: companions of two windows of one map, until MIG9).
 /// Unlike a map load it does not compare the viewer's archive arguments with the stack's sources (`RequireSame`) or the expected
 /// digests: the stack comes from the same game folder as the viewer's, and the rows are derived data.
 /// A map the list does not name, one with no sector files, or one that does not read is a typed failure, never an exception.
 /// </summary>
-public sealed class AreaMapRecords(TerrainViewerArguments launch) : IMapRecordSource
+public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirectory? homes = null, Func<int, CellCoord?>? near = null) : IMapRecordSource
 {
+    private readonly IAreaHomeSource _own = new AreaMapHomes(launch, _ => null);
+
     public MapRecordsLoad Load(int runtimeMap, CancellationToken token)
     {
-        try { return LoadChecked(runtimeMap, token); }
-        catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            return new(null, $"map {runtimeMap} did not read: {error.GetType().Name} {error.Message}");
-        }
-    }
-
-    private MapRecordsLoad LoadChecked(int runtimeMap, CancellationToken token)
-    {
-        var discovery = ContentMountPlan.Discover(launch.GameRoot ?? throw new InvalidOperationException("AREA_RECORDS_GAME_ROOT_REQUIRED"));
-        if (discovery.Status != ContentMountStatus.Ready) return new(null, "mount " + discovery.Status);
-        var opened = ContentStack.Open(discovery.Plan!);
-        if (opened.Status != ContentStackStatus.Ready) return new(null, "stack " + opened.Status);
-        using var stack = opened.Stack!;
-        var list = MapList.Read(stack);
-        if (list.Status != MapListStatus.Read) return new(null, "the map list did not read: " + list.Status);
-        if (list.ByRuntime(runtimeMap) is not { } entry) return new(null, $"the map list has no runtime map {runtimeMap}");
-        var created = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), entry.Name, launch.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven);
-        if (created.Status != AreaMapPlanStatus.Ready) return new(null, $"map {entry.Name} has no whole-map plan: {created.Status}");
-        token.ThrowIfCancellationRequested();
-        var plan = created.Plan!;
-        using var owner = plan.Open();
-        var snapshot = owner.LoadStrict(token);
-        var steps = AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 1);
-        var build = AreaInventoryMap.Build(snapshot, steps, token);
-        return build.Map is null ? new(null, $"map {entry.Name} has no records: {build.Status} {build.Detail}") : new(build.Map, build.Detail);
+        var at = near?.Invoke(runtimeMap);
+        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
+        return load.Read is { } read ? new(read.Rows, load.Detail) : new(null, load.Detail);
     }
 }
 
