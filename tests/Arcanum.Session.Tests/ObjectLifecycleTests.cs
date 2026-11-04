@@ -59,17 +59,15 @@ public sealed class ObjectLifecycleTests
     }
 
     [TestMethod]
-    public void DestroyingTheOnlyItemsOfAPileRemovesTheEmptyPile()
+    public void AnEmptiedPileStandsWhileTheWindowShowsItAndTheCloseRemovesIt()
     {
         using var owner = PileOwner();
-        owner.DestroyObject("kit:2");
-        owner.PlaceHeroItem("kit:3", There);
-        owner.PlaceHeroItem("kit:1", There);
-        var pile = owner.QueryJunkPiles().Single();
-        owner.DestroyObject("kit:3");
-        owner.DestroyObject("kit:1");
-        Assert.AreEqual(0, owner.QueryJunkPiles().Count(p => p.Entity == pile.Entity && p.Items.Count == 0), "no empty pile stays");
-        Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.JunkPiles.Count(p => p.Items.Count == 0));
+        owner.DestroyObject("kit:2", windowShowsContainer: true);
+        owner.DestroyObject("apple", windowShowsContainer: true);
+        Assert.AreEqual(0, owner.QueryJunkPiles().Single().Items.Count, "an empty pile stands while the window shows it (JP5)");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseJunkPile(owner.Version, "junk:1").Disposition);
+        Assert.AreEqual(0, owner.QueryJunkPiles().Count, "no empty pile stays after the close");
+        Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.Ground.Count);
     }
 
     [TestMethod]
@@ -139,7 +137,7 @@ public sealed class ObjectLifecycleTests
     }
 
     [TestMethod]
-    public void ACreatedMadeItemIsRegisteredWhereItLandsWithItsWeightAndAsTaken()
+    public void ACreatedMadeItemIsRegisteredWhereItLandsWithItsWeightAndComplexity()
     {
         using var owner = Owner();
         var hero = owner.NextObjectEntity(SessionObjectOrigin.Made)!;
@@ -154,13 +152,18 @@ public sealed class ObjectLifecycleTests
         var ground = owner.QueryObject(onGround)!;
         Assert.AreEqual((SessionObjectPlace.Ground, Exterior, There), (ground.Place, ground.Map, ground.Cell));
         Assert.AreEqual(3, owner.QueryPlacedItems().Single(p => p.Entity == onGround).Complexity);
-        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == onGround) || owner.QueryPlacedItems().Any(p => p.Entity == onGround));
+
+        var held = owner.NextObjectEntity(SessionObjectOrigin.Made)!;
+        owner.CreateMadeItem(new(held, Kind(12), SessionCreatePlace.NpcList, new(0, 0, 0), Holder: "oid:wolf"));
+        var listed = owner.QueryObject(held)!;
+        Assert.AreEqual((SessionObjectPlace.NpcList, "oid:wolf"), (listed.Place, listed.Holder));
+        owner.DestroyObject(held);
 
         owner.DestroyObject(onGround);
         owner.DestroyObject(hero);
         Assert.IsNull(owner.QueryItemWeight(hero), "destroyed objects keep no weight facts");
         Assert.AreEqual(SessionObjectPlace.Destroyed, owner.QueryObject(hero)!.Place);
-        Assert.AreEqual("made:3", owner.NextObjectEntity(SessionObjectOrigin.Made), "a destroyed made number is not given again");
+        Assert.AreEqual("made:4", owner.NextObjectEntity(SessionObjectOrigin.Made), "a destroyed made number is not given again");
     }
 
     [TestMethod]

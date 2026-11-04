@@ -70,9 +70,9 @@ ground and its junk pile, is hidden from every seed, loses its records and decay
 ([view](../world/inventory-runtime.md#junk-piles-arc-world-063)). While the window shows the pile (a decay waits for it; the window's own loot never dissolves its pile, which
 `CloseJunkPile` does on closing) the pile stands. A junk pile or a pool of blood is destroyed by the same call (the pile's record only, its items lie loose; a decayed pool is
 purged by the next creation through it). The path is session-wide: the ammunition spend, assembly components, barter's gold piles, a used scroll or food, a broken item, a healed
-item's last use, the restock's old stacks, a schematic and the merge of an ammunition stack all end in it, so no path leaves a pile with one item or none standing (before,
+item's last use, the restock's old stacks, a schematic and the merge of an ammunition stack all end in it, so no destroy path leaves a pile with one item or none standing except under the loot-window rule below (before,
 only the decay step dissolved). The shown-window state is read from the event world of the pass the destroy runs in (the decay); outside a pass the session knows none and the
-pile is checked at once (the host's window state is not session state).
+pile is checked at once, which dissolves a pile the original would keep while a container window is open (a limit: the host's window state is not session state; the `windowShowsContainer` argument is for hosts that know it and has no production caller yet). The original's "decay on" flag (0x5E87E4) of JP5 is not modelled.
 
 ## Not ready
 
