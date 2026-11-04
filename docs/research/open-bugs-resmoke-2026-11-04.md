@@ -149,5 +149,14 @@ The scripting layer (`src/Arcanum.Scripting`, `ScrAdmission.cs`, `ScrInterpreter
   with no bodies (the wilderness) as a failure, `dying` assumed a target that was not knocked out first. They also hid one real regression:
   the `town` step's carry check fails (`AREA_MAP_CARRY_FAILED`) because the companion body from home (MIG4) meets B02 on the town window; B02's fix
   (#614) removes that failure, after which the town step meets the combat stages whose fixtures are written for the Crash Site (ARC-DEV-089).
+  Result (ARC-DEV-089): all bugs of the smoke checks, none of the game; the `town` step (and the Crash Site, wilderness and elven ruins batteries) pass.
+  `attack`, `cast`, `turn-based` and `ai` took the weakest NPC of the map, which in a town may stand under a roof or walled in: they now take the
+  first (weakest first) the hero can stand next to and see from there (`AreaSmokeFightableStartAsync`; no such NPC prints `NO-TARGET`, which the
+  battery tolerates). `ai-cast`: a caster whose own spell is on the heal list lists only the spell (items only without a spell entry, 0x4CC580), so
+  the NPC is tired to 40 % first (items first at or below half fatigue). `ai-follower`: a good follower complains instead of fighting when the hero
+  attacks a good NPC (0x4ADCC0, the town's nearest), so the victim is the nearest NPC it is not upset by. `wreck` and `altar` print `NONE` where
+  Virgil's home is not in the window. The `resources` sweep counts any ground body as planned: an item no holder lists lies on the ground under its own
+  row key (ARC-DEV-085) with no T0 body in the window's plan (a limit: a wrongly dropped item now passes this sweep too). The hover scan of `HoverPointAsync` covers the body's own screen rectangle, not the whole
+  viewport (a body that is not visible took over a minute).
 - **The 13 unverified rows** need the executable reading the plan already names (B08, B17, B21, B44, B45), a stage the plan already describes (SM07 for B07, SM23 for B31, B32, B36 and B41, SM19 for B46), the reporter's save and hero (B36, B40) or the prototype read (B37). B33, B34 and B35 are Present, but whether the original behaves differently is also unverified and waits for the executable.
 - **B02** is the one reproducible migration-relevant failure left in the object-model group; MIG6 is its planned slice, and the same seed refusal blocks the report's path of B01.

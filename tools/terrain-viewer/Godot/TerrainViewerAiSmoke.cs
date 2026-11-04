@@ -40,21 +40,18 @@ public partial class TerrainViewerApp
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
-            var target = candidates[0];
-            var entity = target.Holder.Entity;
-            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            // A standable cell 3..4 cells from the NPC, so it walks up before it bites.
-            CellCoord? start = null;
-            foreach (var (dx, dy) in new[] { (4, 0), (-4, 0), (0, 4), (0, -4), (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3) })
+            // ARC-DEV-089: the first animal (weakest first) the hero can stand 3..4 cells from, so it walks up before it bites, and see from there.
+            var target = candidates[0]; CellCoord? start = null; var targetCell = default(CellCoord);
+            foreach (var candidate in candidates.Take(24))
             {
-                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
-                if (!map.Chart.Contains(near)) continue;
-                CellCoord cell;
-                try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
-                if (Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y)) >= 3) { start = cell; break; }
+                targetCell = map.Chart.ToChart(new(candidate.Row.WorldX!.Value, candidate.Row.WorldY!.Value));
+                var body = commands[candidate.Row.Key];
+                start = await AreaSmokeFightableStartAsync(map, body, targetCell, 4, 3, false) ?? await AreaSmokeFightableStartAsync(map, body, targetCell, 3, 3, false);
+                if (start is not null) { target = candidate; break; }
             }
-            Require(start is not null, "a standable cell a few cells from the NPC");
-            AreaSmokePlace(map, start!.Value);
+            if (start is null) { GD.Print($"ARC-WORLD-092 native-smoke ai NO-TARGET map={map.RuntimeMap} (no animal the hero can stand near and see)"); return; }
+            var entity = target.Holder.Entity;
+            AreaSmokePlace(map, start.Value);
             if (!HeroInCombatMode) ToggleCombatMode();
             Require(HeroInCombatMode, "the hero is in combat mode");
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
@@ -344,6 +341,7 @@ public partial class TerrainViewerApp
         var entity = target.Holder.Entity;
         var npcLife = target.Build.Combat!.Target;
         var npcBefore = session.QueryLife(npcLife).View?.Status.HitPoints;
+        var npcFatigueBefore = session.QueryLife(npcLife).View?.Status.Fatigue ?? 0;
         var heroBefore = session.QueryHeroLife()!.Record.State;
         string? potion = null;
         try
@@ -473,9 +471,16 @@ public partial class TerrainViewerApp
             var max = session.QueryLife(npcLife).View?.Status.MaxHitPoints ?? 0;
             if (session.QueryLife(npcLife).View?.Status is { } full && full.HitPoints > max / 4)
                 session.ApplyDamage(session.Version, npcLife, new LifeDamage { HitPoints = full.HitPoints - max / 4 });
+            // ARC-DEV-089: a caster whose own spell is on the heal list (the town's has one) would list that spell alone, as the list builds
+            // the spells first and the items only without a spell entry (0x4CC580); at or below half its fatigue in combat mode the
+            // items come first, so the NPC is tired down to 40 % (its fatigue is restored with it, after).
+            if (session.QueryLife(npcLife).View?.Status is { MaxFatigue: > 0 } rested
+                && 100L * rested.Fatigue / rested.MaxFatigue > AiActionLists.ItemsFirstFatigue)
+                session.ApplyDamage(session.Version, npcLife, new LifeDamage { Fatigue = rested.Fatigue - rested.MaxFatigue * 40 / 100 });
             var hurt = session.QueryLife(npcLife).View?.Status.HitPoints ?? 0;
             Require(host.Inventory(entity).Contains(potion!) && host.List(entity, AiActionList.HealingLight).Any(e => e.Item == potion),
-                "the potion is on the NPC's light-healing list");
+                "the potion is on the NPC's light-healing list: its list " + string.Join(",", host.List(entity, AiActionList.HealingLight).Select(e => $"{e.Spell}:{e.Item is not null}"))
+                + $", its spells on the list {string.Join(",", known.Where(light.Contains))}, fatigue {host.Support(entity).FatiguePercent}%, magick {host.Support(entity).MagickPoints}");
             var uses = _aiItemUses;
             // The pass's heal step and its perform, as the AI pass runs them (heal first; a choice skips the danger update).
             Require(host.Heal(entity), $"the heal step chose: {host.TraceOf(entity)?.Item}");
@@ -507,7 +512,7 @@ public partial class TerrainViewerApp
             // The casts' runs (a maintained one keeps its slot) are freed, the NPC and the hero healed.
             foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity).ToArray())
                 _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
-            if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead))
+            if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead || now.Fatigue < npcFatigueBefore))
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             var heroNow = session.QueryHeroLife()!.Record.State;
             if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
@@ -644,6 +649,17 @@ public partial class TerrainViewerApp
             Require(!healer.Holds(follower), $"after the heal its own walk follows the hero again: {healer.TraceOf(follower)?.Perform}");
             // The hero next to the NPC, so the NPC fights it where it stands (the placement rebinds the companions, the joined one among
             // them); the follower follows the hero there (beyond 30 tiles it jumps to the hero, OL9) before the fight.
+            // ARC-DEV-089: the victim is the nearest NPC the follower is not upset by (0x4ADCC0): a good follower complains instead of
+            // fighting when the hero attacks a good NPC (the town's nearest one), so the follower rule has a fight to start only against
+            // another (an animal, a hostile). The nearest that passes replaces the first pick, which the smoke has not touched yet.
+            var victimIndex = Array.FindIndex(candidates, c => HostilityRules.Upset(healer, follower, c.Holder.Entity, AiSchedulerRules.Pc, session.Rules.Combat) == UpsetReason.None);
+            if (victimIndex < 0)
+            {
+                GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-TARGET map={map.RuntimeMap} (every NPC with combat values upsets the follower)");
+                return;
+            }
+            target = candidates[victimIndex]; enemy = target.Holder.Entity; enemyLife = target.Build.Combat!.Target;
+            enemyBefore = session.QueryLife(enemyLife).View!.Status.HitPoints;
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
             AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 1));
             var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower);

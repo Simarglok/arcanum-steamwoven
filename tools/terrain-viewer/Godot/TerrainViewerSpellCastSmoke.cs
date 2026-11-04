@@ -101,7 +101,19 @@ public partial class TerrainViewerApp
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
-        var target = candidates[0];
+        // ARC-DEV-089: the first NPC (weakest first) the hero can stand three cells from and see, with the hero standing there.
+        var target = candidates[0]; CellCoord? castStart = null;
+        foreach (var candidate in candidates.Take(24))
+        {
+            var candidateCell = map.Chart.ToChart(new(candidate.Row.WorldX!.Value, candidate.Row.WorldY!.Value));
+            if (await AreaSmokeFightableStartAsync(map, commands[candidate.Row.Key], candidateCell, 3, 2, false) is not { } found) continue;
+            target = candidate; castStart = found; break;
+        }
+        if (castStart is null)
+        {
+            GD.Print($"ARC-MAGIC-015 native-smoke cast NO-TARGET map={map.RuntimeMap} (no NPC the hero can stand near and see)");
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
+        }
         var npc = target.Build.Combat!.Target;
         var npcStart = session.QueryLife(npc).View!.Status.HitPoints;
         var scaled = false;
@@ -358,16 +370,8 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             if (HeroInCombatMode) ToggleCombatMode();
-            // The hero stands three cells from the NPC for both casts (placed once: the smoke's clock then runs on).
-            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            CellCoord? start = null;
-            foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2) })
-            {
-                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
-                if (!map.Chart.Contains(near)) continue;
-                try { start = AreaSmokeStandable(map, near, 1); break; } catch (InvalidOperationException) { }
-            }
-            AreaSmokePlace(map, start ?? AreaSmokeStandable(map, targetCell, 1));
+            // The hero stands where the search saw the NPC from (three cells off) for both casts (placed once: the smoke's clock then runs on).
+            AreaSmokePlace(map, castStart!.Value);
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             PublishWorldSelection();
             if (SpellMissileArt(spell!.Data.Number) is not null)
