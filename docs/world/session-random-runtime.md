@@ -59,7 +59,7 @@ The session keeps a **project generator**, not the original LCG (decision of thi
 - **The viewer seeds from the clock** (ARC-DEV-080, GI6 follow-up): the original seeds its one process generator once at
   start-up with the C runtime's clock (the random module's init function 0x4CEEB0 calls the clock seed function 0x4CEEE0,
   which seeds with `time(NULL)`: whole seconds since 1970 in 32 bits; read in the retail 1.0.7.4 executable, SHA-256
-  `9bd80511…3d52`) and never reseeds it at a new game or a load; the only other seed points of the single-player game
+  `9bd80511…3d52`) and never reseeds it from the clock at a new game or a load (the spawn-once inventory's fixed, name-derived seed may still replace it when that inventory is generated); the only other seed points of the single-player game
   are the spawn-once inventory and the dialog (above), and a multiplayer message handler (0x49F7F2, not modelled). The
   viewer's host code (`AreaRandomSeed`) gives every session the player starts (the scene's first session and the main
   menu's placeholder, a new game, the opening shop's session) the seed of the clock's whole Unix seconds, wrapped to 32
