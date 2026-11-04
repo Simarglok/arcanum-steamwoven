@@ -97,6 +97,79 @@ public partial class TerrainViewerApp
         SaveLauncherRules();
         Require(Stored() is { Rules: RuleMode.Steamwoven, GameRoot: not null }, "the Rules line stored Steamwoven and kept the folder");
 
+        // ARC-DEV-074: install from the GOG installer over a stand-in for innoextract (the real one runs in the opt-in Session test).
+        await Start(true);
+        var installer = System.IO.Path.Combine(directory, "setup_synthetic.exe");
+        System.IO.File.WriteAllBytes(installer, [1, 2, 3]);
+        var unpacked = System.IO.Path.Combine(directory, "unpacked");
+        _launcherUnpackerForSelfTest = () => null;
+        _launcherPanel!.InstallRequestForSelfTest();
+        Require(Lines()[5].Contains("innoextract", StringComparison.Ordinal) && Lines()[7] == "Installer: idle, install on",
+            "without the tool the screen says how to get it: " + Lines()[5]);
+        byte[] exe = [1, 2, 3, 4, 5];
+        var blockExtract = false;
+        GogToolRunner stand = async (tool, arguments, onLine, cancel) =>
+        {
+            List<string> lines = [];
+            void Emit(string line) { lines.Add(line); onLine(line); }
+            (string Name, byte[] Bytes)[] files = [("tig.dat", [1, 2, 3]), ("arcanum1.dat", [1]), ("arcanum2.dat", [1]), ("modules/Arcanum.dat", [1]), ("Arcanum.exe", exe)];
+            switch (arguments[0])
+            {
+                case "--gog-game-id": Emit("GOG.com game ID is " + GameFolderLocator.GogProductId); break;
+                case "--list": foreach (var (name, bytes) in files) Emit($"{bytes.Length} {name}"); break;
+                case "--test": foreach (var (name, _) in files) Emit($" - \"{name}\""); break;
+                default:
+                    if (blockExtract) { try { await Task.Delay(System.Threading.Timeout.Infinite, cancel); } catch (OperationCanceledException) { } return new(-1, lines); }
+                    var target = arguments[arguments.ToList().IndexOf("--output-dir") + 1];
+                    foreach (var (name, bytes) in files)
+                    {
+                        var path = System.IO.Path.Combine(target, name);
+                        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                        System.IO.File.WriteAllBytes(path, bytes);
+                        Emit($" - \"{name}\"");
+                    }
+                    break;
+            }
+            return new(0, lines);
+        };
+        var options = new GogInstallOptions { ExpectedExeSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(exe)).ToLowerInvariant(), FreeSpace = _ => long.MaxValue };
+        _launcherUnpackerForSelfTest = () => new GogInstallerUnpacker("/stub/innoextract", stand, options);
+        async Task Idle()
+        {
+            for (var frames = 0; _launcher!.Busy; frames++)
+            {
+                Require(frames < 1200, "the unpack did not end: " + string.Join(" | ", Lines()));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+        }
+        var folderBefore = _launcher!.Folder?.Path;
+        _launcherPanel.InstallForSelfTest(installer, unpacked);
+        Require(_launcher is { Busy: true, CanPlay: false } && Lines()[7] == "Installer: unpacking, install off, cancel shown" && !_launcherPanel.PlayEnabledForSelfTest,
+            "while unpacking Play and the install button are off: " + string.Join(" | ", Lines()));
+        _launcherPanel.ChooseForSelfTest(game);
+        _launcherPanel.PlayForSelfTest();
+        Require(started is null && _launcher!.Folder?.Path == folderBefore, "no folder is chosen and Play does nothing while unpacking");
+        await Idle();
+        Require(_launcher is { Busy: false, CanPlay: true } && _launcher.Folder?.Path == unpacked
+                && Lines()[5].StartsWith("Unpacked the GOG installer into", StringComparison.Ordinal) && Lines()[7] == "Installer: idle, install on",
+            "the unpacked folder is chosen: " + string.Join(" | ", Lines()));
+        _launcherPanel.PlayForSelfTest();
+        Require(started?.GameRoot is { } unpackedRoot && System.IO.Path.GetFullPath(unpackedRoot) == unpacked && Stored().GameRoot == started.GameRoot,
+            "Play opens and stores the unpacked folder: " + started?.GameRoot);
+        // A folder with files in it is refused in words and nothing changes; a cancel stops the tool.
+        await Start(true);
+        _launcherPanel.InstallForSelfTest(installer, unpacked);
+        await Idle();
+        Require(Lines()[5].StartsWith("Choose a new or empty folder", StringComparison.Ordinal), "a used folder is refused: " + Lines()[5]);
+        blockExtract = true;
+        var cancelled = System.IO.Path.Combine(directory, "cancelled");
+        _launcherPanel.InstallForSelfTest(installer, cancelled);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        _launcherPanel.CancelInstallForSelfTest();
+        await Idle();
+        Require(Lines()[5].StartsWith("Unpacking was cancelled.", StringComparison.Ordinal) && _launcher!.Folder?.Path != cancelled, "a cancel is named: " + Lines()[5]);
+        _launcherUnpackerForSelfTest = null;
+
         // Reset replaces even a newer build's file with the defaults.
         System.IO.File.WriteAllText(settingsPath, """{"schema":2,"gameRoot":"/x"}""");
         await Start(true);
@@ -110,7 +183,8 @@ public partial class TerrainViewerApp
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
         _launcher = null; _launcherPanel.CloseView();
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
-               + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, Reset over a newer build's file";
+               + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
+               + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), Reset over a newer build's file";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the

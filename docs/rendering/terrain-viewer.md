@@ -109,6 +109,24 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   after alpha); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
+- **Install from GOG installer…** (ARC-DEV-074, [research](../research/gog-installer-unpack.md) option A) is for a player
+  without Windows who has the GOG offline installer (`setup_arcanum_….exe`, Inno Setup 5.6.2, one file). It first looks for
+  the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
+  `/usr/bin`; `innoextract.exe` on `PATH` on Windows); without it the screen says how to get it (`brew install
+  innoextract`) and nothing else happens. Then the system's file dialog picks the installer and the folder dialog a new or
+  empty folder (a folder with anything in it is refused, so the installer's own folder never is a target). `GogInstallerUnpacker`
+  (Godot-free, `src/Arcanum.Session/Launcher`) runs the tool as a child process, arguments as a list and never a shell, off the main
+  thread: the installer must name GOG game id 1207658829 (`--gog-game-id`); the listing (`--list --list-sizes --gog
+  --exclude-temp`) gives the files and the bytes, and the free space (listed size plus 64 MB) is checked on the target's volume;
+  `--test` verifies the installer's checksums before anything is written; then the files are written (`--extract --gog
+  --exclude-temp --output-dir`); then `GameFolderLocator.Check` must find a ready game folder whose `Arcanum.exe` in the root (not
+  `app/`) has the verified 1.0.7.4 fingerprint. The screen shows the stage with files and megabytes done (the folder, Play and Reset
+  are off while it runs; "Cancel unpacking" and Quit stop the tool) and the tool's lines go to the run log (`ARC-DEV-074 installer
+  unpack …`). On success the folder is chosen as if the player had picked it (Play stores it, with the GOG marker in its identity);
+  every failure (not Arcanum's installer, missing `.bin` parts, a failed checksum, not enough space, a tool error with its first
+  error line, the wrong executable, a cancel) is named in words and leaves the chosen folder as it was; files a failed or cancelled
+  run wrote stay in the target (the player empties it or picks another). It builds no prototypes: `data/proto` comes at the first
+  start (ARC-DEV-068, ARC-DEV-069).
 - **Play** is offered only for a ready folder. It stores the folder with its source and identity (the start leaves a
   detected folder and a changed installation unwritten, so Play is where they are confirmed), the rule mode, "show
   at start" and the debug mode (`debugMode`, which turns the run's debug mode on, as `--debug-mode` does), then starts map mode on the main map with the main menu from that folder, as a start without the screen
@@ -126,7 +144,10 @@ Self-test `ARC-UI-014 self-test PASS synthetic launcher` (synthetic folders, a t
 the start): the first run without a folder and Play off, a non-game folder named in words, Play storing the chosen
 folder with its identity, Original and "show at start", that setting reopening the screen, a stored folder going
 straight to the start, a request opening it, the Rules line writing the file, Play never overwriting a newer build's
-file and Reset replacing it. Native smoke on the original data: `LAUNCHER_SETTINGS_TEST_PATH=FILE
+file and Reset replacing it, and (ARC-DEV-074) the install button over a stand-in tool: no tool named in words, the
+folder and Play off while it runs, the unpacked folder chosen and started by Play, a used folder refused, a cancel named.
+The real tool runs only in the opt-in `The_real_installer_unpacks_into_the_verified_game_folder` test
+([opt-in data](../workflow/toolchain.md#opt-in-original-data)). Native smoke on the original data: `LAUNCHER_SETTINGS_TEST_PATH=FILE
 ARC_AREA_MAP_SMOKE_ONLY=menu` and `godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke` (a first run
 with `FILE` absent, or with `--launcher`) prints `ARC-UI-014 native-smoke launcher PASS` (the detected or stored folder
 ready, an empty folder refused, Original chosen, Play storing it and starting under Original), then

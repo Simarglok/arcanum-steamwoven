@@ -22,14 +22,27 @@ public partial class LauncherPanel : CanvasLayer
     private CheckBox _showAtStart = null!;
     private CheckBox _debugMode = null!;
     private Button _play = null!;
+    private Button _choose = null!;
+    private Button _install = null!;
+    private Button _cancelInstall = null!;
+    private Button _reset = null!;
     private Label _notice = null!;
     private FileDialog _dialog = null!;
+    private FileDialog _installerDialog = null!;
+    private FileDialog _targetDialog = null!;
+    private string? _installerPath;
+    private bool _busy;
     private bool _rendering;
     public event Action<int>? CandidateRequested;
     public event Action<string>? FolderChosen;
     public event Action<RuleMode>? RulesRequested;
     public event Action<bool>? ShowAtStartRequested;
     public event Action<bool>? DebugModeRequested;
+    /// <summary>ARC-DEV-074: "Install from GOG installer…" pressed; the host checks the tool, then calls <see cref="PickInstaller"/>.</summary>
+    public event Action? InstallRequested;
+    /// <summary>The installer file and the empty folder to unpack into were picked.</summary>
+    public event Action<string, string>? InstallChosen;
+    public event Action? CancelInstallRequested;
     public event Action? PlayRequested;
     public event Action? ResetRequested;
     public event Action? QuitRequested;
@@ -40,12 +53,16 @@ public partial class LauncherPanel : CanvasLayer
         _reason.Text, _file.Text, _folder.Text,
         "Rules: " + string.Join(" ", _rules.GetChildren().OfType<Button>().Select(button => button.ButtonPressed ? $"[{button.Text}]" : button.Text)),
         "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), _notice.Text, "Debug mode: " + (_debugMode.ButtonPressed ? "on" : "off"),
+        "Installer: " + (_busy ? "unpacking" : "idle") + (_install.Disabled ? ", install off" : ", install on") + (_cancelInstall.Visible ? ", cancel shown" : ""),
     ];
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
     internal void ChooseForSelfTest(string path) => FolderChosen?.Invoke(path);
     internal void RulesForSelfTest(RuleMode mode) => RulesRequested?.Invoke(mode);
     internal void ShowAtStartForSelfTest(bool show) => ShowAtStartRequested?.Invoke(show);
     internal void DebugModeForSelfTest(bool on) => DebugModeRequested?.Invoke(on);
+    internal void InstallRequestForSelfTest() => InstallRequested?.Invoke();
+    internal void InstallForSelfTest(string installer, string target) => InstallChosen?.Invoke(installer, target);
+    internal void CancelInstallForSelfTest() => CancelInstallRequested?.Invoke();
     internal void PlayForSelfTest() => PlayRequested?.Invoke();
     internal void ResetForSelfTest() => ResetRequested?.Invoke();
 
@@ -68,7 +85,14 @@ public partial class LauncherPanel : CanvasLayer
         contents.AddChild(new Label { Text = "Arcanum Steamwoven", HorizontalAlignment = HorizontalAlignment.Center, Modulate = dark });
         _reason = Line(dark); _file = Line(new Color(.3f, .3f, .3f)); _folder = Line(new Color(.1f, .1f, .1f));
         _candidates = new VBoxContainer { Name = "Candidates" };
-        var choose = MakeButton("ChooseFolder", "Choose folder…", () => _dialog.PopupCentered(new Vector2I(720, 480)));
+        _choose = MakeButton("ChooseFolder", "Choose folder…", () => _dialog.PopupCentered(new Vector2I(720, 480)));
+        // ARC-DEV-074: the GOG offline installer, unpacked with innoextract into a folder the player picks; Cancel shows while it runs.
+        _install = MakeButton("InstallFromInstaller", "Install from GOG installer…", () => InstallRequested?.Invoke());
+        _install.CustomMinimumSize = new Vector2(220, 30);
+        _cancelInstall = MakeButton("CancelInstall", "Cancel unpacking", () => CancelInstallRequested?.Invoke());
+        _cancelInstall.Visible = false;
+        var chooseRow = new HBoxContainer { Name = "ChooseRow" };
+        chooseRow.AddChild(_choose); chooseRow.AddChild(_install); chooseRow.AddChild(_cancelInstall);
         _rules = new HBoxContainer { Name = "Rules" };
         _rules.AddChild(new Label { Text = "Rules:", Modulate = dark, CustomMinimumSize = new Vector2(80, 30) });
         foreach (var mode in Enum.GetValues<RuleMode>())
@@ -89,14 +113,16 @@ public partial class LauncherPanel : CanvasLayer
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
         actions.AddChild(_play);
-        actions.AddChild(MakeButton("Reset", "Reset settings", () => ResetRequested?.Invoke()));
+        _reset = MakeButton("Reset", "Reset settings", () => ResetRequested?.Invoke());
+        actions.AddChild(_reset);
         actions.AddChild(MakeButton("Quit", "Quit", () => QuitRequested?.Invoke()));
         _notice = Line(new Color(.45f, .1f, .05f));
         var hint = Line(new Color(.3f, .3f, .3f));
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. "
                     + "The rules can also be switched in play in Options. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
-                    + "The game folder is only read, never written.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, choose, _rules, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
+                    + "The game folder is only read, never written. "
+                    + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -104,8 +130,34 @@ public partial class LauncherPanel : CanvasLayer
         };
         _dialog.DirSelected += path => FolderChosen?.Invoke(path);
         AddChild(_dialog);
+        _installerDialog = new FileDialog
+        {
+            Name = "ChooseInstaller", FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
+            Title = "Choose the GOG offline installer of Arcanum (setup_arcanum_….exe)",
+        };
+        _installerDialog.AddFilter("*.exe", "GOG offline installer");
+        _targetDialog = new FileDialog
+        {
+            Name = "ChooseUnpackFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
+            Title = "Choose a new or empty folder to unpack the game into",
+        };
+        _installerDialog.FileSelected += path =>
+        {
+            _installerPath = path;
+            // Deferred: the next native dialog opens after this one has closed.
+            Callable.From(() => _targetDialog.PopupCentered(new Vector2I(720, 480))).CallDeferred();
+        };
+        _targetDialog.DirSelected += path => { if (_installerPath is { } installer) InstallChosen?.Invoke(installer, path); _installerPath = null; };
+        AddChild(_installerDialog); AddChild(_targetDialog);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
+    }
+
+    /// <summary>Opens the installer file dialog, then the folder dialog; <see cref="InstallChosen"/> follows both choices.</summary>
+    public void PickInstaller()
+    {
+        _installerPath = null;
+        _installerDialog.PopupCentered(new Vector2I(720, 480));
     }
 
     private static Button MakeButton(string name, string text, Action action)
@@ -138,7 +190,11 @@ public partial class LauncherPanel : CanvasLayer
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
             _debugMode.ButtonPressed = screen.Settings.DebugMode;
+            _busy = screen.Busy;
             _play.Disabled = !screen.CanPlay;
+            _choose.Disabled = _install.Disabled = _reset.Disabled = screen.Busy;
+            _cancelInstall.Visible = screen.Busy;
+            foreach (var button in _candidates.GetChildren().OfType<Button>()) button.Disabled = screen.Busy;
             _notice.Text = screen.Notice ?? "";
         }
         finally { _rendering = false; }

@@ -29,6 +29,10 @@ public partial class TerrainViewerApp
     private LauncherPanel? _launcherPanel;
     private LauncherScreen? _launcher;
     private Task? _gameFolderStart;
+    /// <summary>ARC-DEV-074: stops the running unpack (Cancel, Quit).</summary>
+    private CancellationTokenSource? _installCancel;
+    /// <summary>The self-test's stand-in for the unpacker (null result: no tool) instead of this machine's innoextract.</summary>
+    private Func<GogInstallerUnpacker?>? _launcherUnpackerForSelfTest;
     /// <summary>The self-test's stand-in for the start Play begins (a synthetic folder cannot load).</summary>
     private Action<TerrainViewerArguments>? _launcherStartForSelfTest;
     /// <summary>The self-test's platform (synthetic candidate folders) instead of this machine's.</summary>
@@ -122,9 +126,12 @@ public partial class TerrainViewerApp
             _launcherPanel.RulesRequested += mode => LauncherChange(launcher => launcher.SelectRules(mode));
             _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
+            _launcherPanel.InstallRequested += LauncherInstallRequested;
+            _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
+            _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074 installer unpack cancel requested"); _installCancel?.Cancel(); };
             _launcherPanel.PlayRequested += LauncherPlay;
             _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
-            _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); GetTree().Quit(); };
+            _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); _installCancel?.Cancel(); GetTree().Quit(); };
         }
         _launcherPanel.Render(screen);
         GD.Print($"ARC-UI-014 launcher open reason={screen.Reason} file={screen.FileStatus} folder={screen.Folder?.Status.ToString() ?? "none"} canPlay={screen.CanPlay}");
@@ -139,12 +146,70 @@ public partial class TerrainViewerApp
 
     private void LauncherReset(LauncherScreen launcher)
     {
+        if (launcher.Busy) return;
         var defaults = launcher.Reset();
         var path = LauncherSettingsPath();
         var status = path is null ? (LauncherSettingsSaveStatus?)null : LauncherSettingsFile.Reset(path);
         launcher.ResetDone(status == LauncherSettingsSaveStatus.Saved);
         if (status == LauncherSettingsSaveStatus.Saved || path is null) _launcherSettings = defaults;
         GD.Print($"ARC-UI-014 launcher reset save={status?.ToString() ?? "skipped (automated run)"}");
+    }
+
+    private GogInstallerUnpacker? FindUnpacker()
+        => _launcherUnpackerForSelfTest is { } stand ? stand() : GogInstallerUnpacker.FindTool() is { } tool ? new GogInstallerUnpacker(tool) : null;
+
+    /// <summary>ARC-DEV-074: "Install from GOG installer…": without innoextract the screen says how to get it; otherwise the file and
+    /// folder dialogs open.</summary>
+    private void LauncherInstallRequested()
+    {
+        if (_launcher is not { Busy: false } launcher) return;
+        if (FindUnpacker() is null)
+        {
+            GD.Print("ARC-DEV-074 installer unpack tool=missing");
+            launcher.InstallToolMissing();
+            _launcherPanel?.Render(launcher);
+            return;
+        }
+        _launcherPanel?.PickInstaller();
+    }
+
+    /// <summary>ARC-DEV-074: unpacks <paramref name="installer"/> into <paramref name="target"/> off the main thread (the tool is a child
+    /// process), shows its progress, and on success chooses the verified folder like a folder the player picked.</summary>
+    private async Task LauncherInstallAsync(string installer, string target)
+    {
+        if (_launcher is not { } launcher || launcher.Busy) return;
+        var unpacker = FindUnpacker();
+        if (unpacker is null) { launcher.InstallToolMissing(); _launcherPanel?.Render(launcher); return; }
+        launcher.BeginInstall(installer, target);
+        _launcherPanel?.Render(launcher);
+        GD.Print($"ARC-DEV-074 installer unpack start installer={installer} target={target}");
+        using var cancel = _installCancel = new CancellationTokenSource();
+        GogInstallResult result;
+        try
+        {
+            var stage = (GogInstallStage?)null;
+            result = await Task.Run(() => unpacker.UnpackAsync(installer, target, progress =>
+            {
+                // Progress comes from the tool's reader threads: the screen is updated on the main thread, the log line only at a stage change.
+                if (stage != progress.Stage) { stage = progress.Stage; GD.Print($"ARC-DEV-074 installer unpack stage={progress.Stage} files={progress.FilesTotal} bytes={progress.BytesTotal}"); }
+                Callable.From(() =>
+                {
+                    if (_launcher != launcher || !launcher.Busy) return;
+                    launcher.InstallProgress(progress);
+                    _launcherPanel?.Render(launcher);
+                }).CallDeferred();
+            }, cancel.Token));
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            result = new(GogInstallStatus.ExtractFailed, error.GetType().Name + ": " + error.Message);
+        }
+        finally { _installCancel = null; }
+        GD.Print($"ARC-DEV-074 installer unpack result status={result.Status} detail={result.Detail ?? "none"} folder={result.Folder?.Path ?? "none"}");
+        if (_launcher != launcher) return; // the screen closed (Play cannot run while busy, so this is a quit)
+        launcher.InstallDone(result);
+        if (result.Folder is { } folder) PrintGameFolder("unpacked", folder);
+        _launcherPanel?.Render(launcher);
     }
 
     private void LauncherPlay()
