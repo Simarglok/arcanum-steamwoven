@@ -154,8 +154,8 @@ public sealed class DataMoveTests
     [TestMethod]
     public void FlagRegisterMoves()
     {
-        // pushfd ; pop eax
-        var push = Cpu.Run("9C 58", m => Cpu.SetFlags(m, "C1 Z1 O1 D1"));
+        // std ; pushfd ; pop eax (the call itself clears DF)
+        var push = Cpu.Run("FD 9C 58", m => Cpu.SetFlags(m, "C1 Z1 O1"));
         Assert.AreEqual(Cpu.Hex(0x2u | 0x1 | 0x40 | 0x200 | 0x400 | 0x800), Cpu.Hex(push.Eax));
         // push eax ; popfd
         var pop = Cpu.Run("50 9D", m => m.Eax = 0x0000_0895);
@@ -169,7 +169,7 @@ public sealed class DataMoveTests
         Cpu.Flags(Cpu.Run("F9"), "C1");
         Cpu.Flags(Cpu.Run("F8", m => m.Carry = true), "C0");
         Cpu.Flags(Cpu.Run("FD"), "D1");
-        Cpu.Flags(Cpu.Run("FC", m => m.Direction = true), "D0");
+        Cpu.Flags(Cpu.Run("FD FC"), "D0");
     }
 
     [TestMethod]

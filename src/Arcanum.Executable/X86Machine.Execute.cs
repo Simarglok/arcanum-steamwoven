@@ -289,7 +289,8 @@ public sealed partial class X86Machine
                     ModRM();
                     kind = ShiftKinds[reg];
                     var count = (op <= 0xC1 ? Fetch8() : op <= 0xD1 ? 1u : r[EcxIndex]) & 0x1F;
-                    if (count != 0) WriteRM(size, Shift(reg, ReadRM(size), count, size));
+                    var value = ReadRM(size); // read even for a count of 0, as the CPU does (it may fault)
+                    if (count != 0) WriteRM(size, Shift(reg, value, count, size));
                 }
                 break;
             case 0xC2:
@@ -523,7 +524,8 @@ public sealed partial class X86Machine
                     kind = left ? "shld" : "shrd";
                     ModRM();
                     var count = ((op & 1) == 0 ? Fetch8() : r[EcxIndex]) & 0x1F;
-                    if (count != 0) WriteRM(4, DoubleShift(left, ReadRM(4), GetReg(reg, 4), (int)count));
+                    var value = ReadRM(4);
+                    if (count != 0) WriteRM(4, DoubleShift(left, value, GetReg(reg, 4), (int)count));
                 }
                 break;
             case 0xAF:

@@ -14,9 +14,10 @@ public sealed class PeImageTests
 
     /// <summary>
     /// A three-section image at 0x400000: .text (RX, two calls through import slots), .idata (RW, one KERNEL32.dll
-    /// descriptor with a named and an ordinal import) and .bss (RW, no raw data).
+    /// descriptor with a named and an ordinal import; with <paramref name="duplicate"/> a second descriptor imports the
+    /// same two again through its own slots) and .bss (RW, no raw data).
     /// </summary>
-    internal static byte[] SyntheticImage()
+    internal static byte[] SyntheticImage(bool duplicate = false)
     {
         var file = new byte[0x600];
         var span = file.AsSpan();
@@ -40,20 +41,24 @@ public sealed class PeImageTests
         Section(span, 0, ".text", 0x10, 0x1000, 0x200, 0x200, 0x6000_0020);
         Section(span, 1, ".idata", 0x100, 0x2000, 0x200, 0x400, 0xC000_0040);
         Section(span, 2, ".bss", 0x800, 0x3000, 0, 0, 0xC000_0080);
-        // .text: call [0x402028] ; ret ; call [0x40202C] ; ret
-        Cpu.Bytes("FF 15 28 20 40 00 C3  FF 15 2C 20 40 00 C3").CopyTo(span[0x200..]);
-        // .idata at file 0x400 = RVA 0x2000
+        // .text: call [0x402040] ; ret ; call [0x402044] ; ret ; call [0x402050] ; ret
+        Cpu.Bytes("FF 15 40 20 40 00 C3  FF 15 44 20 40 00 C3  FF 15 50 20 40 00 C3").CopyTo(span[0x200..]);
+        // .idata at file 0x400 = RVA 0x2000: descriptors at 0x00 and 0x14 (terminator after them), slots at 0x40 and
+        // 0x50, the lookup table at 0x60, the hint and name at 0x70, the library name at 0x90.
         var idata = span[0x400..];
-        BinaryPrimitives.WriteUInt32LittleEndian(idata[0x00..], 0x2034); // lookup table
-        BinaryPrimitives.WriteUInt32LittleEndian(idata[0x0C..], 0x2060); // library name
-        BinaryPrimitives.WriteUInt32LittleEndian(idata[0x10..], 0x2028); // import slots
-        foreach (var at in new[] { 0x28, 0x34 })
+        foreach (var (descriptor, slots) in duplicate ? new[] { (0x00, 0x2040), (0x14, 0x2050) } : [(0x00, 0x2040)])
         {
-            BinaryPrimitives.WriteUInt32LittleEndian(idata[at..], 0x2040);
+            BinaryPrimitives.WriteUInt32LittleEndian(idata[descriptor..], 0x2060);
+            BinaryPrimitives.WriteUInt32LittleEndian(idata[(descriptor + 0x0C)..], 0x2090);
+            BinaryPrimitives.WriteUInt32LittleEndian(idata[(descriptor + 0x10)..], (uint)slots);
+        }
+        foreach (var at in new[] { 0x40, 0x50, 0x60 })
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(idata[at..], 0x2070);
             BinaryPrimitives.WriteUInt32LittleEndian(idata[(at + 4)..], 0x8000_0007);
         }
-        Encoding.ASCII.GetBytes("GetTickCount\0").CopyTo(idata[0x42..]);
-        Encoding.ASCII.GetBytes("KERNEL32.dll\0").CopyTo(idata[0x60..]);
+        Encoding.ASCII.GetBytes("GetTickCount\0").CopyTo(idata[0x72..]);
+        Encoding.ASCII.GetBytes("KERNEL32.dll\0").CopyTo(idata[0x90..]);
         return file;
     }
 
@@ -81,7 +86,7 @@ public sealed class PeImageTests
         Assert.AreEqual(".bss", image.SectionAt(0x0040_37FF)!.Name);
         Assert.IsNull(image.SectionAt(0x0040_3800));
         CollectionAssert.AreEqual(new[] { "KERNEL32.dll!GetTickCount", "KERNEL32.dll!#7" }, image.Imports.Select(i => i.FullName).ToArray());
-        CollectionAssert.AreEqual(new[] { 0x0040_2028u, 0x0040_202Cu }, image.Imports.Select(i => i.SlotAddress).ToArray());
+        CollectionAssert.AreEqual(new[] { 0x0040_2040u, 0x0040_2044u }, image.Imports.Select(i => i.SlotAddress).ToArray());
     }
 
     [TestMethod]
@@ -111,6 +116,32 @@ public sealed class PeImageTests
     }
 
     [TestMethod]
+    public void HooksEverySlotOfAnImportNamedTwice()
+    {
+        var image = PeImage.Read(SyntheticImage(duplicate: true)).Image!;
+        CollectionAssert.AreEqual(new[] { 0x0040_2040u, 0x0040_2044u, 0x0040_2050u, 0x0040_2054u }, image.Imports.Select(i => i.SlotAddress).ToArray());
+        var machine = new X86Machine();
+        image.LoadInto(machine.Memory);
+        machine.BindImports(image);
+        Assert.IsTrue(machine.HookImport("KERNEL32.dll!GetTickCount", m => { m.Eax = 99; return HookResult.Return(); }));
+        Assert.AreEqual(99u, machine.Call(image.EntryPoint, [], 100).Eax);
+        Assert.AreEqual(99u, machine.Call(image.EntryPoint + 14, [], 100).Eax, "the second descriptor's slot");
+    }
+
+    [TestMethod]
+    public void BindingRefusesAThunkRangeOverTheSentinelOrPastMemory()
+    {
+        var image = PeImage.Read(SyntheticImage()).Image!;
+        var overSentinel = new X86Machine(new MachineOptions { ImportThunkBase = 0xFFFF_FFE0 });
+        image.LoadInto(overSentinel.Memory);
+        Assert.ThrowsExactly<ArgumentException>(() => overSentinel.BindImports(image));
+        var hooked = new X86Machine();
+        image.LoadInto(hooked.Memory);
+        hooked.Hook(hooked.Options.ImportThunkBase, "taken", _ => HookResult.Return());
+        Assert.ThrowsExactly<ArgumentException>(() => hooked.BindImports(image));
+    }
+
+    [TestMethod]
     [DataRow("not MZ", PeReadFailureKind.NotMz)]
     [DataRow("short", PeReadFailureKind.Truncated)]
     [DataRow("PE offset", PeReadFailureKind.Truncated)]
@@ -123,6 +154,8 @@ public sealed class PeImageTests
     [DataRow("raw data past the file", PeReadFailureKind.Truncated)]
     [DataRow("import table in .bss", PeReadFailureKind.BadImportTable)]
     [DataRow("unterminated import name", PeReadFailureKind.BadImportTable)]
+    [DataRow("import slots outside every section", PeReadFailureKind.BadImportTable)]
+    [DataRow("import slots in the headers", PeReadFailureKind.BadImportTable)]
     [DataRow("image too large", PeReadFailureKind.TooLarge)]
     public void RefusesMalformedImages(string damage, PeReadFailureKind kind)
     {
@@ -142,8 +175,10 @@ public sealed class PeImageTests
             case "raw data past the file": BinaryPrimitives.WriteUInt32LittleEndian(span[(SectionTable + 40 + 20)..], 0x10000); break;
             case "import table in .bss": BinaryPrimitives.WriteUInt32LittleEndian(span[(Optional + 104)..], 0x3000); break;
             case "unterminated import name":
-                for (var i = 0x400 + 0x60; i < file.Length; i++) file[i] = (byte)'A';
+                for (var i = 0x400 + 0x90; i < file.Length; i++) file[i] = (byte)'A';
                 break;
+            case "import slots outside every section": BinaryPrimitives.WriteUInt32LittleEndian(span[(0x400 + 0x10)..], 0x00F0_0000); break;
+            case "import slots in the headers": BinaryPrimitives.WriteUInt32LittleEndian(span[(0x400 + 0x10)..], 0); break;
             case "image too large": BinaryPrimitives.WriteUInt32LittleEndian(span[(Optional + 56)..], 0x2000_0000); break;
         }
         var result = PeImage.Read(file);

@@ -12,7 +12,7 @@ public sealed record PeSection(string Name, uint VirtualAddress, uint VirtualSiz
 
     public MemoryAccess Access =>
         ((Characteristics & Readable) != 0 ? MemoryAccess.Read : MemoryAccess.None)
-        | ((Characteristics & Writable) != 0 ? MemoryAccess.Write : MemoryAccess.None)
+        | ((Characteristics & Writable) != 0 ? MemoryAccess.ReadWrite : MemoryAccess.None)
         | ((Characteristics & Executable) != 0 ? MemoryAccess.Execute | MemoryAccess.Read : MemoryAccess.None);
 
     /// <summary>The mapped length: the virtual size, or the raw size when the linker left the virtual size 0.</summary>
@@ -207,6 +207,9 @@ public sealed class PeImage
                 else if (ReadName(file, sections, entry + 2, limits.MaxNameBytes) is { } text) name = text;
                 else return $"import name of {library} at RVA 0x{entry:X}";
                 if (imports.Count >= limits.MaxImports) return $"more than {limits.MaxImports} imports";
+                var slot = (ulong)slots + 4 * i;
+                if (!sections.Any(s => slot >= s.VirtualAddress && slot + 4 <= (ulong)s.VirtualAddress + s.MappedSize))
+                    return $"import slot of {library}!{name} at RVA 0x{slot:X} is outside every section";
                 imports.Add(new PeImport(library, name, imageBase + slots + 4 * i));
             }
         }

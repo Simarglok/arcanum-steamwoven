@@ -16,7 +16,7 @@ test: the tests use hand-assembled synthetic code and a synthetic PE image built
 - `PeImage.Read(byte[], PeReadLimits?)` returns a `PeReadResult`: the image, or a typed `PeReadFailure`
   (`TooLarge`, `Truncated`, `NotMz`, `NotPe`, `NotI386`, `NotPe32`, `TooManySections`, `BadSection`, `BadImportTable`) with
   a detail. Only i386 PE32 images; sections must be page aligned, ascending and inside the image and their raw data
-  inside the file. Limits: 64 MiB file, 256 MiB image, 96 sections, 8,192 imports, 256-byte names.
+  inside the file, every import slot inside a section. Limits: 64 MiB file, 256 MiB image, 96 sections, 8,192 imports, 256-byte names.
 - `PeImage` holds the image base, entry point, sections (name, range, access from the characteristics) and the imports
   (`library!name`, or `library!#ordinal`, with the absolute address of the import slot). `LoadInto(MachineMemory)` maps
   the headers read-only and each section with its own access at the fixed image base (no relocations) and copies the
@@ -26,13 +26,16 @@ test: the tests use hand-assembled synthetic code and a synthetic PE image built
   straddling write checks both pages before writing. `Load` and `Peek` are host access that ignores the rights (the
   loader writes read-only sections and import slots). Every refused access raises `MachineFaultException` with the
   data address.
-- `X86Machine(MachineOptions?)`: the eight registers, EIP, the flags CF, PF, AF, ZF, SF, OF, DF (and IF, kept for
-  `pushfd`/`popfd`), the memory and the census. The options give the stack (default 2 MiB at 0x100000, below the
+- `X86Machine(MachineOptions?)`: the eight registers, EIP, the flags CF, PF, AF, ZF, SF, OF, DF, the memory and the
+  census. As in user mode, `pushfd` shows IF always set and `popfd` cannot clear it; AC and ID are kept as written,
+  so the CPUID-detection idiom sees a working ID bit and then stops at `cpuid` instead of silently taking the
+  no-CPUID branch. The options give the stack (default 2 MiB at 0x100000, below the
   image), the FS base (default 0x7FFDF000: a zeroed thread block with fs:[0] = 0xFFFFFFFF, the end of the exception
   chain, and fs:[0x18] = its own address; 0 maps none and refuses FS overrides), the return sentinel (0xFFFFFFF0,
-  unmapped), the import thunk range (0xFF000000) and the step limit of one call (4 × 10^9).
-- `Call(function, arguments, maxSteps?)` pushes the 32-bit arguments right to left and the sentinel, runs until the
-  sentinel is reached and restores ESP; the `MachineRunResult` gives EAX, EDX, the steps and the argument bytes the
+  unmapped), the import thunk range (0xFF000000) and the step limit of one call (4 × 10^9 steps: one per instruction and per hook reached, one per repeated string
+  iteration).
+- `Call(function, arguments, maxSteps?)` pushes the 32-bit arguments right to left and the sentinel, clears DF (the
+  Win32 convention at a function's entry), runs until the sentinel is reached by a return and restores ESP; the `MachineRunResult` gives EAX, EDX, the steps and the argument bytes the
   callee popped (0 for cdecl, n for `ret n`), or the `MachineFault`. Other registers and memory keep what the call
   left, so consecutive calls share state, as the builds of E3 do after one start-up. A fault leaves the machine
   usable for the next call (ESP is restored), but its memory as the faulting call left it.
@@ -42,8 +45,10 @@ test: the tests use hand-assembled synthetic code and a synthetic PE image built
   and the memory, sets EAX/EDX and returns `HookResult.Return(argumentBytes)` (a cdecl or stdcall return),
   `HookResult.Continue()` (observe, then run the code at the address) or `HookResult.Stop(reason)`.
   `BindImports(image)` points every import slot at its own address in the thunk range; a call through it reaches the
-  hook that `HookImport("library!name", hook)` set (library case ignored), or stops with `UnhookedImport` and the
-  import's name. A hook may not call the machine again (one call at a time).
+  hook that `HookImport("library!name", hook)` set for every slot of that name (library case ignored), or stops with
+  `UnhookedImport` and the import's name. A hook may not call the machine again (one call at a time:
+  `InvalidOperationException`); any exception a hook throws is a host bug and propagates out of `Call`, it is not a
+  fault.
 - Census mode: with `Census = new MachineCensus()` the machine records every instruction kind (its mnemonic;
   `rep`/`repe`/`repne` before a repeated string instruction), the count of each, the distinct instruction addresses,
   every called function (the entry of `Call` and every call target) and every hook reached by name; `Report()` lists
@@ -56,7 +61,8 @@ Every stop is a typed `MachineFault` (kind, address of the instruction or hook, 
 from memory that is not executable, for example falling off the end of a section), `ControlOutsideCode` (a call, jump
 or return to an address that is neither executable code, a hook nor the sentinel), `DivideError` (zero divisor or a
 quotient out of range, the CPU's #DE), `Breakpoint` (`int3`), `InstructionLimit`, `HookStopped` and
-`UnhookedImport`. So an unknown path is found with its address, never guessed. Exceptions model nothing: there is no
+`UnhookedImport`; reaching the sentinel with ESP below the return address (a jump to it) is `ControlOutsideCode`.
+So an unknown path is found with its address, never guessed. Exceptions model nothing: there is no
 exception dispatch, no interrupt and no floating point.
 
 ## The instruction subset
@@ -65,7 +71,9 @@ The census of E1 found 72 kinds of instructions, none of them floating point; th
 of the integer instructions a 32-bit compiler emits. A sweep of every instruction class of the owner's executable
 (below) found every compiler-generated integer class supported.
 
-- Prefixes: operand size `66` (16-bit forms of every instruction that has one), `rep`/`repe` `F3`, `repne` `F2`,
+- Prefixes: operand size `66` (the 16-bit forms of the arithmetic, logic, shift, rotate, multiply, divide, move,
+  extension, exchange, bit, string and push/pop instructions; refused for `pushaw`, `popaw`, `pushfw`, `popfw`,
+  `enter`, `leave`, `ret`, `call`, `jmp`, `jcc`, `loop`, `jecxz`, `shld`, `shrd` and `bswap`), `rep`/`repe` `F3`, `repne` `F2`,
   `lock` `F0` (no effect: one thread), the segment overrides CS, DS, ES, SS (flat) and FS (the FS base). Refused: GS and the
   address-size prefix `67`.
 - Arithmetic and logic on 8, 16 and 32 bits in every ModRM and immediate form: `add`, `or`, `adc`, `sbb`, `and`,
@@ -87,8 +95,9 @@ of the integer instructions a 32-bit compiler emits. A sweep of every instructio
   two-byte opcode and any undefined group member.
 
 Flags follow the Intel manual (vol. 2). Where the manual leaves a flag undefined the interpreter keeps a fixed choice:
-logic instructions clear AF; shifts keep AF and compute OF by the count-1 rule for every count; an 8- or 16-bit shift by
-its width or more gives CF from the last bit out (0 beyond the width); multiply keeps SF, ZF, AF and PF; divide keeps
+logic instructions clear AF; shifts keep AF and compute OF by the count-1 rule for every count; an 8- or 16-bit `shl`
+or `shr` by its width or more gives 0 with CF the last bit out (0 beyond the width), `sar` the sign in every bit and in
+CF; multiply keeps SF, ZF, AF and PF; divide keeps
 every flag; the bit tests set only CF; `bsf`/`bsr` set only ZF and leave the destination unchanged for a zero
 source. Compiled code does not read undefined flags; the tests check only defined ones.
 
@@ -96,7 +105,10 @@ source. Compiled code does not read undefined flags; the tests check only define
 
 - Synthetic tests (`tests/Arcanum.Executable.Tests`, root solution): every instruction kind and flag rule above with
   hand-assembled bytes and values from the manual, all 16 conditions of `jcc` (both widths), `setcc` and `cmovcc` over all 32
-  combinations of CF, ZF, SF, OF and PF, the faults with their addresses, hooks (cdecl, stdcall, tail jump, observe,
+  combinations of CF, ZF, SF, OF and PF, the forms the random cross-check below does not reach (strings with every
+  prefix and DF, the FS forms of the exception-chain link and of a string source, ESP-relative operands, `pop esp`,
+  16-bit multiply and divide, rotate-through-carry count wrap, memory forms of shifts, bits, `setcc` and `cmovcc`, the
+  user-mode flags register and the CPUID-detection idiom, DF at a call's entry), the faults with their addresses, hooks (cdecl, stdcall, tail jump, observe,
   stop, a hook's own fault), the census, the memory's access rules and the PE reader on a synthetic image (sections,
   imports, loading, binding, every refusal and limit).
 - Opt-in on the player's executable (`TestCategory=OriginalExe`, `ARCANUM_EXE`; inconclusive without it): the PE reads
@@ -119,4 +131,7 @@ source. Compiled code does not read undefined flags; the tests check only define
   MES, clock, GUID, log), the build loop and the comparison with the files the original wrote are E3.
 - No allocator: the host maps any heap and answers the allocation functions with hooks (E3).
 - One call at a time; a hook cannot call back into the interpreted code.
+- The loader maps each section's virtual size rounded to the page, not to a larger section alignment (the retail
+  executable aligns sections to the page), and makes a writable section readable, as Windows does.
+- Hooks fire on control transfers only, not when execution falls through into the hooked address.
 - The census mode costs time (a dictionary update per instruction); production runs leave it off.

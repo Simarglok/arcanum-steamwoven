@@ -77,6 +77,6 @@ public sealed record MachineOptions
     public uint ReturnSentinel { get; init; } = 0xFFFF_FFF0;
     /// <summary>Base of the unmapped range the import slots point into (one 16-byte slot per import).</summary>
     public uint ImportThunkBase { get; init; } = 0xFF00_0000;
-    /// <summary>Default step limit of one call (one step per instruction, plus one per repeated string iteration).</summary>
+    /// <summary>Default step limit of one call (one step per instruction and per hook reached, plus one per repeated string iteration).</summary>
     public long MaxStepsPerCall { get; init; } = 4_000_000_000;
 }

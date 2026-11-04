@@ -86,8 +86,8 @@ public sealed partial class X86Machine
     /// <summary>
     /// rol, ror, rcl, rcr, shl, shr, sal (= shl), sar by a count already masked to 5 bits and not 0. OF is defined only for a
     /// count of 1; for larger counts it is computed by the same rule. AF is undefined after a shift and kept. Rotates set
-    /// only CF and OF. A shift of an 8- or 16-bit operand by its width or more leaves 0 (or the sign), with CF the last bit
-    /// out (0 past the width).
+    /// only CF and OF. An 8- or 16-bit shl or shr by its width or more leaves 0, with CF the last bit out (0 past the
+    /// width); sar leaves the sign in every bit and in CF.
     /// </summary>
     private uint Shift(int operation, uint a, uint count, int size)
     {

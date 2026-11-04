@@ -31,9 +31,11 @@ public sealed partial class X86Machine
 
     private readonly uint[] r = new uint[8];
     private readonly Dictionary<uint, HookEntry> hooks = [];
-    private readonly Dictionary<string, uint> importThunks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<uint>> importThunks = new(StringComparer.OrdinalIgnoreCase);
     private uint eip;
-    private bool cf, pf, af, zf, sf, of, df, interruptFlag = true;
+    private bool cf, pf, af, zf, sf, of, df;
+    // AC (bit 18) and ID (bit 21): kept as written, so the CPUID-detection idiom sees an ID bit that toggles and then stops at cpuid.
+    private uint storedFlags;
     private bool transferred;
     private uint instructionStart;
     private long steps, stepLimit;
@@ -83,11 +85,14 @@ public sealed partial class X86Machine
     public bool Overflow { get => of; set => of = value; }
     public bool Direction { get => df; set => df = value; }
 
-    /// <summary>The flags register as <c>pushfd</c> stores it: CF, PF, AF, ZF, SF, IF, DF, OF and the fixed bit 1.</summary>
+    /// <summary>
+    /// The flags register as <c>pushfd</c> stores it: CF, PF, AF, ZF, SF, DF, OF, AC and ID as written, IF always set and
+    /// the fixed bit 1 (user mode: <c>popfd</c> cannot clear IF; the other system bits read 0).
+    /// </summary>
     public uint Eflags
     {
         get => 0x2u | (cf ? 0x1u : 0) | (pf ? 0x4u : 0) | (af ? 0x10u : 0) | (zf ? 0x40u : 0) | (sf ? 0x80u : 0)
-            | (interruptFlag ? 0x200u : 0) | (df ? 0x400u : 0) | (of ? 0x800u : 0);
+            | 0x200u | (df ? 0x400u : 0) | (of ? 0x800u : 0) | storedFlags;
         set
         {
             cf = (value & 0x1) != 0;
@@ -95,7 +100,7 @@ public sealed partial class X86Machine
             af = (value & 0x10) != 0;
             zf = (value & 0x40) != 0;
             sf = (value & 0x80) != 0;
-            interruptFlag = (value & 0x200) != 0;
+            storedFlags = value & (0x4_0000u | 0x20_0000u);
             df = (value & 0x400) != 0;
             of = (value & 0x800) != 0;
         }
@@ -118,25 +123,29 @@ public sealed partial class X86Machine
     public void BindImports(PeImage image)
     {
         ArgumentNullException.ThrowIfNull(image);
+        if ((ulong)Options.ImportThunkBase + 16UL * (ulong)image.Imports.Count > 1UL << 32)
+            throw new ArgumentException("the import thunk range wraps past 4 GiB", nameof(image));
         Span<byte> slot = stackalloc byte[4];
         for (var i = 0; i < image.Imports.Count; i++)
         {
             var import = image.Imports[i];
             var thunk = Options.ImportThunkBase + 16u * (uint)i;
-            if (Memory.IsMapped(thunk)) throw new ArgumentException($"import thunk 0x{thunk:X8} is mapped", nameof(image));
+            if (Memory.IsMapped(thunk) || thunk == Options.ReturnSentinel || hooks.ContainsKey(thunk))
+                throw new ArgumentException($"import thunk 0x{thunk:X8} is mapped, the return sentinel or already hooked", nameof(image));
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(slot, thunk);
             Memory.Load(import.SlotAddress, slot);
             hooks[thunk] = new HookEntry(import.FullName, null);
-            importThunks[import.FullName] = thunk;
+            if (!importThunks.TryGetValue(import.FullName, out var thunks)) importThunks[import.FullName] = thunks = [];
+            thunks.Add(thunk);
         }
     }
 
-    /// <summary>Answers the bound import <c>library!name</c> (library case ignored); false when no slot of that name was bound.</summary>
+    /// <summary>Answers every bound slot of the import <c>library!name</c> (library case ignored); false when none was bound.</summary>
     public bool HookImport(string fullName, MachineHook hook)
     {
         ArgumentNullException.ThrowIfNull(hook);
-        if (!importThunks.TryGetValue(fullName, out var thunk)) return false;
-        hooks[thunk] = new HookEntry(hooks[thunk].Name, hook);
+        if (!importThunks.TryGetValue(fullName, out var thunks)) return false;
+        foreach (var thunk in thunks) hooks[thunk] = new HookEntry(hooks[thunk].Name, hook);
         return true;
     }
 
@@ -149,17 +158,22 @@ public sealed partial class X86Machine
 
     /// <summary>
     /// Calls <paramref name="function"/> with the stack <paramref name="arguments"/> (pushed right to left, then the
-    /// return sentinel), runs until it returns there and restores ESP. Either calling convention works: the result says
-    /// how many argument bytes the callee popped. Registers other than ESP and the flags keep what the call left.
+    /// return sentinel), clears DF (the Win32 calling convention), runs until it returns there and restores ESP. Either
+    /// calling convention works: the result says how many argument bytes the callee popped. Registers other than ESP and
+    /// the flags keep what the call left. An exception a hook throws (a host bug) is not a fault and propagates.
     /// </summary>
+    /// <exception cref="InvalidOperationException">A hook called the machine again.</exception>
+    /// <exception cref="ArgumentException"><paramref name="function"/> is the return sentinel.</exception>
     public MachineRunResult Call(uint function, ReadOnlySpan<uint> arguments, long? maxSteps = null)
     {
         if (running) throw new InvalidOperationException("the machine is already running (a hook may not call it again)");
+        if (function == Options.ReturnSentinel) throw new ArgumentException("the return sentinel is not a function", nameof(function));
         var saved = r[EspIndex];
         running = true;
         steps = 0;
         stepLimit = maxSteps ?? Options.MaxStepsPerCall;
         instructionStart = function;
+        df = false;
         try
         {
             for (var i = arguments.Length - 1; i >= 0; i--) Push(arguments[i], 4);
@@ -168,6 +182,8 @@ public sealed partial class X86Machine
             Census?.Function(function);
             Transfer(function);
             Run();
+            if (r[EspIndex] < entry + 4)
+                throw Fault(MachineFaultKind.ControlOutsideCode, $"reached the return sentinel with ESP 0x{r[EspIndex]:X8} below the return address");
             return new MachineRunResult(null, r[EaxIndex], r[EdxIndex], steps, r[EspIndex] - entry - 4);
         }
         catch (MachineFaultException exception)
