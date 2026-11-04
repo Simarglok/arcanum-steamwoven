@@ -345,7 +345,7 @@ public sealed partial class GameSessionOwner
         if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
-        Delete(entity);
+        DestroyObject(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }

@@ -1626,7 +1626,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (into is { } stack)
         {
             var units = _inventory.Ammo[placed.Entity].Units;
-            Delete(placed.Entity);
+            DestroyObject(placed.Entity);
             _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + units };
         }
         else _inventory.Return(placed);
@@ -1753,7 +1753,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (into is { } stack)
         {
             // The inserted stack's units join the held one and the inserted item is deleted (from the NPC's added items too).
-            Delete(item.Entity);
+            DestroyObject(item.Entity);
             _inventory.Ammo[stack.Entity] = stack with { Units = stack.Units + ammo!.Value.Units };
         }
         else if (npc is not null)

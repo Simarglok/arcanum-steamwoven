@@ -62,11 +62,8 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-084 (TM1): an id is never reassigned, so a decayed pool's number is not taken again.
         if (NextObjectNumber(SessionObjectOrigin.BloodPool) == int.MaxValue) return Reject(GameSessionFailure.BudgetExceeded);
 
-        _inventory.BloodPools.RemoveAll(pool => BloodPoolRules.Decayed(pool.CreatedMs, now));
-        var number = AllocateObjectNumber(SessionObjectOrigin.BloodPool);
-        var pool = new SessionBloodPool(SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            critter, deathMs, map, cell, offsetX, offsetY, now);
-        _inventory.BloodPools.Add(pool);
+        foreach (var decayed in _inventory.BloodPools.Where(pool => BloodPoolRules.Decayed(pool.CreatedMs, now)).Select(pool => pool.Entity).ToArray()) DestroyObject(decayed);
+        var pool = CreateBloodPool(critter, deathMs, map, cell, offsetX, offsetY, now);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, pool, BloodPoolRefusal.None, new(_identity, _revision));
     }

@@ -123,14 +123,11 @@ public sealed partial class GameSessionOwner
         // The new stack's record and item; an emptied source's go.
         var freed = emptied ? 1 : 0;
         if (_inventory.Ammo.Count - freed + 1 > _limits.MaxAmmoRecords || _inventory.Held - freed + 1 > _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
-        var number = NextMadeNumber();
-        if (number > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        if (emptied) Delete(source.Entity);
+        if (emptied) DestroyObject(source.Entity);
         else _inventory.Ammo[source.Entity] = source with { Units = source.Units - count };
-        var item = new SessionMadeItem(SessionMadeItem.EntityOf((int)number), newStackKind);
-        _inventory.Add(item);
-        _inventory.SetWeight(item.Entity, CreatedWeight(newStackKind.Prototype));
+        var item = CreateMadeItem(new(entity, newStackKind, SessionCreatePlace.HeroList, CreatedWeight(newStackKind.Prototype)));
         _inventory.Ammo[item.Entity] = new(item.Entity, source.AmmoType, count);
         // The placement is the drop's (junk pile, decay) and makes the one revision.
         PlaceHeroItem(item.Entity, cell);

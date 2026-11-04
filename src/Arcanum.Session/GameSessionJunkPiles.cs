@@ -68,12 +68,8 @@ public sealed partial class GameSessionOwner
                 for (var i = 0; i < loose.Length; i++)
                     if (placement.Swept[i] >= 0) { var (w, h) = GridSize(loose[i]); items.Add(new(loose[i], placement.Swept[i], w, h)); }
                 if (placement.Slot >= 0) items.Add(new(entity, placement.Slot, width, height));
-                if (_inventory.JunkPiles.Count >= SessionJunkPile.MaxPiles || _inventory.JunkPileItems + items.Count > SessionJunkPile.MaxItems) return;
                 // The original leaves a new pile that took nothing standing; so does the session (an empty pile).
-                if (NextObjectNumber(SessionObjectOrigin.JunkPile) == int.MaxValue) return;
-                var number = AllocateObjectNumber(SessionObjectOrigin.JunkPile);
-                _inventory.JunkPiles.Add(new(SessionJunkPile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture), map, cell,
-                    Array.AsReadOnly(items.ToArray())));
+                if (CreateJunkPile(map, cell, items) is null) return;
                 // The swept items keep their decay events: in a junk pile an item still decays, so the pickup's cancel leaves them (ID4).
                 break;
         }
@@ -88,7 +84,8 @@ public sealed partial class GameSessionOwner
     {
         var step = JunkPileRules.Dissolve(pile.Items.Count);
         if (step == JunkPileDissolve.Keep) return;
-        _inventory.JunkPiles.Remove(_inventory.JunkPile(pile.Entity) ?? throw new InvalidOperationException("JUNK_PILE_GONE"));
+        if (_inventory.JunkPile(pile.Entity) is null) throw new InvalidOperationException("JUNK_PILE_GONE");
+        DestroyObject(pile.Entity);
         if (step == JunkPileDissolve.Release)
         {
             SettleDrop(pile.Items[0].Entity, pile.Map, pile.Cell);
@@ -123,6 +120,15 @@ public sealed partial class GameSessionOwner
     // decay ends; a placed item goes back to the list it came from. The pile stays while the host's loot window shows it
     // (CloseJunkPile).
     private InventoryMutationResult LootJunkPile(SessionJunkPile pile, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
+    {
+        // The window shows the pile while it is looted, so a destroy inside the loot (an ammunition stack that merged) leaves it standing.
+        var outer = _lootedPile;
+        _lootedPile = pile.Entity;
+        try { return LootJunkPileItem(pile, item, insertCheck, scripts); }
+        finally { _lootedPile = outer; }
+    }
+
+    private InventoryMutationResult LootJunkPileItem(SessionJunkPile pile, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
     {
         if (pile.Items.FirstOrDefault(entry => entry.Entity == item) is not { } entry) return RejectItem(GameSessionFailure.ItemNotAvailable);
         InventoryMutationResult result;

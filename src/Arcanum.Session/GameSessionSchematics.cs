@@ -89,7 +89,7 @@ public sealed partial class GameSessionOwner
             return RejectReading(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectReading(GameSessionFailure.RevisionExhausted);
         _foundSchematics = registration.Found;
-        Delete(entity);
+        DestroyObject(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, registration.Reading, number, true, Version);
     }

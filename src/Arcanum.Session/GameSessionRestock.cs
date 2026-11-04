@@ -436,7 +436,7 @@ public sealed partial class GameSessionOwner
     // it, so nothing has to hide it) and its number stays used, so restocks do not fill the deleted-item budget.
     private void Discard(string entity)
     {
-        Delete(entity);
+        DestroyObject(entity);
         if (SessionMadeItem.Number(entity) is not { } number) return;
         _durability.Destroyed.Remove(entity);
         _inventory.Taken.Remove(entity);

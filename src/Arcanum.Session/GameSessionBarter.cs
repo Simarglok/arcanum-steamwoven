@@ -92,7 +92,7 @@ public sealed partial class GameSessionOwner
             if (identify) marked.Add(pile);
         }
         if (pile is not null) _inventory.Piles[pile] = (int)((target?.Quantity ?? 0) + coins);
-        foreach (var entry in piles) Delete(entry.Entity);
+        foreach (var entry in piles) DestroyObject(entry.Entity);
         _inventory.Identified.UnionWith(marked);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, (int)coins, piles.Length, pile, marked.Count, Version);

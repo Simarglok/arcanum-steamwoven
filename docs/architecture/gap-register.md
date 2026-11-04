@@ -281,7 +281,7 @@ is implemented).
 | K10 Newspapers and gambling | — | — |
 | K11 Network readiness | GR34 | GQ5 |
 | K12 Movies, slides, endings | GR20 (frozen-ping modes, TL46) | TM6 |
-| K13 Object directory and field store (new) | GR1–GR7, GR17 | GQ1; written as MIG6's design: [object directory](object-directory.md) (MIG6a done, ARC-DEV-084) |
+| K13 Object directory and field store (new) | GR1–GR7, GR17 | GQ1; written as MIG6's design: [object directory](object-directory.md) (MIG6a done, ARC-DEV-084; MIG6b, ARC-DEV-085; MIG6c, ARC-DEV-086) |
 | K14 One goal table for every animated object (new) | GR24, GR25, GR26, GR27 | TM7; MIG13's design |
 | K15 Clocks and the frame in the session (new) | GR20, GR21, GR22 | GQ3; MIG12's design |
 | K16 Interface mode stack (new) | GR35 | TM13; MIG16's design |
