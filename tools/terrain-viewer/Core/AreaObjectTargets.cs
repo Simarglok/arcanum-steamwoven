@@ -5,6 +5,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

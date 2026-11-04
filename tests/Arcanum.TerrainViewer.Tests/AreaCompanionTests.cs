@@ -399,6 +399,43 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(0, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, away, SimulationTime.At(0)).Companions.Count);
     }
 
+    // ARC-DEV-073 (MIG10, research FM2): an unconscious follower is ordered to wait by the change of place and stays on the map the PC
+    // leaves; the request's "no wait orders" flag takes it along; the session applies the order with the placement in one revision.
+    [TestMethod]
+    public void AnUnconsciousFollowerIsOrderedToWaitByTheMapChangeAndStaysWhereItStands()
+    {
+        var f = Load();
+        var templates = Templates(f);
+        SessionMapId home = new(1), away = new(2);
+        var entity = templates[0].Entity;
+        var arrival = AreaChart.Exterior.ToWorld(new CellCoord(12, 3));
+        var world = new CellCoord((int)arrival.X, (int)arrival.Y);
+
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var group = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
+        var facts = new SessionTransferFacts { NoFatigue = who => who == entity, WaitFacts = _ => AreaCompanionRoster.WaitFacts(AreaCompanionRoster.Virgil) };
+        var leaving = group.Leaving(session, facts);
+        Assert.AreEqual(0, leaving.Companions.Count, "it does not leave with the PC");
+        Assert.AreEqual(entity, leaving.MoveList.Waiting.Single().Entity);
+        var carry = group.Carry(session, away, world, facts);
+        Assert.AreEqual(0, carry.Carried.Count);
+        var revision = session.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            session.ApplyChanges(session.Version, new ActorPlacement(away, world, NeighborDirection.XPlus), carry.Changes, carry.MoveList).Disposition);
+        Assert.AreEqual(revision + 1, session.Version.Revision);
+        Assert.AreEqual(CompanionStanding.Waiting, session.QueryCompanion(entity).Standing);
+        Assert.AreEqual(home, AreaCompanionPlacement.Where(session, home, entity).Map, "it never left its map");
+        Assert.AreEqual(1, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0)).Companions.Count);
+
+        using var flagged = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, flagged.ForceJoinParty(flagged.Version, entity).Disposition);
+        var along = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, flagged, home, SimulationTime.At(0))
+            .Carry(flagged, away, world, new SessionTransferFacts { NoFatigue = _ => true, NoWaitOrders = true });
+        Assert.AreEqual(1, along.Carried.Count, "no wait orders: the unconscious follower travels");
+        Assert.AreEqual(0, along.MoveList.Waiting.Count);
+    }
+
     [TestMethod]
     public void AnUnreadableAwayMapOrAMissingAwayPlacementIsReportedNotGuessed()
     {

@@ -138,17 +138,19 @@ public sealed class AreaTransitionCoordinator
 
     /// <summary>Applies the pending transfer exactly once: the current map changes and the session (when
     /// present) records the actor on the destination map at the authored arrival, together with
-    /// <paramref name="changes"/> (ARC-WORLD-017: the companions it carries or leaves behind) in one atomic step.
+    /// <paramref name="changes"/> (ARC-WORLD-017: the companions it carries or leaves behind) and the party side of the move
+    /// (<paramref name="moveList"/>, ARC-DEV-073: wait orders, FM6's cleared links, the travellers' events) in one atomic step.
     /// Changes without a session are refused. A session refusal (for example the change budget) applies nothing:
     /// the pending transfer is dropped, <see cref="LastRefusal"/> names the failure and null is returned.</summary>
-    public AreaTransition? Process(NeighborDirection facing = NeighborDirection.XPlus, IReadOnlyList<MapChangeEdit>? changes = null)
+    public AreaTransition? Process(NeighborDirection facing = NeighborDirection.XPlus, IReadOnlyList<MapChangeEdit>? changes = null,
+        SessionMoveList? moveList = null)
     {
         if (Pending is not { } transition) return null;
         if (_session is null && changes is { Count: > 0 }) throw new InvalidOperationException("AREA_TRANSITION_CHANGES_WITHOUT_SESSION");
         if (_session is not null)
         {
             var placed = _session.ApplyChanges(_session.Version, new ActorPlacement(new(transition.ToMap),
-                new(checked((int)transition.Arrival.X), checked((int)transition.Arrival.Y)), facing), changes ?? []);
+                new(checked((int)transition.Arrival.X), checked((int)transition.Arrival.Y)), facing), changes ?? [], moveList);
             if (placed.Disposition == GameSessionDisposition.Rejected)
             {
                 Pending = null; LastRefusal = placed.Failure;

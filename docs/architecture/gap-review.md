@@ -1,6 +1,6 @@
 # Gap review: the narrow gaps, the owner's gaps and the intended differences
 
-Status: **Research, waiting for the owner's answers**, work item ARC-RES-088 (2026-11-04), a review of
+Status: **Answered by the owner** (2026-11-04, [answers](#owner-answers)), work item ARC-RES-088 (2026-11-04), a review of
 the [gap register](gap-register.md) (G1, ARC-RES-086) after the architecture audit. Docs-only: no code
 changes and no checks run.
 
@@ -65,8 +65,7 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 - **No GQ decision is contradicted by the audit.** Two get a condition: GQ8 B builds an Original
   branch on an inferred consequence (PS34), which D9 must confirm before it is built; GQ7 A keeps a
   link the original forgets, with one small visible case (below).
-- **Sources outside the repository:** task codes in work or reserved (ARC-DEV-068, ARC-DEV-073,
-  ARC-SCRIPT-051) and the alpha items N12 and N16 (the alpha gap list approved on 2026-10-27) come
+- **Sources outside the repository:** task codes reserved (ARC-SCRIPT-051) and the alpha items N12 and N16 (the alpha gap list approved on 2026-10-27) come
   from the coordinator's project notes, not from git.
 - **The answer list** is at the [end](#answer-list): one line per row, the recommendation first.
 
@@ -119,7 +118,9 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 
 - **Steamwoven, why:** the session moves the hero's followers by `npc.cell` and `npc.map`; the move
   list is the party, not followers of followers; ARC-WORLD-084 removes the traveller's AI tick;
-  FM6's clearing was not part of the follower slices. MIG10 (V5) is in work as ARC-DEV-073.
+  FM6's clearing was not part of the follower slices. MIG10 (V5) was in work as ARC-DEV-073 when this
+  review was written and has since merged (#597; the register's row says what it left: followers of
+  followers need NPC leaders in the session, and the carried tick keeps its old deadline until MIG9).
 - **Original:** FM1, FM2 (unconscious followers wait, RL23), FM6, RL22, RL23, RL28 (the carried tick
   is replaced by the fold's first tick).
 - **Record:** accurate.
@@ -298,7 +299,7 @@ All five were answered on 2026-11-04 ("Везде по рекомендации"
 | GI5 Events at their own deadlines | By requirement FR-RUNTIME-001 (ARC-WORLD-039): the pump steps to each deadline, at most 64 steps a frame; a wait stays one jump, so timers fire once, late, as the original's | One ping per frame, a late event fires once and repeaters re-arm from "now" (TL20–TL22) | Only frame-level lateness differs; jumps behave as the original; holds | Keep, both modes (technical) | **A (recommended)** keep. **B** an Original switch for per-ping lateness |
 | GI6 The random generator is saved | Design of session randomness (ARC-WORLD-019), no owner decision, no switch | Not saved, seeded once from the clock; only the skill module's one pre-rolled value is saved, so the next skill roll repeats after a reload and everything else rerolls (PS14, PS32) | **Visible to a player:** after a reload the same actions give the same results in Steamwoven; in the original a reload rerolls hits, damage and every other draw, though not the next skill roll. An improvement without the owner's word and without the switch the rule asks for | Record it as an owner decision and add the Original switch: reseed at a load and keep only a saved next-skill roll | **A (recommended)** Steamwoven saves the generator, Original reseeds at load and keeps the next skill roll. **B** saved in both modes, recorded as your decision. **C** reseed in both modes (as the original; it removes what OQ2's seeded replays rely on, so OQ2 would need revisiting) |
 | GI7 A failed transfer leaves the session on its map | Owner rule on technical bugs; FR-WORLD-016 | The payload may stop half way; effects already applied stay, the fade-in never runs (RL30) | Technical; holds | Keep, both modes | **A (recommended)** keep. **B** the original's half move behind an Original switch (not advised: a broken state, a technical bug by the rule) |
-| GI8 Prototypes from the player's executable | Owner decision 2026-11-03 (ARC-RES-085; the ARC-DEV-066 line: ARC-DEV-067 done, ARC-DEV-068 in work, ARC-DEV-069 next) | The game writes the 1,423 missing prototype files on its first run (OM12) | Same result without running the original; holds | Keep | **A (recommended)** keep the DEV-066 line. **B** ask the player to run the original once (the fallback only) |
+| GI8 Prototypes from the player's executable | Owner decision 2026-11-03 (ARC-RES-085; the ARC-DEV-066 line: ARC-DEV-067 and ARC-DEV-068 done, ARC-DEV-069 next) | The game writes the 1,423 missing prototype files on its first run (OM12) | Same result without running the original; holds | Keep | **A (recommended)** keep the DEV-066 line. **B** ask the player to run the original once (the fallback only) |
 
 ## 4. Corrections made in the register
 
@@ -344,4 +345,17 @@ an existing MIG step or GQ decision change nothing when answered A.
 
 ## Owner answers
 
-Not answered yet. The answers are recorded here before this PR merges.
+**Owner decision** (Aleksandr, 2026-11-04 12:50): every row by option A, except GR22, GR36 and GR37, which
+change three decisions of the [target model](target-model.md#owner-decisions).
+
+| Row | Answer | What it means |
+| --- | --- | --- |
+| GR12–GR15, GR23, GR27–GR31, GR35 | A | As recommended: each gap is closed in the slice named in §1 (MIG7–MIG13, MIG16, K3–K5, K7, D8), in both rule modes |
+| GR19 | A | A switch: the Original setting rebuilds the round order at a load and shows round 1, Steamwoven resumes the saved round with its subturn count; a load that fails because the rebuilt order lacks the current turn is fixed in both modes. Built in D4 |
+| GR6, GR34 | A | GQ1 A and GQ5 A stand |
+| GR22 | **B** | **GQ3 A** (replaces B): only the Esc menu pauses, in both rule modes; dialog, inventory, sheet, barter, logbook and world map run in real time. MIG12 sets it without a switch |
+| GR36 | **B** | **GQ7 B** (replaces A): a switch: the Original setting nulls a link to an object that left for another map when the map it stands on opens again; Steamwoven keeps the identity. Built in MIG7 (TM10) |
+| GR37 | **B** | **GQ8 A** (replaces B): a loaded game plays in the turn-based mode it was saved in, in both rule modes. D9 first confirms PS34 in the executable or the oracle; if the original does not do this, the question goes back to the owner |
+| GI1–GI3, GI5, GI7, GI8 | A | Kept as recorded |
+| GI4 | A | The `RebuildOnLoad` switch stays; K1 (MIG9) writes the load rule: Steamwoven keeps the saved tick times, and the fold still marks each as the first tick, so the first heartbeat (point 10) and the waypoint return run at a load |
+| GI6 | A | Owner decision: Steamwoven saves the generator (save-scumming off); the Original setting reseeds at a load and keeps only a saved next skill roll (PS14). A switch, built by its own task |

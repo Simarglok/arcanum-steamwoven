@@ -70,7 +70,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030, ARC-UI-033 |
 | Scene flow | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-012 |
-| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014 |
+| Launcher screen | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-014, ARC-DEV-074 |
 | Debug mode | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-050 |
 | Interface bars | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-018, ARC-UI-023 |
 | WORLD diagnostic integration | [Viewer, rendering, HD and input](status/viewer.md) | ARC-INPUT-001 |
@@ -132,6 +132,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Wait timer and loyalty | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-045, ARC-WORLD-046 |
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |
+| Record resolver | [World, maps and movement](status/world.md) | ARC-DEV-072 |
 | NPC danger state | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-079, ARC-COMBAT-004, ARC-WORLD-026 |
 | NPC hostility and targets | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-080, ARC-WORLD-079, ARC-WORLD-078 |
 | NPC morale | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-082, ARC-WORLD-080, ARC-WORLD-079 |
@@ -144,6 +145,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | NPC awareness rules | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-078, ARC-COMBAT-012, ARC-SKILLS-008 |
 | Function oracle | [Verification and tools](status/tools.md) | ARC-DEV-007, ARC-WORLD-033, ARC-SKILLS-001 |
 | Executable interpreter | [Verification and tools](status/tools.md) | ARC-DEV-067 |
+| Prototype builder | [Verification and tools](status/tools.md) | ARC-DEV-068 |
 | Function registry | [Verification and tools](status/tools.md) | ARC-DEV-008, ARC-DEV-023, ARC-DEV-009 |
 | Local workflow/research tools | [Verification and tools](status/tools.md) | ARC-DEV-026, ARC-DEV-028, ARC-DEV-033, ARC-DEV-041, ARC-DEV-043, ARC-DEV-055, ARC-DEV-059 |
 | Packaged alpha build (macOS, Windows) | [Verification and tools](status/tools.md) | ARC-DEV-047, ARC-DEV-048, ARC-DEV-049, ARC-DEV-062 |

@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
-        BindAreaInventory(arguments, result);
+        BindAreaInventory(arguments, result, keepLeft: carried is not null && _mapHandoff is { Kind: not MapHandoffKind.QuickLoad });
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
         AttachAreaItemArtSizes();
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
@@ -253,8 +253,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-017 (research C15, V4): every following companion goes with the PC onto the arrival cell, every other
         // one stays where it stands; one atomic session step with the PC's placement.
         var pending = _areaTransitions.Pending!;
-        var carry = _areaCompanions?.Carry(_areaSession!, new(pending.ToMap), new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)));
-        if (_areaTransitions.Process(session.State.Facing, carry?.Changes) is not { } transition)
+        var carry = _areaCompanions?.Carry(_areaSession!, new(pending.ToMap), new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)), TransferFacts());
+        if (_areaTransitions.Process(session.State.Facing, carry?.Changes, carry?.MoveList) is not { } transition)
         {
             // The session refused the step (nothing applied): the PC stays on this map and may use the endpoint again.
             _areaUseStatus = $"transfer to map {pending.ToMap} refused by the session ({_areaTransitions.LastRefusal})";
@@ -264,6 +264,7 @@ public partial class TerrainViewerApp
         }
         // ARC-COMBAT-004: the source's teleport leaves combat mode.
         LeaveCombatModeForMapChange();
+        LeaveFollowersCombatMode(carry?.MoveList);
         if (carry is { } carried)
             GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
                 transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Carried.Select(c => c.Speaker.ScriptId).ToArray(),

@@ -85,7 +85,7 @@ public static class AreaCompanionPlacement
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 
     /// <summary>ARC-WORLD-017: on the NPC's home map, the runtime map it stands on while it is elsewhere (absent = home).</summary>
-    public const string MapProperty = "npc.map";
+    public const string MapProperty = Arcanum.World.EntityHomes.AwayProperty;
 
     public static MapChangeKey MapKey(string entity) => MapChangeKey.ForEntity(entity, MapProperty);
 
@@ -537,21 +537,26 @@ public sealed class AreaCompanionGroup
     /// <paramref name="destination"/> at the world cell <paramref name="arrival"/>. Every companion the session party says
     /// follows the PC goes with it, at any distance, onto the same arrival cell with its own facing (the next follow
     /// decision on the destination steps it off the shared cell); its home map names the destination, or forgets the away
-    /// map when the destination is home. Every other companion (waiting, free) stays where it stands on this map. The host
-    /// applies the changes together with the PC's placement in one <see cref="GameSessionOwner.ApplyChanges"/>.
+    /// map when the destination is home. Every other companion (waiting, free, or ordered to wait by the change of place: ARC-DEV-073, the
+    /// unconscious ones in <paramref name="facts"/>) stays where it stands on this map. The host applies the changes together with the
+    /// PC's placement and the returned move list in one <see cref="GameSessionOwner.ApplyChanges"/>.
     /// </summary>
-    public (IReadOnlyList<MapChangeEdit> Changes, IReadOnlyList<AreaCompanion> Carried) Carry(GameSessionOwner session, SessionMapId destination, CellCoord arrival)
+    public (IReadOnlyList<MapChangeEdit> Changes, IReadOnlyList<AreaCompanion> Carried, SessionMoveList MoveList) Carry(GameSessionOwner session,
+        SessionMapId destination, CellCoord arrival, SessionTransferFacts? facts = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (destination == _map) throw new ArgumentException("AREA_COMPANION_CARRY_SAME_MAP", nameof(destination));
+        // ARC-DEV-073 (MIG10): the session's move list says who travels and who is ordered to wait (an unconscious follower stays).
+        var moveList = session.QueryTransferMoveList(facts ?? new SessionTransferFacts());
+        var travelling = moveList.Travelling.ToHashSet(StringComparer.Ordinal);
         var changes = new List<MapChangeEdit>(); var carried = new List<AreaCompanion>();
         foreach (var companion in _companions)
         {
-            if (session.QueryCompanion(companion.Entity).Standing != CompanionStanding.Following) { changes.Add(Stay(companion)); continue; }
+            if (!travelling.Contains(companion.Entity)) { changes.Add(Stay(companion)); continue; }
             changes.AddRange(Arrive(companion.Template, _map, destination, arrival, companion.Grid.State.Facing));
             carried.Add(companion);
         }
-        return (changes.AsReadOnly(), carried.AsReadOnly());
+        return (changes.AsReadOnly(), carried.AsReadOnly(), moveList);
     }
 
     /// <summary>
@@ -579,6 +584,21 @@ public sealed class AreaCompanionGroup
         ArgumentNullException.ThrowIfNull(session);
         return _companions.Where(c => session.QueryCompanion(c.Entity).Standing == CompanionStanding.Following)
             .Select(c => (c.Template, c.Grid.State.Facing)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-DEV-073 (MIG10): the companions that leave this map with the PC, with the facing each stands with now, and the session's move
+    /// list for the change of place (the unconscious followers are ordered to wait and stay; <see cref="Following"/> without the wait
+    /// orders).
+    /// </summary>
+    public (IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> Companions, SessionMoveList MoveList) Leaving(
+        GameSessionOwner session, SessionTransferFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(facts);
+        var moveList = session.QueryTransferMoveList(facts);
+        var travelling = moveList.Travelling.ToHashSet(StringComparer.Ordinal);
+        return (_companions.Where(c => travelling.Contains(c.Entity)).Select(c => (c.Template, c.Grid.State.Facing)).ToArray(), moveList);
     }
 
     /// <summary>The companion of a speaker, if it stands on this map.</summary>

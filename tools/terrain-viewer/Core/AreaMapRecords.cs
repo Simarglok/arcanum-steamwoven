@@ -1,0 +1,67 @@
+using Arcanum.Data.Area;
+using Arcanum.Data.Content;
+using Arcanum.Data.Maps;
+using Arcanum.Data.Traversal;
+using Arcanum.World;
+
+namespace Arcanum.TerrainViewer.Core;
+
+/// <summary>
+/// ARC-DEV-072 (MIG1, TM3): the record source of the viewer: the object rows of any whole map of the game folder's module content
+/// stack, by runtime map number, read on demand for <see cref="RecordResolver"/>. It reads rows only: the strict AREA publication of
+/// the map and its whole-map step evidence (the life evidence of its NPCs), no scene plan, no art, no lighting. A map that opens only
+/// as a window (the main world map: more sector files than a whole-map plan admits) is refused with a reason, since its stored
+/// objects outside the window cannot be listed this way (NOT READY: an NPC whose home is such a map resolves only while the viewer
+/// holds that map's window; the viewer's launch maps are given to the resolver, so the Crash Site's own NPCs are held).
+/// Unlike a map load it does not compare the viewer's archive arguments with the stack's sources (`RequireSame`) or the expected
+/// digests: the stack comes from the same game folder as the viewer's, and the rows are derived data.
+/// A map the list does not name, one with no sector files, or one that does not read is a typed failure, never an exception.
+/// </summary>
+public sealed class AreaMapRecords(TerrainViewerArguments launch) : IMapRecordSource
+{
+    public MapRecordsLoad Load(int runtimeMap, CancellationToken token)
+    {
+        try { return LoadChecked(runtimeMap, token); }
+        catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return new(null, $"map {runtimeMap} did not read: {error.GetType().Name} {error.Message}");
+        }
+    }
+
+    private MapRecordsLoad LoadChecked(int runtimeMap, CancellationToken token)
+    {
+        var discovery = ContentMountPlan.Discover(launch.GameRoot ?? throw new InvalidOperationException("AREA_RECORDS_GAME_ROOT_REQUIRED"));
+        if (discovery.Status != ContentMountStatus.Ready) return new(null, "mount " + discovery.Status);
+        var opened = ContentStack.Open(discovery.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) return new(null, "stack " + opened.Status);
+        using var stack = opened.Stack!;
+        var list = MapList.Read(stack);
+        if (list.Status != MapListStatus.Read) return new(null, "the map list did not read: " + list.Status);
+        if (list.ByRuntime(runtimeMap) is not { } entry) return new(null, $"the map list has no runtime map {runtimeMap}");
+        var created = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), entry.Name, launch.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven);
+        if (created.Status != AreaMapPlanStatus.Ready) return new(null, $"map {entry.Name} has no whole-map plan: {created.Status}");
+        token.ThrowIfCancellationRequested();
+        var plan = created.Plan!;
+        using var owner = plan.Open();
+        var snapshot = owner.LoadStrict(token);
+        var steps = AreaStepInspector.InspectWholeMap(snapshot, stack, plan.Map.AggregatePath, 1);
+        var build = AreaInventoryMap.Build(snapshot, steps, token);
+        return build.Map is null ? new(null, $"map {entry.Name} has no records: {build.Status} {build.Detail}") : new(build.Map, build.Detail);
+    }
+}
+
+/// <summary>
+/// ARC-DEV-075 (MIG2): the record source of a map change inside one run: the maps the run left behind (their rows as the viewer loaded
+/// them, a window of the main world map too, which <see cref="AreaMapRecords"/> cannot read) answer first, then the game folder's
+/// reader. The viewer tears a map's scene down at every change, so a companion carried from the main map into the Crash Site cave would
+/// otherwise have no record on the cave (its home map is a window nothing reads on demand). The maps are derived data of this run only:
+/// a quick load to another map or a fresh run starts with none (NOT READY: a companion whose home is a main-map window resolves only after a change of
+/// map in the run that loaded it; MIG9 owns reading such a window on demand).
+/// </summary>
+public sealed class AreaRememberedRecords(IEnumerable<AreaInventoryMap> left, IMapRecordSource? inner) : IMapRecordSource
+{
+    private readonly Dictionary<int, AreaInventoryMap> _left = left.GroupBy(map => map.RuntimeMap).ToDictionary(group => group.Key, group => group.First());
+
+    public MapRecordsLoad Load(int runtimeMap, CancellationToken token) =>
+        _left.TryGetValue(runtimeMap, out var map) ? new(map, "left behind in this run") : inner?.Load(runtimeMap, token) ?? new(null, "no source reads the map");
+}

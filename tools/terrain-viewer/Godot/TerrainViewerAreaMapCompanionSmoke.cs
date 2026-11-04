@@ -126,11 +126,12 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-DEV-065: on the destination (the Crash Site cave from the main map), with the AI on and a hero, the hero strikes the living
-    /// monstrous NPC with the fewest hit points and that NPC bites the hero back while the visitor stands here: the AI host's world
-    /// does not know a visitor (no combat fields on this map), so the rules must never meet it (the follower rule of both attack
-    /// events, the flee test's party count, the noise's square). Before the fix the bite stopped the game (ActorPlan). The hero, the
-    /// clock and the AI are restored after.
+    /// ARC-DEV-065 / ARC-DEV-075: on the destination (the Crash Site cave from the main map), with the AI on and a hero, the hero strikes
+    /// the living monstrous NPC with the fewest hit points and that NPC bites the hero back while the visitor stands here. Since
+    /// ARC-DEV-075 (MIG2) the AI host describes a visitor by identity (its home map's record, read on demand by the record resolver): it is
+    /// told of the hero's attack, stands in the NPC's square, strikes the NPC and is a target of the cave NPC. When no record resolves (the
+    /// main map's window as a home, MIG9) the ARC-DEV-065 guard keeps it out of the rules as before and the fight checks that instead
+    /// (before that guard the bite stopped the game, ActorPlan). The hero, the clock and the AI are restored after.
     /// </summary>
     private void FightNextToAreaMapVisitor(AreaCompanion companion)
     {
@@ -167,7 +168,7 @@ public partial class TerrainViewerApp
             Require(HeroInCombatMode, "the hero is in combat mode");
             var host = AreaAiHostNow();
             Require(host is not null && host.RunCompanions.Contains(companion.Entity), "the AI host runs the visitor's walk");
-            Require(host!.Find(companion.Entity) is null, "the AI host's world does not know the visitor (no combat fields here)");
+            var resolved = host!.Find(companion.Entity) is not null;
             // The hero's attack: the attacker's followers are told, the victim weighs fleeing against the hero's party, witnesses hear it.
             host.HeroAttacked(entity);
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
@@ -183,10 +184,30 @@ public partial class TerrainViewerApp
             }
             Require(host.TraceOf(entity)?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal),
                 $"the NPC's bite was resolved after {frames} frames: {host.TraceOf(entity)?.Hit} {host.TraceOf(entity)?.Step}");
-            Require(host.TraceOf(companion.Entity)?.Event is null, "the visitor was told of no attack: " + host.TraceOf(companion.Entity)?.Event);
-            Require(!host.Square(entity, 20).Contains(companion.Entity), "the visitor stands in no square the rules read");
+            if (resolved)
+            {
+                var told = host.TraceOf(companion.Entity)?.Event;
+                // The trace keeps the last event: the hero's attack (as its attacker) or the NPC's bite on the hero (as its victim).
+                Require(told is not null && told.StartsWith("told ", StringComparison.Ordinal), "the visitor was told of an attack: " + told);
+                Require(host.Square(entity, 20).Contains(companion.Entity), "the visitor stands in the NPC's square: the cave NPC can target it");
+                // The visitor walks up and strikes the NPC it was told of.
+                for (; frames < 8000 && host.TraceOf(companion.Entity)?.Hit is null; frames++)
+                {
+                    _areaSmokeTime++;
+                    TickAreaClock(hostMs += 50);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(host.TraceOf(companion.Entity)?.Hit is { } visitorHit && !visitorHit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal),
+                    $"the visitor's strike was resolved after {frames} frames: {host.TraceOf(companion.Entity)?.Hit} {host.TraceOf(companion.Entity)?.Step}");
+            }
+            else
+            {
+                Require(host.TraceOf(companion.Entity)?.Event is null, "an unresolved visitor was told of no attack: " + host.TraceOf(companion.Entity)?.Event);
+                Require(!host.Square(entity, 20).Contains(companion.Entity), "an unresolved visitor stands in no square the rules read");
+            }
             GD.Print("ARC-DEV-065 native-smoke visitor-fight PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = map.RuntimeMap, Visitor = companion.Speaker.ScriptId, Target = target.Row.PrototypeNumber, Frames = frames, Hit = host.TraceOf(entity)?.Hit }));
+                Map = map.RuntimeMap, Visitor = companion.Speaker.ScriptId, Target = target.Row.PrototypeNumber, Frames = frames, Resolved = resolved,
+                Hit = host.TraceOf(entity)?.Hit, VisitorHit = resolved ? host.TraceOf(companion.Entity)?.Hit : null }));
         }
         finally
         {

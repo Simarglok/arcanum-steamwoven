@@ -1140,6 +1140,7 @@ public partial class TerrainViewerApp : Node
         if (_exiting) return;
         _exiting = true;
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
+        _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)
         ExitWorld();
         GetViewport().SizeChanged -= HandleViewportSizeChanged;
         _generation = _coordinator.BeginGeneration();

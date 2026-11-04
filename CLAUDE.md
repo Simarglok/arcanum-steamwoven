@@ -94,9 +94,9 @@ yet. Current state: the component catalogue
   ([opt-in original data](docs/workflow/toolchain.md#opt-in-original-data)).
 - Code: `src/` holds `Arcanum.Data`, `Arcanum.Simulation`,
   `Arcanum.Scripting`, `Arcanum.Presentation`, `Arcanum.Input`,
-  `Arcanum.Session` (the one game-session owner), `Arcanum.Executable` (the
+  `Arcanum.Session` (the one game-session owner), `Arcanum.World` (the Godot-free world runtime, GQ6; the record resolver first), `Arcanum.Executable` (the
   x86 interpreter of the player's `Arcanum.exe`) and `Arcanum.Godot`;
-  Data/Simulation/Scripting/Session/Executable stay Godot-independent. `tools/` holds the
+  Data/Simulation/Scripting/Session/World/Executable stay Godot-independent. `tools/` holds the
   terrain viewer (AREA and WORLD modes), `terrain-inspect`, research probes and
   the local export/lease/retention authority (`arcanum-local`, `local_dev`);
   labs live in `experiments/`.
