@@ -13,6 +13,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// as a window (the main world map: more sector files than a whole-map plan admits) is refused with a reason, since its stored
 /// objects outside the window cannot be listed this way (NOT READY: an NPC whose home is such a map resolves only while the viewer
 /// holds that map's window; the viewer's launch maps are given to the resolver, so the Crash Site's own NPCs are held).
+/// Unlike a map load it does not compare the viewer's archive arguments with the stack's sources (`RequireSame`) or the expected
+/// digests: the stack comes from the same game folder as the viewer's, and the rows are derived data.
 /// A map the list does not name, one with no sector files, or one that does not read is a typed failure, never an exception.
 /// </summary>
 public sealed class AreaMapRecords(TerrainViewerArguments launch) : IMapRecordSource
@@ -35,7 +37,7 @@ public sealed class AreaMapRecords(TerrainViewerArguments launch) : IMapRecordSo
         using var stack = opened.Stack!;
         var list = MapList.Read(stack);
         if (list.Status != MapListStatus.Read) return new(null, "the map list did not read: " + list.Status);
-        if (list.ByRuntime(runtimeMap) is not { } entry || entry.Runtime != runtimeMap) return new(null, $"the map list has no runtime map {runtimeMap}");
+        if (list.ByRuntime(runtimeMap) is not { } entry) return new(null, $"the map list has no runtime map {runtimeMap}");
         var created = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), entry.Name, launch.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven);
         if (created.Status != AreaMapPlanStatus.Ready) return new(null, $"map {entry.Name} has no whole-map plan: {created.Status}");
         token.ThrowIfCancellationRequested();

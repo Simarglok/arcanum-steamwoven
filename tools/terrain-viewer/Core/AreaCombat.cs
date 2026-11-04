@@ -47,6 +47,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     // the session or its revision changes.
     // ARC-DEV-072: one entry per map (a visiting companion's holder lies on its home map, the shown map's NPCs on the shown one).
     private (GameSessionOwner Session, long Revision)? _holdersStamp;
+    private readonly HashSet<int> _refusedAttach = [];
     private readonly Dictionary<int, (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)> _holders = [];
 
     /// <param name="inventory">The maps' seeds and object rows.</param>
@@ -103,8 +104,10 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_holders.TryGetValue(runtimeMap, out var cached)) return cached;
         // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
         // attached with the host, and a restore attaches them again).
-        if (_resolver.IsRead(runtimeMap) && session.QueryMapInventory(new(runtimeMap)) is null && _resolver.Held(runtimeMap) is { } read)
-            session.AttachMapInventory(new(runtimeMap), read.Seed);
+        if (_resolver.IsRead(runtimeMap) && session.QueryMapInventory(new(runtimeMap)) is null && _resolver.Held(runtimeMap) is { } read
+            && session.AttachMapInventory(new(runtimeMap), read.Seed) is { Disposition: GameSessionDisposition.Rejected } refused
+            && _refusedAttach.Add(runtimeMap))
+            Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused.Failure}");
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
         var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))

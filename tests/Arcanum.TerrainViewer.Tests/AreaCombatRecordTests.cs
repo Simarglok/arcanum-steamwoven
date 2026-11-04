@@ -130,7 +130,10 @@ public sealed class AreaCombatRecordTests
         Assert.IsNotNull(holder);
         CollectionAssert.AreEqual(new[] { Entity(1, 2) }, holder.Items.Select(item => item.Entity).ToArray());
         Assert.IsNotNull(session.QueryMapInventory(new(1)), "the home seed is attached");
-        Assert.AreEqual(onHome.Worn(referenceSession, 1, virgil)!.Count, combat.Worn(session, virgil)!.Count);
+        // Nothing in the fixture is worn: the identity question lists him (a holder of the home seed) with an empty set, as the map-keyed one.
+        Assert.AreEqual(0, onHome.Worn(referenceSession, 1, virgil)!.Count);
+        Assert.AreEqual(0, combat.Worn(session, virgil)!.Count);
+        Assert.IsNull(combat.Worn(session, Entity(2, 5)), "an entity no map lists has no worn set");
 
         // The shown map's own NPC is unchanged, and the guard of map 1 resolves though he never left home.
         Assert.AreEqual(2, combat.HomeMap(Entity(2, 0)));
@@ -191,6 +194,26 @@ public sealed class AreaCombatRecordTests
         Assert.IsNotNull(loaded.QueryMapInventory(new(1)));
         Assert.IsNotNull(loaded.QueryMapInventory(new(2)));
         Assert.AreEqual(1, source.Asked.Count, "attaching did not read again");
+    }
+
+    [TestMethod]
+    public void A_map_read_on_demand_that_the_session_refuses_does_not_refuse_the_session_and_its_npcs_have_no_holder()
+    {
+        // Map 3 (read on demand) lists the item of map 1: the session refuses a second map for one item (an object lies on one map).
+        var clash = new AreaInventoryMap(3,
+            new([new SessionSeedHolder(Entity(3, 0), SessionHolderKind.Npc, false, false, [], [Entity(1, 2)])],
+                [new SessionSeedItem(Entity(1, 2), new(Healing, 1, 0, 0, null, []), null)]),
+            new Dictionary<string, AreaObjectRecord> { [Entity(3, 0)] = Npc(3, 0), [Entity(1, 2)] = Item(1, 2) });
+        var inventory = new AreaInventoryHost([Home(), Shown()], records: new Source(clash));
+        var session = Session(inventory, travelled: false);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(3), AreaCompanionPlacement.MapKey(Entity(3, 0)), 2).Disposition);
+        var combat = new AreaCombatHost(inventory, session: () => session);
+        Assert.AreEqual(3, combat.HomeMap(Entity(3, 0)), "the record resolves");
+        Assert.IsNull(combat.Holder(session, Entity(3, 0)), "but the refused seed gives no holder");
+        Assert.IsNotNull(combat.Holder(session, Entity(1, 0)), "the given maps are unaffected");
+
+        // A later attach (a load) skips the refused read map instead of refusing the whole session.
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(Session(inventory, travelled: false)));
     }
 }
 

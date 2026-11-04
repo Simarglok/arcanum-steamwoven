@@ -138,11 +138,16 @@ public sealed class AreaInventoryHost
     public GameSessionFailure Attach(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        foreach (var map in _resolver.Maps)
+        foreach (var map in _maps.Values.OrderBy(map => map.RuntimeMap))
         {
             var attached = session.AttachMapInventory(new(map.RuntimeMap), map.Seed);
             if (attached.Disposition == GameSessionDisposition.Rejected) return attached.Failure;
         }
+        // ARC-DEV-072: the maps read on demand are attached too, but a refusal of one of them (a map that is not shown) does not refuse the
+        // session: that map's NPCs then have no holder entry, as if it had never been read, and the combat host says so once.
+        foreach (var map in _resolver.ReadMaps)
+            if (session.AttachMapInventory(new(map.RuntimeMap), map.Seed).Disposition == GameSessionDisposition.Rejected)
+                Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={map.RuntimeMap}");
         return GameSessionFailure.None;
     }
 

@@ -62,8 +62,8 @@ public partial class TerrainViewerApp
             maps.Add(build.Map);
         }
         var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
-        // ARC-DEV-072 (MIG1): an NPC whose home map this run did not load (a companion after a quick load on a foreign map) resolves through
-        // the resolver, which reads the home map's rows on demand from the game folder.
+        // ARC-DEV-072 (MIG1): an NPC whose home map this run did not load resolves through the resolver, which reads the home map's rows on
+        // demand from the game folder. Only maps a whole-map plan admits are read: a home on the main world map (a window) is not (NOT READY).
         AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaMapRecords(arguments)));
     }
 

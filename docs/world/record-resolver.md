@@ -17,7 +17,7 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 | `AreaInventoryMap` (moved here from the viewer, same API) | One map's session inventory seed with the object rows of its items and holders; the unit the resolver holds. |
 | `RecordResolver` | Holds the maps it was given plus maps read on demand, indexes their rows by entity, and answers `Resolve(entity, home)` with a `RecordLookup`. |
 | `IMapRecordSource` | Reads one map's rows by runtime number (rows only, no scene). The viewer's `AreaMapRecords` reads the game folder's module content stack; tests give synthetic maps. |
-| `RecordResolverLimits` | The explicit bounds: `MaxMaps` (given plus read on demand, default 8) and `MaxRowsPerMap` (items plus holders, default 100 000). |
+| `RecordResolverLimits` | The explicit bounds: `MaxMaps` (given plus read on demand, default 8) and `MaxRowsPerMap` (items plus holders, default 100 000). The constructor throws `ArgumentException` for more given maps or rows than that. |
 | `EntityHomes` | The session side: the map that carries the entity's `npc.map` change is its home map (ARC-WORLD-017), so a travelling NPC's home is known without having loaded it (`GameSessionOwner.QueryEntityChanges`, a read only). |
 
 ## Rules
@@ -25,10 +25,11 @@ other than its home had no record there (gap register GR1, GR2, GR11). The resol
 1. A held map answers first: an entity listed by a given or already read map resolves without the source.
 2. Otherwise, with a home map named, the resolver reads that map once from the source, holds it, and looks the entity up in it. Without a
    named home nothing is read (`UnknownEntity`).
-3. Typed failures, no exceptions at the boundary: `UnknownEntity` (no held map, or the named home, lists it), `HomeUnread` (no source, the
+3. Typed failures, no exceptions at the boundary (a source that throws is the same `HomeUnread`; only a cancelled read propagates and is asked again): `UnknownEntity` (no held map, or the named home, lists it), `HomeUnread` (no source, the
    source could not read the map, or it answered another map) and `LimitExceeded` (the given maps fill `MaxMaps`, or the map has more rows
    than `MaxRowsPerMap`; such a map is never partly held).
-4. A map the source could not read is remembered as unread and not asked again in the resolver's life.
+4. A map the source could not read (or that passes a limit) is remembered with its status and not asked again in the resolver's life.
+   The session's attach of a map read on demand is best effort: `AreaInventoryHost.Attach` fails only on the given maps.
 5. Given maps are never dropped; maps read on demand leave least recently used first when the bound is reached.
 6. The held maps are derived data: nothing here is saved, a quick load or a fresh run loses nothing, and the next question reads again.
 7. A map read on demand has no seed in the session until it is first asked about; `AreaCombatHost` attaches it then (a given map's seed is

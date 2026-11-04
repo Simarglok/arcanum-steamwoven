@@ -59,11 +59,14 @@ public sealed class RecordResolver
     private readonly Dictionary<int, AreaInventoryMap> _given = [];
     private readonly Dictionary<int, (AreaInventoryMap Map, long Used)> _loaded = [];
     private readonly Dictionary<string, int> _index = new(StringComparer.Ordinal);
-    private readonly Dictionary<int, string> _unread = [];
+    private readonly Dictionary<int, (RecordStatus Status, string Detail)> _unread = [];
+    private AreaInventoryMap[]? _maps;
     private readonly IMapRecordSource? _source;
     private long _clock;
 
-    /// <param name="given">The maps the caller already holds (the run's loaded maps), kept for the resolver's life.</param>
+    /// <param name="given">The maps the caller already holds (the run's loaded maps), kept for the resolver's life. More maps than
+    /// <see cref="RecordResolverLimits.MaxMaps"/> or a map with more rows than <see cref="RecordResolverLimits.MaxRowsPerMap"/> is an
+    /// <see cref="ArgumentException"/> (a programming error of the caller, not a runtime boundary).</param>
     /// <param name="source">Where other maps' rows come from; null: only the given maps resolve.</param>
     public RecordResolver(IEnumerable<AreaInventoryMap> given, IMapRecordSource? source = null, RecordResolverLimits? limits = null)
     {
@@ -88,7 +91,10 @@ public sealed class RecordResolver
 
     /// <summary>Every map held now: the given ones and those read on demand, in map order.</summary>
     public IReadOnlyList<AreaInventoryMap> Maps =>
-        _given.Values.Concat(_loaded.Values.Select(entry => entry.Map)).OrderBy(map => map.RuntimeMap).ToArray();
+        _maps ??= _given.Values.Concat(_loaded.Values.Select(entry => entry.Map)).OrderBy(map => map.RuntimeMap).ToArray();
+
+    /// <summary>The maps read on demand now, in map order (the given maps are the caller's own).</summary>
+    public IReadOnlyList<AreaInventoryMap> ReadMaps => Maps.Where(map => _loaded.ContainsKey(map.RuntimeMap)).ToArray();
 
     /// <summary>Whether the resolver holds the map (it never reads one here).</summary>
     public bool Holds(int runtimeMap) => _given.ContainsKey(runtimeMap) || _loaded.ContainsKey(runtimeMap);
@@ -139,35 +145,41 @@ public sealed class RecordResolver
     private RecordLookup Read(int runtimeMap, CancellationToken token)
     {
         if (_source is null) return new(RecordStatus.HomeUnread, null, "no source reads maps");
-        if (_unread.TryGetValue(runtimeMap, out var why)) return new(RecordStatus.HomeUnread, null, why);
+        if (_unread.TryGetValue(runtimeMap, out var why)) return new(why.Status, null, why.Detail);
         if (_given.Count >= Limits.MaxMaps) return new(RecordStatus.LimitExceeded, null, $"the {Limits.MaxMaps} maps held are all given");
-        var load = _source.Load(runtimeMap, token);
-        if (load.Map is not { } map)
+        MapRecordsLoad load;
+        try { load = _source.Load(runtimeMap, token); }
+        // A source reports an ordinary failure as a result; anything else it throws is the same failure here, never an exception at the
+        // boundary. A cancelled read is not a failure of the map: it is asked again.
+        catch (Exception error) when (error is not OperationCanceledException)
         {
-            _unread[runtimeMap] = load.Detail;
-            return new(RecordStatus.HomeUnread, null, load.Detail);
+            return Unread(runtimeMap, RecordStatus.HomeUnread, $"the source threw {error.GetType().Name}: {error.Message}");
         }
-        if (map.RuntimeMap != runtimeMap)
-        {
-            _unread[runtimeMap] = $"the source returned map {map.RuntimeMap}";
-            return new(RecordStatus.HomeUnread, null, _unread[runtimeMap]);
-        }
+        if (load.Map is not { } map) return Unread(runtimeMap, RecordStatus.HomeUnread, load.Detail);
+        if (map.RuntimeMap != runtimeMap) return Unread(runtimeMap, RecordStatus.HomeUnread, $"the source returned map {map.RuntimeMap}");
         if (map.Seed.Holders.Count + map.Seed.Items.Count > Limits.MaxRowsPerMap)
-        {
-            _unread[runtimeMap] = $"{map.Seed.Holders.Count + map.Seed.Items.Count} rows pass the limit of {Limits.MaxRowsPerMap}";
-            return new(RecordStatus.LimitExceeded, null, _unread[runtimeMap]);
-        }
+            return Unread(runtimeMap, RecordStatus.LimitExceeded, $"{map.Seed.Holders.Count + map.Seed.Items.Count} rows pass the limit of {Limits.MaxRowsPerMap}");
         while (_given.Count + _loaded.Count >= Limits.MaxMaps) Evict();
         _loaded[runtimeMap] = (map, ++_clock);
+        _maps = null;
         Index(map);
         return new(RecordStatus.Found, null, string.Empty);
+    }
+
+    private RecordLookup Unread(int runtimeMap, RecordStatus status, string detail)
+    {
+        _unread[runtimeMap] = (status, detail);
+        return new(status, null, detail);
     }
 
     private void Evict()
     {
         var oldest = _loaded.MinBy(pair => pair.Value.Used);
         _loaded.Remove(oldest.Key);
-        foreach (var entity in _index.Where(pair => pair.Value == oldest.Key).Select(pair => pair.Key).ToArray()) _index.Remove(entity);
+        _maps = null;
+        // Rebuilt from the maps still held, so an entity a remaining map also lists (a corrupt id on two maps) stays found.
+        _index.Clear();
+        foreach (var held in _given.Values.OrderBy(map => map.RuntimeMap).Concat(_loaded.Values.Select(entry => entry.Map).OrderBy(map => map.RuntimeMap))) Index(held);
     }
 
     private void Index(AreaInventoryMap map)

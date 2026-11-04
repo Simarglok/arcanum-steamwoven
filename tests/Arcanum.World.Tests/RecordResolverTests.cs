@@ -135,4 +135,39 @@ public sealed class RecordResolverTests
         Assert.AreEqual(RecordStatus.HomeUnread, resolver.Map(9).Status);
         CollectionAssert.AreEqual(new[] { 6, 9 }, source.Asked);
     }
+
+    [TestMethod]
+    public void A_source_that_throws_is_an_unread_map_asked_once_and_a_limit_refusal_keeps_its_status()
+    {
+        var calls = 0;
+        var throwing = new Source { Override = _ => { calls++; throw new InvalidOperationException("boom"); } };
+        var resolver = new RecordResolver([Map(1)], throwing);
+        Assert.AreEqual(RecordStatus.HomeUnread, resolver.Resolve(Entity(7, 0), home: 7).Status);
+        Assert.AreEqual(RecordStatus.HomeUnread, resolver.Resolve(Entity(7, 0), home: 7).Status);
+        Assert.AreEqual(1, calls);
+        Assert.ThrowsExactly<OperationCanceledException>(() => new RecordResolver([Map(1)], new Source { Override = _ => throw new OperationCanceledException() }).Resolve(Entity(7, 0), home: 7));
+
+        var big = new RecordResolver([Map(1)], new Source(Map(3, 4)), new(MaxMaps: 4, MaxRowsPerMap: 3));
+        Assert.AreEqual(RecordStatus.LimitExceeded, big.Resolve(Entity(3, 0), home: 3).Status);
+        Assert.AreEqual(RecordStatus.LimitExceeded, big.Resolve(Entity(3, 0), home: 3).Status, "asked again: the same status");
+    }
+
+    [TestMethod]
+    public void An_entity_listed_by_two_maps_stays_found_when_the_map_the_index_pointed_at_is_evicted()
+    {
+        // The same entity on maps 3 and 4 (an id the session forbids for items, but the index must not lose it).
+        var shared = Entity(3, 0);
+        AreaInventoryMap Twin(int map) => new(map,
+            new([new SessionSeedHolder(shared, SessionHolderKind.Npc, false, false, [], []), new SessionSeedHolder(Entity(map, 1), SessionHolderKind.Npc, false, false, [], [])], []),
+            new Dictionary<string, AreaObjectRecord> { [shared] = Row(3, 0), [Entity(map, 1)] = Row(map, 1) });
+        var resolver = new RecordResolver([Map(1)], new Source(Twin(3), Twin(4), Map(5)), new(MaxMaps: 3));
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(shared, home: 3).Status);
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(4, 1), home: 4).Status);
+        Assert.AreEqual(3, resolver.HeldHome(shared), "the first map listed it");
+        Assert.IsNotNull(resolver.Held(4), "map 4 is used last: map 3 is the least recently used");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(5, 0), home: 5).Status);
+        Assert.IsFalse(resolver.Holds(3));
+        Assert.AreEqual(4, resolver.HeldHome(shared), "map 4 still lists it");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(shared).Status);
+    }
 }
