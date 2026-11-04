@@ -173,7 +173,10 @@ changes (clear the old cell, write the new cell, point `npc.map`) and relocates
 timers; the session then drops every AI tick and the danger records that hold only check bits (ARC-WORLD-084,
 `GameSessionOwner`), but not FM6's focus, last hitter, enemy list, fleeing or combat mode; it has no followers of followers,
 no unconscious or dead follower rule (FM2) and no inventory move (none is needed
-for the identity-keyed stores, but the seed holder is per map).
+for the identity-keyed stores, but the seed holder is per map). *Since ARC-DEV-073 (MIG10, V5):* the transfer asks the session
+for a move list and applies it with the placement, so unconscious followers wait, FM6's links are cleared, a travelling
+follower's AI tick is carried and its combat mode is left on another map; the move-list walk handles followers of followers,
+but the session has no NPC leaders to feed it ([companion map change](../world/companion-follow-runtime.md#map-change-arc-world-017)).
 
 ## 3. Gap: systemic, not narrow
 
@@ -234,7 +237,7 @@ FR-SOCIAL-005 for V6).
 | V3 Targets and panels | Spell targets (`AreaSpellCastMap.IdOf`), hover attack, life bars, turn-based facts, the sheet and levels read the companion through V1; the home-map fallbacks are removed. | FM3 | V1 |
 | V4 Body after a load | The companion template is built from the resolver (home map rows, visuals and frames on demand) instead of the run-local `_travellers`; `AreaVisitors.Unbodied` and the "no body kept this run" path go away; a quick load on a foreign map shows the companion and it follows. Native smoke: F7 in the cave, a fresh run, F8, Virgil drawn and following. | FM14 | V1 |
 | V4b One dialog host | A companion's conversation runs through the shown map's host with its record from V1 (its dialog state stays keyed on its record's map, as ARC-WORLD-048 keeps it); `AreaConversationHost.ForVisitor`, the routing in `AreaTalkRouting`, the viewer's visitor host cache and `refuseUncoveredInventory` go away (a negative `IN` finds the seed holder through V1). | FM3, OL33 | V1, V4 |
-| V5 Transfer parity | The session transfer clears FM6's transient state for every travelling follower (focus, last hitter, enemy list, fleeing; combat mode on a cross-map move; the AI ticks are already dropped by ARC-WORLD-084); followers of followers travel (FM1); an unconscious follower is made to wait first (FM2, settled by RL23). | FM1, FM2, FM6 | — (independent of V1) |
+| V5 Transfer parity (**done: ARC-DEV-073 = MIG10**) | The session transfer clears FM6's transient state for every travelling follower (focus, last hitter, enemy list, fleeing; combat mode on a cross-map move; the AI ticks are already dropped by ARC-WORLD-084); followers of followers travel (FM1); an unconscious follower is made to wait first (FM2, settled by RL23). | FM1, FM2, FM6 | — (independent of V1) |
 | V6 Former followers go home | The NPC's teleport map in the session (set once at its first teleport); when a map opens (or its sector re-folds after the 3-second rule), a leaderless NPC whose teleport map differs is moved to its standpoint on that map, as the original's forced pass does; a snapshot schema bump (main + 1) for the new field. | FM10, FM11, FM13 | V1, V5 |
 
 Not planned: carrying active spells (FM9) until NPC spell runs are saved per

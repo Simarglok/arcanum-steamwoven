@@ -193,8 +193,10 @@ public partial class TerrainViewerApp
         if (target is null) return;
         LeaveCombatModeForMapChange();
         var origin = _arguments;
+        var leaving = LeavingCompanions();
+        if (target != _readyMapName) LeaveFollowersCombatMode(leaving.MoveList);
         _mapHandoff = new(_areaSession, CurrentAreaMap, target, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell),
-            target, Companions: LeavingCompanions());
+            target, Companions: leaving.Companions, MoveList: leaving.MoveList);
         var next = teleport
             ? origin with { AreaMapName = target, AreaMapArrival = null, AreaMapSector = new Arcanum.Data.Area.AreaSectorCoordinate(landing.X >> 6, landing.Y >> 6) }
             : origin with { AreaMapName = target, AreaMapArrival = new(landing.X, landing.Y), AreaMapSector = null };
