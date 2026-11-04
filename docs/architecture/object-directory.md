@@ -86,12 +86,14 @@ home map (attached to the session by the host: the given maps with the host, a m
 - **Origin.** `Take` keeps the seed's map, not the actor's: the hero's `SessionPcItem` origin is the map whose seed lists the item (`Taken`, the viewer's hidden
   items and the attach check of a later seed read it), so a save and a re-attach of both maps agree. The stale check follows that seed: a new seed of the item's map
   during the host's insert check refuses the move with no effect. No new state, no schema step (snapshot schema stays 60).
-- **Scripts.** The script host answers for the shown map's rows (every object of a run stands on that map), so an item of another map with an insert-item or
-  remove-item script, and a holder with a transfer script, refuse the move (`ItemScriptUnsupported`, `HolderScriptUnsupported`) instead of moving it with a
-  script skipped; no installed item or companion is known to carry one.
+- **Scripts.** The script host answers for the shown map's rows (every object of a run stands on that map), so an item that is a row of another map's seed and
+  carries a remove-item or insert-item script refuses the move (`ItemScriptUnsupported`) instead of moving it with a script skipped; no installed item is known to
+  carry one. A holder's own scripts do not matter: the gate of a move out of a holder is the PC's transfer script, which the host answers. With a host the PC's gate
+  still runs with the shown map as the item's map (harmless while the item guard holds).
 - **Host.** `SessionDialogInventoryPort` takes an optional `prepare(entity)` hook; `AreaInventoryHost.DialogPort` passes `AttachHolderMap`, which attaches the seed of the
   map that lists the speaker when the resolver read it on demand and the session holds none (`AttachReadMap`, the rule `AreaCombatHost` already used for its holder
-  index). The other direction, the hero giving an item to a companion of another map (`GiveItemToNpc`), already knew every attached seed and keeps the item's
+  index). Only the dialog port attaches: the steal (`TakeItemFromNpc`) has no such hook in the viewer, so it moves from a read-on-demand home map only after something
+  else (the combat host's holder index) attached its seed. The other direction, the hero giving an item to a companion of another map (`GiveItemToNpc`), already knew every attached seed and keeps the item's
   origin (`Given`); a companion's item the hero gave back is in its list again.
 - **Smoke.** The `transfer` stage's visitor talk is followed by `visitor-give` (`ARC-DEV-087 native-smoke visitor-give`): on the cave (map 79) the dialog port takes an item
   from Virgil, whose home is the main map's window (map 1), the hero's list holds it with origin 1, and the hero gives it back. It needs a hero (`--hero human-male`);

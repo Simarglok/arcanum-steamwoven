@@ -136,7 +136,7 @@ visitor host cache (`_visitorHosts`, `_talkHost`, `VisitorHost`, `VisitorCallHos
 
 - A deferred call whose attachee is a companion that is not standing here is run by the shown host with that attachee's own map (the session role's), as
   any object that is not a speaker of the host.
-- A carried companion from another map gives an item by negative `IN` since MIG6e (ARC-DEV-087); an item or a holder with a transfer, insert-item or remove-item script
-  of another map is refused (the script host answers for the shown map's rows), and a companion whose home map's seed is not attached is refused (see above).
+- A carried companion from another map gives an item by negative `IN` since MIG6e (ARC-DEV-087); an item with an insert-item or remove-item script
+  of another map's seed is refused (the script host answers for the shown map's rows), and a companion whose home map's seed is not attached is refused (see above).
 - The companion's dialog state is not on its object: a quick save of a companion carried here keeps it under its home map's entity keys, as before.
 - The admission order depends on who is asked first, so a speaker's index differs between runs; no state is keyed by it.

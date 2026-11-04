@@ -271,16 +271,19 @@ public partial class TerrainViewerApp
         var home = companion.Template.Home;
         if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is not { } inventory)
         { GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} (no hero or inventory host)"); return; }
-        inventory.AttachHolderMap(session, companion.Entity);
-        var listed = session.QueryMapInventory(new(home.RuntimeMap))?.Holders.FirstOrDefault(h => h.Entity == companion.Entity);
-        if (listed is null)
+        // The candidates are the names of the companion's items in its home map's seed rows; the session may hold no seed of that map yet (the
+        // dialog port attaches it, which is what this step observes).
+        var homeSeed = inventory.Resolver.Held(home.RuntimeMap)?.Seed;
+        var seedHolder = homeSeed?.Holders.FirstOrDefault(h => h.Entity == companion.Entity);
+        if (homeSeed is null || seedHolder is null)
         { GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} home={home.RuntimeMap} (the home map's seed lists no such holder)"); return; }
+        var names = seedHolder.Items.Select(entity => homeSeed.Items.First(item => item.Entity == entity).Facts.Kind.Name).ToArray();
         var (pc, npc) = (AreaConversationState.PcParticipant, new DialogParticipantId(2));
         var port = inventory.DialogPort(session, id => id == npc ? companion.Entity : null);
-        foreach (var candidate in listed.Items)
+        foreach (var name in names)
         {
             var before = session.QueryPcInventory().Count;
-            var applied = port.Execute(new GiveItemCommand(npc, pc, candidate.Facts.Kind.Name));
+            var applied = port.Execute(new GiveItemCommand(npc, pc, name));
             var result = port.LastResult;
             if (result is not { Disposition: GameSessionDisposition.Changed, Item: { } item }) continue;
             Require(applied == DialogCommandResult.Applied && session.QueryPcInventory().Count == before + 1, "the item entered the hero's list");
@@ -291,10 +294,10 @@ public partial class TerrainViewerApp
             var back = session.GiveItemToNpc(session.Version, companion.Entity, item, inventory.InsertCheck);
             Require(back.Disposition == GameSessionDisposition.Changed, $"the hero gave it back: {back.Disposition} {back.Failure}");
             GD.Print("ARC-DEV-087 native-smoke visitor-give PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = CurrentAreaMap, Home = home.RuntimeMap, Candidates = listed.Items.Count, Name = candidate.Facts.Kind.Name }));
+                Map = CurrentAreaMap, Home = home.RuntimeMap, Candidates = names.Length, Name = name }));
             return;
         }
-        GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} home={home.RuntimeMap} (none of its {listed.Items.Count} items moves: {port.LastResult?.Failure})");
+        GD.Print($"ARC-DEV-087 native-smoke visitor-give NONE map={CurrentAreaMap} home={home.RuntimeMap} (none of its {names.Length} items moves: {port.LastResult?.Failure})");
     }
 
     /// <summary>

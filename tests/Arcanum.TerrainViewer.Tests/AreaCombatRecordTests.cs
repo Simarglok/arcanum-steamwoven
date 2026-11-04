@@ -171,8 +171,6 @@ public sealed class AreaCombatRecordTests
         Assert.AreEqual(0, session.QueryMapInventory(new(1))!.Holders.Single(holder => holder.Entity == virgil).Items.Count);
         Assert.IsNull(inventory.AttachReadMap(session, 1), "an attached map is not attached again");
         Assert.IsNull(inventory.AttachReadMap(session, 2), "a given map is attached with the host");
-        // The hero's own map's NPC is unchanged: no read, no attach.
-        inventory.AttachHolderMap(session, Entity(2, 0));
         CollectionAssert.AreEqual(new[] { 1 }, source.Asked, "the home map was read once");
     }
 

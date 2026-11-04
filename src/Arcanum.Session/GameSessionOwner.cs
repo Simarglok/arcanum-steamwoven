@@ -1715,14 +1715,11 @@ public sealed partial class GameSessionOwner : IDisposable
         // The item's own points on this path; the session runs them only through a host.
         var own = parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get;
         if (scripts is null && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem))) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        // ARC-DEV-087 (MIG6e): the script host answers for the shown map's rows (every script object of a run stands on it), so the scripts of an item
-        // and of a holder of another map are not run: such a move is refused when one would run, never moved with a script skipped.
-        if (origin != _actor.Map)
-        {
-            if (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-            if (holder is not null && seed.Holders.TryGetValue(holder, out var from) && from.ScriptPoints.Contains(SessionScriptPoint.Transfer))
-                return RejectItem(GameSessionFailure.HolderScriptUnsupported);
-        }
+        // ARC-DEV-087 (MIG6e): the script host answers for the shown map's rows (every script object of a run stands on it), so the remove-item,
+        // get and insert-item scripts of an item whose row is another map's seed row are not run: such a move is refused, never moved with a
+        // script skipped. (The gate of a move from a holder is the PC's transfer script, not the holder's, so a holder's own scripts do not matter.)
+        if (origin != _actor.Map && seed.Items.ContainsKey(item.Entity) && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem)))
+            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-066: ammunition merges into the hero's stack of the same prototype (its units added, the item deleted, 0x466640),
         // else enters the list as a new stack. The sum must fit 32 bits (the original wraps: crash class, refused in both settings).
         SessionAmmoRecord? ammo = null, into = null;

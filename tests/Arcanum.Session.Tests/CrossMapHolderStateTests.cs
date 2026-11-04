@@ -172,7 +172,7 @@ public sealed class CrossMapHolderStateTests
     }
 
     [TestMethod]
-    public void ScriptsOfAnotherMapsItemOrHolderAreNotSkippedTheMoveIsRefused()
+    public void ScriptsOfAnotherMapsItemAreNotSkippedTheMoveIsRefusedAndAHoldersOwnScriptsDoNotMatter()
     {
         var seed = HomeSeed();
         var scripted = seed with
@@ -185,8 +185,9 @@ public sealed class CrossMapHolderStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Cave, scripted).Disposition);
         var host = new NoSlotHost();
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.GiveItemToPc(owner.Version, "pal", 5700, Accept, host).Failure, "the item's insert-item script");
-        Assert.AreEqual(GameSessionFailure.HolderScriptUnsupported, owner.GiveItemToPc(owner.Version, "keeper", 5703, Accept, host).Failure, "the holder's transfer script");
         Assert.AreEqual(0L, owner.Version.Revision);
+        // The gate of a move out of a holder is the PC's transfer script (the host answers none here), so a holder's own transfer script does not refuse it.
+        Assert.AreEqual("band", owner.GiveItemToPc(owner.Version, "keeper", 5703, Accept, host).Item, "the holder's own transfer script is not run on a take");
         // An item with no script of a holder with none moves through the host as without it.
         Assert.AreEqual("bone", owner.GiveItemToPc(owner.Version, "pal-pet", 5701, Accept, host).Item);
     }
