@@ -11,8 +11,10 @@ public sealed class SessionObjectRecords
     /// <summary>No junk pile, no pool and no number given.</summary>
     internal static SessionObjectRecords Empty { get; } = new([], [], 0, 0);
 
-    internal SessionObjectRecords(SessionJunkPile[] junkPiles, SessionBloodPool[] bloodPools, int lastJunkNumber, int lastPoolNumber)
+    internal SessionObjectRecords(SessionJunkPile[] junkPiles, SessionBloodPool[] bloodPools, int lastJunkNumber, int lastPoolNumber,
+        SessionObjectField[]? state = null)
     {
+        State = Array.AsReadOnly(state ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles);
         BloodPools = Array.AsReadOnly(bloodPools);
         LastJunkNumber = lastJunkNumber;
@@ -30,6 +32,12 @@ public sealed class SessionObjectRecords
     /// <summary>ARC-DEV-084 (MIG6, TM1): the highest blood pool number the session ever gave (0 when none), so a new pool never takes the
     /// number of one that decayed.</summary>
     public int LastPoolNumber { get; }
+    /// <summary>ARC-DEV-092 (MIG7a, TM2, GR5, schema 62): the recorded fields of mobile map-data objects, by entity then property (ordinal): the
+    /// state of the directory entries, kept by the object's identity and not under the map it stands on. Schema 61 saved these as entity changes in
+    /// <see cref="GameSessionSnapshot.Maps"/>; the 61 to 62 upgrade step moves them.</summary>
+    public IReadOnlyList<SessionObjectField> State { get; }
+
+    internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state);
 }
 
 /// <summary>

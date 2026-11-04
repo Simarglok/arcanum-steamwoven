@@ -8,20 +8,32 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":61,\"world\"";
-    private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
+    private const string Current = "\"schemaVersion\":62,\"world\"";
+    private const string Current61 = "\"schemaVersion\":61,\"world\"";
+    private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
+    private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
+
+    // MIG7a (ARC-DEV-092): the schema 61 text of a schema 62 one with no object field: the same text without `objects.state` (a hand-made
+    // inverse of the upgrade step, so the step is checked against the older layout and not against itself).
+    internal static string Schema61(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, ObjectsSection);
+        return text.Replace(Current, Current61).Replace(ObjectsSection, ObjectsSection61);
+    }
 
     // MIG6d-3 (ARC-DEV-091): the schema 60 text of a schema 61 one with no junk pile and no pool: the junk piles, the pools and the two marks
     // inside the inventory section, written the way the schema 60 build wrote them (a hand-made inverse of the upgrade step, so the step
     // is checked against the older layout and not against itself).
     internal static string Schema60(string text)
     {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, ObjectsSection);
-        StringAssert.Contains(text, ",\"identified\":[");
-        return text.Replace(Current, "\"schemaVersion\":60,\"world\"")
+        var older = Schema61(text);
+        StringAssert.Contains(older, Current61);
+        StringAssert.Contains(older, ObjectsSection61);
+        StringAssert.Contains(older, ",\"identified\":[");
+        return older.Replace(Current61, "\"schemaVersion\":60,\"world\"")
             .Replace(",\"identified\":[", ",\"junkPiles\":[],\"identified\":[")
-            .Replace(ObjectsSection, ",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
+            .Replace(ObjectsSection61, ",\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}");
     }
 
     // The schema 56 text of a schema 59 one without a saved round, whose NPCs were never dressed and that left no pool of blood: the same text without
@@ -148,7 +160,7 @@ public sealed class SnapshotUpgradeTests
         CollectionAssert.AreEqual(new[] { "pool:3" }, snapshot.Objects.BloodPools.Select(pool => pool.Entity).ToArray());
         Assert.AreEqual((5, 7), (snapshot.Objects.LastJunkNumber, snapshot.Objects.LastPoolNumber));
         var text = GameSessionSnapshotCodec.Encode(snapshot);
-        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7}");
+        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7,\"state\":[]}");
         Assert.AreEqual(-1, text.IndexOf("\"junkPiles\"", text.IndexOf("\"inventory\"", StringComparison.Ordinal), text.IndexOf("\"objects\"", StringComparison.Ordinal) - text.IndexOf("\"inventory\"", StringComparison.Ordinal), StringComparison.Ordinal),
             "the inventory section no longer carries them");
         // The loaded session holds the records and never gives a number at or below the saved marks.
@@ -263,6 +275,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":62,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":63,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

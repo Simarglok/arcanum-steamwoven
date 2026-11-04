@@ -461,9 +461,10 @@ public sealed class GameSessionSnapshot
     /// <see cref="Inventory"/> (ARC-WORLD-103); schema 58 adds the pools of blood the session left to <see cref="Inventory"/>
     /// (ARC-RENDER-041); schema 59 adds the session's subturn starts to a saved <see cref="Combat"/> round (GR19, ARC-DEV-078); schema 60 adds the junk and pool
     /// number high-water marks to <see cref="Inventory"/> (MIG6, ARC-DEV-084); schema 61 moves the junk piles, the pools of blood and the two marks out of
-    /// <see cref="Inventory"/> into the section <see cref="Objects"/> (MIG6d-3, ARC-DEV-091). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 60 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 61;
+    /// <see cref="Inventory"/> into the section <see cref="Objects"/> (MIG6d-3, ARC-DEV-091); schema 62 moves the entity changes of mobile map-data objects out of
+    /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG7a, ARC-DEV-092). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 61 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 62;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

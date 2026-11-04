@@ -77,7 +77,8 @@ public static partial class GameSessionSnapshotCodec
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
-    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber"];
+    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state"];
+    private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
     private static readonly string[] NpcWearFields = ["npc", "worn"];
     private static readonly string[] NpcWornItemFields = ["slot", "item"];
@@ -552,6 +553,18 @@ public static partial class GameSessionSnapshotCodec
             // ARC-DEV-084 (schema 60, section moved in schema 61): the high-water marks of the junk and pool numbers.
             w.WriteNumber("lastJunkNumber", snapshot.Objects.LastJunkNumber);
             w.WriteNumber("lastPoolNumber", snapshot.Objects.LastPoolNumber);
+            // ARC-DEV-092 (MIG7a, schema 62): the recorded fields of mobile map-data objects, by entity then property.
+            w.WriteStartArray("state");
+            foreach (var field in snapshot.Objects.State)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", field.Entity);
+                w.WriteString("property", field.Property);
+                w.WriteNumber("map", field.Map.RuntimeMap);
+                w.WriteNumber("value", field.Value);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -1841,7 +1854,23 @@ public static partial class GameSessionSnapshotCodec
                 Int(row["offsetX"], path + ".offsetX", int.MinValue, int.MaxValue), Int(row["offsetY"], path + ".offsetY", int.MinValue, int.MaxValue),
                 Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue));
         }
-        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue));
+        // ARC-DEV-092 (MIG7a, schema 62): the object fields in canonical order (entity, then property, both ordinal); the owner's restore checks the
+        // keys and the budgets.
+        var stateRows = Array(f["state"], p + ".state", GameSessionLimits.PolicyMaxTotalChanges);
+        var state = new SessionObjectField[stateRows.Length];
+        for (var i = 0; i < stateRows.Length; i++)
+        {
+            var path = $"{p}.state[{i}]";
+            var row = Fields(stateRows[i], path, ObjectFieldFields);
+            state[i] = new(String(row["entity"], path + ".entity"), String(row["property"], path + ".property"),
+                new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)), Long(row["value"], path + ".value", long.MinValue, long.MaxValue));
+            if (!SessionValidation.Code(state[i].Entity, SessionValidation.MaxEntityCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".entity");
+            if (!SessionValidation.Code(state[i].Property, SessionValidation.MaxPropertyCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".property");
+            if (i > 0 && (string.CompareOrdinal(state[i - 1].Entity, state[i].Entity) is var order && (order > 0 ||
+                    order == 0 && string.CompareOrdinal(state[i - 1].Property, state[i].Property) >= 0)))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

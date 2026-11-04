@@ -80,8 +80,7 @@ public sealed partial class GameSessionOwner
     internal CellCoord? DroppedCell(SessionMapId map, InventoryDomain.Seed seed, string item)
     {
         if (!seed.HolderOf.TryGetValue(item, out var holder) || seed.Holders[holder].Kind != SessionHolderKind.Npc) return null;
-        if (!_maps.TryGetValue(map, out var changes) || !changes.TryGetValue(MapChangeKey.ForEntity(item, ItemDroppedProperty), out var packed) ||
-            packed <= 0) return null;
+        if (_maps.Get(map, MapChangeKey.ForEntity(item, ItemDroppedProperty)) is not { } packed || packed <= 0) return null;
         return new CellCoord((int)((packed - 1) & 0xFFFFFF), (int)(((packed - 1) >> 24) & 0xFFFFFF));
     }
 

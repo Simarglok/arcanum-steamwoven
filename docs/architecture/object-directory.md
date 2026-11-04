@@ -1,6 +1,6 @@
-# Object directory (K13, MIG6)
+# Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090) and MIG6e (ARC-DEV-087) implemented** (2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092) of MIG7** (2026-11-04). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -149,6 +149,30 @@ beside them. Changes go through `AddPile`, `ReplacePile`, `RemovePile`, `LeaveIt
   numbers, and each damaged variant), the older schemas upgrade through 60, and the whole session suite runs on schema 61 fixtures.
 - **GR4, GR17.** GR4 is closed for the kinds the session has: items, junk piles and pools of blood have one create path, one destroy path and records found by entity. GR17 is closed for the piles and pools only, saved as one
   section of records. **Not closed:** the made and placed items are still in the `inventory` section and the other TM4 kinds (NPCs, projectiles, summons, traps) have no store; the section of whole objects per map (TM8) is later work.
+
+## MIG7a: what is built
+
+MIG7 (object state on the entry, TM2, TM10, GR5, GR10, GR36) is cut into four slices, each its own PR: **MIG7a** (ARC-DEV-092) the fields of mobile map-data objects by identity;
+**MIG7b** (ARC-DEV-093) the changes of static objects per sector, keyed by their positional identity; **MIG7c** (ARC-DEV-094) NPC positions as state; **MIG7d** (ARC-DEV-095) links as `ObjectId` fields and
+the GQ7 B switch. MIG8 (script attachments on the object) rests on the store MIG7a builds.
+
+**The store.** The entity-scoped map changes that are the state of a mobile map-data object were keys under a map (`MapChangeKey.ForEntity`, one value per map, entity and property). `SessionMapChanges`
+(`GameSessionMapChanges.cs`) now keeps those, the **object fields** of `ObjectStateVocabulary`, by the object's identity: one record per entity and property, naming the map it is kept on (the object's home
+map, which the map budgets and `QueryMapChanges` use). A key is an object field when it is entity-scoped, its entity starts with `oid:` (a mobile object; a static object's positional `sector:` entity is
+not one) and its property is one of `obj.off`, `obj.destroyed`, `npc.cell`, `npc.map`, `npc.home`, `npc.faction`, `follow.pc`, `item.dropped`, `object.damage`, `object.condition`, `lock.flags`, `lock.frame`,
+`lock.kind`, `trap.state`. Every other change stays in its map as before: the sector changes, the changes of static objects (MIG7b), and the script attachments `dialog.lf`, `dialog.counters`,
+`dialog.script` and `use.*` (MIG8).
+
+- **Reads and writes keep their names.** `QueryMapChange`, `QueryMapChanges`, `SetMapChange`, `ClearMapChange` and `ApplyChanges` take the same arguments and answer as before for every caller: a read, a removal or a
+  clear that names a map the record is not on finds none, a write that names another map **moves the record** there (the old model kept a second, independent value; no code wrote one key under two maps).
+  The budgets count each record once, against the map it names and the session. The new reads are by identity: `QueryObjectState(entity)` (the entry's fields, each with its map) and
+  `QueryEntityChanges` for an object field (one answer, whatever map).
+- **Snapshot (schema 62).** The maps section no longer holds the object fields: they are the rows of `objects.state` (entity, property, map, value; sorted by entity then property, ordinal). A restore refuses an
+  object field left in the maps section (`InvalidSnapshot`), a row whose entity is not an `oid:` object or whose property is not an object field (`InvalidChangeKey`) and an over-budget load
+  (`BudgetExceeded`); decode refuses rows out of order (`NotCanonical`). The step from 61 moves every such change out of the maps, drops a map left empty, and for a key under two maps keeps the lowest map's value.
+- **Not done here.** The viewer's consumers still read through `QueryMapChange` with the map they always used (the home map); moving them to `QueryObjectState` waits for the slices that change
+  what they read. `QueryObject` does not carry the fields (the directory's entry shape stays that of MIG6). Statics, NPC positions, links and the script attachments are MIG7b, MIG7c, MIG7d and MIG8.
+  GR5 stays open for the static class.
 
 ## Not ready
 
