@@ -182,9 +182,11 @@ public sealed class AreaTransitionCoordinator
     /// session's player character is that hero and its main-menu flag starts true. ARC-UI-007: the hero's load also brings the
     /// experience data, so the session awards experience (ARC-WORLD-030) and knows the next level. ARC-WORLD-044: the module's
 /// <paramref name="reputations"/> table, when the host read one (<see cref="AreaReputations.Load"/>). ARC-WORLD-101: a pre-made hero's
-/// prototype player name becomes the session hero's (<see cref="GameSessionOwner.SetHeroPlayerName"/>; a refusal fails the start).</summary>
+/// prototype player name becomes the session hero's (<see cref="GameSessionOwner.SetHeroPlayerName"/>; a refusal fails the start).
+/// ARC-DEV-080: <paramref name="randomSeed"/> seeds the session's gameplay generator (default 0, which tests and smokes rely on; the
+/// viewer's own starts pass <see cref="AreaRandomSeed.ForNewSession"/>).</summary>
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
-        AreaHeroLoad? hero = null, ReputationCatalog? reputations = null)
+        AreaHeroLoad? hero = null, ReputationCatalog? reputations = null, ulong randomSeed = 0)
     {
         // ARC-UI-030: only the new character starts without a main-menu flag.
         if (hero is not null && (hero.Status != AreaHeroStatus.Ready || hero.Definition is null
@@ -193,7 +195,7 @@ public sealed class AreaTransitionCoordinator
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
-            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel, Reputations: reputations));
+            Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel, Reputations: reputations, RandomSeed: randomSeed));
         // ARC-WORLD-101: a pre-made hero keeps its prototype's player name (field 0x10E; the new character's is typed on its screen).
         if (created.Owner is { } named && hero is { Hero.BasicPrototype: not AreaStartingHero.GenericPrototype, Read.Hero.PlayerName: { Count: > 0 } name }
             && named.SetHeroPlayerName(named.Version, name) is { Disposition: GameSessionDisposition.Rejected } refused)
