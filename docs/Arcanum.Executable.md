@@ -1,8 +1,8 @@
 # Arcanum.Executable
 
 Status: **implemented, bounded** (ARC-DEV-067, slice E2 of the [prototype extraction](research/prototype-extraction.md),
-2026-11-04). Not wired into the game: the prototype builder that uses it is E3 (ARC-DEV-068), the cache and the launcher's
-first-start build are E4 (ARC-DEV-069).
+2026-11-04; the prototype builder over it, E3 / ARC-DEV-068, [below](#the-prototype-builder)). Not wired into the game: the cache
+and the launcher's first-start build are E4 (ARC-DEV-069).
 
 `Arcanum.Executable` reads the player's own PE32 `Arcanum.exe` in place and interprets the 32-bit integer subset of x86
 that the original's prototype build reaches, so that Steamwoven can later run the original's own prototype code instead
@@ -127,11 +127,40 @@ source. Compiled code does not read undefined flags; the tests check only define
   a compiler-generated integer instruction.
 - Speed (Release, Apple silicon, measured on a register-and-memory loop): about 100 million instructions per second.
 
+## The prototype builder
+
+`Arcanum.Executable.Prototypes.PrototypeBuilder.Build(executable, files, options?, progress?)` (ARC-DEV-068, E3) builds the player's
+prototype files by running the original's own code: it loads the executable (only the verified retail 1.0.7.4 one: its SHA-256 is
+checked unless `RequireVerifiedExecutable` is turned off), runs the start-up functions in the original's order (read from its own
+module tables: the game modules 0 to 16, then the object modules `Scroll` to `Obj`, with the window start information) and calls the
+prototype module's check (0x468660), which composes each file name, asks the file layer whether the file exists and calls the build
+(0x468890) for every missing one. The files come back in memory as `BuiltPrototype(Number, Name, Bytes)` in the original's order; the
+builder writes nothing to the disk.
+
+- **Services (the only Steamwoven code).** The allocator (`GuestHeap`: hooked `malloc`, `calloc`, `realloc` and `free`; explicit limit,
+  zeroed or fill-byte blocks), the file layer (open, close, line and block reads, writes, length, existence and directory
+  listing over `IOriginalFileSource`: base sources only, as the original sees them before it mounts the module; text-mode reads drop a
+  CR before an LF; files the executable writes stay in memory and are visible to its later reads; writes outside `proto\` are not
+  kept), the clock (fixed), the GUID (a fixed fill), directory creation (answers 1), the window rectangle, the display's colour
+  conversion, the two window callbacks of the start information (counting stubs) and the art library's start-up (the module's tables
+  and cache limit are written by the host, the rest is the original's code). Prototype files are never taken from the source:
+  `PrototypeBuildOptions.ExistingFiles` says which exist; none (the default) is a fresh installation with 1,423 builds.
+- **Refusals (typed, `PrototypeBuildFailure`).** `InvalidExecutable`, `UnverifiedExecutable`, `MissingSourceFile` (one of the 13 data files
+  without which a build is wrong is not in any source; other missing files read as absent, as in the original), `StartupFault` and
+  `BuildFault` (the interpreter's fault with its address and the build's number), `BadOutput` (a build that did not write exactly one prototype file, an unexpected file
+  operation, a write outside the allowed names) and `LimitExceeded` (heap, steps per call, files, bytes written).
+- **Verification.** Synthetic tests (refusals, the heap). Opt-in on the player's executable and data
+  (`TestCategory=OriginalExe`; `ARCANUM_EXE`, `ARCANUM_GAME_ROOT`, and `ARCANUM_ORIGINAL_PROTO` for the comparison): all 1,423 files are
+  built, equal field by field to the files the original wrote on a Windows installation, and a second build over other uninitialized memory
+  shows the only values that depend on it (word 0 of a script element); a finished installation's check rebuilds 307 files. Results
+  and the answers to the open questions: [E3 results](research/prototype-extraction.md#e3-results-arc-dev-068). A fresh
+  installation takes about 2.43 × 10^9 steps, 26 s (Release, Apple silicon).
+
 ## Not ready
 
-- No prototype is built yet: the start-up functions, the service layer over the content stack (memory, file layer,
-  MES, clock, GUID, log), the build loop and the comparison with the files the original wrote are E3.
-- No allocator: the host maps any heap and answers the allocation functions with hooks (E3).
+
+- The builder is not wired into the game: no cache, no content-stack source for the built files, no launcher progress or first-start build (E4).
+- The interpreter has no allocator of its own; the builder's `GuestHeap` answers the allocation functions with hooks.
 - One call at a time; a hook cannot call back into the interpreted code.
 - The loader maps each section's virtual size rounded to the page, not to a larger section alignment (the retail
   executable aligns sections to the page), and makes a writable section readable, as Windows does.

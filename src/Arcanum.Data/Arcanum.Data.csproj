@@ -6,6 +6,8 @@
   <ItemGroup>
     <PackageReference Include="SharpZipLib" />
     <InternalsVisibleTo Include="Arcanum.Data.Tests" />
+    <!-- ARC-DEV-068: the prototype builder's real-data test compares built records field by field with the original's. -->
+    <InternalsVisibleTo Include="Arcanum.Executable.Tests" />
     <!-- ARC-WORLD-021: the viewer tests build a whole-map step snapshot with a window edge. -->
     <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
   </ItemGroup>

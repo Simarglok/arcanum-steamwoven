@@ -4,7 +4,8 @@ Status: **Research**, work item ARC-RES-085 (2026-11-03), slice E1 of the fresh-
 fix. Docs-only: no code changes and no checks run (the census below ran locally, not as a repository check). It says how the original builds its
 prototype files, what a build needs at run time, and how Steamwoven builds the same files
 from the player's own `Arcanum.exe` on any operating system. The slices that implement it
-are E2–E4 ([plan](#slices)).
+are E2–E4 ([plan](#slices)); E2 (the interpreter) and E3 (the builder, with the answers to the open questions) are done
+([E3 results](#e3-results-arc-dev-068)).
 
 Requirements (reference only, no coverage row changes):
 [FR-CONTENT-001](../requirements/content-product.md#fr-content-001),
@@ -146,17 +147,54 @@ owner's Windows installation (2026-10-29).
 | --- | --- | --- | --- |
 | E1 | ARC-RES-085 | This document | Merged |
 | E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
-| E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the build loop, the captured files; the open inputs of the census settled by reading | All 1,423 files equal to the files the original wrote on the owner's Windows installation, leaving out the unused ID bytes (an opt-in real-data test; the owner's zipped `data\proto` stays local); the macOS differences listed |
+| E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the original's own check and build loop, the captured files; the open inputs of the census settled by reading | **Done:** all 1,423 files equal to the files the original wrote on the owner's Windows installation (an opt-in real-data test; the Windows files stay local); the macOS differences listed ([results](#e3-results-arc-dev-068)) |
 | E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, the ARC-DEV-066 detection as the fallback for an unverified executable | A fresh installation (no `data/proto`) starts the game on macOS and Windows |
 
-## Open questions for E3
+## E3 results (ARC-DEV-068)
 
-1. The two callbacks (0x5E8658, 0x5E8668): which functions the start-up information sets
-   before the prototype check, and whether they change a prototype.
-2. The sound file index (0x601770, 0x601774) and the ART name function (0x604710): which
-   prototypes reach them and whether the result changes a field.
-3. The three tables read by 0x44D305 and whether the spell start-up must run further.
-4. The order of the start-up functions in the original's start (0x4020F0 and its table) up to
-   the prototype check, so the interpreter runs what the original has run by then.
-5. Whether the check of PX1 finds the 81 files named after their object's own name (PX6); if it does not, the original builds them again at every start.
-6. The 112 files that differ from the macOS set, once the original's set is compared.
+The builder ([contract](../Arcanum.Executable.md#the-prototype-builder)) runs the original's own functions in the E2 interpreter:
+the 17 game modules' inits and the first nine object modules' inits in the original's order, then the prototype module's check
+(0x468660), which composes `proto\%06d - %s.pro` for each of the 1,423 numbers and calls the build (0x468890) for every file the file
+layer does not report. Only the system services are Steamwoven code. On the owner's Mac (Release, Apple silicon) a fresh installation takes
+about 2.43 × 10^9 interpreted instructions and 26 s.
+
+- **Compared with the files the original wrote** (the owner's Windows installation, CrossOver, read only, 2026-11-04): all 1,423
+  names equal and all 1,423 files equal field by field, read through the repository's own v119 record reader (the unused bytes of the IDs
+  of PX6 and the storage handle of an array are not part of what the reader returns). The one thing the original leaves to chance is
+  **word 0 of an element of the script array** (slot 31, 65 values in the whole set): it is a stack or heap address the original copies
+  without having set it. A second build over other uninitialized memory (another fill byte, stack and heap base) differs from the first in exactly
+  these values and nowhere else, so the comparison leaves them out; this is checked, not assumed.
+- **Questions 1 to 6** of the plan, answered from the executable:
+  1. *Callbacks.* The start information every module init receives (built by 0x4020F0) holds the editor flag at +0 (0), the main window's handle at +4 (a fixed 1 here) and two window callbacks at +8
+     (view change) and +0xC (redraw) that the original's window code supplies; the host answers them with stubs. The view change is called once, by the location
+     module's init, and the redraw never; no prototype depends on either (all files equal).
+  2. *The "sound file index" and the ART name function.* 0x601770/0x601774 is the index of the script files (the `scr\*.scr` listing that
+     0x44BCC0 parses into numbers, read by 0x4CEDC0 for the NPC scripts), not a sound index; it needs the base sources' `scr` directory. The ART name
+     function 0x41DAE0 is installed by the window library's art module (table entry 0x500590, called with colour depth 16 from 0x401100):
+     the host writes the module's tables and its cache limit and lets the code do the rest. The art file frame counts of the AID fields (the last frame of an
+     animation, the first frame of a critter) come from reading the art files' headers through the file layer
+     (`art\tile`, `art\critter`, `art\monster`, `art\unique_npc` listings, the unique and monster NPC art, the trap eye-candy art).
+     The display's colour conversion (0x52C560) and window rectangle (0x51CEB0) are answered with fixed values; nothing a prototype holds
+     comes from them.
+  3. *The tables read by 0x44D305.* The function 0x44D2F0 scans a table of 216 records of 0xD38 bytes (0x68770C to 0x739E4C) for a record in
+     use (flag bit 0 set, bit 1 clear) whose fields +0x14 and +0x18 equal its two arguments: the run-time table of active spell
+     effects. A prototype build asks it 647 times (one caller, 0x423316) and finds no record in use, so no part of the spell start-up has to run further; the
+     table is filled by casting.
+  4. *Order.* Game modules 0 to 16 (table 0x59A330, 0x2C bytes a record, init at +4), then inside the map module's init (0x40EA90) the object modules `Scroll` to
+     `Obj` (table 0x59F068, 0x34 bytes a record), then the prototype module (0x4681B0) whose check is the build loop. The two tables
+     are read from the executable, not written down in the builder.
+  5. *Does the check find the self-named files?* No, and not only those 81: on an installation that has all 1,423 files the check still
+     builds **307** of them again at every start, because the name it composes from the group's name text differs from the one the build writes (the object's own
+     name text): 85 NPCs of the group named "6401 Monster" and 162 of "6402 Unique NPC" (written as "NPC"), and 60 items (such as `Weapon`
+     against "5678 Auto Loading Mechanism"). The rebuilt files equal the first build (the same test checks it). The builder's `ExistingFiles` option
+     reproduces this.
+  6. *The 112 files that differ from the macOS set.* Against the original's files the macOS set (the community reimplementation's build in
+     `/Applications/Arcanum/data/proto`, 2026-11-04) has 1,373 equal and 50 different files; 62 more differ only in the unset
+     word 0 above. The 50: 15 portals (file numbers 2028 to 2042, two fields: the portal flags, 805319680 against 805319697), one scenery object
+     (4042, one field), 11 generic items (15152, 15170 to 15173, 15181 to 15186; one field), one PC (16086, a text), 19 NPCs (28330 to 28333,
+     28396 to 28407, 28479, 28484, 28486; the field after the flags, 0 against 4, 8, 16, 32768, …) and 3 NPCs (27331, 27339, 27340; script
+     element words). In each of them the original's value is the reference. Which are reconstruction slips and which are the
+     original's own behaviour is for the task that consumes them (D8 "Original" and "Steamwoven" settings).
+
+Not done in E3: the cache, the content-stack source for the built files and the launcher's first-start build and progress (E4),
+and the use of the builder outside tests.
