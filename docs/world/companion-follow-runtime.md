@@ -135,7 +135,7 @@ pending tick and leaves it, so there is one). The viewer takes the travelling fo
 `EventBudgetExceeded`; either applies nothing. **NOT READY:** the session models no NPC leader, so no follower has followers
 of its own and the walk below a follower finds none (the rule is tested with an injected relation); the carried tick keeps
 its old deadline instead of being replaced by the fold's first tick with the wake-up marker (TM5, MIG9); inventories are not
-moved (the stores are identity-keyed).
+moved (the stores are identity-keyed). On a map load the list and the followers' combat-mode exit are taken when the move is requested, so a later refusal of the arrival (a follower's standing changed meanwhile) leaves the PC on the old map with the followers already out of combat mode, as the PC's own exit already does.
 
 **On each map** the group is rebuilt from the session (`AreaCompanionGroup.Create(templates, …)`):
 

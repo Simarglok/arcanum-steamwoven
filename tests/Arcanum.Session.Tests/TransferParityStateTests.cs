@@ -177,6 +177,7 @@ public sealed class TransferParityStateTests
             new([new(Sogg, null), new(Sogg, null)], [Virgil]),              // listed twice
             new([], [Virgil, Sogg, Sogg]),                                  // travelling twice
             new([], [Virgil, Sogg, "bad id"]),
+            new([], [Virgil, Sogg, SessionEventKinds.PlayerEntity]),        // the PC is the mover, not a traveller
             new([new(Sogg, new PartyWaitFacts(3, (PersuasionTraining)99, 8, false))], [Virgil]),
         ];
         foreach (var list in bad)
@@ -187,6 +188,16 @@ public sealed class TransferParityStateTests
             Assert.AreEqual(Exterior, owner.QueryActor().Map);
             Assert.IsNotNull(owner.QueryDanger(Virgil).HitBy);
         }
+    }
+
+    [TestMethod]
+    public void A_traveller_whose_record_held_only_links_leaves_no_danger_record_behind()
+    {
+        using var owner = Party(Virgil);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddDangerEnemy(owner.Version, Virgil, RatHandle).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Virgil, RatHandle).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, Inside, [], owner.QueryTransferMoveList(new())).Disposition);
+        Assert.AreEqual(0, owner.QueryDangerRecords().Records.Count, "a record with nothing left is not kept");
     }
 
     [TestMethod]

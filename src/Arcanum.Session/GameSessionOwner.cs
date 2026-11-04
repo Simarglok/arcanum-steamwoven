@@ -428,7 +428,12 @@ public sealed partial class GameSessionOwner : IDisposable
         if (actorChanged && MoveFollowerEvents(actor!.Value.Map, transfer?.Travelling) is var moved && moved != GameSessionFailure.None) return Reject(moved);
 
         // All refusals precede the commit.
-        if (transfer is not null) CommitTransfer(transfer);
+        if (transfer is not null)
+        {
+            CommitTransfer(transfer);
+            // FM6 may leave a traveller's record holding only check bits: the map change's reset covers it too.
+            if (actorChanged && actor!.Value.Map != _actor.Map) DropCheckOnlyDanger();
+        }
         if (actorChanged) _actor = actor!.Value;
         foreach (var change in effective)
         {
@@ -1386,8 +1391,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure == GameEventFailure.None)
         {
             _events.RemoveAll(SessionEventKinds.AiTick, e => travelling is null || e.ScopeMap != to.RuntimeMap);
-            foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
-                _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
+            DropCheckOnlyDanger();
         }
         return failure switch
         {
@@ -1395,6 +1399,13 @@ public sealed partial class GameSessionOwner : IDisposable
             GameEventFailure.PassInProgress => GameSessionFailure.InvalidEventPass,
             _ => GameSessionFailure.EventConflict,
         };
+    }
+
+    // The danger records that hold only the gate's check bits (see MoveFollowerEvents).
+    private void DropCheckOnlyDanger()
+    {
+        foreach (var record in _danger.Records.Values.Where(r => (r with { Flags = r.Flags & ~CheckBits }).IsBaseline && !r.IsBaseline).ToArray())
+            _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
     }
 
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>

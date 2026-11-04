@@ -64,13 +64,13 @@ public sealed partial class GameSessionOwner
         var waiting = new HashSet<string>(StringComparer.Ordinal);
         foreach (var wait in list.Waiting)
         {
-            if (wait is null || !SessionValidation.Entity(wait.Entity) || !order.Contains(wait.Entity) || !waiting.Add(wait.Entity))
+            if (wait is null || !SessionEventKinds.AiTickNpc(wait.Entity) || !order.Contains(wait.Entity) || !waiting.Add(wait.Entity))
                 return GameSessionFailure.InvalidCompanion;
             if (wait.Timer is not null && !Enum.IsDefined(wait.Timer.LeaderPersuasion)) return GameSessionFailure.InvalidConsentFacts;
         }
         var travelling = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in list.Travelling)
-            if (!SessionValidation.Entity(entity) || waiting.Contains(entity) || !travelling.Add(entity)) return GameSessionFailure.InvalidCompanion;
+            if (!SessionEventKinds.AiTickNpc(entity) || waiting.Contains(entity) || !travelling.Add(entity)) return GameSessionFailure.InvalidCompanion;
         // Every direct follower that is not told to wait travels.
         if (order.Any(entity => !waiting.Contains(entity) && !travelling.Contains(entity))) return GameSessionFailure.InvalidCompanion;
         var waits = new List<(string, long?, int)>();
