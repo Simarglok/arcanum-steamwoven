@@ -49,7 +49,7 @@ and keeps its map-keyed questions with their meaning (the rows of that map), so 
 - A map that opens only as a window (the main world map, more sector files than a whole-map plan admits) is not read on demand
   (`HomeUnread` with the plan status); its NPCs resolve while the viewer holds that map. Since ARC-DEV-075 (MIG2) the viewer also keeps the
   maps it left at a map change of the same run (`AreaRememberedRecords`, a record source that answers from them before the game folder's
-  reader), so Virgil carried from the main map into the Crash Site cave resolves there. A quick load or a fresh run on the cave starts with
+  reader), so Virgil carried from the main map into the Crash Site cave resolves there. A quick load to another map or a fresh run starts with
   none: Virgil's home (a main-map window) is then unresolved, and the AI keeps him out of its rules (`AreaAiHost.Unresolved`) until MIG9
   reads such a window on demand (the F7 in the cave, a fresh run, F8 case). The Crash Site's own NPCs are held because the
   viewer gives the resolver the launch maps.

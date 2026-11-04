@@ -78,7 +78,7 @@ is therefore told of attack events, stands in the scan's and noise's squares (`S
 (`Followers`, which still leaves out a follower on another map), strikes and is struck. Since ARC-DEV-065 an object the rules cannot
 describe must never reach them (the rules refuse an object `Find` does not know, and the refusal once stopped the whole game with failure
 stage `ActorPlan`): the one case left is a companion with no record at all (its home is the main map's window, which the resolver does not
-read on demand: MIG9) and was not left by a map change of this run (`AreaRememberedRecords`: a quick load on the cave), which `Unresolved` keeps out
+read on demand: MIG9) and was not left by a map change of this run (`AreaRememberedRecords`: a quick load to another map or a fresh run), which `Unresolved` keeps out
 of the rules as before; its walk still follows the hero through the group.
 
 | Part | Original | What it does |

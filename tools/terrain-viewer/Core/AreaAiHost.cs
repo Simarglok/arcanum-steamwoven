@@ -1405,7 +1405,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     }
 
     public void PickUp(string id, string item) { }
-    /// <summary>ARC-WORLD-108: the NPC of the shown map that holds the item now (0x4612A0), or null (the hero's items are not the AI's).</summary>
+    /// <summary>ARC-WORLD-108: the NPC that holds the item now (0x4612A0; ARC-DEV-075: of any map the host holds, a visiting companion's holder entry is its home map's), or null (the hero's items are not the AI's).</summary>
     public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, item);
 
     // ---- ARC-WORLD-108: an NPC's item use (0x462CC0: goal 39's last node and the chooser's use at once) ----
@@ -1727,7 +1727,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private static bool HealingTool(CombatFields fields) =>
         fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & SessionHealingItem.HealingFlag) != 0;
 
-    // The fields of an item an NPC of the shown map holds now, or null.
+    // The fields of an item an NPC (of the shown map, or a companion carried here) holds now, or null.
     private CombatFields? ItemFields(string item) => _scene.Combat.NpcItemFields(_session, item);
 
     public bool Knows(string critter, int spell) => _scene.Spells?.Invoke()?.AiKnows(critter, spell) ?? false;

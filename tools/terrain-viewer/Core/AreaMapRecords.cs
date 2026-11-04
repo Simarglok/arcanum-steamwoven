@@ -55,7 +55,7 @@ public sealed class AreaMapRecords(TerrainViewerArguments launch) : IMapRecordSo
 /// them, a window of the main world map too, which <see cref="AreaMapRecords"/> cannot read) answer first, then the game folder's
 /// reader. The viewer tears a map's scene down at every change, so a companion carried from the main map into the Crash Site cave would
 /// otherwise have no record on the cave (its home map is a window nothing reads on demand). The maps are derived data of this run only:
-/// a quick load or a fresh run starts with none (NOT READY: a companion whose home is a main-map window resolves only after a change of
+/// a quick load to another map or a fresh run starts with none (NOT READY: a companion whose home is a main-map window resolves only after a change of
 /// map in the run that loaded it; MIG9 owns reading such a window on demand).
 /// </summary>
 public sealed class AreaRememberedRecords(IEnumerable<AreaInventoryMap> left, IMapRecordSource? inner) : IMapRecordSource

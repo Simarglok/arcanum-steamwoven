@@ -79,6 +79,8 @@ public sealed class AreaAiFollowerTests
         public void Face(string entity, CellCoord toward) => Turns++;
     }
 
+    private static readonly List<object> HomeSources = [];
+
     private sealed class HomeSource(AreaInventoryMap home) : Arcanum.World.IMapRecordSource
     {
         public int Reads;
@@ -87,6 +89,13 @@ public sealed class AreaAiFollowerTests
             Reads++;
             return runtimeMap == home.RuntimeMap ? new(home, string.Empty) : new(null, "unreadable");
         }
+    }
+
+    private static HomeSource NewSource(AreaInventoryMap home)
+    {
+        var source = new HomeSource(home);
+        HomeSources.Add(source);
+        return source;
     }
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, Walks Walks, string Enemy, string Companion)
@@ -116,12 +125,10 @@ public sealed class AreaAiFollowerTests
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var home = new AreaInventoryMap(2, new([new SessionSeedHolder(Entity(1), SessionHolderKind.Npc, false, false, [], [])], []),
             new Dictionary<string, AreaObjectRecord> { [Entity(1)] = Npc(1, new(3, 4)) });
-        var inventory = new AreaInventoryHost(visitor && !onDemand && !homeless ? [map, home] : [map], records: visitor && onDemand ? new HomeSource(home) : null);
+        var inventory = new AreaInventoryHost(visitor && !onDemand && !homeless ? [map, home] : [map], records: visitor && onDemand ? NewSource(home) : null);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         if (visitor && onDemand)
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(2), AreaCompanionPlacement.MapKey(Entity(1)), 1).Disposition);
-        // A home map read on demand has its seed attached to the session on first use (before the companion can join the party).
-        if (visitor && onDemand) Assert.IsNotNull(new AreaCombatHost(inventory, session: () => session).Holder(session, Entity(1)));
         Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(1)).Disposition);
         if (companionWaits) Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, Entity(1)).Disposition);
         // ARC-WORLD-119: a companion released before the host is built.
@@ -366,7 +373,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(1, host.RunCompanions.Count);
         CollectionAssert.Contains(host.Square(enemy, 20).ToList(), companion, "a scan's or noise's square holds him");
         CollectionAssert.Contains(host.Followers(Pc).ToList(), companion, "the flee test's party counts him");
-        Assert.IsNotNull(host.AiLifeTarget(companion) ?? SessionLifeTarget.Hero, "his combat values build");
+        Assert.IsNotNull(host.AiLifeTarget(companion), "his combat values build");
     }
 
     [TestMethod]
@@ -414,7 +421,9 @@ public sealed class AreaAiFollowerTests
     public void A_companion_of_a_home_map_this_run_never_loaded_is_run_through_the_resolvers_on_demand_read()
     {
         var (session, host, _, enemy, companion) = Open(visitor: true, onDemand: true);
+        Assert.AreEqual(0, ((HomeSource)HomeSources[^1]).Reads, "nothing read the home map before the AI host asked");
         Assert.IsNotNull(host.Find(companion));
+        Assert.AreEqual(1, ((HomeSource)HomeSources[^1]).Reads, "the AI host's own question read the home map once");
         host.HeroAttacked(enemy);
         Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(companion).State, $"{host.TraceOf(companion)?.Event}");
         CollectionAssert.Contains(host.Square(enemy, 20).ToList(), companion);
