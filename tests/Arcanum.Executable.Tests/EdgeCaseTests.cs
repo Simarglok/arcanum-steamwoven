@@ -24,7 +24,7 @@ public sealed class EdgeCaseTests
         var machine = Cpu.Run("64 A4", m => { m.Esi = 1; m.Edi = Cpu.Data; });
         Assert.AreEqual(0xFFu, machine.Memory.ReadU8(Cpu.Data));
         Assert.AreEqual((2u, Cpu.Data + 1), (machine.Esi, machine.Edi));
-        // repne movsb repeats like rep
+        // repne movsb repeats like rep (reserved by the manual; the contract fixes the hardware behaviour)
         var repne = Cpu.Run("F2 A4", m => { m.Memory.WriteBytes(Cpu.Data, "abc"u8); m.Esi = Cpu.Data; m.Edi = Cpu.Data + 0x10; m.Ecx = 3; });
         Assert.AreEqual(0x63_6261u, repne.Memory.ReadU32(Cpu.Data + 0x10));
     }
@@ -88,7 +88,7 @@ public sealed class EdgeCaseTests
     [TestMethod]
     public void MemoryFormsOfShiftsBitsSetccAndCmovcc()
     {
-        // shl dword [eax], 1 ; shld [eax+4], ebx, 4 ; sete byte [eax+8] (ZF from the shl: clear) ; bt word [eax+12], cx (17: bit 1 of [eax+14])
+        // shl dword [eax], 1 ; shld [eax+4], ebx, 4 ; sete byte [eax+8] (ZF from the shld: clear) ; bt word [eax+12], cx (17: bit 1 of [eax+14])
         var machine = Cpu.Run("D1 20  0F A4 58 04 04  0F 94 40 08  66 0F A3 48 0C", m =>
         {
             m.Eax = Cpu.Data;

@@ -27,7 +27,8 @@ test: the tests use hand-assembled synthetic code and a synthetic PE image built
   loader writes read-only sections and import slots). Every refused access raises `MachineFaultException` with the
   data address.
 - `X86Machine(MachineOptions?)`: the eight registers, EIP, the flags CF, PF, AF, ZF, SF, OF, DF, the memory and the
-  census. As in user mode, `pushfd` shows IF always set and `popfd` cannot clear it; AC and ID are kept as written,
+  census. `pushfd` shows IF always set and `popfd` cannot clear it; IOPL, TF, NT and the other system bits are not
+  modelled and read 0; AC and ID are kept as written,
   so the CPUID-detection idiom sees a working ID bit and then stops at `cpuid` instead of silently taking the
   no-CPUID branch. The options give the stack (default 2 MiB at 0x100000, below the
   image), the FS base (default 0x7FFDF000: a zeroed thread block with fs:[0] = 0xFFFFFFFF, the end of the exception
@@ -44,7 +45,7 @@ test: the tests use hand-assembled synthetic code and a synthetic PE image built
   execution falls through into it. The hook reads its stack arguments (`Argument(i)`, [ESP + 4 + 4i])
   and the memory, sets EAX/EDX and returns `HookResult.Return(argumentBytes)` (a cdecl or stdcall return),
   `HookResult.Continue()` (observe, then run the code at the address) or `HookResult.Stop(reason)`.
-  `BindImports(image)` points every import slot at its own address in the thunk range; a call through it reaches the
+  `BindImports(image)` (once per machine; it checks every thunk before it changes a slot) points every import slot at its own address in the thunk range; a call through it reaches the
   hook that `HookImport("library!name", hook)` set for every slot of that name (library case ignored), or stops with
   `UnhookedImport` and the import's name. A hook may not call the machine again (one call at a time:
   `InvalidOperationException`); any exception a hook throws is a host bug and propagates out of `Call`, it is not a
@@ -87,7 +88,8 @@ of the integer instructions a 32-bit compiler emits. A sweep of every instructio
 - Bits: `bt`, `bts`, `btr`, `btc` (register offsets reach past the operand, signed, as on the CPU), `bsf`, `bsr`.
 - Control: `jcc` (8- and 32-bit), `jmp` (relative and indirect, jump tables), `call` (relative and indirect),
   `ret`, `ret n`, `loop`, `loope`, `loopne`, `jecxz`; `nop` (with the `0F 1F` form and `pause`).
-- Strings: `movs`, `cmps`, `stos`, `lods`, `scas` on bytes, words and dwords, once or repeated; every repeated
+- Strings: `movs`, `cmps`, `stos`, `lods`, `scas` on bytes, words and dwords, once or repeated (`F2` on `movs`,
+  `stos` and `lods`, reserved by the manual, repeats like `rep`, as the hardware does); every repeated
   iteration counts as a step, and a repeat with ECX = 0 changes nothing.
 - Refused with `UnsupportedInstruction`: every floating-point and `wait` opcode, the segment register moves and pushes,
   far calls, jumps and returns, `int`, `into`, `iret`, `hlt`, `in`, `out` and the string port instructions, the BCD

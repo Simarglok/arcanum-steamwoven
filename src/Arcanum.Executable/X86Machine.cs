@@ -87,7 +87,7 @@ public sealed partial class X86Machine
 
     /// <summary>
     /// The flags register as <c>pushfd</c> stores it: CF, PF, AF, ZF, SF, DF, OF, AC and ID as written, IF always set and
-    /// the fixed bit 1 (user mode: <c>popfd</c> cannot clear IF; the other system bits read 0).
+    /// the fixed bit 1. <c>popfd</c> cannot change IF; IOPL, TF, NT and the other system bits are not modelled and read 0.
     /// </summary>
     public uint Eflags
     {
@@ -118,20 +118,28 @@ public sealed partial class X86Machine
     /// <summary>
     /// Points every import slot of the loaded <paramref name="image"/> at its own address in the unmapped thunk range. A call
     /// through a slot then reaches the hook <see cref="HookImport"/> set for it, or stops with
-    /// <see cref="MachineFaultKind.UnhookedImport"/> and the import's name.
+    /// <see cref="MachineFaultKind.UnhookedImport"/> and the import's name. Once per machine; every thunk is checked before
+    /// any slot changes, so a refusal leaves the machine as it was.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Imports were bound already.</exception>
+    /// <exception cref="ArgumentException">The thunk range wraps, or a thunk is mapped, the sentinel or hooked.</exception>
     public void BindImports(PeImage image)
     {
         ArgumentNullException.ThrowIfNull(image);
+        if (importThunks.Count > 0) throw new InvalidOperationException("imports are bound already");
         if ((ulong)Options.ImportThunkBase + 16UL * (ulong)image.Imports.Count > 1UL << 32)
             throw new ArgumentException("the import thunk range wraps past 4 GiB", nameof(image));
+        for (var i = 0; i < image.Imports.Count; i++)
+        {
+            var thunk = Options.ImportThunkBase + 16u * (uint)i;
+            if (Memory.IsMapped(thunk) || thunk == Options.ReturnSentinel || hooks.ContainsKey(thunk))
+                throw new ArgumentException($"import thunk 0x{thunk:X8} is mapped, the return sentinel or already hooked", nameof(image));
+        }
         Span<byte> slot = stackalloc byte[4];
         for (var i = 0; i < image.Imports.Count; i++)
         {
             var import = image.Imports[i];
             var thunk = Options.ImportThunkBase + 16u * (uint)i;
-            if (Memory.IsMapped(thunk) || thunk == Options.ReturnSentinel || hooks.ContainsKey(thunk))
-                throw new ArgumentException($"import thunk 0x{thunk:X8} is mapped, the return sentinel or already hooked", nameof(image));
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(slot, thunk);
             Memory.Load(import.SlotAddress, slot);
             hooks[thunk] = new HookEntry(import.FullName, null);

@@ -135,6 +135,11 @@ public sealed class PeImageTests
         var overSentinel = new X86Machine(new MachineOptions { ImportThunkBase = 0xFFFF_FFE0 });
         image.LoadInto(overSentinel.Memory);
         Assert.ThrowsExactly<ArgumentException>(() => overSentinel.BindImports(image));
+        Assert.AreEqual(0u, overSentinel.Memory.ReadU32(image.Imports[0].SlotAddress) & 0xFF00_0000, "a refusal changes no slot");
+        var twice = new X86Machine();
+        image.LoadInto(twice.Memory);
+        twice.BindImports(image);
+        Assert.ThrowsExactly<InvalidOperationException>(() => twice.BindImports(image));
         var hooked = new X86Machine();
         image.LoadInto(hooked.Memory);
         hooked.Hook(hooked.Options.ImportThunkBase, "taken", _ => HookResult.Return());

@@ -289,7 +289,7 @@ public sealed partial class X86Machine
                     ModRM();
                     kind = ShiftKinds[reg];
                     var count = (op <= 0xC1 ? Fetch8() : op <= 0xD1 ? 1u : r[EcxIndex]) & 0x1F;
-                    var value = ReadRM(size); // read even for a count of 0, as the CPU does (it may fault)
+                    var value = ReadRM(size); // read even for a count of 0 (a read fault stays a fault; no write is made)
                     if (count != 0) WriteRM(size, Shift(reg, value, count, size));
                 }
                 break;
