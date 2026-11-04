@@ -65,7 +65,7 @@ real data showed the holder inside it. The original never lists an `OF_INVENTORY
 and its fold and queries skip a held item (RL10), and a holder's items are found through its list, so an item whose parent is in the area (or null) and
 that the list does not name is reachable by nobody: it is inert, as it is here (F2 for the sector part, F1 for the list walk of the inventory functions, which was
 not read one by one). An item whose parent lies **outside** the loaded area is also kept apart, but that is a limit, not a claim: the parent's own list, on the
-map but outside the window, may name it, and the item is left out of this view's items until cross-map holders exist (MIG6e). Such an item still needs its
+map but outside the window, may name it, and the item is left out of this view's items (a limit that stays: MIG6e, ARC-DEV-087, moves an item out of an NPC's list on an attached map to the hero, it does not read a parent outside a window). Such an item still needs its
 inventory location field (a missing one is `FieldUnresolved`, as for every item).
 
 Every other reconciliation rule is unchanged: a listed item still needs its parent and flag, a ground item still no parent and a location.

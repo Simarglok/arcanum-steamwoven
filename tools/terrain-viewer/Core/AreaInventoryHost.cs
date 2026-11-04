@@ -151,6 +151,25 @@ public sealed class AreaInventoryHost
         return GameSessionFailure.None;
     }
 
+    /// <summary>ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's is
+    /// attached with the host, and a restore attaches them again): attaches it now. The session's refusal, or null when there was nothing to
+    /// attach (a given map, one already attached, one not read) or the seed was accepted.</summary>
+    public GameSessionFailure? AttachReadMap(GameSessionOwner session, int runtimeMap)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_resolver.IsRead(runtimeMap) || session.QueryMapInventory(new(runtimeMap)) is not null || _resolver.Held(runtimeMap) is not { } read) return null;
+        return session.AttachMapInventory(new(runtimeMap), read.Seed) is { Disposition: GameSessionDisposition.Rejected } refused ? refused.Failure : null;
+    }
+
+    /// <summary>ARC-DEV-087 (MIG6e): attaches the seed of the map that lists <paramref name="entity"/> when the resolver read it on demand and the
+    /// session holds none yet, so an item moves between the object and the hero's list (the negative IN of a companion carried here from its
+    /// home map). A refusal is named in the log; the move then finds no holder and is refused as before.</summary>
+    public void AttachHolderMap(GameSessionOwner session, string entity)
+    {
+        if (_resolver.HeldHome(entity) is { } map && AttachReadMap(session, map) is { } refused)
+            Console.WriteLine($"ARC-DEV-087 holder-map-attach refused map={map} failure={refused}");
+    }
+
     /// <summary>The ground item, dead NPC or (ARC-WORLD-101) standing container a press on <paramref name="key"/> acts on; null for
     /// anything else (a taken item, a living NPC, a broken container, an object of a map without a seed). A ground item the session will
     /// refuse (gold, ammunition, a key, a pickup or insert script) is still a target: the click reports the refusal, as a locked container's
@@ -200,7 +219,7 @@ public sealed class AreaInventoryHost
 
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
-        new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session));
+        new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity));
 
     /// <summary>The shown name of an item or holder of any loaded map (the hover tooltip's rule); a taken item keeps its
     /// row. Unknown entities and nameless objects get a bracketed type label, never original text.</summary>
