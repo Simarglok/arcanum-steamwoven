@@ -47,7 +47,8 @@ names as its parent an NPC of the same window whose list does not hold it, so th
 items through its list and never lists a held item in a sector (RL3, RL10), so the item is inert there. `AreaInventoryReader` now keeps such an item in
 `AreaInventory.Detached` and out of `Items`; `AreaInventoryMap.Detached` carries the entities and the seed builds (`Ready`, the viewer's detail names the count).
 Nothing is created for it: `QueryObject` of a detached entity answers null (a map object the session never moved and that no seed row names), which is the existing
-limit MIG6d removes. Only this one window is known to hold such an item; the rule is general, so another window or map with one builds too.
+limit MIG6d removes. Only this window is known to hold such an item (the town window, sector 1409,1314; the Crash Site and cave seeds were already `Ready` without one). The rule is general, so another
+window or map with one builds too; where the parent is outside the window the item is only left out of the view, which MIG6e (cross-map holders) settles.
 
 ## Not ready
 

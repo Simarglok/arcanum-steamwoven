@@ -179,6 +179,14 @@ public sealed class AreaInventoryTests
     }
 
     [TestMethod]
+    public void A_detached_item_still_needs_its_inventory_location_field()
+    {
+        var world = World();
+        world.Add(Item(31, 21, Armor, 1, 2805, flags: Inventory, extra: [Null(43)]));
+        Refused(AreaInventoryFailure.FieldUnresolved, 31, world);
+    }
+
+    [TestMethod]
     public void A_clean_area_has_no_detached_items()
     {
         Assert.AreEqual(0, Read(World()).Detached.Count);

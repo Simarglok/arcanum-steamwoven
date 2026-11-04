@@ -62,8 +62,11 @@ Why: the town window of the main map (sector 1409,1314, runtime map 1) holds one
 is an NPC of the same window whose list (7 of 7) does not name it. The refusal made the whole seed unavailable (bug B02: no inventory, no loot, the hero's
 worn set not shown, until the hero went back into the temple map whose own seed is ready). The first plan guessed a holder outside the window; the reading of the
 real data showed the holder inside it. The original never lists an `OF_INVENTORY` item in a sector (insert refuses it, [RL3](../architecture/original-object-model.md))
-and its fold and queries skip a held item (RL10), and a holder's items are found through its list, so an unlisted held item is reachable by nobody: it is
-inert, as it is here (F2 for the sector part, F1 for the list walk of the inventory functions, which was not read one by one).
+and its fold and queries skip a held item (RL10), and a holder's items are found through its list, so an item whose parent is in the area (or null) and
+that the list does not name is reachable by nobody: it is inert, as it is here (F2 for the sector part, F1 for the list walk of the inventory functions, which was
+not read one by one). An item whose parent lies **outside** the loaded area is also kept apart, but that is a limit, not a claim: the parent's own list, on the
+map but outside the window, may name it, and the item is left out of this view's items until cross-map holders exist (MIG6e). Such an item still needs its
+inventory location field (a missing one is `FieldUnresolved`, as for every item).
 
 Every other reconciliation rule is unchanged: a listed item still needs its parent and flag, a ground item still no parent and a location.
 
