@@ -212,7 +212,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Moves an item of an NPC's current list in the actor's map seed (alive or not: life is the caller's concern) to the hero (0x4617F0 with the hero as the new parent, NT2, NT3), as
+    /// Moves an item of an NPC's current list in the seed of the actor's map, or (ARC-DEV-087, MIG6e) of the other attached map that lists the NPC (alive or not: life is the caller's concern) to the hero (0x4617F0 with the hero as the new parent, NT2, NT3), as
     /// a steal or a purchase does: a seed item, a made item the session added to it, or an item the hero gave it (which returns to the list
     /// it came from). The item rules and the commit are <see cref="LootItem"/>'s (the insert check, the Technophobia refusal, the
     /// insert-item script, the ammunition merge), without its dead-holder and use-script conditions. Refused before any effect: an invalid
@@ -231,14 +231,14 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (!SessionValidation.Entity(npc) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-        if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
+        // ARC-DEV-087 (MIG6e): an NPC of another attached map (a companion carried here) moves its item from that map's seed.
+        if (!NpcHolderSeed(npc, out var map, out var seed, out _)) return RejectItem(UnseededHolder());
         if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
-            return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.AddedFacts(added))), npc, insertCheck, scripts);
-        if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
+            return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.AddedFacts(added))), npc, insertCheck, scripts, map);
+        if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-103: worn as the session's lists show it (a dressed NPC's record over its map data).
-        return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), npc, insertCheck, scripts);
+        return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), npc, insertCheck, scripts, map);
     }
 
     /// <summary>
@@ -311,7 +311,7 @@ public sealed partial class GameSessionOwner
         var known = new SortedDictionary<string, SessionItemKind>(StringComparer.Ordinal);
         foreach (var item in _inventory.Kit) known.TryAdd(item.Entity, item.Kind);
         foreach (var item in _inventory.Placed) if (item.Source == SessionPlacedSource.Kit) known.TryAdd(item.Entity, item.Kind);
-        foreach (var item in _inventory.Npcs.Values.SelectMany(list => list))
+        foreach (var item in _inventory.Lists.All)
             if (_inventory.Given.TryGetValue(item.Entity, out var given) && given.Origin is null) known.TryAdd(item.Entity, item.Kind);
         return Array.AsReadOnly(known.Select(pair => new SessionKitItem(pair.Key, pair.Value)).ToArray());
     }
@@ -414,7 +414,7 @@ public sealed partial class GameSessionOwner
                 foreach (var entity in row.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { Kind.Type: SessionItemType.Gold } facts)
                         yield return (entity, _inventory.Piles.TryGetValue(entity, out var tracked) ? tracked : facts.Quantity ?? 0, facts);
-        if (kind == SessionHolderKind.Npc || _inventory.Containers.Contains(holder))
+        if (kind == SessionHolderKind.Npc || _inventory.Lists.IsContainer(holder))
             foreach (var item in _inventory.AddedTo(holder))
                 if (item.Kind.Type == SessionItemType.Gold) yield return (item.Entity, _inventory.Piles[item.Entity], null);
     }

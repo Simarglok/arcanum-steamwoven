@@ -439,11 +439,8 @@ internal sealed class InventoryDomain
     internal List<SessionMadeItem> Made { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
     /// <summary>ARC-WORLD-055: the made items added to each NPC, by NPC entity; a list is never empty. ARC-WORLD-090: and to each
-    /// container a barter window filled (its entity in <see cref="Containers"/>).</summary>
-    internal SortedDictionary<string, List<SessionMadeItem>> Npcs { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>ARC-WORLD-090: the keys of <see cref="Npcs"/> that are containers.</summary>
-    internal HashSet<string> Containers { get; } = new(StringComparer.Ordinal);
+    /// container a barter window filled. ARC-DEV-088 (MIG6d): the lists are directory entries, an item's holder found by its entity.</summary>
+    internal HolderLists Lists { get; } = new();
 
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1).</summary>
     internal SortedSet<string> Identified { get; } = new(StringComparer.Ordinal);
@@ -478,34 +475,23 @@ internal sealed class InventoryDomain
             : facts.Worn ? facts with { InventoryLocation = -1 } : facts;
 
     /// <summary>The made items added to NPCs and containers (the bound of <see cref="GameSessionLimits.MaxNpcItems"/>).</summary>
-    internal int NpcHeld => Npcs.Values.Sum(list => list.Count);
+    internal int NpcHeld => Lists.Count;
 
-    /// <summary>The NPC that holds the added made item, or null.</summary>
-    internal string? NpcOf(string entity) => Npcs.FirstOrDefault(pair => pair.Value.Exists(item => item.Entity == entity)).Key;
+    /// <summary>The NPC (or container) that holds the added made item, or null.</summary>
+    internal string? NpcOf(string entity) => Lists.HolderOf(entity);
 
     /// <summary>The made items added to an NPC, in order (empty when none).</summary>
-    internal IReadOnlyList<SessionMadeItem> AddedTo(string npc) => Npcs.TryGetValue(npc, out var list) ? list : [];
+    internal IReadOnlyList<SessionMadeItem> AddedTo(string npc) => Lists.Of(npc);
 
-    internal void AddToNpc(string npc, SessionMadeItem item)
-    {
-        if (!Npcs.TryGetValue(npc, out var list)) Npcs[npc] = list = [];
-        list.Add(item);
-    }
+    internal void AddToNpc(string npc, SessionMadeItem item) => Lists.Add(npc, item, container: false);
 
     /// <summary>ARC-WORLD-090: an item at the end of a container's added list.</summary>
-    internal void AddToContainer(string container, SessionMadeItem item)
-    {
-        AddToNpc(container, item);
-        Containers.Add(container);
-    }
+    internal void AddToContainer(string container, SessionMadeItem item) => Lists.Add(container, item, container: true);
 
     /// <summary>Removes an added made item from whichever NPC holds it; an emptied list is dropped.</summary>
     internal bool RemoveFromNpc(string entity)
     {
-        if (NpcOf(entity) is not { } npc) return false;
-        var list = Npcs[npc];
-        list.RemoveAll(item => item.Entity == entity);
-        if (list.Count == 0) { Npcs.Remove(npc); Containers.Remove(npc); }
+        if (!Lists.Remove(entity)) return false;
         Unwear(entity);
         return true;
     }
@@ -578,7 +564,7 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-066: the ammunition stacks the session tracks, by entity.</summary>
     internal SortedDictionary<string, SessionAmmoRecord> Ammo { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs (their entries are in <see cref="Npcs"/>), by entity.</summary>
+    /// <summary>ARC-WORLD-071: the kit and taken items the hero gave NPCs (their entries are in <see cref="Lists"/>), by entity.</summary>
     internal SortedDictionary<string, SessionGivenItem> Given { get; } = new(StringComparer.Ordinal);
 
     /// <summary>ARC-WORLD-071: the gold piles whose coins the session tracks, by entity.</summary>
@@ -596,7 +582,7 @@ internal sealed class InventoryDomain
     }
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray(), Made.ToArray(),
-        Npcs.Select(pair => new SessionNpcInventory(pair.Key, Array.AsReadOnly(pair.Value.ToArray())) { Container = Containers.Contains(pair.Key) }).ToArray(),
+        Lists.Capture(),
         Placed.ToArray(), Ammo.Values.ToArray(), Given.Values.ToArray(), Piles.Select(pair => new SessionGoldRecord(pair.Key, pair.Value)).ToArray(),
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), JunkPiles.ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
@@ -704,7 +690,7 @@ internal sealed class InventoryDomain
             new(entity, holder.Kind == SessionHolderKind.Npc ? Worn(holder.Entity, entity, facts) : facts);
         return holder.Items
             .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => Item(entity, WithAmmo(entity, seed.Items[entity].Facts)))
-            .Concat(added && (holder.Kind == SessionHolderKind.Npc) != Containers.Contains(holder.Entity)
+            .Concat(added && (holder.Kind == SessionHolderKind.Npc) != Lists.IsContainer(holder.Entity)
                 ? AddedTo(holder.Entity).Select(item => Item(item.Entity, AddedFacts(item)))
                 : []);
     }

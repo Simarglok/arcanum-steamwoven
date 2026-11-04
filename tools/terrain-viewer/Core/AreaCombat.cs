@@ -30,6 +30,7 @@ public readonly record struct AreaNpcWornItem(Arcanum.Simulation.Equipment.Equip
 /// </summary>
 public sealed class AreaCombatHost : IAreaEventObjects
 {
+    private readonly AreaInventoryHost _inventory;
     private readonly RecordResolver _resolver;
     private readonly Func<int, CombatFields?>? _prototypes;
     private readonly Func<GameSessionOwner?>? _session;
@@ -58,6 +59,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaCombatHost(AreaInventoryHost inventory, Func<int, CombatFields?>? prototypes = null, Func<GameSessionOwner?>? session = null)
     {
         ArgumentNullException.ThrowIfNull(inventory);
+        _inventory = inventory;
         _resolver = inventory.Resolver;
         _prototypes = prototypes;
         _session = session;
@@ -148,10 +150,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_holders.TryGetValue(runtimeMap, out var cached)) return cached;
         // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
         // attached with the host, and a restore attaches them again).
-        if (_resolver.IsRead(runtimeMap) && session.QueryMapInventory(new(runtimeMap)) is null && _resolver.Held(runtimeMap) is { } read
-            && session.AttachMapInventory(new(runtimeMap), read.Seed) is { Disposition: GameSessionDisposition.Rejected } refused
-            && _refusedAttach.Add(runtimeMap))
-            Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused.Failure}");
+        if (_inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
+            Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
         var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))

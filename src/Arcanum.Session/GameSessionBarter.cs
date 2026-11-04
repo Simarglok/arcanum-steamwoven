@@ -228,7 +228,7 @@ public sealed partial class GameSessionOwner
             var hero = HeroStackOfType(source.AmmoType);
             return MoveUnits(source, count, hero, hero is null ? () => NewHeroStack(newStackKind, source.AmmoType, count, insertCheck) : null);
         }
-        if (_inventory.Containers.Contains(container) && _inventory.AddedTo(container).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
+        if (_inventory.Lists.IsContainer(container) && _inventory.AddedTo(container).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
             return Take(seed, new(item, _inventory.AddedFacts(added)), container, insertCheck, scripts);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != container || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);

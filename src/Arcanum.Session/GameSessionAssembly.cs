@@ -257,7 +257,7 @@ public sealed partial class GameSessionOwner
     /// int.MaxValue there is none.</summary>
     private long NextMadeNumber()
     {
-        var numbers = _inventory.Made.Select(item => item.Entity).Concat(_inventory.Npcs.Values.SelectMany(list => list).Select(item => item.Entity))
+        var numbers = _inventory.Made.Select(item => item.Entity).Concat(_inventory.Lists.All.Select(item => item.Entity))
             .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_durability.Destroyed).Concat(_durability.Records.Keys)
             .Select(entity => (long)(SessionMadeItem.Number(entity) ?? 0));
         // ARC-WORLD-094: and never a number a regeneration discarded.

@@ -16,7 +16,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
-        if (_inventory.Containers.Contains(npc)) return [];
+        if (_inventory.Lists.IsContainer(npc)) return [];
         // ARC-WORLD-071: the kit and taken items the hero gave the NPC are its list's too, but not made items (QueryGivenItems).
         return Array.AsReadOnly(_inventory.AddedTo(npc).Where(item => !_inventory.Given.ContainsKey(item.Entity)).ToArray());
     }
@@ -122,7 +122,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>An NPC holder of an attached seed, a party record, or an NPC holding added items (ARC-WORLD-090: not a container).</summary>
-    private bool KnownNpc(string npc) => _inventory.Npcs.ContainsKey(npc) && !_inventory.Containers.Contains(npc) || _party.Records.ContainsKey(npc) ||
+    private bool KnownNpc(string npc) => _inventory.Lists.HasList(npc) && !_inventory.Lists.IsContainer(npc) || _party.Records.ContainsKey(npc) ||
         _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc);
 
     /// <summary>The NPC's seed items still in its list, in every attached seed that lists it as an NPC (ARC-WORLD-090: or the
