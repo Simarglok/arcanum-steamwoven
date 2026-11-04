@@ -37,9 +37,14 @@ public partial class TerrainViewerApp
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var tiles = _mapTransfers!.ScriptTiles;
         var wrecks = tiles.Where(c => _mapTransfers.TileScript(c)?.Script == tileScript).OrderBy(c => c.Y).ThenBy(c => c.X).ToArray();
-        Require(wrecks.Length > 0, $"a tile of script {tileScript} is in the window ({tiles.Count} script tiles)");
+        // ARC-DEV-089: the stage needs Virgil's home and the script's tile in the window (the Crash Site, or the altar's sector); another
+        // window (the town, the wilderness) has neither, which is no failure of the game: the stage reports NONE there.
         var template = _companionTemplates.SingleOrDefault(t => t.Facts.ScriptId == AreaCompanionRoster.Virgil.ScriptId && t.Home.RuntimeMap == CurrentAreaMap);
-        Require(template is not null, $"Virgil is a companion template here ({_companionTemplates.Count} templates)");
+        if (wrecks.Length == 0 || template is null)
+        {
+            GD.Print($"{passLine[..passLine.IndexOf(' ', StringComparison.Ordinal)]} native-smoke {place} NONE map={_readyMapName} ({(wrecks.Length == 0 ? $"no tile of script {tileScript} among {tiles.Count} script tiles" : $"Virgil is no companion template here, {_companionTemplates.Count} templates")})");
+            return;
+        }
         // A line through one of its tiles: Virgil one cell before it and the PC four cells past it, so he starts to follow (farther than
         // the start distance 4) and walks the line to within 2 of the PC, his first step onto the tile; every cell walkable, every step open.
         var routes = new AreaRouteSource(map.Steps, map.Chart);

@@ -58,9 +58,11 @@ public partial class TerrainViewerApp
                 Require(_camera.State == view, "CAMERA_MOVED");
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
                 // A body of no plan command is a visiting companion's or (ARC-WORLD-063) a junk pile's or placed item's drawn under its own
-                // key (ARC-RENDER-033), or (ARC-RENDER-041) a pool of blood's, never anything else.
+                // key (ARC-RENDER-033), or (ARC-RENDER-041) a pool of blood's, never anything else. ARC-DEV-089: an item the session
+                // holds on the ground under its own row key (an item no holder lists is detached onto the ground, ARC-DEV-085) has no T0
+                // body in a window whose plan leaves held items out, so every ground body counts, not only the ones under a placed key.
                 Require(_canvas.AreaVisibleCommands.All(c => c.Identity is not { } key || identities!.Contains(key) || companions.Contains(key)
-                    || _groundOnly.ContainsKey(key) || _bloodPoolKeys.Contains(key)), "UNPLANNED_BODY");
+                    || _groundBodies.ContainsKey(key) || _groundOnly.ContainsKey(key) || _bloodPoolKeys.Contains(key)), "UNPLANNED_BODY");
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
