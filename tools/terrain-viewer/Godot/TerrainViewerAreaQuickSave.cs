@@ -287,6 +287,8 @@ public partial class TerrainViewerApp
         ApplySessionSettings(session);
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
         if (_conversationHost is not null) _conversationHost = talk!;
+        // ARC-DEV-081: a walk-to-talk names a speaker of the replaced host (its index is that host's).
+        _talkAfterRoute = null;
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
         // ARC-SCRIPT-017: the cached use-script host kept the previous owner.
         _useScriptHost = null;

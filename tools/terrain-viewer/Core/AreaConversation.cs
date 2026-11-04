@@ -192,6 +192,10 @@ public sealed class AreaConversationHost
     /// </summary>
     public SessionMapId StateMap(AreaSpeaker speaker) => State.MapOf(speaker.Index);
 
+    /// <summary>True for a speaker <see cref="AdmitVisitor"/> listed after the map's own: a companion carried here, whose presence is the
+    /// viewer's companion group's, not the map's data.</summary>
+    public bool IsCarried(AreaSpeaker speaker) => speaker.Index >= _ownCount && speaker.Index < _speakers.Count && _speakers[speaker.Index] == speaker;
+
     /// <summary>
     /// ARC-DEV-081 (MIG5, was ARC-WORLD-048's visitor host): lists a companion carried to the shown map as one more speaker of this host,
     /// after the map's own and the ones admitted before, so the one host talks to every speaker standing here. A companion this host
@@ -206,7 +210,8 @@ public sealed class AreaConversationHost
     {
         ArgumentNullException.ThrowIfNull(template);
         refusal = null;
-        if (_speakers.FirstOrDefault(listed => listed.Row.Key == template.Key) is { } known) return known;
+        // One object, one speaker: a row of the same entity id counts as listed too (the id, not the row's key, names its dialog state).
+        if (_speakers.FirstOrDefault(listed => listed.Row.Key == template.Key || AreaConversationState.EntityId(listed.Row) == template.Entity) is { } known) return known;
         if (!_party) return null;
         if (_refusedVisitors.ContainsKey(template.Entity)) return null;
         var speaker = template.Speaker with { Index = _speakers.Count };
@@ -352,7 +357,7 @@ public sealed class AreaConversationHost
         if (_content is null) { detail = _contentDetail; return false; }
         if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
         var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
-            new() { Rules = _session.Rules.Scripts, Admission = Scripts.RunAdmission });
+            new() { Rules = _session.Rules.Scripts, Admission = Scripts.AdmissionFor(Scripts.Local(call.Attachee)) });
         LastCall = result;
         if (_content.Changed) { detail = $"script {call.Script}: a script file changed since it was first read"; return false; }
         if (result.Outcome == ScrOutcome.Refused)
@@ -412,7 +417,7 @@ public sealed class AreaConversationHost
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
-            new() { Rules = _session.Rules.Scripts, Admission = Scripts.RunAdmission });
+            new() { Rules = _session.Rules.Scripts, Admission = Scripts.AdmissionFor(Scripts.Object(speaker)) });
         LastRun = result;
         if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, $"script {result.Script}: a script file changed since it was first read");
         if (result.Outcome == ScrOutcome.Refused)
@@ -694,6 +699,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public SessionMapId MapOf(int speaker) => _stateMaps.TryGetValue(speaker, out var map) ? map : _map;
 
     /// <summary><see cref="MapOf(int)"/> of the speaker with this entity id; the shown map's for an entity this port does not list.</summary>
+    internal bool IsCarried(string entity) => _entities.IndexOf(entity) is var index and >= 0 && _stateMaps.ContainsKey(index);
+
     internal SessionMapId MapOfEntity(string entity) => _entities.IndexOf(entity) is var index and >= 0 ? MapOf(index) : _map;
 
     /// <summary>Session entity id of an area object: its source object-id fingerprint.</summary>

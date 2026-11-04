@@ -36,6 +36,10 @@ public sealed class AreaVisitorTalkTests
         return (AreaCompanionTemplate.From([speaker], AreaScenePlan.Create(area), area.Visuals, AreaChart.Exterior, Home).Single(), area);
     }
 
+    /// <summary>A dialog NPC of the shown map with an object id of its own (the fixture's rows share one).</summary>
+    private static AreaSpeaker OwnSpeaker(AreaCompanionTemplate template) =>
+        new(0, template.Speaker.Row with { Key = template.Key with { ObjectIdSha256 = new string('9', 64), SourceIndex = 77 } }, 1, 0, 0);
+
     /// <summary>The one host of the visited map 2, party-wired, with no dialog NPC of its own, over <paramref name="session"/>.</summary>
     internal static AreaConversationHost Shown(AreaSnapshot area, GameSessionOwner session, AreaInventoryHost? inventory = null) =>
         new(area, Visited, [], null, session, party: true, inventory);
@@ -83,7 +87,7 @@ public sealed class AreaVisitorTalkTests
     {
         var (template, area) = Load();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
-        var own = new AreaSpeaker(0, area.Objects.First(o => o.Key != template.Key), 1, 0, 0);
+        var own = OwnSpeaker(template);
         var host = new AreaConversationHost(area, Visited, [own], null, session, party: true);
         var speaker = host.AdmitVisitor(template, out _)!;
         Assert.AreEqual(1, speaker.Index, "after the map's own speaker");
@@ -219,7 +223,7 @@ public sealed class AreaVisitorTalkTests
     }
 
     [TestMethod]
-    public void A_carried_companions_give_item_goes_through_the_session_and_is_refused_by_it_without_a_seed_holder()
+    public void A_carried_companions_give_item_goes_through_the_session_and_is_refused_by_it_for_a_holder_the_heros_map_does_not_list()
     {
         var (template, area) = Load();
         using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
@@ -229,7 +233,7 @@ public sealed class AreaVisitorTalkTests
         var host = Shown(area, session, inventory);
         host.AdmitVisitor(template, out _);
         Assert.IsTrue(host.InventoryWired, "the shown map's seed is attached: no second host to ask");
-        // The home map's seed is not attached: the session has no holder for the companion, and says so (no host-side refusal rule).
+        // The session looks in the seed of the hero's map only: the companion's holder is on its home map, so it says so (no host-side refusal rule).
         var port = host.InventoryPort()!;
         Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 4001)));
         Assert.AreEqual(GameSessionFailure.UnknownHolder, ((SessionDialogInventoryPort)port).LastResult!.Value.Failure);
@@ -238,5 +242,62 @@ public sealed class AreaVisitorTalkTests
         plain.AdmitVisitor(template, out _);
         Assert.IsNull(plain.InventoryPort());
         Assert.IsFalse(plain.InventoryWired);
+    }
+
+    [TestMethod]
+    public void A_companion_of_the_shown_maps_other_window_gives_an_item_from_the_seed_holder_the_session_holds()
+    {
+        var (template, area) = Load();
+        // The companion's home is the shown map (the main map's other window): the hero's map seed lists its holder, so the session moves the item.
+        using var session = ConversationSessionFixture.Create(Home.RuntimeMap);
+        var kind = new SessionItemKind(SessionItemType.Generic, 8000, 6000, 6001);
+        var held = "oid:" + new string('7', 64);
+        var map = new AreaInventoryMap(Home.RuntimeMap,
+            new([new SessionSeedHolder(template.Entity, SessionHolderKind.Npc, false, false, [], [held])], [new SessionSeedItem(held, new(kind, 1, 0, 0, null, []), null)]),
+            new Dictionary<string, AreaObjectRecord>
+            {
+                [template.Entity] = template.Speaker.Row,
+                [held] = template.Speaker.Row with { Key = template.Key with { SourceIndex = 78, ObjectIdSha256 = new string('7', 64) } },
+            });
+        var inventory = new AreaInventoryHost([map]);
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        var host = new AreaConversationHost(area, Home, [], null, session, party: true, inventory);
+        var speaker = host.AdmitVisitor(template, out _)!;
+        Assert.AreEqual(Home, host.StateMap(speaker));
+        var port = host.InventoryPort()!;
+        var given = port.Execute(new GiveItemCommand(Npc, AreaConversationState.PcParticipant, 6000));
+        Assert.AreEqual(DialogCommandResult.Applied, given, $"{((SessionDialogInventoryPort)port).LastResult?.Failure}");
+        Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == held), "the item is the hero's now");
+    }
+
+    [TestMethod]
+    public void A_carried_companion_keeps_the_narrow_script_set_and_the_maps_own_speakers_the_wide_one()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var own = OwnSpeaker(template);
+        var host = new AreaConversationHost(area, Visited, [own], null, session, party: true);
+        var speaker = host.AdmitVisitor(template, out _)!;
+        host.Scripts.QueryHost = () => null;
+        Assert.IsTrue(host.IsCarried(speaker));
+        Assert.IsFalse(host.IsCarried(own));
+        Assert.IsFalse(host.IsCarried(speaker with { Index = 5 }), "a speaker this host does not list is not carried");
+        // Without a use host both sets are the narrow one; the carried companion's never widens (a query about it would be answered with no row).
+        Assert.AreSame(AreaScriptHost.Admission, host.Scripts.AdmissionFor(host.Scripts.Object(speaker)));
+        Assert.AreSame(host.Scripts.RunAdmission, host.Scripts.AdmissionFor(host.Scripts.Object(own)));
+    }
+
+    [TestMethod]
+    public void A_row_of_an_entity_the_host_lists_already_is_not_listed_twice()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        // Another speaker (another row key) of the same entity id: one object, one speaker, so its state stays on the shown map.
+        var twin = new AreaSpeaker(0, template.Speaker.Row with { Key = template.Key with { SourceIndex = 77 } }, 1, 0, 0);
+        Assert.AreEqual(template.Entity, AreaConversationState.EntityId(twin.Row), "the same object id");
+        var host = new AreaConversationHost(area, Visited, [twin], null, session, party: true);
+        Assert.AreSame(twin, host.AdmitVisitor(template, out _));
+        Assert.AreEqual(1, host.Speakers.Count);
+        Assert.AreEqual(Visited, host.StateMap(twin));
     }
 }

@@ -41,7 +41,7 @@ Requirements (reference only, no coverage row changes): the groups of the gap re
   consumers still ask by shown map and move in MIG2-MIG5, so MIG1 alone changes no bug here). The state is `main` at a5245f4f
   (2026-11-04 16:14). So every report is still open unless a row says otherwise.
 - **After MIG5 (ARC-DEV-081).** The dialog host is one (a carried companion is one more speaker of the shown map's host) and its negative `IN` refusal
-  `refuseUncoveredInventory` is gone: the session refuses an entity it holds no seed holder for. That is the dialog's `IN` only. The
+  `refuseUncoveredInventory` is gone: the session refuses an entity the hero's map seed does not list. That is the dialog's `IN` only. The
   `inventory-seed ... UnlistedInventoryItem` refusal of B02 and B05 comes from the seed build (`AreaInventory`), which MIG5 does not touch (MIG6, one
   id space), so those two rows keep their expected slices; the `transfer` smoke's visitor talk and the unit tests cover MIG5 (SM02's first half is the seed, not the talk).
 - **Pending triage.** The triage file of 2026-10-29 17:00 was not readable here. Its pending items are taken from the project

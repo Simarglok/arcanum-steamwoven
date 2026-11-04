@@ -165,7 +165,7 @@ Each system then needed its own special case:
 | Visitor kept out of the AI rules | `AreaAiHost.Stranger` (ARC-DEV-065): not told of attacks, in no square, not in the flee count | the rules refuse an object `Find` does not know |
 | Visitor not targetable by spells | `AreaSpellCastMap.IdOf` | no row |
 | Visitor without a body after a quick load | `AreaVisitors.Unbodied` | the body exists only in the run-local cache |
-| ~~Negative `IN` refused unless the home seed is covered~~ (gone: ARC-DEV-081, MIG5) | `refuseUncoveredInventory` | the seed is per map; the session refuses an entity it holds no seed holder for |
+| ~~Negative `IN` refused unless the home seed is covered~~ (gone: ARC-DEV-081, MIG5) | `refuseUncoveredInventory` | the seed is per map; the session refuses an entity the hero's map seed does not list (a cross-map give waits for MIG6) |
 | `HomeMap` searches only covered maps | `AreaCombatHost.HomeMap` | rows exist only for maps loaded in this run |
 
 The transfer itself (`AreaCompanionGroup.Carry`, `Arrive`) writes three map

@@ -279,6 +279,7 @@ public partial class TerrainViewerApp
     /// map whose entity the action's attachee names (the host refused any other); none here is a notice.</summary>
     private void BeginScriptedConversation(Arcanum.Scripting.Scr.ScrDialogStart dialog)
     {
+        AdmitCompanionSpeakers();
         if (_conversationHost?.Speakers.FirstOrDefault(s => AreaConversationState.EntityId(s.Row) == dialog.Npc?.Code) is { } speaker) { BeginScriptedConversation(speaker, dialog); return; }
         _conversationNotice = $"script {dialog.Script} asked for a conversation with {dialog.Npc?.Code ?? "no NPC"}, which is no dialog NPC here";
         GD.Print("ARC-SCRIPT-046 scripted conversation not opened: " + _conversationNotice);
@@ -384,17 +385,17 @@ public partial class TerrainViewerApp
 
     // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt
     // every frame, so the text is cached per session revision (every story or NPC change moves it).
-    private (AreaConversationHost Host, long Revision, string Text)? _storyStatus;
+    private (AreaConversationHost Host, long Revision, int Speakers, string Text)? _storyStatus;
 
     private string StoryStatus()
     {
         var host = _conversationHost!;
         var revision = _areaSession!.Version.Revision;
-        if (_storyStatus is { } cached && ReferenceEquals(cached.Host, host) && cached.Revision == revision) return cached.Text;
+        if (_storyStatus is { } cached && ReferenceEquals(cached.Host, host) && cached.Revision == revision && cached.Speakers == host.Speakers.Count) return cached.Text;
         var story = host.State.Story;
         var followers = Enumerable.Range(0, host.Speakers.Count).Count(host.State.Follows);
         var text = $" | session story: quests {story.Quests.Count}, rumors {story.Rumors.Count}, followers {followers}";
-        _storyStatus = (host, revision, text);
+        _storyStatus = (host, revision, host.Speakers.Count, text);
         return text;
     }
 }

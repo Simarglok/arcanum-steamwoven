@@ -598,9 +598,8 @@ back to lev 2 with the companion) and on a `tulla interior` jump point
   ([OL31–OL33](../research/companion-orders-loyalty-evidence.md#7-followers-across-maps-q7-companion-o7)).
   After the conversation the companions are recorded, then the group is
   rebuilt, so it stays where it stands. A negative `IN` goes to the session by
-  the companion's entity: it moves the item from its seed holder when the session
-  holds one (the home map's seed attached) and is refused (a rejected command,
-  `UnknownHolder`) when it holds none. Its dialog script runs on its home-map
+  the companion's entity: it moves the item when its seed holder is on the hero's
+  map and is refused (a rejected command, `UnknownHolder`) when it is on another. Its dialog script runs on its home-map
   slot, its quest awards and script sounds are taken from its host like the
   shown map's, and a deferred call whose attachee it is runs through the same
   host. A home-map dialog state the session cannot read (a damaged save) makes
