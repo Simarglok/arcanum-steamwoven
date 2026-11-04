@@ -200,7 +200,7 @@ public sealed partial class GameSessionOwner
                 foreach (var entity in holder.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && seed.Items[entity].Facts is { AmmoType: { } type, Quantity: { } units } facts)
                         yield return (_inventory.Ammo.TryGetValue(entity, out var tracked) ? tracked : new(entity, type, units), facts.Kind.Prototype);
-                if (_inventory.Containers.Contains(container))
+                if (_inventory.Lists.IsContainer(container))
                     foreach (var item in _inventory.AddedTo(container))
                         if (item.Kind.Type == SessionItemType.Ammo) yield return (_inventory.Ammo[item.Entity], item.Kind.Prototype);
                 yield break;

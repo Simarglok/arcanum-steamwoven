@@ -141,4 +141,35 @@ public sealed class ObjectDirectoryTests
         Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, negative.Failure);
         Assert.AreEqual("$.inventory.lastJunkNumber", negative.Path);
     }
+
+    // ARC-DEV-088 (MIG6d): the lists of added items are directory entries; a holder's stock is one query.
+    [TestMethod]
+    public void AHoldersStockIsItsSeedItemsThenTheItemsAddedToIt()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(0, owner.QueryHeldBy("smith").Count);
+        Assert.AreEqual(0, owner.QueryHeldBy("nobody").Count, "an unknown holder holds nothing");
+        Assert.AreEqual(0, owner.QueryHeldBy("").Count, "an invalid entity is no holder, not an error");
+        CollectionAssert.AreEqual(new[] { new SessionObjectEntry("bag", SessionObjectOrigin.MapObject, SessionObjectPlace.SeedHolder, Exterior, Holder: "chest") },
+            owner.QueryHeldBy("chest").ToArray());
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "kit:1", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "smith", "kit:2", Accept).Disposition);
+        owner.CreateMadeItem(new("made:1", new(SessionItemType.Food, 3602, 0, 0), SessionCreatePlace.ContainerList, new(0, 0, 0), Holder: "chest"));
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:2" }, owner.QueryHeldBy("smith").Select(entry => entry.Entity).ToArray(), "in the order they entered");
+        Assert.IsTrue(owner.QueryHeldBy("smith").All(entry => entry.Place == SessionObjectPlace.NpcList && entry.Holder == "smith"));
+        CollectionAssert.AreEqual(new[] { SessionObjectPlace.SeedHolder, SessionObjectPlace.ContainerList },
+            owner.QueryHeldBy("chest").Select(entry => entry.Place).ToArray(), "the seed's item first, then the one a container list holds");
+        Assert.AreEqual("made:1", owner.QueryHeldBy("chest")[1].Entity);
+
+        // The lists are saved as before, and a load builds the same entries.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        CollectionAssert.AreEqual(owner.QueryHeldBy("smith").ToArray(), restored.QueryHeldBy("smith").ToArray());
+        Assert.AreEqual(new SessionObjectEntry("made:1", SessionObjectOrigin.Made, SessionObjectPlace.ContainerList, Holder: "chest"), restored.QueryObject("made:1"));
+
+        // An item that leaves a list is in no list any more.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, "kit:1", new ItemCondition(10, 0, 0, false)).Disposition);
+        CollectionAssert.AreEqual(new[] { "kit:2" }, owner.QueryHeldBy("smith").Select(entry => entry.Entity).ToArray());
+        Assert.AreEqual(SessionObjectPlace.Destroyed, owner.QueryObject("kit:1")!.Place);
+    }
 }
