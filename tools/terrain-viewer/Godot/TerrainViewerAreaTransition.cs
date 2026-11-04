@@ -20,6 +20,10 @@ public partial class TerrainViewerApp
 {
     private AreaTransitionCoordinator? _areaTransitions;
     private GameSessionOwner? _areaSession;
+
+    /// <summary>ARC-DEV-080 (GI6): the gameplay generator's seed for a session the player starts, taken from the clock as the original
+    /// does at its start-up (<see cref="AreaRandomSeed"/>); an explicit test or smoke launch keeps seed 0, which its checks rely on.</summary>
+    private ulong NewSessionSeed() => AreaRandomSeed.ForNewSession(SelfTestBootstrap || _nativeSmoke, DateTimeOffset.UtcNow);
     private AreaLoadResult? _exteriorArea;
     private AreaCaveLoad? _caveLoad;
     private Arcanum.Data.Traversal.AreaStepSnapshot? _exteriorSteps;
@@ -90,7 +94,7 @@ public partial class TerrainViewerApp
             var reputations = AreaReputations.Load(arguments.ModulePath);
             GD.Print($"ARC-WORLD-044 reputations status={reputations.Status} detail={reputations.Detail}");
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
-                result.Hero, reputations.Catalog);
+                result.Hero, reputations.Catalog, NewSessionSeed());
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
             AttachAreaEncumbranceEffect();
             ApplySessionSettings(_areaSession);

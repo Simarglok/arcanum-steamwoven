@@ -40,7 +40,8 @@ The session keeps a **project generator**, not the original LCG (decision of thi
 - **One sequence for the session**: the label names a roll; it does not select a stream or change the value. So the
   order of rolls matters, as in the original's single generator, and a roll added before another shifts it.
 - **The host seeds it**: `GameSessionDescriptor.RandomSeed` (default 0). The owner never reads a clock or OS entropy;
-  a host that wants a new sequence per new game passes a new seed (for example from the time).
+  a host that wants a new sequence per new game passes a new seed (for example from the time). The viewer does
+  (ARC-DEV-080, below).
 - **Saved with the session**: a restored session continues exactly where the saved one stood, so a load does not
   re-roll (FR-CONTENT-007 acceptance: with a given seed and command sequence, the rolls are the same). This is the
   Steamwoven setting and an owner decision (gap review GI6, 2026-11-04): a reload repeats the same results, so
@@ -55,6 +56,19 @@ The session keeps a **project generator**, not the original LCG (decision of thi
   (PS14, the `GamblingRoll` of a skill check), is a separate datum that no session domain holds yet: the slice that
   brings gambling into the session saves it and restores it in both modes, outside this switch.
 
+- **The viewer seeds from the clock** (ARC-DEV-080, GI6 follow-up): the original seeds its one process generator once at
+  start-up with the C runtime's clock (the random module's init function 0x4CEEB0 calls the clock seed function 0x4CEEE0,
+  which seeds with `time(NULL)`: whole seconds since 1970 in 32 bits; read in the retail 1.0.7.4 executable, SHA-256
+  `9bd80511…3d52`) and never reseeds it at a new game or a load; the only other seed points of the single-player game
+  are the spawn-once inventory and the dialog (above), and a multiplayer message handler (0x49F7F2, not modelled). The
+  viewer's host code (`AreaRandomSeed`) gives every session the player starts (the scene's first session and the main
+  menu's placeholder, a new game, the opening shop's session) the seed of the clock's whole Unix seconds, wrapped to 32
+  bits like the original's `time` result. The seed is drawn per new session, where the original continues one process
+  generator across a new game; the difference is not visible to a player, as both are unpredictable. An explicit test or
+  smoke launch (`SelfTestBootstrap` or the native smoke) and every test keep seed 0, which their known sequences and
+  draw counts rely on (`AreaTransitionCoordinator.CreateSession` takes the seed, default 0). The editor's draft session,
+  which never rolls, stays at 0. A load under Steamwoven restores the saved generator, so its seed does not matter there.
+
 `Arcanum.Simulation.Randomness.SeededRandom` is the generator itself (Godot-free, no session types), so a component
 that needs its own replayable sequence can use it without a session.
 
@@ -66,6 +80,7 @@ that needs its own replayable sequence can use it without a session.
 | `GameSessionOwner.Roll(label, min, max)` | One uniform integer in `min..max` inclusive. Returns `SessionRollResult` with a `SessionRoll(Label, Min, Max, Value, Position)`, where `Position` is the draws made after this roll. The label is 1..64 ASCII letters, digits and `. _ : -` (for example `combat.AttackCheck`, `loot:gold`). A bad label or `min > max` is `InvalidRoll`; a generator at its last draw (2^63 − 1) is `RandomExhausted`; a refused roll draws nothing. |
 | `GameSessionOwner.QueryRandom()` | `SessionRandomState(Seed, Draws)`. |
 | `GameSessionRestoreOptions.LoadRandom` | The host's running generator (ARC-DEV-077). Under the Original setting the restored session takes it in place of the saved seed and position (null: seed 0 at draw 0); Steamwoven ignores it. A negative position is `InvalidDescriptor` in both modes. |
+| `AreaRandomSeed.FromClock(now)` / `ForNewSession(testLaunch, now)` | The viewer host's seed (ARC-DEV-080, `tools/terrain-viewer/Core`): the clock's whole Unix seconds in 32 bits, or 0 for a test or smoke launch. |
 | `GameSessionOwner.CombatRolls` | The session generator as the attack resolver's `ICombatRollSource`; each roll is labelled `combat.` and the `CombatRollPurpose` name. The source interface has no refusal channel: `min > max` throws `ArgumentOutOfRangeException` (the interface's precondition, as in `CombatRollLog`), and an exhausted generator throws `InvalidOperationException`. The label is checked but not recorded: the resolver's `CombatRollLog` keeps the trace by purpose. |
 | `GameSessionOwner.SpellRolls` | The session generator as the magic rules' `ISpellRollSource` (ARC-MAGIC-005); each roll is labelled `magic.` and the `SpellRollPurpose` name (`ResistanceD100`, `SaveD20`, `FailChanceD20`; `InvocationAptitudeD100` from ARC-MAGIC-006); refusals throw as for `CombatRolls`. |
 | `SeededRandom(seed, draws)` / `TryNext(min, max, out value)` / `Output(seed, index)` | The generator: position, one range roll (false when exhausted, with no draw), and draw `index` (1-based) of a seed. |
@@ -108,6 +123,10 @@ before this schema, so nothing is lost.
   switch (ARC-DEV-077): Steamwoven keeps the saved generator and ignores a running one, Original goes on with the
   running one (or seed 0) and saves it next, a negative running position refused in both modes and a damaged saved one
   under Original too.
+- [`AreaRandomSeedTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaRandomSeedTests.cs) (ARC-DEV-080): the clock seed is
+  whole Unix seconds wrapped to 32 bits, a test launch keeps 0 and a player launch takes the clock, a session made with
+  and without a seed, two launches at different times roll differently and one launch the same, and an Original quick load
+  right after a relaunch goes on with that launch's clock seed instead of 0.
 - [`AreaQuickSaveTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaQuickSaveTests.cs)
   `QuickLoadTakesTheGeneratorTheRuleModeSays`: the viewer's quick load under each setting.
 
@@ -118,7 +137,7 @@ before this schema, so nothing is lost.
 
 ## Not implemented / remaining work
 
-- No host rolls yet: the viewer passes no seed (its sessions use 0) and combat is not wired to a session. The life
+- Combat is not wired to a session by every host. The life
   state's knockout and second-arm rolls (`combat.KnockoutFatigue`, `combat.CrippleBothArms`, ARC-COMBAT-002) draw from
   the same generator.
 - The original's other draws (AI reactions, sounds, effect stat checks) are not modelled, so a session fight is not an
@@ -127,9 +146,6 @@ before this schema, so nothing is lost.
   the owner wants rolls of one kind not to shift those of another).
 - A legacy LCG profile, if the owner wants the original's 15-bit modulo distribution.
 - A trace of recent rolls kept by the session (callers keep their own, like the resolver's `CombatRollLog`).
-- **Original load after a relaunch (GI6, NOT READY):** the viewer seeds every new session, the main menu's placeholder
-  included, with 0, so under Original a save loaded right after a start of the viewer goes on with seed 0 at draw 0
-  every time, and a relaunch repeats the same rolls; the retail game seeds from the clock at start-up. A quick load
-  inside a running game rerolls as the original does. Seeding new sessions from the time is a host change of the viewer
-  (it may read the clock; the owner does not) for its own task, since smokes and tests that roll may rely on seed 0.
-
+- **Original load after a relaunch (GI6)** is closed by ARC-DEV-080: the viewer's sessions are seeded from the clock (above),
+  so under Original a save loaded right after a start of the viewer goes on with that start's seed, as in the retail game.
+  Smokes and tests stay on seed 0; a smoke or test cannot show the clock's seed itself, only a player launch does.
