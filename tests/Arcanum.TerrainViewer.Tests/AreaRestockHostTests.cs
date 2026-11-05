@@ -169,7 +169,7 @@ public sealed class AreaRestockHostTests
         var restock = (AreaRestockHost?)null;
         var world = new AreaEventWorld(() => new AreaCombatHost(inventory), () => null, restock: () => restock);
         AreaRestockHost.Schedule(session, inventory, Entity(1));
-        var pump = new AreaEventPump(session, world);
+        var pump = new FrameStep(session, world);
         var waited = pump.Jump(RestockRules.MaxDelayMs).Restocks.Single();
         Assert.IsTrue(waited.Postponed, "no restock host yet: a minute on");
         restock = host;

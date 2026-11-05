@@ -114,12 +114,12 @@ public sealed class AreaAiCastTests
         using var crash = Open();
         var (session, host, caster, npc, known, _, events) = crash;
         // The AI ticks fire and the runs step until a casting goal's end.
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var notices = new List<AreaAiNotice>();
         var choices = new HashSet<string>();
         for (var frame = 0; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd); frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             if (host.TraceOf(npc)?.Spell is { } spell) choices.Add(spell);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
@@ -149,12 +149,12 @@ public sealed class AreaAiCastTests
         var began = session.SetCombatMode(session.Version, SessionCombatant.Hero, true, new SessionCombatModeContext { TurnBased = true, World = world });
         Assert.AreEqual(GameSessionFailure.None, began.Failure);
         Assert.IsTrue(session.QueryCombatRound()?.Participants.Contains(critter) == true, "the caster takes part in the round");
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         AreaAiNotice? play = null;
         var offTurn = false; var paid = -1;
         for (var frame = 0; frame < 4000 && play is null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             var before = session.QueryCombatRound();
             host.Pump(50L * frame);
             var drained = host.DrainNotices().Where(n => n.Npc == npc).ToArray();
@@ -185,11 +185,11 @@ public sealed class AreaAiCastTests
         // pace later: at 700 ms, a rest of 400 ms.
         using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(8, 4, 10), null, timesRelease: true, 0));
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         AreaAiNotice? play = null;
         for (var frame = 0; frame < 4000 && play is null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             play = host.DrainNotices().FirstOrDefault(n => n.Npc == npc && n.Kind == AreaAiNoticeKind.Cast);
         }
@@ -212,11 +212,11 @@ public sealed class AreaAiCastTests
         // Action frame 0 is never reached (EC7): the play runs its 3 frames and the goal ends without a release.
         using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(3, 0, 10), null, timesRelease: true, 0));
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var notices = new List<AreaAiNotice>();
         for (var frame = 0; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd); frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
@@ -231,12 +231,12 @@ public sealed class AreaAiCastTests
     // ---- ARC-WORLD-104: the queued cast (SU13, AC5) ----
 
     // The first casting goal's play (the invented eye candy: release at 300 ms, end at 700 ms), the run holding its attempt goal.
-    private static AreaAiNotice PlayFirstCast(Crash crash, AreaEventPump pump, ref int frame)
+    private static AreaAiNotice PlayFirstCast(Crash crash, FrameStep pump, ref int frame)
     {
         AreaAiNotice? play = null;
         for (; frame < 4000 && play is null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             crash.Host.Pump(50L * frame);
             play = crash.Host.DrainNotices().FirstOrDefault(n => n.Npc == crash.Npc && n.Kind == AreaAiNoticeKind.Cast);
         }
@@ -255,7 +255,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames());
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -277,7 +277,7 @@ public sealed class AreaAiCastTests
         var notices = new List<AreaAiNotice>();
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
@@ -294,7 +294,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames());
         var (session, host, caster, npc, _, world, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -315,7 +315,7 @@ public sealed class AreaAiCastTests
 
         // A turn-based round refuses the queue (0x4B6D70, any round).
         using var round = Open((_, _) => EightFrames());
-        var roundPump = new AreaEventPump(round.Session, round.Events, spells: () => round.Caster);
+        var roundPump = new FrameStep(round.Session, round.Events, spells: () => round.Caster);
         var roundFrame = 0;
         var first = PlayFirstCast(round, roundPump, ref roundFrame);
         Assert.AreEqual(GameSessionFailure.None, round.Session.SetCombatMode(round.Session.Version, SessionCombatant.Hero, true,
@@ -336,7 +336,7 @@ public sealed class AreaAiCastTests
         var calls = 0;
         using var crash = Open((_, _) => calls++ == 0 ? EightFrames() : null);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -347,7 +347,7 @@ public sealed class AreaAiCastTests
         var notices = new List<AreaAiNotice>();
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
@@ -362,12 +362,12 @@ public sealed class AreaAiCastTests
 
     // The casting goal up to its missile's launch: the play (the invented eye candy) and the launch notice. Every spell has a missile
     // here: the caster's installed spells have none.
-    private static (AreaAiNotice Play, AreaAiNotice Missile, List<AreaAiNotice> Notices) LaunchFirstMissile(Crash crash, AreaEventPump pump, ref int frame)
+    private static (AreaAiNotice Play, AreaAiNotice Missile, List<AreaAiNotice> Notices) LaunchFirstMissile(Crash crash, FrameStep pump, ref int frame)
     {
         var notices = new List<AreaAiNotice>();
         for (; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.Missile); frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             crash.Host.Pump(50L * frame);
             notices.AddRange(crash.Host.DrainNotices().Where(n => n.Npc == crash.Npc));
         }
@@ -382,7 +382,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var (play, missile, notices) = LaunchFirstMissile(crash, pump, ref frame);
         // The release frame at 300 ms; the launch restarts the goal one pace (100 ms) later (SM1), so the rest is 500 ms, not 400.
@@ -397,7 +397,7 @@ public sealed class AreaAiCastTests
 
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
-            pump.Advance(8 * 50);
+            pump.AdvanceGame(8 * 50);
             host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
@@ -419,7 +419,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
         Assert.AreEqual(AiGoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play's rest holds the attempt goal");
@@ -441,7 +441,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new AreaEventPump(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster);
         var frame = 0;
         var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
         // The viewer rebuilds its cast host mid-rest (a map change), then drops the AI host: the goal's end goes to the host that

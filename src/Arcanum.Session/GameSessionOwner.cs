@@ -271,13 +271,15 @@ public sealed partial class GameSessionOwner : IDisposable
 
     public ClockSnapshot QueryClockSnapshot() { ThrowIfDisposed(); return _clock.QueryClockSnapshot(); }
 
-    /// <summary>Forwarded to the clock. An advance that leaves the hour of the recorded lighting clears it, so a
-    /// capture never pairs a time with another hour's scheme; the host records the new hour's lighting. While a turn-based
-    /// round is active (ARC-COMBAT-003) an ordinary advance is NoChange after the clock's own checks: game time then moves
-    /// only by the round's one second, as in the source; an explicit wait still advances. An ordinary advance is the game half
-    /// of an admitted frame (<see cref="AdvanceFrame"/> moved the real and animation clocks already) and moves game time alone;
-    /// an explicit wait is a time jump (MIG12 S3, TL26) and moves the animation clock by the same amount (<see cref="JumpClocks"/>).</summary>
-    public ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
+    /// <summary>Forwarded to the clock; internal since MIG12 S4 (ARC-DEV-123): ordinary game time moves only inside a frame
+    /// (<see cref="BeginFrame"/>) and a jump has its own call (<see cref="JumpClocks"/>), so no caller outside the session can move
+    /// the game stamp by itself. An advance that leaves the hour of the recorded lighting clears it, so a capture never pairs a time
+    /// with another hour's scheme; the host records the new hour's lighting. While a turn-based round is active (ARC-COMBAT-003)
+    /// an ordinary advance is NoChange after the clock's own checks: game time then moves only by the round's one second, as in
+    /// the source; an explicit wait still advances (and, as a time jump, moves the animation clock by the same amount, MIG12 S3).
+    /// The frame's own steps (<see cref="SessionFrame.Step"/>) go through <see cref="AdvanceClock"/> after reading the same flags.
+    /// The tests of the session use this call as the shorthand of a step of game time.</summary>
+    internal ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
         ThrowIfDisposed();
         if (_combat.Round is not null && reason == ClockAdvanceReason.OrdinaryAdvance && durationGameMs > 0)

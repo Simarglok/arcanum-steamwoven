@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -62,8 +63,8 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 /// <summary>
 /// Viewer wiring of day/night over the session clock (ARC-WORLD-010): the lighting reads and advances the
 /// <see cref="GameSessionOwner"/>'s clock, never one of its own, so lighting, HUD and snapshot see one time.
-/// <see cref="Tick"/> lets time flow from host milliseconds through the session's frame admission
-/// (<see cref="GameSessionOwner.AdvanceFrame"/>, MIG12 S3: the session owns the three clocks and their admission) and holds a
+/// <see cref="Tick"/> lets time flow from host milliseconds through the world runtime's frame step (<see cref="FrameStep"/>,
+/// MIG12 S4: the session owns the three clocks and admits the frame, the step spends it at the event deadlines) and holds a
 /// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
 /// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
 /// while paused. After every clock change the Data hourly selection for the active sector is re-applied
@@ -79,17 +80,20 @@ public sealed class AreaAmbientDriver
     private AmbientLightingState _state;
     private AreaLightingSource _source;
     private bool _holdsPause;
+    private readonly bool _runsEvents;
 
-    private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state, AreaEventPump? events)
+    private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state, FrameStep frame)
     {
-        _source = source; _session = session; _state = state; Events = events;
+        _source = source; _session = session; _state = state; Frame = frame; _runsEvents = frame.RunsEvents;
         _holdsPause = session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
     }
 
     public ClockSnapshot Clock => _session.QueryClockSnapshot();
-    /// <summary>ARC-WORLD-039: the pump of the session's event queue that moves the clock, or null when time moves without
+    /// <summary>MIG12 S4: the frame step that moves the session's clocks (and its event passes and participants); it always exists.</summary>
+    public FrameStep Frame { get; }
+    /// <summary>ARC-WORLD-039: the frame step when it runs the session's event queue, or null when time moves without
     /// event passes (a host that runs no gameplay events).</summary>
-    public AreaEventPump? Events { get; }
+    public FrameStep? Events => _runsEvents ? Frame : null;
     /// <summary>The lighting source currently bound (ARC-RENDER-012: the shown map's).</summary>
     public AreaLightingSource Source => _source;
     public AmbientSelection Selection => _state.Current ?? throw new InvalidOperationException("AREA_AMBIENT_NOT_APPLIED");
@@ -117,28 +121,28 @@ public sealed class AreaAmbientDriver
     }
 
     /// <summary>Binds to a session whose clock was started from this source's profile and applies the
-    /// current hour for the active sector. With <paramref name="events"/> every clock move goes through an
-    /// <see cref="AreaEventPump"/> over that world (ARC-WORLD-039), whose passes go through the cast host <paramref name="spells"/>
-    /// answers when it answers one (ARC-MAGIC-015).</summary>
+    /// current hour for the active sector. Every frame goes through a <see cref="FrameStep"/>; with <paramref name="events"/> it runs the
+    /// event passes over that world (ARC-WORLD-039), through the cast host <paramref name="spells"/>
+    /// answers when it answers one (ARC-MAGIC-015); <paramref name="placePing"/> is the change-of-place ping that opens each frame (TM12).</summary>
     public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector, ISessionEventWorld? events = null,
-        Func<SessionSpellCaster?>? spells = null)
+        Func<SessionSpellCaster?>? spells = null, Action? placePing = null)
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(session);
         if (session.QueryClockSnapshot().ProfileBinding != ClockProfile(source)) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_PROFILE");
         // A new driver's first frame admits nothing, as the driver's own admission did before the session owned it (MIG12 S3).
         session.ResetFrameReference();
-        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), events is null ? null : new AreaEventPump(session, events, spells: spells));
+        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), new FrameStep(session, events, spells: spells, placePing: placePing));
         driver.Apply(activeSector);
         return driver;
     }
 
     public static long SectorOf(long worldX, long worldY) => new AreaSectorCoordinate(worldX / 64, worldY / 64).Packed;
 
-    /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/>, then admit the
-    /// host interval through the session's frame (real, animation and world time move there; MIG12 S3) and pump its game part as
-    /// ordinary game time (a paused clock admits none, so a resume has no catch-up).
-    /// Returns true when the applied selection changed. A pause of another reason is left alone.</summary>
-    public bool Tick(long hostMilliseconds, bool modal, long activeSector)
+    /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/>, then run the frame step at the host
+    /// stamp (MIG12 S4: the session admits the interval, the step spends it on real, game and animation time together at the event
+    /// deadlines, a paused clock admits no game or animation time, so a resume has no catch-up). <paramref name="frozen"/> is a frame in
+    /// which the original does not ping (TL25). Returns true when the applied selection changed. A pause of another reason is left alone.</summary>
+    public bool Tick(long hostMilliseconds, bool modal, long activeSector, bool frozen = false)
     {
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
@@ -146,13 +150,7 @@ public sealed class AreaAmbientDriver
         if (modal && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
         else if (!modal && ModalPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
         else if (!ModalPaused) _holdsPause = false;
-        var frame = _session.AdvanceFrame(hostMilliseconds);
-        if (frame.Failure != FrameClockFailure.None) throw new InvalidOperationException("AREA_AMBIENT_FRAME_" + frame.Failure);
-        var admitted = frame.Admission.GameMs;
-        var hour = clock.Hour;
-        if (Events is { } events) { events.Advance(admitted); clock = Clock; }
-        else if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));
-        return clock.Hour != hour && Apply(activeSector);
+        return Frame.Run(hostMilliseconds, frozen).HourChanged && Apply(activeSector);
     }
 
     /// <summary>Explicit wait of whole game hours (FR-LIGHT-002), also while paused; the selection follows the
@@ -170,8 +168,7 @@ public sealed class AreaAmbientDriver
         if (gameMs <= 0) throw new ArgumentOutOfRangeException(nameof(gameMs));
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
-        if (Events is { } events) events.Jump(gameMs);
-        else Mutate(_session.JumpClocks(Clock.Token, gameMs));
+        Frame.Jump(gameMs);
         return Apply(activeSector);
     }
 

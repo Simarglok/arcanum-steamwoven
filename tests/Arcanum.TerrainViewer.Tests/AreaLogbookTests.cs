@@ -39,7 +39,7 @@ public sealed class AreaLogbookTests
     }
 
     private static void Advance(GameSessionOwner session, long ms) =>
-        Assert.AreEqual(ClockMutationDisposition.Changed, session.AdvanceGameTime(session.QueryClockSnapshot().Token, ms, ClockAdvanceReason.ExplicitWait).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, ms).Disposition);
 
     [TestMethod]
     public void The_date_line_follows_the_original_layout_and_twelve_hour_clock()

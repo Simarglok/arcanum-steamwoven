@@ -1,6 +1,6 @@
 # Clocks and the frame step in the session (K15, MIG12, TM6, GR20–GR22)
 
-Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, S3 (ARC-DEV-122) the session owning the three clocks (schema 70).** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
+Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, S3 (ARC-DEV-122) the session owning the three clocks (schema 70), S4 (ARC-DEV-123) the frame step and the event pump in `Arcanum.World`.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
 decision GQ3 chosen A). Behaviour of the original stays the rows TL1–TL46 of the [original time loop](original-time-loop.md) (read from the
 executable); this page fixes how the session represents them, in which assembly each part lives, the order of the code slices and what each must
@@ -83,9 +83,9 @@ encumbrance) are the project's own and keep their game domain. Two domains gain 
 **Pass semantics.** The original fires each list against the final clock of the ping. The project keeps its decision GI5 (events at their own
 deadlines, FIFO ties GI3): the frame's admitted interval is divided at the next due time of any domain and every sub-step moves the three clocks
 together (real +Δ, game +8Δ, animation +8Δ with the same pause and round flags), then fires real → game → animation, so a real-time handler's
-jump is visible to the later lists of the same sub-step (TL20) and a handler sees the clock at its own deadline. The bound of today's
-`AreaEventPump` (a maximum of steps per advance and passes per step, late firing reported when the bound is hit) stays and moves with the pump
-(S4). A jump made inside a pass is applied at once, and the pass continues against the new clocks.
+jump is visible to the later lists of the same sub-step (TL20) and a handler sees the clock at its own deadline. The bound of the former
+`AreaEventPump` (a maximum of steps per advance and passes per step, late firing reported when the bound is hit) stays and moved with the pump
+(S4: `FrameStepLimits`, steps counted per frame). A jump made inside a pass is applied at once, and the pass continues against the new clocks.
 
 ### 3.3 The frame step and who reads time
 
@@ -191,7 +191,7 @@ The codes of S2–S9 are reserved by the coordinator; schema 70 is reserved for 
 | S1 | ARC-DEV-120 | This document; the MIG12 row and the K15 line updated. | none (docs-only) |
 | S2 | ARC-DEV-121, **done** | `FrameClocks` (the value a participant reads), `FrameClockKeeper` (real and animation stamps, admission, jump, world milliseconds), `FrameFlags`, `FrameAdmission` and typed `FrameClockFailure` results in `Arcanum.Simulation.Clock`; `GameTimeFlow.ObserveInterval` is the real-interval admitter; no caller. The keeper does not hold the game stamp (`GameClockOwner` stays its only writer): `Advance` reports the game part, `PlanJump` validates a jump without changing anything, so S3 applies game and animation in one call without a half-applied jump (`ClocksAt(gameMs)` composes the participants' value). Originally planned as:  `FrameClocks`, the admission with pause, round and frozen flags, the jump and the world milliseconds (admitted only, jumps excluded) in `Arcanum.Simulation`; `GameTimeFlow` generalised; no caller. | Unit tests: 5 ms hold and sum, 250 ms cut, ×8, pause stops game and animation only, round stops game only, frozen credits at most 250 ms later, jump adds both and ignores pause and leaves the world milliseconds alone, first and backwards stamps, limits and typed refusals, determinism. |
 | S3 | ARC-DEV-122, **done** | Landed: `AdvanceFrame(hostMs, frozen)` admits with the session's pause and round and hands the game part to the viewer's pump (which steps it at the deadlines until S4), `JumpClocks` and every `ExplicitWait` jump game and animation together (the animation half checked first), `QueryFrameClocks`, `ResetFrameReference` (the driver calls it on bind, so a new scene's first frame admits nothing, as before), the queue gets `GameEventClocks(real, game, animation)`, the driver's `GameTimeFlow` is gone, schema 70 (`clock.realMs`, `clock.animationMs`; step 69 → 70 real 1, animation = game stamp). Planned as: the session owns the three clocks: `AdvanceFrame(admitted)` and `JumpClocks` on `GameSessionOwner`, the queue gets all three clocks, the driver's flow moves into the session, schema 70 and its step. **Session core and save schema: Opus.** | Session and snapshot tests (round trip, the 69 → 70 step by hand, refusals, queue due times in each domain); `AreaAmbientTests` rewritten over the session. |
-| S4 | ARC-DEV-123 | The frame step and the event pump in `Arcanum.World` with the participant port; the viewer calls one `FrameStep(hostMs, frozen)`; the change-of-place ping runs first (CD7 goes); the lighting hour from the pass. | World tests over synthetic participants (order, one stamp, bound, late firing, jump seen by later domains); smoke `walk`, `ai`, `debug-travel` and the map battery (`map`). |
+| S4 | ARC-DEV-123, **done** | Landed: `FrameStep` in `Arcanum.World` (`Run(hostMs, frozen)`, `Jump(ms)`, the participant port `IFrameParticipant`, the optional change-of-place ping that opens a frame, `FrameStepLimits`, `FrameStepReport` with the clocks and `HourChanged`) replaces the viewer's `AreaEventPump`; the session's `BeginFrame` returns an open `SessionFrame` of `8i` units that is spent in steps moving real, game and animation together at the event deadlines (`UnitsUntil` over the three domains, a carry for the real clock's sub-millisecond share), the pause and the round read at every step; the public `AdvanceFrame` and `AdvanceGameTime` are gone, so ordinary game time moves only in a frame and a jump has its own call (`JumpClocks`); `AreaAmbientDriver.Tick` is one `FrameStep.Run`. **Left for later slices:** the change-of-place ping is the port only (the hero's hosts carry request context, so CD7 stays until MIG11's hosts are made pending requests; the NPC homecoming ping moves with the AI host in S5), and no participant is registered yet (S5, S6). Planned as: The frame step and the event pump in `Arcanum.World` with the participant port; the viewer calls one `FrameStep(hostMs, frozen)`; the change-of-place ping runs first (CD7 goes); the lighting hour from the pass. | World tests over synthetic participants (order, one stamp, bound, late firing, jump seen by later domains); smoke `walk`, `ai`, `debug-travel` and the map battery (`map`). Landed: `FrameStepTests` (World), the frame-handle tests of `FrameClockStateTests`, `Admit`/`Step`/`UnitsUntil` tests of `FrameClocksTests`, `AreaEventsTests` over the new step. |
 | S5 | ARC-DEV-124 | The AI host and the movers on the clocks: `_nowMs` and `host.Pump(WorldMilliseconds())` go; runs step on world milliseconds, the AI tick on game time; the pump is gated by the pause. | Host tests (`AreaAiHostTests`, `AreaAiRouteTests`, follower and round tests); smoke `ai`, `ai-turn-based`, `ai-follower`, `follower-home` (the AI pump pings the change of place, DEV-116). |
 | S6 | ARC-DEV-125 | The other consumers read the clocks: hero attack and cast, projectiles, spell missiles, eye candy, dying and lying animations, body moves, blood pools, scenery, the light animation (`Light` events on the animation domain); `WorldTime` leaves the rules. | Self-tests that assert time; smoke `cast`, `ranged`, `life`, `death`, `knockdown` stages touched; a grep check that no rule file reads `Time.GetTicks*`. |
 | S7 | ARC-DEV-126 | The pause by GQ3 A: only the Esc menu pauses, the world gate no longer closes for the other windows, the death cover freezes; the hero's input gating by the stack stays. | self-tests `TerrainViewerWorldMainSettingsTest`, `TerrainViewerAreaSceneFlowTest`, `TerrainViewerAreaMainMenuTest`; smoke `menu`, `scene`, `inv-ui`, `barter`, `death`; a manual look at an NPC walking behind an open dialog. |
@@ -212,7 +212,7 @@ and the frame step in `Arcanum.World` beside DEV-118's `ISectorTerrain` (differe
    every window that assumes it (the barter and the dialog's pickpocket, the inventory's use of an item in flight, a held item while a round
    starts) needs a look. S7 lists them in its report.
 2. **Frame time spread.** The 250 ms cut costs game time on a slow frame (a load, a long GC) as it does in the original; the viewer's long
-   operations (map open, window rebuild) must report `Frozen` or the admitted time is lost. S4 lists the call sites.
+   operations (map open, window rebuild) must report `Frozen` or the admitted time is lost. S4 listed the call sites: the only production caller of the frame is the viewer's frame loop (`TerrainViewerApp` `_Process` through `TickAreaClock`, which the automated runs replace by literal stamps); a long operation inside a frame (map open, window rebuild) costs at most the 250 ms cut on the next frame, as the original's loading does (TL46), so no site passes `Frozen` yet; the death cover and slide show take it in S7.
 3. **Light animation and sector light.** The light's own `_lightAnimationMs` and the sector light fold (MIG9 S6) use the clock hour; S6 moves the
    animation only, the hour stays the game clock's.
 4. **Round and animation events.** TL38's "animation events due within the next second become due at once at a round end" is an inference;
@@ -227,10 +227,12 @@ and the frame step in `Arcanum.World` beside DEV-118's `ISectorTerrain` (differe
 
 ## 7. Not ready
 
-Everything above is a design except the pure rules of S2 (`FrameClockKeeper`) and the session's ownership of S3: the session holds the
-three clocks, admits the frame and saves the real and animation stamps (schema 70), but the frame step does not exist yet, the
-viewer's pump steps only the game part of a frame at the deadlines (all three clocks together is S4), no host passes a frozen frame
-and the death cover still holds a Menu pause (S7); the AI host,
+Everything above is a design except the pure rules of S2 (`FrameClockKeeper`), the session's ownership of S3 and the frame step of S4:
+the session holds the three clocks, admits the frame and saves the real and animation stamps (schema 70), the world runtime's
+`FrameStep` spends each frame at the event deadlines on the three clocks together, and ordinary game time moves only inside a frame; but
+no host passes a frozen frame
+and the death cover still holds a Menu pause (S7); no participant is registered with the frame step, the change-of-place ping port is
+not wired (the hero's request is still pinged by the viewer, CD7); the AI host,
 projectiles, missiles, eye candy, attack and cast read Godot time; the Menu pause covers every window; no real or animation event exists; the
-viewer keeps calling the frame from `AreaAmbientDriver`. The text of [the game clock policy](../world/game-clock-policy.md) and the TL rows' last column describe
+viewer keeps calling the frame from `AreaAmbientDriver` (its one `FrameStep.Run`). The text of [the game clock policy](../world/game-clock-policy.md) and the TL rows' last column describe
 that state until the slices land.

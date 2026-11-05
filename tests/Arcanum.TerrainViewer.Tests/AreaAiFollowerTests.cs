@@ -219,7 +219,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleAiTick(session.Version,
             new SessionAiTickRequest { Entity = entity, Start = SessionAiTickStart.Immediate, DistanceToPc = scene.Host.DistanceToPc(entity) }).Disposition);
         Assert.AreEqual(Arcanum.Simulation.Clock.ClockMutationDisposition.Changed,
-            session.AdvanceGameTime(session.QueryClockSnapshot().Token, 10, Arcanum.Simulation.Clock.ClockAdvanceReason.OrdinaryAdvance).Disposition);
+            session.JumpClocks(session.QueryClockSnapshot().Token, 10).Disposition);
         var pass = session.ProcessEvents(scene.Host);
         Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         return pass.AiTicks.Single(f => f.Entity == entity).Tick ?? throw new AssertFailedException("the tick did not run");

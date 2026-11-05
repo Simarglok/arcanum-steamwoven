@@ -55,6 +55,8 @@ public sealed class FrameClockKeeper
     private long _real;
     private long _animation;
     private long _worldEighths;
+    // Units of the open frame that did not fill a real millisecond yet (0..7), so sub-steps add up to the admitted interval exactly.
+    private long _realCarry;
 
     private FrameClockKeeper(long real, long animation) { _real = real; _animation = animation; }
 
@@ -77,11 +79,25 @@ public sealed class FrameClockKeeper
     public FrameClocks ClocksAt(long gameMs) => new(_real, gameMs, _animation, _worldEighths);
 
     /// <summary>Observes the host stamp and moves real, animation and world time by what it admits, by the frame's
-    /// flags. A frozen frame observes nothing and admits nothing. Refused, with nothing changed: a negative host stamp
+    /// flags: <see cref="Admit"/> and one <see cref="Step"/> of the whole interval. A frozen frame observes nothing and
+    /// admits nothing. Refused, with nothing changed: a negative host stamp
     /// (<see cref="FrameClockFailure.InvalidHostTime"/>), or a stamp within one admission of the 64-bit limit
     /// (<see cref="FrameClockFailure.TimeOverflow"/>). The game part of the result is for the session to apply to the
     /// game clock; it is not kept here.</summary>
     public FrameAdvanceResult Advance(long hostMs, FrameFlags flags)
+    {
+        var admitted = Admit(hostMs, flags);
+        if (admitted.Failure != FrameClockFailure.None || admitted.Admission.RealMs == 0) return admitted;
+        var step = Step(admitted.Admission.RealMs * RateNumerator, flags);
+        return step == FrameClockFailure.None ? admitted : new(step, default);
+    }
+
+    /// <summary>MIG12 S4: observes the host stamp (the same admission as <see cref="Advance"/>) and reports what it admits
+    /// without moving any clock, so the frame step can spend the interval in sub-steps (<see cref="Step"/>) that end at the
+    /// event deadlines. A frozen frame observes nothing and admits nothing. The real interval is the admitted <c>i</c> and the
+    /// frame is <c>8i</c> units long (an animation or game unit is 1 ms of that clock, a real millisecond is 8 units).
+    /// Refused as <see cref="Advance"/> does, with nothing changed.</summary>
+    public FrameAdvanceResult Admit(long hostMs, FrameFlags flags)
     {
         if (flags.Frozen) return new(FrameClockFailure.None, default);
         if (hostMs < 0) return new(FrameClockFailure.InvalidHostTime, default);
@@ -89,12 +105,54 @@ public sealed class FrameClockKeeper
             return new(FrameClockFailure.TimeOverflow, default);
         var real = _flow.ObserveInterval(hostMs);
         var scaled = real * RateNumerator;
-        var animation = flags.Paused ? 0 : scaled;
-        var game = flags.Paused || flags.Round ? 0 : scaled;
-        _real += real;
-        _animation += animation;
-        _worldEighths += animation;
-        return new(FrameClockFailure.None, new(real, game, animation));
+        _realCarry = 0;
+        return new(FrameClockFailure.None, new(real, flags.Paused || flags.Round ? 0 : scaled, flags.Paused ? 0 : scaled));
+    }
+
+    /// <summary>MIG12 S4: spends <paramref name="units"/> of an admitted frame on the clocks this keeper holds: real time moves
+    /// by <c>units / 8</c> ms (the sub-millisecond remainder is carried, so the sub-steps of a frame add up to the admitted
+    /// interval exactly), animation and world time by <paramref name="units"/> unless <paramref name="flags"/> pause. The game
+    /// part is the session's to apply (<see cref="GameClockOwner"/> stays the game stamp's only writer). Refused, with nothing
+    /// changed: a non-positive duration, or a stamp that would pass the 64-bit limit.</summary>
+    public FrameClockFailure Step(long units, FrameFlags flags)
+    {
+        var refusal = CanStep(units, flags);
+        if (refusal != FrameClockFailure.None) return refusal;
+        var carried = _realCarry + units;
+        _real += carried / RateNumerator;
+        _realCarry = carried % RateNumerator;
+        if (!flags.Paused) { _animation += units; _worldEighths += units; }
+        return FrameClockFailure.None;
+    }
+
+    /// <summary>Whether <see cref="Step"/> would take <paramref name="units"/> under <paramref name="flags"/> (the refusal it would give), changing
+    /// nothing; the session asks before it moves the game clock, so a step is never half applied.</summary>
+    public FrameClockFailure CanStep(long units, FrameFlags flags)
+    {
+        if (units <= 0) return FrameClockFailure.InvalidDuration;
+        if (_real > long.MaxValue - units || (!flags.Paused && (_animation > long.MaxValue - units || _worldEighths > long.MaxValue - units)))
+            return FrameClockFailure.TimeOverflow;
+        return FrameClockFailure.None;
+    }
+
+    /// <summary>The units of the open frame after which the clock of <paramref name="domain"/> reaches
+    /// <paramref name="deadlineMs"/>, or null when that clock does not move under <paramref name="flags"/> (animation stands
+    /// still in a pause; game also in a round) or the deadline is not ahead of it. <paramref name="gameMs"/> is the game stamp
+    /// the clock owner holds now.</summary>
+    public long? UnitsUntil(Events.GameEventDomain domain, long deadlineMs, long gameMs, FrameFlags flags)
+    {
+        switch (domain)
+        {
+            case Events.GameEventDomain.Real:
+                if (deadlineMs <= _real) return null;
+                // A deadline too far for the multiplication is beyond any frame: no boundary.
+                if (deadlineMs - _real > (long.MaxValue - RateNumerator) / RateNumerator) return null;
+                return (deadlineMs - _real) * RateNumerator - _realCarry;
+            case Events.GameEventDomain.Game:
+                return flags.Paused || flags.Round || deadlineMs <= gameMs ? null : deadlineMs - gameMs;
+            default:
+                return flags.Paused || deadlineMs <= _animation ? null : deadlineMs - _animation;
+        }
     }
 
     /// <summary>What a time jump of <paramref name="durationMs"/> would add to game and animation time, without
@@ -118,5 +176,5 @@ public sealed class FrameClockKeeper
     }
 
     /// <summary>Forgets the admission reference, so the next frame admits nothing (a new scene, a load).</summary>
-    public void ResetReference() => _flow.Reset();
+    public void ResetReference() { _flow.Reset(); _realCarry = 0; }
 }
