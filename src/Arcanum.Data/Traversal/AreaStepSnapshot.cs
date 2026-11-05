@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Arcanum.Data.Area;
 
 namespace Arcanum.Data.Traversal;
@@ -38,6 +40,62 @@ public sealed class AreaStepSnapshot
                 AreaStepEdgeRule.Legacy when e.Opening => "WALL_OPENING_PIECE_UNSUPPORTED",
                 _ => null,
             }).OfType<string>().GroupBy(r => r).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()));
+    }
+
+    /// <summary>
+    /// ARC-DEV-118 (MIG9 S5b, K1 §3.5): the evidence of several disjoint sets of sectors as one snapshot that admits their union, so a step
+    /// between two of them is assessed as the evidence of a window holding both would (every verdict reads the cells' terrain, the objects
+    /// on the cells and the wall edges of the cells, which a sector's own evidence already holds: nothing in it depends on a neighbouring
+    /// sector). The parts must share the area profile and input kind, share an epoch, and admit no sector twice; the union's evidence
+    /// digest names the parts' digests in sector order, so a request made on one union is refused by another.
+    /// </summary>
+    public static AreaStepSnapshot Union(IReadOnlyList<AreaStepSnapshot> parts)
+    {
+        ArgumentNullException.ThrowIfNull(parts);
+        if (parts.Count == 0) throw new ArgumentException("AREA_STEP_UNION_EMPTY", nameof(parts));
+        var first = parts[0];
+        var sectors = new HashSet<(long X, long Y)>();
+        var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+        var objects = new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>();
+        var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]>();
+        var sources = new List<AreaStepSourceIdentity>();
+        foreach (var part in parts)
+        {
+            ArgumentNullException.ThrowIfNull(part);
+            if (part.InputIdentity.Kind != first.InputIdentity.Kind || part.InputIdentity.AreaProfile != first.InputIdentity.AreaProfile || part.EvidenceEpoch != first.EvidenceEpoch)
+                throw new ArgumentException("AREA_STEP_UNION_MIXED", nameof(parts));
+            foreach (var sector in part._sectors)
+                if (!sectors.Add(sector)) throw new ArgumentException("AREA_STEP_UNION_SECTOR_TWICE", nameof(parts));
+            foreach (var (cell, value) in part._terrain) terrain.Add(cell, value);
+            foreach (var (cell, value) in part._objects) objects.Add(cell, value);
+            foreach (var (cell, value) in part._walls) walls.Add(cell, value);
+            foreach (var source in part.InputIdentity.Sources)
+                if (!sources.Any(known => known.Role == source.Role && known.Length == source.Length && known.Sha256 == source.Sha256)) sources.Add(source);
+        }
+        var digest = new StringBuilder("AREA_STEP_UNION_V1");
+        foreach (var part in parts.OrderBy(p => p._sectors.Min(s => (s.Y, s.X))).ThenBy(p => p.EvidenceSha256, StringComparer.Ordinal)) digest.Append('|').Append(part.EvidenceSha256);
+        var evidence = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(digest.ToString()))).ToLowerInvariant();
+        return new(new(first.InputIdentity.Kind, first.InputIdentity.AreaProfile, sources, evidence), first.EvidenceEpoch, sectors, terrain, objects, walls);
+    }
+
+    /// <summary>
+    /// ARC-DEV-118: the evidence of the <paramref name="sectors"/> of this snapshot that it admits, as a snapshot of its own (the cells, objects and wall
+    /// edges of those sectors only), so a window's evidence can be held sector by sector and joined again (<see cref="Union"/>). A sector this snapshot
+    /// does not admit is left out; no sector left is an <see cref="ArgumentException"/>. The restriction's evidence digest names this snapshot's and the sectors.
+    /// </summary>
+    public AreaStepSnapshot Restrict(IEnumerable<(long X, long Y)> sectors)
+    {
+        ArgumentNullException.ThrowIfNull(sectors);
+        var kept = sectors.Where(_sectors.Contains).ToHashSet();
+        if (kept.Count == 0) throw new ArgumentException("AREA_STEP_RESTRICT_EMPTY", nameof(sectors));
+        bool In(AreaStepCell cell) => kept.Contains((cell.X >> 6, cell.Y >> 6));
+        var digest = new StringBuilder("AREA_STEP_RESTRICT_V1|").Append(EvidenceSha256);
+        foreach (var (x, y) in kept.OrderBy(sector => sector.Y).ThenBy(sector => sector.X)) digest.Append('|').Append(x).Append(',').Append(y);
+        var evidence = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(digest.ToString()))).ToLowerInvariant();
+        return new(new(InputIdentity.Kind, InputIdentity.AreaProfile, InputIdentity.Sources, evidence), EvidenceEpoch, kept,
+            _terrain.Where(pair => In(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value),
+            _objects.Where(pair => In(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value),
+            _walls.Where(pair => In(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value));
     }
 
     public string ProfileId => AreaStepRules.ProfileId;

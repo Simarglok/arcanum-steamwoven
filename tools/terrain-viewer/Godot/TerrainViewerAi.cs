@@ -4,6 +4,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -40,6 +41,10 @@ public partial class TerrainViewerApp
     private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
     // The hero's overlay with the moved NPCs, while neither changed.
     private (AreaOccupancy? Base, long Version, AreaOccupancy Value)? _aiPcOccupancy;
+
+    // ARC-DEV-118 (MIG9 S5b): the main map's host chart over the loaded sectors, built with the map's sector cache (a window move keeps it).
+    private AreaSectorChart? _sectorChart;
+    private (GameSessionOwner Session, int Map)? _sectorChartKey;
 
     private bool AiEnabled => !AutomatedVisualRun || _aiForSmoke;
 
@@ -79,6 +84,9 @@ public partial class TerrainViewerApp
         var scene = new AreaAiScene
         {
             RuntimeMap = mapNumber, Chart = chart, Steps = grid.Snapshot, Npcs = npcs, Combat = combat,
+            // ARC-DEV-118 (MIG9 S5b): a window of the main map reads the sectors its session's cache has loaded, not the window.
+            LoadedSteps = area.Snapshot.Window is not null ? () => _sectorChart?.Steps : null,
+            SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
@@ -109,11 +117,12 @@ public partial class TerrainViewerApp
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
-        if (AreaResidency.Open(session, area.Snapshot, map, scene.HeroCell()) is { } opened)
+        if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)
             GD.Print($"ARC-DEV-104 residency map={mapNumber} status={opened.Residency.Status} rows={opened.Residency.Rows} sectors={opened.Sectors?.ToString() ?? "-"}"
                 + $" extent={opened.Extent.SectorsX}x{opened.Extent.SectorsY} folds={opened.Arrival?.Folds.Count ?? 0}"
                 + $" ticks={opened.Arrival?.Folds.Sum(f => f.Npcs.Count - f.Refused.Count) ?? 0} failure={opened.Arrival?.Failure.ToString() ?? "-"}"
                 + (opened.Residency.Detail.Length > 0 ? $" detail={opened.Residency.Detail}" : ""));
+        if (area.Snapshot.Window is not null) StartSectorChart(session, mapNumber, area, grid);
         var refused = host.ScheduleTicks();
         GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
         return host;
@@ -241,18 +250,43 @@ public partial class TerrainViewerApp
         _heartbeatDialog = null;
     }
 
+    // ARC-DEV-118 (MIG9 S5b, K1 §3.5): the chart over the loaded sectors the host of the main map's window reads; created with the map's sector cache and kept
+    // across window moves, dropped with the cache. The window's own evidence is the free source of its sectors; any other sector is read on a task.
+    private void StartSectorChart(GameSessionOwner session, int mapNumber, AreaLoadResult area, AreaGridSession grid)
+    {
+        if (session.QuerySectors(new SessionMapId(mapNumber)) is null) { DropSectorChart(); return; }
+        if (_sectorChart is null || _sectorChartKey != (session, mapNumber))
+        {
+            DropSectorChart();
+            var root = _arguments?.GameRoot; var name = _readyMapName; var data = session.Rules.Data;
+            _sectorChart = new AreaSectorChart(() => root is null || name is null ? null : ContentSectorTerrain.Open(root, name, out _, data));
+            _sectorChartKey = (session, mapNumber);
+        }
+        _sectorChart.UseWindow(area.Snapshot, grid.Snapshot);
+        RequestSectorChart();
+    }
+
+    private void RequestSectorChart()
+    {
+        if (_sectorChart is { } chart && _areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap)) is { } state) chart.Request(state.Slots);
+    }
+
+    private void DropSectorChart() { _sectorChart?.Dispose(); _sectorChart = null; _sectorChartKey = null; }
+
     // ARC-DEV-104 (MIG9 S4, RL11): each frame the hero's view square touches its sectors in the session's cache (an age bump, or a load and a
-    // fold); a map without a cache (a window of the main map) touches nothing.
+    // fold); a map without a cache touches nothing. ARC-DEV-118: the main map has one since S5b, and its chart follows the cache.
     private void TouchAreaView()
     {
         if (_areaSession is not { } session || _worldActor.Session is not AreaGridSession hero) return;
         var map = new SessionMapId(CurrentAreaMap);
-        if (session.QuerySectors(map) is null) return;
+        if (session.QuerySectors(map) is null) { DropSectorChart(); return; }
         var cell = hero.Chart.ToWorld(hero.State.CommittedCell);
         var touch = session.TouchSectors(session.Version, map, AreaResidency.ViewCells(new(checked((int)cell.X), checked((int)cell.Y))));
         foreach (var fold in touch.Folds)
             GD.Print($"ARC-DEV-104 fold map={CurrentAreaMap} sector={fold.Sector.X},{fold.Sector.Y} marked={fold.Marked} npcs={fold.Npcs.Count}"
                 + $" refused={fold.Refused.Count} evicted={(fold.Evicted is { } e ? $"{e.X},{e.Y}" : "-")}");
+        RequestSectorChart();
+        if (_sectorChart is { } chart) while (chart.Log.TryDequeue(out var line)) GD.Print(line);
     }
 
     // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame.

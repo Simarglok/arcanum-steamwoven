@@ -206,10 +206,21 @@ public sealed class WorldCatalog
     /// <summary>The map's mobile objects as a normal game reads them: the game-generated
     /// aggregate when the stack holds one, otherwise the editor's <c>.mob</c> files (which only
     /// the original editor reads; <see cref="WorldMobileResult.Source"/> says which).</summary>
-    public WorldMobileResult ReadMobiles(WorldMap map)
+    public WorldMobileResult ReadMobiles(WorldMap map) => ReadMobiles(map, null, null, false);
+
+    /// <summary>
+    /// ARC-DEV-118 (MIG9 S5b): <see cref="ReadMobiles(WorldMap)"/> with <c>map.patch</c> applied to the aggregate's objects as the original applies it
+    /// when a map opens (ARC-DATA-028, <see cref="MapPatchApplier"/>), so the objects carry the flags, names, stands and script attachments the
+    /// patch gives them, exactly as an area plan's owner builds them. Only the game-generated aggregate is patched; editor files are read as before.
+    /// A patch line for an object whose prototype cannot be read is a <see cref="WorldIssueCode"/> issue that ends the readable part, like a refused record.
+    /// </summary>
+    /// <param name="scriptHeader">The 8-byte header of a script the patch attaches (null: the original cannot load it).</param>
+    public WorldMobileResult ReadMobiles(WorldMap map, MapPatchFile? patch, Func<int, MapPatchScriptHeader?>? scriptHeader, bool scriptZeroClears)
     {
         ArgumentNullException.ThrowIfNull(map);
+        if (patch is not null) ArgumentNullException.ThrowIfNull(scriptHeader);
         var reader = new Reader(_stack, _options);
+        var prototypes = new Dictionary<int, ObjectWireRecord>();
         var objects = new List<WorldObject>(); var issues = new List<WorldIssue>();
         if (map.AggregatePath is { } aggregate)
         {
@@ -223,7 +234,19 @@ public sealed class WorldCatalog
                 try
                 {
                     var record = ObjectWireReader.Read(bytes.AsSpan(offset), _options.Wire, maxRecordBytes: _options.MaxMobileBytes);
-                    objects.Add(Object(record)); offset += record.Length;
+                    var length = record.Length;
+                    if (patch is not null && record.Own.Entity is { Kind: 2 } entity && patch.For(MapPatchFile.ObjectGuid(entity)) is { Count: > 0 } lines)
+                    {
+                        if (record.Parent.Kind != 1 || record.Parent.Number is not int number) { issues.Add(new(WorldIssueCode.Malformed, aggregate, objects.Count, "a patched object without a prototype")); break; }
+                        if (!prototypes.TryGetValue(number, out var prototype))
+                        {
+                            prototype = PrototypeRecord(number, out var prototypeIssue)!;
+                            if (prototype is null) { issues.Add(prototypeIssue!); break; }
+                            prototypes.Add(number, prototype);
+                        }
+                        record = MapPatchApplier.Apply(record, prototype, lines, scriptHeader!, scriptZeroClears).Record;
+                    }
+                    objects.Add(Object(record)); offset += length;
                 }
                 catch (StaticObjectException error) { issues.Add(new(WorldIssueCode.ObjectRefused, aggregate, objects.Count, error.Code.ToString())); break; }
             }
@@ -289,18 +312,26 @@ public sealed class WorldCatalog
     /// <see cref="WorldIssueCode.Malformed"/>, a number without a base file <see cref="WorldIssueCode.Missing"/>.</summary>
     public WorldPrototypeResult ReadPrototype(int number)
     {
-        if (Prototypes.IsAmbiguous(number)) return new(null, new(WorldIssueCode.Malformed, $"proto/{number:D6}", null, "duplicate prototype number"));
-        if (Prototypes.Path(number) is not { } path || Prototypes.Candidate(number) is not { } candidate) return new(null, new(WorldIssueCode.Missing, $"proto/{number:D6}"));
-        var bytes = new Reader(_stack, _options).Bytes(path, candidate, _options.Wire.MaxPrototypeBytes, out var issue);
-        if (bytes is null) return new(null, issue);
+        var record = PrototypeRecord(number, out var issue);
+        return record is null ? new(null, issue) : new(Object(record), null);
+    }
+
+    /// <summary>The prototype's wire record (<see cref="ReadPrototype"/>'s read), or null with the issue.</summary>
+    private ObjectWireRecord? PrototypeRecord(int number, out WorldIssue? issue)
+    {
+        issue = null;
+        if (Prototypes.IsAmbiguous(number)) { issue = new(WorldIssueCode.Malformed, $"proto/{number:D6}", null, "duplicate prototype number"); return null; }
+        if (Prototypes.Path(number) is not { } path || Prototypes.Candidate(number) is not { } candidate) { issue = new(WorldIssueCode.Missing, $"proto/{number:D6}"); return null; }
+        var bytes = new Reader(_stack, _options).Bytes(path, candidate, _options.Wire.MaxPrototypeBytes, out issue);
+        if (bytes is null) return null;
         try
         {
             var record = ObjectWireReader.Read(bytes, _options.Wire, prototype: true, maxRecordBytes: _options.Wire.MaxPrototypeBytes);
-            if (record.Length != bytes.Length) return new(null, new(WorldIssueCode.Malformed, path, null, "prototype file has trailing bytes"));
-            if (record.Own.Number != number) return new(null, new(WorldIssueCode.Malformed, path, null, "prototype number differs from its file name"));
-            return new(Object(record), null);
+            if (record.Length != bytes.Length) { issue = new(WorldIssueCode.Malformed, path, null, "prototype file has trailing bytes"); return null; }
+            if (record.Own.Number != number) { issue = new(WorldIssueCode.Malformed, path, null, "prototype number differs from its file name"); return null; }
+            return record;
         }
-        catch (StaticObjectException error) { return new(null, new(WorldIssueCode.ObjectRefused, path, 0, error.Code.ToString())); }
+        catch (StaticObjectException error) { issue = new(WorldIssueCode.ObjectRefused, path, 0, error.Code.ToString()); return null; }
     }
 
     /// <summary>The name of a map's game-generated mobile file: letters rotated by 13 within

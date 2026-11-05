@@ -10,5 +10,7 @@
     <InternalsVisibleTo Include="Arcanum.Executable.Tests" />
     <!-- ARC-WORLD-021: the viewer tests build a whole-map step snapshot with a window edge. -->
     <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
+    <!-- ARC-DEV-118: the loaded-sector chart's tests build synthetic one-sector step evidence. -->
+    <InternalsVisibleTo Include="Arcanum.World.Tests" />
   </ItemGroup>
 </Project>

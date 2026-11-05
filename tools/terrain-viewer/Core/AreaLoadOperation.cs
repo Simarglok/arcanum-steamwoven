@@ -24,6 +24,9 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
     /// <summary>ARC-COMBAT-005: the archive file of each input key the snapshot's art came from (empty for fixtures), where a
     /// fallen pose is read on demand (<see cref="AreaFallenPoses"/>).</summary>
     public IReadOnlyDictionary<AreaInputKey, string> ArtSources { get; init; } = new Dictionary<AreaInputKey, string>();
+    /// <summary>ARC-DEV-118 (MIG9 S5b): a window's map read whole (its mobile rows and its size in sectors), which the session opens the map's residency
+    /// and sector cache from; null for a whole map (its snapshot already holds the rows) and for a fixture.</summary>
+    public AreaWholeMobile? WholeMobile { get; init; }
 }
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>

@@ -30,6 +30,13 @@ public sealed record AreaAiScene
     public required int RuntimeMap { get; init; }
     public required AreaChart Chart { get; init; }
     public required AreaStepSnapshot Steps { get; init; }
+    /// <summary>ARC-DEV-118 (MIG9 S5b, K1 §3.5): the host's chart over the loaded sectors (<c>LoadedSectorChart.Steps</c>), read at each question: while it
+    /// answers a snapshot the planners and the steps read it instead of <see cref="Steps"/>, so a cell of a sector the session's cache has not loaded is
+    /// outside the evidence; null (the provider, or its answer before a first sector is read): <see cref="Steps"/>. A whole map leaves it null.</summary>
+    public Func<AreaStepSnapshot?>? LoadedSteps { get; init; }
+    /// <summary>ARC-DEV-118: told after the host touched sectors in the session's cache (a planner reading a goal in an unloaded sector, RL11), so the
+    /// chart reads what entered the cache.</summary>
+    public Action? SectorsTouched { get; init; }
     /// <summary>The NPCs the host runs (companions are left out: ARC-WORLD-115 runs the hero's through <see cref="Followers"/>).</summary>
     public required IReadOnlyList<AreaAiNpc> Npcs { get; init; }
     public required AreaCombatHost Combat { get; init; }
@@ -914,6 +921,29 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ---- the executor's world (IAiGoalWorld) ----
 
+    /// <summary>ARC-DEV-118: the evidence the planners and steps read: the loaded sectors' chart when the scene has one that holds a sector, else the scene's.</summary>
+    private AreaStepSnapshot Steps => _scene.LoadedSteps?.Invoke() ?? _scene.Steps;
+
+    /// <summary>ARC-DEV-118: whether a cell is a place the shown map holds: admitted by the scene's evidence or by a loaded sector's (a relocation is no walk,
+    /// so it does not wait for its sector to load).</summary>
+    private bool Admitted(AreaStepCell cell) => _scene.Steps.IsAdmitted(cell) || _scene.LoadedSteps?.Invoke()?.IsAdmitted(cell) == true;
+
+    /// <summary>
+    /// ARC-DEV-118 (MIG9 S5b, K1 §3.5, RL11): a planner reads the tiles it plans over and the original's tile reads lock the sector of a tile whose sector is
+    /// not loaded; the host touches the goal's sector (the one end the planner reads that the NPC does not stand in) when the scene has a loaded-sector
+    /// chart, the session holds the map's sector cache and the sector is not loaded. The chart reads it when its sync runs (<see cref="AreaAiScene.SectorsTouched"/>),
+    /// so the next question sees the evidence. A deliberate difference (K1 §4): the cells between are not touched one by one, so a long walk loads the sector
+    /// it ends in, not every sector it crosses.
+    /// </summary>
+    private void TouchGoal(CellCoord goal)
+    {
+        if (_scene.LoadedSteps is null || goal.X < 0 || goal.Y < 0) return;
+        var map = new SessionMapId(_scene.RuntimeMap);
+        if (_session.QuerySectorLoaded(map, ResidentSector.Of(goal)) != false) return;
+        _session.TouchSectors(_session.Version, map, [goal]);
+        _scene.SectorsTouched?.Invoke();
+    }
+
     public CellCoord? Tile(string id)
     {
         if (id == Pc) return _scene.HeroCell();
@@ -943,7 +973,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(_scene.Steps, _scene.Chart, () => Occupancy(id, toward)).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward)).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
@@ -973,7 +1003,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Tile(id) is not { } from) return null;
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
-        var source = new AreaRouteSource(_scene.Steps, _scene.Chart, () => Occupancy(id, request.Target));
+        TouchGoal(to);
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target));
         RoutePlan plan;
         switch (request.Kind)
         {
@@ -1015,7 +1046,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(_scene.Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 
