@@ -65,6 +65,17 @@ public sealed class AreaAiMovers
         Version++;
     }
 
+    /// <summary>
+    /// ARC-DEV-119 (MIG9 S5c): gives a mover the map record and origin a later window holds for the same NPC (a window move keeps the host, so the
+    /// movers stay; the T0 record the overlay hides is the new window's). The cell, facing and step stay; none without a mover or with the same record.
+    /// </summary>
+    public void Rekey(string entity, AreaObjectKey key, CellCoord origin)
+    {
+        if (!_movers.TryGetValue(entity, out var mover) || (mover.Key == key && mover.Origin == origin)) return;
+        _movers[entity] = mover with { Key = key, Origin = origin };
+        Version++;
+    }
+
     /// <summary>Turns the NPC toward <paramref name="toward"/> where it stands (no turn on the same cell).</summary>
     public void Face(string entity, AreaObjectKey key, CellCoord origin, CellCoord toward)
     {

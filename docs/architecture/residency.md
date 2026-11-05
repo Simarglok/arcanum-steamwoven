@@ -195,14 +195,31 @@ window already holds from the window's own evidence (`AreaStepSnapshot.Restrict`
 the cache lists as loaded (`AreaStepSnapshot.Union`, which joins disjoint sectors into one evidence that assesses a step across their border as a window holding both would) and is
 synchronised with the cache's slots (the union carries the chart's own evidence epoch, since a window's evidence and a sector read have epochs of their own); the viewer's `AreaSectorChart` does the reads on a worker and publishes the chart as one immutable swap, and the host
 reads the current chart. (3) *The planner touches what it reads.* The AI host touches the sector of a path's goal once per path it plans (a long walk loads the goal's sector); a facts question (the attack facts' path probe) plans without touching, since a touch can run a fold. Sectors a path only crosses are
-not touched. **Not built here:** that crossing rule, a host built per map (S5c), eviction history (S6).
+not touched (S5c, below, touches them). **Not built here:** a host built per map (S5c), eviction history (S6).
 
-The **host** (`AreaAiHost`) stops being built per window: it is built per open map over the residents the session lists and serves the NPCs of
+The **host** (`AreaAiHost`) stops being built per window: it is built per open map and serves the NPCs of
 the loaded sectors. Because the viewer's window snapshot no longer decides who is alive, the host's chart (passability for movement)
 comes from the **loaded sectors** through a sector source port beside the record source (`ISectorTerrain`, in `Arcanum.World` beside the record source; rows and passability of one sector by
 id, read from the content stack, derived data); a goal that needs a tile of an unloaded sector touches it first, as the original's tile reads
 do (RL11), so a long walk loads the sectors it crosses. A window move changes only the presentation scene and the view rectangle reported to the
 cache; it does not retire the host.
+
+**As built (S5c, ARC-DEV-119).** (1) *One host per map.* The viewer builds the host once per session, map and party (a load, a map change or a joined or left
+follower still builds it again: its runs are not saved). A window move of the main map (the viewer's `StreamMapWindowAsync`) publishes a new scene (the chart, the
+step evidence, the rows its map data holds, the companion group, the providers) and the host is given it through `AreaAiHost.Rebind`: its goal runs, traces, movers,
+round state and pending ticks stay. The host's NPCs become those of every window it has seen: a row the new window holds replaces the earlier one (and the mover of that NPC
+takes the new record key, `AreaAiMovers.Rekey`, so the overlay hides the right T0 record), an NPC the window left keeps its row while it has a run or has been moved (one that stands on its map data's cell and runs nothing is forgotten and comes back with a window that holds it), and its runs wait while the cache has evicted its sector (`Pump`, RL16); an NPC a window adds stands where the session recorded it (`RestorePlaces`), as a host built for that window would place it. Casting runs end at the move (`ReleaseCasts`: the cast host and the eye candy they were charged on are the old window's); the viewer's
+stamp carries no area for a window map (a map without a window, a whole map or the cave, still builds again with its area). A map with a loaded-sector chart places a
+resident (the fold's waypoint and standpoint relocation) on any admitted cell of the map, not only inside the window's chart (`PlaceHeld`). (2) *The path's sectors.* A planned path (not a facts probe) touches the
+unloaded sectors inside the map on the straight line from the NPC to the goal (sampled every 4 cells), nearest to the NPC first, the goal's last, the NPC's own sector left out (its fold is the cache's), at most `AreaAiHost.PathTouchLimit` (4) of them per plan: the
+corridor the planner's search reads first (RL11). The cache has 16 slots and the hero's 3 × 3 pre-cache and view square already take most of them (§6 risk 2), so a longer walk loads the next ones when its next plan asks;
+the cells the search explores beside the line are not touched one by one (a deliberate difference, §4).
+(3) *Where the host lives.* It stays in `tools/terrain-viewer/Core` (TM11's move to `Arcanum.World` is **not** done here): it is 2,300 lines tied to `AreaCombatHost`, `AreaChart`, `AreaObjectRecord` rows
+and the viewer's event world, which MIG15 moves with their owners (the lane note of [clocks and frame](clocks-frame.md#5-slices) also keeps DEV-124's `Pump` rewrite on the host in place).
+(4) *What a window still decides.* The bodies drawn and the rows a host can know are the window's: an NPC enters the host when a window first holds its row (no
+row of an NPC no window has held exists in the viewer; the whole read's `SessionResidentRow`s are not map records), so the NPCs of a loaded sector no window has shown are not run
+(a fold still gives them ticks; the host answers as for an unknown NPC and starts no run, and its route steps find no row until a window holds it), and a body is drawn only while its record is in the shown window, so a kept NPC that walks into a window that does not hold its record blocks the hero and the line of fire but is not drawn. The record source of every map NPC
+(TM3, MIG1) lifts that limit.
 
 ### 3.6 Eviction history in the snapshot (slice S6)
 
@@ -285,7 +302,7 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S4b | ARC-DEV-117 (**done**) | The waypoint and standpoint steps of a marked first tick: read 0x4ACBB0, 0x4ACD90 and 0x4ACDB0 and the NPC rows' waypoint list and day and night standpoints, then the host's `RunWaypoints` and `RunStandpoints` relocate a leaderless NPC (a request when its map is another, MIG11). | Session and host tests; smoke `town` (B06). |
 | S5 | ARC-DEV-105 (**done** for the gating and the catch-up; the rest is S5b and S5c) | Heartbeat gating (far branch, chain end, no chain for an unreached sector) and the follower catch-up in the host. | Session and host tests (`AreaAiFollowerTests`); smoke `ai`, `ai-follower`, `town`; the exe reading CX9. |
 | S5b | ARC-DEV-118 (**done**, the crossing rule of the planner is not) | `ISectorTerrain` (rows and passability of one sector by id, beside the record source in `Arcanum.World`); the host's chart from the loaded sectors, a planner touching what it reads; the main map's whole mobile read (7,399 rows, §6 risk 1) so the main map opens a residency. | World and host tests over synthetic sectors; smoke `ai`, `town`; the altar run (it needs sector 1452,1291 loaded). |
-| S5c | ARC-DEV-119 | The host built per open map: whether `AreaAiHost` moves into `Arcanum.World` (TM11), a window move no longer retires it (the stamp stops carrying the loaded area), `./arcanum map` main-map smoke. | Host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`; B06, B08, B25 re-checked. |
+| S5c | ARC-DEV-119 (**done**; the move into `Arcanum.World` is MIG15's, §3.5) | The host built per open map: a window move no longer retires it (`Rebind`, the stamp stops carrying the loaded area), the sectors a path goes through are touched. | Host tests (`AreaAiHostRebindTests`); smoke `stream` with `ARC_AREA_STREAM_AI=1`, `ai`, `ai-follower`, `town`. |
 | S6 | ARC-DEV-106 (**done**) | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
 | S7 | ARC-DEV-107 | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
 
@@ -311,8 +328,8 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above except the sector model (S2), the residents (S3, §3.2), the fold (S4, §3.4), the heartbeat gating with the follower catch-up (S5, §3.5), the sector terrain port with the main map's whole mobile read (S5b) and the saved history with the light fold (S6, §3.6) is a design. The host per
-open map is not implemented (the host is still rebuilt at a window move, S5c); the main map opens a residency since S5b (the viewer loads it as windows, and a window move keeps the cache). The waypoint and standpoint steps of the fold run since S4b (ARC-DEV-117). Since S6 a restored session gives its cache the saved history, so the arrival
+Everything above except the sector model (S2), the residents (S3, §3.2), the fold (S4, §3.4), the heartbeat gating with the follower catch-up (S5, §3.5), the sector terrain port with the main map's whole mobile read (S5b), the host per map (S5c) and the saved history with the light fold (S6, §3.6) is a design. The host per
+open map is built since S5c (a window move rebinds it; it still lives in the viewer's core, not in `Arcanum.World`); the main map opens a residency since S5b (the viewer loads it as windows, and a window move keeps the cache). The waypoint and standpoint steps of the fold run since S4b (ARC-DEV-117). Since S6 a restored session gives its cache the saved history, so the arrival
 pre-cache after a load folds a sector the save listed without the marker and the others with it (as the original does); a game saved by an older build or with no cache open
 lists none and folds every sector once. The light state of the loaded sectors is a record only: no drawing follows it. The emptying passes (a teleport within the map, a
 world-map landing: `EvictUnlocked`) and the relocation's wading touch have no caller yet (MIG11). On a whole map larger than the touched sectors, a

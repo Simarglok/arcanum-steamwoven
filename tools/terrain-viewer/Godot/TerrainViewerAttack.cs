@@ -92,7 +92,15 @@ public partial class TerrainViewerApp
         return _barterData?.Data?.Prototype(prototype);
     }
 
-    private void UnbindAreaCombat() { RetireAiHost(); _aiHostStamp = null; CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null; }
+    // ARC-DEV-119 (MIG9 S5c): the window move of one session keeps the map's AI host (the combat host it gets is the next window's, bound by AreaAiHostNow's rebind); its
+    // casting runs end here, while the cast host they were charged on is still the shown one. Any other unbinding (a map change, a load, a leave) retires it.
+    private void UnbindAreaCombat()
+    {
+        // The publish unbinds twice, the second time after the scene's teardown cleared _areaSession; a session that is not the host's shows in the stamp (AreaAiHostNow builds again).
+        if (_aiKeepAcrossWindowMove && _aiHost is { } kept && (_areaSession is null || ReferenceEquals(kept.Session, _areaSession))) kept.ReleaseCasts();
+        else { RetireAiHost(); _aiHostStamp = null; }
+        CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null;
+    }
 
     private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
 

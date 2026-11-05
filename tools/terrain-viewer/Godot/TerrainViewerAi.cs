@@ -25,7 +25,13 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaAiHost? _aiHost;
-    private (GameSessionOwner Session, int Map, AreaLoadResult Area, string Party, string Companions)? _aiHostStamp;
+    // ARC-DEV-119 (MIG9 S5c): the stamp carries no area for a map shown as windows (a window move keeps the host); _aiHostArea is the area its scene was built for.
+    private (GameSessionOwner Session, int Map, AreaLoadResult? Area, string Party, string Companions)? _aiHostStamp;
+    private AreaLoadResult? _aiHostArea;
+    // True while a window move publishes the next window of the same session: the unbinding it runs keeps the host (its casting runs end).
+    private bool _aiKeepAcrossWindowMove;
+    // ARC-DEV-119: how many hosts were built and how often a window move rebound the standing one (the stream smoke's AI observation reads them).
+    private int _aiHostBuilds, _aiHostRebinds;
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
@@ -59,8 +65,10 @@ public partial class TerrainViewerApp
 
     private bool AiEnabled => !AutomatedVisualRun || _aiForSmoke;
 
-    /// <summary>The shown map's AI host, built again when the session, the map or the loaded area changes (its runs and movers are
-    /// not saved, so a load or a map change stands every NPC on its map data's cell); null without a hero, combat values or a grid.</summary>
+    /// <summary>The shown map's AI host, built again when the session, the map or the party changes (its runs and movers are not saved, so a load or a
+    /// map change stands every NPC on its map data's cell); null without a hero, combat values or a grid. ARC-DEV-119 (MIG9 S5c): a window move of the
+    /// main map does not build it again: the host is the map's, and the scene the new window gave it replaces the old (<see cref="AreaAiHost.Rebind"/>);
+    /// a map without a window (a whole map, the cave) is built again when its area is.</summary>
     private AreaAiHost? AreaAiHostNow()
     {
         if (!AiEnabled || _areaSession is not { } session || session.QueryHero() is null || _combatHost is not { } combat || _readyArea is not { } area
@@ -76,12 +84,46 @@ public partial class TerrainViewerApp
         var companions = (_areaCompanions?.Companions.Select(c => c.Key) ?? []).Concat(_areaCompanions?.Absent ?? new HashSet<AreaObjectKey>()).ToHashSet();
         // A visitor from another home map has no row here: the group's entities count too.
         var groupEntities = (_areaCompanions?.Companions.Select(c => c.Entity) ?? []).ToHashSet(StringComparer.Ordinal);
-        var stamp = (session, CurrentAreaMap, area,
+        var windowed = area.Snapshot.Window is not null;
+        var stamp = (session, CurrentAreaMap, windowed ? null : area,
             string.Join(",", session.QueryParty().Followers.Select(f => f.Entity)
                 .Where(f => !groupEntities.Contains(f) && (!map.TryGetRow(f, out var r) || !companions.Contains(r.Key)))),
             string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
-        if (_aiHost is not null && Equals(stamp, _aiHostStamp)) return _aiHost;
+        if (_aiHost is { } kept && Equals(stamp, _aiHostStamp))
+        {
+            if (ReferenceEquals(area, _aiHostArea)) return kept;
+            // ARC-DEV-119: the map's window moved; the host goes on over the scene the new window gives.
+            var rebound = BuildAiScene(session, area, grid, map, combat, companions, () => _aiHost);
+            kept.Rebind(rebound);
+            _aiHostArea = area; _aiPcOccupancy = null; _aiLineOfFire = null; _aiHostRebinds++;
+            if (windowed) StartSectorChart(session, CurrentAreaMap, area, grid);
+            var late = kept.ScheduleTicks();
+            GD.Print($"ARC-DEV-119 ai-host rebound map={CurrentAreaMap} npcs={kept.Scene.Npcs.Count} window-npcs={rebound.Npcs.Count} companions={kept.RunCompanions.Count} ticks-refused={late}");
+            return kept;
+        }
         RetireAiHost();
+        var scene = BuildAiScene(session, area, grid, map, combat, companions, () => _aiHost);
+        var mapNumber = CurrentAreaMap;
+        var host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
+        _aiHost = host; _aiHostStamp = stamp; _aiHostArea = area; _aiPcOccupancy = null; _aiHostBuilds++;
+        // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
+        // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
+        if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)
+            GD.Print($"ARC-DEV-104 residency map={mapNumber} status={opened.Residency.Status} rows={opened.Residency.Rows} sectors={opened.Sectors?.ToString() ?? "-"}"
+                + $" extent={opened.Extent.SectorsX}x{opened.Extent.SectorsY} folds={opened.Arrival?.Folds.Count ?? 0}"
+                + $" ticks={opened.Arrival?.Folds.Sum(f => f.Npcs.Count - f.Refused.Count) ?? 0} failure={opened.Arrival?.Failure.ToString() ?? "-"}"
+                + (opened.Residency.Detail.Length > 0 ? $" detail={opened.Residency.Detail}" : ""));
+        if (windowed) StartSectorChart(session, mapNumber, area, grid); else DropSectorChart();
+        var refused = host.ScheduleTicks();
+        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={scene.Npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
+        return host;
+    }
+
+    /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads
+    /// left out) and the viewer's live providers. <paramref name="host"/> is the host the scene belongs to, for the line of fire's frame cache.</summary>
+    private AreaAiScene BuildAiScene(GameSessionOwner session, AreaLoadResult area, AreaGridSession grid, AreaInventoryMap map, AreaCombatHost combat,
+        IReadOnlySet<AreaObjectKey> companions, Func<AreaAiHost?> host)
+    {
         var npcs = new List<AreaAiNpc>();
         foreach (var holder in map.Seed.Holders)
         {
@@ -91,8 +133,7 @@ public partial class TerrainViewerApp
         }
         var chart = grid.Chart;
         var mapNumber = CurrentAreaMap;
-        AreaAiHost? host = null;
-        var scene = new AreaAiScene
+        return new AreaAiScene
         {
             RuntimeMap = mapNumber, Chart = chart, Steps = grid.Snapshot, Npcs = npcs, Combat = combat,
             // ARC-DEV-118 (MIG9 S5b): a window of the main map reads the sectors its session's cache has loaded, not the window.
@@ -102,7 +143,7 @@ public partial class TerrainViewerApp
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             Removed = AreaRemovedObjects,
-            LineOfFire = () => AiLineOfFire(host),
+            LineOfFire = () => AiLineOfFire(host()),
             DropMap = AreaDropMapNow,
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
@@ -120,26 +161,13 @@ public partial class TerrainViewerApp
             Heartbeat = AiHeartbeat,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
-            Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart) : null,
+            Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
             MapListed = MapListedNow,
             Homecomings = HomecomingQueue(session, mapNumber),
         };
-        host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
-        _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
-        // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
-        // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
-        if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)
-            GD.Print($"ARC-DEV-104 residency map={mapNumber} status={opened.Residency.Status} rows={opened.Residency.Rows} sectors={opened.Sectors?.ToString() ?? "-"}"
-                + $" extent={opened.Extent.SectorsX}x{opened.Extent.SectorsY} folds={opened.Arrival?.Folds.Count ?? 0}"
-                + $" ticks={opened.Arrival?.Folds.Sum(f => f.Npcs.Count - f.Refused.Count) ?? 0} failure={opened.Arrival?.Failure.ToString() ?? "-"}"
-                + (opened.Residency.Detail.Length > 0 ? $" detail={opened.Residency.Detail}" : ""));
-        if (area.Snapshot.Window is not null) StartSectorChart(session, mapNumber, area, grid); else DropSectorChart();
-        var refused = host.ScheduleTicks();
-        GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
-        return host;
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
@@ -260,7 +288,7 @@ public partial class TerrainViewerApp
     private void RetireAiHost()
     {
         if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
-        _aiHost = null;
+        _aiHost = null; _aiHostArea = null;
         _heartbeatDialog = null;
     }
 
