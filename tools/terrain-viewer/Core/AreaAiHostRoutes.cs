@@ -147,7 +147,9 @@ public sealed partial class AreaAiHost
     private AreaNpcRoute? RouteOf(string npc)
     {
         if (_routes.TryGetValue(npc, out var held)) return held;
-        var route = TryNpc(npc, out var row) && AreaNpcRouteReader.Read(row.Row) is { Status: AreaNpcRouteStatus.Ready, Route: { } read } ? read : null;
+        // An NPC no window has held yet has no row to read (ARC-DEV-119: a later window gives it), so that is no answer to keep.
+        if (!TryNpc(npc, out var row)) return null;
+        var route = AreaNpcRouteReader.Read(row.Row) is { Status: AreaNpcRouteStatus.Ready, Route: { } read } ? read : null;
         _routes[npc] = route;
         return route;
     }
@@ -178,7 +180,8 @@ public sealed partial class AreaAiHost
         return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
     }
 
-    // Whether the shown map holds a resident on this world cell: it lies on the chart, its tile is admitted and the hero is not on it.
+    // Whether the shown map holds a resident on this world cell: it lies on the chart (a map with a loaded-sector chart, the main map's windows: anywhere on the map, ARC-DEV-119),
+    // its tile is admitted and the hero is not on it.
     private bool PlaceHeld(CellCoord world) =>
-        _scene.Chart.Contains(ToChart(world)) && Admitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
+        (_scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world))) && Admitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
 }
