@@ -1,0 +1,256 @@
+# One goal table for every animated object (K14, MIG13, TM7, TM14, GR24–GR27)
+
+Status: **concept and slice plan (S1, ARC-DEV-130, docs-only, no checks run). No code slice of MIG13 has landed.** Concept document K14 of the
+[architecture audit](../research/architecture-audit-plan.md) and design of MIG13 ([target model](target-model.md#migration-order), elements TM7, TM14 and the
+goal part of TM11; decisions GQ5 chosen A, GQ4 chosen A for MIG14). Behaviour of the original stays the rows GS1–GS32 of the [original's goals](original-goals.md) and
+TL38–TL45 of the [original time loop](original-time-loop.md) (read from the executable); this page fixes how the session represents them, in which assembly each
+part lives, the order of the code slices and what each must show. It follows the style of [clocks and the frame](clocks-frame.md), [residency](residency.md)
+and [change of place](change-of-place.md).
+
+Requirements (reference only, no coverage row changes in S1):
+[FR-RUNTIME-002](../requirements/world-travel-runtime.md#fr-runtime-002) (the actor's goals and interrupts),
+[FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the action frame fires once),
+[FR-NAV-001](../requirements/world-travel-runtime.md#fr-nav-001), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003),
+[FR-COMBAT-006](../requirements/combat-magic-tech.md#fr-combat-006), [FR-COMBAT-012](../requirements/combat-magic-tech.md#fr-combat-012),
+[FR-AI-001](../requirements/story-social-ai.md#fr-ai-001), [FR-AI-003](../requirements/story-social-ai.md#fr-ai-003) (doors for NPCs),
+[FR-SCENE-014](../requirements/scene.md#fr-scene-014) (a door opens and closes), [FR-DIALOG-001](../requirements/story-social-ai.md#fr-dialog-001),
+[FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002), [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-004),
+[FR-LIGHT-002](../requirements/lighting-time.md#fr-light-002) (time flow; the `Light` event). Each code slice updates the coverage rows it changes in its own PR.
+
+## 1. The problem in one paragraph
+
+The original has **one** goal system: the hero, NPCs, doors, projectiles, spell missiles, eye candy and burning scenery all own runs of one table of 216 slots, stepped by
+one handler on the animation clock; the hero's walk, attack, talk, use, pickup, throw, skill and cast are goals of the same 87 types with the same nodes, priorities
+and interrupts (GS1–GS3, GS25–GS32). Steamwoven has **five** machines. The NPC executor (`AiExecutorRules`, `AiGoalRun`, `AreaAiHost._runs`) holds one run per NPC of the
+shown map, with priorities for 26 goal types, no overlays, no alias table, an interrupt helper that always answers true (`InterruptLowerAnimations`) and a
+"priority 3 or less" interrupt (`AreaAiHost.Interrupt`). The hero's actions are viewer hosts beside it: the route follower and grid actor on a movement time
+(`RouteFollower`, `DiagnosticGridActor`), `AttackGoal`, `SpellCastGoal` with its queue, the held throw, and five "after route" intents (`_talkAfterRoute`,
+`_areaUseAfterRoute`, `_inventoryAfterRoute`, `_pickPocketAfterRoute`, `_portalUseAfterRoute`) that stand in for the goals talk, use, loot, pickup and the door goals.
+Doors, projectiles, spell missiles, eye candy, scenery animation, dying, stun, knock-down and get-up are viewer objects and timers, not runs. The consequences
+(GR24–GR27, GR33): a stun, knock-down or spell cannot interrupt a hero's action the way it interrupts an NPC's (B11); a walk can replace an attack; talk, use and loot are
+not interruptible goals; doors never close by themselves (B15, FR-SCENE-014); the cast effect, the dying body and the thrown item are not runs of one table
+(B12–B14); the hero's place reaches the session only at commit points; every hero action is a second implementation of an NPC action. MIG12 gave the clock
+(the animation domain of the event queue exists and has no kind); MIG13 gives the table.
+
+## 2. What the original does, in the rows MIG13 follows
+
+| Row | Fact the design keeps |
+| --- | --- |
+| GS1, GS2 | One table of 216 slots, a 12-byte handle (slot, run id, change counter 0 in single player), lowest free slot, the free slot's id −1; a full table fails the start, sets a flag and the next goal step interrupts every run at level 3. |
+| GS3, GS4 | Any object can own runs and one object can own several: a **main run** (bottom goal without the no-interrupt flag) and **overlays**. Some queries look at the object's first run only (runs goal N, the idle test), the others at all runs. |
+| GS5, GS6 | A goal frame is the goal type and typed parameters (objects, locations, integers, frame flags); a run holds up to eight frames and flags (done, action frame reached and handled, running, no-walk 0x100, flight 0x400, near-occupied 0x4000, killed 0x8000 …). |
+| GS7 | Goal steps are `Anim` events on the animation clock: the first frame 5 ms after the start (1 ms into the live list in a round for a non-current owner, TL41), the next at the run's pace; every end of a run removes the slot's events. |
+| GS8, GS9 | 87 goal types (85 with descriptors): priority 1–5, no-interrupt (15 types), carried across a teleport (26), not counted (5), up to three aliases. |
+| GS10 | A teleport of the hero writes the runs of travelling owners whose bottom goal has the carry flag to the destination, then interrupts all runs at level 6; walks, attacks, talks, uses and casts never cross a map. The loader was not read (Q1). |
+| GS11–GS15 | A start builds a frame, interrupts the object's runs at a level (the goal's priority, or a fixed 3 for the walks, runs, follow, attack, throw and spread out; stun 4 then 1, projectile 4 then 5, knock-down 5 then 3), refuses duplicates for attack, throw, follow and spread out, is gated (start gate: AP and fatigue for an NPC only; movement gate: current participant in a round, not an NPC in a reaction), allocates a slot and queues the first frame. Priority decides replacement as well as interruption. A running walk is retargeted in place, a repeated attack is inserted at the bottom of the stack. |
+| GS16–GS21 | The interrupt rule reads the **current** goal's descriptor: level 6 stops all; below 6 a no-interrupt goal is left running (success), priority 5 refuses, priorities 2 and 3 end at level ≥ priority, 1 and 4 at level > priority. An interrupt always ends the whole run with every end node; the sweeps are round start (3), table exhaustion (3), map reset and close (6), teleport (6); a kill ends runs with no rule. |
+| GS22–GS24 | A run ends from inside by the end step, by a bottom pop or by a node that kills it; only the stepper's own end calls the subturn hook and the idle restart, so a run stopped from outside is followed by no decision and no fidget. |
+| GS25–GS28 | The hero's input: tile click walks (or runs by the always-run rule), object click builds the goal itself with no start gate (attack 18, or 19 with Shift; talk 21; use 38 and 81; pickup 15; throw 37; trap walk 3), spell, skill and item cursors go to the shared starters, the right button's release interrupts at level 3 and turns the hero; in a round the click is taken only while the hero is idle. The hero differs inside the shared code only at the gates, the always-run rule, follow and pickup. |
+| GS29 | Talk, use, loot and doors are goals that act in their last node: the dialog, the loot window or the use script opens there; a door's own run plays goal 70, waits 1.5 s and closes through 72 and 71 unless the portal's flag 0x100 is set. |
+| GS30, GS31 | Scripts start few goals (perform animation, walk to, run to, use item, steal, get up, the casts). The engine starts stun, knock-down, dying, get-up, knockback, projectile, missile, eye candy, floating text, burning scenery and the fidget; no code starts the hit reactions 29 and 30. |
+| TL38–TL45 | The animation clock keeps running in a round and gets the round's 1 s too; goal steps are animation events; a round start interrupts every run at level 3; the TB callback waits for the significant goals (priority ≥ 2, no no-interrupt flag, not "not counted") to finish; a critter that is not the current participant keeps its goals playing free of AP and the gated starters refuse it. |
+
+## 3. Design
+
+### 3.1 The run table in the session
+
+**One table, owned by the session.** A Godot-free value in `Arcanum.Simulation` (new namespace `Goals`: the pure tables, descriptors and decision rules, as the other rule sets are, GQ6 A) holds the 216 slots, the run id counter and the rules that read it; the starters that change the table and the stepper live in `Arcanum.World` and the session (TM11); the session
+owns the one instance and mutates it only through its own methods (as it owns `FrameClockKeeper`: no caller outside the session writes a run). A run is an immutable record
+of an **owner** (the object's session entity string, so an NPC, the hero, a static portal by its positional identity or a created object; a run never holds a reference), its
+**handle** (slot and run id, no change counter), its flags, its **frames** (at most eight, bottom first), the due time of its next step and its pace. Allocation takes the lowest free
+slot; a freed slot's id is cleared so an old handle never matches (GS1).
+
+**The frame is typed.** The original's 21 parameter slots become the fields the goals read: the target, the destination tile, the item, the skill, the range, the spell run,
+the frame flags (not counted 0x80, follow 0x1000), the path segment and the rest time; `AiGoalFrame` and `AiGoalRun` are the starting point (S2 widens them; `AiGoalType` becomes the
+87-type `GoalType` with the original's numbers and names, the 26 existing values unchanged). Every field is a plain value (entity strings, cells, ints) so MIG14 can save a stack
+unchanged.
+
+**Descriptors are a static table** (`GoalDescriptors`): per type the priority 1–5, the no-interrupt, carry and not-counted flags and the aliases (GS8, GS9), checked against the executable
+in S2. The 15 no-interrupt types start without any interrupt, run beside the main run and survive every interrupt below level 6 (GS3, GS18).
+
+**Queries.** The table answers what the original's helpers answer, each on the set of runs the original reads: the main run of an object and its bottom goal's priority, "runs goal N" and
+the idle test on the first run only, "an equal goal is queued" over every run with the alias rule, "a busy run" (carry flag), "the first run attacks", the **significant goal count** of the round
+(TL39) and an owner's runs in slot order (GS4, GS20). Because overlays take any free slot, the first-run shadowing of GS4 is reproduced (an eye-candy run in a lower slot hides the walk from "runs
+goal N"); it is a rule of the original and S2 keeps it as a named test.
+
+### 3.2 Goals on the animation clock
+
+**One kind, `goal.step`, in the animation domain** of the session's event queue (the first kind of that domain; MIG12 S3 gave the clock and no kind). Entity: the run's owner; values: the slot and
+the run id. A step is due at the animation clock's value when it was queued plus the pace (real milliseconds ×8, TL40). The next step is queued **relative to the clock at firing** (the original's default without `-animcatchup`), so a jump of the clock (a round's second, a world-map step, a script's
+time action) fires each pending step once and never replays the missed ones (TL22); the AI host's `Math.Max(due, now)` is the same rule. The first frame is 5 ms on the animation clock after the start, or 1 ms into the live list for a non-current
+owner in a round (GS7, TL41). Every end of a run removes the run's pending event by slot **and** id (the original compares only the slot and the in-use bit, GS7: a deliberate, safer difference,
+no visible effect because the original removes the events at every end). A map close ends the map's runs at level 6 and removes their `goal.step` events (GS19), so no goal event is ever parked; the kind is
+**not saved** until MIG14 (as `travel.step` and the spell run: a load starts with no run, as the host's runs do today).
+
+**Who fires it.** The frame step reports the due `goal.step` events of a pass to one host, in order, at their deadlines with the clocks at the due time, and runs another pass after the host has
+rescheduled (the pattern of `IRealStepHost`, S8 of MIG12): an `IGoalStepHost` in the world runtime steps the run with the stepper of §3.4 and answers the next delay or the end. Until MIG15 the
+node code needs ports whose implementations live in the viewer's Core (`IAiGoalWorld`, declared in `Arcanum.Simulation.Ai` and implemented by `AreaAiHost`), so the host object stays there and the **stepper** (dispatch by goal type, the 100-node
+limit, the end handling, the hooks, the reschedule) lives in `Arcanum.World`. The AI host's own pump (`Pump(nowMs)`, `_nowMs`) and the viewer's calls to the hero's hosts leave the frame loop: one
+mechanism steps every run, in deadline order.
+
+**Round and animation time (TL38).** The animation clock keeps running in a round and takes the round's +1 s jump; animation events due within it become due at once. This is an inference of
+the original that S3 reads again in the executable and classifies before the kind is registered (the open reading of [clocks §6.4](clocks-frame.md#6-risks-and-open-questions));
+a bug of the game goes under the D8 "Original"/"Steamwoven" setting.
+
+**The `Light` kind.** TL32 puts two kinds on the animation list: the goal step and `Light`. The viewer's light animation reads the frame clocks' world time since MIG12 S6 and was left without an
+event; S3 registers `Light` only if the read of the viewer's `_lightAnimationMs` shows it is cheap, otherwise it stays on the viewer (risk 4, [FR-LIGHT-002](../requirements/lighting-time.md#fr-light-002)).
+
+### 3.3 Starting, replacing and interrupting (rules, S2; wiring, S4–S5)
+
+**Starters are pure.** A starter takes the owner, the goal, its parameters and a gate port and returns a typed result: `Started(handle)`, or a refusal with the reason (`Gate`, `Interrupt`,
+`Duplicate`, `TableFull`, `Loading`, `Destroyed`). The start itself compares no priority (GS11); replacement is decided before it by the starter's interrupt level (GS12, GS13: the table of fixed levels,
+the "27 sites refuse, three start anyway" rule), the duplicate refusal (attack, throw, follow, spread out) and the gates (GS15, TL41). **Retarget in place** (a running walk's new destination overwrites the old
+and re-plans, GS14) and **insert at the bottom** (a repeated attack, a queued cast) are table operations. The insert on a full stack is refused with a typed result (the original writes a ninth frame, reachability not
+shown, GS14, Q8): a deliberate difference.
+
+**Interrupts are the original's rule.** `CanInterrupt(currentGoal, level)` is the table of GS16 and GS18; the per-object walk stops at the first refusal and leaves earlier runs ended (GS17); the sweeps
+(GS19) and the kill (GS21) are separate functions. Ending a run runs the **end node of every goal on the stack**, top down, through a port the node code implements (the host's `EndDroppedRun` and
+`FreeQueuedCasts` are the first of them); an end from outside runs them once with **no subturn hook, no idle restart and no AP charge** (GS24), the stepper's own end calls the hook and the restart (GS23).
+Whether the second end-node pass after an end step has a visible effect is open (Q2): S5 reads it.
+
+**The NPC decision layer stays.** `AiExecutorRules`' decision functions (which goal to start, the pass choices, the attack and flee reasons) ask the table through a port instead of owning a run; the
+original's AI pre-check (an NPC is decided for only while its main run's bottom goal has priority 2 or less, GS20) is a table query.
+
+### 3.4 One stepper
+
+`AiExecutorRules.Step` interprets the nodes of 26 goal types; the stepper takes it over as the node interpreter of those goals and gains the nodes of the others as the slices add them: stun, knock-down,
+get-up, dying (S6); the door goals 11, 12, 49, 50, 70, 71, 72 (S7); the projectile 36, the missile 28 and the knockback 43 (S8); the eye candy and floating text 44–48, 58, 59, 75, 76, burning scenery 77 and the
+scenery restart (S9); the fidget 2, the rotate 53, the animate loop 1 and unconceal 54 that the idle restart and the dialog start (S5), and the script actions (S14: perform animation 0 and 60, walk to 7, run to 55, use item 40), need; and the goals the executor
+lacks for the click: 3 (shared with NPCs, GS32), 21, 38 and 81 (S10, S11). A goal type with no node yet is a typed "unknown goal" end, never a silent skip. The presentation
+**reads** the run (goal, node, path, due time) to draw and play sound; it no longer owns an animation timer for a rule (the drawing-only frame loops of art stay on the host, §3.9).
+
+### 3.5 Engine goals, doors, projectiles, eye candy (GR26; S6–S9)
+
+- **Critter states (S6).** Damage starts the stun 57 or the knock-down 62 by the damage result's flags (GS31), unconsciousness and the slip on a marked tile knock down, fatigue recovery and healing start
+  the get-up 63, death starts dying 31 whose node creates the decoration. The viewer's fallen poses and the NPC lying animation (`AreaFallenPoses`) read the run, and the art choice of `AreaBodyMoves` follows the run's goal. B13 (the dying body
+  and the pool) is closed or reclassified here.
+- **Doors (S7).** A portal owns runs: use goals 38 and 81 turn into 11 or 49 on a portal, attempts 12 and 50 start the door's own run 70 or 71, 70 becomes 72 after 1.5 s unless the portal's flag 0x100 is set,
+  72 retries every 1.5 s (and in a round for a non-current opener the close fails and repeats, TL41). A static portal's identity is positional (MIG7b), so it is a valid owner. Whether a walker that opens a door
+  while passing gets goals 70–72 is open (Q5): S7 reads it before the walk's door step changes. B15 and FR-SCENE-014 close here; the pause part of the smoke SM10 is checked after S7.
+- **Projectiles and missiles (S8).** A projectile (goal 36) and a spell missile (goal 28) are runs **on a created object**, so S8 gives the directory the kinds `projectile` and `missile` (TM4's creation path)
+  as objects that no save keeps yet (MIG14 saves them; a save in flight loses them, as today). The thrown item's landing and the "explode on landing" effect are started by the node (B14), the missile's chase
+  of a moved target is the node's retarget (B12). Knockback 43 is a goal of the target.
+- **Eye candy, floating text, burning scenery (S9).** Eye candy and floating text (44–48, 58, 59, 75, 76) are overlays (no-interrupt, priority 5) owned by the object they play on, started from the 17 sites of GS31; the combat floaters (`AreaCombatFloaters`) and the
+  eye candy host (`TerrainViewerEyeCandy`) read them. Burning scenery 77 is an ordinary priority-1 run (not counted, no no-interrupt flag, GS9). It and the scenery animation restart (kill, then start, GS21) replace `AreaSceneryAnimation`'s own timers.
+
+### 3.6 The hero (TM14, TM11, GQ5 A; S10–S13)
+
+**The hero is an entry like any NPC** (the player's entity), and **its actions are runs of the table**. Its location is written at every step (RL5), which retires the commit points of S4 and the
+viewer-owned grid position as the truth of the hero's cell (GR33); the session answers "where is the hero" at every moment.
+
+**The request boundary (GQ5 A).** `Arcanum.World` gets one typed request per player action, applied at once in single player, with no queue, returning a typed result: `WalkRequest` (tile, run), `ObjectClickRequest`
+(target, Shift, Alt, the cursor mode from the interface stack), `ThrowRequest`, `UseItemRequest`, `SkillRequest`, `CastRequest`, `StopRequest` (the right button's release: interrupt at level 3 and turn toward the cursor)
+and `FaceRequest`. The viewer turns clicks, keys and the stick into requests and draws; the rules inside change state directly, as the original's single-player branch does (SA34). The request set grows with
+each slice; the ones outside goals (item moves, combat mode, raising a stat, follower orders) belong to later work. The pure rules are `HeroClickRules` (the decision table of GS26, the start branch of GS27 including
+the auto-attack option, the round's "only while idle" rule and the run-flag setters) and the always-run rule (GS25), in `Arcanum.Simulation.Goals` (pure rules; `Arcanum.World` applies them).
+
+**The hero's goals.** The tile click is goal 3 or 4 (retarget in place, GS14); the object click builds the goal itself, with no start gate: attack 18 or 19, talk 21, use 38 and 81, pickup 15, throw 37, the trap walk
+(GS26). Talk, use and loot are goals whose **last node acts** through a port: `OpenDialog(target)` (script point 9 then the dialog), `OpenLoot`, `FireUseScript` (point 1), the door goals of §3.5. The five after-route
+intents of the viewer disappear: the approach is the goal's own node 8, an interrupt (a stun, a new click, a window that takes the hero's goal along as the original's windows do, S7 of MIG12) ends the run and the intent
+with it. Spell, skill and item cursors start the shared starters (the casting run, the skill starter, the item-use starters); the hero's `AttackGoal`, `SpellCastGoal` and held throw retire in S12.
+
+**Walking.** The hero uses the NPC walk goal and the same mover (`AreaAiMovers`), so a stun or knock-down can stop the hero as it stops an NPC once S13 starts the hero's stun on the table (B11). The viewer's grid actor and its movement time (C3) leave the hero's rule
+path; the stick and the gamepad become a held `WalkRequest` (the original's mode 3 repeats the walk and marks the run, partial, Q7). The hero's gait, smoothing and the stick's feel are presentation of the same steps (risk 3).
+
+**In a round.** The click is taken only on the hero's turn and only while the hero is idle; the hero passes the start gate (it tests only NPCs), is checked by the movement gate and pays AP in the round host as now
+(GS15, GS27, TL44). The round host (G6) stays as the turn machine and reads the table for the wait on animations (§3.7).
+
+### 3.7 Rounds on the table (S5)
+
+The table counts significant goals (priority ≥ 2, no no-interrupt flag, not "not counted", TL39) and calls the round's "all animations done" callback when a slot is freed with the count at zero; this
+replaces the host's `CompleteCombatActions` twice-unchanged rule, which stays only as the stall detector TL39 describes. Round start interrupts every run at level 3 (the current goals that are "not counted" are
+left), each participant again, and set-turn interrupts the previous participant unless it is the hero (GS19, GS20, TL36, TL37). A critter that is not the current participant keeps its running goals and is refused by the
+gated starters; goals started for it get their first frame at 1 ms into the live list (TL41). The subturn hook after a stepper's end is the round host's next frame as now (`FidgetAfterHook`).
+
+### 3.8 Scripts (S14)
+
+The script effects that start goals (perform animation 62, walk to 69, run to 74, get up 76, use item 79, steal 115, the casts 48, 61, 118, 121, 122, 136, kill 58 through the death path and dying 31, the two eye-candy actions) become requests applied by
+the world runtime with the starters of §3.3 and their own gates (62 and the casts have none); stop attacking 109 (level 3) and become prone 93 (level 4, no goal) are interrupts. No script action calls the attack,
+follow, flee, throw, pickup, wander or fidget starters (GS30). GR27 closes here.
+
+### 3.9 Maps, saving, what stays outside
+
+- **Maps.** A run belongs to its owner's map. A map close or reset interrupts every run at level 6 (GS19). The carry flag of GS10 and the destination loader are open (Q1): until it is read the runs of a travelling owner
+  end with the map change, as today (the walk, attack, talk, use and cast never cross in the original either; the animations, hit reactions, dying, door runs, eye candy and floating text do).
+- **Saving.** MIG13 saves nothing new: a save keeps no run, no goal stack, no projectile and no missile, a load starts with none, as before (MIG14, GQ4 A, saves the table, the spell runs and the objects in flight in
+  the next schema). The frame values are plain so MIG14 needs no redesign. If a slice must raise the schema above 70 it adds the upgrade step in `GameSessionSnapshotUpgrade.cs` in the same PR.
+- **Presentation clocks** (zoom, panel slide, the art's frame loops that decide nothing, light shimmer if `Light` stays on the viewer) stay on the host as MIG12 §3.7 says. The door's frames are the exception:
+  they follow the door's run.
+- **Hosts that stay in the viewer** until MIG15: the implementations of the node ports (`IAiGoalWorld` and its descendants), the art and sound choices, the mover's drawing.
+- **The turn machine** (`CombatDomain`) and the AP budget stay (G6); K7 (sleep and UI timers as real-time chains) and the spell run's own saved state (MIG14) are not touched.
+
+## 4. Deliberate differences from the original
+
+| Difference | Why |
+| --- | --- |
+| Typed frame fields instead of the 21 eight-byte parameter slots; the run's work area and the unsaved sound handle are not modelled. | Same behaviour, saveable values; the original's slots are an implementation detail. |
+| A run's id is checked by the event as well as its slot (the original compares only the slot and the in-use bit). | A safer match with no visible effect, because the original removes a run's events at every end. |
+| Run ids start at 1 and count up (the original seeds its counter randomly, 0..10,000). | Determinism of tests and saves; ids are never shown. |
+| No change counter in the handle. | Single player; the counter is 0 there (GS1). |
+| An insert at the bottom of a full stack is refused with a typed result. | The original writes a ninth frame past the stack; reachability was not shown (GS14, Q8). |
+| A goal with no node yet ends as a typed "unknown goal" instead of running nothing. | Typed failure at the boundary; each slice adds the nodes it owns. |
+| Table exhaustion: S2 reads the executable again and decides whether the sweep (every run interrupted at level 3 at the next step) is reproduced; the default is to reproduce the failure result and the sweep under the Original setting. | 216 slots are never reached by a map's critters in practice; a bug of the game goes under the D8 switch, not into the shared code. |
+| Events fire at their own deadlines inside a frame (GI5), not all against the ping's final clock. | Decision GI5 kept by MIG12; the order of two goal steps in one frame is deadline order, not the host's fixed order. |
+| Requests are applied at once and return a typed result; no client request is sent (the network branch of every rule is not followed). | GQ5 A and SA34. |
+| The hero's gait and the stick's feel are presentation on top of the goal's steps. | The original draws the same steps; the feel is tuned in the viewer. |
+
+No switch is added by S1. Where a slice's read of the executable shows a behaviour that is a bug of the game rather than a rule, it is classified by the
+[original executable check](../research/original-executable-check.md) and put under the D8 "Original"/"Steamwoven" setting in that slice's PR (candidates already known: the table exhaustion above, the
+second end-node pass, the animation events that fall due at once at a round's end, TL38).
+
+## 5. Slices
+
+S1 is this document. The codes of S2–S15 are handed out by the coordinator one by one, each checked unused; no code is reserved here. A slice is one PR and updates the coverage rows it changes; the
+smoke stages are the ones the change touches (`./arcanum smoke pr --stages …`, one Godot window at a time), the full map chain only in the daily package. The reviews are Opus (rule 2 of the review-model
+rule): every slice compares the original, changes the session core or is over 800 lines, except a slice that is only a wording or a row.
+
+| Slice | Code | Result | Tests and evidence |
+| --- | --- | --- | --- |
+| S1 | ARC-DEV-130, **this document** | The concept K14 and the plan; the MIG13 row and the K14 line updated. | none (docs-only) |
+| S2 | next | Goal rules, no caller: `GoalType` (all 87, the original's numbers and names), `GoalDescriptors`, the interrupt rule and levels (GS16–GS19), the start and replacement rules with the fixed levels, duplicates and gates as ports (GS11–GS15), retarget and insert (GS14), the pure `GoalRunTable` (216 slots, handles, lowest free slot, the GS4 queries, the significant-goal count). Reads the executable for the 87 names and the descriptor table, GS2's sweep, Q8. | Synthetic tests per row (a priority table test from GS9, the aliases, the first-run shadowing, the fixed levels); no smoke (the executable is read, not run) |
+| S3 | next | The session owns the table and the `goal.step` kind on the animation domain (not saved): start, interrupt, kill, query and the event's scheduling and removal; `IGoalStepHost` in `FrameStep` (a pass reports the due steps, the host steps them, one more pass follows); the TL38 reading and classification; the `Light` decision. No host yet. | Session tests (events at deadlines, removal by slot and id, map scope, no schema change), frame-step tests with a fake host; the `map` frame-clock check |
+| S4 | next | The AI host on the table: `AreaAiHost._runs` and its pump go, the stepper moves into `Arcanum.World`, NPC runs are session runs stepped by the frame step; priorities come from the descriptors, the alias and equal-goal tests read all runs, overlays are possible. Same behaviour first, through a facade with today's `RunOf` and `AnimationRunning`. | The AI unit tests; smoke `ai`, `ai-cast`, `ai-follower`, `ai-turn-based`, `walk` |
+| S5 | next | Real interrupts, end nodes and rounds: GS16–GS24 in the host (the always-true `InterruptLowerAnimations` goes), end nodes on every end, the hooks only on the stepper's path, kill, the sweeps, round start at level 3, the significant-goal count and the TB callback (TL39), TL41's first frame, the AI pre-check as a query; the second end-node pass read (Q2). GR25 closes. | Round tests; smoke `turn-based`, `ai-turn-based`, `ranged`, `ai` |
+| S6 | next | Critter states as runs: stun 57, knock-down 62, get-up 63, dying 31 for NPCs; fallen poses and body moves read the run; B13 re-checked. | Smoke `knockdown`, `death`, `ai`, `ranged` |
+| S7 | next | Doors as runs: the door goals, the 1.5 s close, flag 0x100, the round rule; Q5 read; B15 and FR-SCENE-014 close; SM10's pause part checked. | Portal unit tests; `TerrainViewerAreaPortalSmoke` and the new door-close check of the smoke plan's SM10 |
+| S8 | next | Projectiles, spell missiles and knockback as runs on created objects (kinds `projectile`, `missile`, unsaved until MIG14); B12 and B14 re-checked. | Smoke `cast`, `ranged` |
+| S9 | next | Eye candy, floating text, burning scenery and the scenery restart as overlays and runs. | Smoke `floaters`, `cast`; `TerrainViewerSceneryAnimationSmoke` |
+| S10 | next | The hero's request boundary and the tile click: `WalkRequest`, `StopRequest`, `FaceRequest`, the hero's walk goal on the NPC mover, the location written at every step (commit points retire), the always-run rule, retarget in place; Q7's mode 3 read. | Request tests; smoke `walk`, `transfer`, `roundtrip` |
+| S11 | next | The hero's object click (GS26, GS27): talk, use, loot, pickup, door and trap goals; the five after-route intents go; the talk partner's `ConversationCallback` hold-out closes; B33 re-checked. | Smoke `container`, `barter`, `pickpocket`, `ai`, `census` |
+| S12 | next | The hero's combat actions as shared goals: attack, throw, skill, item use, cast; `AttackGoal`, `SpellCastGoal`, the held throw and the hero's flying bodies retire. | Smoke `cast`, `ranged`, `turn-based`, `pickpocket` |
+| S13 | next | The hero's states on the table: knock-down, stun, dying and get-up for the hero; the death flow reads them; the round's hero rules (TL44) complete; B11 closes. | Smoke `knockdown`, `death`, `turn-based` |
+| S14 | next | Scripts start goals (GS30): the script effects as requests; stop attacking and become prone as interrupts; GR27 closes. | Interpreter tests; smoke `ai` |
+| S15 | next | The re-check: the bug rows B11–B15, B33 and the smokes SM06, SM08–SM12, SM17 and SM24 of the [smoke plan](../research/open-bugs-migration-smoke-plan.md); GR24–GR27 (and TM7's part of GR13, the far branch's level-4 interrupt) and the MIG13 rows closed; this document's status. | Smokes of the stages the slices touched; the full map chain in the daily package |
+
+**Order and lanes.** S2 → S3 → S4 → S5 is one line (each needs the one before). S6–S9 need S5 and are independent of each other in files except the viewer's shared hosts; S10 needs S4 and S5 but not S6–S9; S11 needs S7 and S10; S12 needs S8 and
+S11; S13 needs S6 and S12; S14 needs S5, S6, S9 and S10; S15 is last. `AreaAiHost.cs` is rewritten by S4, S5 and S6 and also holds the NPC's door use and ranged shots, so S6 runs before S7–S9 and no other lane edits it in that time; S3 shares `FrameStep` and the event registry with MIG14's future
+work only. MIG15 (the hosts into the world runtime) runs alongside and closes after MIG14: a slice that leaves a port in the viewer's Core says so in its report. No slice starts before the previous one of its line has merged.
+
+## 6. Risks and open questions
+
+1. **Size of S4 and S5.** `AreaAiHost` is about 2,250 lines and reads `_runs` from many places (`RunOf`, `Interrupt`, `AnimationRunning`, the casts, the follower catch-up, the round host). S4 moves the storage first
+   behind today's calls and changes no behaviour; S5 then makes the rules real. If S4's diff passes about 800 lines of rules the slice is cut again by the owner's split rule.
+2. **Frame order.** Today the AI pump runs once per frame after the passes, and the hero's attack, walk and cast run in the viewer's world step in a fixed order. As goal steps are events at their deadlines the order
+   of two steps inside one frame becomes deadline order. Smokes that assume the old order (`ai`, `cast`, `ranged`) are restated, not retuned, and the change is listed in S4's report.
+3. **The hero's feel.** The grid actor, the stick and the route follower carry tuned input smoothing; the hero as a goal with per-tile steps must not change the walking speed, the gamepad stick or the click-to-walk
+   response. S10 keeps the speed rules of `MovementRuntime` and runs the `walk` stage and a manual run of the hero before it merges; a held stick is a design call for S10 (Q7 open) and may keep the grid actor as the stick's mover
+   until the mode 3 reading is done.
+4. **`Light` and the round's animation catch-up (TL38).** Both belong to the first animation-domain kind and are read in S3; the `Light` event may stay on the viewer.
+5. **Projectiles as objects.** S8 needs a transient directory origin for created objects that no save keeps; the snapshot must skip them without a version change and MIG14 replaces the skip. The directory's wipe at a map change
+   and a load must remove them.
+6. **Original questions not yet read.** Q1 (the carried runs' loader), Q2 (the second end-node pass), Q3 (frame flag 0x80), Q5 (door goals during a walk), Q6 (spell data goals), Q7 (mode 3, the Alt action, the called shot, the use
+   node's turn test), Q8 ([original goals](original-goals.md#open-questions)). Each is read in the slice that needs it and classified before the rule is written; a question that cannot be settled gets a documented default and a switch.
+7. **MIG14 compatibility.** Frames must be savable (entity strings, cells, ints, no objects) and the handles stable; a slice that adds a field a save could not hold says so. The animation events are not saved, so MIG14 must
+   re-create them from the saved runs' due times.
+8. **Network.** The original's host and client branches of every starter are not followed (GS11, GS17, R6 rows); the request boundary is the place K11 adds them.
+9. **Time.** The hero's actions run on animation time now: since MIG12 S7 an open window drops them through the input gate; on the table each window interrupts the hero's run at the original's level (dialog start 3, world map 4, character editor 4, GS20; MIG16 S4 owns the gate). S11 and S12 list each window that assumed a held hero.
+
+## 7. Not ready
+
+S1 landed only this document and the update of the K14 line and the MIG13 row.
+
+- **Not started.** The goal rules, the session's table and the animation-domain kind (S2, S3) and everything after them. The hero is still a set of viewer hosts, doors, projectiles, missiles and eye candy are still viewer objects,
+  stun and knock-down still cannot interrupt a hero's action (B11), doors still never close (B15), and the AI host's runs are still run-local with one run per NPC.
+- **Not decided here.** The reproduction of the table exhaustion sweep (S2), the `Light` kind (S3), the stick as a held request (S10), the transient object origin (S8): each slice settles its own and records it.
+- **Not part of MIG13.** Saved runs, spell runs, projectiles and missiles in the snapshot (MIG14); moving the remaining hosts into the world runtime (MIG15); sleep and the UI timers as real-time chains (K7);
+  the item, stat, combat-mode and follower-order requests of the boundary; the hero's change-of-place request as a pending request (MIG11's CD7).
