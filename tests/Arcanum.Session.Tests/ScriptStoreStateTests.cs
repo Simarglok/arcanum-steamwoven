@@ -176,6 +176,30 @@ public sealed class ScriptStoreStateTests
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.scripts"), (carries.Failure, carries.Path));
     }
 
+    // Restore checks the stores itself, apart from the decoder: a snapshot built by hand is held to the same canonical form.
+    [TestMethod]
+    public void RestoreRefusesAHandBuiltStoreThatTheDecoderWouldRefuse()
+    {
+        using var owner = Hero();
+        var saved = owner.Capture();
+        void Refused(SessionScriptState scripts)
+        {
+            var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(),
+                saved.Story, saved.Party, saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience,
+                saved.Advancement, saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, saved.Danger, saved.Events,
+                saved.Lighting, saved.Sound, saved.Hotkeys, saved.Objects, scripts);
+            Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(snapshot, RestoreOptions()).Failure);
+        }
+        SessionScriptCell[] None = [];
+        Refused(new([new(2000, 1)], None, None));
+        Refused(new([new(-1, 1)], None, None));
+        Refused(new(None, [new(2048, 1)], None));
+        Refused(new(None, None, [new(65536, 1)]));
+        Refused(new([new(3, 0)], None, None));
+        Refused(new([new(4, 1), new(3, 1)], None, None));
+        Refused(new([new(3, 1), new(3, 2)], None, None));
+    }
+
     private static GameSessionFailure RestoreFailure(string text) =>
         GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot, RestoreOptions()).Failure;
 }

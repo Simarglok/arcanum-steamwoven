@@ -912,8 +912,6 @@ public static partial class GameSessionSnapshotCodec
         w.WriteEndArray();
     }
 
-    // Shapes: exactly ten entries and two recent actions, each fitting its kind; who holds the items and the kinds of the recent actions
-    // are Restore's.
     // Shapes, ranges and the one canonical order (ascending unique index, no zero value); whether a PC store has a hero to own it is Restore's.
     private static SessionScriptState Scripts(JsonElement element)
     {
@@ -941,6 +939,8 @@ public static partial class GameSessionSnapshotCodec
         return cells;
     }
 
+    // Shapes: exactly ten entries and two recent actions, each fitting its kind; who holds the items and the kinds of the recent actions
+    // are Restore's.
     private static SessionHotkeyState Hotkeys(JsonElement element)
     {
         const string p = "$.hotkeys";
