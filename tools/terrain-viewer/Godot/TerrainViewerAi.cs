@@ -341,16 +341,25 @@ public partial class TerrainViewerApp
         return map;
     }
 
-    /// <summary>Per frame, after the hero's attack: the due goal runs step, and what they did reaches the status line, the bodies and
-    /// the drawing.</summary>
+    // ARC-DEV-124 (MIG12 S5): the AI host steps its goal runs inside the frame step, as one of its participants (AreaAiFrameParticipant, registered with every
+    // ambient driver, StartAreaAmbient): on the frame's world milliseconds, not while paused; the shown map's sectors are touched first.
+    private AreaAiFrameParticipant? _aiFrame;
+
+    // The host the ping (before the frame opens) built or kept; no pump while a transfer is in flight (its frames are the transfer's: ProcessAreaAi does not
+    // run in them, so a notice a pump made would wait for the next one, which a retired host never gives).
+    private AreaAiHost? AiFrameHost() =>
+        AreaTransferPending || _aiHost is not { } host || !ReferenceEquals(host.Session, _areaSession) ? null : host;
+
+    private AreaAiFrameParticipant AiFrameParticipant => _aiFrame ??= new(AiFrameHost);
+
+    /// <summary>Per frame, after the hero's attack: what the goal runs did in this frame's step (the frame step pumped them, <see cref="AreaAiFrameParticipant"/>)
+    /// reaches the status line, the bodies and the drawing.</summary>
     private void ProcessAreaAi()
     {
         if (AreaAiHostNow() is not { } host) return;
+        // The view's sectors are touched in every frame the world runs, whether or not the frame step did (a smoke's frames call it only when they say so).
         TouchAreaView();
-        var now = AiWorldMilliseconds();
-        var steps = host.Pump(now);
-        // ARC-DEV-116 (MIG11 S5): an NPC's request a tick made (a former follower going home) is pinged on this frame, after the pass.
-        ProcessNpcChangeOfPlace(host);
+        var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
         LogRound(roundEvents);
@@ -418,7 +427,7 @@ public partial class TerrainViewerApp
             }
         }
         // ARC-WORLD-111: a stepping NPC's cycle advances every frame, and its stand pose is drawn once its step ends.
-        if (AiMoversAnimating(host, now) | redraw) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
+        if (AiMoversAnimating(host, host.NowMs) | redraw) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
     }
 
     // An NPC's hit: the status line, a stun's end, a killed NPC's fall, the bodies and the inventory.
@@ -497,7 +506,8 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
-        var now = AiWorldMilliseconds();
+        // The movers' steps and attack plays run on the host's clock (the frame step's world milliseconds).
+        var now = host.NowMs;
         return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now), now);
     }
 

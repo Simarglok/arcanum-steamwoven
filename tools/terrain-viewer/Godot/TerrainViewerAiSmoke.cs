@@ -98,7 +98,7 @@ public partial class TerrainViewerApp
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 drawnMoved |= host.Movers.Of(entity) is { } mover && AreaMovingCommands()?.Any(c => c.Identity == target.Row.Key && c.MapX == mover.Cell.X && c.MapY == mover.Cell.Y) == true;
-                if (host.Movers.Of(entity)?.Stepping(AiWorldMilliseconds()) == true && AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key) is { } stepping)
+                if (host.Movers.Of(entity)?.Stepping(host.NowMs) == true && AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key) is { } stepping)
                 {
                     steppingFrames++;
                     if (stepping.Frame.Policy == AreaBodyMoveArt.Policy) stepFrames.Add(stepping.Frame);
@@ -270,16 +270,16 @@ public partial class TerrainViewerApp
             var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
             // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART (distinct frames counted from here).
             _npcAttackFrames.Clear(); var attackFrames = 0;
-            string? hit = null;
+            string? hit = null; var offTurnBefore = host.OffTurnSteps;
             for (; frames < 6000 && hit is null; frames++)
             {
-                var before = session.QueryCombatRound()?.Actor;
-                var cell = host.Tile(entity);
                 _areaSmokeTime++;
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 hit = host.TraceOf(entity)?.Hit;
-                offTurn |= before != critter && host.Tile(entity) != cell;
+                // ARC-DEV-124: the frame step may give the NPC its subturn and pump its run in one frame, so the actor before the frame says nothing about
+                // whether a step began off its turn; the host counts those.
+                offTurn |= host.OffTurnSteps > offTurnBefore;
                 var round = session.QueryCombatRound();
                 Require(round is not null, $"the round runs at frame {frames}");
                 if (round!.Actor == critter)

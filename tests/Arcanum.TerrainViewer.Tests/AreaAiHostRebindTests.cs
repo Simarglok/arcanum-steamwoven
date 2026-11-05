@@ -44,7 +44,7 @@ public sealed class AreaAiHostRebindTests
             Field(78, At(standpoint.X, standpoint.Y)), Field(79, At(standpoint.X, standpoint.Y)), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0), Array(92),
         ], true, true, true);
 
-    private static AreaStepSnapshot Sector(long sx, long sy)
+    internal static AreaStepSnapshot Sector(long sx, long sy)
     {
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
         for (var x = sx * 64; x < sx * 64 + 64; x++)
@@ -54,7 +54,7 @@ public sealed class AreaAiHostRebindTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
     }
 
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         public void Dispose() => Session.Dispose();
         public required GameSessionOwner Session { get; init; }
@@ -65,6 +65,7 @@ public sealed class AreaAiHostRebindTests
         public AreaStepSnapshot? Loaded { get; set; }
         public int Touched { get; set; }
         public AreaAiHost? Host { get; set; }
+        public AreaEventWorld? Events { get; private set; }
         public string A => Entity(0);
         public string B => Entity(1);
 
@@ -78,12 +79,12 @@ public sealed class AreaAiHostRebindTests
 
         public AreaAiHost Build(AreaAiScene scene)
         {
-            var events = new AreaEventWorld(() => Combat, () => null, ai: () => Host);
+            var events = Events = new AreaEventWorld(() => Combat, () => null, ai: () => Host);
             return Host = new AreaAiHost(Session, scene, events, new AreaCombatWorld(Map, () => [], _ => null));
         }
     }
 
-    private static Fixture Open((int X, int Y)? standpointA = null)
+    internal static Fixture Open((int X, int Y)? standpointA = null)
     {
         var rowA = Npc(0, CellA, standpointA ?? (1, 1));
         var rowB = Npc(1, CellB, (1, 1));
@@ -99,7 +100,7 @@ public sealed class AreaAiHostRebindTests
         return new() { Session = session, Inventory = inventory, Combat = new AreaCombatHost(inventory, session: () => session), RowA = rowA, RowB = rowB };
     }
 
-    private static AreaAiNpc NpcA(Fixture f, AreaObjectRecord? row = null) => new(f.A, row ?? f.RowA, CellA);
+    internal static AreaAiNpc NpcA(Fixture f, AreaObjectRecord? row = null) => new(f.A, row ?? f.RowA, CellA);
     private static AreaAiNpc NpcB(Fixture f) => new(f.B, f.RowB, CellB);
 
     [TestMethod]

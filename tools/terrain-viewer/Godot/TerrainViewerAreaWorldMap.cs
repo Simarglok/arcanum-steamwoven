@@ -118,8 +118,8 @@ public partial class TerrainViewerApp
     private void StartWorldMapTravel()
     {
         if (!WorldMapOpen || _worldMap is null) return;
-        // MIG12 S8: the journey is a chain of real-time events of the session, which only the frame step of the lit map's clock moves.
-        if (_areaAmbient is null)
+        // MIG12 S8: the journey is a chain of real-time events of the session, which only a frame step moves (a lit map's, or an unlit map's frame driver, ARC-DEV-124).
+        if (!HasFrameSource)
         {
             GD.Print("ARC-UI-048 travel start refused: no game clock on this map");
             RenderWorldMap("no game clock on this map: the journey cannot run");

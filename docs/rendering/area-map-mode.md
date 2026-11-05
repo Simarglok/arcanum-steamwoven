@@ -69,8 +69,9 @@ Since ARC-RENDER-024 the main world map opens here too, as a window that moves w
   (`AreaLightingReader.ReadStartup`), with the same clock profile as a lit map of the module, so a session carries
   between them (native smoke on `bessietoonesmine-fixed`, drawn unlit for sectors without the metadata section: the map
   battery with `--hero`, the transfer to the main map and F7/F8 pass). A map whose start clock cannot be read has none.
-  On an unlit map the session clock stands still: with no ambient driver it does not flow, holds no modal pause and runs
-  no event passes, and the palette's wait is unavailable; time and the pending timers go on on the next lit map.
+  Since ARC-DEV-124 (MIG12 S5) an unlit map has its own frame source, `AreaFrameDriver` (the same `FrameStep` as a lit map's ambient driver, with the same
+  Menu pause for a modal window and no lighting to follow), so its session clock flows, its event passes and the AI host's goal runs go on, as in the
+  original, whose clocks and AI do not depend on the lighting; the palette's wait (a time jump through the ambient driver) is still unavailable there.
   The session places the actor on the map's runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
@@ -911,8 +912,8 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after
   the step before it (TL28), run by the frame step, so the steps fall due behind the open map's Menu pause (the viewer
   still ends the journey on Escape, which lands where it stands; the original keeps stepping behind the Esc menu, TL24).
-  A frame runs as many steps as fit its admitted real time (at most 250 ms: up to four). On a map without lighting there is no clock flow to run the
-  chain, so the journey is refused there ("no game clock on this map").
+  A frame runs as many steps as fit its admitted real time (at most 250 ms: up to four). A map without lighting has the frame driver of ARC-DEV-124 (`AreaFrameDriver`, the same frame step), so the chain runs there too; a scene
+  with no session has no clock to run it and refuses the journey ("no game clock on this map").
   - Each step's game time is a jump of game and animation time together (TL26). The events it made due fire in the same
     frame, right after the step.
   - An area the step discovers becomes known in the session, and the last discovered record is cleared again.

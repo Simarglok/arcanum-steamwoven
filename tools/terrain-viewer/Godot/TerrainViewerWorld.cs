@@ -46,11 +46,6 @@ public partial class TerrainViewerApp
     private bool _frameClockForSelfTest;
     private bool LiveFrameClock => _frameTap is not null && (!(SelfTestBootstrap || _nativeSmoke) || _frameClockForSelfTest);
     private SimulationTime LiveWorldTime() => SimulationTime.At(_worldTimeline.Read(LiveFrameClock ? _frameTap : null, (long)Time.GetTicksUsec()), 1_000_000);
-    // ARC-DEV-125: the AI host keeps the clock it had (a test's time, else the host's own, latched once per observed frame) until its own
-    // slice (S5, ARC-DEV-124) moves it onto the frame clocks.
-    private SimulationTime? _aiObservationTime;
-    private SimulationTime HostWorldTime() => SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
-    private SimulationTime AiWorldTime => _worldObservationTime is not null && _aiObservationTime is { } latched ? latched : _worldTestTime ?? HostWorldTime();
     // ARC-WORLD-025: a smoke stage drives the actor on test time, which can run ahead of the wall clock. The time it
     // restores must not be older than the actor's session or the stage's last observation, or the next observation (a
     // quarantine on a pad change, the next frame) is refused as late or non-monotonic (GRID_OBSERVATION_LATE_OR_INVALID,
@@ -66,7 +61,7 @@ public partial class TerrainViewerApp
     private void WorldObservation(Action action)
     {
         if (_worldObservationTime.HasValue) { action(); return; }
-        _worldObservationTime = WorldTime; _aiObservationTime = _worldTestTime ?? HostWorldTime();
+        _worldObservationTime = WorldTime;
         try { action(); }
         catch (Exception error) when (error is InvalidOperationException or GridReplayCapacityException or OverflowException or TerrainViewerException or ArgumentException)
         {
@@ -84,7 +79,7 @@ public partial class TerrainViewerApp
             PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
             if (SelfTestBootstrap || _nativeSmoke) throw;
         }
-        finally { _worldObservationTime = null; _aiObservationTime = null; }
+        finally { _worldObservationTime = null; }
     }
     internal static string ObservationFaultTrace(Exception error)
     {

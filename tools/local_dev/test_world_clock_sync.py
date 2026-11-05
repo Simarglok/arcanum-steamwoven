@@ -48,12 +48,22 @@ class WorldClockSyncTests(unittest.TestCase):
     def test_the_frame_participant_is_registered_where_a_driver_is_bound(self):
         lighting = (GODOT / "TerrainViewerAreaLighting.cs").read_text(encoding="utf-8")
         self.assertEqual(2, lighting.count("BindFrameParticipants(_areaAmbient);"), "every driver the viewer builds registers the frame tap")
-        self.assertIn("driver.Frame.Register(_frameTap);", lighting)
+        self.assertIn("frame.Register(_frameTap);", lighting)
+        # ARC-DEV-124 (S5): the AI host is the other participant, registered with the tap, and a map drawn unlit binds its own frame driver the same way.
+        self.assertIn("frame.Register(AiFrameParticipant);", lighting)
+        self.assertIn("BindFrameParticipants(driver.Frame);", lighting)
+        self.assertEqual(1, lighting.count("frame.RealSteps = RealStepHost;"), "both kinds of driver get the real-time step host through the one binding")
+        self.assertEqual(0, lighting.count("Frame.RealSteps = RealStepHost;"))
+        self.assertEqual(3, lighting.count("PingNpcChangeOfPlace)"), "every frame step opens with the NPCs' change-of-place ping")
 
-    def test_the_ai_host_keeps_its_own_clock_until_its_slice(self):
+    def test_the_ai_host_runs_on_the_frame_clocks(self):
+        # ARC-DEV-124 (S5): the host steps in the frame step on the frame's world milliseconds and the viewer draws its movers on the host's clock.
         text = (GODOT / "TerrainViewerAi.cs").read_text(encoding="utf-8")
-        self.assertNotIn("WorldMilliseconds()", text.replace("AiWorldMilliseconds()", "").replace("LaunchNpcSpellMissile(notice, WorldMilliseconds())", ""),
-                         "ARC-DEV-124 (S5) moves the AI host, not ARC-DEV-125")
+        self.assertNotIn("host.Pump(", text, "the frame step pumps the host (AreaAiFrameParticipant), not the viewer")
+        self.assertNotIn("AiWorldMilliseconds", text)
+        self.assertIn("host.NowMs", text)
+        for path in GODOT.glob("*.cs"):
+            self.assertNotIn("AiWorldMilliseconds", path.read_text(encoding="utf-8"), path.name)
         # What an AI notice starts in a consumer (the missile and its eye candy) runs on the world clock, never the AI host's stamp.
         self.assertIn("LaunchNpcSpellMissile(notice, WorldMilliseconds())", text)
         self.assertNotRegex(text, r"LaunchNpcSpellMissile\(notice, now\)")

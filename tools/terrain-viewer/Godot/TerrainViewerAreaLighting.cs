@@ -33,9 +33,8 @@ public partial class TerrainViewerApp
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents);
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
-        _areaAmbient.Frame.RealSteps = RealStepHost;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -49,9 +48,8 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
-        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents);
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
-        _areaAmbient.Frame.RealSteps = RealStepHost;
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
@@ -59,11 +57,17 @@ public partial class TerrainViewerApp
     }
 
     // ARC-DEV-125 (MIG12 S6): the viewer's frame participant, registered on the driver's frame step (it runs after the event passes of
-    // every frame): it carries the frame's clocks to the systems that read time between frames. The AI host registers its own in S5.
-    private void BindFrameParticipants(AreaAmbientDriver driver)
+    // every frame): it carries the frame's clocks to the systems that read time between frames. ARC-DEV-124 (MIG12 S5): the AI host is the
+    // other one, and every frame step opens with the NPCs' change-of-place ping (TM12, the placePing given to the driver).
+    private void BindFrameParticipants(AreaAmbientDriver driver) => BindFrameParticipants(driver.Frame);
+
+    private void BindFrameParticipants(FrameStep frame)
     {
         _frameTap = new FrameClockTap();
-        driver.Frame.Register(_frameTap);
+        frame.Register(_frameTap);
+        frame.Register(AiFrameParticipant);
+        // MIG12 S8: the host of the real-time steps, the same one for a lit map's driver and an unlit map's.
+        frame.RealSteps = RealStepHost;
     }
 
     private void StopAreaAmbient()
@@ -118,14 +122,47 @@ public partial class TerrainViewerApp
 
     private void TickAreaClock()
     {
-        if (_areaAmbient is null || SelfTestBootstrap || _nativeSmoke) return;
+        if (SelfTestBootstrap || _nativeSmoke) return;
         TickAreaClock((long)Time.GetTicksMsec());
+    }
+
+    // ARC-DEV-124 (MIG12 S5): the frame source of a scene with a session and no ambient driver (a map drawn unlit, or a lit map whose driver was stopped by an
+    // unlit one and not rebound); it is bound to one session and map (a window move of the same map keeps it, as it keeps a lit map's driver), and the game does not depend on the lighting: the clocks, the event passes,
+    // the real-time steps and the AI run on it all the same.
+    private (GameSessionOwner Session, int Map, AreaFrameDriver Driver, FrameClockTap? Tap)? _unlitFrame;
+
+    // The unlit driver's frame step is gone with it, and so is its own tap (a stale tap would hold the world time still); a tap a lit driver has bound since stays.
+    private void DropUnlitFrame()
+    {
+        if (_unlitFrame is not { } held) return;
+        _unlitFrame = null;
+        if (ReferenceEquals(_frameTap, held.Tap)) _frameTap = null;
+    }
+
+    // Whether a frame step moves this scene's session clock: a lit map's ambient driver, or the frame driver of a session without one
+    // (MIG12 S8's real-time steps, the world-map journey and the turn-based event, run in it either way).
+    private bool HasFrameSource => _areaAmbient is not null || _areaSession is not null;
+
+    private void TickUnlitFrame(long hostMilliseconds)
+    {
+        if (_areaSession is not { } session) { DropUnlitFrame(); return; }
+        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session) || held.Map != CurrentAreaMap)
+        {
+            DropUnlitFrame();
+            // A new driver's first frame admits nothing, as an ambient driver's does on a new scene.
+            var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
+            BindFrameParticipants(driver.Frame);
+            _unlitFrame = held = (session, CurrentAreaMap, driver, _frameTap);
+        }
+        held.Driver.Tick(hostMilliseconds, WorldModal);
+        LogAreaEvents(held.Driver.Frame);
     }
 
     // One production tick at the given host time; the frame loop passes the monotonic engine clock.
     private void TickAreaClock(long hostMilliseconds)
     {
-        if (_areaAmbient is not { } driver) return;
+        if (_areaAmbient is not { } driver) { TickUnlitFrame(hostMilliseconds); return; }
+        DropUnlitFrame();
         var paused = driver.ModalPaused;
         var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
         LogAreaEvents(driver);
@@ -215,11 +252,13 @@ public partial class TerrainViewerApp
     // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
     private int _loggedCallRefusals;
 
-    private void LogAreaEvents(AreaAmbientDriver driver)
+    private void LogAreaEvents(AreaAmbientDriver driver) => LogAreaEvents(driver.Events);
+
+    private void LogAreaEvents(FrameStep? frame)
     {
         // ARC-SCRIPT-047: a heartbeat's talk, asked for during the pump that just returned.
         OpenHeartbeatConversation();
-        if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        if (frame?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
         // ARC-DEV-051: the session events that came due, for the bug report's log.
         BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"
             + $" waits={last.Waits.Count} decays={last.Decays.Count} restocks={last.Restocks.Count}");

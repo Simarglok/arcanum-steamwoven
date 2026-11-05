@@ -240,7 +240,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly List<AreaAiNotice> _notices = [];
     // The round's events of the host's own session calls (the executor's consumes and subturn ends), for the viewer's round log.
     private readonly List<SessionCombatEvent> _roundEvents = [];
-    // The animation clock of the last pump.
+    // The world milliseconds of the last pump (the frame step's clock, ARC-DEV-124).
     private long _nowMs;
     // ARC-WORLD-095: the round as last observed (whether one ran, the session's subturn starts then, the critter of the last turn set:
     // 0x5FC248), the pending cost (0x5FC244) and the subturn start it was written in.
@@ -419,12 +419,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return refused;
     }
 
+    /// <summary>ARC-DEV-124: the world milliseconds of the last <see cref="Pump"/>, the clock the movers' steps and the attack plays are timed on; the viewer reads
+    /// it to draw them, so a pause that stops the pump stops their drawing too.</summary>
+    public long NowMs => _nowMs;
+
     /// <summary>
     /// Steps every run that is due at <paramref name="nowMs"/> (<paramref name="maxSteps"/> steps at most), each after its delay; a run
     /// that ended is dropped (a killed one, or one stopped by the node limit or an overflow, through <see cref="AiExecutorRules.EndRun"/>). ARC-DEV-119: a run of a map NPC
     /// whose sector the session's cache has evicted waits (the NPC is not alive there, RL16) and goes on when the sector loads; a map without a cache holds none back.
-    /// Returns the steps taken. The runs go by the caller's animation clock in milliseconds (the viewer's world clock, which the hero's
-    /// walk and attack play on; the session's game clock runs 8 times faster), the AI ticks by the session's game clock.
+    /// Returns the steps taken. ARC-DEV-124 (MIG12 S5): the runs go by the frame step's world milliseconds
+    /// (<see cref="Arcanum.Simulation.Clock.FrameClocks.WorldMs"/>: admitted animation time ÷ 8, which stops with the pause and is not moved by a jump;
+    /// <see cref="AreaAiFrameParticipant"/> pumps once per frame and not while paused), the AI ticks by the session's game clock (events of the frame's pass).
     /// </summary>
     public int Pump(long nowMs, int maxSteps = 64)
     {
@@ -1139,9 +1144,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
     }
 
+    /// <summary>ARC-DEV-124: the steps a run began while a round ran and the round's actor was another participant (a diagnostic: the executor pays a step with the
+    /// round's action points, so a step off its turn is a defect; the ai-turn-based smoke requires none).</summary>
+    public int OffTurnSteps { get; private set; }
+
     public int BeginStep(string id, CellCoord next, bool running)
     {
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
+        if (InRound && RoundActor != id) OffTurnSteps++;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;

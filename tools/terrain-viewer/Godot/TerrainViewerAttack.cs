@@ -105,8 +105,6 @@ public partial class TerrainViewerApp
     private static long Milliseconds(SimulationTime time) => (long)(time.Value.Numerator * 1000 / time.Value.Denominator);
     // ARC-DEV-125: the clock of the rules the hero's systems and the animations run on (the frame's world milliseconds in play).
     private long WorldMilliseconds() => Milliseconds(WorldTime);
-    // The AI host's own clock until its slice (S5, ARC-DEV-124) moves it onto the frame clocks.
-    private long AiWorldMilliseconds() => Milliseconds(AiWorldTime);
 
     /// <summary>Tracks left Alt from the key events (the mouse event only says that some Alt is held).</summary>
     private void TrackAttackModifiers(InputEventKey key)

@@ -126,13 +126,13 @@ public partial class TerrainViewerApp
     /// (ARC-DEV-127): the step itself (<see cref="RunTurnBasedStep"/>: the NPCs' subturns and the hero's completion check) runs when the session's
     /// real-time turn-based event falls due, in the frame step, so it fires behind the Esc menu as the original's does. The original's callback
     /// asks for the event when an animation slot is freed; the viewer has no slot hook and asks for it every frame a round runs (one pending at
-    /// most), which is the step it ran every frame before. A map without a frame step (drawn unlit: no day/night driver, so no event passes run
-    /// there either) keeps the step in the frame.</summary>
+    /// most), which is the step it ran every frame before. A scene without a frame step (no session on the shown map; an unlit map has
+    /// the frame driver of ARC-DEV-124) keeps the step in the frame.</summary>
     private void ProcessTurnBasedRound()
     {
         ObserveSectorEntries();
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
-        if (_areaAmbient is null) { RunTurnBasedStep(); return; }
+        if (!HasFrameSource) { RunTurnBasedStep(); return; }
         if (_areaSession!.ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected) return;
         // A full queue refuses the request: the round must not stall, so the step runs in the frame as it did before MIG12 S8.
         GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
