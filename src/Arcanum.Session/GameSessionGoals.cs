@@ -103,6 +103,9 @@ public sealed partial class GameSessionOwner
     private List<SessionGoalStepFiring>? _passGoalSteps;
     // ARC-DEV-134: the runs the session ended by itself (a map's close, a departure, a lost step, a refused step close), whose end nodes no caller was handed.
     private readonly List<GoalRunEnd> _goalEndsUnclaimed = [];
+    // ARC-DEV-135: the stepped run the session itself marked done (a map's close, a departure) while its step was open: its close ends it, and that end is unclaimed too (a caller's
+    // own mark is the caller's to settle: it runs the end nodes at once).
+    private readonly HashSet<GoalHandle> _goalMarkedBySession = [];
     /// <summary>The most unclaimed ends kept (<see cref="DrainGoalEnds"/>); older ones are dropped first.</summary>
     public const int MaxUnclaimedGoalEnds = GoalRunTable.SlotCount * 2;
 
@@ -117,6 +120,13 @@ public sealed partial class GameSessionOwner
         var drained = _goalEndsUnclaimed.ToImmutableArray();
         _goalEndsUnclaimed.Clear();
         return drained;
+    }
+
+    // The stepped run a session-made sweep or kill only marked done: its close will report its end (see _goalMarkedBySession).
+    private void MarkedBySession(IEnumerable<GoalInterruptStep> steps)
+    {
+        foreach (var step in steps)
+            if (step.Outcome == GoalInterruptOutcome.MarkedDone) _goalMarkedBySession.Add(step.Handle);
     }
 
     private void Unclaimed(IEnumerable<GoalRunEnd> ended)
@@ -270,7 +280,12 @@ public sealed partial class GameSessionOwner
         _goalStepOpen = null;
         _goals = _goals.WithStepping(null);
         if (!_goals.TryGet(handle, out var run)) return new(SessionGoalFailure.NoRun, SessionGoalStepOutcome.Ended, null, null);
-        if (run.Done) return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, Finish(run, run.Flags.HasFlag(GoalRunFlags.Killed) ? GoalEndKind.Killed : GoalEndKind.Interrupted, endNodes: true), null);
+        if (run.Done)
+        {
+            var marked = Finish(run, run.Flags.HasFlag(GoalRunFlags.Killed) ? GoalEndKind.Killed : GoalEndKind.Interrupted, endNodes: true);
+            if (_goalMarkedBySession.Remove(handle)) Unclaimed([marked]);
+            return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, marked, null);
+        }
         if (answer.Abandoned) return Refused(run);
         var stepped = answer.Run ?? run;
         if (stepped.Handle != handle || !string.Equals(stepped.Owner, run.Owner, StringComparison.Ordinal)) return Refused(run);
@@ -284,7 +299,8 @@ public sealed partial class GameSessionOwner
 
     // ARC-DEV-135 (MIG13 S5): the head of the stepper (0x423566, GS2, GT12): when a start found the table full, the next step of any run interrupts every run at level 3 and clears
     // the flag, then goes on with its own run. A run the sweep ended loses its step and its end nodes go to the unclaimed ends (the host that owns the runs claims them at its next
-    // frame or step, `DrainGoalEnds`); the step then finds its run gone and is skipped (the frame step cannot open it).
+    // frame or step, `DrainGoalEnds`). Differs from the original in one case (goal-table.md §4): when the sweep ends the very run that is about to step (its current goal has priority
+    // 3 or less) the original goes on stepping a freed slot, which was not shown to be reachable; here the step finds its run gone and is skipped (the frame step cannot open it).
     private void SweepExhaustedGoals()
     {
         if (!_goals.ExhaustionPending) return;
@@ -351,12 +367,14 @@ public sealed partial class GameSessionOwner
     // marked and its step's close ends it. The end nodes of the ended runs are unclaimed ends (`DrainGoalEnds`): the owners' host runs them.
     private void CloseGoalMap()
     {
-        if (_goals.InUseCount == 0 && !_goals.ExhaustionPending) return;
+        if (_goals.InUseCount == 0) return;
         var swept = _goals.ClearAll();
-        // ARC-DEV-135: a table-full flag of the closed map has nothing to wait for (the sweep above ended every run): the next map's first step does not sweep again.
-        _goals = swept.Table.WithExhaustionCleared();
+        // ARC-DEV-135: the table-full flag is not touched: the original writes it only in the allocator and clears it only at the stepper's head (GT22), so a map change keeps it
+        // and the next step of any run, on the next map, sweeps once.
+        _goals = swept.Table;
         SettleEnded(swept.Ended);
         Unclaimed(swept.Ended);
+        MarkedBySession(swept.Steps);
     }
 
     // For the tests: a run's step lost the way a stray relocation or a dropped firing would lose it.
@@ -384,6 +402,7 @@ public sealed partial class GameSessionOwner
         _goals = killed.Table;
         SettleEnded(killed.Ended);
         Unclaimed(killed.Ended);
+        MarkedBySession(killed.Steps);
     }
 
     // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map

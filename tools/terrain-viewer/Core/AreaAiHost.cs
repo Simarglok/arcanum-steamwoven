@@ -757,8 +757,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (!_led.Remove(companion)) continue;
             Trace(companion).Event = "left the hero";
             if (RunOf(companion) is null) continue;
-            InterruptRuns(companion, LeaveLevel);
-            (dropped ??= []).Add(companion);
+            if (InterruptRuns(companion, LeaveLevel)) (dropped ??= []).Add(companion);
         }
         return dropped ?? (IReadOnlyList<string>)[];
     }
@@ -930,9 +929,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
         if (_followers.ContainsKey(npc) && result.Kind == AiPerformKind.Follow)
         {
-            // A run left from the fight (a flight, a back-off) ends as a replaced one would, so the walk is no longer held by it.
+            // A run left from the fight (a flight, a back-off) is interrupted as the follow starter's own interrupt would (level 3, the table's rule: a spell attempt, priority 4,
+            // goes on), so the walk is no longer held by it. ARC-DEV-135: it was a drop at the highest level.
             Trace(npc).Perform = $"{result.Kind} by its own walk";
-            if (current is not null) DropRun(npc);
+            if (current is not null) InterruptRuns(npc, GoalInterruptRules.OrdinaryActions);
             return;
         }
         Started(npc, current, result);
@@ -963,21 +963,23 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
         if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
         // ARC-DEV-135 (MIG13 S5): the proposed run starts in the session's table with its starter's own plan (GS12, GS13): the table interrupts the NPC's runs at the starter's
-        // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already and found nothing left), refuses a duplicate
-        // and a refused interrupt, and the end nodes of every run the start ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the
-        // start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
+        // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already, so what is left is the runs the rule kept, a
+        // no-interrupt overlay among them, and the attack retarget's, which asks no port), refuses a duplicate and a refused interrupt, and the end nodes of every run the start
+        // ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
         var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), StartPorts.Open);
         foreach (var end in started.Ended) EndNodes(end);
         if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
         // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
         // run's end nodes free what its starter took (a cast's magic run).
+        // Only the proposed run's end nodes run: the kept run's attack animation (a priority-4 goal's run can have one) is not the proposed run's.
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
-        EndDroppedRun(run);
+        AiExecutorRules.EndRun(run, this);
+        FreeUnbegunCasts(run, queuedOnly: false);
     }
 
     // The interrupt plan of the starter that builds a run with this bottom goal (GS12, GS13): level 3 for the walks, runs, follow, attack, throw and spread out (with the
     // duplicate refusal for the last four); every other start interrupts at its goal's own priority (the cast, skill, item, pickup and flee goals are 3).
-    private static GoalStartPlan StarterPlan(GoalType goal) => goal switch
+    internal static GoalStartPlan StarterPlan(GoalType goal) => goal switch
     {
         GoalType.MoveToTile => GoalStarters.Walk,
         GoalType.RunToTile => GoalStarters.Run,

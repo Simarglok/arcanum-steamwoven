@@ -10,7 +10,7 @@ namespace Arcanum.Session.Tests;
 /// <summary>
 /// ARC-DEV-135 (MIG13 S5, docs/architecture/goal-table.md §3.3): the session's sweeps. The round start's sweep (0x424310) interrupts every run whose current goal is
 /// counted at level 3 by the rule and leaves the rest; the stepper's head (0x423566) sweeps a full table at level 3 once and goes on with its own run (the sweep's ends
-/// are the owner host's to claim); a map's close clears the table-full flag together with the runs. Entity ids are invented; no original data.
+/// are the owner host's to claim); a map's close leaves the table-full flag (the original clears it only at the stepper's head, GT22). Entity ids are invented; no original data.
 /// </summary>
 [TestClass]
 public sealed class GoalSweepTests
@@ -120,7 +120,7 @@ public sealed class GoalSweepTests
     }
 
     [TestMethod]
-    public void A_map_close_clears_the_table_full_flag_with_the_runs()
+    public void A_map_close_keeps_the_table_full_flag_so_the_next_maps_first_step_sweeps_once()
     {
         using var owner = Create();
         for (var i = 0; i < GoalRunTable.SlotCount; i++) Started(owner, GoalType.EyeCandy, $"fx:{i}");
@@ -130,10 +130,45 @@ public sealed class GoalSweepTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
 
         Assert.AreEqual(0, owner.QueryGoals().InUseCount, "the close ended every run at level 6");
-        Assert.IsFalse(owner.QueryGoals().ExhaustionPending, "a flag of the map left has nothing to sweep on the next one");
+        Assert.AreEqual(GoalRunTable.SlotCount, owner.DrainGoalEnds().Length, "unclaimed: the owners' host runs their end nodes");
+        Assert.IsTrue(owner.QueryGoals().ExhaustionPending, "the original's flag is written only by the allocator and cleared only by the stepper's head (GT22): a map change leaves it");
         var handle = Started(owner, GoalType.MoveToTile, A, GoalStarters.Generic);
         Jump(owner, 5);
         owner.ProcessEvents(new NoWorld());
-        Assert.IsNotNull(owner.BeginGoalStep(handle), "the first step of the new map is not swept");
+        Assert.IsNull(owner.BeginGoalStep(handle), "the first step on the next map sweeps at level 3 and ends this run (priority 2)");
+        Assert.IsFalse(owner.QueryGoals().ExhaustionPending);
+        Assert.AreEqual(handle, owner.DrainGoalEnds().Single().Run.Handle);
+        var second = Started(owner, GoalType.MoveToTile, A, GoalStarters.Generic);
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(second), "once: the flag is clear now");
+    }
+
+    [TestMethod]
+    public void A_stepped_run_the_session_marks_has_its_end_reported_unclaimed_once_a_callers_mark_is_not()
+    {
+        using var owner = Create();
+        var mine = Started(owner, GoalType.MoveToTile, A);
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+
+        // The session's own mark: a map close while the step is open.
+        Assert.IsNotNull(owner.BeginGoalStep(mine));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length, "only marked: the stepped run waits for its close");
+        var closed = owner.EndGoalStep(mine, SessionGoalStepAnswer.After(100));
+        Assert.AreEqual(SessionGoalStepOutcome.Ended, closed.Outcome);
+        var drained = owner.DrainGoalEnds();
+        Assert.AreEqual(mine, drained.Single().Run.Handle, "the close reports its end nodes to the owners' host, which was handed none");
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length, "once");
+
+        // A caller's own mark is the caller's: it ran the end nodes at the mark, so the close hands nobody a second copy.
+        var cave = Started(owner, GoalType.MoveToTile, B);
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(cave));
+        Assert.AreEqual(GoalInterruptOutcome.MarkedDone, owner.InterruptGoal(cave, 3).Steps.Single().Outcome);
+        Assert.AreEqual(SessionGoalStepOutcome.Ended, owner.EndGoalStep(cave, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length);
     }
 }
