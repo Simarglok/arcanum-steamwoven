@@ -18,6 +18,20 @@ public interface IFrameParticipant
     void Step(FrameClocks clocks, FrameFlags flags);
 }
 
+/// <summary>
+/// MIG12 S8 (ARC-DEV-127, docs/architecture/clocks-frame.md §3.5): the host of the chains the original keeps on the real-time list: the
+/// world-map journey's travel step and the turn-based event. The session's pass only reports a step that came due
+/// (<see cref="SessionRealStepFiring"/>); the frame step calls the host right after that pass, outside it, so the host acts on the session as any
+/// caller does (a time jump, a discovery, a round's subturns), and runs one more pass at once so the events a jump made due fire in the same frame
+/// (TL20). Real time runs behind the Esc menu, so a step falls due behind it too.
+/// </summary>
+public interface IRealStepHost
+{
+    /// <summary>Runs one step that fell due. Returns the real milliseconds after which the step is due again (1..<see cref="GameSessionOwner.MaxRealStepDelayMs"/>,
+    /// counted from now, as the original's handler adds its next event), or null when the chain ends.</summary>
+    long? RunRealStep(SessionRealStep step, FrameClocks clocks);
+}
+
 /// <summary>Bounds of one <see cref="FrameStep"/> frame: sub-steps per frame (beyond them the rest of the frame is one step and its
 /// events fire late, <see cref="FrameStepReport.Coalesced"/>), and passes per sub-step while a pass leaves due events behind its
 /// budget (the rest wait for the next step or frame).</summary>
@@ -42,6 +56,12 @@ public sealed record FrameStepLimits
 public sealed record FrameStepReport(int Steps, int Passes, int Fired, int Dropped, int ScriptCalls, int ScriptCallsRun, bool Coalesced,
     bool BudgetLeft, int Pending, long? NextDeadlineMs)
 {
+    /// <summary>MIG12 S8: the real-time steps that came due and were run by the host (<see cref="IRealStepHost"/>), in order.</summary>
+    public IReadOnlyList<SessionRealStep> RealSteps { get; init; } = [];
+
+    /// <summary>MIG12 S8: the real-time steps that came due with no host registered (consumed unrun).</summary>
+    public int RealStepsUnhandled { get; init; }
+
     public static FrameStepReport None { get; } = new(0, 0, 0, 0, 0, 0, false, false, 0, null);
 
     /// <summary>ARC-WORLD-045: the wait timers that came due, in firing order.</summary>
@@ -96,6 +116,7 @@ public sealed class FrameStep
     private readonly Func<SessionSpellCaster?>? _spells;
     private readonly Action? _placePing;
     private readonly List<IFrameParticipant> _participants = [];
+    private IRealStepHost? _realSteps;
 
     /// <param name="world">The event world the passes ask, or null: the clocks move and no event passes run (a host that runs no gameplay events).</param>
     /// <param name="spells">ARC-MAGIC-015: the cast host of the shown map now, or null (no host: plain passes).</param>
@@ -122,6 +143,10 @@ public sealed class FrameStep
 
     /// <summary>The participants, in the order they run.</summary>
     public IReadOnlyList<IFrameParticipant> Participants => _participants;
+
+    /// <summary>MIG12 S8: the host of the real-time steps (<see cref="IRealStepHost"/>), or null (a step that falls due is consumed unrun). Set by the
+    /// viewer when it binds the step to its session; the host outlives the frame step's frames, not the session.</summary>
+    public IRealStepHost? RealSteps { get => _realSteps; set => _realSteps = value; }
 
     /// <summary>Registers a participant after the ones already registered (TM6's fixed order).</summary>
     public void Register(IFrameParticipant participant)
@@ -227,13 +252,33 @@ public sealed class FrameStep
             tally.Decays.AddRange(result.Decays);
             tally.Restocks.AddRange(result.Restocks);
             tally.BudgetLeft = outcome.BudgetExhausted;
-            if (!outcome.BudgetExhausted) return;
+            // MIG12 S8: the real-time steps that came due run after the pass, outside it; a step that jumped the clocks lets the next pass fire
+            // the events that became due (the original's later lists see a real-time handler's jump, TL20).
+            var ran = RunRealSteps(result.RealSteps, tally);
+            if (!outcome.BudgetExhausted && ran == 0) return;
         }
+    }
+
+    // Each due step, in firing order: the host acts, then the step is scheduled again from now when the host asks. Returns the steps run.
+    private int RunRealSteps(IReadOnlyList<SessionRealStepFiring> due, Tally tally)
+    {
+        var ran = 0;
+        foreach (var firing in due)
+        {
+            if (_realSteps is not { } host) { tally.RealStepsUnhandled++; continue; }
+            ran++;
+            tally.RealSteps.Add(firing.Step);
+            var next = host.RunRealStep(firing.Step, _session.QueryFrameClocks());
+            if (next is { } delay && _session.ScheduleRealStep(firing.Step, delay) == GameSessionDisposition.Rejected)
+                throw new InvalidOperationException("FRAME_STEP_REAL_STEP_DELAY");
+        }
+        return ran;
     }
 
     private sealed class Tally
     {
-        public int Steps, Passes, Fired, Dropped, Calls, CallsRun;
+        public int Steps, Passes, Fired, Dropped, Calls, CallsRun, RealStepsUnhandled;
+        public List<SessionRealStep> RealSteps { get; } = [];
         public bool Coalesced, BudgetLeft;
         public List<SessionWaitFiring> Waits { get; } = [];
         public List<SessionDecayFiring> Decays { get; } = [];
@@ -247,6 +292,7 @@ public sealed class FrameStep
             {
                 Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray(),
                 Clocks = step._session.QueryFrameClocks(), HourChanged = clock.Hour != hourBefore, Participants = participants,
+                RealSteps = RealSteps.ToArray(), RealStepsUnhandled = RealStepsUnhandled,
             };
         }
     }

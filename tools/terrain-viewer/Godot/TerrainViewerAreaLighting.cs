@@ -25,11 +25,16 @@ public partial class TerrainViewerApp
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
+    // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
+    private AreaRealStepHost? _realStepHost;
+    private AreaRealStepHost RealStepHost => _realStepHost ??= new AreaRealStepHost(RunWorldMapStep, RunTurnBasedStepEvent);
+
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents);
+        _areaAmbient.Frame.RealSteps = RealStepHost;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -44,6 +49,7 @@ public partial class TerrainViewerApp
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents);
+        _areaAmbient.Frame.RealSteps = RealStepHost;
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();

@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
 using Godot;
@@ -7,7 +8,9 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-048 native smoke (map mode on the start map, stage "worldmap", last): W opens the world map; a far area refuses its
 // one-waypoint route; the nearest area whose route plans is added; Enter travels at the original's pace; the journey discovers
 // the area, jumps the session clock by an hour per sector step, lands and loads the start map around the area, with the
-// session carried and the actor at the landing. Prints counts and outcomes only.
+// session carried and the actor at the landing. MIG12 S8 (ARC-DEV-127): the steps are the session's real-time events (the first 50 ms
+// after Enter, each next 62 ms after it), which the smoke's own frame stamps move (an automated run has no live flow) while the open map
+// holds the Menu pause: the steps fall due behind it and only their jumps move game time. Prints counts and outcomes only.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaWorldMapSmokeAsync()
@@ -55,12 +58,20 @@ public partial class TerrainViewerApp
             RenderWorldMap(null);
             var (steps, hours) = map.Estimate();
             var before = session.QueryClockSnapshot().GameTimestampMs;
+            var realBefore = session.QueryFrameClocks().RealMs;
             var wasKnown = session.IsAreaKnown(target);
             var started = System.Environment.TickCount64;
             InventoryKey(Key.Enter);
-            Require(map.Travelling, "Enter started the journey");
-            for (var i = 0; i < 36000 && WorldMapOpen; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");
+            var behindPause = 0;
+            for (var i = 0; i < 36000 && WorldMapOpen; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                TickAreaClock((long)Time.GetTicksMsec());
+                if (map.Travelling && session.QueryClockSnapshot().PauseDisposition.Paused) behindPause++;
+            }
             var elapsed = System.Environment.TickCount64 - started;
+            var realGained = session.QueryFrameClocks().RealMs - realBefore;
             // The clock as the journey left it (the frames of the load let ordinary time flow again).
             var gained = session.QueryClockSnapshot().GameTimestampMs - before;
             for (var i = 0; i < 36000 && (_mapHandoff is not null || !ReferenceEquals(_areaSession, session)); i++)
@@ -69,8 +80,11 @@ public partial class TerrainViewerApp
             Require(ReferenceEquals(_areaSession, session), "the session is carried");
             Require(session.IsAreaKnown(target) && session.QueryLastDiscoveredArea() == 0, "the target is known, the last record cleared");
             Require(gained == hours * WorldJourney.MsPerSector, $"clock gained {gained} ms for {hours} h");
-            // Frame deltas accumulate, so the steps of one frame's catch-up may come early.
-            Require(elapsed >= (steps - WorldMapStepsPerFrame) * WorldJourney.StepRealMs, $"one step per 62 ms: {elapsed} ms for {steps} steps");
+            // The first step came 50 ms after Enter and each next one 62 ms of real time after it, behind the pause the open map holds.
+            var paced = WorldJourney.FirstStepRealMs + (steps - 1) * WorldJourney.StepRealMs;
+            Require(realGained >= paced, $"50 ms, then one step per 62 ms of real time: the real clock gained {realGained} ms for {steps} steps (at least {paced})");
+            Require(behindPause > 0, "the steps fell due behind the Menu pause the open map holds");
+            Require(session.QueryRealStep(SessionRealStep.WorldMapStep) is null, "no travel step is left pending");
             var landing = data.TravelAreas[target].Location;
             var actor = session.QueryActor();
             Require(actor.Map.RuntimeMap == data.StartRuntime, "on the start map");
@@ -78,7 +92,7 @@ public partial class TerrainViewerApp
             Require(off <= 64, $"the actor stands {off} tiles from the landing");
             Require(_mapWindowCentre is { } centre && centre.X == landing.X >> 6 && centre.Y == landing.Y >> 6, "the window opened around the landing");
             GD.Print("ARC-UI-048 native-smoke worldmap PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Target = target, Far = far, Steps = steps, Hours = hours, ElapsedMs = elapsed, WasKnown = wasKnown,
+                Target = target, Far = far, Steps = steps, Hours = hours, ElapsedMs = elapsed, RealMs = realGained, WasKnown = wasKnown,
                 Known = session.QueryKnownAreas().Count, ActorOff = off, Rules = session.Rules.Travel.Name }));
         }
         finally

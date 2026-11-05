@@ -20,6 +20,8 @@ public sealed class WorldJourney
 {
     /// <summary>The real time between travel steps (the WorldMap event's delay).</summary>
     public const long StepRealMs = 62;
+    /// <summary>The real time from the start of a journey to its first travel step (TL28, the WorldMap event the start schedules).</summary>
+    public const long FirstStepRealMs = 50;
     /// <summary>A waypoint within this many tiles of a known area ends on it (0x66D850).</summary>
     public const long SnapDistance = 320;
     /// <summary>Game time per sector of distance: one hour.</summary>

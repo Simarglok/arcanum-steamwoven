@@ -1,6 +1,6 @@
 # Clocks and the frame step in the session (K15, MIG12, TM6, GR20–GR22)
 
-Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, S3 (ARC-DEV-122) the session owning the three clocks (schema 70), S4 (ARC-DEV-123) the frame step and the event pump in `Arcanum.World`.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
+Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, S3 (ARC-DEV-122) the session owning the three clocks (schema 70), S4 (ARC-DEV-123) the frame step and the event pump in `Arcanum.World`, S8 (ARC-DEV-127) the real-time domain.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
 decision GQ3 chosen A). Behaviour of the original stays the rows TL1–TL46 of the [original time loop](original-time-loop.md) (read from the
 executable); this page fixes how the session represents them, in which assembly each part lives, the order of the code slices and what each must
@@ -144,6 +144,18 @@ not stop them and a window does not accelerate them:
 - the **turn-based step event** (TL39: the stall detector and the step that ends a round when nothing is left to do), which today runs from the
   frame; the round's end jump then fires the game events that became due in the same pass (TL38).
 
+**As built (S8, ARC-DEV-127).** The two chains are the session's real-domain events `travel.step` and `combat.step` (`SessionEventKinds`; not saved, one
+pending of each, `ScheduleRealStep` / `QueryRealStep` / `CancelRealStep` on the session). Their handlers only report the step that fell due
+(`SessionEventPassResult.RealSteps`): the session's own operations are refused inside a pass, and the step's work (a time jump, a discovery,
+the round's subturns and the AI host) is exactly such work. The frame step runs the registered `IRealStepHost` for each reported step right
+after the pass, outside it, schedules the step again from now when the host returns a delay (the original's handler adds its next event the same
+way) and runs one more pass, so a jump the step made fires the events it made due in the same frame (TL20, which the pass alone could not give:
+a pass reads its clocks once). A step's chain ends when the host returns null. The world-map journey schedules its first step 50 ms after the
+start and each step asks for the next one 62 ms on; the viewer cancels a pending step whenever the journey ends. The turn-based event is asked for
+by the viewer's frame (the original's callback hangs on an animation slot being freed, which the viewer does not have: the same cadence as the
+per-frame step it replaces) and its host returns no repeat; where a map has no frame step (drawn unlit) the viewer steps the round in the frame
+as before and refuses the journey.
+
 Sleep and rest (K7) do not exist yet; when they do they are one more real-time chain (TL27: 200 ms, +1 h a step) on this domain, which is the
 reason K7 follows MIG12 (GQ-review option A).
 
@@ -174,6 +186,7 @@ later real and animation kinds are saved only when they are saved kinds: the wor
 | The interval carries the host's `timeGetTime`-like stamp as a 64-bit millisecond count, with no wrap. | The original's 32-bit wrap is every 49.7 days of host uptime; no run is that long. |
 | World milliseconds (admitted animation time ÷ 8, jumps excluded) for the viewer's tuned speeds. | Nothing is retuned in MIG12; the original's walk and goal step durations are restated by MIG13. |
 | The viewer's dev palette and bug report are windows with no original counterpart and do not pause. | Under GQ3 A only the Esc menu pauses; the palette and report are tools, not play states. |
+| A real-time step reported by a pass is run after it (and the pass' game list has run), not before the game list as the original's real list is. | The host acts on the session, which refuses its operations inside a pass; the events a step's jump makes due fire in a pass that follows at once, so the set of events fired and their order by deadline are the original's, only an event due at exactly the sub-step's boundary may fire before the step instead of after it. |
 | A saved game keeps the pause and the world-map step is not a saved event. | The original does not save its pause counter (TL23) and does save the real-list kinds 12 and 14 (TL32); here a save during a journey or with the menu open restores the menu closed and the journey ended at the last step. A save is offered from the menu, which holds the pause, so the saved pause is the menu's own; both are viewer states the load re-creates. |
 | The death cover and slide freeze all three clocks. | The original's slide show does not ping (TL25); today's viewer holds a Menu pause there. |
 
@@ -195,7 +208,7 @@ The codes of S2–S9 are reserved by the coordinator; schema 70 is reserved for 
 | S5 | ARC-DEV-124 | The AI host and the movers on the clocks: `_nowMs` and `host.Pump(WorldMilliseconds())` go; runs step on world milliseconds, the AI tick on game time; the pump is gated by the pause. | Host tests (`AreaAiHostTests`, `AreaAiRouteTests`, follower and round tests); smoke `ai`, `ai-turn-based`, `ai-follower`, `follower-home` (the AI pump pings the change of place, DEV-116). |
 | S6 | ARC-DEV-125 | The other consumers read the clocks: hero attack and cast, projectiles, spell missiles, eye candy, dying and lying animations, body moves, blood pools, scenery, the light animation (`Light` events on the animation domain); `WorldTime` leaves the rules. | Self-tests that assert time; smoke `cast`, `ranged`, `life`, `death`, `knockdown` stages touched; a grep check that no rule file reads `Time.GetTicks*`. |
 | S7 | ARC-DEV-126 | The pause by GQ3 A: only the Esc menu pauses, the world gate no longer closes for the other windows, the death cover freezes; the hero's input gating by the stack stays. | self-tests `TerrainViewerWorldMainSettingsTest`, `TerrainViewerAreaSceneFlowTest`, `TerrainViewerAreaMainMenuTest`; smoke `menu`, `scene`, `inv-ui`, `barter`, `death`; a manual look at an NPC walking behind an open dialog. |
-| S8 | ARC-DEV-127 | The real-time domain: the world-map journey as a chain of real events (62 ms steps), the turn-based step event on the real list; the delta loop and explicit waits go. | Session and viewer tests (a step behind the menu still fires, the time jump per step); smoke `worldmap`, `debug-travel`, `turn-based`, `ai-turn-based`. |
+| S8 | ARC-DEV-127, **done** | Landed: the session's real-domain kinds `travel.step` and `combat.step` (not saved, `KeepExisting`), `ScheduleRealStep`/`QueryRealStep`/`CancelRealStep`, `SessionEventPassResult.RealSteps`; `IRealStepHost` and `FrameStep.RealSteps` (the host runs after a pass, the step is scheduled again from now, one more pass follows so the jump's due events fire in the frame; `FrameStepReport.RealSteps`/`RealStepsUnhandled`); the viewer's `AreaRealStepHost` (world-map travel step: 50 ms after the start, then 62 ms, a jump per step, behind the Menu pause; turn-based pass asked for every frame a round runs); `SyncAreaWorldMap`'s delta loop, `WorldMapStepsPerFrame`, `AdvanceWorldMapClock` and the round's per-frame call are gone; the worldmap and turn-based smokes tick the session clock with their own stamps. **No flaw of the original is involved** (the 50/62 ms and 2 ms delays and the jump rules are TL26/TL28/TL39 as read; no Original switch). Planned as: The real-time domain: the world-map journey as a chain of real events (62 ms steps), the turn-based step event on the real list; the delta loop and explicit waits go. | Session and viewer tests (a step behind the menu still fires, the time jump per step); smoke `worldmap`, `debug-travel`, `turn-based`, `ai-turn-based`. Landed: `RealStepStateTests` (Session), `RealStepTests` (World), `AreaWorldMapTests` journey over the frame step; the four smokes pass. |
 | S9 | ARC-DEV-128 | Re-check of B-bugs that depend on time, coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; the daily full chain covers the rest. |
 
 S2 and S3 change the clock authority and the saved state, S3 and S4 change the session core and threading, so they take the larger review model
@@ -233,6 +246,6 @@ the session holds the three clocks, admits the frame and saves the real and anim
 no host passes a frozen frame
 and the death cover still holds a Menu pause (S7); no participant is registered with the frame step, the change-of-place ping port is
 not wired (the hero's request is still pinged by the viewer, CD7); the AI host,
-projectiles, missiles, eye candy, attack and cast read Godot time; the Menu pause covers every window; no real or animation event exists; the
+projectiles, missiles, eye candy, attack and cast read Godot time; the Menu pause covers every window; no animation event exists (the real list has the world-map step and the turn-based event, S8); the
 viewer keeps calling the frame from `AreaAmbientDriver` (its one `FrameStep.Run`). The text of [the game clock policy](../world/game-clock-policy.md) and the TL rows' last column describe
 that state until the slices land.

@@ -119,10 +119,33 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>Per frame, before the hero moves: the sector entries, then the NPCs' subturns and the hero's completion check.</summary>
+    /// <summary>The real time after which the turn-based event falls due once the host asked for it (the original's 0x4B7080 schedules it 2 ms ahead, TL39).</summary>
+    private const long TurnBasedEventDelayMs = 2;
+
+    /// <summary>Per frame, before the hero moves: the sector entries, then, while a round runs, the request for the turn-based event. MIG12 S8
+    /// (ARC-DEV-127): the step itself (<see cref="RunTurnBasedStep"/>: the NPCs' subturns and the hero's completion check) runs when the session's
+    /// real-time turn-based event falls due, in the frame step, so it fires behind the Esc menu as the original's does. The original's callback
+    /// asks for the event when an animation slot is freed; the viewer has no slot hook and asks for it every frame a round runs (one pending at
+    /// most), which is the step it ran every frame before. A map without a frame step (drawn unlit: no day/night driver, so no event passes run
+    /// there either) keeps the step in the frame.</summary>
     private void ProcessTurnBasedRound()
     {
         ObserveSectorEntries();
+        if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
+        if (_areaAmbient is null) { RunTurnBasedStep(); return; }
+        _areaSession!.ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs);
+    }
+
+    /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round's host, without a repeat
+    /// (the next request comes from the frame).</summary>
+    private long? RunTurnBasedStepEvent()
+    {
+        RunTurnBasedStep();
+        return null;
+    }
+
+    private void RunTurnBasedStep()
+    {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
         var session = _areaSession!;
         PlaceHeroForRound();
