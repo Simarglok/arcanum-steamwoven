@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-RENDER-010: day/night in crash-site-area; the diagnostic palette can switch the ambient
 // multiplier off to show unlit source pixels. The active sector follows the actor's committed cell.
-// ARC-WORLD-010: the clock is the game session's. It flows by itself each frame (GameTimeFlow, 8x
+// ARC-WORLD-010: the clock is the game session's. It flows by itself each frame (the session's AdvanceFrame, MIG12 S3: 8x
 // admitted host time), holds a Menu pause while the palette or a dialog is open, and the palette's
 // "+1 hour" is an explicit wait that works during that pause. Automated runs (self-test, native smoke)
 // get no live flow; they drive the same tick with literal host times.

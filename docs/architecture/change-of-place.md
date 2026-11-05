@@ -79,7 +79,7 @@ part that the area path and every non-player request need.
   request, right after its transfer checks (CD7). It takes the request (`Begin`), plans it (`Plan`; the mover is the hero, so the move list holds a player
   character) and runs the steps in order; for each step the session's part comes first, then the host's (`IChangeOfPlaceHost.Run`, false
   stops the change there). The session's parts: the clock advance (`AdvanceClocks`, game time by the seconds × 1000 as an explicit wait,
-  so a round does not hold it; the animation clock is not the session's before MIG12), the move list (`BuildMoveList`, with the host's
+  so a round does not hold it; since MIG12 S3, ARC-DEV-122, a jump of game and animation time together), the move list (`BuildMoveList`, with the host's
   facts and the request's "no wait orders"), and the payload (`RelocateObjects` or `WriteTravellers`): the hero at the host's arrival
   (`IChangeOfPlaceHost.Arrive`: the cell, the facing, the followers' body edits) with the move list in one revision of `ApplyChanges`,
   which writes the wait orders, FM6's clearing and the carry of the travellers' events together (the plan's `WaitOrders` and

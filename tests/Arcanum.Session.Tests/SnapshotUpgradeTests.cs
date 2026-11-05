@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.SessionFixtures;
 
@@ -8,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":69,\"world\"";
+    private const string Current = "\"schemaVersion\":70,\"world\"";
+    private const string Current69 = "\"schemaVersion\":69,\"world\"";
     private const string Current68 = "\"schemaVersion\":68,\"world\"";
     private const string Current67 = "\"schemaVersion\":67,\"world\"";
     private const string Current66 = "\"schemaVersion\":66,\"world\"";
@@ -21,12 +23,33 @@ public sealed class SnapshotUpgradeTests
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
 
+    // MIG12 S3 (ARC-DEV-122): the clock section of a schema 70 text without its real and animation stamps. The step back is exact only for a session whose
+    // real clock still stands at 1 ms and whose animation clock equals the game stamp (no frame admitted, no ordinary game advance outside a frame), which
+    // the inverse checks, so a test that needs another pair writes its own older literal.
+    private static readonly Regex FrameClocks = new(",\"timestampMs\":(\\d+),(\"paused\":(?:true|false),\"pauseReason\":\"[A-Za-z]+\",\"revision\":\\d+),\"realMs\":(\\d+),\"animationMs\":(\\d+)\\}");
+
+    internal static string WithoutFrameClocks(string text)
+    {
+        var match = FrameClocks.Match(text);
+        Assert.IsTrue(match.Success, "the clock section carries the real and animation stamps");
+        Assert.AreEqual("1", match.Groups[3].Value, "the real clock stands at its start");
+        Assert.AreEqual(match.Groups[1].Value, match.Groups[4].Value, "the animation clock equals the game stamp");
+        return string.Concat(text.AsSpan(0, match.Index), $",\"timestampMs\":{match.Groups[1].Value},{match.Groups[2].Value}}}", text.AsSpan(match.Index + match.Length));
+    }
+
+    // MIG12 S3 (ARC-DEV-122): the schema 69 text of a schema 70 one: the same text without the real and animation stamps of the clock section.
+    internal static string Schema69(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return WithoutFrameClocks(text.Replace(Current, Current69));
+    }
+
     // MIG11 S5 (ARC-DEV-116): the schema 68 text of a schema 69 one with no `npc.teleport` field: the layout is the same (a text with no such field is the
     // same text), so the inverse is the schema number alone. A text with the field has its own hand-made schema 68 literal (TeleportMapStateTests).
     internal static string Schema68(string text)
     {
-        StringAssert.Contains(text, Current);
-        return text.Replace(Current, Current68);
+        var older = Schema69(text);
+        return older.Replace(Current69, Current68);
     }
 
     // MIG9 S6 (ARC-DEV-106): the schema 67 text of a schema 68 one with no eviction history: the same text without the `residency` section (a hand-made
@@ -350,6 +373,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":70,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":71,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

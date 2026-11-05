@@ -63,7 +63,7 @@ animation time are not modelled by `GameTimeFlow`. Tests: `tests/Arcanum.Simulat
 ## Frame clocks (ARC-DEV-121, MIG12 S2)
 
 [K15](../architecture/clocks-frame.md) generalises the admission to the three clocks of the original's ping (TL14, TL15, TL26) as
-pure rules, with **no caller yet** (the session and the viewer still use `GameTimeFlow` and the game clock alone until S3 and S4).
+pure rules; since S3 (below) the session is their one caller.
 `GameTimeFlow.ObserveInterval` is the admitted real interval (the same 5 ms floor, reference-then-cut order, 250 ms cut, first and
 backwards stamps as `Observe`, which is that interval times 8). `FrameClockKeeper` keeps the **real** stamp (starts at 1 ms) and the
 **animation** stamp (starts at the start time) beside the game clock, whose authority stays `GameClockOwner`:
@@ -74,6 +74,29 @@ session adds to game time in the same call; `PlanJump` validates the same jump a
 time the viewer's tuned speeds will read. Refusals are typed (`FrameClockFailure`: negative host stamp, bad restored state, negative
 duration, stamps within one admission of the 64-bit limit) and change nothing; the admission reference and world time are not saved.
 Tests: `tests/Arcanum.Simulation.Tests/Clock/FrameClocksTests.cs`.
+
+## The session's three clocks (ARC-DEV-122, MIG12 S3)
+
+`GameSessionOwner` owns the three clocks: the game clock stays its `GameClockOwner` (token, revision, pause, calendar) and a
+`FrameClockKeeper` beside it holds the real and animation stamps, which only the session moves. A new session starts real at 1 ms and
+animation at the start time (TL15). `AdvanceFrame(hostMs, frozen)` admits one host stamp with the session's own flags (the game clock's
+pause; a turn-based round stops game time only) and moves real, animation and world time; the game part of the admission is **handed
+back**, not applied: the viewer's event pump steps it at each event deadline through `AdvanceGameTime(OrdinaryAdvance)` (S4 moves the
+pump into `Arcanum.World` and steps the three clocks together). `JumpClocks(token, ms)` is a time jump (TL26): game and animation by the
+same amount (0 is 1 ms), also while paused or in a round, world time untouched; the animation half is checked first, so a refusal
+changes neither. Every positive `ExplicitWait` of `AdvanceGameTime` is that jump (a zero one stays NoChange; only `JumpClocks` makes 0
+into 1 ms); a saved real or animation stamp within one admission of the 64-bit limit is refused at decode, so the world-map travel step, the round's second (TL38), the
+change of place's timed advance and the palette's "+1 hour" move both clocks; an `OrdinaryAdvance` moves game time alone.
+`QueryFrameClocks()` gives the participants' `FrameClocks`; `ResetFrameReference()` forgets the admission reference (the viewer's
+`AreaAmbientDriver` calls it when it binds, so a new scene's first frame admits nothing, as the driver's own `GameTimeFlow` did; the
+driver no longer owns one). The event queue is handed all three clocks (`GameEventClocks(real, game, animation)`) for every schedule
+and pass; the 17 session kinds stay game-domain, so their deadlines are unchanged.
+
+**Schema 70** saves the real and animation stamps in the `clock` section (`realMs` ≥ 1, `animationMs` ≥ 0) beside the game stamp; the
+world milliseconds and the admission reference are run-local (a load credits nothing at its first frame). The step from schema 69 sets
+real to 1 and animation to the saved game stamp: the two moved together in every older save except in a turn-based round, where the
+animation clock was never advanced and the difference is not recoverable. Tests: `tests/Arcanum.Session.Tests/FrameClockStateTests.cs`,
+the round's jump in `CombatRoundTests`, the driver over the session in `tests/Arcanum.TerrainViewer.Tests/AreaAmbientTests.cs`.
 
 ## API and caller ownership
 

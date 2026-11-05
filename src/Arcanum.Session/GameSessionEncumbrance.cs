@@ -156,7 +156,7 @@ public sealed partial class GameSessionOwner
         if (IsPending(SessionEventKinds.HeroEncumbrance, null) || _events.Count >= _events.Limits.MaxPending) return;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         if (now > long.MaxValue - delay) return;
-        _events.ScheduleAfter(SessionEventKinds.HeroEncumbrance, GameEventPayload.Of([], now), delay, new(0, now, 0));
+        _events.ScheduleAfter(SessionEventKinds.HeroEncumbrance, GameEventPayload.Of([], now), delay, EventClocks(now));
     }
 
     /// <summary>

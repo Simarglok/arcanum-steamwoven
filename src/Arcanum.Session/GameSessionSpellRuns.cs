@@ -273,7 +273,7 @@ public sealed partial class GameSessionOwner
         foreach (var e in events)
         {
             var scheduled = _events.ScheduleAfter(SessionEventKinds.SpellRun, GameEventPayload.Of([], now, e.Run, (long)e.Code), Math.Max(1, e.DelayMs),
-                new(0, now, 0));
+                EventClocks(now));
             // Every refusal was checked before (the kind keeps any number), so a failure here is a defect.
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("An admitted magic-tech event could not be scheduled.");
         }

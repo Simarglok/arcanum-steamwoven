@@ -351,6 +351,20 @@ public static partial class GameSessionSnapshotCodec
             if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
             if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
         },
+        // MIG12 S3 (ARC-DEV-122, schema 70): the clock section gains the real and animation stamps (TL34). An older session kept one clock: real
+        // starts at 1 ms, as for a new session, and animation is the saved game stamp, the nearest consistent value (the two moved together in
+        // every older save except inside a turn-based round, where the animation clock was never advanced and the difference is not recoverable).
+        // The game stamp the older schema carried must be there and a number (a damaged save gets its typed failure, not a repair); its range is
+        // the strict decode's.
+        [69] = root =>
+        {
+            var clock = Section(root, "clock");
+            if (!clock.TryGetPropertyValue("timestampMs", out var game)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.clock.timestampMs");
+            if (game is not JsonValue value || value.GetValueKind() != JsonValueKind.Number)
+                throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.clock.timestampMs");
+            AddField(clock, "$.clock", "realMs", JsonValue.Create(1L));
+            AddField(clock, "$.clock", "animationMs", value.DeepClone());
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
