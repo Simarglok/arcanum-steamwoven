@@ -171,6 +171,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportInventory(snapshot.Inventory, hero is not null, limits, durability.Destroyed, out var inventory);
@@ -241,7 +243,7 @@ public sealed partial class GameSessionOwner : IDisposable
             hero, inventory, equipment, effects, experience, advancement, new(random.Seed, random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
-          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts };
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory };
         owner._danger.Here = () => owner._actor.Map;
         owner.MarkEncumbranceOfRestore();
         // GQ7 B (GR36): the saved map opens; the Original setting forgets the links to objects that are not there (ARC-DEV-095).
@@ -279,6 +281,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var result = _clock.AdvanceGameTime(token, durationGameMs, reason);
         if (result.Disposition == ClockMutationDisposition.Changed && _lighting is { } lighting && lighting.Hour != result.Snapshot.Hour)
             _lighting = null;
+        // ARC-DEV-106 (RL19): the hourly ambient lighting update reaches the loaded sectors only.
+        if (result.Disposition == ClockMutationDisposition.Changed) RefreshSectorLights(result.Snapshot.Hour);
         return result;
     }
 
@@ -324,7 +328,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var mapOpens = placement.Map != _actor.Map;
         _actor = placement;
         // ARC-DEV-103 (K1 §3.1): the map the hero left closes, and its residency with it.
-        if (mapOpens) { _residency = null; _sectors = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
         // GQ7 B (GR36): a placement on another map opens it too (ARC-DEV-095); the party arrives with the hero.
         if (mapOpens) ApplyOpenMapLinkRule(placement.Map, _party.Order.ToArray());
         return Changed();
@@ -567,7 +571,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
-        if (mapOpens) { _residency = null; _sectors = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
@@ -1562,7 +1566,8 @@ public sealed partial class GameSessionOwner : IDisposable
             _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
     }
 
-    /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
+    /// <summary>Copies every component at this call boundary into one detached snapshot. Under the Original setting it also does what the original's save does to the
+    /// sector cache's own history (<see cref="LifecycleRuleProfile.SaveStampsLoadedSectors"/>, ARC-DEV-106): derived data, no revision.</summary>
     public GameSessionSnapshot Capture()
     {
         ThrowIfDisposed();
@@ -1573,7 +1578,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

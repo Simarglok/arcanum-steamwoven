@@ -459,6 +459,14 @@ public partial class TerrainViewerApp
                 owner.Dispose();
                 return "new game refused: " + wieldRefused;
             }
+            // ARC-DEV-115 (MIG11 S4, RL29): then the start's teleport of the hero to the start map, the session's change of place.
+            var startRefused = AreaNewGameStart.Run(owner, new(recipe.RuntimeMap), new(checked((int)recipe.Spawn.X), checked((int)recipe.Spawn.Y)), null, out var startRun);
+            if (startRun is not null) LogChangeOfPlace(startRun);
+            if (startRefused is not null)
+            {
+                owner.Dispose();
+                return "new game refused: " + startRefused;
+            }
         }
         // As a load: the maps' inventory seeds and the dialog host move to the new session before anything changes.
         if (_inventoryHost?.Attach(owner) is { } attached && attached != GameSessionFailure.None)

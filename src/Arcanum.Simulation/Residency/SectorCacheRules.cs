@@ -135,6 +135,57 @@ public static class SectorCacheRules
         return new(new SectorCacheState(state.Limits, null, [], state.AgeCounter, history), SectorCacheFailure.None, evicted);
     }
 
+    /// <summary>
+    /// The save hook of the sector module (0x4D1150, ledger CX10): at game time <paramref name="nowMs"/> every loaded slot, in ascending id,
+    /// whose sector has no record in the history gets one appended; a full history drops its oldest record first (the same bound as a free,
+    /// CX1). The slots stay loaded and the lookup is by sector only, so a sector that is evicted afterwards leaves a second record (the original
+    /// checks no duplicate when it frees). The state returned is the one the original's live game holds after the save; the saved file is the same
+    /// history (<see cref="SectorCacheState.History"/>).
+    /// </summary>
+    [OriginalFunction(0x4D1150, OriginalFunctionScope.Partial)]
+    public static SectorHistoryStamp StampLoaded(SectorCacheState state, long nowMs)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (nowMs < 0) return new(state, SectorCacheFailure.InvalidTime, []);
+        var history = new List<SectorEvictionRecord>(state.History);
+        var stamped = ImmutableArray.CreateBuilder<long>();
+        foreach (var slot in state.Slots)
+        {
+            if (history.Exists(r => r.Sector == slot.Sector)) continue;
+            if (history.Count >= state.Limits.HistoryCapacity) history.RemoveAt(0);
+            history.Add(new(slot.Sector, nowMs));
+            stamped.Add(slot.Sector);
+        }
+        return stamped.Count == 0 ? new(state, SectorCacheFailure.None, []) :
+            new(new SectorCacheState(state.Limits, state.Map, state.Slots, state.AgeCounter, [.. history]), SectorCacheFailure.None, stamped.ToImmutable());
+    }
+
+    /// <summary>
+    /// A cache with no map open whose eviction history is <paramref name="history"/>, a saved one (the sector module's load, 0x4D12B0, which
+    /// refuses a count above twice the slot count and checks nothing else; the session adds the checks of a typed file): at most
+    /// <see cref="SectorCacheLimits.HistoryCapacity"/> records, each a sector id (both coordinates below 2<sup>26</sup>) and a game time of
+    /// 0..<paramref name="nowMs"/>, oldest first. The same sector may appear twice, as the original's history can hold two records of it
+    /// (<see cref="StampLoaded"/>). Open a map on the result with <see cref="Open"/>, which keeps the history.
+    /// </summary>
+    [OriginalFunction(0x4D12B0, OriginalFunctionScope.Partial)]
+    public static SectorCacheChange RestoreHistory(SectorCacheLimits limits, IReadOnlyList<SectorEvictionRecord> history, long nowMs)
+    {
+        ArgumentNullException.ThrowIfNull(limits);
+        ArgumentNullException.ThrowIfNull(history);
+        var initial = SectorCacheState.Initial(limits);
+        if (nowMs < 0) return Refuse(initial, SectorCacheFailure.InvalidTime);
+        if (history.Count > limits.HistoryCapacity) return Refuse(initial, SectorCacheFailure.HistoryTooLong);
+        var last = 0L;
+        foreach (var record in history)
+        {
+            if (record.Sector < 0 || record.Sector >> 52 != 0) return Refuse(initial, SectorCacheFailure.InvalidSector);
+            if (record.EvictedAtMs < 0 || record.EvictedAtMs > nowMs) return Refuse(initial, SectorCacheFailure.InvalidTime);
+            if (record.EvictedAtMs < last) return Refuse(initial, SectorCacheFailure.HistoryOutOfOrder);
+            last = record.EvictedAtMs;
+        }
+        return new(new SectorCacheState(limits, null, [], 0, [.. history]), SectorCacheFailure.None, []);
+    }
+
     internal static int IndexOf(ImmutableArray<SectorCacheSlot> slots, long sector) => IndexOf(slots.AsSpan(), sector);
 
     private static int IndexOf(List<SectorCacheSlot> slots, long sector) => IndexOf(CollectionsMarshal.AsSpan(slots), sector);

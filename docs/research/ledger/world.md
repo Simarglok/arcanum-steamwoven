@@ -359,3 +359,22 @@ the new `SessionAiTickStart.Immediate` start (1 ms, no marker).
 Steamwoven follows CX9 in `AreaAiHost.CatchUp` and `MoveToLeader` (ARC-DEV-105): the facts are read as above (the waiting test also counts a waiting
 standing), the move stands the follower on the PC's cell through the follower source (the companion group's jump); the network step is left out
 (single player).
+
+## Sector eviction history (ARC-DEV-106)
+
+Source: the [eviction history in the snapshot](../../architecture/residency.md#36-eviction-history-in-the-snapshot-slice-s6) of the residency concept
+(MIG9 slice S6) and row PS8 of the [original persistence model](../../architecture/original-persistence.md), which says a save adds every cached
+sector not yet listed. Question: whether that add changes the live history or only the file, how the history is bounded when it is written, and what
+the load checks. Read on 2026-11-05 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this task (F2); every direct
+branch stays inside `.text`.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| CX10 | sector module save hook (0x4D1150), game time (0x45A7C0), memmove (0x58B060) | The hook walks the slot index (ascending id, CX5) and, for every slot in use, searches the **live** history (the same array the free of CX1 appends to) for a record of its sector by id only. Without one it appends `(id, game time pair)`: when the history already holds twice the slot count it first moves the records down one place, dropping the oldest, as the free does. Then it writes the count word and the records (16 bytes each: the 64-bit id and the {day, millisecond} pair) to the file. The slots stay loaded, so the history of the running game keeps those records after the save; a sector that is evicted later appends a second record (CX1 checks no duplicate), and the next load takes the first, which is the save's (CX3). The time away of that load is therefore measured from the save, not from the eviction. | Original; a bug of the game (an artefact of an append that checks no duplicate: a player cannot read it as a rule; it only makes a sector fold that was away under 3 s), classified like CX7 as a gameplay bug behind the Original switch `LifecycleRuleProfile.SaveStampsLoadedSectors` |
+| CX11 | sector module load hook (0x4D12B0) | Reads the count word and refuses a count larger than twice the slot count (unsigned), then reads count × 16 bytes into the live history. It checks no id, no time and no order. The history is read before the map opens and the clock only at the time-event module (PS8, PS12), which Steamwoven does not reproduce: the session restores its clock with the snapshot, so a sector fetched early measures against the saved clock. | Original (the bound); the typed file's other checks are Steamwoven's |
+
+Steamwoven follows CX10 and CX11 in `SectorCacheRules.StampLoaded` and `RestoreHistory` (ARC-DEV-106). A save (`GameSessionOwner.Capture`) writes the
+history with a record for every loaded sector without one, stamped with the session's game time, to the `residency` section; the session's own history
+is changed the same way only under the Original setting (CX10), Steamwoven leaves it. The restore refuses a history longer than twice the slot count of
+the largest cache the rules allow, a sector that is not a sector id, a time before 0 or after the saved clock, a list that is not oldest first and a map
+that is not the hero's (an empty history has no map). The same sector may appear twice (the original can hold two records of it).

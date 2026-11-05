@@ -148,7 +148,7 @@ public sealed class ScriptStoreStateTests
         Fails("{\"globalVariables\":[[3,1.5]],\"pcFlags\":[],\"pcVariables\":[]}", SnapshotDecodeFailure.OutOfRange, "$.scripts.globalVariables[0][1]");
         Fails("{\"globalVariables\":[],\"pcFlags\":[]}", SnapshotDecodeFailure.MissingField, "$.scripts.pcVariables");
         Fails("{\"globalVariables\":[],\"pcFlags\":[],\"pcVariables\":[],\"storyState\":1}", SnapshotDecodeFailure.UnknownField, "$.scripts.storyState");
-        var missing = GameSessionSnapshotCodec.TryDecode(text.Replace(NoScripts, ""));
+        var missing = GameSessionSnapshotCodec.TryDecode(text.Replace(NoScripts, "").Replace(NoResidency, ""));
         Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.scripts"), (missing.Failure, missing.Path));
         // Elements of every store are bounded by the store: 2000 variables cannot be listed twice over.
         var many = string.Join(",", Enumerable.Range(0, 2001).Select(i => $"[{i},1]"));

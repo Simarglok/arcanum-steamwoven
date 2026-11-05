@@ -47,6 +47,17 @@ public sealed record LifecycleRuleProfile
     public bool FoldOnDayChange { get; init; }
 
     /// <summary>
+    /// Ledger CX10 (ARC-DEV-106, a bug of the game): the sector module's save hook (0x4D1150) appends a record, stamped with the save's time, for
+    /// every loaded sector that has none, to the <b>live</b> eviction history, not to a copy for the file, and the sector stays loaded. When it is
+    /// evicted later the history holds two records of it (the free checks no duplicate), and its next load takes the older one, the save's: the
+    /// time away is then measured from the save, not from the eviction, so a sector evicted and reloaded within 3 s folds after any save made 3 s
+    /// or more before. Under this switch a save (<see cref="GameSessionOwner.Capture"/>) stamps the loaded sectors in the session's history too;
+    /// Steamwoven stamps them in the saved copy only, which is what a load needs (a sector the file lists is not away), and measures every time
+    /// away from the real eviction.
+    /// </summary>
+    public bool SaveStampsLoadedSectors { get; init; }
+
+    /// <summary>
     /// Ledger CP12 (RL15, RL22, R3 Q5; ARC-DEV-114): a non-player object sent to another map without the hero leaves a destroyed, extinct live copy
     /// behind and arrives as a new record with no events, so the timers that named it die when the dispatcher finds their object destroyed (the AI
     /// tick goes in both settings: the object loses its AI events as it leaves, FM6). Under this switch the session drops the events that name only the NPC
@@ -60,7 +71,7 @@ public sealed record LifecycleRuleProfile
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true,
-        FoldOnDayChange = true, NonPlayerMoveDropsEvents = true };
+        FoldOnDayChange = true, SaveStampsLoadedSectors = true, NonPlayerMoveDropsEvents = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };

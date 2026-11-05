@@ -232,7 +232,7 @@ public sealed class AreaShopSession : IDisposable
     /// <summary>
     /// The game's start on this session (0x5412E0 with the new-game flag, OS5): the best weapon and body armour into empty slots, the
     /// kit's wear facts by kit number and a bought ware's from its shop row (<see cref="AreaNewCharacter.WieldStart"/>), then the PC is
-    /// teleported to the start map's tile (<paramref name="startMap"/>, <paramref name="start"/>). Null on success, else why the session
+    /// teleported to the start map's tile (<paramref name="startMap"/>, <paramref name="start"/>) by the session's change of place (<see cref="AreaNewGameStart"/>). Null on success, else why the session
     /// refused it: the session is not taken, but a wield done before a refused teleport stays (the caller drops the shop then).
     /// </summary>
     public string? Start(IReadOnlyList<SessionWearableItem?> kitWear, SessionMapId startMap, CellCoord start)
@@ -240,8 +240,8 @@ public sealed class AreaShopSession : IDisposable
         ArgumentNullException.ThrowIfNull(kitWear);
         if (_owner is not { } owner) return "the shop's session is gone";
         if (AreaNewCharacter.WieldStart(owner, kitWear, Wearable) is { } wield) return wield;
-        var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(startMap, start, NeighborDirection.XPlus), []);
-        return placed.Disposition == GameSessionDisposition.Rejected ? $"the start map's teleport was refused ({placed.Failure})" : null;
+        // ARC-DEV-115 (MIG11 S4, RL29): the teleport is the session's change of place with the start's flags (0x45), not a bare placement.
+        return AreaNewGameStart.Run(owner, startMap, start, NeighborDirection.XPlus) is { } refused ? $"the start map's teleport was refused ({refused})" : null;
     }
 
     /// <summary>Hands the session to the game: this shop no longer disposes it.</summary>

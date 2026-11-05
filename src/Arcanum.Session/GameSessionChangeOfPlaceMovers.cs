@@ -43,7 +43,8 @@ public sealed partial class GameSessionOwner
         if (Sectors(map) is not { } sectors) return null;
         var change = SectorCacheRules.EvictUnlocked(sectors.State, _clock.QueryClockSnapshot().GameTimestampMs);
         if (change.Failure != SectorCacheFailure.None) return null;
-        _sectors = (map, change.State);
+        // ARC-DEV-106 (RL19): the sectors unloaded leave the light state with them.
+        _sectors = sectors with { State = change.State, LightHours = System.Collections.Immutable.ImmutableDictionary<long, int>.Empty };
         return change.Evicted.Select(Sector).ToArray();
     }
 

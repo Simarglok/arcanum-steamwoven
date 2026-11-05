@@ -248,6 +248,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="prototype-extraction-arc-res-085"></a>[Prototype extraction (ARC-RES-085)](ledger/data.md#prototype-extraction-arc-res-085) | [Data and loading](ledger/data.md) | PX1–PX6 |
 | <a id="sector-cache-arc-dev-102"></a>[Sector cache (ARC-DEV-102)](ledger/world.md#sector-cache-arc-dev-102) | [World, maps and movement](ledger/world.md) | CX1–CX6 |
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
+| <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 
 ## Decisions to revisit
 

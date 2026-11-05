@@ -43,7 +43,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -146,6 +146,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] HotkeysFields = ["entries", "recent"];
     // ARC-DEV-098 (schema 67): the global variables and the PC's flag elements and variables.
     private static readonly string[] ScriptsFields = ["globalVariables", "pcFlags", "pcVariables"];
+    // ARC-DEV-106 (schema 68): the open map's sector eviction history.
+    private static readonly string[] ResidencyFields = ["map", "history"];
     private static readonly string[] HotkeyEntryFields = ["kind", "item", "index"];
 
     public static string Encode(GameSessionSnapshot snapshot)
@@ -871,6 +873,20 @@ public static partial class GameSessionSnapshotCodec
             WriteScriptCells(w, "pcVariables", snapshot.Scripts.PcVariables);
             w.WriteEndObject();
 
+            // ARC-DEV-106: the map the sector eviction history belongs to (null with an empty history) and its records oldest first, each [sector id, game ms].
+            w.WriteStartObject("residency");
+            if (snapshot.Residency.Map is { } residencyMap) w.WriteNumber("map", residencyMap.RuntimeMap); else w.WriteNull("map");
+            w.WriteStartArray("history");
+            foreach (var record in snapshot.Residency.History)
+            {
+                w.WriteStartArray();
+                w.WriteNumberValue(record.Sector);
+                w.WriteNumberValue(record.EvictedAtMs);
+                w.WriteEndArray();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -910,6 +926,26 @@ public static partial class GameSessionSnapshotCodec
             w.WriteEndObject();
         }
         w.WriteEndArray();
+    }
+
+    // Shapes and ranges: the map is null exactly when the history is empty, the history holds at most twice the largest cache's slot count, each record a
+    // sector id and a game time; whether the map is the hero's, the order and the time against the clock are Restore's.
+    private static SessionResidencyState Residency(JsonElement element)
+    {
+        const string p = "$.residency";
+        var f = Fields(element, p, ResidencyFields);
+        var map = f["map"].ValueKind == JsonValueKind.Null ? (SessionMapId?)null : new SessionMapId(Int(f["map"], p + ".map", 1, int.MaxValue));
+        var rows = Array(f["history"], p + ".history", 2 * Arcanum.Simulation.Residency.SectorCacheLimits.MaximumSlots);
+        var history = new SessionSectorEviction[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var at = $"{p}.history[{i}]";
+            var pair = Array(rows[i], at, 2);
+            if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, at);
+            history[i] = new(Long(pair[0], at + "[0]", 0, long.MaxValue), Long(pair[1], at + "[1]", 0, long.MaxValue));
+        }
+        if ((map is null) != (history.Length == 0)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, p + ".map");
+        return new(map, history);
     }
 
     // Shapes, ranges and the one canonical order (ascending unique index, no zero value); whether a PC store has a hero to own it is Restore's.
@@ -1052,7 +1088,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"]), Residency(f["residency"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
