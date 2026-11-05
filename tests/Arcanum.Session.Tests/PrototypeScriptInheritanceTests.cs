@@ -78,8 +78,26 @@ public sealed class PrototypeScriptInheritanceTests
         Assert.IsNull(owner.QueryItemScriptSlot("kit:1", SessionScriptPoint.WieldOn), "a kit item's slot is the host's data");
         Assert.IsNull(owner.QueryItemScriptSlot("made:99", SessionScriptPoint.WieldOn), "an item the session does not hold");
         // The source is not state: detached, the item has no attachment (the older behaviour).
+        Assert.IsTrue(owner.HasItemScriptSource);
         owner.AttachItemScripts(null);
+        Assert.IsFalse(owner.HasItemScriptSource);
         Assert.IsNull(owner.QueryItemScriptSlot(ring, SessionScriptPoint.WieldOn));
+    }
+
+    // ARC-DEV-099: the source is the host's, attached to every session it builds or restores; a restored session has none until the host attaches it
+    // (the save carries no source), and an attached one answers for the items made before it was attached.
+    [TestMethod]
+    public void A_restored_session_has_no_source_until_the_host_attaches_one()
+    {
+        var (owner, ring) = Owner();
+        using var _ = owner;
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.IsFalse(restored.HasItemScriptSource, "the source is not saved");
+        Assert.IsNull(restored.QueryItemScriptSlot(ring, SessionScriptPoint.WieldOn), "a made item reads no attachment without a source");
+        restored.AttachItemScripts(prototype => prototype == RingPrototype ? Array_ : null);
+        Assert.IsTrue(restored.HasItemScriptSource);
+        Assert.AreEqual(new SessionItemScriptSlot(ring, SessionScriptPoint.WieldOn, WieldOn, 3, 0), restored.QueryItemScriptSlot(ring, SessionScriptPoint.WieldOn),
+            "the item made before the attachment inherits from then on");
     }
 
     [TestMethod]

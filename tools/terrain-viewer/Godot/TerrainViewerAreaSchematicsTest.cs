@@ -96,6 +96,7 @@ public partial class TerrainViewerApp
                 new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic"));
             var owner = created.Owner ?? throw new InvalidOperationException("AREA schematics: session " + created.Failure);
             ReplaceAreaSession(owner, AreaRuntimes(), actor.Map.RuntimeMap, _conversationHost?.Rebind(owner));
+            Require(owner.HasItemScriptSource, "ARC-DEV-099: the replacement attached the prototype script source");
             _schematicSounds.Clear();
 
             InventoryKey(Key.T);

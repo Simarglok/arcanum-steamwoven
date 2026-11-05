@@ -283,6 +283,8 @@ public partial class TerrainViewerApp
         _areaSession = session;
         AttachAreaEncumbranceEffect();
         AttachAreaItemArtSizes();
+        // ARC-DEV-099: the attachment is not saved; the restored session gets the prototypes' script arrays again.
+        AttachAreaPrototypeScripts(session);
         SyncTurnBasedSetting(session);
         ApplySessionSettings(session);
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.

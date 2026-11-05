@@ -70,6 +70,13 @@ public partial class TerrainViewerApp
         return _prototypeItems;
     }
 
+    /// <summary>ARC-DEV-099 (MIG8, SA4): attaches the module's prototype script arrays to <paramref name="session"/>, wherever the viewer builds,
+    /// carries or restores one (the attachment is not state and is not saved), so a made item reads its prototype's array until its first write
+    /// whether or not a script has created an item yet. The source reads the prototype when asked (opened on first use, kept), so a session
+    /// without the module's content answers none, which is the older behaviour.</summary>
+    private void AttachAreaPrototypeScripts(GameSessionOwner session) =>
+        session.AttachItemScripts(prototype => PrototypeItems()?.Item(prototype)?.Scripts);
+
     /// <summary>
     /// The shown map's bodies drawn from extra art, recomputed when the session or the map changes: a scenery or trap the session
     /// busted takes its destroyed ART (field 24) at its own anchor, and every item lying on the map's ground away from a T0 body
