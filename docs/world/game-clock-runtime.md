@@ -58,7 +58,22 @@ backwards restarts the reference; `Reset()` forgets it. The 8× rate is a source
 reading (F0), not an original-runtime measurement (**NOT_VERIFIED**). Pause stays the
 clock's: the host keeps observing while paused and the clock ignores the ordinary
 advance, so resume has no catch-up. Network gate counters, turn-based combat and
-animation time are not modelled. Tests: `tests/Arcanum.Simulation.Tests/Clock/TimeFlowTests.cs`.
+animation time are not modelled by `GameTimeFlow`. Tests: `tests/Arcanum.Simulation.Tests/Clock/TimeFlowTests.cs`.
+
+## Frame clocks (ARC-DEV-121, MIG12 S2)
+
+[K15](../architecture/clocks-frame.md) generalises the admission to the three clocks of the original's ping (TL14, TL15, TL26) as
+pure rules, with **no caller yet** (the session and the viewer still use `GameTimeFlow` and the game clock alone until S3 and S4).
+`GameTimeFlow.ObserveInterval` is the admitted real interval (the same 5 ms floor, reference-then-cut order, 250 ms cut, first and
+backwards stamps as `Observe`, which is that interval times 8). `FrameClockKeeper` keeps the **real** stamp (starts at 1 ms) and the
+**animation** stamp (starts at the start time) beside the game clock, whose authority stays `GameClockOwner`:
+`Advance(hostMs, FrameFlags)` admits real `i` always, game `8i` unless paused or in a round, animation `8i` unless paused; a frozen
+frame (message box, movie, slide show, fade, loading) observes no stamp and keeps the reference, so the next frame credits at most
+250 ms. `Jump` adds a duration (0 is 1 ms) to the animation clock, ignoring pause and round, and reports the amount the
+session adds to game time in the same call; `PlanJump` validates the same jump and changes nothing. `WorldMs` is the admitted animation time ÷ 8 (kept in 1/8 ms, jumps excluded), the run-local
+time the viewer's tuned speeds will read. Refusals are typed (`FrameClockFailure`: negative host stamp, bad restored state, negative
+duration, stamps within one admission of the 64-bit limit) and change nothing; the admission reference and world time are not saved.
+Tests: `tests/Arcanum.Simulation.Tests/Clock/FrameClocksTests.cs`.
 
 ## API and caller ownership
 

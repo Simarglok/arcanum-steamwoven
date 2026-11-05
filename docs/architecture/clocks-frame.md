@@ -1,6 +1,6 @@
 # Clocks and the frame step in the session (K15, MIG12, TM6, GR20–GR22)
 
-Status: **concept written; nothing implemented.** This is slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
+Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, no caller yet.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
 decision GQ3 chosen A). Behaviour of the original stays the rows TL1–TL46 of the [original time loop](original-time-loop.md) (read from the
 executable); this page fixes how the session represents them, in which assembly each part lives, the order of the code slices and what each must
@@ -189,7 +189,7 @@ The codes of S2–S9 are reserved by the coordinator; schema 70 is reserved for 
 | Slice | Code | Result | Tests and evidence |
 | --- | --- | --- | --- |
 | S1 | ARC-DEV-120 | This document; the MIG12 row and the K15 line updated. | none (docs-only) |
-| S2 | ARC-DEV-121 | `FrameClocks`, the admission with pause, round and frozen flags, the jump and the world milliseconds (admitted only, jumps excluded) in `Arcanum.Simulation`; `GameTimeFlow` generalised; no caller. | Unit tests: 5 ms hold and sum, 250 ms cut, ×8, pause stops game and animation only, round stops game only, frozen credits at most 250 ms later, jump adds both and ignores pause and leaves the world milliseconds alone, first and backwards stamps, limits and typed refusals, determinism. |
+| S2 | ARC-DEV-121, **done** | `FrameClocks` (the value a participant reads), `FrameClockKeeper` (real and animation stamps, admission, jump, world milliseconds), `FrameFlags`, `FrameAdmission` and typed `FrameClockFailure` results in `Arcanum.Simulation.Clock`; `GameTimeFlow.ObserveInterval` is the real-interval admitter; no caller. The keeper does not hold the game stamp (`GameClockOwner` stays its only writer): `Advance` reports the game part, `PlanJump` validates a jump without changing anything, so S3 applies game and animation in one call without a half-applied jump (`ClocksAt(gameMs)` composes the participants' value). Originally planned as:  `FrameClocks`, the admission with pause, round and frozen flags, the jump and the world milliseconds (admitted only, jumps excluded) in `Arcanum.Simulation`; `GameTimeFlow` generalised; no caller. | Unit tests: 5 ms hold and sum, 250 ms cut, ×8, pause stops game and animation only, round stops game only, frozen credits at most 250 ms later, jump adds both and ignores pause and leaves the world milliseconds alone, first and backwards stamps, limits and typed refusals, determinism. |
 | S3 | ARC-DEV-122 | The session owns the three clocks: `AdvanceFrame(admitted)` and `JumpClocks` on `GameSessionOwner`, the queue gets all three clocks, the driver's flow moves into the session, schema 70 and its step. **Session core and save schema: Opus.** | Session and snapshot tests (round trip, the 69 → 70 step by hand, refusals, queue due times in each domain); `AreaAmbientTests` rewritten over the session. |
 | S4 | ARC-DEV-123 | The frame step and the event pump in `Arcanum.World` with the participant port; the viewer calls one `FrameStep(hostMs, frozen)`; the change-of-place ping runs first (CD7 goes); the lighting hour from the pass. | World tests over synthetic participants (order, one stamp, bound, late firing, jump seen by later domains); smoke `walk`, `ai`, `debug-travel` and the map battery (`map`). |
 | S5 | ARC-DEV-124 | The AI host and the movers on the clocks: `_nowMs` and `host.Pump(WorldMilliseconds())` go; runs step on world milliseconds, the AI tick on game time; the pump is gated by the pause. | Host tests (`AreaAiHostTests`, `AreaAiRouteTests`, follower and round tests); smoke `ai`, `ai-turn-based`, `ai-follower`, `follower-home` (the AI pump pings the change of place, DEV-116). |
@@ -226,7 +226,7 @@ and the frame step in `Arcanum.World` beside DEV-118's `ISectorTerrain` (differe
 
 ## 7. Not ready
 
-Everything above is a design. Today the session has one game clock and one admission flow in the viewer's `AreaAmbientDriver`; the AI host,
+Everything above is a design except the pure rules of S2 (`FrameClockKeeper`, no caller). Today the session has one game clock and one admission flow in the viewer's `AreaAmbientDriver`; the AI host,
 projectiles, missiles, eye candy, attack and cast read Godot time; the Menu pause covers every window; no real or animation event exists; the
 snapshot saves only the game clock. The text of [the game clock policy](../world/game-clock-policy.md) and the TL rows' last column describe
 that state until the slices land.
