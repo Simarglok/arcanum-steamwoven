@@ -102,6 +102,9 @@ public partial class TerrainViewerApp
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
+        // ARC-DEV-133: the search places the hero, and the safety gate opens only under focus. The smoke owns the focus from here on, as every
+        // smoke does before its first placement, not the window's own, which a run behind another window does not have.
+        _worldFocused = true; SelectSimulatedPadForSelfTest();
         // ARC-DEV-089: the first NPC (weakest first) the hero can stand three cells from and see, with the hero standing there.
         var target = candidates[0]; CellCoord? castStart = null;
         foreach (var candidate in candidates.Take(24))
@@ -113,7 +116,7 @@ public partial class TerrainViewerApp
         if (castStart is null)
         {
             GD.Print($"ARC-MAGIC-015 native-smoke cast NO-TARGET map={map.RuntimeMap} (no NPC the hero can stand near and see)");
-            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
         }
         var npc = target.Build.Combat!.Target;
         var npcStart = session.QueryLife(npc).View!.Status.HitPoints;
@@ -374,7 +377,6 @@ public partial class TerrainViewerApp
 
         try
         {
-            _worldFocused = true; SelectSimulatedPadForSelfTest();
             if (HeroInCombatMode) ToggleCombatMode();
             // The hero stands where the search saw the NPC from (three cells off) for both casts (placed once: the smoke's clock then runs on).
             AreaSmokePlace(map, castStart!.Value);

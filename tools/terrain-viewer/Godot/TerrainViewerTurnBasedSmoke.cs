@@ -46,6 +46,9 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting; var concealed = HeroConcealed;
         _worldFocusSimulationForSelfTest = true;
+        // ARC-DEV-133: the search places the hero, and the safety gate opens only under focus. The smoke owns the focus from here on, as every
+        // smoke does before its first placement, not the window's own, which a run behind another window does not have.
+        _worldFocused = true; SelectSimulatedPadForSelfTest();
         // ARC-DEV-089: the first NPC (weakest first) the hero can stand three cells from and next to, and see from there.
         var target = candidates[0]; var found = false;
         foreach (var candidate in candidates.Take(24))
@@ -57,7 +60,7 @@ public partial class TerrainViewerApp
         if (!found)
         {
             GD.Print($"ARC-COMBAT-020 native-smoke turn-based NO-TARGET map={map.RuntimeMap} (no NPC the hero can stand near, next to and see)");
-            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime); return;
         }
         var npc = target.Build.Combat!.Target;
         var npcBefore = session.QueryLife(npc).View!.Status.HitPoints;
@@ -65,7 +68,6 @@ public partial class TerrainViewerApp
         var critter = SessionCombatant.Critter(target.Holder.Entity);
         try
         {
-            _worldFocused = true; SelectSimulatedPadForSelfTest();
             _numLockRun = false; _alwaysRunOption = false;
             if (HeroInCombatMode) ToggleCombatMode();
             _turnBasedSetting = false; _chargeLog.Clear(); _roundLog.Clear();
