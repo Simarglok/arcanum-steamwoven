@@ -12,12 +12,12 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-RENDER-041: the pool prototype's current art (4048, read when the content stack opens; null when it does not read), the
-    // recorded deaths (critter, death time) already seen on the shown map and session, and the real time each pool this view left
+    // recorded deaths (critter, death time) already seen on the shown map and session, and the world time each pool this view left
     // started its frames at (a pool the view did not see left shows its last frame).
     private uint? _bloodPoolArt;
     private object? _bloodPoolDeathStamp, _bloodPoolDeathBaseline;
     private HashSet<(string Critter, long DeathMs)> _bloodPoolDeaths = [];
-    private readonly Dictionary<string, ulong> _bloodPoolStarts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _bloodPoolStarts = new(StringComparer.Ordinal);
     private (int Frames, int FramesPerSecond)? _bloodPoolTiming;
     private HashSet<AreaObjectKey> _bloodPoolKeys = [];
     private const int OffsetXSlot = 2, OffsetYSlot = 3;
@@ -67,7 +67,7 @@ public partial class TerrainViewerApp
                 continue;
             }
             var left = session.LeaveBloodPool(session.Version, critter, new SessionMapId(CurrentAreaMap), cell, offsetX, offsetY, facts);
-            if (left.Disposition == GameSessionDisposition.Changed && left.Pool is { } pool) _bloodPoolStarts[pool.Entity] = Time.GetTicksMsec();
+            if (left.Disposition == GameSessionDisposition.Changed && left.Pool is { } pool) _bloodPoolStarts[pool.Entity] = WorldMilliseconds();
             GD.Print($"ARC-RENDER-041 blood-pool critter={critter} disposition={left.Disposition} failure={left.Failure} refusal={left.Refusal}"
                 + (left.Pool is { } p ? $" entity={p.Entity} cell={p.Cell.X},{p.Cell.Y} offset={p.OffsetX},{p.OffsetY}" : ""));
         }
@@ -103,8 +103,8 @@ public partial class TerrainViewerApp
     {
         if (_bloodPoolStarts.Count == 0) return null;
         if (_bloodPoolTiming is not { } timing) return $"unread:{_bloodPoolStarts.Count}";
-        var now = Time.GetTicksMsec();
-        int FrameOf(ulong start) => BloodPoolRules.Frame((long)(now - start), timing.Frames, timing.FramesPerSecond);
+        var now = WorldMilliseconds();
+        int FrameOf(long start) => BloodPoolRules.Frame(now - start, timing.Frames, timing.FramesPerSecond);
         foreach (var (entity, start) in _bloodPoolStarts.ToArray())
             if (FrameOf(start) >= timing.Frames - 1) _bloodPoolStarts.Remove(entity);
         return _bloodPoolStarts.Count == 0 ? null
@@ -127,11 +127,11 @@ public partial class TerrainViewerApp
         }
         var frames = Math.Clamp(first.FramesPerGroup, 1, 32);
         _bloodPoolTiming = (frames, first.FramesPerSecond);
-        var now = Time.GetTicksMsec();
+        var now = WorldMilliseconds();
         foreach (var pool in pools)
         {
             var index = _bloodPoolStarts.TryGetValue(pool.Entity, out var start)
-                ? BloodPoolRules.Frame((long)(now - start), frames, first.FramesPerSecond) : frames - 1;
+                ? BloodPoolRules.Frame(now - start, frames, first.FramesPerSecond) : frames - 1;
             if (frameOf(WithSceneryFrame(art, index), "blood-pool") is not { } frame) continue;
             var key = PlacedKey(area.Snapshot.RuntimeMap, pool.Entity);
             _bloodPoolKeys.Add(key);
@@ -166,11 +166,16 @@ public partial class TerrainViewerApp
         Require(_groundBodies.TryGetValue(key, out var drawn) && drawn.Phase == 3 && !_groundOnly.ContainsKey(key), "the pool is drawn flat and not picked");
         Require(_bloodPoolTiming is { Frames: > 1 } timing && _bloodPoolStarts.ContainsKey(pool.Entity), "the pool plays its frames: " + _bloodPoolTiming);
         var last = ExtraArt()!.Load(WithSceneryFrame(_bloodPoolArt!.Value, _bloodPoolTiming!.Value.Frames - 1)).Frame!.Key;
-        // Wait by real time, not frames: a background window's frames may come far faster than the art's rate.
-        var deadline = Time.GetTicksMsec() + 3000;
+        // Wait by the world clock, not by frames (a background window's frames may come far faster than the art's rate): the pool plays on
+        // it (ARC-DEV-125). A smoke that drives the clock by a literal test time moves it 50 ms a frame; otherwise it follows the host.
+        var deadline = WorldMilliseconds() + 3000;
         var waited = 0;
-        while (_bloodPoolStarts.ContainsKey(pool.Entity) && Time.GetTicksMsec() < deadline)
-        { waited++; await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+        while (_bloodPoolStarts.ContainsKey(pool.Entity) && WorldMilliseconds() < deadline)
+        {
+            waited++;
+            if (_worldTestTime is { } driven) _worldTestTime = new SimulationTime(driven.Value + ExactScalar.Create(1, 20));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory();
+        }
         Require(!_bloodPoolStarts.ContainsKey(pool.Entity) && _groundBodies[key].Frame == last, $"the pool keeps its last frame after {waited} frames");
         Require(GameSessionSnapshotCodec.Encode(session.Capture()).Contains($"{{\"entity\":\"{pool.Entity}\",\"critter\":\"{npc}\"", StringComparison.Ordinal), "the save holds the pool");
         // A repeated sync leaves no second pool.

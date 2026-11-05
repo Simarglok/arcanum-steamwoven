@@ -102,7 +102,9 @@ public partial class TerrainViewerApp
         CancelAreaAttack(null); CancelSpellCast(null); ClearAreaProjectiles("the map changed"); _combatHost = null; _attackNotice = null; _spellCasterStamp = null;
     }
 
-    private long WorldMilliseconds() { var time = WorldTime.Value; return (long)(time.Numerator * 1000 / time.Denominator); }
+    private static long Milliseconds(SimulationTime time) => (long)(time.Value.Numerator * 1000 / time.Value.Denominator);
+    // ARC-DEV-125: the clock of the rules the hero's systems and the animations run on (the frame's world milliseconds in play).
+    private long WorldMilliseconds() => Milliseconds(WorldTime);
 
     /// <summary>Tracks left Alt from the key events (the mouse event only says that some Alt is held).</summary>
     private void TrackAttackModifiers(InputEventKey key)

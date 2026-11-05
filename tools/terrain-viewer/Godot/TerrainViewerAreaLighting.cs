@@ -25,19 +25,12 @@ public partial class TerrainViewerApp
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
-    // ARC-DEV-124 (MIG12 S5): every frame step opens with the NPCs' change-of-place ping (TM12) and runs the AI host's goal runs as its participant.
-    private AreaAmbientDriver CreateAreaAmbient(AreaLightingSource source, GameSessionOwner session, long sector)
-    {
-        var driver = AreaAmbientDriver.Create(source, session, sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
-        driver.Frame.Register(AiFrameParticipant);
-        return driver;
-    }
-
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
-        _areaAmbient = CreateAreaAmbient(lighting.Source, _areaSession, ActiveAreaSector());
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
+        BindFrameParticipants(_areaAmbient);
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -51,16 +44,29 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
-        _areaAmbient = CreateAreaAmbient(previous.Source, session, previous.Selection.Sector);
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
+        BindFrameParticipants(_areaAmbient);
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
     }
 
+    // ARC-DEV-125 (MIG12 S6): the viewer's frame participant, registered on the driver's frame step (it runs after the event passes of
+    // every frame): it carries the frame's clocks to the systems that read time between frames. ARC-DEV-124 (MIG12 S5): the AI host is the
+    // other one, and every frame step opens with the NPCs' change-of-place ping (TM12, the placePing given to the driver).
+    private void BindFrameParticipants(AreaAmbientDriver driver) => BindFrameParticipants(driver.Frame);
+
+    private void BindFrameParticipants(FrameStep frame)
+    {
+        _frameTap = new FrameClockTap();
+        frame.Register(_frameTap);
+        frame.Register(AiFrameParticipant);
+    }
+
     private void StopAreaAmbient()
     {
-        _areaAmbient = null;
+        _areaAmbient = null; _frameTap = null;
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
 
@@ -77,25 +83,29 @@ public partial class TerrainViewerApp
     }
 
     // ARC-RENDER-031: animation time of the lights since the map's lighting bound (ledger LT3, LT6: the original starts a
-    // light's animation when the light enters its sector list at load); it stands still while the game pauses.
+    // light's animation when the light enters its sector list at load). ARC-DEV-125: it is the frame clocks' world milliseconds since
+    // the frame in which it bound, so it stands still while the game pauses, is cut with a long frame like every animation and is not
+    // moved by a jump (a world-map step or a round's second does not run the lights for minutes).
     private double _lightAnimationMs;
     private string? _lightAnimationKey;
+    private long? _lightAnimationBaseMs;
 
-    private void ResetLightAnimation() { _lightAnimationMs = 0; _lightAnimationKey = null; }
+    private void ResetLightAnimation() { _lightAnimationMs = 0; _lightAnimationKey = null; _lightAnimationBaseMs = null; }
 
     // The hour's form posed at the animation time (AtHour first: a posed view keeps no day form). Pure: the draw-time
     // companion delegate calls it too.
     private AreaLocalLighting? LightsNow(AreaLocalLighting? local, AreaAmbientDriver driver) =>
         local?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
 
-    /// <summary>Per frame: the animation time runs unless the clock pauses; a light that changed its frame or offsets pushes
-    /// a new view.</summary>
-    private void TickLightAnimation(double delta)
+    /// <summary>Per frame, after the clock's frame: the animation time follows the frame clocks (<see cref="FrameClockTap"/>); a light
+    /// that changed its frame or offsets pushes a new view.</summary>
+    private void TickLightAnimation()
     {
         // Automated runs drive the animation time themselves, as they drive the clock (TickAreaClock).
         if (SelfTestBootstrap || _nativeSmoke) return;
         if (_areaAmbient is not { } driver || _readyArea?.Lighting?.Local is not { } local || local.Field.Animated.Count == 0) return;
-        if (!driver.Clock.PauseDisposition.Paused) _lightAnimationMs += delta * 1000;
+        if (_frameTap?.Clocks is not { } clocks) return;
+        _lightAnimationMs = clocks.WorldMs - (_lightAnimationBaseMs ??= clocks.WorldMs);
         // With the lighting toggled off nothing is drawn lit; the time still runs.
         if (!driver.Enabled) return;
         var key = local.AtHour(driver.Selection.Hour).AnimationKey((long)_lightAnimationMs);
@@ -114,13 +124,20 @@ public partial class TerrainViewerApp
     // session lasts (the game does not depend on the lighting: the clocks, the event passes and the AI run on it all the same).
     private (GameSessionOwner Session, AreaFrameDriver Driver)? _unlitFrame;
 
+    // The unlit driver's frame step is gone with it, and so is its tap (a stale tap would hold the world time still).
+    private void DropUnlitFrame()
+    {
+        if (_unlitFrame is null) return;
+        _unlitFrame = null; _frameTap = null;
+    }
+
     private void TickUnlitFrame(long hostMilliseconds)
     {
-        if (_readyArea is not { Lighting: null } || _areaSession is not { } session) { _unlitFrame = null; return; }
+        if (_readyArea is not { Lighting: null } || _areaSession is not { } session) { DropUnlitFrame(); return; }
         if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session))
         {
             var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
-            driver.Frame.Register(AiFrameParticipant);
+            BindFrameParticipants(driver.Frame);
             _unlitFrame = held = (session, driver);
         }
         held.Driver.Tick(hostMilliseconds, WorldModal);
@@ -131,7 +148,7 @@ public partial class TerrainViewerApp
     private void TickAreaClock(long hostMilliseconds)
     {
         if (_areaAmbient is not { } driver) { TickUnlitFrame(hostMilliseconds); return; }
-        _unlitFrame = null;
+        DropUnlitFrame();
         var paused = driver.ModalPaused;
         var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
         LogAreaEvents(driver);
