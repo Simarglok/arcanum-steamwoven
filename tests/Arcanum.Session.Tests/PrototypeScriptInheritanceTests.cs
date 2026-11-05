@@ -24,6 +24,7 @@ public sealed class PrototypeScriptInheritanceTests
     private static readonly SessionPrototypeScript[] Array_ =
     [
         new(SessionScriptPoint.Use, 0, 9, 0x0102), new(SessionScriptPoint.WieldOn, WieldOn, 3, 0), new(SessionScriptPoint.WieldOff, WieldOff, 0, 0),
+        new(SessionScriptPoint.Throw, 0, 0, 0),
     ];
 
     // Wield on writes counter 0 (the first write to the ring's array); wield off changes nothing.
@@ -72,6 +73,7 @@ public sealed class PrototypeScriptInheritanceTests
         Assert.AreEqual(new SessionItemScriptSlot(ring, SessionScriptPoint.WieldOn, WieldOn, 3, 0), owner.QueryItemScriptSlot(ring, SessionScriptPoint.WieldOn));
         Assert.AreEqual(new SessionItemScriptSlot(ring, SessionScriptPoint.Use, 0, 9, 0x0102), owner.QueryItemScriptSlot(ring, SessionScriptPoint.Use), "an element with no script is present");
         Assert.IsNull(owner.QueryItemScriptSlot(ring, SessionScriptPoint.Drop), "a point the prototype has no element at");
+        Assert.AreEqual(new SessionItemScriptSlot(ring, SessionScriptPoint.Throw, 0, 0, 0), owner.QueryItemScriptSlot(ring, SessionScriptPoint.Throw));
         Assert.AreEqual(0, owner.QueryItemScriptSlots().Count, "the read is through the prototype: nothing is copied");
         Assert.IsNull(owner.QueryItemScriptSlot("kit:1", SessionScriptPoint.WieldOn), "a kit item's slot is the host's data");
         Assert.IsNull(owner.QueryItemScriptSlot("made:99", SessionScriptPoint.WieldOn), "an item the session does not hold");
@@ -104,7 +106,8 @@ public sealed class PrototypeScriptInheritanceTests
         var worn = owner.Equip(owner.Version, ring, EquipmentSlot.Ring1, Wearable(), Drawn, Accept, host);
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (worn.Disposition, worn.Failure));
         CollectionAssert.AreEqual(new[] { (SessionScriptPoint.WieldOn, ring) }, worn.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
-        // The run read the prototype's slot and wrote counter 0; the other points came along with their prototype values.
+        // The run read the prototype's slot and wrote counter 0; the other points came along with their prototype values (the all-zero
+        // element at the throw point reads as an absent one and is not kept).
         CollectionAssert.AreEqual(new[]
         {
             new SessionItemScriptSlot(ring, SessionScriptPoint.Use, 0, 9, 0x0102),

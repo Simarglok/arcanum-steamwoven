@@ -284,16 +284,18 @@ created object has no loaded row.
 - **What the session creates from a prototype.** Only the made items (`made:n`: a script's create object, an assembly product, a split or given stack; the one registration `CreateMadeItem`, whose `SessionItemKind` names
   the prototype). The session creates no other object from a prototype (no NPC, container or portal; junk piles and pools of blood have no script), so the mobile `oid:` objects of the vocabulary are all map data and need no inheritance.
 - **The prototype's array.** `CombatObjectFields.ScriptAttachments` reads every element of the prototype's field 31 (SA1: flags, counters, script number, the script-0 elements included) next to `ScriptPoints`.
-  The host hands them to the session by prototype with `GameSessionOwner.AttachItemScripts` (`SessionPrototypeScript`; not state, never saved, attached again after a restore, the way `AttachItemWeights` is);
+  The host hands them to the session by prototype with `GameSessionOwner.AttachItemScripts` (`SessionPrototypeScript`; not state, never saved, the host attaches it again after a restore, the way `AttachItemWeights` is);
   `AreaPrototypeItems` supplies them from the prototype files and `AreaUseScripts` attaches them with the weights when a script creates an item.
 - **Reads.** `QueryItemScriptSlot(entity, point)` and the item script runs (`SessionFlagReads.Slot`) answer a kept slot first, else, for a made item that has no kept slot at all, the prototype's element; a point the prototype has no
   element at reads none (SA1: an absent index reads as no script). An array the store could not keep (a point outside 0..35 or twice, the dialog-override point 31, a script number outside 0..99999) counts as none, whole.
 - **The first write.** A run that changes a made item's slot (a wield-on script counting into a counter) commits the whole prototype array onto the item's kept slots, then the written points over it (`ItemScriptRuns.Writes`,
-  also what the slot budget counts); from then on the item owns its array and a different prototype source no longer matters. The kept slots are the existing `inventory.scriptSlots` rows (the item scripts' S12 store): **no schema change**.
+  also what the slot budget counts, planned once in `Prepare` so the commit asks the host nothing; an all-zero element is not kept, it reads as an absent one); from then on the item owns its array and a different prototype source no longer matters. The kept slots are the existing `inventory.scriptSlots` rows (the item scripts' S12 store): **no schema change**.
 - **Tests.** [PrototypeScriptInheritanceTests](../../tests/Arcanum.Session.Tests/PrototypeScriptInheritanceTests.cs) (inherited reads, invalid arrays, the first-write copy through a worn ring, save and restore, destroy),
   [CombatFieldReaderTests](../../tests/Arcanum.Data.Tests/Combat/CombatFieldReaderTests.cs) (the array as 12-byte elements).
-- **Not done here.** The inheritance reaches the item script events (equipment moves, transfers, drops) of a made item only while a source is attached, which today is after a script created an item in the viewer;
-  the other creators (the schematics' products) attach weights only, so such a product has no attachment to inherit until they attach scripts too. The session makes no copy of an
+- **Limit: the source is attached by the viewer only when a script creates an item** (`AreaUseScripts`), and nothing attaches it after a restore or in a session where no script created an item yet. In
+  such a session a made item has no attachment to inherit, and a first write copies nothing but the written point; once a script attaches the source it answers for every prototype, so items made earlier
+  (schematic products, split stacks) inherit from then on, which is what the original does for every created object. Attaching the source wherever a session is built or restored (next to the weights)
+  is the follow-up. The inheritance reaches the item script events (equipment moves, transfers, drops) of a made item only while a source is attached. The session makes no copy of an
   object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is the next slice.
 
 ## Not ready

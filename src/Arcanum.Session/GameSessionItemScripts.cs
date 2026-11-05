@@ -33,8 +33,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
     /// prototype (<c>made:n</c> items): a created object owns no array and reads its prototype's until its first write, which copies every point
-    /// of the prototype's array onto it (SA3). Not state: it is never saved and is attached again after a restore (the way
-    /// <see cref="AttachItemWeights"/> is); null detaches it. Without one, or for a prototype it answers null or an invalid array for (a point
+    /// of the prototype's array onto it (SA3). Not state: it is never saved and is the host's to attach again after a restore (the way
+    /// <see cref="AttachItemWeights"/> is; the viewer attaches both when a script creates an item); null detaches it. Without one, or for a prototype it answers null or an invalid array for (a point
     /// outside 0..35 or twice, the dialog-override point 31 the store refuses, a script number outside 0..99999), a created item has no attachment
     /// until a run writes one, which is the older behaviour.
     /// </summary>
@@ -133,6 +133,7 @@ public sealed partial class GameSessionOwner
         private readonly List<EffectStep> _steps = [];
         private readonly Dictionary<int, SessionEffectDefinition> _definitions;
         private PreparedEffects? _prepared;
+        private Dictionary<(string Entity, int Point), ScrSlot>? _planned;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items)
         {
@@ -264,7 +265,13 @@ public sealed partial class GameSessionOwner
         {
             var writes = new Dictionary<(string Entity, int Point), ScrSlot>();
             foreach (var entity in _slots.Keys.Select(key => key.Entity).Distinct(StringComparer.Ordinal))
-                foreach (var element in _owner.InheritedSlots(entity)) writes[(entity, element.Point)] = new(element.Script, element.LocalFlags, element.Counters);
+                foreach (var element in _owner.InheritedSlots(entity))
+            {
+                // An all-zero element reads exactly as an absent one (the interpreter's default is the zero record), so it is not kept: the
+                // copy of a sparse array costs the slots that say something.
+                if (element is { Script: 0, LocalFlags: 0, Counters: 0 }) continue;
+                writes[(entity, element.Point)] = new(element.Script, element.LocalFlags, element.Counters);
+            }
             foreach (var (key, slot) in _slots) writes[key] = slot;
             return writes;
         }
@@ -278,7 +285,9 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return;
             if (_writes.Count > 0 && _owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) { Failure = GameSessionFailure.RevisionExhausted; return; }
-            if (Writes().Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
+            // The slots are planned once, here: the commit applies this plan and asks the host nothing more after the first flag write.
+            _planned = Writes();
+            if (_planned.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
             {
                 Failure = GameSessionFailure.BudgetExceeded;
                 return;
@@ -297,7 +306,7 @@ public sealed partial class GameSessionOwner
                 if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
                     throw new InvalidOperationException("ITEM_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
             }
-            foreach (var (key, slot) in Writes()) _owner._inventory.ScriptSlots[key] = slot;
+            foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
         }
     }
