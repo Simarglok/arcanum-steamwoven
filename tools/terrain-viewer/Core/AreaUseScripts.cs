@@ -63,7 +63,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -111,7 +111,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject]),
-        ScrAdmissionSet.S4.ValueKinds,
+        ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
 
@@ -146,7 +146,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction]),
-        ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
+        ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
+        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
@@ -440,6 +441,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
     public int StoryState() => _session.QueryStoryState();
+
+    /// <summary>ARC-DEV-100 (GV1–GV4): the session's global variables and the hero's variables and flags, which the sets of this host admit
+    /// (the use, tile, sector and heartbeat runs). A session without a hero reads 0 for the PC's.</summary>
+    public int GlobalVariable(int index) => _session.QueryGlobalVariable(index);
+    public int PcVariable(int index) => _session.QueryPcVariable(index);
+    public bool PcFlag(int index) => _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     // ARC-SCRIPT-047: the dialog gates of a call-ex of an NPC's dialog point (E6): dead as the session holds it (map data or killed);
     // surrender and mind control are not modelled here (normal).
@@ -719,6 +726,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-DEV-100: the global variables and the hero's variables and flags.
+        if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
         if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later

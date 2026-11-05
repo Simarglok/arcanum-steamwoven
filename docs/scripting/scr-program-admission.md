@@ -63,7 +63,7 @@ carries exactly one of the program and the refusal.
 | `UnknownCondition`, `UnknownAction` | P2 | the type is outside the catalogue |
 | `ConditionNotAdmitted`, `ActionNotAdmitted` | P2 | a known type is outside the set |
 | `UnknownValueKind`, `ValueKindNotAdmitted` | P3 | a number slot's kind byte is above 6, or outside the set |
-| `UnknownFocusKind`, `FocusKindNotAdmitted` | P3 | an object slot's kind byte is above 23, or outside the set |
+| `UnknownFocusKind`, `FocusKindNotAdmitted` | P3 | an object slot's kind byte is above 23, or outside the set; since ARC-DEV-100 also a PC variable or PC flag operand (value kind 5 or 6) whose high 16 bits (the focus kind of its object, an arithmetic shift) are no focus kind or one the set does not admit (its low 16 bits are the index, any of 0..65535) |
 | `IndexOutOfRange` | P4 | a literal index outside its store: a counter, local variable, global flag, global variable or local object operand, or the literal flag number of a local-flag (0..31) or global-flag (0..3199) condition or action |
 | `WriteToNumber` | P5 | an assign, add, subtract, multiply, divide or get-story-state action stores into a number literal (operand 0), or a get-skill action (set S11, ARC-SKILLS-009) into one (its operand 2) |
 | `ComputedGoto` | P6 | a goto whose target is not a number literal |

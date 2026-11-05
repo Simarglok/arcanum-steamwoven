@@ -1,3 +1,5 @@
+using Arcanum.Scripting.Scr;
+
 namespace Arcanum.Session;
 
 /// <summary>ARC-DEV-098 (MIG8, GR29, TM9; SA13, SA14): the bounds of the script stores the session keeps beside the global flags and the story number.</summary>
@@ -117,6 +119,27 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         ScriptStores.Write(_scripts.PcFlags, element, next);
         return Changed();
+    }
+
+    /// <summary>
+    /// ARC-DEV-100 (MIG8 slice 4, GV1–GV4): applies the script store changes of a run's effects in the order the run leaves them (the global
+    /// variables, then the hero's variables, then its flags), each as one versioned write. A write the session refuses stops the later ones
+    /// and returns false, except that a session without a hero ignores a PC write, as the original ignores a write to an object that is not a
+    /// PC (SA14); the earlier writes stay, as the original applies as it goes.
+    /// </summary>
+    public bool ApplyScriptStores(ScrEffects effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        foreach (var write in effects.GlobalVariables)
+            if (SetGlobalVariable(Version, write.Index, write.Value).Disposition == GameSessionDisposition.Rejected) return false;
+        foreach (var write in effects.PcVariables)
+            if (Refused(SetPcVariable(Version, write.Index, write.Value))) return false;
+        foreach (var write in effects.PcFlags)
+            if (Refused(SetPcFlag(Version, write.Index, write.Value))) return false;
+        return true;
+
+        static bool Refused(GameSessionMutationResult result) =>
+            result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.PcScriptsUnavailable;
     }
 
     private GameSessionMutationResult SetScript(GameSessionVersion expected, bool inRange, bool pc, Dictionary<int, int> store, int index, int value)

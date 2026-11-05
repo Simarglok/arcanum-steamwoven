@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S20"/>.
+/// <see cref="ScrAdmissionSet.S21"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -48,6 +48,10 @@ internal sealed class ScrInterpreter
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
         public readonly SortedDictionary<int, bool> Flags = new();
+        // ARC-DEV-100 (GV1–GV4): the run's writes to the global variables, the hero's variables and the hero's flags (the flags already spread
+        // over their 32-flag word), read back by the run itself and handed to the caller with the global flags.
+        public readonly SortedDictionary<int, int> GlobalVariables = new(), PcVariables = new();
+        public readonly SortedDictionary<int, bool> PcFlags = new();
         public int? Story, StoryBefore;
         // Lines executed by every run of the dispatch (a project bound across nested calls).
         public int Executed;
@@ -72,6 +76,8 @@ internal sealed class ScrInterpreter
     private int? _story { get => _shared.Story; set => _shared.Story = value; }
     private int? _storyBefore { get => _shared.StoryBefore; set => _shared.StoryBefore = value; }
     private readonly ScrRunOptions _options;
+    // The line being executed, which an operand read that stops the run (an absent object of a PC operand) names.
+    private int _line;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly List<ScrTraceStep> _trace = new();
     private uint _localFlags, _counters;
@@ -119,6 +125,7 @@ internal sealed class ScrInterpreter
                 if (executed == _options.MaxExecutedLines) { stop = ScrStop.Budget; stopLine = line; break; }
                 // The original's line read compares unsigned, so any line outside 0..count−1 fails it.
                 if (line < 0 || line >= count) { stop = ScrStop.LineOutOfRange; stopLine = line; break; }
+                _line = line;
                 var row = lines[line];
                 var always = row.Condition.Type == ScrCatalogue.Condition.True;
                 var held = always || Condition(row.Condition, line);
@@ -158,6 +165,7 @@ internal sealed class ScrInterpreter
         var outcome = stop == ScrStop.ReturnRunDefault ? ScrOutcome.RunDefault : ScrOutcome.SkipDefault;
         var flags = _flags.Where(p => p.Value != _host.GlobalFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
+        var stores = StoreWrites();
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()),
             _lines.Count == 0 ? null : Array.AsReadOnly(_lines.ToArray()), _sounds.Count == 0 ? null : Array.AsReadOnly(_sounds.ToArray()),
@@ -171,7 +179,7 @@ internal sealed class ScrInterpreter
             _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()),
             _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()),
             _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()),
-            _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()));
+            _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores);
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -675,6 +683,10 @@ internal sealed class ScrInterpreter
             ScrValueKind.LocalVariable => _locals[index],
             ScrValueKind.Number => index,
             ScrValueKind.GlobalFlag => Flag(index) ? 1 : 0,
+            ScrValueKind.GlobalVariable => GlobalVariable(index),
+            // GV3, GV4: the operand packs the object in its high 16 bits and the index in its low 16; any object but a PC reads 0 (0x444DB0, 0x444E30).
+            ScrValueKind.PcVariable => PcStore(index, out var variable) ? PcVariable(variable) : 0,
+            ScrValueKind.PcFlag => PcStore(index, out var flag) ? PcFlag(flag) ? 1 : 0 : 0,
             _ => throw new InvalidOperationException("Value kind outside the interpreter's set."),
         };
     }
@@ -693,21 +705,60 @@ internal sealed class ScrInterpreter
                 _counters = (_counters & ~(0xFFu << CounterShift(index))) | (((uint)value & 0xFF) << CounterShift(index));
                 break;
             case ScrValueKind.LocalVariable: _locals[index] = value; break;
-            case ScrValueKind.GlobalFlag: WriteFlag(GlobalFlag(index, line), value); break;
+            case ScrValueKind.GlobalFlag: WriteFlag(_flags, GlobalFlag(index, line), value); break;
+            // GV1: a global variable keeps the whole 32-bit value, unmasked (0x444C90).
+            case ScrValueKind.GlobalVariable: _shared.GlobalVariables[GlobalVariableIndex(index, line)] = value; break;
+            // GV3, GV4: a write to any object but a PC is ignored (0x444DF0, 0x444E90).
+            case ScrValueKind.PcVariable: if (PcStore(index, out var variable)) _shared.PcVariables[variable] = value; break;
+            case ScrValueKind.PcFlag: if (PcStore(index, out var flag)) WriteFlag(_shared.PcFlags, flag, value); break;
             default: throw new InvalidOperationException("Store outside the interpreter's set.");
         }
     }
 
     private static int CounterShift(int index) => unchecked(8 * index) & 31;
 
-    private void WriteFlag(int index, int value)
+    // X10, and GV4 for the hero's flags (0x444E90 is the same code over field 272): clear the flag's bit, then OR the value shifted to it into
+    // the flag's 32-flag word.
+    private void WriteFlag(SortedDictionary<int, bool> flags, int index, int value)
     {
-        if (!_options.Rules.GlobalFlagWriteSpills) { _flags[index] = (value & 1) != 0; return; }
-        // X10, the original: clear the flag's bit, then OR the value shifted to it into the flag's 32-flag word.
+        if (!_options.Rules.GlobalFlagWriteSpills) { flags[index] = (value & 1) != 0; return; }
         var bit = index % 32; var word = index - bit;
         var bits = unchecked((uint)(value << bit));
-        _flags[index] = ((bits >> bit) & 1) != 0;
-        for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) _flags[word + j] = true;
+        flags[index] = ((bits >> bit) & 1) != 0;
+        for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) flags[word + j] = true;
+    }
+
+    // GV3, GV4: whether the PC operand's object is a PC, and its index. The object is the first of the focus kind in the high 16 bits (0x44B960
+    // with value 0, the shift keeps the sign); an absent one stops the run as for any object operand (OV3), and one that is not a PC reads 0
+    // and ignores a write.
+    private bool PcStore(int packed, out int index)
+    {
+        index = packed & 0xFFFF;
+        var obj = FocusObject((ScrFocusKind)(packed >> 16), 0) ?? throw new MissingObjectStop(_line);
+        return _host.IsPc(obj);
+    }
+
+    private IScrStoreQueries Stores => _host as IScrStoreQueries
+        ?? throw new InvalidOperationException("SCR_STORE_QUERIES_REQUIRED: the admission set holds a global variable, PC variable or PC flag operand and the host cannot answer it.");
+
+    private int GlobalVariable(int index) =>
+        _shared.GlobalVariables.TryGetValue(GlobalVariableIndex(index, _line), out var value) ? value : Stores.GlobalVariable(index);
+
+    private int PcVariable(int index) => _shared.PcVariables.TryGetValue(index, out var value) ? value : Stores.PcVariable(index);
+
+    private bool PcFlag(int index) => _shared.PcFlags.TryGetValue(index, out var value) ? value : Stores.PcFlag(index);
+
+    private static int GlobalVariableIndex(int index, int line) => index is >= 0 and < ScrCatalogue.GlobalVariables ? index : throw new IndexStop(line);
+
+    // The store changes the run leaves: a value equal to the store's own is no change.
+    private ScrStoreWrites? StoreWrites()
+    {
+        var shared = _shared;
+        if (shared.GlobalVariables.Count == 0 && shared.PcVariables.Count == 0 && shared.PcFlags.Count == 0) return null;
+        var globals = shared.GlobalVariables.Where(p => p.Value != Stores.GlobalVariable(p.Key)).Select(p => new ScrVariableWrite(p.Key, p.Value)).ToArray();
+        var variables = shared.PcVariables.Where(p => p.Value != Stores.PcVariable(p.Key)).Select(p => new ScrVariableWrite(p.Key, p.Value)).ToArray();
+        var flags = shared.PcFlags.Where(p => p.Value != Stores.PcFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
+        return globals.Length + variables.Length + flags.Length == 0 ? null : new ScrStoreWrites(globals, variables, flags);
     }
 
     private ScrObjectRef Object(ScrClause c, int slot, int line) => OptionalObject(c, slot) ?? throw new MissingObjectStop(line);
@@ -725,19 +776,21 @@ internal sealed class ScrInterpreter
         return seconds <= 0 ? 8L : seconds * 8000L;
     }
 
-    private ScrObjectRef? OptionalObject(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
+    private ScrObjectRef? OptionalObject(ScrClause c, int slot) => FocusObject((ScrFocusKind)c.Kind(slot), c.Value(slot));
+
+    private ScrObjectRef? FocusObject(ScrFocusKind kind, int value) => kind switch
     {
         ScrFocusKind.Triggerer => _roles.Triggerer,
         ScrFocusKind.Attachee => _roles.Attachee,
         ScrFocusKind.ExtraObject => _roles.Extra,
         ScrFocusKind.Player => _host.Player(),
         // OV4: an object variable never assigned in this run names no object.
-        ScrFocusKind.LocalObject => _objects[c.Value(slot)],
+        ScrFocusKind.LocalObject => _objects[value],
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
         // A group's first object (0x44B960), none for an empty one.
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity
-            => Vicinity((ScrFocusKind)c.Kind(slot)) is { Count: > 0 } list ? list[0] : null,
+            => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
