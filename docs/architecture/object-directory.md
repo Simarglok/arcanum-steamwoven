@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092) and MIG7b (ARC-DEV-093) of MIG7** (2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093) and MIG7c (ARC-DEV-094) of MIG7** (2026-11-04). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -193,6 +193,30 @@ under their map on purpose; MIG7b keeps them in the same store as the fields of 
   restore refuses it. The step does not repair damage: a state row that is unreadable, a `sector:` row or rows out of order in the schema 62 text are `NotCanonical` (or `WrongType`), whether or not anything moves. The 61 to 62 step now reads a frozen copy of the schema 62 vocabulary, so it still moves mobile objects only.
 - **Not done here.** The viewer's consumers still read through `QueryMapChange` with the map they always used (the static's own map, which now is also its identity); NPC positions (MIG7c), links as `ObjectId` fields and the GQ7 B switch (MIG7d)
   and the script attachments (MIG8) are other slices. GR5 stays open for NPC positions and the attachments.
+
+## MIG7c: what is built
+
+Where a map NPC stands was run-local state: the AI host's movers (`AreaAiMovers`) held the cell and facing of every NPC the host had walked or turned, and a quick load, a map change or a window move built the host again
+with no movers, so every NPC stood on its map data's cell (GR10, bugs B06 and B10 of the [smoke plan](../research/open-bugs-migration-smoke-plan.md)). MIG7c makes the place **object state**: one more field of the mobile
+object's entry, in the store MIG7a built.
+
+- **The field.** `npc.pos` (`SessionNpcPlacement.Property`), a mobile object field of `ObjectStateVocabulary`: the world cell and the facing packed into one value (the packing of a companion's `npc.cell`, now one
+  `SessionNpcPlacement.Encode/Decode` that `AreaCompanionPlacement` delegates to), kept on the map whose data lists the NPC. It is **not** `npc.cell`: that field names the companions the roster stands on a map
+  (`AreaVisitors.Here` lists every `npc.cell` of a map that is no template of its own scene), and a walking resident is no companion. An NPC with no record stands on its map data's cell.
+- **Session API.** `RecordNpcPlace(expected, map, entity, cell, facing)` (one revision; the same place again is no change; a cell or facing outside the packing, a bad entity or one that is not a mobile `oid:` object is `InvalidChangeKey`),
+  `QueryNpcPlace(entity)` (the place with the map it names) and `QueryNpcPlaces(map)` (by entity, ordinal). `QueryObjectState(entity)` lists it among the entry's fields; the budgets count it like any change.
+- **Who writes it.** The AI host, at the two places it moves a map NPC's mover: `BeginStep` (the mover takes the next cell at once, so the cell recorded is the one the NPC walks to) and the turn toward a cell
+  (`FaceNpc`). A companion's step goes through the roster's own walk and writes `npc.cell` as before. A refused write only leaves that place unsaved (the host's trace says so).
+- **Who reads it.** A host built for a map (`AreaAiHost` constructor and `Reset`) restores a mover, with no step under way, for each NPC it runs that has a place on that map (not one switched off or destroyed, and not a place outside the chart, not admitted or on the hero's cell: that NPC stands on its map data's cell and the host's trace says so): after a quick load, a map change or a
+  window move the NPC stands where it was left. The NPC's own T0 record stays the map data's, so the occupancy and the drawing of the moved body are those of a mover that walked there in this run.
+- **Snapshot (schema 64).** The place is a row of `objects.state` (`oid:` entity, `npc.pos`, map, value), sorted with the others; a restore refuses it left in the maps section (`InvalidSnapshot`) or on a static
+  entity (`InvalidChangeKey`). No build before wrote the field, so the step from 63 moves nothing (it checks that the objects state is there, as the older schema carried it).
+- **Smoke.** The `ai` stage checks, after the fighter walked, that the session holds the cell and facing of its mover and that a host built again over the same session and scene stands it there. A stage that
+  starts from the map data's cells (`ai`, `ai-turn-based`, `ai-cast`, `ai-follower`) forgets the places the stage before it left, since the stages of one run share a session.
+- **Not done here.** The place is written when the host moves the NPC; nothing else moves a map NPC yet (a script teleport, the waypoint re-placement of the fold, an NPC thrown or knocked back), and an NPC outside
+  the shown window is not walked (MIG9). An NPC that joins the party starts from its T0 cell, not from the place it was left on (the roster's `npc.cell` is its own record), and its `npc.pos` stays on the map as a stale record (the host ignores it while the NPC is a companion); an NPC that leaves for another map
+  keeps a place on the map it left (MIG11). The goal run, its animation and the AI tick are not saved with the place (GR18, MIG14), so after a load an NPC stands where it was and chooses its next goal afresh. The
+  links as `ObjectId` fields and the GQ7 B switch are MIG7d; GR5 stays open for the script attachments (MIG8).
 
 ## Not ready
 

@@ -54,6 +54,29 @@ public sealed class AreaAiHostTests
     }
 
     [TestMethod]
+    public void A_restored_mover_stands_where_the_session_left_it_with_no_step_under_way()
+    {
+        // ARC-DEV-094 (MIG7c): the place the session recorded (the cell and facing the host last gave the NPC) comes back as a mover with no slide.
+        var origin = new CellCoord(5, 5);
+        var movers = new AreaAiMovers();
+        var version = movers.Version;
+        movers.Restore("rat", Rat, origin, new(9, 7), NeighborDirection.YPlus);
+        Assert.IsTrue(movers.Version > version);
+        Assert.AreEqual(new CellCoord(9, 7), movers.CellOf("rat", origin));
+        Assert.AreEqual(NeighborDirection.YPlus, movers.FacingOf("rat", NeighborDirection.XPlus));
+        Assert.IsTrue(movers.IsMoved("rat"));
+        Assert.IsNull(movers.Of("rat")!.From);
+        Assert.IsFalse(movers.Of("rat")!.Stepping(0));
+        CollectionAssert.AreEqual(new[] { new CellCoord(9, 7) }, movers.Held().ToArray(), "it holds its cell, as a mover that finished its step");
+        CollectionAssert.AreEqual(new[] { Rat }, movers.Moved.ToArray(), "its T0 record is the one moved");
+
+        // A place on the map data's own cell (a turn) is a mover that is not moved: it keeps its facing only.
+        movers.Restore("rat", Rat, origin, origin, NeighborDirection.XMinus);
+        Assert.IsFalse(movers.IsMoved("rat"));
+        Assert.AreEqual(NeighborDirection.XMinus, movers.FacingOf("rat", NeighborDirection.XPlus));
+    }
+
+    [TestMethod]
     public void A_settled_step_holds_one_cell_and_the_event_world_without_a_host_ends_the_tick()
     {
         var movers = new AreaAiMovers();

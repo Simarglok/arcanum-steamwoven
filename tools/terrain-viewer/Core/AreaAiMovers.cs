@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
+using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -26,8 +27,7 @@ public sealed record AreaAiMover(string Entity, AreaObjectKey Key, CellCoord Ori
 /// <summary>
 /// ARC-WORLD-092: the NPCs of the shown map that the AI host moved, in world cells (an NPC never moved stands on its map data's
 /// cell and has no entry). The goal machine's step puts an NPC on its next cell at once (it stands there when the run's next step
-/// comes); the drawing slides its body there over the step's time (ARC-WORLD-111: the viewer draws the walk or run cycle on it). Moved NPCs are not saved: a load or a map change stands every
-/// NPC on its map data's cell again. Caller-serialized; no Godot.
+/// comes); the drawing slides its body there over the step's time (ARC-WORLD-111: the viewer draws the walk or run cycle on it). ARC-DEV-094: where an NPC stands is session state (<see cref="GameSessionOwner.RecordNpcPlace"/>); a host built again (a load, a map change, a window move) restores its movers from it. Caller-serialized; no Godot.
 /// </summary>
 public sealed class AreaAiMovers
 {
@@ -52,6 +52,16 @@ public sealed class AreaAiMovers
         var from = CellOf(entity, origin);
         var facing = AreaCombatHost.Facing(from, next) ?? FacingOf(entity, NeighborDirection.XPlus);
         _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs, Running = running };
+        Version++;
+    }
+
+    /// <summary>
+    /// ARC-DEV-094 (MIG7c): stands the NPC where the session recorded it (<see cref="GameSessionOwner.QueryNpcPlaces"/>), with no step under way: what a
+    /// load, a map change or a window move gives back to a mover the host had before.
+    /// </summary>
+    public void Restore(string entity, AreaObjectKey key, CellCoord origin, CellCoord cell, NeighborDirection facing)
+    {
+        _movers[entity] = new AreaAiMover(entity, key, origin, cell, facing);
         Version++;
     }
 
