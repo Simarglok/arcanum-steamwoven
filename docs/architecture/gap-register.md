@@ -283,7 +283,7 @@ is implemented).
 | K12 Movies, slides, endings | GR20 (frozen-ping modes, TL46) | TM6 |
 | K13 Object directory and field store (new) | GR1–GR7, GR17 | GQ1; written as MIG6's design: [object directory](object-directory.md) (MIG6a done, ARC-DEV-084; MIG6b, ARC-DEV-085; MIG6c, ARC-DEV-086; MIG6d-1, ARC-DEV-088: the NPC and container lists as entries; MIG6d-2, ARC-DEV-090: the hero's lists, placed items and given records as entries; MIG6d-3, ARC-DEV-091: the junk piles and pools of blood as records, one snapshot section) |
 | K14 One goal table for every animated object (new) | GR24, GR25, GR26, GR27 | TM7; MIG13's design |
-| K15 Clocks and the frame in the session (new) | GR20, GR21, GR22 | GQ3; MIG12's design |
+| K15 Clocks and the frame in the session (new) | GR20, GR21, GR22 | GQ3; written as MIG12's design: [clocks and the frame](clocks-frame.md) (S1, ARC-DEV-120) |
 | K16 Interface mode stack (new) | GR35 | TM13; MIG16's design: [interface modes](interface-modes.md) (S1, ARC-DEV-108: the stack and its tables in `Arcanum.World`; S2, ARC-DEV-109: the viewer's windows open through it and the cursor and the modal test read it; S3, ARC-DEV-110: its target modes and overlays are on it too; S4, ARC-DEV-111: the input gates, Esc, the window keys and the opener refusals follow it as the original's do, owner decision D9) |
 
 K13 to K16 are new concept documents: the target model changes these parts enough that each
