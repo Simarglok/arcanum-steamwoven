@@ -13,6 +13,10 @@ public sealed record AreaMapDestination(int Runtime, int Catalogue, string Name)
 public sealed record AreaMapTransfer(MapTransitionSite Site, int FromMap, AreaMapDestination To, AreaStepCell Arrival, AreaObjectKey? Trigger)
 {
     public bool SameMap => To.Runtime == FromMap;
+
+    /// <summary>ARC-DEV-113: the extras of a script's fade-and-teleport (action 102, ledger TR2), or null for a jump point, a plain
+    /// teleport (action 44) and an unconditional site, which request with flags 0 (TR1, TR3).</summary>
+    public ScrTeleportFade? Fade { get; init; }
 }
 
 /// <summary>The answer to one map-mode use of an object or entry of a tile.</summary>
@@ -162,7 +166,7 @@ public sealed class AreaMapTransfers
         var ran = LastScripted = runner(site, use.Object, teleport => Refusal(Teleported(site, teleport)));
         return ran.Outcome switch
         {
-            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), trigger, check.Distance),
+            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), trigger, check.Distance, ran.Teleport!.Fade),
             AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), check.Distance, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, use.Site, check.Distance, ran.Detail),
             _ => new(AreaUseOutcome.ScriptRefused, use.Site, check.Distance, ran.Detail),
@@ -212,7 +216,7 @@ public sealed class AreaMapTransfers
         return ran.Outcome switch
         {
             AreaScriptedUseOutcome.Teleport when Pending is not null => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, "TRANSITION_PENDING"),
-            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0),
+            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0, ran.Teleport!.Fade),
             AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), 0, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, site, 0, ran.Detail),
             _ => new(AreaUseOutcome.ScriptRefused, site, 0, ran.Detail),
@@ -241,10 +245,10 @@ public sealed class AreaMapTransfers
         return null;
     }
 
-    private AreaMapUseResult Queue(MapTransitionSite site, AreaObjectKey? trigger, int distance)
+    private AreaMapUseResult Queue(MapTransitionSite site, AreaObjectKey? trigger, int distance, ScrTeleportFade? fade = null)
     {
         if (Refusal(site) is { } refusal) return new(AreaUseOutcome.DestinationUnavailable, site, distance, refusal);
-        Pending = new(site, Map.RuntimeMap, _destinations[site.DestinationRuntime], new(site.Arrival.X, site.Arrival.Y), trigger);
+        Pending = new(site, Map.RuntimeMap, _destinations[site.DestinationRuntime], new(site.Arrival.X, site.Arrival.Y), trigger) { Fade = fade };
         return new(AreaUseOutcome.Accepted, site, distance, "QUEUED");
     }
 

@@ -518,7 +518,10 @@ and its step evidence with wall edges.
   original new-game GF domain (0..3199 known false, ARC-SCRIPT-006). Dialogs keep their
   consequences in it ([conversation runtime](../scripting/dialog-conversation-runtime.md#consequences-in-the-game-session-arc-script-006)),
   so they hold after the cave trip. Each transfer records the actor's map and
-  arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
+  arrival cell; the HUD shows it. Since ARC-DEV-113 the transfer is the session's
+  [change of place](../architecture/change-of-place.md#3-what-the-session-does-s2)
+  (a use script's teleport, flags 0): the session writes the actor, the companions
+  and the move list in one revision, and the open switches the coordinator's map. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
 - **Cave view.** The cave is lit by its own map-default ambient scheme and its four stationary sector lights ([ARC-RENDER-012](area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012)); walls are drawn with the wall hotspot rule
