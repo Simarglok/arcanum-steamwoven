@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Runtime.InteropServices;
 
 namespace Arcanum.Simulation.Residency;
 
@@ -26,16 +27,22 @@ public static class SectorCacheRules
     }
 
     /// <summary>
-    /// Whether a sector evicted at <paramref name="evictedAtMs"/> folds when it loads at <paramref name="nowMs"/> (RL8). The original
-    /// keeps game time as two unsigned words {day, millisecond of the day}, subtracts them word by word and compares the difference
-    /// with {0, 3000} (0x45A7D0, 0x45A9B0 from the load step): the sector folds when the day words differ, or, on the same day, when
-    /// the millisecond words differ by at least 3000 as an unsigned number. So a return across midnight folds however short the
-    /// absence, and a time before the eviction (never in play) folds too.
+    /// Whether a sector evicted at <paramref name="evictedAtMs"/> folds when it loads at <paramref name="nowMs"/> (RL8); both are game
+    /// times of 0 or more. The original keeps game time as two unsigned words {day, millisecond of the day}: the lock subtracts the
+    /// eviction's pair from the clock word by word when it takes the record (0x45A7D0) and the load step compares the difference with
+    /// {0, 3000} (0x45A9B0 at both of its sites): the sector folds when the day words differ, or, on the same day, when the
+    /// millisecond words differ by at least 3000 as an unsigned number. So a return across midnight folds however short the absence,
+    /// and a time before the eviction (never in play) folds too. One instant differs: the original's clock add (0x45AA10) can hold
+    /// {d, 86,400,000}, which the session's single timestamp stores as {d + 1, 0}.
     /// </summary>
+    [OriginalFunction(0x45A7D0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45A9B0, OriginalFunctionScope.Partial)]
     public static bool FoldDue(long evictedAtMs, long nowMs)
     {
-        if ((uint)(nowMs / DayMs) != (uint)(evictedAtMs / DayMs)) return true;
-        return (uint)(nowMs % DayMs - evictedAtMs % DayMs) >= FoldAwayMs;
+        ArgumentOutOfRangeException.ThrowIfNegative(evictedAtMs);
+        ArgumentOutOfRangeException.ThrowIfNegative(nowMs);
+        return unchecked((uint)(nowMs / DayMs) != (uint)(evictedAtMs / DayMs) ||
+            (uint)(nowMs % DayMs - evictedAtMs % DayMs) >= FoldAwayMs);
     }
 
     /// <summary>
@@ -51,7 +58,7 @@ public static class SectorCacheRules
     }
 
     /// <summary>
-    /// Locks one sector at game time <paramref name="nowMs"/> (0x4D0540, refusal order: map open, bounds): a hit refreshes the age; a
+    /// Locks one sector at game time <paramref name="nowMs"/> (0x4D0540, refusal order: time, map open, bounds): a hit refreshes the age; a
     /// miss on a full cache evicts the slot of least age (its record enters the history first, dropping the oldest record when the
     /// history is full), then takes the sector's oldest history record out of the history and decides the fold from it.
     /// </summary>
@@ -81,9 +88,10 @@ public static class SectorCacheRules
     }
 
     /// <summary>
-    /// Evicts every slot at game time <paramref name="nowMs"/>, ascending id, each into the history (0x4D0BC0, the pass that empties
-    /// the cache for a map flush, a teleport within the map and a world-map landing). The map stays open. The original evicts only
-    /// slots no caller holds and saves a dirty sector first; here no lock outlives a call and an eviction saves nothing (residency §4).
+    /// Evicts every slot at game time <paramref name="nowMs"/>, ascending id, each into the history (0x4D0BC0 with argument 0, the
+    /// pass that empties the cache for a map flush, a teleport within the map and a world-map landing; its save-only mode is not
+    /// modelled). The map stays open. The original evicts only slots no caller holds and saves a dirty sector first; here no lock
+    /// outlives a call and an eviction saves nothing (residency §4).
     /// </summary>
     [OriginalFunction(0x4D0BC0, OriginalFunctionScope.Partial)]
     public static SectorCacheChange EvictUnlocked(SectorCacheState state, long nowMs)
@@ -101,6 +109,7 @@ public static class SectorCacheRules
     /// nothing, as the original's close does when its closed flag is already set.
     /// </summary>
     [OriginalFunction(0x4CF320, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4D0B40, OriginalFunctionScope.Partial)]
     public static SectorCacheChange Close(SectorCacheState state, long nowMs, SectorMapClose reason)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -112,11 +121,13 @@ public static class SectorCacheRules
         return new(new SectorCacheState(state.Limits, null, [], state.AgeCounter, history), SectorCacheFailure.None, evicted);
     }
 
-    internal static int IndexOf(ImmutableArray<SectorCacheSlot> slots, long sector) => IndexOf((IReadOnlyList<SectorCacheSlot>)slots, sector);
+    internal static int IndexOf(ImmutableArray<SectorCacheSlot> slots, long sector) => IndexOf(slots.AsSpan(), sector);
 
-    private static int IndexOf(IReadOnlyList<SectorCacheSlot> slots, long sector)
+    private static int IndexOf(List<SectorCacheSlot> slots, long sector) => IndexOf(CollectionsMarshal.AsSpan(slots), sector);
+
+    private static int IndexOf(ReadOnlySpan<SectorCacheSlot> slots, long sector)
     {
-        int low = 0, high = slots.Count - 1;
+        int low = 0, high = slots.Length - 1;
         while (low <= high)
         {
             var mid = low + ((high - low) >> 1);

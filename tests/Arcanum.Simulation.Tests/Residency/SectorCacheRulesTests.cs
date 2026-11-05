@@ -142,6 +142,8 @@ public sealed class SectorCacheRulesTests
         // A time before the eviction (never in play) wraps the millisecond word and folds.
         Assert.IsTrue(FoldDue(5 * Day + 4_000, 5 * Day + 3_000));
         Assert.IsTrue(FoldDue(6 * Day, 5 * Day + 3_000));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FoldDue(-1, 0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FoldDue(0, -1));
     }
 
     [TestMethod]
@@ -265,12 +267,18 @@ public sealed class SectorCacheRulesTests
         Assert.AreEqual(new SectorLockOutcome(0, SectorLockStatus.Refused, SectorCacheFailure.NoMapOpen, null, false, null), noMap.Outcome);
         Assert.AreSame(initial, noMap.State);
 
-        Assert.AreEqual(SectorCacheFailure.InvalidExtent, Open(initial, new SectorMapExtent(0, 4)).Failure);
-        Assert.AreEqual(SectorCacheFailure.InvalidExtent, Open(initial, new SectorMapExtent(4, (1L << 26) + 1)).Failure);
+        foreach (var bad in new[] { new SectorMapExtent(0, 4), new SectorMapExtent(4, -1), new SectorMapExtent(4, (1L << 26) + 1) })
+        {
+            var refused = Open(initial, bad);
+            Assert.AreEqual(SectorCacheFailure.InvalidExtent, refused.Failure, $"{bad}");
+            Assert.AreSame(initial, refused.State);
+        }
         Assert.AreEqual(SectorCacheFailure.None, Open(initial, new SectorMapExtent(1L << 26, 1L << 26)).Failure);
 
         var state = Opened();
-        Assert.AreEqual(SectorCacheFailure.MapAlreadyOpen, Open(state, Extent).Failure);
+        var twice = Open(state, Extent);
+        Assert.AreEqual(SectorCacheFailure.MapAlreadyOpen, twice.Failure);
+        Assert.AreSame(state, twice.State);
         foreach (var sector in new[] { -1L, SectorId(64, 0), SectorId(0, 64), SectorId(63, 63) + (1L << 52) })
         {
             var result = Lock(state, sector, 0);
@@ -282,8 +290,13 @@ public sealed class SectorCacheRulesTests
         var badTime = Lock(state, SectorId(1, 1), -1);
         Assert.AreEqual(SectorCacheFailure.InvalidTime, badTime.Outcome.Failure);
         Assert.AreSame(state, badTime.State);
-        Assert.AreEqual(SectorCacheFailure.InvalidTime, EvictUnlocked(state, -1).Failure);
-        Assert.AreEqual(SectorCacheFailure.InvalidTime, Close(state, -1, SectorMapClose.OtherMap).Failure);
+        var loaded = Lock(state, SectorId(2, 2), 0).State;
+        foreach (var change in new[] { EvictUnlocked(loaded, -1), Close(loaded, -1, SectorMapClose.OtherMap) })
+        {
+            Assert.AreEqual(SectorCacheFailure.InvalidTime, change.Failure);
+            Assert.AreSame(loaded, change.State);
+            Assert.AreEqual(0, change.Evicted.Length);
+        }
     }
 
     [TestMethod]
@@ -299,6 +312,8 @@ public sealed class SectorCacheRulesTests
             batch.Outcomes[8]);
         CollectionAssert.AreEquivalent(sectors.Take(8).ToArray(), batch.State.Slots.Select(s => s.Sector).ToArray());
         Assert.AreEqual(8, batch.State.History.Length);
+        // The counter stamps only the ages it gives: 8 loads before, 8 in the batch, none for the refused ninth.
+        Assert.AreEqual(16, batch.State.AgeCounter);
 
         // A repeated sector is a hit, and a later sector never evicts one the batch already locked.
         var repeat = LockAll(Filled(Limited(8), 7, 0), [SectorId(1, 0), SectorId(1, 0), SectorId(20, 0), SectorId(21, 0)], 1_000);
@@ -308,7 +323,7 @@ public sealed class SectorCacheRulesTests
         Assert.AreEqual(SectorId(0, 0), repeat.Outcomes[3].Evicted);
         Assert.IsTrue(repeat.State.IsLoaded(SectorId(1, 0)));
 
-        // A single lock holds nothing afterwards, so it never finds the cache without a free slot.
+        // A single lock holds nothing afterwards, so it never finds the cache without a free slot (each Locked call asserts Loaded).
         var single = Filled(Limited(8), 8, 0);
         for (var i = 0; i < 20; i++) single = Locked(single, SectorId(i, 7), 2_000 + i, SectorLockStatus.Loaded);
 

@@ -313,3 +313,27 @@ Anomalies: none. Steamwoven follows AS1–AS6 in both rule modes (ARC-RENDER-035
 viewer, not a rule. The installed data has no frame delta and no zero rate on any animated scenery (whole-map census), so AS6's
 offset move and the zero-rate fault are not met. Not modelled: the misc sound (audio), goal 77's fire damage (combat), restarting
 a loop when the ART or the off flag changes at runtime (AS1's other callers), the critter refusal of AS3.
+
+## Sector cache (ARC-DEV-102)
+
+Source: the [sector model](../../architecture/residency.md#33-the-sector-model-slice-s2-pure-rules-no-wiring) of the residency concept (MIG9
+slice S2), which rows RL2, RL7, RL8 and RL20 of the [original object model](../../architecture/original-object-model.md) leave open in
+detail. Question: how the eviction history is written, searched and bounded, how the fold decision compares the time away, and in which
+order the passes evict. Read on 2026-11-05 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this task
+and again by its independent review (F2): the lock 0x4D0540, the slot free 0x4D1400, the passes 0x4D0BC0 and 0x4D0B40, the sector close
+hook 0x4CF320, the time helpers 0x45A7D0, 0x45A950, 0x45A970, 0x45A9B0 and the two load sites that pass the fold flag (0x4D19E3,
+0x4D2274). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| CX1 | slot free (0x4D1400) | A slot with an id appends `(id, game time)` at the end of the history; when the history already holds twice the slot count, the oldest record (index 0) is dropped first. Duplicates are not checked. | Original |
+| CX2 | lock (0x4D0540) | Refusal order: re-entry, cache walk, map-open flag, bounds (`X = id & (2^26 − 1)`, `Y = id >> 26`, a negative id refused). Then the counter is bumped. A hit adds a lock and stamps the age. A miss on a full cache scans the slots in ascending id order for an unlocked one of strictly least age (the first minimum wins) and refuses when there is none; the victim is saved (hook), freed (CX1) and removed from the index **before** the new sector's history lookup. | Original |
+| CX3 | lock (0x4D0540, history lookup), elapsed (0x45A7D0) | The lookup scans the history from index 0 and takes the first record of the sector **out** (the rest moves down); the elapsed time is the clock pair minus the record's pair, word by word {day, millisecond}, with no borrow. Without a record the elapsed pair is {0xFFFFFFFF, 0xFFFFFFFF}. The pair is stored in the slot; the new slot gets one lock and the age. So a loaded sector has no record. | Original |
+| CX4 | load sites (0x4D19E3, 0x4D2274), compare 0x45A9B0 with 0x45A950 and 0x45A970 | The fold flag passed to the fold 0x4F1CD0 is "elapsed ≥ {0, 3000}", the day words compared first, then the millisecond words, both unsigned. The sector folds when the day words differ (also across midnight after a short absence), or on the same day when the millisecond words differ by 3000 or more; no record always folds. | Original; whether the midnight case is a bug of the game is classified in S4 (MIG9), where the fold becomes visible |
+| CX5 | save and evict (0x4D0BC0), evict all (0x4D0B40) | Both walk the slots in ascending id. 0x4D0BC0 saves and frees each unlocked slot, or only saves it when bit 0 of its argument is set; 0x4D0B40 frees every slot without saving. Each free appends its record (CX1), so the history receives a pass's sectors in ascending id. | Original |
+| CX6 | sector close hook (0x4CF320) | Frees every slot (0x4D0B40), then empties the history unless a game is being loaded (0x4038D0). The closed-flag guard of the whole close is the map close's (RL26). | Original |
+
+Steamwoven follows CX1–CX6 in `SectorCacheRules` (ARC-DEV-102) with two differences of the concept (residency §4): locks do not outlive a
+call (no re-entry or cache-walk refusal, no lock count) and an eviction saves nothing; the counter is bumped only when it stamps an age,
+which keeps every age comparison the same. The session's single game timestamp stores the original's {d, 86,400,000} instant (the clock
+add's day carry, "Clock add" above) as {d + 1, 0}, the one instant where the compare of CX4 can differ.

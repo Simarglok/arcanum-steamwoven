@@ -88,17 +88,18 @@ A Godot-free immutable state machine in `Arcanum.Simulation` (so `Arcanum.Sessio
 
 #### The S2 read of the executable
 
-ARC-DEV-102 read the lock (0x4D0540), the slot free (0x4D1400), the two emptying passes (0x4D0BC0, 0x4D0B40), the sector close hook
-(0x4CF320) and the fold decision of the load step (0x45A7D0, 0x45A9B0 at 0x4D19E3) before writing the rules
-([code](../../src/Arcanum.Simulation/Residency/SectorCacheRules.cs), [tests](../../tests/Arcanum.Simulation.Tests/Residency/SectorCacheRulesTests.cs)).
+ARC-DEV-102 read the lock (0x4D0540, which also computes the time away, 0x45A7D0), the slot free (0x4D1400), the two emptying passes
+(0x4D0BC0, 0x4D0B40), the sector close hook (0x4CF320) and the fold compare of the load step (0x45A9B0 at 0x4D19E3 and 0x4D2274) before
+writing the rules ([ledger CX1–CX6](../research/ledger/world.md#sector-cache-arc-dev-102),
+[code](../../src/Arcanum.Simulation/Residency/SectorCacheRules.cs), [tests](../../tests/Arcanum.Simulation.Tests/Residency/SectorCacheRulesTests.cs)).
 It settles what the rows above leave open:
 
 - **History record.** A free appends `(sector, game time)` at the end of the history; when the history holds twice the slot count, the
   oldest record is dropped first. A load takes the sector's **first** (oldest) record **out** of the history and decides the fold from it,
   so a loaded sector has no record. A miss on a full cache frees its victim (appending the victim's record) **before** it looks up the new
   sector, so with a full history the new sector's own record can be the one dropped, and it folds as "no record".
-- **Fold compare.** Game time is the pair {day, millisecond of the day}; the load subtracts the pairs word by word and compares the
-  difference with {0, 3000}. The sector folds when the day words differ, or on the same day when the millisecond words differ by 3000 or
+- **Fold compare.** Game time is the pair {day, millisecond of the day}; the lock subtracts the record's pair from the clock word by word
+  when it takes the record, and the load step compares the difference with {0, 3000}. The sector folds when the day words differ, or on the same day when the millisecond words differ by 3000 or
   more. A return across midnight therefore folds however short the absence (`SectorCacheRules.FoldDue`). This is followed as is; whether
   it is a rule or a bug of the game is classified in S4, where the fold becomes visible (§4).
 - **Victim and order.** The victim is the unreferenced slot of least age, the first in sector-id order on a tie; the slots are kept in
@@ -106,6 +107,8 @@ It settles what the rows above leave open:
   slot into the history, then clears the history unless a game is being loaded.
 - **Counter.** The lock counter is bumped after the map and bounds checks, also for a lock that then finds no free slot; the model bumps
   it only when it stamps an age, which keeps every age comparison the same.
+- **For S6.** The state is built only by `SectorCacheState.Initial` and the rules; restoring a saved history needs a validating restore
+  (slot count, history bound and order, typed refusals) and the save step's records for loaded sectors (RL20), both S6's.
 
 ### 3.4 The fold (slice S4)
 
