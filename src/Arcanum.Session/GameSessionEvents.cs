@@ -70,6 +70,10 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
     public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = Array.Empty<SessionRestockFiring>();
+    /// <summary>ARC-DEV-104: the first ticks of sector folds that a touch inside the pass queued (<see cref="GameSessionOwner.TouchSectors"/>),
+    /// scheduled when the pass ended, and those the queue could not take.</summary>
+    public int DeferredFoldTicks { get; init; }
+    public int DeferredFoldTicksRefused { get; init; }
 }
 
 /// <summary>An Item Decay event that came due (ARC-WORLD-062, ledger ID3): the item, its map and what the rules say the event does.
