@@ -269,4 +269,33 @@ public sealed class ObjectLinkStateTests
         Assert.IsTrue(GameRules.Original.Lifecycle.OpeningMapNullsLinksToLeftObjects);
         Assert.IsFalse(GameRules.Steamwoven.Lifecycle.OpeningMapNullsLinksToLeftObjects);
     }
+
+    [TestMethod]
+    public void APlacementOnAnotherMapOpensItAndAHolderLeftWithNoLinkAndNoBitIsGone()
+    {
+        using var owner = WolfHoldingVirgil(RuleMode.Original);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, VirgilHandle).Disposition);
+        VirgilStandsOn(owner, Cave);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, AtCave).Disposition);
+        Assert.AreEqual(3, owner.QueryObjectLinks(Wolf).Count, "the cave opened, the wolf's links are the exterior's");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, AtExterior).Disposition);
+        Assert.IsNull(owner.QueryDanger(Wolf).Focus);
+        // Sogg held one link and no danger bit: nothing is left of its record, its links or its map.
+        Assert.AreEqual(0, owner.QueryObjectLinks(Sogg).Count);
+        Assert.IsNull(owner.QueryDanger(Sogg).HitBy);
+        Assert.IsFalse(owner.QueryDangerRecords().Records.Any(record => record.Entity == Sogg));
+        Assert.AreEqual(1, owner.QueryObjectLinks(Exterior).Count(link => link.Entity == Wolf), "only the hero stays on the wolf's enemy list");
+        Assert.IsFalse(GameSessionSnapshotCodec.Encode(owner.Capture()).Contains("oid:sogg", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void TheRecordBudgetCountsHoldersOfBitsAndHoldersOfLinksTogether()
+    {
+        using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
+        var snapshot = Decode(GameSessionSnapshotCodec.Encode(owner.Capture()));
+        // The wolf holds bits and links, the sogg links alone: two records, though the danger section lists one.
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(snapshot, RestoreOptions(new GameSessionLimits(maxDangerRecords: 1))).Failure);
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(snapshot, RestoreOptions(new GameSessionLimits(maxDangerRecords: 2))).Failure);
+    }
 }
