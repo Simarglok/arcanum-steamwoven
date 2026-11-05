@@ -217,8 +217,7 @@ writes, `SectorCacheRules.RestoreHistory` (the load hook plus the typed checks) 
 history a restore left unclaimed; `Restore` refuses a map that is not the hero's, more than 256 records (the largest cache's bound), a sector id that is
 not a sector id (a coordinate of 26 bits or more), a time after the saved clock and an unordered list (`InvalidSnapshot`; the decode refuses the shapes
 with their paths, `NotCanonical` for a map with no history or a history with no map). The restored history waits in the session until the map's cache
-opens: `OpenSectors` takes it into the new cache (a history longer than the cache's own bound is `SectorsOpenStatus.InvalidHistory` and stays for a
-larger cache), and it is dropped with the residency's close and with the hero's map change, as the original clears the history at any other map close.
+opens: `OpenSectors` takes it into the new cache (a history longer than the cache's own bound keeps its newest records, as a free drops the oldest; the original refuses the whole load there, which a file of this build cannot reach with the default cache), and it is dropped with the residency's close and with the hero's map change, as the original clears the history at any other map close.
 A cache opened again later starts empty. The first lock of a sector the save listed finds the record stamped at the saved clock: no marker (§3.4), where
 before S6 every load folded the 3 × 3 sectors around the hero with it.
 

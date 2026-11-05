@@ -1558,7 +1558,8 @@ public sealed partial class GameSessionOwner : IDisposable
             _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
     }
 
-    /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
+    /// <summary>Copies every component at this call boundary into one detached snapshot. Under the Original setting it also does what the original's save does to the
+    /// sector cache's own history (<see cref="LifecycleRuleProfile.SaveStampsLoadedSectors"/>, ARC-DEV-106): derived data, no revision.</summary>
     public GameSessionSnapshot Capture()
     {
         ThrowIfDisposed();

@@ -177,19 +177,23 @@ public sealed class SectorHistoryStateTests
     }
 
     [TestMethod]
-    public void AHistoryLongerThanTheCachesBoundIsRefusedAtOpenAndStaysForALargerCache()
+    public void AHistoryLongerThanTheCachesBoundKeepsItsNewestRecordsWhenTheCacheOpens()
     {
         using var owner = Fresh();
         var records = string.Join(",", Enumerable.Range(0, 20).Select(i => $"[{i},{i}]"));
         var text = WithHistory(GameSessionSnapshotCodec.Encode(owner.Capture()), "{\"map\":79,\"history\":[" + records + "]}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(ResidencyStatus.Open, restored.OpenResidency(Exterior, Rows()).Status);
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "unclaimed, the history is kept whole");
         SectorCacheLimits.TryCreate(8, out var eight);
-        Assert.AreEqual(SectorsOpenStatus.InvalidHistory, restored.OpenSectors(Exterior, Extent, eight), "8 slots keep 16 records");
-        Assert.IsNull(restored.QuerySectors(Exterior));
-        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "the history is kept");
-        Assert.AreEqual(SectorsOpenStatus.Open, restored.OpenSectors(Exterior, Extent));
-        Assert.AreEqual(20, restored.QuerySectors(Exterior)!.History.Length);
+        Assert.AreEqual(SectorsOpenStatus.Open, restored.OpenSectors(Exterior, Extent, eight), "8 slots keep 16 records");
+        var history = restored.QuerySectors(Exterior)!.History;
+        Assert.AreEqual(16, history.Length);
+        Assert.AreEqual((4L, 19L), (history[0].Sector, history[^1].Sector), "the oldest four went");
+        // The default cache (32 records) keeps all twenty.
+        using var again = Restore(Decode(text));
+        Opened(again);
+        Assert.AreEqual(20, again.QuerySectors(Exterior)!.History.Length);
     }
 
     [TestMethod]

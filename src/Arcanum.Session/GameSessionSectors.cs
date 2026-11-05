@@ -14,8 +14,6 @@ public enum SectorsOpenStatus
     NoResidency,
     /// <summary>The extent is not <see cref="SectorMapExtent.Valid"/>, or a resident on the ground lies outside it.</summary>
     InvalidExtent,
-    /// <summary>The eviction history a restore left for this map is longer than twice the cache's slot count (ARC-DEV-106); the history stays unclaimed.</summary>
-    InvalidHistory,
 }
 
 /// <summary>ARC-DEV-106: the open map's sector cache, the light hour of each of its loaded sectors (RL19, derived) and its map.</summary>
@@ -57,7 +55,7 @@ public sealed partial class GameSessionOwner
     /// unloaded; the map's extent is in sectors (64 × 64 cells each). A cache replaces the previous one of the same map and starts with an
     /// empty eviction history (the original clears it at every map close but a game load's, CX6), except that the history a restore left for this
     /// map (schema 68, ARC-DEV-106, <see cref="SessionResidencyState"/>) goes into the new cache and is taken out of the session's keeping; one
-    /// longer than the cache's own bound is refused (<see cref="SectorsOpenStatus.InvalidHistory"/>) and stays. Derived data apart from that history: no
+    /// longer than the cache's own bound (twice its slot count) keeps its newest records, as a free drops the oldest. Derived data apart from that history: no
     /// revision, dropped with the residency (a close, the hero's map change, a restore).
     /// </summary>
     public SectorsOpenStatus OpenSectors(SessionMapId map, SectorMapExtent extent, SectorCacheLimits? limits = null)
@@ -72,8 +70,10 @@ public sealed partial class GameSessionOwner
         var claim = _pendingHistory is { } pending && pending.Map == map;
         if (claim)
         {
-            var restored = SectorCacheRules.RestoreHistory(initial.Limits, _pendingHistory!.Value.History, _clock.QueryClockSnapshot().GameTimestampMs);
-            if (restored.Failure != SectorCacheFailure.None) return SectorsOpenStatus.InvalidHistory;
+            var kept = _pendingHistory!.Value.History;
+            if (kept.Length > initial.Limits.HistoryCapacity) kept = kept[^initial.Limits.HistoryCapacity..];
+            var restored = SectorCacheRules.RestoreHistory(initial.Limits, kept, _clock.QueryClockSnapshot().GameTimestampMs);
+            if (restored.Failure != SectorCacheFailure.None) return SectorsOpenStatus.InvalidExtent;
             initial = restored.State;
         }
         var opened = SectorCacheRules.Open(initial, extent);
