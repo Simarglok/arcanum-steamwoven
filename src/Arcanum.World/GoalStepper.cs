@@ -45,8 +45,8 @@ public sealed record GoalStepperResult(SessionGoalStepAnswer Answer, GoalStepper
 /// <summary>
 /// ARC-DEV-134 (MIG13 S4, docs/architecture/goal-table.md §3.2, §3.4): the one stepper of the goal runs, in the world runtime. It dispatches a run by its current goal to
 /// the node interpreter of that goal (the NPC executor's 26 goals, <see cref="AiExecutorRules.Interprets"/>; the slices S6–S14 add the others), keeps the 100-node limit
-/// and the end handling of the interpreter, calls the end hooks (<see cref="IGoalStepHooks"/>) and answers the next frame delay: a delay of 0 is the next frame (1 ms),
-/// so a run never steps twice at one time. The node ports (<see cref="IAiGoalWorld"/>) and the hooks are the viewer's AI host until MIG15.
+/// and the end handling of the interpreter, calls the end hooks (<see cref="IGoalStepHooks"/>) and answers the next frame delay, at least 1 ms (a delay of 0 is the
+/// interpreter's "next frame"; the host that steps the runs keeps each to one step a frame). The node ports (<see cref="IAiGoalWorld"/>) and the hooks are the viewer's AI host until MIG15.
 /// </summary>
 public static class GoalStepper
 {

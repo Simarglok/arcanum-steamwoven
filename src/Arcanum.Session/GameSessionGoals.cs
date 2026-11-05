@@ -101,6 +101,29 @@ public sealed partial class GameSessionOwner
     // The runs a pass reported whose step the frame step has not opened yet (a nested pass, run by a host between, must not take them for lost).
     private readonly HashSet<GoalHandle> _goalStepsReported = [];
     private List<SessionGoalStepFiring>? _passGoalSteps;
+    // ARC-DEV-134: the runs the session ended by itself (a map's close, a departure, a lost step, a refused step close), whose end nodes no caller was handed.
+    private readonly List<GoalRunEnd> _goalEndsUnclaimed = [];
+    /// <summary>The most unclaimed ends kept (<see cref="DrainGoalEnds"/>); older ones are dropped first.</summary>
+    public const int MaxUnclaimedGoalEnds = GoalRunTable.SlotCount * 2;
+
+    /// <summary>
+    /// ARC-DEV-134 (MIG13 S4): the runs the session ended by itself since the last call, in order, and forgets them: a map's close at level 6 (GS19), an NPC's departure,
+    /// a run whose step went missing (the pass's reconcile) and a step close the session refused. No caller was handed their end nodes, so the host whose runs they were
+    /// runs its own (the AI host's casts); S5 runs the end nodes of every end. At most <see cref="MaxUnclaimedGoalEnds"/> are kept.
+    /// </summary>
+    public ImmutableArray<GoalRunEnd> DrainGoalEnds()
+    {
+        ThrowIfDisposed();
+        var drained = _goalEndsUnclaimed.ToImmutableArray();
+        _goalEndsUnclaimed.Clear();
+        return drained;
+    }
+
+    private void Unclaimed(IEnumerable<GoalRunEnd> ended)
+    {
+        _goalEndsUnclaimed.AddRange(ended);
+        if (_goalEndsUnclaimed.Count > MaxUnclaimedGoalEnds) _goalEndsUnclaimed.RemoveRange(0, _goalEndsUnclaimed.Count - MaxUnclaimedGoalEnds);
+    }
 
     /// <summary>The goal table now: an immutable value, so every query of the rules (<see cref="GoalRunTable.MainRunOf"/>, <see cref="GoalRunTable.RunRunningGoal"/>,
     /// <see cref="GoalRunTable.EqualGoalQueued"/>, the significant-goal count, an owner's runs in slot order) reads it without a copy.</summary>
@@ -243,8 +266,12 @@ public sealed partial class GameSessionOwner
         return new(SessionGoalFailure.None, SessionGoalStepOutcome.Continued, null, due);
     }
 
-    private SessionGoalStepResult Refused(GoalRun run) =>
-        new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(run, GoalEndKind.Finished, endNodes: true), null);
+    private SessionGoalStepResult Refused(GoalRun run)
+    {
+        var ended = Finish(run, GoalEndKind.Finished, endNodes: true);
+        Unclaimed([ended]);
+        return new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, ended, null);
+    }
 
     // A pass or the spell-run rules hold the queue: the steps wait (the frame step opens them after the pass).
     private bool GoalsBusy() => _passWorld is not null || _spellRunsBusy;
@@ -300,6 +327,7 @@ public sealed partial class GameSessionOwner
         var swept = _goals.ClearAll();
         _goals = swept.Table;
         SettleEnded(swept.Ended);
+        Unclaimed(swept.Ended);
     }
 
     // For the tests: a run's step lost the way a stray relocation or a dropped firing would lose it.
@@ -326,6 +354,7 @@ public sealed partial class GameSessionOwner
         var killed = _goals.Kill(entity);
         _goals = killed.Table;
         SettleEnded(killed.Ended);
+        Unclaimed(killed.Ended);
     }
 
     // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map
@@ -347,6 +376,7 @@ public sealed partial class GameSessionOwner
             RemoveGoalStep(run.Handle);
             if (killed.Step.Ended is { } end) ended.Add(end);
         }
+        Unclaimed(ended);
         return ended.ToImmutable();
     }
 }

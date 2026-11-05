@@ -239,6 +239,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private long _nowMs;
     // ARC-DEV-134: the run the stepper is ending (its end hooks run before the session frees it, so the fidget's "no run" test leaves it out).
     private GoalHandle? _ending;
+    // ARC-DEV-134: the runs stepped since the last frame (a run steps at most once a frame, as the former pump stepped it: a delay shorter than the frame, 0 among
+    // them, is the next frame), the world milliseconds of the last frame and its length (the wait of a run that came due again within its frame).
+    private readonly HashSet<GoalHandle> _steppedThisFrame = [];
+    private long _lastFrameMs = -1;
+    private long _frameLengthMs = 16;
     // ARC-WORLD-095: the round as last observed (whether one ran, the session's subturn starts then, the critter of the last turn set:
     // 0x5FC248), the pending cost (0x5FC244) and the subturn start it was written in.
     private bool _roundSeen;
@@ -438,17 +443,30 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void Frame(long nowMs)
     {
+        if (_lastFrameMs >= 0 && nowMs > _lastFrameMs) _frameLengthMs = Math.Clamp(nowMs - _lastFrameMs, 1, 250);
+        _lastFrameMs = Math.Max(_lastFrameMs, nowMs);
+        _steppedThisFrame.Clear();
         _nowMs = Math.Max(_nowMs, nowMs);
+        ClaimSessionEnds();
         Movers.Settle(_nowMs);
         ObserveLeaves();
         ObserveRound();
+    }
+
+    // ARC-DEV-134: the runs the session ended by itself (a map's close, a departure, a lost step, a refused step close: GameSessionOwner.DrainGoalEnds) are run
+    // through the host's end nodes, as the former host's own drop of them did (ARC-WORLD-102: no NPC's magic run outlives its goal). The hero's runs are not the host's.
+    private void ClaimSessionEnds()
+    {
+        foreach (var end in _session.DrainGoalEnds())
+            if (end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 
     /// <summary>
     /// ARC-DEV-134 (MIG13 S4, goal-table.md §3.2): one step of a session run whose <c>goal.step</c> came due (<see cref="IGoalStepHost"/>), at the clocks of its deadline.
     /// Before it the movers settle, the leaves are seen and the round is observed (a step that began a round or passed the subturn interrupts runs, this one too: then it
     /// ends without stepping, its end nodes run by the interrupt). A run of a map NPC whose sector the session's cache has evicted waits a frame (the NPC is not alive there,
-    /// RL16) and goes on when the sector loads; a map without a cache holds none back (ARC-DEV-119). Otherwise the world runtime's stepper steps it
+    /// RL16) and goes on when the sector loads; a map without a cache holds none back (ARC-DEV-119). A run steps at most once a frame (the former pump's cadence: a
+    /// delay shorter than the frame, 0 among them, is the next frame), so one that comes due again within its frame waits for the next. Otherwise the world runtime's stepper steps it
     /// (<see cref="GoalStepper.Step"/>) over this host's node ports and end hooks, and its answer goes back to the session: the next frame delay in real milliseconds
     /// (the session queues it ×8 on the animation clock from now, TL40), or the end.
     /// </summary>
@@ -456,11 +474,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         ArgumentNullException.ThrowIfNull(run);
         _nowMs = Math.Max(_nowMs, clocks.WorldMs);
+        ClaimSessionEnds();
         Movers.Settle(_nowMs);
         ObserveLeaves();
         ObserveRound();
         if (Ended(run.Handle)) return SessionGoalStepAnswer.End;
         if (!_followers.ContainsKey(run.Owner) && !SectorLoaded(run.Owner)) return SessionGoalStepAnswer.After(1);
+        // Stepped in this frame already: it waits for the next one (just past this frame's expected end: the last frame's end plus its length).
+        if (_steppedThisFrame.Contains(run.Handle)) return SessionGoalStepAnswer.After(Math.Max(1, _lastFrameMs + _frameLengthMs + 1 - clocks.WorldMs));
+        _steppedThisFrame.Add(run.Handle);
         var npc = run.Owner;
         GoalStepperResult stepped;
         _ending = run.Handle;
@@ -551,6 +573,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void Retire()
     {
+        ClaimSessionEnds();
         foreach (var npc in RunOwners()) DropRun(npc);
         Reset();
     }
@@ -559,7 +582,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// the runs are the session's, so the host holds none to clear).</summary>
     public void Reset()
     {
-        _steps = 0; _ending = null;
+        _steps = 0; _ending = null; _steppedThisFrame.Clear(); _lastFrameMs = -1; _frameLengthMs = 16;
         _traces.Clear();
         _notices.Clear();
         _roundEvents.Clear();
@@ -922,7 +945,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
         if (current is not null) DropRun(current);
         var started = _session.StartGoal(new GoalStartRequest(npc, GoalStarters.NoInterrupt, run.Bottom, run.Flags), StartPorts.Open);
-        if (!started.Started) Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
+        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
+        // A start the table refused (no free slot, a full queue) leaves the NPC without a run: the proposed run's end nodes free what its starter took (a cast's magic run).
+        Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
+        EndDroppedRun(run);
     }
 
     // The table's start ports for the host's starts: the executor's starters ran the gates, nothing loads and a destroyed NPC is not performed for.
@@ -966,8 +992,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // done and its step's close ends it), then its end nodes run here (the session's report of them is S5's).
     private void DropRun(GoalRun run)
     {
-        _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-        EndDroppedRun(run);
+        // A refused interrupt (the spell-run rules hold the queue, a run already gone) leaves the run's end nodes to its real end.
+        var dropped = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+        if (dropped.Succeeded && dropped.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone)) EndDroppedRun(run);
+        else Trace(run.Owner).Step = $"drop refused: {dropped.Failure} {string.Join(",", dropped.Steps.Select(s => s.Outcome))}";
     }
 
     // A run the host drops without stepping it to its end: its end nodes (AiExecutorRules.EndRun). ARC-WORLD-102: a casting goal 26 or
@@ -1764,7 +1792,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (refused == SessionGoalFailure.None) _queuedCasts.Add(run);
             else
             {
-                caster.DropQueued(run);
+                if (OwnRun(npc, run) && caster.DropQueued(run) is { } freed) _notices.Add(new(AreaAiNoticeKind.CastEnd, npc, null) { Run = run, SpellRun = freed });
                 Trace(npc).Cast += $" not queued in the table: {refused}";
                 return new(null, castAnimation);
             }

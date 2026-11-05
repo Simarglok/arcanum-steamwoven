@@ -37,6 +37,11 @@ public sealed class GoalDescriptorsTests
         var interpreted = AiExecutorRules.InterpretedGoals.Select(g => (int)g).Order().ToArray();
         CollectionAssert.AreEqual(new[] { 4, 5, 6, 8, 15, 16, 18, 19, 24, 25, 26, 27, 33, 34, 37, 39, 52, 56, 61, 67, 69, 79, 80, 82, 83, 86 }, interpreted);
         foreach (var goal in AiExecutorRules.InterpretedGoals) Assert.IsTrue(GoalDescriptors.Has(goal), $"goal {(int)goal} has a descriptor");
+        // The AI host's former priority table (ARC-WORLD-092..109) equals the descriptors' for these goals: 4 for the attempted casts, 3 for the actions, 2 for the walks.
+        var four = new[] { 27, 83 };
+        var three = new[] { 15, 16, 18, 19, 25, 26, 33, 34, 37, 39, 67, 82, 86 };
+        foreach (var goal in AiExecutorRules.InterpretedGoals)
+            Assert.AreEqual(four.Contains((int)goal) ? 4 : three.Contains((int)goal) ? 3 : 2, GoalDescriptors.Of(goal)!.Priority, $"goal {(int)goal}");
     }
 
     [TestMethod]

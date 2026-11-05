@@ -15,7 +15,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// <list type="bullet">
 /// <item>A paused frame (the Esc menu and a save or load list; no other window pauses since MIG12 S7) runs no goal step: the original's animation clock does not advance behind the pause. The view's sector touch still runs.</item>
 /// <item>A frozen frame (a loop of the original that does not ping, TL25) does nothing: no stamp was observed, so no time passed.</item>
-/// <item><c>before</c> runs first for a host (the viewer's per-frame sector touch, so a run of an evicted sector waits as the session's cache says, RL16).</item>
+/// <item><c>before</c> runs first for a host (the viewer's per-frame sector touch, so a run of an evicted sector waits as the session's cache says, RL16). ARC-DEV-134: the
+/// frame's goal steps came before it, so a run whose sector this touch loads goes on in the next frame.</item>
 /// </list>
 /// </summary>
 public sealed class AreaAiFrameParticipant(Func<AreaAiHost?> host, Action<AreaAiHost>? before = null) : IFrameParticipant

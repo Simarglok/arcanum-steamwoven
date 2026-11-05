@@ -270,7 +270,10 @@ public sealed class AreaAiHostRebindTests
         // ARC-DEV-134: the run is a session run; its steps come due and wait a frame each while the sector is evicted (the passes here run no AI tick: the
         // NPC's heartbeat is not the subject).
         var steps = new FrameStep(f.Session, AreaAiTestSteps.NoAi) { GoalSteps = host };
+        var handle = host.RunOf(f.A)!.Handle;
+        var due = f.Session.QueryGoalStep(handle);
         steps.AdvanceHost(1000);
+        Assert.IsTrue(f.Session.QueryGoalStep(handle) > due, "its steps came due and were queued again");
         Assert.AreEqual(0, host.TakeSteps(), "no step for an NPC that is not alive in the cache");
         Assert.IsNotNull(host.RunOf(f.A), "the run waits");
         host.PlanPath(f.A, new(AiPathKind.ToTile, null, new CellCoord(200, 10), 0, false, false));

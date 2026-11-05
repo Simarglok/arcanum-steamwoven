@@ -360,4 +360,19 @@ public sealed class GoalTableStateTests
         Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(handle, SessionGoalStepAnswer.After(10)).Outcome);
         Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle, [queued]));
     }
+
+    // ARC-DEV-134 (MIG13 S4): the runs the session ends by itself are reported once for their owner's host to run its end nodes; the caller's own ends are not.
+    [TestMethod]
+    public void The_runs_the_session_ends_by_itself_are_drained_once_and_the_callers_ends_are_not()
+    {
+        using var owner = Create();
+        var lost = Started(owner, Request(GoalType.MoveToTile));
+        var interrupted = Started(owner, Request(GoalType.MoveToTile, B));
+        Assert.IsTrue(owner.InterruptGoal(interrupted, GoalInterruptRules.MaxLevel).Succeeded);
+        owner.LoseGoalStepForTests(lost);
+        owner.ProcessEvents(new NoWorld());
+        var drained = owner.DrainGoalEnds();
+        Assert.AreEqual(lost, drained.Single().Run.Handle, "the reconcile's kill is unclaimed; the caller's interrupt is the caller's");
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length, "drained once");
+    }
 }
