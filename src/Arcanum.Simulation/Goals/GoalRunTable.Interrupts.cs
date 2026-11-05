@@ -18,8 +18,10 @@ public sealed partial class GoalRunTable
     {
         if (level is < 0 or > GoalInterruptRules.MaxLevel) throw new ArgumentOutOfRangeException(nameof(level));
         if (!TryGet(handle, out var run)) return new(this, new(handle, GoalInterruptOutcome.NotFound, null));
-        if (!gameReset && GoalDescriptors.Of(run.Top.Goal) is { } descriptor)
+        if (!gameReset)
         {
+            // Every goal on a run's stack has a descriptor (GoalRun.WithFrames), so the current goal's descriptor is always there to read.
+            var descriptor = GoalDescriptors.Of(run.Top.Goal) ?? throw new InvalidOperationException($"goal {(int)run.Top.Goal} on a run has no descriptor");
             switch (GoalInterruptRules.Verdict(descriptor, level))
             {
                 case GoalInterruptVerdict.Refuse: return new(this, new(handle, GoalInterruptOutcome.Refused, null));
@@ -55,7 +57,7 @@ public sealed partial class GoalRunTable
     /// Interrupts every run in use at <paramref name="level"/> (0x424290, the full-table sweep): a refusal is recorded and the sweep goes on. The stepper does this at
     /// level 3 at the next step after a start found the table full (<see cref="SweepIfExhausted"/>).
     /// </summary>
-    [OriginalFunction(0x424290, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x424290, OriginalFunctionScope.Partial)]
     public GoalSweepResult InterruptAll(int level)
     {
         if (level is < 0 or > GoalInterruptRules.MaxLevel) throw new ArgumentOutOfRangeException(nameof(level));
@@ -67,7 +69,7 @@ public sealed partial class GoalRunTable
     /// The sweep at the start of a round (0x424310, ledger GS19): every run whose current goal is not "not counted" is interrupted at level 3; a refusal is recorded and
     /// the sweep goes on. A round start does this for the map and each participant again; set-turn interrupts the previous participant itself (TL36, TL37).
     /// </summary>
-    [OriginalFunction(0x424310, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x424310, OriginalFunctionScope.Partial)]
     public GoalSweepResult InterruptForRoundStart()
     {
         var (table, steps) = Sweep(GoalInterruptRules.OrdinaryActions, run => !run.CurrentGoalNotCounted(), gameReset: false, stopAtFailure: false);
@@ -78,7 +80,7 @@ public sealed partial class GoalRunTable
     /// Ends every run at level 6 (0x424250, the sweep of a map reset and of a map clear): with no run in use nothing happens; the first failure stops the sweep (level 6
     /// refuses nothing). <paramref name="gameReset"/> is the original's reset flag: a reset runs no end node.
     /// </summary>
-    [OriginalFunction(0x424250, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x424250, OriginalFunctionScope.Partial)]
     public GoalSweepResult ClearAll(bool gameReset = false)
     {
         if (InUseCount <= 0) return new(this, []);

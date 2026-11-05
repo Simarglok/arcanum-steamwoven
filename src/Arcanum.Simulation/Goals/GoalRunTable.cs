@@ -33,6 +33,8 @@ public enum GoalRetargetOutcome
 {
     /// <summary>The handle matches no run.</summary>
     NoRun,
+    /// <summary>The run's bottom goal is no tile walk (3, 4, 7 or 55), so it has no destination to overwrite: refused with no change.</summary>
+    NotAWalk,
     /// <summary>The run already walks to that destination: accepted with no change.</summary>
     Unchanged,
     /// <summary>The bottom goal's destination was overwritten and the path flag "replan" set.</summary>
@@ -79,8 +81,8 @@ public sealed partial class GoalRunTable
     /// <summary>The slot of the run the stepper is stepping, if any (the original's marker 0x5A5978): an interrupt of that run only marks it done, the stepper ends it (GS16).</summary>
     public int? SteppingSlot { get; }
 
-    /// <summary>The run in a slot (null when it is free).</summary>
-    public GoalRun? this[int slot] => slots[slot];
+    /// <summary>The run in a slot (null when it is free); a slot outside 0..<see cref="SlotCount"/> is an argument error.</summary>
+    public GoalRun? this[int slot] => slot is >= 0 and < SlotCount ? slots[slot] : throw new ArgumentOutOfRangeException(nameof(slot));
 
     /// <summary>Whether <paramref name="handle"/> names a run that is in the table: its slot holds a run with the same id (the original's lookup compares the id and, in single player, the slot).</summary>
     public bool TryGet(GoalHandle handle, [NotNullWhen(true)] out GoalRun? run)
@@ -93,7 +95,7 @@ public sealed partial class GoalRunTable
         return true;
     }
 
-    /// <summary>The table with the stepper's marker set to <paramref name="slot"/> (or cleared).</summary>
+    /// <summary>The table with the stepper's marker set to <paramref name="slot"/> (or cleared). The marker is a plain slot number, as in the original: a free slot is accepted, an interrupt only matches it against the run it ends.</summary>
     public GoalRunTable WithStepping(int? slot)
     {
         if (slot is < 0 or >= SlotCount) throw new ArgumentOutOfRangeException(nameof(slot));
@@ -112,6 +114,7 @@ public sealed partial class GoalRunTable
     {
         ArgumentException.ThrowIfNullOrEmpty(owner);
         ArgumentNullException.ThrowIfNull(bottom);
+        if (!GoalDescriptors.Has(bottom.Goal)) throw new ArgumentException($"goal {(int)bottom.Goal} has no descriptor", nameof(bottom));
         var free = FirstFreeSlot();
         if (free < 0) return new(new(slots, NextRunId, InUseCount, true, SteppingSlot), null);
         var handle = new GoalHandle(free, NextRunId);
@@ -159,11 +162,15 @@ public sealed partial class GoalRunTable
 
     /// <summary>
     /// Changes a running walk's destination in place (0x433640, ledger GS14): the same destination is accepted with no change; a new one overwrites the bottom goal's
-    /// destination and sets the run's path flag "replan", so the walk re-plans without a new run.
+    /// destination and sets the run's path flag "replan", so the walk re-plans without a new run. Only a run whose bottom goal walks to a tile (move to tile 3, run to tile 4,
+    /// move near tile 7, run near tile 55) has a destination to change; any other run is refused (<see cref="GoalRetargetOutcome.NotAWalk"/>). The movement gate that precedes
+    /// the retarget in the original is the caller's (<see cref="GoalStartRules.RetargetWalk"/>).
     /// </summary>
     public GoalRetargetResult RetargetDestination(GoalHandle handle, CellCoord destination)
     {
         if (!TryGet(handle, out var run)) return new(this, GoalRetargetOutcome.NoRun, null);
+        if (run.Bottom.Goal is not (GoalType.MoveToTile or GoalType.RunToTile or GoalType.MoveNearTile or GoalType.RunNearTile))
+            return new(this, GoalRetargetOutcome.NotAWalk, handle);
         if (run.Bottom.Tile == destination) return new(this, GoalRetargetOutcome.Unchanged, handle);
         var changed = run.WithFrames(run.Frames.SetItem(0, run.Bottom with { Tile = destination })) with { PathFlags = run.PathFlags | GoalPathFlags.Replan };
         return new(WithRun(changed), GoalRetargetOutcome.Retargeted, handle);
@@ -215,7 +222,8 @@ public sealed partial class GoalRunTable
     /// <summary>
     /// "An equal goal is queued" (0x44E710, the duplicate test of the attack, throw, follow and spread-out starters): the first of the owner's runs, in slot order,
     /// whose bottom goal is the frame's goal or one of its aliases and whose object parameters are the same. The original compares the five object parameters; the
-    /// typed frame holds the target and the item (the owner is the run's own).
+    /// typed frame holds the target and the item (the owner is the run's own). The starters ask through the forwarder 0x44E6F0, which calls this function with no
+    /// out-handle and so only learns whether such a run exists; this method serves both forms (it returns the run).
     /// </summary>
     [OriginalFunction(0x44E710, OriginalFunctionScope.Partial)]
     public GoalRun? EqualGoalQueued(string owner, GoalFrame frame)

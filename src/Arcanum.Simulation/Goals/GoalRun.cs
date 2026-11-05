@@ -21,6 +21,10 @@ public enum GoalFrameFlags
 /// </summary>
 public sealed record GoalFrame
 {
+    private readonly GoalType goal;
+    private readonly int range;
+    private readonly ImmutableArray<CellCoord> path = [];
+
     public GoalFrame(GoalType goal, string? target = null, CellCoord? tile = null, int range = 0, int? sound = null)
     {
         if (!GoalTypes.IsDefined((int)goal)) throw new ArgumentOutOfRangeException(nameof(goal));
@@ -28,7 +32,11 @@ public sealed record GoalFrame
         Goal = goal; Target = target; Tile = tile; Range = range; Sound = sound;
     }
 
-    public GoalType Goal { get; init; }
+    public GoalType Goal
+    {
+        get => goal;
+        init => goal = GoalTypes.IsDefined((int)value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
     /// <summary>The node the goal continues at; a goal starts and restarts at 1.</summary>
     public int Node { get; init; } = 1;
     /// <summary>The goal's object (object parameter 1): the attack's target, the flight's source, the follower's leader.</summary>
@@ -38,7 +46,11 @@ public sealed record GoalFrame
     /// <summary>The goal's destination location (parameter 5): the walk's and the run's destination tile.</summary>
     public CellCoord? Tile { get; init; }
     /// <summary>The goal's range in tiles (the attack's approach 1, the flight's 9, the follower's 2 or 5).</summary>
-    public int Range { get; init; }
+    public int Range
+    {
+        get => range;
+        init => range = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
     /// <summary>The attack's alerted sound, played once when the approach starts moving and then cleared.</summary>
     public int? Sound { get; init; }
     /// <summary>The skill of a skill goal (the original's skill numbers: 5 pickpocket, 10 heal, 14 pick locks).</summary>
@@ -46,7 +58,11 @@ public sealed record GoalFrame
     /// <summary>The magic run a casting goal plays (the cast host's run slot).</summary>
     public int? SpellRun { get; init; }
     /// <summary>The walk goals' planned segment, else empty.</summary>
-    public ImmutableArray<CellCoord> Path { get; init; } = [];
+    public ImmutableArray<CellCoord> Path
+    {
+        get => path;
+        init => path = value.IsDefault ? [] : value;
+    }
     /// <summary>The next step of <see cref="Path"/>.</summary>
     public int PathIndex { get; init; }
     /// <summary>The target's tile when the segment was planned (the approach walks stop when it changes).</summary>
@@ -130,11 +146,18 @@ public sealed record GoalRun
     public GoalFrame Top => Frames[^1];
     public int Depth => Frames.Length;
 
-    /// <summary>The run with another goal stack (the stepper's push and pop); the bottom goal must have a descriptor.</summary>
+    /// <summary>
+    /// The run with another goal stack (the stepper's push and pop): 1..8 goals, each with a descriptor. The original reads the descriptor of the current goal in every
+    /// rule and has no way to start goal 13 or 22 (Q5 asks whether the door goals push 13), so the model keeps no such goal on a stack: the interrupt rule always has a descriptor to read.
+    /// </summary>
     public GoalRun WithFrames(ImmutableArray<GoalFrame> frames)
     {
         if (frames.IsDefaultOrEmpty || frames.Length > MaxFrames) throw new ArgumentOutOfRangeException(nameof(frames), "a run holds 1..8 goals");
-        if (!GoalDescriptors.Has(frames[0].Goal)) throw new ArgumentException($"goal {(int)frames[0].Goal} has no descriptor", nameof(frames));
+        foreach (var frame in frames)
+        {
+            ArgumentNullException.ThrowIfNull(frame);
+            if (!GoalDescriptors.Has(frame.Goal)) throw new ArgumentException($"goal {(int)frame.Goal} has no descriptor", nameof(frames));
+        }
         return this with { Frames = frames };
     }
 

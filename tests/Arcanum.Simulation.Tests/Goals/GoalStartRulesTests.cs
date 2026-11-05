@@ -55,6 +55,10 @@ public sealed class GoalStartRulesTests
         CollectionAssert.AreEqual(new[] { 0 }, Levels(GoalStarters.Generic, GoalType.EyeCandy));
         CollectionAssert.AreEqual(Array.Empty<int>(), Levels(GoalStarters.NoInterrupt, GoalType.CastSpellFriendly));
         Assert.ThrowsExactly<ArgumentNullException>(() => GoalStarters.Walk.LevelsFor(null!));
+        // A plan built with a default array of fixed levels has none, instead of failing.
+        var defaulted = new GoalStartPlan(GoalStarterKind.Generic, default, true, false, false);
+        CollectionAssert.AreEqual(new[] { 3 }, Levels(defaulted, GoalType.Talk));
+        CollectionAssert.AreEqual(Array.Empty<int>(), Levels(defaulted with { InterruptsAtOwnPriority = false }, GoalType.Talk));
         // The duplicate refusal is the attack, throw, follow and spread-out starters'.
         CollectionAssert.AreEquivalent(new[] { GoalStarterKind.Follow, GoalStarterKind.Attack, GoalStarterKind.Throw, GoalStarterKind.SpreadOut },
             new[] { GoalStarters.Walk, GoalStarters.Run, GoalStarters.Follow, GoalStarters.Attack, GoalStarters.Throw, GoalStarters.SpreadOut, GoalStarters.Stun,

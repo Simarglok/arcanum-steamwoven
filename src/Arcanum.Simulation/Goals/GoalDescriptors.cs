@@ -44,7 +44,7 @@ public static class GoalDescriptors
     /// A queried goal without a descriptor matches only itself.
     /// </summary>
     public static bool IsSameActivity(GoalType queried, GoalType bottom) =>
-        queried == bottom || (Of(queried) is { } descriptor && descriptor.Aliases.Contains(bottom));
+        queried == bottom || (Of(queried) is { } descriptor && !descriptor.Aliases.IsDefaultOrEmpty && descriptor.Aliases.Contains(bottom));
 
     /// <summary>
     /// Whether a goal of this descriptor is a "significant" goal of the round (TL39): priority 2 or more and not a no-interrupt goal. The

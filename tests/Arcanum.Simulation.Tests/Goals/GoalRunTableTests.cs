@@ -467,7 +467,8 @@ public sealed class GoalRunTableTests
         (table, _) = Add(table, A, GoalType.EyeCandy);                                          // overlay: 0
         (table, var fidget) = Add(table, B, GoalType.Fidget);                                   // priority 1: 0
         (table, var stack) = AddStack(table, B, GoalType.Fidget, GoalType.MoveToTile);          // fidget 0 + walk 1
-        (table, _) = AddStack(table, "npc:c", GoalType.Attack, GoalType.AnimateLoop);           // current goal not counted: 0
+        // The current goal is not counted, so the whole run counts 0 (the derived count; the original's counter would have counted the attack when it was pushed, open question Q3).
+        (table, _) = AddStack(table, "npc:c", GoalType.Attack, GoalType.AnimateLoop);
         (table, var dying) = Add(table, "npc:d", GoalType.Dying);                               // 1
         Assert.AreEqual(3, table.SignificantGoalCount);
 
@@ -545,6 +546,80 @@ public sealed class GoalRunTableTests
         Assert.IsFalse(table.TryReplace(new GoalRun(B, run, F(GoalType.Attack)), out _), "another owner");
         Assert.IsFalse(table.TryReplace(new GoalRun(A, new GoalHandle(run.Slot, 99), F(GoalType.Attack)), out _), "another id");
         Assert.IsFalse(table.TryReplace(new GoalRun(A, new GoalHandle(5, 1), F(GoalType.Attack)), out _), "a free slot");
+    }
+
+    [TestMethod]
+    public void OnlyARunWhoseBottomGoalWalksToATileCanBeRetargeted()
+    {
+        foreach (var walk in new[] { GoalType.MoveToTile, GoalType.RunToTile, GoalType.MoveNearTile, GoalType.RunNearTile })
+        {
+            var allocation = GoalRunTable.Empty.Allocate(A, new GoalFrame(walk, tile: new CellCoord(1, 1)));
+            Assert.AreEqual(GoalRetargetOutcome.Retargeted, allocation.Table.RetargetDestination(allocation.Handle!.Value, new CellCoord(2, 2)).Outcome, $"{walk}");
+        }
+        foreach (var other in new[] { GoalType.Attack, GoalType.MoveNear, GoalType.Wander, GoalType.Follow })
+        {
+            var allocation = GoalRunTable.Empty.Allocate(A, new GoalFrame(other, tile: new CellCoord(1, 1)));
+            var refused = allocation.Table.RetargetDestination(allocation.Handle!.Value, new CellCoord(2, 2));
+            Assert.AreEqual(GoalRetargetOutcome.NotAWalk, refused.Outcome, $"{other}");
+            Assert.AreSame(allocation.Table, refused.Table);
+            Assert.AreEqual(new CellCoord(1, 1), refused.Table[allocation.Handle.Value.Slot]!.Bottom.Tile, "the goal's tile is untouched");
+        }
+    }
+
+    [TestMethod]
+    public void AGoalWithoutADescriptorIsRefusedAtEveryDepthOfAStackAndOnAFullTableToo()
+    {
+        var (table, handle) = Add(GoalRunTable.Empty, A, GoalType.Attack);
+        Assert.IsTrue(table.TryGet(handle, out var run));
+        Assert.ThrowsExactly<ArgumentException>(() => run.WithFrames([F(GoalType.Attack), F(GoalType.UnlockDoor)]), "on top");
+        Assert.ThrowsExactly<ArgumentException>(() => run.WithFrames([F(GoalType.Attack), F(GoalType.PickWeapon), F(GoalType.MoveNear)]), "in the middle");
+        Assert.AreEqual(GoalInsertOutcome.NoDescriptor, table.InsertAtBottom(handle, F(GoalType.PickWeapon)).Outcome);
+        var full = GoalRunTable.Empty;
+        for (var i = 0; i < GoalRunTable.SlotCount; i++) (full, _) = Add(full, A, GoalType.Attack);
+        Assert.ThrowsExactly<ArgumentException>(() => full.Allocate(A, F(GoalType.UnlockDoor)), "a full table refuses the argument too, it does not just set the flag");
+        var failed = full.Allocate(A, F(GoalType.Attack));
+        Assert.IsNull(failed.Handle, "a valid start on a full table fails");
+        Assert.IsTrue(failed.Table.ExhaustionPending, "and sets the flag");
+        Assert.IsFalse(full.ExhaustionPending, "on a new table");
+    }
+
+    [TestMethod]
+    public void AGoalFrameKeepsItsChecksWhenItIsCopiedWithAnotherValue()
+    {
+        var frame = new GoalFrame(GoalType.Attack, "npc:foe");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = frame with { Goal = (GoalType)87 });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = frame with { Goal = (GoalType)(-1) });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = frame with { Range = -1 });
+        Assert.AreEqual(GoalType.Follow, (frame with { Goal = GoalType.Follow }).Goal);
+        Assert.AreEqual(5, (frame with { Range = 5 }).Range);
+        Assert.IsFalse((frame with { Path = default }).Path.IsDefault, "a default path becomes an empty one");
+        Assert.AreEqual(0, (frame with { Path = default }).Path.Length);
+        Assert.IsFalse(frame.Path.IsDefault);
+    }
+
+    [TestMethod]
+    public void TheSlotIndexerAndTheSteppingMarkerRefuseASlotOutsideTheTable()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = GoalRunTable.Empty[-1]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = GoalRunTable.Empty[GoalRunTable.SlotCount]);
+        Assert.IsNull(GoalRunTable.Empty[GoalRunTable.SlotCount - 1]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GoalRunTable.Empty.WithStepping(-1));
+        Assert.AreEqual(0, GoalRunTable.Empty.WithStepping(0).SteppingSlot, "the marker is a plain slot number: a free slot is accepted");
+        Assert.IsNull(GoalRunTable.Empty.WithStepping(0).WithStepping(null).SteppingSlot);
+    }
+
+    [TestMethod]
+    public void AMapEndSweepMarksTheSteppedRunDoneAndGoesOnToTheOthers()
+    {
+        var table = GoalRunTable.Empty;
+        (table, var stepped) = Add(table, A, GoalType.Attack);
+        (table, var other) = Add(table, B, GoalType.Attack);
+        var cleared = table.WithStepping(stepped.Slot).ClearAll();
+        CollectionAssert.AreEqual(new[] { GoalInterruptOutcome.MarkedDone, GoalInterruptOutcome.Ended }, cleared.Steps.Select(s => s.Outcome).ToArray());
+        Assert.IsTrue(cleared.Steps.All(s => s.Succeeded), "a marked run counts as success, so the sweep is not stopped");
+        Assert.AreEqual(1, cleared.Table.InUseCount, "the stepper still has to end the marked run");
+        Assert.IsTrue(cleared.Table.TryGet(stepped, out var done) && done.Done);
+        Assert.IsFalse(cleared.Table.TryGet(other, out _));
     }
 
     [TestMethod]

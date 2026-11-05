@@ -45,7 +45,8 @@ public sealed record GoalStartPlan(GoalStarterKind Kind, ImmutableArray<int> Fix
     public ImmutableArray<int> LevelsFor(GoalDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
-        return InterruptsAtOwnPriority ? FixedLevels.Add(descriptor.NoInterrupt ? 0 : descriptor.Priority) : FixedLevels;
+        var fixedLevels = FixedLevels.IsDefault ? [] : FixedLevels;
+        return InterruptsAtOwnPriority ? fixedLevels.Add(descriptor.NoInterrupt ? 0 : descriptor.Priority) : fixedLevels;
     }
 }
 
@@ -164,8 +165,10 @@ public static class GoalStartRules
     /// <summary>
     /// The first step of the main walk and run starters (0x433640, ledger GS14): when the owner's first run's bottom goal is <paramref name="walkGoal"/> or one of its aliases, the
     /// same destination is accepted with no change and a new one is written over the destination in place (the run re-plans); with no such run the caller starts one
-    /// (<see cref="GoalRetargetOutcome.NoRun"/>). The move-near starter 0x4341C0 does the same (F1 in GS14, not read again here). The starter's other branches (the gate,
-    /// the always-run conversion, the network) are the caller's.
+    /// (<see cref="GoalRetargetOutcome.NoRun"/>); a run whose bottom goal is no tile walk is refused (<see cref="GoalRetargetOutcome.NotAWalk"/>). The move-near starter 0x4341C0
+    /// does the same (F1 in GS14, not read again here). The starter's other branches (the gate, the always-run conversion, the network) are the caller's, and so is the order:
+    /// the original runs the movement gate (0x4339A0) <b>before</b> this retarget, so a caller passes the gate first and calls this only when it passed; unlike <see cref="Start"/>
+    /// this function takes no gate port (S10 builds the walk request on it).
     /// </summary>
     [OriginalFunction(0x433640, OriginalFunctionScope.Partial)]
     public static GoalRetargetResult RetargetWalk(GoalRunTable table, string owner, GoalType walkGoal, CellCoord destination)
