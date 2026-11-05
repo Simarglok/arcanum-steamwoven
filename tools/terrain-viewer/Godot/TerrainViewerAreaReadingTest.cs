@@ -149,10 +149,11 @@ public partial class TerrainViewerApp
 
             // A dead hero cannot read (the original's start returns for a dead reader).
             Require(owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
+            // ARC-DEV-111 (SA52): the inventory opener itself refuses a dead hero, so the Read button is not reachable; the window never opens.
             OpenInventory();
+            Require(!InventoryOpen && !ReadingOpen, "a dead hero: the inventory opener refused (stack " + StackText() + ")");
             ReadItem(bookEntity);
-            Require(!ReadingOpen && inventory.MessageForSelfTest == "not read: no hero or the hero is dead", "a dead hero: " + inventory.MessageForSelfTest);
-            EndInventory();
+            Require(!ReadingOpen, "a dead hero: nothing reads");
             return "Read buttons, schematic document registered (89, gone), book replaces the inventory (3008, modal), page turns with 3010 and bounds, " +
                 "keys owned, Escape (3009), book kept, script plaque waits for the palette then opens, controller cancel, picture art refused, dead hero refused";
         }
