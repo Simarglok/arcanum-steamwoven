@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) MIG7d (ARC-DEV-095) of MIG7 MIG8 slices 1 (ARC-DEV-096) and 2 (ARC-DEV-097)** (2026-11-04/05). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) MIG7d (ARC-DEV-095) of MIG7 MIG8 slices 1 (ARC-DEV-096), 2 (ARC-DEV-097) and 3 (ARC-DEV-098)** (2026-11-04/05). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -296,7 +296,18 @@ created object has no loaded row.
   such a session a made item has no attachment to inherit, and a first write copies nothing but the written point; once a script attaches the source it answers for every prototype, so items made earlier
   (schematic products, split stacks) inherit from then on, which is what the original does for every created object. Attaching the source wherever a session is built or restored (next to the weights)
   is the follow-up. The inheritance reaches the item script events (equipment moves, transfers, drops) of a made item only while a source is attached. The session makes no copy of an
-  object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is the next slice.
+  object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is slice 3, below.
+
+## MIG8 slice 3: what is built (ARC-DEV-098)
+
+GR29: the admission refused the 2000 global variables and the PC's flags and variables because the session had nowhere to keep them. Slice 3 adds the stores and their save, **not** the interpreter's use of them.
+
+- **Stores.** `GameSessionScriptStores.cs`: `ScriptStores` (sparse, a zero is not kept) holds the global variables (0..1999, SA13), the hero's flag array (2,048 32-bit words, flag *n* = bit *n* mod 32 of word *n* / 32) and the hero's variable array (0..65535, SA14). The global flags stay in the `GlobalFlagOwner` (S2, already 0..3199 for a new game) and the story number in the story domain (S5); with the variables they are the three module blocks of PS9.
+- **API.** `QueryGlobalVariable`/`SetGlobalVariable`, `QueryPcVariable`/`SetPcVariable`, `QueryPcFlag`/`SetPcFlag`, `QueryScriptState`, versioned like every session write. An index outside a store is `InvalidScriptIndex` (the original reads past its array; the project does not). The accessors act on a PC only (SA14): a session without a hero reads 0 and refuses a PC write with `PcScriptsUnavailable`.
+- **Save.** Schema 67 adds the root section `scripts` (`globalVariables`, `pcFlags`, `pcVariables`, each the non-zero cells as `[index, value]` pairs ascending); the step 66 → 67 adds it empty (an older session had no store, so every value was zero). `Restore` refuses a PC store in a save with no hero (`InvalidSnapshot`); the decode refuses an out-of-range, repeated, unsorted or zero cell.
+- **Where the PC arrays live.** The gap review's option B: a session domain beside the hero, one schema step. They move onto the hero's directory entry when the hero has one (MIG8 as planned); nothing reads them by identity yet, and the session has one PC.
+- **Not done here.** The interpreter and the admission sets: value kinds 1, 5, 6 (`ScrValueKind.GlobalVariable`, `PcVariable`, `PcFlag`) stay unadmitted, `IScrHost` has no member for them and `ScrRun` no writeback record, so Dernholm's opening heartbeat 1015 and every script with such an operand are still refused until that slice; the dialog conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) likewise. The prototype source at session load is ARC-DEV-099.
+- [Tests](../../tests/Arcanum.Session.Tests/ScriptStoreStateTests.cs).
 
 ## Not ready
 

@@ -725,8 +725,8 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
 
 ## Not ready
 
-- The session has no global variables (a snapshot schema change, coordinated with other schema work); no admitted set reads
-  them. The story-state number is the session's since ARC-SCRIPT-019.
+- The session holds the global variables (2000) and the hero's flags and variables since ARC-DEV-098 (schema 67, `scripts` section), but no admitted set reads
+  or writes them yet: value kinds 1, 5 and 6 stay unadmitted, `IScrHost` has no member for them and a run has no writeback for them. The story-state number is the session's since ARC-SCRIPT-019.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-story": S3,
