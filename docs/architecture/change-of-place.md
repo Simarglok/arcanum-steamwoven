@@ -197,7 +197,7 @@ waypoint or standpoint on the teleport map (CP15).
 - **The request** (`SendHome`): the step's `RequestTeleport` outcome becomes `RequestChangeOfPlace` with the caller `NpcWaypoint`, flags 0 (CP15), the NPC's
   teleport map and the step's target. Steamwoven makes the request in the next frame, one per frame (`FlushHomecomings`; the waiting list is the viewer's and survives a rebuilt AI host); the Original setting makes it at
   once over any pending non-player request (`NonPlayerRequestsOverwriteEachOther`, RL21: the two NPCs that go home in one fold lose the first).
-- **The ping** (`ProcessNpcChangeOfPlace`, per frame after the AI pump, until MIG12's frame step): a pending request that is not the hero's runs through
+- **The ping** (`ProcessNpcChangeOfPlace`; since ARC-DEV-124 (MIG12 S5) the frame step's `placePing`, the first thing of each frame, TM12, so a request a tick or a goal step made in one frame is carried out at the start of the next, as the original's teleport ping does): a pending request that is not the hero's runs through
   `HomecomingHost`: the session's non-player plan (S3), the host's `Arrive` the companion group's own edits for the move (`AreaCompanionGroup.Arrive`: its
   placement on the map it leaves cleared, its cell on the destination, its home map's away change cleared when the destination is home); the destination
   is not opened and the hero stays. The group is bound again, so the destination's scene no longer holds the companion, and the home map shows it on

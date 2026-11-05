@@ -25,11 +25,19 @@ public partial class TerrainViewerApp
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
+    // ARC-DEV-124 (MIG12 S5): every frame step opens with the NPCs' change-of-place ping (TM12) and runs the AI host's goal runs as its participant.
+    private AreaAmbientDriver CreateAreaAmbient(AreaLightingSource source, GameSessionOwner session, long sector)
+    {
+        var driver = AreaAmbientDriver.Create(source, session, sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
+        driver.Frame.Register(AiFrameParticipant);
+        return driver;
+    }
+
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents);
+        _areaAmbient = CreateAreaAmbient(lighting.Source, _areaSession, ActiveAreaSector());
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -43,7 +51,7 @@ public partial class TerrainViewerApp
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
-        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents);
+        _areaAmbient = CreateAreaAmbient(previous.Source, session, previous.Selection.Sector);
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();

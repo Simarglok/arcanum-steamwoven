@@ -61,12 +61,18 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-DEV-116 (MIG11 slice S5, RL21, FM10, ledger WS6): the ping of an NPC's change of place, once per frame after the AI pump (the original's
-    /// teleport ping runs on the frame after the request, so the request a tick made in a pass is carried out outside it). The host first makes the next
+    /// ARC-DEV-116 (MIG11 slice S5, RL21, FM10, ledger WS6): the ping of an NPC's change of place. ARC-DEV-124 (MIG12 S5): it is the frame step's
+    /// <c>placePing</c> (<see cref="PingNpcChangeOfPlace"/>), the first thing of each frame (TM12), so the request a tick or a goal step made in the
+    /// last frame is carried out on the frame after the request, as the original's teleport ping does, outside any pass. The host first makes the next
     /// request it holds (Steamwoven; <see cref="AreaAiHost.FlushHomecomings"/>); a pending request that is not the hero's runs through
     /// <see cref="HomecomingHost"/>: a former follower on a map that is not its teleport map is moved there (its placement edits, the away change, its
     /// events and links through the session's mover payload) and leaves the shown scene when the group is bound again.
     /// </summary>
+    private void PingNpcChangeOfPlace()
+    {
+        if (AreaAiHostNow() is { } host) ProcessNpcChangeOfPlace(host);
+    }
+
     private void ProcessNpcChangeOfPlace(AreaAiHost host)
     {
         if (_areaSession is not { } owner) return;
