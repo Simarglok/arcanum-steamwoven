@@ -13,8 +13,8 @@ public enum SessionGoalFailure
     InvalidRequest,
     /// <summary>The call came inside an event pass or while the spell-run rules hold the queue (a handler may not change the table).</summary>
     PassInProgress,
-    /// <summary>A step is open (<see cref="GameSessionOwner.BeginGoalStep"/>) and the call needs none, or the handle is not the open step's.</summary>
-    StepOpen,
+    /// <summary>No step is open for the handle: none is open, or the open one is another run's (<see cref="GameSessionOwner.EndGoalStep"/>).</summary>
+    NotStepping,
     /// <summary>The handle names no run in the table (a freed slot, a reused slot's old id).</summary>
     NoRun,
     /// <summary>The run's first step could not be queued: the run was not started.</summary>
@@ -49,10 +49,14 @@ public sealed record SessionGoalStepFiring(GameEvent Event, GoalHandle Handle, s
 /// the real milliseconds after which it steps again (the original's frame delay, 1..<see cref="GameSessionOwner.MaxGoalStepDelayMs"/>, converted to animation time ×8,
 /// TL40), or null when the run ends.
 /// </summary>
-public readonly record struct SessionGoalStepAnswer(long? NextDelayMs, GoalRun? Run = null)
+public readonly record struct SessionGoalStepAnswer(long? NextDelayMs, GoalRun? Run = null, bool Abandoned = false)
 {
-    /// <summary>The run ends with this step.</summary>
+    /// <summary>The run ends with this step (the stepper ran the end nodes of what it popped).</summary>
     public static SessionGoalStepAnswer End { get; } = new(null);
+
+    /// <summary>The step could not be completed (the host threw, a firing was never handed to it): the run ends with the end nodes of every goal still on
+    /// its stack reported, as for a refused repeat.</summary>
+    public static SessionGoalStepAnswer Abandon { get; } = new(null, null, true);
 
     /// <summary>The run steps again <paramref name="delayMs"/> real milliseconds from now.</summary>
     public static SessionGoalStepAnswer After(long delayMs, GoalRun? run = null) => new(delayMs, run);
@@ -65,7 +69,8 @@ public enum SessionGoalStepOutcome
     Continued,
     /// <summary>The run ended: the host answered the end, or the run was interrupted or killed while it stepped.</summary>
     Ended,
-    /// <summary>The run ended because its next step could not be queued (a delay out of range, a run that is not the stepped one's, a full queue).</summary>
+    /// <summary>The run ended because its next step could not be queued (a delay out of range, a run that is not the stepped one's, a full queue) or the
+    /// step was abandoned; the end nodes of the goals still on its stack are reported.</summary>
     Refused,
 }
 
@@ -76,8 +81,9 @@ public sealed record SessionGoalStepResult(SessionGoalFailure Failure, SessionGo
 /// ARC-DEV-132 (MIG13 S3, docs/architecture/goal-table.md §3.1, §3.2): the session owns the one goal table (<see cref="GoalRunTable"/>, the 216 slots of every animated
 /// object's runs) and the <c>goal.step</c> kind on the animation domain. No caller outside the session writes a run: a start, an interrupt, a kill and a step go through
 /// these calls, and every end of a run removes its pending step by slot <b>and</b> run id (the original compares only the slot, GS7: a deliberate, safer difference with no
-/// visible effect). A run belongs to the active map (the actor's): a start is for an owner on it, and a map change ends every run at level 6 and removes its step (GS19), so
-/// no goal step is ever parked. Neither the table nor the kind is saved (MIG14): a captured session holds no run and a restored one starts with none.
+/// visible effect). A run belongs to the active map (the actor's): a start is for an owner on it, a map change ends every run at level 6 and removes its step (GS19), an
+/// NPC that departs to another map loses its runs (killed, as the original kills an object's runs when it leaves with its map, 0x423FF0), and before every pass a run
+/// whose step went missing or was carried off the active map is killed, so no goal step is ever parked and no run is left without one. Neither the table nor the kind is saved (MIG14): a captured session holds no run and a restored one starts with none.
 /// </summary>
 public sealed partial class GameSessionOwner
 {
@@ -187,32 +193,35 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// Closes the open step of <paramref name="handle"/> with the host's answer. A run marked done during the step (an interrupt, a kill, the map's close) or answered with the
-    /// end is freed (<see cref="GoalRunEnd"/>: the marked run's end nodes top down, none for <see cref="GoalEndKind.Finished"/>); otherwise the answered run replaces the table's
+    /// end is freed (<see cref="GoalRunEnd"/>: the marked run's end nodes top down; none for the host's end, whose stepper ran them); otherwise the answered run replaces the table's
     /// and its next step is queued the answered delay ×8 after the animation clock <b>now</b> (relative to the clock at firing, the original's default without
     /// <c>-animcatchup</c>: a jump fires a pending step once and never replays the missed ones, TL22, TL40). A delay out of range, an answered run with another handle or
-    /// owner, or a full queue end the run (<see cref="SessionGoalStepOutcome.Refused"/>), so no run is left without a step.
+    /// owner, a full queue or an abandoned step end the run (<see cref="SessionGoalStepOutcome.Refused"/>, with the end nodes of the goals still on its stack), so no
+    /// run is left without a step. A run marked by a game reset would be reported as interrupted (no reset path reaches a stepped run yet, S5).
     /// </summary>
     [OriginalFunction(0x423C80, OriginalFunctionScope.Partial)]
     public SessionGoalStepResult EndGoalStep(GoalHandle handle, SessionGoalStepAnswer answer)
     {
         ThrowIfDisposed();
-        if (_goalStepOpen != handle) return new(SessionGoalFailure.StepOpen, SessionGoalStepOutcome.Refused, null, null);
+        if (_goalStepOpen != handle) return new(SessionGoalFailure.NotStepping, SessionGoalStepOutcome.Refused, null, null);
         if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, SessionGoalStepOutcome.Refused, null, null);
         _goalStepOpen = null;
         _goals = _goals.WithStepping(null);
         if (!_goals.TryGet(handle, out var run)) return new(SessionGoalFailure.NoRun, SessionGoalStepOutcome.Ended, null, null);
-        if (run.Done) return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, Finish(run, run.Flags.HasFlag(GoalRunFlags.Killed) ? GoalEndKind.Killed : GoalEndKind.Interrupted), null);
+        if (run.Done) return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, Finish(run, run.Flags.HasFlag(GoalRunFlags.Killed) ? GoalEndKind.Killed : GoalEndKind.Interrupted, endNodes: true), null);
+        if (answer.Abandoned) return Refused(run);
         var stepped = answer.Run ?? run;
-        if (stepped.Handle != handle || !string.Equals(stepped.Owner, run.Owner, StringComparison.Ordinal))
-            return new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(run, GoalEndKind.Finished), null);
+        if (stepped.Handle != handle || !string.Equals(stepped.Owner, run.Owner, StringComparison.Ordinal)) return Refused(run);
         if (answer.NextDelayMs is not { } delay || stepped.Done)
-            return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, Finish(stepped, GoalEndKind.Finished), null);
-        if (delay is < 1 or > MaxGoalStepDelayMs) return new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(stepped, GoalEndKind.Finished), null);
+            return new(SessionGoalFailure.None, SessionGoalStepOutcome.Ended, Finish(stepped, GoalEndKind.Finished, endNodes: false), null);
+        if (delay is < 1 or > MaxGoalStepDelayMs) return Refused(stepped);
         if (_goals.TryReplace(stepped, out var replaced)) _goals = replaced;
-        if (ScheduleGoalStep(handle, run.Owner, delay * GoalStepClockRate) is not { } due)
-            return new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(stepped, GoalEndKind.Finished), null);
+        if (ScheduleGoalStep(handle, run.Owner, delay * GoalStepClockRate) is not { } due) return Refused(stepped);
         return new(SessionGoalFailure.None, SessionGoalStepOutcome.Continued, null, due);
     }
+
+    private SessionGoalStepResult Refused(GoalRun run) =>
+        new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(run, GoalEndKind.Finished, endNodes: true), null);
 
     // A pass or the spell-run rules hold the queue: the table and its steps wait.
     private bool GoalsBusy() => _passWorld is not null || _spellRunsBusy;
@@ -242,15 +251,14 @@ public sealed partial class GameSessionOwner
         return new(SessionGoalFailure.None, succeeded, steps);
     }
 
-    // Frees a run the step ended; the marked run's end nodes run top down (GS23), a finished one has none left.
-    private GoalRunEnd Finish(GoalRun run, GoalEndKind kind)
+    // Frees a run the step ended; the end nodes of the goals on its stack run top down (GS23) unless the stepper already ran them (the host's end).
+    private GoalRunEnd Finish(GoalRun run, GoalEndKind kind, bool endNodes)
     {
         RemoveGoalStep(run.Handle);
         var freed = _goals.Free(run.Handle);
         _goals = freed.Table;
         var ended = run with { Done = true };
-        var endNodes = kind == GoalEndKind.Finished ? ImmutableArray<GoalType>.Empty : ended.Frames.Reverse().Select(f => f.Goal).ToImmutableArray();
-        return new(ended, kind, endNodes, freed.SignificantGoalsLeft);
+        return new(ended, kind, endNodes ? ended.Frames.Reverse().Select(f => f.Goal).ToImmutableArray() : [], freed.SignificantGoalsLeft);
     }
 
     // GS19: the map closes (the actor moved to another map): every run ends at level 6 and loses its step, wherever a relocation carried it. The run being stepped is
@@ -274,9 +282,31 @@ public sealed partial class GameSessionOwner
         return GameEventHandlerOutcome.Completed;
     }
 
-    // The owners of the table's runs on the active map: a pending step's entity exists while its run does (a kill removes an object's runs).
-    private HashSet<GameEventEntity>? GoalOwners() =>
-        _goals.InUseCount == 0 ? null : _goals.Runs.Select(r => new GameEventEntity(_actor.Map.RuntimeMap, r.Owner)).ToHashSet();
+    // ARC-DEV-132: an NPC that departs to another map takes no run with it (its steps are removed wherever the relocation carried them). The end nodes of
+    // the killed runs are S5's.
+    private void KillDepartingGoals(string entity)
+    {
+        if (_goals.InUseCount == 0) return;
+        var killed = _goals.Kill(entity);
+        _goals = killed.Table;
+        SettleEnded(killed.Ended);
+    }
+
+    // Before a pass: a run that is not being stepped and has no pending step on the active map (a host that threw before its step closed, a firing never
+    // handed to a host, a step a relocation carried to another map) is killed and any stray step removed, so no run waits for a step that will not come.
+    private void ReconcileGoalSteps()
+    {
+        if (_goals.InUseCount == 0) return;
+        var map = _actor.Map.RuntimeMap;
+        var pending = _events.QueryPending(SessionEventKinds.GoalStep);
+        foreach (var run in _goals.Runs.ToArray())
+        {
+            if (_goalStepOpen == run.Handle || pending.Any(e => SessionEventKinds.NamesRun(e, run.Handle) && e.ScopeMap == map)) continue;
+            var killed = _goals.KillRun(run.Handle);
+            _goals = killed.Table;
+            RemoveGoalStep(run.Handle);
+        }
+    }
 }
 
 internal sealed class GoalStepHandler(SessionEventSink sink) : IGameEventHandler

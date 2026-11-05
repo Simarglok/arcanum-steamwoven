@@ -347,7 +347,8 @@ public static class SessionEventKinds
             Real(WorldMapStep, SessionRealStep.WorldMapStep), Real(TurnBasedStep, SessionRealStep.TurnBasedStep),
             new(GoalStep, GameEventDomain.Animation, GameEventPersistence.NotSaved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 3, 1, 2,
                 new GoalStepHandler(owner),
-                Validate: payload => payload.Values[0] is >= 0 and < GoalRunTable.SlotCount && payload.Values[1] is >= 1 and <= int.MaxValue && payload.Values[2] >= 0),
+                Validate: payload => payload.Values[0] is >= 0 and < GoalRunTable.SlotCount && payload.Values[1] is >= 1 and <= int.MaxValue && payload.Values[2] >= 0,
+                ChecksOwnEntities: true),
         ]);
     }
 

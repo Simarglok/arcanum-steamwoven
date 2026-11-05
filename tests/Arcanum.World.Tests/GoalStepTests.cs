@@ -181,6 +181,43 @@ public sealed class GoalStepTests
     }
 
     [TestMethod]
+    public void A_host_that_throws_ends_every_run_of_the_pass_it_did_not_step()
+    {
+        using var session = Create();
+        var host = new Host(steps: 100);
+        var step = new FrameStep(session, new Calls(session)) { GoalSteps = host };
+        step.Run(0);
+        Begin(session, "npc:a", 10);
+        Begin(session, "npc:b", 10);
+        Begin(session, "npc:c", 10);
+        host.Override = run => run.Owner == "npc:a" ? throw new InvalidOperationException("host") : null;
+        Assert.ThrowsExactly<InvalidOperationException>(() => step.Run(16));
+        Assert.AreEqual(1, host.Ran.Count, "the throw stopped the pass's steps");
+        Assert.AreEqual(0, session.QueryGoals().InUseCount, "the runs due in the same pass end too: none waits for a step that will not come");
+        Assert.IsFalse(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.GoalStep));
+    }
+
+    [TestMethod]
+    public void A_goal_step_fires_whatever_the_worlds_existence_test_answers_for_its_owner()
+    {
+        // The kind checks its own owner (the run's handle and owner); the world's existence test still drops the other kinds' events.
+        using var session = Create();
+        var host = new Host(steps: 100);
+        var step = new FrameStep(session, new Gone()) { GoalSteps = host };
+        step.Run(0);
+        Begin(session, "npc:a", 10);
+        step.Run(16);
+        Assert.AreEqual(2, host.Ran.Count);
+    }
+
+    private sealed class Gone : ISessionScriptWorld
+    {
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        public bool ObjectExists(SessionMapId map, string entity) => false;
+        public bool RunScriptCall(SessionScriptCall call) => true;
+    }
+
+    [TestMethod]
     public void A_host_that_throws_leaves_no_open_step()
     {
         using var session = Create();

@@ -116,7 +116,7 @@ public sealed class GoalTableStateTests
         var interrupted = owner.InterruptGoal(handle, 3);
         Assert.AreEqual(GoalInterruptOutcome.MarkedDone, interrupted.Steps.Single().Outcome);
         Assert.AreEqual(1, owner.QueryGoals().InUseCount, "the stepped run stays until its step closes");
-        Assert.AreEqual(SessionGoalFailure.StepOpen, owner.EndGoalStep(new GoalHandle(1, 9), SessionGoalStepAnswer.End).Failure, "only the open step closes");
+        Assert.AreEqual(SessionGoalFailure.NotStepping, owner.EndGoalStep(new GoalHandle(1, 9), SessionGoalStepAnswer.End).Failure, "only the open step closes");
         var closed = owner.EndGoalStep(handle, SessionGoalStepAnswer.After(100));
         Assert.AreEqual(SessionGoalStepOutcome.Ended, closed.Outcome, "a marked run ends whatever the host answers");
         Assert.AreEqual(GoalEndKind.Interrupted, closed.Ended!.Kind);
@@ -140,6 +140,7 @@ public sealed class GoalTableStateTests
         owner.BeginGoalStep(second);
         var refused = owner.EndGoalStep(second, SessionGoalStepAnswer.After(GameSessionOwner.MaxGoalStepDelayMs + 1));
         Assert.AreEqual(SessionGoalStepOutcome.Refused, refused.Outcome);
+        CollectionAssert.AreEqual(new[] { GoalType.MoveToTile }, refused.Ended!.EndNodeGoals.ToArray(), "the goals still on the stack were never popped: their end nodes are due");
         Assert.AreEqual(0, owner.QueryGoals().InUseCount, "no run is left without a step");
         Assert.AreEqual(0, Steps(owner).Length);
     }
@@ -172,6 +173,8 @@ public sealed class GoalTableStateTests
         var step = Steps(owner).Single();
         CollectionAssert.AreEqual(new[] { 0L, 2 }, step.Payload.Values.Take(2).ToArray(), "only the new run's step is pending");
         Assert.IsNull(owner.QueryGoalStep(walk), "the old handle names no step though its slot does");
+        Assert.AreEqual(GoalInterruptOutcome.NotFound, owner.KillGoal(walk).Steps.Single().Outcome, "the old handle names no run either");
+        Assert.AreEqual(1, Steps(owner).Length, "and its kill leaves the new run's step in the same slot");
 
         var candy = Started(owner, Request(GoalType.EyeCandy, B, GoalStarters.NoInterrupt));
         Assert.AreEqual(2, Steps(owner).Length);
@@ -284,5 +287,35 @@ public sealed class GoalTableStateTests
         var full = owner.StartGoal(Request(GoalType.EyeCandy, "obj:x", GoalStarters.NoInterrupt), new Ports());
         Assert.AreEqual(GoalStartOutcome.TableFull, full.Outcome);
         Assert.IsTrue(owner.QueryGoals().ExhaustionPending, "the stepper's next step sweeps (S5)");
+    }
+
+    [TestMethod]
+    public void A_run_whose_step_went_missing_is_killed_before_the_next_pass()
+    {
+        using var owner = Create();
+        var lost = Started(owner, Request(GoalType.MoveToTile));
+        var open = Started(owner, Request(GoalType.MoveToTile, B));
+        Jump(owner, 5);
+        Assert.AreEqual(2, owner.ProcessEvents(new NoWorld()).GoalSteps.Count);
+        Assert.IsNotNull(owner.BeginGoalStep(open));
+        // The first firing was never handed to a host; the second's step is still open.
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsFalse(owner.QueryGoals().TryGet(lost, out _), "no run waits for a step that will not come");
+        Assert.IsTrue(owner.QueryGoals().TryGet(open, out _), "the open step's run is not touched");
+        Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(open, SessionGoalStepAnswer.After(100)).Outcome);
+    }
+
+    [TestMethod]
+    public void An_abandoned_step_ends_its_run_with_its_stacks_end_nodes()
+    {
+        using var owner = Create();
+        var handle = Started(owner, Request(GoalType.MoveToTile));
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        owner.BeginGoalStep(handle);
+        var closed = owner.EndGoalStep(handle, SessionGoalStepAnswer.Abandon);
+        Assert.AreEqual((SessionGoalStepOutcome.Refused, GoalEndKind.Finished), (closed.Outcome, closed.Ended!.Kind));
+        CollectionAssert.AreEqual(new[] { GoalType.MoveToTile }, closed.Ended.EndNodeGoals.ToArray());
+        Assert.AreEqual(0, owner.QueryGoals().InUseCount);
     }
 }

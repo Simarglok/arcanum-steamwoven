@@ -2,6 +2,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.ChangeOfPlace;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Residency;
@@ -255,6 +256,32 @@ public sealed class ChangeOfPlaceMoverTests
         var run = owner.ProcessChangeOfPlace(new Host());
         Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, run.Status);
         Assert.IsNull(owner.QueryAiTick(Wolf), "the NoChange short cut does not skip the departure's work");
+    }
+
+    private sealed class GoalPorts : IGoalStartPorts
+    {
+        public bool Loading => false;
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    [TestMethod]
+    [DataRow(RuleMode.Steamwoven)]
+    [DataRow(RuleMode.Original)]
+    public void A_cross_map_departure_ends_the_npcs_goal_runs_and_removes_their_steps(RuleMode rules)
+    {
+        // ARC-DEV-132: a run belongs to the active map; the departing NPC's runs end (the original kills an object's runs when it leaves with its map, 0x423FF0)
+        // and their steps are not carried to the destination (Steamwoven) or left without a run (Original).
+        using var owner = Owner(rules);
+        Assert.IsTrue(owner.StartGoal(new(Wolf, GoalStarters.Generic, new GoalFrame(GoalType.MoveToTile)), new GoalPorts()).Started);
+        Assert.IsTrue(owner.StartGoal(new(Wolf, GoalStarters.NoInterrupt, new GoalFrame(GoalType.EyeCandy)), new GoalPorts()).Started);
+        var dog = owner.StartGoal(new(Dog, GoalStarters.Generic, new GoalFrame(GoalType.MoveToTile)), new GoalPorts()).Handle!.Value;
+        Assert.IsTrue(Npc(owner, Wolf, Cave.RuntimeMap, There).Accepted);
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, owner.ProcessChangeOfPlace(new Host()).Status);
+        Assert.AreEqual(0, owner.QueryGoals().RunsOf(Wolf).Length);
+        Assert.AreEqual(1, owner.QueryGoals().InUseCount, "the other NPC's run stays");
+        var steps = owner.QueryEvents().Where(e => e.Kind == SessionEventKinds.GoalStep).ToArray();
+        Assert.AreEqual(dog.Slot, (int)steps.Single().Payload.Values[0], "no step of the wolf's is parked on the cave");
     }
 
     [TestMethod]

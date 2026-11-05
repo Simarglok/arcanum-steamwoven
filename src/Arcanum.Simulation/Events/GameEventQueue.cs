@@ -211,7 +211,7 @@ public sealed class GameEventQueue
                     position = order;
                     var due = _events[order.Sequence];
                     Remove(due);
-                    if (!due.Payload.Entities.All(request.EntityExists))
+                    if (!Kind(due.Kind).ChecksOwnEntities && !due.Payload.Entities.All(request.EntityExists))
                     {
                         outcomes.Add(new(due, GameEventOutcomeKind.EntityMissing, now));
                         continue;

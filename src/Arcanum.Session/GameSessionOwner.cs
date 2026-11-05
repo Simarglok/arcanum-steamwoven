@@ -1338,8 +1338,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var goalSteps = new List<SessionGoalStepFiring>();
         _passRealSteps = realSteps;
         _passGoalSteps = goalSteps;
-        // ARC-DEV-132: a goal step's owner exists while its run is in the table (a kill removes an object's runs with it).
-        var goalOwners = GoalOwners();
+        // ARC-DEV-132: a run whose step went missing (a host that threw, a step carried off the active map) is killed before the pass, so no run is left without one.
+        ReconcileGoalSteps();
         _passDecays = decays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
@@ -1371,7 +1371,6 @@ public sealed partial class GameSessionOwner : IDisposable
             // absent role always does).
             pass = _events.ProcessDue(new(EventClocks(now), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
-                || goalOwners?.Contains(entity) == true
                 || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
                 || restocking?.Contains(entity) == true && !_life.Critters.ContainsKey(entity.Code)
                 || (_life.Critters.ContainsKey(entity.Code)

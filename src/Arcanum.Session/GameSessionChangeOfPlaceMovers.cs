@@ -131,6 +131,8 @@ public sealed partial class GameSessionOwner
             if (moved != GameEventFailure.None) return GameSessionFailure.EventConflict;
         }
         _events.RemoveAll(SessionEventKinds.AiTick, e => SessionEventKinds.NamesNpc(e, entity));
+        // ARC-DEV-132: its goal runs stay with the map it leaves, so they end (both settings).
+        KillDepartingGoals(entity);
         if (plan.Drops)
             foreach (var kind in OwnEvents(entity).Select(e => e.Kind).Where(kind => kind != SessionEventKinds.SpellRun).Distinct().ToArray())
                 _events.RemoveAll(kind, e => e.Payload.Entities.All(x => x.Code == entity));

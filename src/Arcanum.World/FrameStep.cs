@@ -35,8 +35,8 @@ public interface IRealStepHost
 
 /// <summary>
 /// ARC-DEV-132 (MIG13 S3, docs/architecture/goal-table.md §3.2): the host of the goal runs' steps. The session's pass only reports a <c>goal.step</c> that came due
-/// (<see cref="SessionGoalStepFiring"/>); the frame step opens the run's step (<see cref="GameSessionOwner.BeginGoalStep"/>), calls the host with the clocks at the
-/// step's due time, closes the step with the answer (<see cref="GameSessionOwner.EndGoalStep"/>: the next step queued from now, or the run's end) and runs one more
+/// (<see cref="SessionGoalStepFiring"/>); the frame step opens the run's step (<see cref="GameSessionOwner.BeginGoalStep"/>), calls the host with the clocks now
+/// (the step's due time, or later when a jump earlier in the frame made it overdue; TL20, TL22), closes the step with the answer (<see cref="GameSessionOwner.EndGoalStep"/>: the next step queued from now, or the run's end) and runs one more
 /// pass. One mechanism steps every run, in deadline order. The host steps the run (S4: the stepper of the world runtime over the viewer's node ports); while the step
 /// is open an interrupt or a kill of the run only marks it done, and the close ends it.
 /// </summary>
@@ -287,7 +287,14 @@ public sealed class FrameStep
             tally.BudgetLeft = outcome.BudgetExhausted;
             // MIG12 S8: the real-time steps that came due run after the pass, outside it; a step that jumped the clocks lets the next pass fire
             // the events that became due (the original's later lists see a real-time handler's jump, TL20).
-            var ran = RunRealSteps(result.RealSteps, tally);
+            int ran;
+            try { ran = RunRealSteps(result.RealSteps, tally); }
+            catch
+            {
+                // A real-time host that threw leaves the pass's goal steps unrun: their runs end, none waits for a step that will not come.
+                AbandonGoalSteps(result.GoalSteps, 0);
+                throw;
+            }
             // ARC-DEV-132: the goal steps that came due run next, in firing order; their repeats are queued from now, so the next pass fires only what a step made due.
             ran += RunGoalSteps(result.GoalSteps, tally);
             if (!outcome.BudgetExhausted && ran == 0) return;
@@ -316,8 +323,9 @@ public sealed class FrameStep
     private int RunGoalSteps(IReadOnlyList<SessionGoalStepFiring> due, Tally tally)
     {
         var ran = 0;
-        foreach (var firing in due)
+        for (var i = 0; i < due.Count; i++)
         {
+            var firing = due[i];
             if (_session.BeginGoalStep(firing.Handle) is not { } run) continue;
             if (_goalSteps is not { } host)
             {
@@ -331,13 +339,22 @@ public sealed class FrameStep
             try { answer = host.StepGoal(run, _session.QueryFrameClocks()); }
             catch
             {
-                // A host that threw leaves no open step behind: the run ends.
-                _session.EndGoalStep(firing.Handle, SessionGoalStepAnswer.End);
+                // A host that threw leaves no open step behind: this run and the ones after it in the pass end with their stacks' end nodes reported.
+                _session.EndGoalStep(firing.Handle, SessionGoalStepAnswer.Abandon);
+                AbandonGoalSteps(due, i + 1);
                 throw;
             }
             if (_session.EndGoalStep(firing.Handle, answer).Outcome == SessionGoalStepOutcome.Refused) tally.GoalStepsRefused++;
         }
         return ran;
+    }
+
+    // The firings from `from` on, which no host will step: each run is opened and abandoned (a run already gone is skipped). The session's check before the
+    // next pass kills any run this could not reach.
+    private void AbandonGoalSteps(IReadOnlyList<SessionGoalStepFiring> due, int from)
+    {
+        for (var i = from; i < due.Count; i++)
+            if (_session.BeginGoalStep(due[i].Handle) is not null) _session.EndGoalStep(due[i].Handle, SessionGoalStepAnswer.Abandon);
     }
 
     private sealed class Tally
