@@ -342,9 +342,19 @@ public partial class TerrainViewerApp
             _inventoryPanel!.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
             return;
         }
+        // ARC-DEV-110 (MIG16 S3): the lockpicks are the item target mode (16). The original's opener (0x571AA0) closes the inventory
+        // and pops it when the item's target mask has no inventory bit (a lock is not an inventory item): the window closes through its
+        // End routine, then the mode takes the base; a target or pick pocket armed before it is left first (the mode replaces it).
         EndInventory();
         CancelPendingOrder("lockpicks armed");
-        _pickPocketArmed = false; _pickPocketAfterRoute = null;
+        CancelSpellTargeting("lockpicks armed");
+        _pickPocketAfterRoute = null;
+        if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => _lockpickArmed = null))
+        {
+            _portalNotice = "pick a lock: not ready (the interface mode did not open)";
+            RefreshAreaStatus();
+            return;
+        }
         _lockpickArmed = item;
         _portalNotice = "pick a lock: press a door or window";
         GD.Print($"ARC-SKILLS-006 lockpicks armed item={item}");
@@ -506,8 +516,8 @@ public partial class TerrainViewerApp
         if (_inventoryPanel is null || OpenInventoryMode is not { } mode) return;
         GD.Print($"ARC-UI-004 inventory closed pc={_areaSession?.QueryPcInventory().Count}");
         var holder = _inventoryPanel.Holder;
-        // ARC-UI-029: a question still up goes with the window; nothing moves.
-        _quantityMove = null;
+        // ARC-UI-029: a question still up goes with the window; nothing moves (ARC-DEV-110: the window's close pops the quantity picker
+        // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
         _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.

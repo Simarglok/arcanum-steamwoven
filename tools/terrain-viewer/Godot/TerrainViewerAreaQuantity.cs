@@ -1,6 +1,7 @@
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -47,6 +48,15 @@ public partial class TerrainViewerApp
 
     private void AskQuantity(AreaQuantityMove move)
     {
+        // ARC-DEV-110 (MIG16 S3): the question is interface mode 13 (quantity picker), pushed over the inventory window, which keeps its
+        // window (mode table); the leave step, from Accept, Cancel or the window's own close, drops the question.
+        if (!OpenOverlayMode(InterfaceMode.QuantityPicker, _ => _quantityMove = null))
+        {
+            _inventoryStatus = $"not moved: the quantity window did not open for {move.Name}";
+            _inventoryPanel!.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
+            RefreshReadyStatus();
+            return;
+        }
         _quantityMove = move;
         _inventoryStatus = $"how many of {move.Name}? (0..{move.Units})";
         _inventoryPanel!.AskQuantity(move.Name, move.Units, _inventoryStatus);
@@ -58,7 +68,7 @@ public partial class TerrainViewerApp
     private void AcceptQuantity(int count)
     {
         if (_quantityMove is not { } move) return;
-        _quantityMove = null;
+        CloseTargetMode(InterfaceMode.QuantityPicker);
         if (!InventoryOpen || !InventoryActive) return;
         MoveQuantity(move, count);
     }
@@ -66,7 +76,7 @@ public partial class TerrainViewerApp
     private void CancelQuantity()
     {
         if (_quantityMove is not { } move) return;
-        _quantityMove = null;
+        CloseTargetMode(InterfaceMode.QuantityPicker);
         if (!InventoryOpen || !InventoryActive) return;
         _inventoryStatus = $"nothing moved: {move.Name} stays";
         GD.Print($"ARC-UI-029 quantity-cancel item={move.Item}");

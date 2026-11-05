@@ -47,16 +47,16 @@ public partial class TerrainViewerApp
 
     private ulong CursorClock => _cursorClockForSelfTest ?? Time.GetTicksMsec();
 
-    /// <summary>The interface mode that picks the cursor. ARC-DEV-109 (MIG16 S2): the spell cursor while spell targeting is open (it joins the
-    /// stack in slice S3), else the cursor family of the stack's top mode (SA41: the gauntlet in a window mode); a panel outside the stack
-    /// (palette, main menu, save list, bug report, hero-death cover) covers the game with the gauntlet too.</summary>
+    /// <summary>The interface mode that picks the cursor. ARC-DEV-109 (MIG16 S2) and ARC-DEV-110 (S3): the cursor family of the stack's top
+    /// mode (SA41: the spell cursor in spell targeting 1 and in item use 16, the skill cursor in skill targeting 2, the game cursor in 0
+    /// and the follower order 18, the gauntlet in a window mode and in the quantity picker); a panel outside the stack (palette, main
+    /// menu, save list, bug report, hero-death cover) covers any mode with the gauntlet.</summary>
     private AreaCursorMode CursorMode
     {
         get
         {
-            if (_spellTargeting is not null) return AreaCursorMode.SpellTarget;
-            var stacked = AreaCursorArt.Mode(_interfaceWindows.Stack.Cursor);
-            return stacked != AreaCursorMode.Game ? stacked : WorldModal ? AreaCursorMode.Window : AreaCursorMode.Game;
+            // A panel outside the stack (palette, main menu, save list, bug report, death cover) covers whatever mode is on top.
+            return WorldModal ? AreaCursorMode.Window : AreaCursorArt.Mode(_interfaceWindows.Stack.Cursor);
         }
     }
 

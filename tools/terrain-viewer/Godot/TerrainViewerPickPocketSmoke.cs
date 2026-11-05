@@ -4,6 +4,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Skills;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -67,9 +68,17 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(map, stand);
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
                 ArmPickPocket();
-                Require(_pickPocketArmed, "the palette's Pick pocket arms the skill: " + _inventoryStatus);
-                _pickPocketArmed = false;
+                Require(PickPocketArmed && TargetsMatchStack, "the palette's Pick pocket arms the skill: " + _inventoryStatus);
+                // ARC-DEV-110 (MIG16 S3): the armed skill is interface mode 2 (skill target) over the base, with the skill cursor (SA41).
+                Require(_interfaceWindows.Stack.Current == InterfaceMode.SkillTarget && _interfaceWindows.Stack.Depth == 2 && CursorMode == AreaCursorMode.SkillTarget,
+                    "the armed skill is mode 2 on the stack: " + StackText());
+                // The press that starts the skill leaves mode 2 before it opens the window; the smoke starts the attempt itself, so the
+                // steal window opens over the armed skill and replaces it (SA40: a window replaces the top mode).
                 StartPickPocket(holder.Entity);
+                if (InventoryOpen)
+                    Require(!PickPocketArmed && TargetsMatchStack && _interfaceWindows.Stack.Depth == 2 && WindowPanelsMatchStack,
+                        "the steal window replaced the armed skill's mode: " + StackText());
+                else CancelPickPocket("the start opened no window");
                 if (InventoryOpen && _inventoryPanel!.Holder == holder.Entity) { victim = holder.Entity; break; }
                 tried.Add($"{holder.Entity[^6..]}:{_lastPickPocketStart?.Open?.ToString() ?? "none"}/{_lastPickPocketStart?.Detail}");
             }
@@ -215,7 +224,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (InventoryOpen) EndInventory();
-            _pickPocketArmed = false; _pickPocketAfterRoute = null;
+            CancelPickPocket("the smoke ends"); _pickPocketAfterRoute = null;
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
